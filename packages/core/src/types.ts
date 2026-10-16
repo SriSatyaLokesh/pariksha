@@ -183,6 +183,53 @@ export interface Bank {
   questions: Question[];
 }
 
+// Test-format types, mirroring schemas/test-1.json's `$defs/section`,
+// `sourceFixed`, `sourcePool` and `sourceSets` exactly. Only what question
+// selection needs — timing, access, the registration form, proctoring,
+// release and retention belong to later phases.
+
+export interface SourceFixed {
+  kind: "fixed";
+  questions: string[];
+}
+
+export interface PoolFilter {
+  tags?: string[];
+  difficulty?: Difficulty[];
+  types?: string[];
+}
+
+export interface SourcePool {
+  kind: "pool";
+  bank?: string;
+  count: number;
+  filter?: PoolFilter;
+}
+
+export interface SetDefinition {
+  set: string;
+  questions: string[];
+}
+
+export type SetAssignment = "round_robin" | "random" | "hash" | "from_candidate_list";
+
+export interface SourceSets {
+  kind: "sets";
+  assignment?: SetAssignment;
+  sets: SetDefinition[];
+}
+
+export type QuestionSource = SourceFixed | SourcePool | SourceSets;
+
+export interface Section {
+  id: string;
+  title: string;
+  instructions?: string;
+  time_limit_minutes?: number;
+  shuffle_questions?: boolean;
+  source: QuestionSource;
+}
+
 export type ResponseValue =
   | { kind: "option"; option: string }
   | { kind: "options"; options: string[] }
