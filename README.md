@@ -2,6 +2,8 @@
 
 # Pariksha
 
+### పరీక్ష · परीक्षा
+
 **Run real exams on the internet, for free, on infrastructure you own.**
 
 Question pools, 12 question types, browser proctoring, a registration form builder and CSV results — self-hosted in under 30 minutes, at zero hosting cost.
@@ -19,7 +21,7 @@ Question pools, 12 question types, browser proctoring, a registration form build
 
 > **Status: pre-alpha.** This repository holds the product requirements, the open question and test formats, their JSON Schemas, and a complete worked example. **Code lands with v0.1.** Everything here is reviewable, and the formats are stable enough to write questions against today. Issues and pull requests are open — see [good first issues](#contributing).
 
-*Pariksha* (परीक्षा) means "examination" in Hindi and several other Indian languages.
+*Pariksha* — **పరీక్ష**, **परीक्षा** — means "examination".
 
 ## Why
 

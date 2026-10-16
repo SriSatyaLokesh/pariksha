@@ -5,7 +5,7 @@
 | **Status** | Draft |
 | **Last updated** | 2026-10-16 |
 | **Author** | Satya K |
-| **Product** | Pariksha (परीक्षा, "examination") |
+| **Product** | Pariksha — పరీక్ష · परीक्षा, "examination" |
 
 ## Contents
 
