@@ -1,0 +1,213 @@
+{
+  "$schema": "../../schemas/test-1.json",
+  "format": "pariksha/test@1",
+  "name": "Reasoning and Aptitude Screening 2026",
+  "slug": "reasoning-aptitude-2026",
+  "description": "A 45-minute screening round in logical reasoning, quantitative aptitude, data interpretation and written reasoning. Taken unsupervised, in a browser, with Standard proctoring.",
+  "tags": ["campus", "aptitude", "screening"],
+  "license": "CC-BY-4.0",
+  "banks": ["questions.json"],
+
+  "timing": {
+    "timezone": "Asia/Kolkata",
+    "opens_at": "2026-11-14T09:00:00+05:30",
+    "closes_at": "2026-11-14T13:00:00+05:30",
+    "latest_start_at": "2026-11-14T12:00:00+05:30",
+    "duration_minutes": 45,
+    "navigation": "per_section",
+    "attempts_allowed": 1,
+    "counted_attempt": "highest",
+    "warn_at_minutes": [10, 2],
+    "late_sync_grace_seconds": 30
+  },
+
+  "access": {
+    "mode": "link_code",
+    "access_code": "APTI-2026",
+    "allow_email_domains": ["*.edu.in", "*.ac.in"],
+    "captcha": true
+  },
+
+  "consent": {
+    "version": "2026-10-01",
+    "text": "This test records your answers, the times you open and leave the test window, and your browser and screen details. Your name, email and college are stored so the organiser can identify your result. Nothing is recorded from your camera or microphone in this test. Your answers and personal details are kept for 12 months and then deleted. You can ask the organiser for a copy of your data, or for it to be deleted, at any time."
+  },
+
+  "registration_form": {
+    "title": "Before you start",
+    "description": "All fields marked * are required. Use the email address your college uses for placements — your result is sent there.",
+    "fields": [
+      {
+        "id": "full_name",
+        "type": "short_text",
+        "label": "Full name",
+        "help": "As it appears on your college records.",
+        "required": true,
+        "validation": { "min_length": 3, "max_length": 80 }
+      },
+      {
+        "id": "email",
+        "type": "email",
+        "label": "College email address",
+        "help": "We send your result here. Personal addresses are not accepted.",
+        "required": true,
+        "unique": true,
+        "validation": { "allowed_domains": ["*.edu.in", "*.ac.in"] }
+      },
+      {
+        "id": "phone",
+        "type": "phone",
+        "label": "Mobile number",
+        "help": "Used only if we cannot reach you by email.",
+        "required": true,
+        "validation": { "default_country": "IN" }
+      },
+      {
+        "id": "roll_number",
+        "type": "short_text",
+        "label": "Roll number",
+        "required": true,
+        "unique": true,
+        "validation": { "pattern": "^[0-9]{2}[A-Z]{2}[0-9]{4}$", "pattern_message": "Format: 21CS0147 — two digits, two letters, four digits." }
+      },
+      {
+        "id": "degree",
+        "type": "dropdown",
+        "label": "Degree",
+        "required": true,
+        "options": ["B.Tech", "B.Sc", "B.Com", "BCA", "M.Tech", "MCA", "Other"]
+      },
+      {
+        "id": "graduation_year",
+        "type": "number",
+        "label": "Year of graduation",
+        "required": true,
+        "validation": { "min": 2026, "max": 2030, "integer": true }
+      },
+      {
+        "id": "cgpa",
+        "type": "number",
+        "label": "CGPA so far",
+        "help": "On a 10-point scale, for example 8.4.",
+        "required": true,
+        "validation": { "min": 0, "max": 10, "decimals": 2 }
+      },
+      {
+        "id": "date_of_birth",
+        "type": "date",
+        "label": "Date of birth",
+        "required": true,
+        "validation": { "max": "2010-12-31" }
+      },
+      {
+        "id": "resume_url",
+        "type": "url",
+        "label": "Link to your resume",
+        "help": "A Google Drive, OneDrive or GitHub link that anyone with the link can open.",
+        "required": true,
+        "validation": {
+          "allowed_domains": ["drive.google.com", "1drv.ms", "github.com", "*.github.io"],
+          "check_reachable": true
+        }
+      },
+      {
+        "id": "stream",
+        "type": "radio",
+        "label": "Which role are you applying for?",
+        "required": true,
+        "options": ["Software engineering", "Data and analytics", "Quality engineering"]
+      },
+      {
+        "id": "accommodations",
+        "type": "checkbox",
+        "label": "Do you need any of these?",
+        "help": "The organiser will contact you before the test. Asking for extra time does not affect your result.",
+        "required": false,
+        "options": ["Extra time (approved accommodation)", "Larger text", "High-contrast colours", "Screen reader support"]
+      },
+      {
+        "id": "notes",
+        "type": "long_text",
+        "label": "Anything else the organiser should know?",
+        "required": false,
+        "validation": { "max_length": 500 }
+      },
+      {
+        "id": "consent",
+        "type": "consent",
+        "label": "I have read and accept how my data is used.",
+        "required": true,
+        "link_text": "What we collect and why",
+        "link_target": "consent"
+      }
+    ]
+  },
+
+  "proctoring": {
+    "profile": "standard",
+    "overrides": {
+      "violation_limit": 4,
+      "violation_action": "warn_then_flag",
+      "allow_calculator": true
+    }
+  },
+
+  "scoring": {
+    "default_mode": "negative",
+    "negative_fraction": 0.25,
+    "pass_mark_percent": 50
+  },
+
+  "sections": [
+    {
+      "id": "quant",
+      "title": "Quantitative aptitude",
+      "instructions": "Four questions drawn at random for each candidate. A calculator is available in the toolbar. Wrong answers lose a quarter of the question's points; unanswered questions lose nothing.",
+      "time_limit_minutes": 15,
+      "shuffle_questions": true,
+      "source": {
+        "kind": "pool",
+        "bank": "questions.json",
+        "count": 4,
+        "filter": { "tags": ["quantitative"] }
+      }
+    },
+    {
+      "id": "reasoning",
+      "title": "Logical reasoning",
+      "instructions": "Four questions. Candidates sitting next to each other get different sets.",
+      "time_limit_minutes": 12,
+      "shuffle_questions": true,
+      "source": {
+        "kind": "sets",
+        "assignment": "round_robin",
+        "sets": [
+          { "set": "A", "questions": ["LOG-001", "LOG-003", "LOG-005", "LOG-007"] },
+          { "set": "B", "questions": ["LOG-002", "LOG-004", "LOG-006", "LOG-008"] }
+        ]
+      }
+    },
+    {
+      "id": "written",
+      "title": "Data interpretation and written reasoning",
+      "instructions": "Read the table once and answer both questions on it, then write your two answers in your own words. The last two questions are marked by a person, not by the computer.",
+      "time_limit_minutes": 18,
+      "shuffle_questions": false,
+      "source": {
+        "kind": "fixed",
+        "questions": ["DIN-001", "DIN-002", "WRI-001", "WRI-002"]
+      }
+    }
+  ],
+
+  "release": {
+    "when": "on_date",
+    "at": "2026-11-16T18:00:00+05:30",
+    "show": "score_and_sections"
+  },
+
+  "retention": {
+    "personal_data_days": 365,
+    "snapshots_days": 90
+  }
+}

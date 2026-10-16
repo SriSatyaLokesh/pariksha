@@ -1,0 +1,255 @@
+{
+  "$schema": "../../schemas/bank-1.json",
+  "format": "pariksha/bank@1",
+  "name": "Reasoning and aptitude — campus screening",
+  "description": "Seventeen questions covering logical reasoning, quantitative aptitude, data interpretation and written reasoning. Together they use all twelve Pariksha question types, so this file doubles as a worked reference for question authors.",
+  "license": "CC-BY-4.0",
+  "groups": [
+    {
+      "id": "library-loans",
+      "title": "Books borrowed from a college library",
+      "passage": "The table shows how many books were borrowed from a college library in the first three months of the year.\n\n| Month | Fiction | Science | History |\n| --- | --- | --- | --- |\n| January | 120 | 80 | 40 |\n| February | 150 | 90 | 60 |\n| March | 180 | 60 | 60 |"
+    }
+  ],
+  "questions": [
+    {
+      "id": "QNT-001",
+      "type": "numeric",
+      "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+      "unit": "km/h",
+      "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+      "difficulty": "easy",
+      "tags": ["quantitative", "speed-distance-time"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "The train covers its own length: 180 ÷ 9 = 20 m/s. Multiply by 18/5 to get 72 km/h."
+    },
+    {
+      "id": "QNT-002",
+      "type": "numeric",
+      "prompt": "Asha finishes a job in 12 days and Bhanu finishes the same job in 18 days. Working together, how many days do they take? Give the answer in days, correct to one decimal place.",
+      "unit": "days",
+      "key": { "value": 7.2, "tolerance": 0.05, "tolerance_type": "absolute" },
+      "difficulty": "medium",
+      "tags": ["quantitative", "time-and-work"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "Combined rate = 1/12 + 1/18 = 5/36 of the job per day, so the job takes 36/5 = 7.2 days."
+    },
+    {
+      "id": "QNT-003",
+      "type": "select_k",
+      "k": 2,
+      "prompt": "Choose **exactly two** numbers below that are prime.",
+      "options": [
+        { "id": "a", "text": "51" },
+        { "id": "b", "text": "53" },
+        { "id": "c", "text": "57" },
+        { "id": "d", "text": "59" },
+        { "id": "e", "text": "91" }
+      ],
+      "key": ["b", "d"],
+      "difficulty": "medium",
+      "tags": ["quantitative", "number-theory"],
+      "scoring": { "mode": "partial", "points": 2 },
+      "explanation": "51 = 3 × 17, 57 = 3 × 19 and 91 = 7 × 13. Only 53 and 59 have no factor other than 1 and themselves."
+    },
+    {
+      "id": "QNT-004",
+      "type": "multiple",
+      "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+      "options": [
+        { "id": "a", "text": "114" },
+        { "id": "b", "text": "128" },
+        { "id": "c", "text": "222" },
+        { "id": "d", "text": "345" },
+        { "id": "e", "text": "432" }
+      ],
+      "key": ["a", "c", "e"],
+      "difficulty": "easy",
+      "tags": ["quantitative", "divisibility"],
+      "scoring": { "mode": "partial", "points": 2 },
+      "explanation": "A number is divisible by 6 when it is even and its digits add to a multiple of 3. 128 fails the digit test (1+2+8 = 11) and 345 is odd."
+    },
+    {
+      "id": "QNT-005",
+      "type": "fill_blank",
+      "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+      "blanks": [
+        { "id": "b1", "accepted": ["56"], "match": "exact" },
+        { "id": "b2", "accepted": ["224"], "match": "exact" }
+      ],
+      "difficulty": "easy",
+      "tags": ["quantitative", "series"],
+      "scoring": { "mode": "partial", "points": 2 },
+      "explanation": "Each term is twice the one before it."
+    },
+    {
+      "id": "LOG-001",
+      "type": "single",
+      "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+      "options": [
+        { "id": "a", "text": "95" },
+        { "id": "b", "text": "117" },
+        { "id": "c", "text": "127" },
+        { "id": "d", "text": "131" }
+      ],
+      "key": "c",
+      "difficulty": "easy",
+      "tags": ["reasoning", "series"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "Each term is double the previous term plus one: 63 × 2 + 1 = 127."
+    },
+    {
+      "id": "LOG-002",
+      "type": "single",
+      "prompt": "Pointing at a photograph, Meera said: *\"He is the only son of my mother's only sister.\"* How is the man in the photograph related to Meera?",
+      "options": [
+        { "id": "a", "text": "Her brother" },
+        { "id": "b", "text": "Her cousin" },
+        { "id": "c", "text": "Her uncle" },
+        { "id": "d", "text": "Her nephew" }
+      ],
+      "key": "b",
+      "difficulty": "easy",
+      "tags": ["reasoning", "blood-relations"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "Her mother's sister is Meera's aunt, so the aunt's son is Meera's cousin."
+    },
+    {
+      "id": "LOG-003",
+      "type": "matching",
+      "prompt": "Match each series to the rule that generates it.",
+      "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+      "right": [
+        "Each term is twice the one before it",
+        "Add the next odd number, starting at 3",
+        "Squares of the natural numbers",
+        "Multiples of 3"
+      ],
+      "key": {
+        "2, 4, 8, 16": "Each term is twice the one before it",
+        "2, 5, 10, 17": "Add the next odd number, starting at 3",
+        "1, 4, 9, 16": "Squares of the natural numbers",
+        "3, 6, 9, 12": "Multiples of 3"
+      },
+      "difficulty": "medium",
+      "tags": ["reasoning", "series"],
+      "scoring": { "mode": "partial", "points": 2 },
+      "explanation": "In 2, 5, 10, 17 the gaps are 3, 5 and 7."
+    },
+    {
+      "id": "LOG-004",
+      "type": "multi_matching",
+      "prompt": "Tick every property that each number has. A number can have more than one.",
+      "left": ["12", "17", "36", "45"],
+      "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+      "key": {
+        "12": ["Even"],
+        "17": ["Prime"],
+        "36": ["Even", "Perfect square", "Divisible by 9"],
+        "45": ["Divisible by 9"]
+      },
+      "difficulty": "medium",
+      "tags": ["reasoning", "number-properties"],
+      "scoring": { "mode": "partial", "points": 2 },
+      "explanation": "36 = 6², is even, and 3 + 6 = 9. For 45, 4 + 5 = 9."
+    },
+    {
+      "id": "LOG-005",
+      "type": "assertion_reason",
+      "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+      "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does **not** follow that some roses fade quickly.",
+      "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+      "key": "both_true_explains",
+      "difficulty": "hard",
+      "tags": ["reasoning", "syllogism"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "The flowers that fade quickly may all be flowers other than roses, so the conclusion fails in at least one situation. That is exactly what the reason states."
+    },
+    {
+      "id": "LOG-006",
+      "type": "ordering",
+      "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+      "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+      "difficulty": "medium",
+      "tags": ["reasoning", "alphabetical-order"],
+      "scoring": { "mode": "position", "points": 2 },
+      "explanation": "All five start with \"ab\". Compare the third letter (a, d, i, i, j), then the fourth to separate *abide* from *ability* (d before l)."
+    },
+    {
+      "id": "LOG-007",
+      "type": "true_false",
+      "prompt": "In a certain code, EARTH is written as FBSUI. **Statement:** each letter has been replaced by the letter that follows it in the alphabet.",
+      "key": true,
+      "difficulty": "easy",
+      "tags": ["reasoning", "coding-decoding"],
+      "scoring": { "mode": "all_or_nothing", "points": 1 },
+      "explanation": "E→F, A→B, R→S, T→U, H→I."
+    },
+    {
+      "id": "LOG-008",
+      "type": "true_false",
+      "prompt": "**Statement:** If every student who passed the test had studied, then a student who did not study did not pass.",
+      "key": true,
+      "difficulty": "medium",
+      "tags": ["reasoning", "logic"],
+      "scoring": { "mode": "all_or_nothing", "points": 1 },
+      "explanation": "The second sentence is the contrapositive of the first, and a statement and its contrapositive are always equivalent."
+    },
+    {
+      "id": "DIN-001",
+      "type": "single",
+      "group": "library-loans",
+      "prompt": "In which month did fiction make up the largest share of that month's total loans?",
+      "options": [
+        { "id": "a", "text": "January" },
+        { "id": "b", "text": "February" },
+        { "id": "c", "text": "March" },
+        { "id": "d", "text": "January and February were equal and highest", "pinned": true }
+      ],
+      "key": "c",
+      "difficulty": "medium",
+      "tags": ["data-interpretation"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "January 120/240 = 50%, February 150/300 = 50%, March 180/300 = 60%."
+    },
+    {
+      "id": "DIN-002",
+      "type": "numeric",
+      "group": "library-loans",
+      "prompt": "By what percentage did the total number of loans rise from January to March?",
+      "unit": "%",
+      "key": { "value": 25, "tolerance": 0.5, "tolerance_type": "absolute" },
+      "difficulty": "medium",
+      "tags": ["data-interpretation", "percentages"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "Totals are 240 and 300, so the rise is 60/240 = 25%."
+    },
+    {
+      "id": "WRI-001",
+      "type": "short_answer",
+      "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
+      "max_length": 200,
+      "model_answer": "The nth term is n × (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+      "difficulty": "medium",
+      "tags": ["reasoning", "series", "manual"],
+      "scoring": { "mode": "rubric", "points": 3 },
+      "explanation": "Accept either the closed form n(n+1) or the description of the growing gaps."
+    },
+    {
+      "id": "WRI-002",
+      "type": "long_answer",
+      "prompt": "A college wants to cut printing costs. A committee reports: *\"Last year the library printed 40,000 pages. This year, after we put two more printers in the reading room, it printed 70,000. The new printers caused the rise, so removing them will bring printing back down.\"*\n\nIdentify the weakness in this argument and describe one piece of evidence that would test it. Write 100–200 words.",
+      "max_length": 2000,
+      "rubric": [
+        { "level": "No credit", "points": 0, "description": "No answer, or does not engage with the argument." },
+        { "level": "Partial", "points": 2, "description": "Notices that the conclusion is not supported, but does not name the flaw or propose usable evidence." },
+        { "level": "Good", "points": 4, "description": "Names the flaw (treating a correlation as a cause) and proposes one relevant piece of evidence." },
+        { "level": "Excellent", "points": 5, "description": "Names the flaw, offers at least one plausible alternative explanation (more students, a new course, free printing), and proposes evidence that would separate the explanations." }
+      ],
+      "difficulty": "hard",
+      "tags": ["reasoning", "critical-reasoning", "manual"],
+      "scoring": { "mode": "rubric", "points": 5 },
+      "explanation": "The committee treats a correlation as a cause. Enrolment, course changes or a printing-charge change could explain the rise; pages printed per student, or usage before and after the printers arrived, would separate the explanations."
+    }
+  ]
+}

@@ -1,0 +1,179 @@
+{
+  "$schema": "../../schemas/bank-1.json",
+  "format": "pariksha/bank@1",
+  "name": "Technical screening — one question of each type",
+  "description": "One question of every type, covering SQL, Python, AI basics and reasoning. Use it to try Pariksha or as a template for your own banks.",
+  "license": "CC-BY-4.0",
+  "groups": [
+    {
+      "id": "orders-table",
+      "title": "Orders table",
+      "passage": "Table `orders(customer_id, amount, status)` contains:\n\n| customer_id | amount | status |\n| --- | --- | --- |\n| 1 | 100 | paid |\n| 1 | 50 | refunded |\n| 2 | 200 | paid |\n| 3 | NULL | paid |"
+    }
+  ],
+  "questions": [
+    {
+      "id": "SQL-001",
+      "type": "single",
+      "group": "orders-table",
+      "prompt": "What does this query return?\n\n```sql\nSELECT customer_id, SUM(amount)\nFROM orders\nWHERE status = 'paid'\nGROUP BY customer_id;\n```",
+      "options": [
+        { "id": "a", "text": "3 rows; customer 3's sum is NULL" },
+        { "id": "b", "text": "3 rows; customer 3's sum is 0" },
+        { "id": "c", "text": "2 rows; customer 3 is excluded" },
+        { "id": "d", "text": "3 rows; customer 1's sum is 150" }
+      ],
+      "key": "a",
+      "difficulty": "hard",
+      "tags": ["sql", "aggregation"],
+      "scoring": { "mode": "all_or_nothing", "points": 3 },
+      "explanation": "SUM over only NULLs is NULL; the refunded row is removed by WHERE."
+    },
+    {
+      "id": "SQL-002",
+      "type": "multiple",
+      "prompt": "Every employee has a non-NULL `dept_id` and `departments.id` is the primary key. Which queries return employees whose `dept_id` does **not** exist in `departments`? (Select all that apply)",
+      "options": [
+        { "id": "a", "text": "`SELECT e.* FROM employees e LEFT JOIN departments d ON e.dept_id = d.id WHERE d.id IS NULL;`" },
+        { "id": "b", "text": "`SELECT * FROM employees WHERE dept_id NOT IN (SELECT id FROM departments);`" },
+        { "id": "c", "text": "`SELECT e.* FROM employees e WHERE NOT EXISTS (SELECT 1 FROM departments d WHERE d.id = e.dept_id);`" },
+        { "id": "d", "text": "`SELECT e.* FROM employees e INNER JOIN departments d ON e.dept_id = d.id WHERE d.id IS NULL;`" }
+      ],
+      "key": ["a", "b", "c"],
+      "difficulty": "hard",
+      "tags": ["sql", "joins"],
+      "scoring": { "mode": "partial", "points": 3 },
+      "explanation": "An INNER JOIN can never produce d.id IS NULL."
+    },
+    {
+      "id": "SQL-003",
+      "type": "select_k",
+      "k": 2,
+      "prompt": "Choose exactly **two** statements about NULL that are true.",
+      "options": [
+        { "id": "a", "text": "NULL = NULL evaluates to TRUE" },
+        { "id": "b", "text": "Use IS NULL to test for NULL" },
+        { "id": "c", "text": "Aggregates like SUM and AVG ignore NULL values" },
+        { "id": "d", "text": "COUNT(*) skips rows containing NULL" },
+        { "id": "e", "text": "NULL is treated as 0 in numeric columns" }
+      ],
+      "key": ["b", "c"],
+      "difficulty": "medium",
+      "tags": ["sql", "null"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 }
+    },
+    {
+      "id": "PY-001",
+      "type": "true_false",
+      "prompt": "In Python, a default argument such as `def f(x, acc=[])` is created once and shared across calls.",
+      "key": true,
+      "difficulty": "medium",
+      "tags": ["python"],
+      "scoring": { "mode": "negative", "points": 1, "negative_fraction": 0.5 }
+    },
+    {
+      "id": "AI-001",
+      "type": "assertion_reason",
+      "prompt": "Read the assertion and the reason, then choose the correct option.",
+      "assertion": "Retrieval-augmented generation (RAG) completely eliminates hallucinations.",
+      "reason": "RAG gives the model relevant context at question time.",
+      "key": "a_false_r_true",
+      "difficulty": "medium",
+      "tags": ["ai", "rag"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "RAG reduces hallucinations but the model can still misread or ignore context."
+    },
+    {
+      "id": "SQL-004",
+      "type": "matching",
+      "prompt": "Match each operation to its result.",
+      "left": ["INNER JOIN", "LEFT JOIN", "UNION", "UNION ALL"],
+      "right": [
+        "Only rows that match in both tables",
+        "All rows from the left table, plus matches",
+        "Combines results and removes duplicates",
+        "Combines results and keeps duplicates"
+      ],
+      "key": {
+        "INNER JOIN": "Only rows that match in both tables",
+        "LEFT JOIN": "All rows from the left table, plus matches",
+        "UNION": "Combines results and removes duplicates",
+        "UNION ALL": "Combines results and keeps duplicates"
+      },
+      "difficulty": "easy",
+      "tags": ["sql", "joins"],
+      "scoring": { "mode": "partial", "points": 2 }
+    },
+    {
+      "id": "GEN-001",
+      "type": "multi_matching",
+      "prompt": "Tick every data structure that has each property (a structure can match several properties).",
+      "left": ["Keeps insertion order", "Allows duplicate values", "O(1) average membership test"],
+      "right": ["Python list", "Python set", "Python dict (keys)"],
+      "key": {
+        "Keeps insertion order": ["Python list", "Python dict (keys)"],
+        "Allows duplicate values": ["Python list"],
+        "O(1) average membership test": ["Python set", "Python dict (keys)"]
+      },
+      "difficulty": "medium",
+      "tags": ["python", "data-structures"],
+      "scoring": { "mode": "partial", "points": 3 }
+    },
+    {
+      "id": "SQL-005",
+      "type": "ordering",
+      "prompt": "Arrange these clauses in the **logical** order SQL processes them.",
+      "items": ["FROM", "WHERE", "GROUP BY", "HAVING", "SELECT", "ORDER BY"],
+      "difficulty": "medium",
+      "tags": ["sql"],
+      "scoring": { "mode": "position", "points": 2 }
+    },
+    {
+      "id": "PY-002",
+      "type": "fill_blank",
+      "prompt": "Complete the code so it prints `[0, 4, 16]`:\n\n```python\nprint([i * i for i in range({{1}}) if i % 2 == {{2}}])\n```",
+      "blanks": [
+        { "id": "1", "accepted": ["5"], "match": "exact" },
+        { "id": "2", "accepted": ["0"], "match": "exact" }
+      ],
+      "difficulty": "easy",
+      "tags": ["python"],
+      "scoring": { "mode": "partial", "points": 2 }
+    },
+    {
+      "id": "RSN-001",
+      "type": "numeric",
+      "prompt": "A pipeline has 3 sequential steps, each independently 90% accurate. What is the end-to-end accuracy, in percent?",
+      "unit": "%",
+      "key": { "value": 72.9, "tolerance": 0.1, "tolerance_type": "absolute" },
+      "difficulty": "medium",
+      "tags": ["reasoning", "probability"],
+      "scoring": { "mode": "all_or_nothing", "points": 2 },
+      "explanation": "0.9 × 0.9 × 0.9 = 0.729."
+    },
+    {
+      "id": "GEN-002",
+      "type": "short_answer",
+      "prompt": "An API intermittently returns HTTP 429. In one or two sentences, how should a client handle it?",
+      "max_length": 300,
+      "model_answer": "Retry with exponential backoff and jitter, respecting any Retry-After header.",
+      "difficulty": "easy",
+      "tags": ["http"],
+      "scoring": { "mode": "rubric", "points": 2 }
+    },
+    {
+      "id": "GEN-003",
+      "type": "long_answer",
+      "prompt": "A client says chatbot usage fell 40% after last week's release. Describe how you would investigate before changing anything.",
+      "max_length": 2000,
+      "rubric": [
+        { "level": "Strong", "points": 4, "description": "Verifies the drop is real, segments by user group, channel and date, and links findings to release changes." },
+        { "level": "Adequate", "points": 2, "description": "Checks data and suggests some segmentation." },
+        { "level": "Weak", "points": 0, "description": "Jumps to a fix without checking the data." }
+      ],
+      "difficulty": "hard",
+      "tags": ["analytical"],
+      "scoring": { "mode": "rubric", "points": 4 }
+    }
+  ]
+}
