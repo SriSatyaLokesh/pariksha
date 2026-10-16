@@ -91,56 +91,121 @@ describe("matchBlank", () => {
   });
 });
 
-describe("assertSafeRegex", () => {
-  it("a catastrophically backtracking pattern is rejected rather than executed", () => {
-    expect(() => assertSafeRegex("(a+)+$")).toThrow(/unsafe/i);
+describe("assertSafeRegex — permitted subset", () => {
+  it("rejects a pattern over MAX_REGEX_LENGTH", () => {
     expect(() => assertSafeRegex("a".repeat(MAX_REGEX_LENGTH + 1))).toThrow(/too long/i);
   });
 
-  it("accepts an ordinary bounded pattern", () => {
-    expect(() => assertSafeRegex("\\d{3}-\\d{4}")).not.toThrow();
+  // Each of these was, in turn, a live bypass of an earlier blacklist-style
+  // check (round 1 caught (a+)+ and the explicit-alternation shapes; round 2
+  // closed ((a|a))+, (a?a?)+ and a*a*a*a*b after they were found to slip
+  // through). The permitted-subset rule is a single grammar check, so all
+  // of these are rejected by the SAME code path (the "unbounded-quantified
+  // group contains another quantifier/alternation at any depth" rule, or
+  // the "adjacent unbounded quantifiers" rule for the last one) rather than
+  // by one bespoke rule per shape.
+  it.each([
+    ["(a+)+", /unsafe/i],
+    ["(a|a)+", /alternation|quantifier/i],
+    ["(a|ab|b)+", /alternation|quantifier/i],
+    ["((a|a))+", /alternation|quantifier/i], // alternation nested two levels deep inside the quantified group
+    ["(x(a|a))+", /alternation|quantifier/i], // alternation nested inside a quantified group alongside a literal
+    ["(a?a?)+", /alternation|quantifier/i], // only bounded `?` quantifiers inside — no `*`/`+` at all
+    ["a*a*a*a*b", /unbounded repeat/i], // no groups at all — polynomial blowup from adjacent unbounded quantifiers
+  ])("rejects %s", (pattern, messagePattern) => {
+    expect(() => assertSafeRegex(pattern)).toThrow(/unsafe/i);
+    expect(() => assertSafeRegex(pattern)).toThrow(messagePattern);
   });
 
-  it("names which rule failed in the error message", () => {
-    expect(() => assertSafeRegex("(a*)*")).toThrow(/nested|unbounded/i);
+  it.each(["\\d{1,5}", "[a-z]+", "(abc)+", "(\\d\\d)+", "(cat|dog){1,5}", "cat|dog", "^(yes|no)$"])(
+    "accepts %s",
+    (pattern) => {
+      expect(() => assertSafeRegex(pattern)).not.toThrow();
+    },
+  );
+
+  it("names the construct and the way out in every rejection message", () => {
+    // Every rejection should point the author at a fix: bound the repeat,
+    // or list the forms in `accepted`.
+    for (const pattern of ["(a+)+", "(a|a)+", "(a?a?)+", "a*a*a*a*b"]) {
+      expect(() => assertSafeRegex(pattern)).toThrow(/bound|accepted/i);
+    }
   });
 
-  it("rejects an unbounded-quantified group with a top-level alternation (overlapping alternation blowup)", () => {
-    expect(() => assertSafeRegex("(a|a)+")).toThrow(/unsafe/i);
-    expect(() => assertSafeRegex("(a|a)+")).toThrow(/alternation/i);
-    expect(() => assertSafeRegex("(a|ab|b)+")).toThrow(/alternation/i);
+  it("bans backreferences outright", () => {
+    expect(() => assertSafeRegex("(a+)\\1+")).toThrow(/backreference/i);
+    expect(() => assertSafeRegex("(?<year>\\d{4})-\\k<year>")).toThrow(/backreference/i);
   });
 
-  it("still accepts a bounded alternation inside a repeat", () => {
-    expect(() => assertSafeRegex("(cat|dog){1,5}")).not.toThrow();
+  it("bans lookahead and lookbehind outright", () => {
+    expect(() => assertSafeRegex("foo(?=bar)")).toThrow(/lookahead|lookbehind/i);
+    expect(() => assertSafeRegex("(?<=foo)bar")).toThrow(/lookahead|lookbehind/i);
   });
 
-  it("a catastrophic alternation pattern is genuinely slow when run unguarded, confirming the rejection matters", () => {
+  it("does not ban an ordinary named capture group (not lookbehind)", () => {
+    expect(() => assertSafeRegex("(?<year>\\d{4})")).not.toThrow();
+  });
+
+  it("a catastrophically backtracking pattern previously accepted is genuinely slow when run unguarded, confirming the rejection matters", () => {
+    // (a|a)+ — the round-1 bypass — run unguarded at a small, suite-safe
+    // input size. Not asserting a specific duration (flaky across
+    // machines), just that it is not instantaneous like every pattern in
+    // the accepted set below.
     const re = new RegExp("^(?:(a|a)+)$", "u");
     const input = "a".repeat(20) + "!";
     const start = Date.now();
     re.test(input);
-    const elapsed = Date.now() - start;
-    // Not asserting a specific duration (flaky across machines) — just
-    // that this is not instantaneous, unlike every pattern this suite
-    // otherwise exercises. A regression here is exactly the bug this
-    // rejection exists to prevent.
-    expect(elapsed).toBeGreaterThan(50);
+    expect(Date.now() - start).toBeGreaterThan(50);
   });
 });
 
 describe("matchBlank regex input-length cap", () => {
-  it("refuses to regex-match a candidate over MAX_BLANK_INPUT_LENGTH, scoring it as a non-match rather than throwing", () => {
+  it("refuses to regex-match a candidate over MAX_BLANK_INPUT_LENGTH (101 chars), scoring it as a non-match rather than throwing", () => {
+    expect(MAX_BLANK_INPUT_LENGTH).toBe(100);
     const tooLong = "a".repeat(MAX_BLANK_INPUT_LENGTH + 1);
-    expect(() =>
-      matchBlank(tooLong, { id: "b1", accepted: ["a+"], match: "regex" }),
-    ).not.toThrow();
+    expect(() => matchBlank(tooLong, { id: "b1", accepted: ["a+"], match: "regex" })).not.toThrow();
     expect(matchBlank(tooLong, { id: "b1", accepted: ["a+"], match: "regex" })).toBe(false);
   });
 
-  it("still matches a candidate at or under the cap", () => {
+  it("still matches a candidate at exactly the cap (100 chars)", () => {
     const atCap = "a".repeat(MAX_BLANK_INPUT_LENGTH);
+    expect(atCap).toHaveLength(100);
     expect(matchBlank(atCap, { id: "b1", accepted: ["a+"], match: "regex" })).toBe(true);
+  });
+});
+
+describe("assertSafeRegex — accepted set is fast at the input cap (regression guard)", () => {
+  // Every pattern the whitelist admits, matched against an adversarial
+  // (non-matching, so the engine must exhaust its options) input at
+  // exactly MAX_BLANK_INPUT_LENGTH. If a future change to the grammar
+  // check ever readmits a pattern that can blow up, this is the test that
+  // should catch it by timing out rather than by a human noticing.
+  const n = MAX_BLANK_INPUT_LENGTH;
+  const cases: Array<{ pattern: string; attack: string }> = [
+    { pattern: "\\d{1,5}", attack: "1".repeat(n) },
+    { pattern: "[a-z]+", attack: "a".repeat(n - 1) + "1" },
+    { pattern: "(abc)+", attack: "abc".repeat(Math.floor(n / 3)) + "x" },
+    { pattern: "(\\d\\d)+", attack: "1".repeat(n - 1) + "x" },
+    { pattern: "(cat|dog){1,5}", attack: "cat".repeat(Math.floor(n / 3)) + "x" },
+    { pattern: "cat|dog", attack: "c".repeat(n) },
+  ];
+
+  it("every accepted pattern matches or fails in a few milliseconds, even against a worst-case-shaped input at the cap", () => {
+    let worstElapsed = 0;
+    for (const { pattern, attack } of cases) {
+      expect(() => assertSafeRegex(pattern)).not.toThrow();
+      expect(attack.length).toBeLessThanOrEqual(n);
+      const re = new RegExp(`^(?:${pattern})$`, "u");
+      const start = Date.now();
+      re.test(attack);
+      const elapsed = Date.now() - start;
+      worstElapsed = Math.max(worstElapsed, elapsed);
+      // Generous relative to the sub-millisecond reality, but tight enough
+      // that an exponential or polynomial blowup pattern would fail this
+      // long before it got anywhere near MAX_BLANK_INPUT_LENGTH.
+      expect(elapsed).toBeLessThan(200);
+    }
+    expect(worstElapsed).toBeLessThan(200);
   });
 });
 

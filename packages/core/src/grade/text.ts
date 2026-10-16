@@ -15,20 +15,27 @@ export type TextQuestion = FillBlankQuestion | NumericQuestion;
 export const MAX_REGEX_LENGTH = 200;
 
 /**
- * Longest candidate value matched against a `regex` blank. Backtracking
- * cost in a pathological pattern grows exponentially with *input* length,
- * so capping the input bounds the damage regardless of which pattern
- * shapes `assertSafeRegex`'s heuristic fails to catch (see its own doc
- * comment). A fill-in-the-blank answer is a word, a number or a short
- * phrase — the schema caps a full `short_answer` at 500 characters and a
- * `long_answer` at 5000, and a single blank inside a sentence template is
- * shorter than either — so 300 is generous headroom for any real answer
- * while keeping worst-case backtracking cost bounded in-process. This is
- * the only bound available here: `packages/core` performs no I/O and
- * starts no timers, so a wall-clock execution deadline belongs at the API
- * layer, not in this pure function.
+ * Longest candidate value matched against a `regex` blank. This is the
+ * defense-in-depth backstop, not the primary defense — `assertSafeRegex`
+ * (see below) only admits a subset of patterns that is safe by
+ * construction, but a subset that is "safe by construction" is only as
+ * good as the construction: if the grammar check has a bug, or someone
+ * changes it later and gets it wrong, the input cap is what actually
+ * bounds the damage, because backtracking cost (whether exponential or
+ * merely polynomial) grows with *input* length. The round-1 fix used 300
+ * on the premise that it wouldn't matter once the pattern itself was
+ * provably safe; `(a?a?)+` needed only 25 characters to take over a
+ * minute, which proved the cap has to do real work on its own. 100
+ * characters is still ample for a fill-in-the-blank answer — a word, a
+ * number, a short phrase — while keeping a cap small enough that even an
+ * undiscovered polynomial-blowup pattern finishes in well under a second.
+ * `short_answer` (500) and `long_answer` (5000) are separate question
+ * types that never take this regex path. This is the only bound available
+ * here: `packages/core` performs no I/O and starts no timers, so a
+ * wall-clock execution deadline belongs at the API layer, not in this pure
+ * function.
  */
-export const MAX_BLANK_INPUT_LENGTH = 300;
+export const MAX_BLANK_INPUT_LENGTH = 100;
 
 /**
  * Rejects an author-supplied regex pattern before it is ever compiled or
@@ -36,57 +43,106 @@ export const MAX_BLANK_INPUT_LENGTH = 300;
  * attempt that touches the question, so a catastrophically backtracking
  * pattern would hang the grading worker for all of them.
  *
- * This is a conservative heuristic for known dangerous shapes, not a
- * general decision procedure — detecting catastrophic backtracking in
- * general is undecidable. It catches:
- *   - a group quantified with an unbounded repetition (`*`, `+`, `{n,}`)
- *     whose own contents also contain an unbounded repetition — the
- *     `(a+)+`, `(a*)*`, `(a+)*` nested-quantifier shape that produces
- *     exponential backtracking. The check is textual and recursive-by-
- *     substring: it also catches multi-level nesting such as `((a+)+)+`.
- *   - a group quantified with an unbounded repetition whose own contents
- *     contain a top-level `|` — the `(a|a)+`, `(a|ab|b)+` overlapping-
- *     alternation shape, which backtracks exponentially even with no
- *     quantifier character inside the group at all. No attempt is made to
- *     decide whether the alternatives actually overlap (that is at least
- *     as hard as detecting backtracking in general): a safe pattern like
- *     `(cat|dog)+` is rejected too. An author who needs alternation inside
- *     a repeat can bound the repeat (`(cat|dog){1,5}`) or list the forms
- *     in `accepted` instead — `accepted` already holds a list of whole
- *     answers for exactly this reason.
+ * Two rounds of "reject known-dangerous shapes" were each bypassed within
+ * minutes by a shape the list didn't name (`(a|a)+` after the first round;
+ * `((a|a))+`, `(a?a?)+` and `a*a*a*a*b` after the second). That is the
+ * nature of a blacklist against an undecidable problem: the space of
+ * dangerous constructions is unbounded, so enumerating them always loses.
+ * This function is now a **whitelist**: it does not ask "is this pattern
+ * dangerous?", it asks "is this pattern inside a permitted safe subset?"
+ * and rejects everything else, whether or not the rejected pattern would
+ * actually have been dangerous.
  *
- * It does NOT catch every pattern that can backtrack catastrophically —
- * notably:
- *   - danger spread across several non-nested groups that each look safe
- *     alone but compose badly (e.g. `a*a*a*a*b` without any grouping);
- *   - backreference blowups, e.g. `(a+)\1+`;
- *   - patterns using lookahead/lookbehind to manufacture backtracking.
- * Those shapes are out of scope for this heuristic; `MAX_BLANK_INPUT_LENGTH`
- * is the defense-in-depth backstop for whatever this check misses.
+ * The permitted subset, precisely:
+ *   - No backreferences (`\1`, `\k<name>`) anywhere — banned outright.
+ *   - No lookahead/lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`) anywhere —
+ *     banned outright.
+ *   - A parenthesized group quantified with an **unbounded** repetition
+ *     (`*`, `+`, an open-ended `{n,}`) must not contain — at ANY nesting
+ *     depth inside it — another quantifier of any kind (including `?` and
+ *     a bounded `{m,n}`) or an alternation (`|`). A group quantified with a
+ *     **bounded** repetition (`{m,n}` with an explicit upper bound, or no
+ *     quantifier at all) is unrestricted inside: the work it can do is
+ *     capped by construction, so `(cat|dog){1,5}` is fine but
+ *     `(cat|dog)+` and `(cat|dog)*` are not.
+ *   - No two unbounded-quantified atoms may sit adjacent to each other at
+ *     the top level of the pattern with nothing between them (the
+ *     `a*a*a*a*b` polynomial-blowup shape) — a conservative check: two
+ *     unbounded quantifiers back to back is refused even where they might
+ *     not actually interact badly.
+ *   - The pattern must not exceed `MAX_REGEX_LENGTH`.
+ *
+ * Patterns this still allows: `\d{1,5}`, `[a-z]+`, `(abc)+`, `(\d\d)+`,
+ * `(cat|dog){1,5}`, `cat|dog`, `^(yes|no)$`.
+ *
+ * An author who cannot express their accepted answer inside this subset —
+ * typically because they wanted alternation inside an unbounded repeat —
+ * should bound the repeat (`{1,5}` instead of `+`) or list the accepted
+ * forms in `accepted` instead: `accepted` already holds a list of whole
+ * answers for exactly this reason, and every rejection message says so.
+ *
+ * This is not a claim that every rejected pattern is actually dangerous
+ * (`(cat|dog)+` is perfectly safe and is refused anyway), and it is not a
+ * claim that every accepted pattern is provably safe in general — a
+ * subset this size is a pragmatic line, not a proof. `MAX_BLANK_INPUT_LENGTH`
+ * exists specifically because a subset this size can still be wrong.
  */
 export function assertSafeRegex(pattern: string): void {
   if (pattern.length > MAX_REGEX_LENGTH) {
     throw new Error(`unsafe regex: pattern is too long (max ${MAX_REGEX_LENGTH} characters)`);
   }
+  if (hasBackreference(pattern)) {
+    throw new Error(
+      "unsafe regex: backreferences (e.g. \\1, \\k<name>) are not supported — " +
+        "list the alternative forms in `accepted` instead",
+    );
+  }
+  if (hasLookaround(pattern)) {
+    throw new Error(
+      "unsafe regex: lookahead/lookbehind ((?=...), (?!...), (?<=...), (?<!...)) are not supported — " +
+        "express the condition directly in the pattern, or list the alternative forms in `accepted` instead",
+    );
+  }
   for (const group of findParenGroups(pattern)) {
     const outer = quantifierAt(pattern, group.end + 1);
     if (outer?.unbounded === true) {
       const inner = pattern.slice(group.start + 1, group.end);
-      if (hasUnboundedQuantifier(inner)) {
+      if (hasQuantifierOrAlternation(inner)) {
         throw new Error(
-          "unsafe regex: a quantified group contains an unbounded quantifier " +
-            "(nested unbounded quantifiers can cause catastrophic backtracking)",
-        );
-      }
-      if (hasTopLevelAlternation(inner)) {
-        throw new Error(
-          "unsafe regex: a quantified group contains a top-level alternation, e.g. (a|a)+ " +
-            "(overlapping alternatives can also cause catastrophic backtracking) — " +
-            "bound the repeat (e.g. {1,5}) or list the alternative forms in `accepted` instead",
+          "unsafe regex: a group with an unbounded repeat (*, +, {n,}) contains another " +
+            "quantifier or an alternation at some nesting depth inside it (e.g. (a+)+, (a|a)+, " +
+            "(a?a?)+) — bound the repeat instead (e.g. {1,5}), or list the alternative forms " +
+            "in `accepted` instead",
         );
       }
     }
   }
+  if (hasAdjacentUnboundedQuantifiers(pattern)) {
+    throw new Error(
+      "unsafe regex: two unbounded repeats (*, +, {n,}) sit next to each other with nothing " +
+        "required between them (e.g. a*a*b) — this can take polynomial time to fail a match; " +
+        "require a literal between them, bound one of the repeats instead (e.g. {1,5}), or " +
+        "list the alternative forms in `accepted` instead",
+    );
+  }
+}
+
+/** Whether `pattern` contains a backreference: `\1`-`\9` or `\k<name>`. */
+function hasBackreference(pattern: string): boolean {
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === "\\") {
+      const next = pattern[i + 1];
+      if (next !== undefined && next >= "1" && next <= "9") return true;
+      if (next === "k") return true;
+      i++;
+    }
+  }
+  return false;
+}
+
+/** Whether `pattern` contains a lookahead or lookbehind group. */
+function hasLookaround(pattern: string): boolean {
+  return /\(\?=|\(\?!|\(\?<=|\(\?<!/.test(pattern);
 }
 
 /** A balanced, unescaped, outside-character-class pair of parentheses. */
@@ -121,8 +177,16 @@ function findParenGroups(pattern: string): ParenGroup[] {
   return groups;
 }
 
-/** Whether `*`, `+` or an open-ended `{n,}` appears anywhere outside a character class. */
-function hasUnboundedQuantifier(segment: string): boolean {
+/**
+ * Whether a quantifier (`*`, `+`, `?`, or a valid `{m,n}`) or an
+ * alternation (`|`) appears anywhere in `segment`, outside character
+ * classes and escapes — deliberately NOT depth-aware with respect to
+ * nested parentheses, so a quantifier or `|` buried inside a deeper nested
+ * group (e.g. `((a|a))+`, `(x(a|a))+`) is still found: the permitted
+ * subset forbids these at ANY nesting depth inside an unbounded-quantified
+ * group, not just immediately inside it.
+ */
+function hasQuantifierOrAlternation(segment: string): boolean {
   let inClass = false;
   for (let i = 0; i < segment.length; i++) {
     const c = segment[i];
@@ -136,60 +200,79 @@ function hasUnboundedQuantifier(segment: string): boolean {
     }
     if (c === "[") {
       inClass = true;
-    } else if (c === "*" || c === "+") {
+    } else if (c === "*" || c === "+" || c === "?" || c === "|") {
       return true;
-    } else if (c === "{") {
-      const q = quantifierAt(segment, i);
-      if (q?.unbounded === true) return true;
+    } else if (c === "{" && quantifierAt(segment, i) !== null) {
+      return true;
     }
   }
   return false;
 }
 
 /**
- * Whether `|` appears at depth 0 of `segment` (outside a character class
- * and outside any nested parenthesized group within `segment`) — i.e. the
- * group this segment came from has a top-level alternation. A `|` inside a
- * deeper nested group doesn't count here: that nested group is itself
- * walked by `findParenGroups` and checked on its own terms.
+ * Whether two unbounded-quantified atoms sit directly adjacent to each
+ * other at the top level of `pattern`, with nothing between them —
+ * the `a*a*a*a*b` shape. Groups are treated as opaque atoms here (their
+ * own interiors are validated separately, above); `|`, `^` and `$` break
+ * the adjacency chain, since they mean the next atom isn't actually
+ * immediately after the previous one in the same required sequence.
  */
-function hasTopLevelAlternation(segment: string): boolean {
-  let depth = 0;
-  let inClass = false;
-  for (let i = 0; i < segment.length; i++) {
-    const c = segment[i];
-    if (c === "\\") {
+function hasAdjacentUnboundedQuantifiers(pattern: string): boolean {
+  let i = 0;
+  let prevUnbounded = false;
+  while (i < pattern.length) {
+    const c = pattern[i];
+    if (c === "|" || c === "^" || c === "$") {
       i++;
+      prevUnbounded = false;
       continue;
     }
-    if (inClass) {
-      if (c === "]") inClass = false;
-      continue;
-    }
-    if (c === "[") {
-      inClass = true;
+    let atomEnd: number;
+    if (c === "\\") {
+      atomEnd = Math.min(i + 2, pattern.length);
+    } else if (c === "[") {
+      let j = i + 1;
+      while (j < pattern.length && pattern[j] !== "]") {
+        if (pattern[j] === "\\") j++;
+        j++;
+      }
+      atomEnd = Math.min(j + 1, pattern.length);
     } else if (c === "(") {
-      depth++;
-    } else if (c === ")") {
-      depth--;
-    } else if (c === "|" && depth === 0) {
-      return true;
+      let depth = 1;
+      let j = i + 1;
+      while (j < pattern.length && depth > 0) {
+        if (pattern[j] === "\\") {
+          j += 2;
+          continue;
+        }
+        if (pattern[j] === "(") depth++;
+        else if (pattern[j] === ")") depth--;
+        j++;
+      }
+      atomEnd = j;
+    } else {
+      atomEnd = i + 1;
     }
+    const q = quantifierAt(pattern, atomEnd);
+    const isUnbounded = q?.unbounded === true;
+    if (isUnbounded && prevUnbounded) return true;
+    prevUnbounded = isUnbounded;
+    i = q ? atomEnd + q.length : atomEnd;
   }
   return false;
 }
 
 /** The quantifier (if any) starting at index `j`: `*`, `+`, `?` or `{m,n}`. */
-function quantifierAt(pattern: string, j: number): { unbounded: boolean } | null {
+function quantifierAt(pattern: string, j: number): { unbounded: boolean; length: number } | null {
   const c = pattern[j];
-  if (c === "*" || c === "+") return { unbounded: true };
-  if (c === "?") return { unbounded: false };
+  if (c === "*" || c === "+") return { unbounded: true, length: 1 };
+  if (c === "?") return { unbounded: false, length: 1 };
   if (c === "{") {
     const m = /^\{\d*(,(\d*))?\}/.exec(pattern.slice(j));
     if (m) {
       const hasComma = m[1] !== undefined;
       const upperBound = m[2];
-      return { unbounded: hasComma && (upperBound === undefined || upperBound === "") };
+      return { unbounded: hasComma && (upperBound === undefined || upperBound === ""), length: m[0].length };
     }
   }
   return null;
