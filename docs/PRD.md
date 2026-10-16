@@ -558,7 +558,14 @@ Free-tier budget for the reference deployment, per 500 candidates for one hour:
 | R2 storage | 10 GB / month | about 0.75 GB of snapshots |
 | R2 writes | 1,000,000 / month | about 30,000 |
 
-To stay inside these limits, the snapshot upload doubles as the 60 s heartbeat. Events are batched up to 10 per request. Interval snapshots get no database row. Limits are from Cloudflare's [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) and [R2 pricing](https://developers.cloudflare.com/r2/pricing/) pages.
+Two **per-request** limits of the Workers free plan shape the API as much as the daily totals do:
+
+| Per-request limit | Free plan | What it means for Pariksha |
+| --- | --- | --- |
+| CPU time per invocation | 10 ms | Enough for routing, validation, scoring and a query; **not** enough for Argon2id password hashing, so organiser sign-in on Cloudflare uses OIDC or magic links (S-01). Duration spent waiting on D1 or R2 is not CPU time and is not charged |
+| Subrequests per invocation | 50 | Every D1, R2 and KV call counts as one. The hottest path — saving one answer — must stay at one D1 write plus at most one R2 call. No endpoint may loop over questions issuing a query each; batch or join instead. A Worker that needs more than 50 is a design error on the free plan, not a reason to leave it |
+
+To stay inside the daily limits, the snapshot upload doubles as the 60 s heartbeat. Events are batched up to 10 per request. Interval snapshots get no database row. Limits are from Cloudflare's [Workers limits](https://developers.cloudflare.com/workers/platform/limits/), [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/), [D1 pricing](https://developers.cloudflare.com/d1/platform/pricing/) and [R2 pricing](https://developers.cloudflare.com/r2/pricing/) pages.
 
 ## Open-source project
 
