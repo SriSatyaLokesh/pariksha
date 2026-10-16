@@ -3,6 +3,8 @@
 | Document | Audience |
 | --- | --- |
 | [PRD.md](PRD.md) | Everyone: what Pariksha does, how, and how we judge it done |
+| [ROADMAP.md](ROADMAP.md) | Contributors: the twelve build phases, their gates and their order |
+| [superpowers/plans/](superpowers/plans/) | Implementers: task-by-task plans for the phases that are in flight |
 | [question-format.md](question-format.md) | Question authors and integrators: the 12 question types and their JSON |
 | [test-format.md](test-format.md) | Organisers and integrators: timing, access, registration form, sections, scoring, release |
 | [adr/](adr/) | Contributors: architecture decisions and their reasons |
