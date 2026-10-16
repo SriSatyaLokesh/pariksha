@@ -258,4 +258,184 @@ describe("validateBank", () => {
     };
     expect(validateBank(bank).ok).toBe(true);
   });
+
+  it("an array element in questions does not pass isRecord and does not falsely validate", () => {
+    const bank = { format: "pariksha/bank@1", name: "x", questions: [[]] };
+    expect(() => validateBank(bank)).not.toThrow();
+    const r = validateBank(bank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: null,
+        index: 0,
+        field: "questions",
+      }),
+    );
+  });
+
+  it("an array element in groups does not pass isRecord and does not falsely validate", () => {
+    const bank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      groups: [[]],
+      questions: [{ id: "Q1", type: "true_false", prompt: "True?", key: true }],
+    };
+    expect(() => validateBank(bank)).not.toThrow();
+    const r = validateBank(bank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({ questionId: null, index: 0, field: "groups" }),
+    );
+  });
+
+  it("a null element in options or blanks is reported, not dereferenced", () => {
+    const withBadOption = {
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [
+        {
+          id: "Q1",
+          type: "single",
+          prompt: "Pick one.",
+          options: [{ id: "a", text: "A" }, null],
+          key: "a",
+        },
+      ],
+    };
+    expect(() => validateBank(withBadOption)).not.toThrow();
+    const r1 = validateBank(withBadOption);
+    expect(r1.ok).toBe(false);
+    if (r1.ok) throw new Error("expected failure");
+    expect(r1.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: "Q1",
+        field: "options",
+        message: expect.stringContaining("position 1"),
+      }),
+    );
+
+    const withBadBlank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [
+        {
+          id: "Q2",
+          type: "fill_blank",
+          prompt: "Answer: {{b1}}.",
+          blanks: [{ id: "b1", accepted: ["foo"] }, null],
+        },
+      ],
+    };
+    expect(() => validateBank(withBadBlank)).not.toThrow();
+    const r2 = validateBank(withBadBlank);
+    expect(r2.ok).toBe(false);
+    if (r2.ok) throw new Error("expected failure");
+    expect(r2.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: "Q2",
+        field: "blanks",
+        message: expect.stringContaining("position 1"),
+      }),
+    );
+  });
+
+  it("a null element in matching's left, or select_k's key, is handled without throwing", () => {
+    const matchingBank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [
+        {
+          id: "Q1",
+          type: "matching",
+          prompt: "Match.",
+          left: ["L1", null],
+          right: ["R1", "R2"],
+          key: { L1: "R1" },
+        },
+      ],
+    };
+    // A stray null in `left` is not dereferenced (it just never matches a
+    // `key` entry), so this may or may not raise an issue of its own — the
+    // only hard requirement is that it never throws.
+    expect(() => validateBank(matchingBank)).not.toThrow();
+
+    const selectKBank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [
+        {
+          id: "Q2",
+          type: "select_k",
+          prompt: "Pick two.",
+          k: 2,
+          options: [
+            { id: "a", text: "A" },
+            { id: "b", text: "B" },
+            { id: "c", text: "C" },
+          ],
+          key: ["a", null],
+        },
+      ],
+    };
+    expect(() => validateBank(selectKBank)).not.toThrow();
+    expect(validateBank(selectKBank).ok).toBe(false);
+  });
+
+  it("a question that trips the structural backstop still leaves the other questions' issues reported", () => {
+    const bank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [
+        // options is not an array at all: bypasses the options/blanks
+        // element guards entirely and throws inside the "single" case
+        // (`.some` on null), which only the try/catch backstop can catch.
+        {
+          id: "BACKSTOP",
+          type: "single",
+          prompt: "Pick one.",
+          options: null,
+          key: "a",
+        },
+        // An ordinary, independent rule violation on a second question.
+        {
+          id: "ALSO-BAD",
+          type: "single",
+          prompt: "Pick one.",
+          options: [
+            { id: "a", text: "A" },
+            { id: "b", text: "B" },
+          ],
+          key: "z",
+        },
+      ],
+    };
+    expect(() => validateBank(bank)).not.toThrow();
+    const r = validateBank(bank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: "BACKSTOP",
+        index: 0,
+        field: "question",
+      }),
+    );
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: "ALSO-BAD",
+        index: 1,
+        field: "key",
+      }),
+    );
+  });
+
+  it("the real example bank still validates clean, and bad-bank.json still reports exactly 12", () => {
+    expect(validateBank(exampleBank).ok).toBe(true);
+    const r = validateBank(badBank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues.length).toBe(12);
+  });
 });
