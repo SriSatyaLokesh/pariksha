@@ -224,17 +224,16 @@ describe("assertSafeRegex — permitted subset", () => {
     expect(() => assertSafeRegex("(?<year>\\d{4})")).not.toThrow();
   });
 
-  it("a catastrophically backtracking pattern previously accepted is genuinely slow when run unguarded, confirming the rejection matters", () => {
-    // (a|a)+ — the round-1 bypass — run unguarded at a small, suite-safe
-    // input size. Not asserting a specific duration (flaky across
-    // machines), just that it is not instantaneous like every pattern in
-    // the accepted set below.
-    const re = new RegExp("^(?:(a|a)+)$", "u");
-    const input = "a".repeat(20) + "!";
-    const start = Date.now();
-    re.test(input);
-    expect(Date.now() - start).toBeGreaterThan(50);
-  });
+  // There was a test here asserting that `(a|a)+` — the round-1 bypass — is
+  // *slow* when run unguarded, to show the rejection matters. It asserted a
+  // lower bound on elapsed time, which measures the machine rather than this
+  // code: it took 47ms on a CI runner against a 50ms threshold and failed.
+  // A lower-bound timing assertion cannot be made reliable, and it guarded
+  // nothing — the rejection itself is asserted above (and in the permitted-
+  // subset table), and the danger of the pattern is a fact about V8's
+  // backtracking, not about Pariksha. The upper-bound assertion over the
+  // accepted set below is the one that protects us, and it is safe because
+  // its ceiling sits three orders of magnitude above the real cost.
 });
 
 describe("matchBlank regex input-length cap", () => {
