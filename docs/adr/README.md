@@ -1,0 +1,9 @@
+# Architecture decision records
+
+Short records of significant decisions: the context, what was decided, and the consequences. Copy [`0000-template.md`](0000-template.md) to propose a new one, and open it as a pull request.
+
+| ADR | Title | Status |
+| --- | --- | --- |
+| [0001](0001-record-architecture-decisions.md) | Record architecture decisions | Accepted |
+| [0002](0002-cloudflare-reference-stack-with-adapters.md) | Cloudflare free plan as the reference stack, behind adapters | Accepted |
+| [0003](0003-license-apache-2-0.md) | License: Apache-2.0 | Accepted |
