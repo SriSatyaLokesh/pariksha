@@ -127,6 +127,12 @@ describe("assertSafeRegex — permitted subset", () => {
     ["((a*a*a*b))", /unbounded repeat/i], // wrapped two unquantified groups deep
     ["(x(a*a*a*b))", /unbounded repeat/i], // nested inside a group alongside a literal
     ["(a*a*a*b){1,2}", /unbounded repeat/i], // wrapper has a BOUNDED quantifier — adjacency still applies inside regardless
+    // Round 4: adjacent unbounded Unicode property escapes — the scanner
+    // treated `\p{L}` as `\p` (one atom) plus a separate `{L}` (another
+    // quantifier-looking atom) until \p{...} was taught as a single atom,
+    // so three of them in a row read as six atoms instead of three
+    // quantified ones and the a*a*a* shape went unrecognised.
+    [String.raw`(\p{L}*\p{L}*\p{L}*b)`, /unbounded repeat/i],
   ])("rejects %s", (pattern, messagePattern) => {
     expect(() => assertSafeRegex(pattern)).toThrow(/unsafe/i);
     expect(() => assertSafeRegex(pattern)).toThrow(messagePattern);
@@ -147,9 +153,36 @@ describe("assertSafeRegex — permitted subset", () => {
     "\\d{3}[- ]?\\d{3}[- ]?\\d{4}", // phone number with optional separators
     "\\d+(\\.\\d+)?", // a number with an optional decimal part
     "(https?://)?example\\.com", // an optional URL scheme
+    // Round 4: a single quantified Unicode property escape is fine — only
+    // ADJACENT unbounded ones are the danger. Pariksha's whole premise is
+    // tests in Telugu and Devanagari, so property escapes must stay usable.
+    String.raw`\p{L}+`,
+    String.raw`\p{Script=Devanagari}+`,
   ])("accepts %s", (pattern) => {
     expect(() => assertSafeRegex(pattern)).not.toThrow();
   });
+
+  // Round 4, critical: assertSafeRegex judges SAFETY, but never checked
+  // VALIDITY — an author's typo passed straight through every structural
+  // check (none of them parse regex grammar, only judge the grammar
+  // they're given) and then threw a SyntaxError out of matchBlank on every
+  // attempt that touched the question.
+  it.each([
+    "(unclosed", // unterminated group
+    "[z-a]", // character class range out of order
+    String.raw`\p{Nope}`, // not a real Unicode property name
+    "*leading", // quantifier with nothing to quantify
+  ])("rejects invalid regex syntax: %s", (pattern) => {
+    expect(() => assertSafeRegex(pattern)).toThrow(/invalid|not a valid/i);
+  });
+
+  it.each(["(unclosed", "[z-a]", String.raw`\p{Nope}`, "*leading"])(
+    "matchBlank never throws on invalid regex syntax, scoring a non-match instead: %s",
+    (pattern) => {
+      expect(() => matchBlank("abc", { id: "b1", accepted: [pattern], match: "regex" })).not.toThrow();
+      expect(matchBlank("abc", { id: "b1", accepted: [pattern], match: "regex" })).toBe(false);
+    },
+  );
 
   it("names the construct and the way out in every rejection message", () => {
     // Every rejection should point the author at a fix: bound the repeat,

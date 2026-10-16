@@ -85,9 +85,25 @@ export const MAX_BLANK_INPUT_LENGTH = 100;
  * remember it, and a pattern can't hide a rule's blind spot behind one
  * more pair of parentheses.
  *
+ * Round 4 found two narrower bugs, unrelated to whether the recursive walk
+ * reaches every nesting depth (it does — that is what round 4 set out to
+ * attack, and found no backtracking bypass): this function judged whether
+ * a pattern was *safe* without ever checking whether it was *valid*, so an
+ * author's typo (`(unclosed`, `[z-a]`, `\p{Nope}`, `*leading`) sailed
+ * through every check below — none of which parse regex grammar, only
+ * judge the grammar they're given — and then threw a `SyntaxError` out of
+ * `matchBlank` on every attempt touching the question; and the atom
+ * scanner treated `\p{L}` as `\p` plus a separate `{L}`, so three of them
+ * in a row didn't read as three adjacent unbounded quantifiers the way
+ * `a*a*a*` does. Both are fixed (see `assertValidRegexSyntax` and
+ * `parseAtom`'s `\p`/`\P` handling) — the second is why `\p{...}` and
+ * `\P{...}` are each walked as one atom, the same way `\d` already was.
+ *
  * Outright bans, checked separately (their own blind spot doesn't exist:
  * they scan the whole raw pattern unconditionally, with no depth-based
  * gating to bypass):
+ *   - The pattern must be valid regex syntax at all (checked by actually
+ *     compiling it — see `assertValidRegexSyntax`).
  *   - No backreferences (`\1`, `\k<name>`) anywhere.
  *   - No lookahead/lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`) anywhere. An
  *     ordinary named capture group (`(?<name>...)`) is not a lookbehind
@@ -106,7 +122,11 @@ export const MAX_BLANK_INPUT_LENGTH = 100;
  *
  * Patterns this still allows: `\d{1,5}`, `[a-z]+`, `(abc)+`, `(\d\d)+`,
  * `(cat|dog){1,5}`, `cat|dog`, `^(yes|no)$`, `[0-9]{4}-[0-9]{2}`,
- * `\d{3}[- ]?\d{3}[- ]?\d{4}`, `\d+(\.\d+)?`, `(https?://)?example\.com`.
+ * `\d{3}[- ]?\d{3}[- ]?\d{4}`, `\d+(\.\d+)?`, `(https?://)?example\.com`,
+ * `\p{L}+`, `\p{Script=Devanagari}+` — a single quantified Unicode
+ * property escape is fine; only adjacent unbounded ones are the danger,
+ * and Pariksha's whole premise is tests in scripts like Telugu and
+ * Devanagari, so property escapes have to stay usable.
  *
  * An author who cannot express their accepted answer inside this subset —
  * typically because they wanted alternation or adjacent repetition inside
@@ -119,6 +139,7 @@ export function assertSafeRegex(pattern: string): void {
   if (pattern.length > MAX_REGEX_LENGTH) {
     throw new Error(`unsafe regex: pattern is too long (max ${MAX_REGEX_LENGTH} characters)`);
   }
+  assertValidRegexSyntax(pattern);
   if (hasBackreference(pattern)) {
     throw new Error(
       "unsafe regex: backreferences (e.g. \\1, \\k<name>) are not supported — " +
@@ -132,6 +153,34 @@ export function assertSafeRegex(pattern: string): void {
     );
   }
   validateAlternation(parseAlternation(pattern, 0).node);
+}
+
+/**
+ * Rejects a pattern that is not valid regex syntax at all, compiling it
+ * exactly the way `matchBlank` will — the same `^(?:…)$` wrapper and `u`
+ * flag — so this checks precisely what will run, not a looser
+ * approximation of it. This function asks "is this pattern safe?"; safety
+ * is meaningless to ask about a pattern that doesn't parse, and without
+ * this check an author's typo (`(unclosed`, `[z-a]`, `\p{Nope}`,
+ * `*leading`) passed straight through the structural checks below — none
+ * of which attempt to validate regex grammar, only to judge the grammar
+ * they're given — and then threw a `SyntaxError` out of `matchBlank` on
+ * every attempt that touched the question. Catching it here means the
+ * author sees the engine's own message at import time, where they can fix
+ * it; `matchBlank` also never trusts this check alone (see its own
+ * comment) in case a pattern reaches grading without having passed it.
+ */
+function assertValidRegexSyntax(pattern: string): void {
+  try {
+    new RegExp(`^(?:${pattern})$`, "u");
+  } catch (e) {
+    const reason = e instanceof Error ? e.message : String(e);
+    throw new Error(
+      `unsafe regex: pattern is not a valid regular expression (${reason}) — ` +
+        "fix the pattern, or list the alternative forms in `accepted` instead",
+      { cause: e },
+    );
+  }
 }
 
 /** Whether `pattern` contains a backreference: `\1`-`\9` or `\k<name>`. */
@@ -242,7 +291,19 @@ function parseAtom(pattern: string, i: number): { atom: Atom; next: number } {
   }
   let bodyEnd: number;
   if (c === "\\") {
-    bodyEnd = Math.min(i + 2, pattern.length);
+    const next = pattern[i + 1];
+    if ((next === "p" || next === "P") && pattern[i + 2] === "{") {
+      // A Unicode property escape (\p{L}, \P{Script=Devanagari}) is one
+      // atom, four-plus characters longer than a plain \d — without this,
+      // three of them in a row (\p{L}*\p{L}*\p{L}*) looked like six
+      // separate atoms to the adjacency scan instead of three quantified
+      // ones, so the a*a*a* shape wasn't recognised.
+      let j = i + 3;
+      while (j < pattern.length && pattern[j] !== "}") j++;
+      bodyEnd = Math.min(j + 1, pattern.length);
+    } else {
+      bodyEnd = Math.min(i + 2, pattern.length);
+    }
   } else if (c === "[") {
     // A character class is one opaque atom: quantifier/alternation/group
     // characters inside `[...]` are literal members of the class, not
@@ -374,9 +435,20 @@ export function matchBlank(given: string, blank: Blank): boolean {
     // thrown — so a candidate pasting an essay into a blank scores as a
     // non-match instead of breaking grading for everyone else's attempt.
     if (candidate.length > MAX_BLANK_INPUT_LENGTH) return false;
-    assertSafeRegex(accepted);
-    const re = new RegExp(`^(?:${accepted})$`, "u");
-    return re.test(candidate);
+    try {
+      // This function must never throw, regardless of what `assertSafeRegex`
+      // does: a pattern can reach grading without having passed it (stored
+      // before this check existed, or a future gap in it), and an author's
+      // typo must not crash grading for every attempt that touches the
+      // question. `assertSafeRegex` at import gives the author the good
+      // error message; this is the unconditional guarantee for grading —
+      // belt and braces, not either/or.
+      assertSafeRegex(accepted);
+      const re = new RegExp(`^(?:${accepted})$`, "u");
+      return re.test(candidate);
+    } catch {
+      return false;
+    }
   });
 }
 
