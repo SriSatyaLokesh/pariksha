@@ -71,4 +71,32 @@ describe("gradeChoice", () => {
     // was actually scored rather than short-circuited as unanswered.
     expect(result.parts).toEqual({ correct: 0, wrong: 0, total: 3 });
   });
+
+  // A response whose `kind` doesn't match the question type's expected
+  // shape (e.g. {kind:"number"} on a `single` question) must be treated as
+  // blank, the same way structured.ts and text.ts already treat it — not
+  // as answered-and-all-wrong. Before this fix, LOG-001 (single) scored
+  // -1 under negative with a 0.25 fraction on 4 points, exactly as if the
+  // candidate had guessed wrong; QNT-004 (multiple) and QNT-003
+  // (select_k) scored 0 for the identical mismatched response because
+  // countKeyedOptions' fallback happened not to apply a penalty — same
+  // candidate behaviour, inconsistent cost depending on question type.
+  it("a response whose kind doesn't match the question type scores 0 with no penalty under negative, for each choice type", () => {
+    const negativeDefaults = { mode: "negative", negativeFraction: 0.25 } as const;
+    const mismatched: ResponseValue = { kind: "number", value: 1 };
+
+    for (const id of ["LOG-001" /* single */, "LOG-007" /* true_false */, "LOG-005" /* assertion_reason */]) {
+      const result = gradeChoice(byId(id), mismatched, negativeDefaults);
+      expect(result.points).toBe(0);
+      expect(result.correct).toBe(false);
+      expect(result.parts.wrong).toBe(0);
+    }
+
+    for (const id of ["QNT-004" /* multiple */, "QNT-003" /* select_k */]) {
+      const result = gradeChoice(byId(id), mismatched, negativeDefaults);
+      expect(result.points).toBe(0);
+      expect(result.correct).toBe(false);
+      expect(result.parts.wrong).toBe(0);
+    }
+  });
 });

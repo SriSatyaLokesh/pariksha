@@ -25,9 +25,30 @@ type Parts = { correct: number; wrong: number; total: number };
 
 export function gradeChoice(q: ChoiceQuestion, r: ResponseValue | null, d: ScoringDefaults): GradeResult {
   const { mode, points, negativeFraction } = resolveScoring(q, d);
-  const answered = r !== null;
+  // A response whose `kind` doesn't match this question type's expected
+  // shape (e.g. a `number` response to a `single` question) is not an
+  // answer to this question, the same way structured.ts and text.ts treat
+  // it — not a wrong, penalty-bearing guess. Without this, the fallback
+  // paths in countParts below (oneOfKind's `r.kind !== kind`,
+  // countKeyedOptions' `r.kind !== "options"`) score it as answered and
+  // all-wrong, which costs a negative-marking penalty a blank response
+  // never would.
+  const answered = r !== null && r.kind === expectedKind(q);
   const parts = answered ? countParts(q, r) : { correct: 0, wrong: 0, total: totalParts(q) };
   return applyMode({ mode, points, negativeFraction, parts, answered });
+}
+
+function expectedKind(q: ChoiceQuestion): ResponseValue["kind"] {
+  switch (q.type) {
+    case "single":
+    case "assertion_reason":
+      return "option";
+    case "true_false":
+      return "boolean";
+    case "multiple":
+    case "select_k":
+      return "options";
+  }
 }
 
 function totalParts(q: ChoiceQuestion): number {
