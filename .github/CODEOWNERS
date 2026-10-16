@@ -1,0 +1,7 @@
+# Default owner for everything, until there are more maintainers.
+*                       @SriSatyaLokesh
+
+# Formats and schemas change what every installation can read — review these closely.
+/schemas/               @SriSatyaLokesh
+/docs/question-format.md @SriSatyaLokesh
+/docs/test-format.md    @SriSatyaLokesh

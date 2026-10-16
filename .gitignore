@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Builds and caches
+dist/
+build/
+.turbo/
+.cache/
+coverage/
+*.tsbuildinfo
+
+# Cloudflare / Wrangler
+.wrangler/
+.dev.vars
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Local data
+*.sqlite
+*.sqlite3
+*.db
+data/
+uploads/
+
+# Test output
+playwright-report/
+test-results/
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# AI assistant and scratch output
+Claude outputs/
+.claude/
+.cursor/
+.aider*
+scratch/
