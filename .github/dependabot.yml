@@ -1,13 +1,24 @@
 version: 2
 updates:
+  # One grouped pull request a month, not one per action.
+  # Pinned action versions are a supply-chain surface, so they are still watched —
+  # just not at a rate that buries a pre-alpha repository in noise.
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 1
+    groups:
+      github-actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: "chore(deps)"
 
   # npm updates are enabled together with the code base (package.json) in v0.1:
   # - package-ecosystem: npm
   #   directory: /
   #   schedule:
-  #     interval: weekly
-  #   open-pull-requests-limit: 5
+  #     interval: monthly
+  #   groups:
+  #     npm:
+  #       patterns: ["*"]
