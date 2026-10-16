@@ -1,0 +1,314 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pariksha.local/schemas/test-1.json",
+  "title": "Pariksha test (pariksha/test@1)",
+  "description": "One complete test: identity, timing, access, registration form, proctoring, scoring, sections and result release. This is what `GET /tests/{id}/export` returns and what import accepts. See docs/test-format.md.",
+  "type": "object",
+  "required": ["format", "name", "slug", "timing", "sections"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "pariksha/test@1" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "slug": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 80,
+      "description": "Unique per workspace; forms the candidate URL /<workspace>/<slug>."
+    },
+    "description": { "type": "string" },
+    "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "license": { "type": "string", "description": "SPDX identifier for the test's content, e.g. CC-BY-4.0." },
+    "banks": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Bank files (pariksha/bank@1) this test draws questions from, relative to the test file."
+    },
+    "timing": { "$ref": "#/$defs/timing" },
+    "access": { "$ref": "#/$defs/access" },
+    "consent": {
+      "type": "object",
+      "required": ["version", "text"],
+      "properties": {
+        "version": { "type": "string", "description": "Stored per candidate, so a later edit is distinguishable." },
+        "text": { "type": "string", "minLength": 1, "description": "Markdown shown before registration." }
+      },
+      "additionalProperties": false
+    },
+    "registration_form": { "$ref": "#/$defs/form" },
+    "proctoring": { "$ref": "#/$defs/proctoring" },
+    "scoring": { "$ref": "#/$defs/scoring" },
+    "sections": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/section" } },
+    "release": { "$ref": "#/$defs/release" },
+    "retention": {
+      "type": "object",
+      "properties": {
+        "personal_data_days": { "type": "integer", "minimum": 1 },
+        "snapshots_days": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "branding": {
+      "type": "object",
+      "properties": {
+        "logo": { "type": "string" },
+        "primary_colour": { "type": "string" },
+        "footer_text": { "type": "string" },
+        "start_message": { "type": "string" },
+        "finish_message": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+
+  "$defs": {
+    "timing": {
+      "type": "object",
+      "required": ["duration_minutes"],
+      "properties": {
+        "timezone": { "type": "string", "description": "IANA zone, e.g. Asia/Kolkata. Every time shown to a candidate uses it." },
+        "opens_at": { "type": "string", "format": "date-time" },
+        "closes_at": { "type": "string", "format": "date-time" },
+        "latest_start_at": { "type": "string", "format": "date-time" },
+        "duration_minutes": { "type": "integer", "minimum": 1 },
+        "navigation": {
+          "enum": ["free", "linear", "per_section"],
+          "default": "free",
+          "description": "free: jump anywhere. linear: no going back. per_section: free inside a section, locked once left."
+        },
+        "attempts_allowed": { "type": "integer", "minimum": 1, "default": 1 },
+        "cooldown_minutes": { "type": "integer", "minimum": 0 },
+        "counted_attempt": { "enum": ["highest", "latest", "average"], "default": "highest" },
+        "warn_at_minutes": { "type": "array", "items": { "type": "integer", "minimum": 1 }, "default": [10, 2] },
+        "late_sync_grace_seconds": { "type": "integer", "minimum": 0, "default": 30 }
+      },
+      "additionalProperties": false
+    },
+
+    "access": {
+      "type": "object",
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "enum": ["link_code", "invite_only", "email_code", "sso"],
+          "description": "link_code: public URL plus a code. invite_only: one signed link per candidate. email_code: 6-digit code by email. sso: the candidate's own org account."
+        },
+        "access_code": { "type": "string", "minLength": 4, "description": "Required when mode is link_code." },
+        "candidate_list": { "type": "string", "description": "CSV of candidates, used by invite_only and by candidate allowlists." },
+        "allow_email_domains": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns, e.g. *.ac.in." },
+        "allow_ip_ranges": { "type": "array", "items": { "type": "string" }, "description": "CIDR ranges, e.g. a lab network." },
+        "captcha": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "link_code" } }, "required": ["mode"] },
+          "then": { "required": ["access_code"] }
+        }
+      ]
+    },
+
+    "form": {
+      "type": "object",
+      "required": ["fields"],
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "fields": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/formField" } }
+      },
+      "additionalProperties": false
+    },
+
+    "formField": {
+      "type": "object",
+      "required": ["id", "type", "label"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_]{1,40}$", "description": "Column name in the results CSV." },
+        "type": {
+          "enum": [
+            "short_text", "long_text", "email", "phone", "number", "date",
+            "dropdown", "radio", "checkbox", "url", "consent"
+          ]
+        },
+        "label": { "type": "string", "minLength": 1 },
+        "help": { "type": "string" },
+        "required": { "type": "boolean", "default": false },
+        "unique": {
+          "type": "boolean",
+          "default": false,
+          "description": "A second registration with the same value is refused. Use for email, phone or roll number."
+        },
+        "options": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "minItems": 2,
+          "description": "Required for dropdown, radio and checkbox."
+        },
+        "link_text": { "type": "string", "description": "consent only: the words that open the consent text." },
+        "link_target": { "type": "string", "description": "consent only: 'consent' for the test's consent text, or a URL." },
+        "validation": { "$ref": "#/$defs/validation" }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "enum": ["dropdown", "radio", "checkbox"] } }, "required": ["type"] },
+          "then": { "required": ["options"] }
+        }
+      ]
+    },
+
+    "validation": {
+      "type": "object",
+      "description": "Only the keys that suit the field's type are used; the rest are ignored.",
+      "properties": {
+        "min_length": { "type": "integer", "minimum": 0 },
+        "max_length": { "type": "integer", "minimum": 1 },
+        "pattern": { "type": "string", "description": "RE2-safe regular expression, checked on the server." },
+        "pattern_message": { "type": "string", "description": "Shown when the pattern fails. Say what the right format looks like." },
+        "min": { "type": ["number", "string"] },
+        "max": { "type": ["number", "string"] },
+        "integer": { "type": "boolean" },
+        "decimals": { "type": "integer", "minimum": 0 },
+        "allowed_domains": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns for email and url fields." },
+        "check_reachable": { "type": "boolean", "description": "url only: flag the value if the link does not return HTTP 200." },
+        "default_country": { "type": "string", "description": "phone only: ISO 3166-1 alpha-2, e.g. IN." }
+      },
+      "additionalProperties": false
+    },
+
+    "proctoring": {
+      "type": "object",
+      "required": ["profile"],
+      "properties": {
+        "profile": { "enum": ["off", "standard", "strict"] },
+        "overrides": {
+          "type": "object",
+          "properties": {
+            "desktop_only": { "type": "boolean" },
+            "require_fullscreen": { "type": "boolean" },
+            "block_copy_paste": { "type": "boolean" },
+            "watermark": { "type": "boolean" },
+            "require_camera": { "type": "boolean" },
+            "identity_photo": { "type": "boolean" },
+            "snapshot_interval_seconds": { "type": "integer", "minimum": 15 },
+            "face_check": { "type": "boolean" },
+            "extra_monitor_check": { "type": "boolean" },
+            "violation_limit": { "type": "integer", "minimum": 1 },
+            "violation_action": { "enum": ["warn_only", "warn_then_flag", "auto_submit", "lock"] },
+            "allow_calculator": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "default_mode": { "enum": ["all_or_nothing", "partial", "negative", "position", "rubric"] },
+        "negative_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
+        "pass_mark_percent": { "type": "number", "minimum": 0, "maximum": 100 }
+      },
+      "additionalProperties": false
+    },
+
+    "section": {
+      "type": "object",
+      "required": ["id", "title", "source"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z0-9_-]{1,40}$" },
+        "title": { "type": "string", "minLength": 1 },
+        "instructions": { "type": "string", "description": "Markdown shown above the first question of the section." },
+        "time_limit_minutes": { "type": "integer", "minimum": 1 },
+        "shuffle_questions": { "type": "boolean", "default": true },
+        "source": {
+          "oneOf": [
+            { "$ref": "#/$defs/sourceFixed" },
+            { "$ref": "#/$defs/sourcePool" },
+            { "$ref": "#/$defs/sourceSets" }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "sourceFixed": {
+      "type": "object",
+      "required": ["kind", "questions"],
+      "properties": {
+        "kind": { "const": "fixed" },
+        "questions": { "type": "array", "minItems": 1, "items": { "type": "string" }, "description": "Question IDs, in order." }
+      },
+      "additionalProperties": false
+    },
+
+    "sourcePool": {
+      "type": "object",
+      "required": ["kind", "count"],
+      "properties": {
+        "kind": { "const": "pool" },
+        "bank": { "type": "string" },
+        "count": { "type": "integer", "minimum": 1, "description": "Questions drawn per candidate. Publishing warns if the pool is smaller." },
+        "filter": {
+          "type": "object",
+          "properties": {
+            "tags": { "type": "array", "items": { "type": "string" } },
+            "difficulty": { "type": "array", "items": { "enum": ["easy", "medium", "hard"] } },
+            "types": { "type": "array", "items": { "type": "string" } }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "sourceSets": {
+      "type": "object",
+      "required": ["kind", "sets"],
+      "properties": {
+        "kind": { "const": "sets" },
+        "assignment": {
+          "enum": ["round_robin", "random", "hash", "from_candidate_list"],
+          "default": "round_robin",
+          "description": "round_robin by registration order means neighbours get different sets."
+        },
+        "sets": {
+          "type": "array",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "required": ["set", "questions"],
+            "properties": {
+              "set": { "type": "string", "minLength": 1 },
+              "questions": { "type": "array", "minItems": 1, "items": { "type": "string" } }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+
+    "release": {
+      "type": "object",
+      "required": ["when"],
+      "properties": {
+        "when": { "enum": ["never", "on_submit", "on_date"] },
+        "at": { "type": "string", "format": "date-time", "description": "Required when `when` is on_date." },
+        "show": {
+          "enum": ["score_only", "score_and_sections", "full_review"],
+          "default": "score_only",
+          "description": "full_review shows correct answers and explanations, so use it only after the test has closed for everyone."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": { "properties": { "when": { "const": "on_date" } }, "required": ["when"] },
+          "then": { "required": ["at"] }
+        }
+      ]
+    }
+  }
+}
