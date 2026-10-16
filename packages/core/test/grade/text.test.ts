@@ -1,6 +1,13 @@
 import { describe, it, expect } from "vitest";
 import type { Question } from "../../src/types.js";
-import { gradeText, matchBlank, withinTolerance, assertSafeRegex, MAX_REGEX_LENGTH } from "../../src/grade/text.js";
+import {
+  gradeText,
+  matchBlank,
+  withinTolerance,
+  assertSafeRegex,
+  MAX_REGEX_LENGTH,
+  MAX_BLANK_INPUT_LENGTH,
+} from "../../src/grade/text.js";
 
 // Real questions from examples/reasoning-aptitude/questions.json, by ID:
 // QNT-001: numeric, value 72, tolerance 0 absolute, all_or_nothing, 2 points.
@@ -96,6 +103,44 @@ describe("assertSafeRegex", () => {
 
   it("names which rule failed in the error message", () => {
     expect(() => assertSafeRegex("(a*)*")).toThrow(/nested|unbounded/i);
+  });
+
+  it("rejects an unbounded-quantified group with a top-level alternation (overlapping alternation blowup)", () => {
+    expect(() => assertSafeRegex("(a|a)+")).toThrow(/unsafe/i);
+    expect(() => assertSafeRegex("(a|a)+")).toThrow(/alternation/i);
+    expect(() => assertSafeRegex("(a|ab|b)+")).toThrow(/alternation/i);
+  });
+
+  it("still accepts a bounded alternation inside a repeat", () => {
+    expect(() => assertSafeRegex("(cat|dog){1,5}")).not.toThrow();
+  });
+
+  it("a catastrophic alternation pattern is genuinely slow when run unguarded, confirming the rejection matters", () => {
+    const re = new RegExp("^(?:(a|a)+)$", "u");
+    const input = "a".repeat(20) + "!";
+    const start = Date.now();
+    re.test(input);
+    const elapsed = Date.now() - start;
+    // Not asserting a specific duration (flaky across machines) — just
+    // that this is not instantaneous, unlike every pattern this suite
+    // otherwise exercises. A regression here is exactly the bug this
+    // rejection exists to prevent.
+    expect(elapsed).toBeGreaterThan(50);
+  });
+});
+
+describe("matchBlank regex input-length cap", () => {
+  it("refuses to regex-match a candidate over MAX_BLANK_INPUT_LENGTH, scoring it as a non-match rather than throwing", () => {
+    const tooLong = "a".repeat(MAX_BLANK_INPUT_LENGTH + 1);
+    expect(() =>
+      matchBlank(tooLong, { id: "b1", accepted: ["a+"], match: "regex" }),
+    ).not.toThrow();
+    expect(matchBlank(tooLong, { id: "b1", accepted: ["a+"], match: "regex" })).toBe(false);
+  });
+
+  it("still matches a candidate at or under the cap", () => {
+    const atCap = "a".repeat(MAX_BLANK_INPUT_LENGTH);
+    expect(matchBlank(atCap, { id: "b1", accepted: ["a+"], match: "regex" })).toBe(true);
   });
 });
 
