@@ -217,11 +217,11 @@ describe("layoutForAttempt (AC-11)", () => {
     // same seed reproduces its own order exactly
     expect(layoutA1).toEqual(layoutA2);
 
-    // different seeds give different question order and/or option order
-    const sameEverything =
-      JSON.stringify(layoutA1.sections[0]?.questionIds) === JSON.stringify(layoutB.sections[0]?.questionIds) &&
-      JSON.stringify(layoutA1.sections[0]?.optionOrder) === JSON.stringify(layoutB.sections[0]?.optionOrder);
-    expect(sameEverything).toBe(false);
+    // different seeds give different question order AND different option
+    // order — checked independently, not ORed together, so this test
+    // can't pass if one of the two shufflings were a complete no-op.
+    expect(layoutA1.sections[0]?.questionIds).not.toEqual(layoutB.sections[0]?.questionIds);
+    expect(layoutA1.sections[0]?.optionOrder).not.toEqual(layoutB.sections[0]?.optionOrder);
 
     // pinned option (the 4th, "-d") always stays last regardless of seed
     for (const layout of [layoutA1, layoutB]) {
