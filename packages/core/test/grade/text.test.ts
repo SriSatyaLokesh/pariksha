@@ -96,14 +96,20 @@ describe("assertSafeRegex — permitted subset", () => {
     expect(() => assertSafeRegex("a".repeat(MAX_REGEX_LENGTH + 1))).toThrow(/too long/i);
   });
 
-  // Each of these was, in turn, a live bypass of an earlier blacklist-style
-  // check (round 1 caught (a+)+ and the explicit-alternation shapes; round 2
-  // closed ((a|a))+, (a?a?)+ and a*a*a*a*b after they were found to slip
-  // through). The permitted-subset rule is a single grammar check, so all
-  // of these are rejected by the SAME code path (the "unbounded-quantified
-  // group contains another quantifier/alternation at any depth" rule, or
-  // the "adjacent unbounded quantifiers" rule for the last one) rather than
-  // by one bespoke rule per shape.
+  // Each of these was, in turn, a live bypass of an earlier approach.
+  // Round 1 caught (a+)+ and the explicit-alternation shapes with a
+  // blacklist. Round 2 replaced it with a whitelist — "no quantifier or
+  // alternation inside an unbounded group; no adjacent unbounded
+  // quantifiers" — and closed ((a|a))+, (a?a?)+ and a*a*a*a*b, but each
+  // check was a single non-recursive scan: containment only fired directly
+  // under an unbounded-quantified group, and adjacency ran once over the
+  // whole pattern treating every group as opaque. Round 3 (the last five:
+  // (a*a*a*a*b) through (a*a*a*b){1,2}) wraps the round-2-safe shape in a
+  // plain, unquantified or bounded pair of parens, which both scans missed
+  // for different reasons. The fix is structural, not another rule: the
+  // pattern is now parsed into its nesting tree and both predicates are
+  // evaluated at EVERY node of that tree, so a shape can't hide behind one
+  // more pair of parentheses.
   it.each([
     ["(a+)+", /unsafe/i],
     ["(a|a)+", /alternation|quantifier/i],
@@ -112,22 +118,43 @@ describe("assertSafeRegex — permitted subset", () => {
     ["(x(a|a))+", /alternation|quantifier/i], // alternation nested inside a quantified group alongside a literal
     ["(a?a?)+", /alternation|quantifier/i], // only bounded `?` quantifiers inside — no `*`/`+` at all
     ["a*a*a*a*b", /unbounded repeat/i], // no groups at all — polynomial blowup from adjacent unbounded quantifiers
+    // Round 3: the a*a*a*b shape wrapped in parentheses that carry no
+    // quantifier of their own (or a bounded one) — round 2's containment
+    // check never applied (the wrapper isn't unbounded-quantified) and its
+    // adjacency scan never looked inside a group at all.
+    ["(a*a*a*a*b)", /unbounded repeat/i], // wrapped in an unquantified group
+    ["(a*a*a*a*a*a*b)", /unbounded repeat/i], // more repeats, same unquantified-wrapper shape — measured ~87s unguarded
+    ["((a*a*a*b))", /unbounded repeat/i], // wrapped two unquantified groups deep
+    ["(x(a*a*a*b))", /unbounded repeat/i], // nested inside a group alongside a literal
+    ["(a*a*a*b){1,2}", /unbounded repeat/i], // wrapper has a BOUNDED quantifier — adjacency still applies inside regardless
   ])("rejects %s", (pattern, messagePattern) => {
     expect(() => assertSafeRegex(pattern)).toThrow(/unsafe/i);
     expect(() => assertSafeRegex(pattern)).toThrow(messagePattern);
   });
 
-  it.each(["\\d{1,5}", "[a-z]+", "(abc)+", "(\\d\\d)+", "(cat|dog){1,5}", "cat|dog", "^(yes|no)$"])(
-    "accepts %s",
-    (pattern) => {
-      expect(() => assertSafeRegex(pattern)).not.toThrow();
-    },
-  );
+  it.each([
+    "\\d{1,5}",
+    "[a-z]+",
+    "(abc)+",
+    "(\\d\\d)+",
+    "(cat|dog){1,5}",
+    "cat|dog",
+    "^(yes|no)$",
+    "[0-9]{4}-[0-9]{2}",
+    // Realistic fill_blank patterns an author might actually write —
+    // re-verified accepted after the round-3 restructure specifically so a
+    // tightened rule couldn't silently start refusing them.
+    "\\d{3}[- ]?\\d{3}[- ]?\\d{4}", // phone number with optional separators
+    "\\d+(\\.\\d+)?", // a number with an optional decimal part
+    "(https?://)?example\\.com", // an optional URL scheme
+  ])("accepts %s", (pattern) => {
+    expect(() => assertSafeRegex(pattern)).not.toThrow();
+  });
 
   it("names the construct and the way out in every rejection message", () => {
     // Every rejection should point the author at a fix: bound the repeat,
     // or list the forms in `accepted`.
-    for (const pattern of ["(a+)+", "(a|a)+", "(a?a?)+", "a*a*a*a*b"]) {
+    for (const pattern of ["(a+)+", "(a|a)+", "(a?a?)+", "a*a*a*a*b", "(a*a*a*a*b)"]) {
       expect(() => assertSafeRegex(pattern)).toThrow(/bound|accepted/i);
     }
   });
@@ -188,6 +215,11 @@ describe("assertSafeRegex — accepted set is fast at the input cap (regression 
     { pattern: "(\\d\\d)+", attack: "1".repeat(n - 1) + "x" },
     { pattern: "(cat|dog){1,5}", attack: "cat".repeat(Math.floor(n / 3)) + "x" },
     { pattern: "cat|dog", attack: "c".repeat(n) },
+    // A wrapped group (a safe pattern wrapped in an extra, unquantified
+    // pair of parens): the round-3 bug class was exactly a group acting as
+    // a blind spot, so the regression guard needs a wrapped case of its
+    // own, not only the round-3 rejection tests.
+    { pattern: "((abc)+)", attack: "abc".repeat(Math.floor(n / 3)) + "x" },
   ];
 
   it("every accepted pattern matches or fails in a few milliseconds, even against a worst-case-shaped input at the cap", () => {

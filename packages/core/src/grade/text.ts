@@ -43,49 +43,77 @@ export const MAX_BLANK_INPUT_LENGTH = 100;
  * attempt that touches the question, so a catastrophically backtracking
  * pattern would hang the grading worker for all of them.
  *
- * Two rounds of "reject known-dangerous shapes" were each bypassed within
- * minutes by a shape the list didn't name (`(a|a)+` after the first round;
- * `((a|a))+`, `(a?a?)+` and `a*a*a*a*b` after the second). That is the
- * nature of a blacklist against an undecidable problem: the space of
- * dangerous constructions is unbounded, so enumerating them always loses.
- * This function is now a **whitelist**: it does not ask "is this pattern
- * dangerous?", it asks "is this pattern inside a permitted safe subset?"
- * and rejects everything else, whether or not the rejected pattern would
- * actually have been dangerous.
+ * Three rounds got here. Round 1 ("reject known-dangerous shapes") was
+ * bypassed by `(a|a)+`. Round 2 replaced it with a whitelist — "no
+ * quantifier or alternation inside an unbounded-quantified group, no two
+ * adjacent unbounded quantifiers" — which is the right *rule*, but it was
+ * still two independent single-pass scans over the raw string, each with
+ * its own idea of where it applied: the containment scan only fired
+ * directly under a group with its own unbounded quantifier, and the
+ * adjacency scan ran exactly once, over the whole pattern, treating every
+ * group as one opaque atom. `(a*a*a*a*b)` — the round-2-safe shape wrapped
+ * in one extra, unquantified pair of parentheses — fell through the gap
+ * between them: the containment scan didn't apply (the wrapping group has
+ * no quantifier at all) and the adjacency scan never looked inside a
+ * group. Same underlying mistake as round 1, in a different rule: a check
+ * that only reaches the nesting depth it was written to reach.
  *
- * The permitted subset, precisely:
- *   - No backreferences (`\1`, `\k<name>`) anywhere — banned outright.
- *   - No lookahead/lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`) anywhere —
- *     banned outright.
- *   - A parenthesized group quantified with an **unbounded** repetition
- *     (`*`, `+`, an open-ended `{n,}`) must not contain — at ANY nesting
- *     depth inside it — another quantifier of any kind (including `?` and
- *     a bounded `{m,n}`) or an alternation (`|`). A group quantified with a
- *     **bounded** repetition (`{m,n}` with an explicit upper bound, or no
- *     quantifier at all) is unrestricted inside: the work it can do is
- *     capped by construction, so `(cat|dog){1,5}` is fine but
- *     `(cat|dog)+` and `(cat|dog)*` are not.
- *   - No two unbounded-quantified atoms may sit adjacent to each other at
- *     the top level of the pattern with nothing between them (the
- *     `a*a*a*a*b` polynomial-blowup shape) — a conservative check: two
- *     unbounded quantifiers back to back is refused even where they might
- *     not actually interact badly.
+ * So the structure changed, not just the rule list. The pattern is parsed
+ * once into its nesting tree — each group's interior, and each `|`-
+ * separated branch within it, recursively — and then walked. At *every*
+ * node of that walk (the top level, and the interior of every group, at
+ * every depth, quantified or not), two predicates are evaluated:
+ *
+ *   1. No two atoms adjacent to each other *at that level* both carry an
+ *      unbounded quantifier (the `a*a*a*a*b` polynomial-blowup shape).
+ *      This runs unconditionally at every level, including inside a
+ *      group that itself has no quantifier, or a bounded one — so
+ *      `(a*a*a*b)` and `(a*a*a*b){1,2}` are both rejected on their own
+ *      interior, regardless of what quantifies the wrapper.
+ *   2. If the group enclosing that node carries an **unbounded**
+ *      quantifier (`*`, `+`, an open-ended `{n,}`), nothing anywhere
+ *      inside it — at any depth, through any number of nested groups —
+ *      may itself carry a quantifier of any kind (including a bounded one
+ *      like `?` or `{m,n}`) or an alternation (`|`). A **bounded** outer
+ *      quantifier (`{m,n}` with an explicit upper bound, or none at all)
+ *      leaves the interior unrestricted: bounded repetition caps the work
+ *      by construction, which is what keeps `(cat|dog){1,5}` usable.
+ *
+ * Because both predicates are evaluated at every node of the same
+ * recursive walk — not as two scans each hoping to reach far enough — a
+ * new rule added later inherits the recursion instead of needing to
+ * remember it, and a pattern can't hide a rule's blind spot behind one
+ * more pair of parentheses.
+ *
+ * Outright bans, checked separately (their own blind spot doesn't exist:
+ * they scan the whole raw pattern unconditionally, with no depth-based
+ * gating to bypass):
+ *   - No backreferences (`\1`, `\k<name>`) anywhere.
+ *   - No lookahead/lookbehind (`(?=`, `(?!`, `(?<=`, `(?<!`) anywhere. An
+ *     ordinary named capture group (`(?<name>...)`) is not a lookbehind
+ *     and is not banned.
  *   - The pattern must not exceed `MAX_REGEX_LENGTH`.
  *
+ * This is still a whitelist, not a blacklist: it asks "is this pattern
+ * inside the permitted subset?", not "is this pattern dangerous?", and
+ * rejects everything outside the subset whether or not it would actually
+ * have been dangerous (`(cat|dog)+` is perfectly safe and is refused
+ * anyway). It is not a claim that every pattern inside the subset is
+ * dangerous-pattern-proof in some formal sense — a subset this size is a
+ * pragmatic line, not a proof — which is why `MAX_BLANK_INPUT_LENGTH`
+ * stays as an independent backstop regardless of how sound this check is
+ * believed to be.
+ *
  * Patterns this still allows: `\d{1,5}`, `[a-z]+`, `(abc)+`, `(\d\d)+`,
- * `(cat|dog){1,5}`, `cat|dog`, `^(yes|no)$`.
+ * `(cat|dog){1,5}`, `cat|dog`, `^(yes|no)$`, `[0-9]{4}-[0-9]{2}`,
+ * `\d{3}[- ]?\d{3}[- ]?\d{4}`, `\d+(\.\d+)?`, `(https?://)?example\.com`.
  *
  * An author who cannot express their accepted answer inside this subset —
- * typically because they wanted alternation inside an unbounded repeat —
- * should bound the repeat (`{1,5}` instead of `+`) or list the accepted
+ * typically because they wanted alternation or adjacent repetition inside
+ * an unbounded repeat — should bound the repeat (`{1,5}` instead of `+`),
+ * add a required literal between adjacent repeats, or list the accepted
  * forms in `accepted` instead: `accepted` already holds a list of whole
  * answers for exactly this reason, and every rejection message says so.
- *
- * This is not a claim that every rejected pattern is actually dangerous
- * (`(cat|dog)+` is perfectly safe and is refused anyway), and it is not a
- * claim that every accepted pattern is provably safe in general — a
- * subset this size is a pragmatic line, not a proof. `MAX_BLANK_INPUT_LENGTH`
- * exists specifically because a subset this size can still be wrong.
  */
 export function assertSafeRegex(pattern: string): void {
   if (pattern.length > MAX_REGEX_LENGTH) {
@@ -103,28 +131,7 @@ export function assertSafeRegex(pattern: string): void {
         "express the condition directly in the pattern, or list the alternative forms in `accepted` instead",
     );
   }
-  for (const group of findParenGroups(pattern)) {
-    const outer = quantifierAt(pattern, group.end + 1);
-    if (outer?.unbounded === true) {
-      const inner = pattern.slice(group.start + 1, group.end);
-      if (hasQuantifierOrAlternation(inner)) {
-        throw new Error(
-          "unsafe regex: a group with an unbounded repeat (*, +, {n,}) contains another " +
-            "quantifier or an alternation at some nesting depth inside it (e.g. (a+)+, (a|a)+, " +
-            "(a?a?)+) — bound the repeat instead (e.g. {1,5}), or list the alternative forms " +
-            "in `accepted` instead",
-        );
-      }
-    }
-  }
-  if (hasAdjacentUnboundedQuantifiers(pattern)) {
-    throw new Error(
-      "unsafe regex: two unbounded repeats (*, +, {n,}) sit next to each other with nothing " +
-        "required between them (e.g. a*a*b) — this can take polynomial time to fail a match; " +
-        "require a literal between them, bound one of the repeats instead (e.g. {1,5}), or " +
-        "list the alternative forms in `accepted` instead",
-    );
-  }
+  validateAlternation(parseAlternation(pattern, 0).node);
 }
 
 /** Whether `pattern` contains a backreference: `\1`-`\9` or `\k<name>`. */
@@ -145,137 +152,197 @@ function hasLookaround(pattern: string): boolean {
   return /\(\?=|\(\?!|\(\?<=|\(\?<!/.test(pattern);
 }
 
-/** A balanced, unescaped, outside-character-class pair of parentheses. */
-interface ParenGroup {
-  start: number;
-  end: number;
+// --- Recursive regex structure -------------------------------------------
+//
+// The pattern is parsed once into this shape, then `validateAlternation`
+// walks it. Nothing here attempts to be a full regex parser — it only
+// needs to find atom boundaries, group boundaries, alternation branches
+// and quantifiers accurately enough to evaluate the two safety predicates
+// above at every nesting depth.
+
+/** A quantifier attached to an atom: absent, bounded, or unbounded. */
+interface Quantifier {
+  /** Whether any quantifier at all (even a bounded one) is present. */
+  present: boolean;
+  /** Whether the quantifier, if present, is unbounded (`*`, `+`, open `{n,}`). */
+  unbounded: boolean;
+  /** Characters the quantifier itself consumes (0 if absent). */
+  length: number;
 }
 
-function findParenGroups(pattern: string): ParenGroup[] {
-  const groups: ParenGroup[] = [];
-  const stack: number[] = [];
-  let inClass = false;
-  for (let i = 0; i < pattern.length; i++) {
-    const c = pattern[i];
-    if (c === "\\") {
-      i++;
-      continue;
-    }
-    if (inClass) {
-      if (c === "]") inClass = false;
-      continue;
-    }
-    if (c === "[") {
-      inClass = true;
-    } else if (c === "(") {
-      stack.push(i);
-    } else if (c === ")") {
-      const start = stack.pop();
-      if (start !== undefined) groups.push({ start, end: i });
-    }
-  }
-  return groups;
+const NO_QUANTIFIER: Quantifier = { present: false, unbounded: false, length: 0 };
+
+/** A single-character, escaped-pair, or character-class atom, with its quantifier. */
+interface LiteralAtom {
+  kind: "literal";
+  quantifier: Quantifier;
 }
 
-/**
- * Whether a quantifier (`*`, `+`, `?`, or a valid `{m,n}`) or an
- * alternation (`|`) appears anywhere in `segment`, outside character
- * classes and escapes — deliberately NOT depth-aware with respect to
- * nested parentheses, so a quantifier or `|` buried inside a deeper nested
- * group (e.g. `((a|a))+`, `(x(a|a))+`) is still found: the permitted
- * subset forbids these at ANY nesting depth inside an unbounded-quantified
- * group, not just immediately inside it.
- */
-function hasQuantifierOrAlternation(segment: string): boolean {
-  let inClass = false;
-  for (let i = 0; i < segment.length; i++) {
-    const c = segment[i];
-    if (c === "\\") {
-      i++;
-      continue;
-    }
-    if (inClass) {
-      if (c === "]") inClass = false;
-      continue;
-    }
-    if (c === "[") {
-      inClass = true;
-    } else if (c === "*" || c === "+" || c === "?" || c === "|") {
-      return true;
-    } else if (c === "{" && quantifierAt(segment, i) !== null) {
-      return true;
-    }
-  }
-  return false;
+/** A parenthesized group, with its parsed interior and its own quantifier. */
+interface GroupAtom {
+  kind: "group";
+  body: Alternation;
+  quantifier: Quantifier;
 }
 
-/**
- * Whether two unbounded-quantified atoms sit directly adjacent to each
- * other at the top level of `pattern`, with nothing between them —
- * the `a*a*a*a*b` shape. Groups are treated as opaque atoms here (their
- * own interiors are validated separately, above); `|`, `^` and `$` break
- * the adjacency chain, since they mean the next atom isn't actually
- * immediately after the previous one in the same required sequence.
- */
-function hasAdjacentUnboundedQuantifiers(pattern: string): boolean {
-  let i = 0;
-  let prevUnbounded = false;
-  while (i < pattern.length) {
-    const c = pattern[i];
-    if (c === "|" || c === "^" || c === "$") {
-      i++;
-      prevUnbounded = false;
-      continue;
-    }
-    let atomEnd: number;
-    if (c === "\\") {
-      atomEnd = Math.min(i + 2, pattern.length);
-    } else if (c === "[") {
-      let j = i + 1;
-      while (j < pattern.length && pattern[j] !== "]") {
-        if (pattern[j] === "\\") j++;
-        j++;
-      }
-      atomEnd = Math.min(j + 1, pattern.length);
-    } else if (c === "(") {
-      let depth = 1;
-      let j = i + 1;
-      while (j < pattern.length && depth > 0) {
-        if (pattern[j] === "\\") {
-          j += 2;
-          continue;
-        }
-        if (pattern[j] === "(") depth++;
-        else if (pattern[j] === ")") depth--;
-        j++;
-      }
-      atomEnd = j;
-    } else {
-      atomEnd = i + 1;
-    }
-    const q = quantifierAt(pattern, atomEnd);
-    const isUnbounded = q?.unbounded === true;
-    if (isUnbounded && prevUnbounded) return true;
-    prevUnbounded = isUnbounded;
-    i = q ? atomEnd + q.length : atomEnd;
-  }
-  return false;
+type Atom = LiteralAtom | GroupAtom;
+
+/** A `|`-free run of atoms: one branch of an alternation (or the only branch, if there is no `|`). */
+type Sequence = Atom[];
+
+/** One nesting level's content: one or more `|`-separated branches. */
+interface Alternation {
+  branches: Sequence[];
 }
 
-/** The quantifier (if any) starting at index `j`: `*`, `+`, `?` or `{m,n}`. */
-function quantifierAt(pattern: string, j: number): { unbounded: boolean; length: number } | null {
+/** The quantifier (if any) starting at index `j`: `*`, `+`, `?` or a valid `{m,n}`. */
+function quantifierAt(pattern: string, j: number): Quantifier {
   const c = pattern[j];
-  if (c === "*" || c === "+") return { unbounded: true, length: 1 };
-  if (c === "?") return { unbounded: false, length: 1 };
+  if (c === "*" || c === "+") return { present: true, unbounded: true, length: 1 };
+  if (c === "?") return { present: true, unbounded: false, length: 1 };
   if (c === "{") {
     const m = /^\{\d*(,(\d*))?\}/.exec(pattern.slice(j));
     if (m) {
       const hasComma = m[1] !== undefined;
       const upperBound = m[2];
-      return { unbounded: hasComma && (upperBound === undefined || upperBound === ""), length: m[0].length };
+      return { present: true, unbounded: hasComma && (upperBound === undefined || upperBound === ""), length: m[0].length };
     }
   }
-  return null;
+  return NO_QUANTIFIER;
+}
+
+/**
+ * Characters to skip right after a group's opening `(` for a non-capturing
+ * `(?:` or named `(?<name>` prefix, so the interior parse doesn't mistake
+ * the prefix's own characters for atoms. `(?=`, `(?!`, `(?<=`, `(?<!`
+ * (lookaround) are already rejected by `hasLookaround` before parsing ever
+ * reaches this, so any other `(?` here is one of these two forms.
+ */
+function groupPrefixLength(pattern: string, i: number): number {
+  if (pattern[i] !== "?") return 0;
+  if (pattern[i + 1] === ":") return 2;
+  if (pattern[i + 1] === "<" && pattern[i + 2] !== "=" && pattern[i + 2] !== "!") {
+    let j = i + 2;
+    while (j < pattern.length && pattern[j] !== ">") j++;
+    return j + 1 - i;
+  }
+  return 0;
+}
+
+/** Parses one atom (literal, escape, character class, or group) starting at index `i`. */
+function parseAtom(pattern: string, i: number): { atom: Atom; next: number } {
+  const c = pattern[i];
+  if (c === "(") {
+    let j = i + 1;
+    j += groupPrefixLength(pattern, j);
+    const { node, end } = parseAlternation(pattern, j);
+    const bodyEnd = pattern[end] === ")" ? end + 1 : end;
+    const quantifier = quantifierAt(pattern, bodyEnd);
+    return { atom: { kind: "group", body: node, quantifier }, next: bodyEnd + quantifier.length };
+  }
+  let bodyEnd: number;
+  if (c === "\\") {
+    bodyEnd = Math.min(i + 2, pattern.length);
+  } else if (c === "[") {
+    // A character class is one opaque atom: quantifier/alternation/group
+    // characters inside `[...]` are literal members of the class, not
+    // structure, so they are never interpreted as such.
+    let j = i + 1;
+    while (j < pattern.length && pattern[j] !== "]") {
+      if (pattern[j] === "\\") j++;
+      j++;
+    }
+    bodyEnd = Math.min(j + 1, pattern.length);
+  } else {
+    bodyEnd = i + 1;
+  }
+  const quantifier = quantifierAt(pattern, bodyEnd);
+  return { atom: { kind: "literal", quantifier }, next: bodyEnd + quantifier.length };
+}
+
+/**
+ * Parses a `|`-separated sequence of branches starting at index `start`,
+ * stopping at the first unescaped `)` (left for the caller to consume) or
+ * at the end of the pattern. Used both for the whole pattern (top level,
+ * `start = 0`) and for the interior of every group.
+ */
+function parseAlternation(pattern: string, start: number): { node: Alternation; end: number } {
+  const branches: Sequence[] = [];
+  let current: Sequence = [];
+  let i = start;
+  while (i < pattern.length && pattern[i] !== ")") {
+    if (pattern[i] === "|") {
+      branches.push(current);
+      current = [];
+      i++;
+      continue;
+    }
+    const { atom, next } = parseAtom(pattern, i);
+    current.push(atom);
+    i = next;
+  }
+  branches.push(current);
+  return { node: { branches }, end: i };
+}
+
+/**
+ * Whether `node` contains a quantifier (of any kind, even bounded) or an
+ * alternation anywhere inside it, at any nesting depth — used only when
+ * the group enclosing `node` itself carries an unbounded quantifier.
+ */
+function containsQuantifierOrAlternation(node: Alternation): boolean {
+  if (node.branches.length > 1) return true;
+  for (const seq of node.branches) {
+    for (const atom of seq) {
+      if (atom.quantifier.present) return true;
+      if (atom.kind === "group" && containsQuantifierOrAlternation(atom.body)) return true;
+    }
+  }
+  return false;
+}
+
+/** Whether two atoms adjacent to each other in `seq` both carry an unbounded quantifier. */
+function hasAdjacentUnbounded(seq: Sequence): boolean {
+  for (let k = 1; k < seq.length; k++) {
+    const prev = seq[k - 1];
+    const cur = seq[k];
+    if (prev !== undefined && cur !== undefined && prev.quantifier.unbounded && cur.quantifier.unbounded) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Walks `node` and every group inside it, at every depth, applying both
+ * safety predicates at each level: no adjacent unbounded quantifiers in
+ * any branch, and — for a group whose own quantifier is unbounded — no
+ * quantifier or alternation anywhere in its interior.
+ */
+function validateAlternation(node: Alternation): void {
+  for (const seq of node.branches) {
+    if (hasAdjacentUnbounded(seq)) {
+      throw new Error(
+        "unsafe regex: two unbounded repeats (*, +, {n,}) sit next to each other with nothing " +
+          "required between them (e.g. a*a*b) — this can take polynomial time to fail a match, " +
+          "at any nesting depth, even inside an unquantified or bounded group — require a literal " +
+          "between them, bound one of the repeats instead (e.g. {1,5}), or list the alternative " +
+          "forms in `accepted` instead",
+      );
+    }
+    for (const atom of seq) {
+      if (atom.kind !== "group") continue;
+      validateAlternation(atom.body);
+      if (atom.quantifier.unbounded && containsQuantifierOrAlternation(atom.body)) {
+        throw new Error(
+          "unsafe regex: a group with an unbounded repeat (*, +, {n,}) contains another " +
+            "quantifier or an alternation at some nesting depth inside it (e.g. (a+)+, (a|a)+, " +
+            "(a?a?)+, ((a|a))+) — bound the repeat instead (e.g. {1,5}), or list the alternative " +
+            "forms in `accepted` instead",
+        );
+      }
+    }
+  }
 }
 
 /**
