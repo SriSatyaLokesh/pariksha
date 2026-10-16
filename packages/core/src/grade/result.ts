@@ -79,6 +79,17 @@ export function round2(n: number): number {
   const sign = n < 0 ? -1 : 1;
   const abs = Math.abs(n);
   const scaled = Number(`${abs}e2`);
+  // `${abs}` is already exponential notation for a magnitude small or
+  // large enough ((1e-7).toString() === "1e-7"), so appending another
+  // "e2" produces a malformed string ("1e-7e2") that Number() can't
+  // parse, and `scaled` is silently NaN. schemas/question-1.json only
+  // requires points > 0 (exclusiveMinimum: 0), so points: 1e-7 is
+  // schema-valid, and the NaN would otherwise propagate into the section
+  // total, the attempt total and the percentage. A magnitude that small
+  // or large is never near a decimal boundary where binary
+  // floating-point error at 2 decimal places could matter, so the plain
+  // multiply-then-round this file otherwise avoids is exact enough here.
+  if (!Number.isFinite(scaled)) return sign * (Math.round(abs * 100) / 100);
   const rounded = Math.round(scaled);
   return sign * Number(`${rounded}e-2`);
 }

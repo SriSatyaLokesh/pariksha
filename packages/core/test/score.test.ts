@@ -62,6 +62,34 @@ describe("scoreAttempt", () => {
     expect(s.perQuestion["WRI-002"]?.points).toBe(0);
   });
 
+  it("a question with points: 1e-7 (schema-valid: exclusiveMinimum: 0) produces a finite section total, attempt total and percentage", () => {
+    const tiny: Question = {
+      id: "TINY-001",
+      type: "single",
+      prompt: "Pick the right option.",
+      options: [
+        { id: "a", text: "a" },
+        { id: "b", text: "b" },
+      ],
+      key: "a",
+      scoring: { mode: "all_or_nothing", points: 1e-7 },
+    };
+    const s = scoreAttempt({
+      questionsBySection: [{ sectionId: "section", questions: [tiny] }],
+      responses: { "TINY-001": { kind: "option", option: "a" } },
+      awards: {},
+      defaults,
+    });
+    expect(Number.isFinite(s.perQuestion["TINY-001"]?.points)).toBe(true);
+    expect(Number.isFinite(s.perQuestion["TINY-001"]?.max)).toBe(true);
+    expect(s.sections.every((section) => Number.isFinite(section.points) && Number.isFinite(section.max))).toBe(
+      true,
+    );
+    expect(Number.isFinite(s.total)).toBe(true);
+    expect(Number.isFinite(s.max)).toBe(true);
+    expect(Number.isFinite(s.percent)).toBe(true);
+  });
+
   it("a 40-question partial-credit section totals exactly, with no float residue", () => {
     const questions: Question[] = Array.from({ length: 40 }, (_, i) => ({
       id: `PC-${i}`,

@@ -149,6 +149,20 @@ describe("round2", () => {
     expect(round2(0)).toBe(0);
     expect(round2(2)).toBe(2);
   });
+
+  // schemas/question-1.json sets points to exclusiveMinimum: 0, so a
+  // schema-valid points value can be as small as 1e-7 — small enough that
+  // `${n}` is exponential notation ("1e-7"), and appending another "e2"
+  // produced the malformed string "1e-7e2", which Number() turned into
+  // NaN. That NaN propagated silently through applyMode, section totals,
+  // the attempt total and the percentage. round2 must return a finite
+  // number for any finite input.
+  it("returns a finite number for a magnitude whose string form is exponential", () => {
+    expect(round2(1e-7)).toBe(0);
+    expect(Number.isFinite(round2(1e-7))).toBe(true);
+    expect(Number.isFinite(round2(-1e-7))).toBe(true);
+    expect(Number.isFinite(round2(1e21))).toBe(true);
+  });
 });
 
 describe("resolveScoring", () => {
