@@ -244,20 +244,36 @@ interface Alternation {
   branches: Sequence[];
 }
 
-/** The quantifier (if any) starting at index `j`: `*`, `+`, `?` or a valid `{m,n}`. */
+/**
+ * The quantifier (if any) starting at index `j`: `*`, `+`, `?` or a valid
+ * `{m,n}` — plus a trailing lazy `?` (`*?`, `+?`, `??`, `{m,n}?`), which is
+ * consumed as part of the same quantifier rather than left for the caller
+ * to parse as its own atom. Leaving it unconsumed was the bug: `parseAtom`
+ * would then read that `?` as a separate literal atom sitting *between*
+ * the two real atoms, so two unbounded quantifiers like `a*?a*?b` never
+ * looked adjacent to `hasAdjacentUnbounded` even though they are exactly
+ * the `a*a*b` polynomial-blowup shape with laziness sprinkled on top.
+ */
 function quantifierAt(pattern: string, j: number): Quantifier {
   const c = pattern[j];
-  if (c === "*" || c === "+") return { present: true, unbounded: true, length: 1 };
-  if (c === "?") return { present: true, unbounded: false, length: 1 };
-  if (c === "{") {
+  let base: Quantifier;
+  if (c === "*" || c === "+") {
+    base = { present: true, unbounded: true, length: 1 };
+  } else if (c === "?") {
+    base = { present: true, unbounded: false, length: 1 };
+  } else if (c === "{") {
     const m = /^\{\d*(,(\d*))?\}/.exec(pattern.slice(j));
-    if (m) {
-      const hasComma = m[1] !== undefined;
-      const upperBound = m[2];
-      return { present: true, unbounded: hasComma && (upperBound === undefined || upperBound === ""), length: m[0].length };
-    }
+    if (!m) return NO_QUANTIFIER;
+    const hasComma = m[1] !== undefined;
+    const upperBound = m[2];
+    base = { present: true, unbounded: hasComma && (upperBound === undefined || upperBound === ""), length: m[0].length };
+  } else {
+    return NO_QUANTIFIER;
   }
-  return NO_QUANTIFIER;
+  if (pattern[j + base.length] === "?") {
+    return { ...base, length: base.length + 1 };
+  }
+  return base;
 }
 
 /**

@@ -133,6 +133,17 @@ describe("assertSafeRegex — permitted subset", () => {
     // so three of them in a row read as six atoms instead of three
     // quantified ones and the a*a*a* shape went unrecognised.
     [String.raw`(\p{L}*\p{L}*\p{L}*b)`, /unbounded repeat/i],
+    // Round 5: quantifierAt never consumed a trailing lazy `?`, so
+    // `parseAtom` read it as its own literal atom sitting BETWEEN the two
+    // unbounded atoms — `a*?a*?b` passed the adjacency check even though
+    // it is exactly the a*a*b polynomial-blowup shape with laziness
+    // sprinkled on top (measured well over 100s unguarded at the 100-char
+    // input cap). Also closes the same hole for \p{...} atoms and for an
+    // unbounded quantifier on a group.
+    ["a*?a*?b", /unbounded repeat/i],
+    ["a*?a*?a*?a*?a*?a*?a*?a*?b", /unbounded repeat/i],
+    [String.raw`\p{L}*?\p{L}*?b`, /unbounded repeat/i],
+    ["(a)*?(a)*?b", /unbounded repeat/i],
   ])("rejects %s", (pattern, messagePattern) => {
     expect(() => assertSafeRegex(pattern)).toThrow(/unsafe/i);
     expect(() => assertSafeRegex(pattern)).toThrow(messagePattern);
@@ -158,6 +169,13 @@ describe("assertSafeRegex — permitted subset", () => {
     // tests in Telugu and Devanagari, so property escapes must stay usable.
     String.raw`\p{L}+`,
     String.raw`\p{Script=Devanagari}+`,
+    String.raw`\p{Script=Telugu}+`,
+    // Round 5: a single lazy quantifier is exactly as safe as its greedy
+    // form — laziness changes backtracking order, not the adjacency shape
+    // that makes a*a*b dangerous. Only ADJACENT unbounded quantifiers
+    // (lazy or greedy) are the danger.
+    "a*?",
+    "(abc)+?",
   ])("accepts %s", (pattern) => {
     expect(() => assertSafeRegex(pattern)).not.toThrow();
   });
@@ -187,7 +205,7 @@ describe("assertSafeRegex — permitted subset", () => {
   it("names the construct and the way out in every rejection message", () => {
     // Every rejection should point the author at a fix: bound the repeat,
     // or list the forms in `accepted`.
-    for (const pattern of ["(a+)+", "(a|a)+", "(a?a?)+", "a*a*a*a*b", "(a*a*a*a*b)"]) {
+    for (const pattern of ["(a+)+", "(a|a)+", "(a?a?)+", "a*a*a*a*b", "(a*a*a*a*b)", "a*?a*?b"]) {
       expect(() => assertSafeRegex(pattern)).toThrow(/bound|accepted/i);
     }
   });
@@ -253,6 +271,10 @@ describe("assertSafeRegex — accepted set is fast at the input cap (regression 
     // a blind spot, so the regression guard needs a wrapped case of its
     // own, not only the round-3 rejection tests.
     { pattern: "((abc)+)", attack: "abc".repeat(Math.floor(n / 3)) + "x" },
+    // Round 5: a lazy quantifier (previously able to hide an adjacent-
+    // unbounded shape from the adjacency scan — see the "rejects" cases
+    // above) must be exactly as fast as its greedy form once fixed.
+    { pattern: "(abc)*?", attack: "abc".repeat(Math.floor((n - 1) / 3)) + "x" },
   ];
 
   it("every accepted pattern matches or fails in a few milliseconds, even against a worst-case-shaped input at the cap", () => {
