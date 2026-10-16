@@ -30,4 +30,29 @@ jobs:
           -s schemas/test-1.json
           -d "examples/*/test.json"
 
-  # The lint / type-check / test job is added together with the code base in v0.1.
+  build:
+    name: Lint, type-check, build and test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
