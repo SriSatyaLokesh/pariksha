@@ -4,8 +4,10 @@ updates:
     directory: /
     schedule:
       interval: weekly
-  - package-ecosystem: npm
-    directory: /
-    schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+
+  # npm updates are enabled together with the code base (package.json) in v0.1:
+  # - package-ecosystem: npm
+  #   directory: /
+  #   schedule:
+  #     interval: weekly
+  #   open-pull-requests-limit: 5
