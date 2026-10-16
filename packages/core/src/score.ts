@@ -32,23 +32,12 @@ export interface AttemptScore {
   percent: number;
   /** null when the test sets no pass mark. */
   passed: boolean | null;
-  /** IDs of manual questions the candidate answered but no reviewer has graded yet. */
+  /** IDs of manual questions with no reviewer award yet, blank or not. */
   pending: string[];
 }
 
 function isManual(q: Question): q is ManualQuestion {
   return q.type === "short_answer" || q.type === "long_answer";
-}
-
-/**
- * Whether a candidate's response to a manual question is empty. A reviewer
- * does not need to grade an answer the candidate never wrote, so a blank
- * manual question is excluded from `pending` even while ungraded — a
- * grading queue full of blanks would otherwise be a standing annoyance.
- */
-function isBlank(r: ResponseValue | null): boolean {
-  if (r === null) return true;
-  return r.kind === "text" && r.text.trim() === "";
 }
 
 export function scoreAttempt(input: {
@@ -77,7 +66,13 @@ export function scoreAttempt(input: {
       rawPoints += result.points;
       rawMax += result.max;
 
-      if (isManual(q) && award === undefined && !isBlank(response)) {
+      // `pending` reports a fact about the data, not a presentation-layer
+      // filter: whether a reviewer has ever recorded an award for this
+      // question. A blank answer still needs that same yes/no — it is the
+      // only signal that distinguishes "never graded" from "graded zero",
+      // which matters the moment a result is disputed. A view that wants to
+      // hide blanks from a grading queue can filter `pending` itself.
+      if (isManual(q) && award === undefined) {
         pending.push(q.id);
       }
     }

@@ -33,7 +33,12 @@ describe("scoreAttempt", () => {
     expect(s.pending).toEqual(["WRI-002"]);
   });
 
-  it("a manual question the candidate left entirely blank is not graded and is NOT pending", () => {
+  it("a manual question the candidate left entirely blank still scores zero, counts toward max, and IS pending", () => {
+    // `pending` reports whether a reviewer has ever recorded an award, not
+    // whether the candidate wrote anything — a blank answer and a graded
+    // zero must stay distinguishable (e.g. for a disputed-result lookup),
+    // and a grading queue can filter blanks out of `pending` itself if it
+    // wants to.
     const s = scoreAttempt({
       questionsBySection: [{ sectionId: "writing", questions: [byId("WRI-002")] }],
       responses: { "WRI-002": null },
@@ -41,7 +46,8 @@ describe("scoreAttempt", () => {
       defaults,
     });
     expect(s.perQuestion["WRI-002"]?.points).toBe(0);
-    expect(s.pending).toEqual([]);
+    expect(s.max).toBe(5);
+    expect(s.pending).toEqual(["WRI-002"]);
   });
 
   it("a graded manual question (award present) is not pending, even with an empty-levels award", () => {
@@ -118,6 +124,10 @@ describe("scoreAttempt", () => {
     };
     expect(scoreAttempt(input).passed).toBeNull();
     expect(scoreAttempt({ ...input, passMarkPercent: 50 }).passed).toBe(true);
+    // Exact equality is a pass, not a fail: a 100% pass mark passes a
+    // candidate who scored exactly 100%, same as a 40% pass mark would
+    // pass someone who scored exactly 40%.
+    expect(scoreAttempt({ ...input, passMarkPercent: 100 }).passed).toBe(true);
     expect(scoreAttempt({ ...input, passMarkPercent: 100.01 }).passed).toBe(false);
   });
 
