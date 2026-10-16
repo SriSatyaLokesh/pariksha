@@ -1,0 +1,22 @@
+flowchart TB
+    I["<b>Instance</b><br/>one deployment, run by the instance owner"] --> W
+
+    subgraph W["Workspace — one team or organisation, many per instance"]
+        direction TB
+        M["<b>Members and roles</b><br/>Owner, Admin, Author,<br/>Proctor, Reviewer, Viewer"]
+        B["<b>Question banks</b><br/>12 question types,<br/>tags, difficulty, points"]
+        T["<b>Test</b><br/>name, tst_ ID, URL slug<br/>Draft → Open → Closed → Archived"]
+        V["<b>Published version</b><br/>timing, access, form,<br/>proctoring, scoring, release"]
+        S["<b>Sections</b><br/>fixed list, random pool,<br/>or sets A, B, C…"]
+        C["<b>Candidate</b><br/>registration answers,<br/>consent record"]
+        A["<b>Attempt</b><br/>set, question order,<br/>server deadline, score, flag"]
+        D["<b>Attempt data</b><br/>responses, events,<br/>snapshots, review verdict"]
+
+        T --> V --> S
+        S -- draws questions --> B
+        T --> C --> A --> D
+        V -- attempt pinned to version --> A
+    end
+
+    classDef focus fill:#e3edf9,stroke:#2f6fd0,stroke-width:2px;
+    class T focus;

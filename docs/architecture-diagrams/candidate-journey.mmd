@@ -1,0 +1,22 @@
+flowchart TD
+    S1["Open test link or personal invite"] --> S2["Access: code, invite, OTP or SSO"]
+    S2 -- fails --> X1["Refused: wrong code or not invited"]
+    S2 --> S3["Device and browser check"]
+    S3 -- fails --> X2["Blocked: laptop or desktop only"]
+    S3 --> S4["Consent, then registration form"]
+    S4 --> S5["Camera and mic check (Strict)"]
+    S5 -- fails --> H["Help text, fix permission"]
+    H -- retry --> S5
+    S5 --> S6["Set or pool assigned, order shuffled"]
+    S6 --> S7["Start: fullscreen, server timer"]
+    S7 --> S8["Answer, autosave, proctoring signals"]
+    S8 -- leaves window --> WV["Warning shown, event logged"]
+    WV -- returns --> S8
+    WV -- at the limit: configured action --> S9
+    S8 --> S9["Submitted: manual, timeout or limit"]
+    S9 --> S10["Results shown per release setting"]
+
+    classDef warn fill:#fff4dc,stroke:#e0a100,stroke-width:2px;
+    classDef done fill:#e3edf9,stroke:#2f6fd0,stroke-width:2px;
+    class X1,X2,WV warn;
+    class S9 done;

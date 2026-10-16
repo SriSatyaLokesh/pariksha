@@ -1,0 +1,15 @@
+flowchart TD
+    V01["<b>v0.1 Pilot-ready</b><br/>Tests with name, ID and URL · sets, pools, shuffling · 6 core question types<br/>Registration form builder · access code · Standard and Strict proctoring<br/>Live monitor · results CSV · Cloudflare deploy"]
+    G1{{"Gate: one real test with 300+ candidates and 0 lost answers"}}
+    V02["<b>v0.2 Teams and security</b><br/>Workspaces, roles, per-test grants · OIDC and magic-link sign-in · audit log<br/>Invite links, email codes, SSO for candidates · retention and deletion jobs"]
+    G2{{"Gate: permission test suite passes and an outside security review is done"}}
+    V03["<b>v0.3 All question types and grading</b><br/>Multi-matching, fill in the blank, numeric, short and long answer, passage groups<br/>Partial and negative scoring · grading queue · item analysis · regrade"]
+    G3{{"Gate: scoring fixtures pass for every type and mode; 500-candidate load test passes"}}
+    V10["<b>v1.0 Public open-source release</b><br/>Docker + Postgres · REST API and webhooks · CSV and GIFT import · plugins<br/>Accessibility (WCAG 2.1 AA) · translations · complete docs · signed releases"]
+
+    V01 --> G1 --> V02 --> G2 --> V03 --> G3 --> V10
+
+    classDef gate fill:#f4f4f2,stroke:#9a9a92;
+    classDef focus fill:#e3edf9,stroke:#2f6fd0,stroke-width:2px;
+    class G1,G2,G3 gate;
+    class V10 focus;
