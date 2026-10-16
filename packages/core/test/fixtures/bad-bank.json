@@ -1,0 +1,116 @@
+{
+  "$schema": "../../../../schemas/bank-1.json",
+  "format": "pariksha/bank@1",
+  "name": "Bad bank — one broken rule per question",
+  "groups": [
+    { "id": "g1", "title": "Only real group", "passage": "Some passage text." }
+  ],
+  "questions": [
+    {
+      "id": "BAD-001",
+      "type": "single",
+      "prompt": "Pick one.",
+      "options": [
+        { "id": "a", "text": "A" },
+        { "id": "b", "text": "B" }
+      ],
+      "key": "z"
+    },
+    {
+      "id": "BAD-002",
+      "type": "select_k",
+      "prompt": "Pick two.",
+      "k": 2,
+      "options": [
+        { "id": "a", "text": "A" },
+        { "id": "b", "text": "B" },
+        { "id": "c", "text": "C" },
+        { "id": "d", "text": "D" }
+      ],
+      "key": ["a", "b", "c"]
+    },
+    {
+      "id": "BAD-003",
+      "type": "select_k",
+      "prompt": "Pick two.",
+      "k": 2,
+      "options": [
+        { "id": "a", "text": "A" },
+        { "id": "b", "text": "B" }
+      ],
+      "key": ["a", "b"]
+    },
+    {
+      "id": "BAD-004",
+      "type": "matching",
+      "prompt": "Match them.",
+      "left": ["L1", "L2"],
+      "right": ["R1", "R2"],
+      "key": { "L1": "R1", "Lx": "R2" }
+    },
+    {
+      "id": "BAD-005",
+      "type": "matching",
+      "prompt": "Match them.",
+      "left": ["L1", "L2"],
+      "right": ["R1", "R2"],
+      "key": { "L1": "Rx", "L2": "R2" }
+    },
+    {
+      "id": "BAD-006",
+      "type": "matching",
+      "prompt": "Match them.",
+      "left": ["L1", "L2", "L3"],
+      "right": ["R1", "R2"],
+      "key": { "L1": "R1", "L2": "R1", "L3": "R2" }
+    },
+    {
+      "id": "BAD-007",
+      "type": "fill_blank",
+      "prompt": "Fill in the blank, nothing here.",
+      "blanks": [{ "id": "b1", "accepted": ["foo"] }]
+    },
+    {
+      "id": "BAD-008",
+      "type": "fill_blank",
+      "prompt": "Answer: {{b1}} and {{b2}}.",
+      "blanks": [{ "id": "b1", "accepted": ["foo"] }]
+    },
+    {
+      "id": "DUP-ID",
+      "type": "true_false",
+      "prompt": "First of a duplicate pair.",
+      "key": true
+    },
+    {
+      "id": "DUP-ID",
+      "type": "true_false",
+      "prompt": "Second of a duplicate pair.",
+      "key": false
+    },
+    {
+      "id": "BAD-010",
+      "type": "single",
+      "prompt": "References a group that does not exist.",
+      "group": "missing-group",
+      "options": [
+        { "id": "a", "text": "A" },
+        { "id": "b", "text": "B" }
+      ],
+      "key": "a"
+    },
+    {
+      "id": "BAD-011",
+      "type": "fill_blank",
+      "prompt": "Match: {{b1}}.",
+      "blanks": [{ "id": "b1", "accepted": ["(a+)+$"], "match": "regex" }]
+    },
+    {
+      "id": "BAD-012",
+      "type": "ordering",
+      "prompt": "Order them.",
+      "items": ["one", "two", "three"],
+      "scoring": { "mode": "partial", "points": 2 }
+    }
+  ]
+}

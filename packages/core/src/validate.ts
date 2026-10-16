@@ -1,0 +1,215 @@
+// Cross-field import validation: the rules a JSON Schema cannot express.
+// Structural checks ("is `prompt` a string", "is `type` one of the twelve")
+// are Ajv's job against schemas/bank-1.json and schemas/question-1.json.
+// This file assumes the document already passed that and checks only
+// relationships *between* fields — option IDs a key names, option counts a
+// `select_k` promises, placeholders a `fill_blank` prompt and its blanks
+// must agree on, IDs and group references unique and resolvable within the
+// bank, regex safety, and scoring-mode applicability.
+//
+// Import is all-or-nothing: every issue found is collected and returned,
+// never only the first, so an author fixes their file once.
+//
+// No I/O, no runtime dependencies, nothing time- or randomness-based:
+// packages/core is a pure, leaf package.
+
+import type { Bank, PassageGroup, Question } from "./types.js";
+import { assertSafeRegex } from "./grade/text.js";
+import { APPLICABLE_MODES } from "./grade/result.js";
+
+export interface ImportIssue {
+  /** The question's `id`, or null for an issue not about one specific question. */
+  questionId: string | null;
+  /** The question's position in `bank.questions` (0-based), or -1 when no question applies. */
+  index: number;
+  field: string;
+  message: string;
+}
+
+type ValidationResult =
+  { ok: true; bank: Bank } | { ok: false; issues: ImportIssue[] };
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
+/** `{{id}}` placeholders in a fill_blank prompt. */
+function placeholdersIn(prompt: string): Set<string> {
+  const ids = new Set<string>();
+  for (const m of prompt.matchAll(/\{\{([^{}]+)\}\}/g)) {
+    const id = m[1];
+    if (id !== undefined) ids.add(id);
+  }
+  return ids;
+}
+
+/**
+ * Checks only cross-field relationships a JSON Schema cannot express.
+ * Assumes `bank` already passed Ajv validation against the question/bank
+ * schemas — the two checks below (that it's an object with a `questions`
+ * array) exist only so this function degrades safely on malformed input
+ * rather than reimplementing the schema's own structural checks.
+ */
+export function validateBank(bank: unknown): ValidationResult {
+  if (!isRecord(bank) || !Array.isArray(bank.questions)) {
+    return {
+      ok: false,
+      issues: [
+        {
+          questionId: null,
+          index: -1,
+          field: "questions",
+          message: "bank.questions must be an array",
+        },
+      ],
+    };
+  }
+
+  const questions = bank.questions as Question[];
+  const groupIds = new Set(
+    Array.isArray(bank.groups)
+      ? (bank.groups as PassageGroup[]).map((g) => g.id)
+      : [],
+  );
+
+  const issues: ImportIssue[] = [];
+  const seenIds = new Set<string>();
+
+  questions.forEach((q, index) => {
+    const issue = (field: string, message: string): void => {
+      issues.push({ questionId: q.id, index, field, message });
+    };
+
+    if (seenIds.has(q.id)) {
+      issue("id", `duplicate question ID "${q.id}"`);
+    } else {
+      seenIds.add(q.id);
+    }
+
+    if (q.group !== undefined && !groupIds.has(q.group)) {
+      issue("group", `group "${q.group}" does not exist in the bank`);
+    }
+
+    const mode = q.scoring?.mode;
+    if (mode !== undefined) {
+      const allowed = APPLICABLE_MODES[q.type];
+      if (!allowed.includes(mode)) {
+        issue(
+          "scoring.mode",
+          `scoring mode "${mode}" does not apply to question type "${q.type}" (allowed: ${allowed.join(", ")})`,
+        );
+      }
+    }
+
+    switch (q.type) {
+      case "single": {
+        if (!q.options.some((o) => o.id === q.key)) {
+          issue("key", `key "${q.key}" is not among the options`);
+        }
+        break;
+      }
+      case "multiple": {
+        for (const k of q.key) {
+          if (!q.options.some((o) => o.id === k))
+            issue("key", `key "${k}" is not among the options`);
+        }
+        break;
+      }
+      case "select_k": {
+        for (const k of q.key) {
+          if (!q.options.some((o) => o.id === k))
+            issue("key", `key "${k}" is not among the options`);
+        }
+        if (q.key.length !== q.k) {
+          issue(
+            "key",
+            `select_k key has ${q.key.length} entries, but k is ${q.k}`,
+          );
+        }
+        if (q.k >= q.options.length) {
+          issue(
+            "k",
+            `k (${q.k}) must be less than the number of options (${q.options.length})`,
+          );
+        }
+        break;
+      }
+      case "matching": {
+        const leftSet = new Set(q.left);
+        const rightSet = new Set(q.right);
+        const rightUsage = new Map<string, number>();
+        for (const [left, right] of Object.entries(q.key)) {
+          if (!leftSet.has(left))
+            issue("key", `key uses "${left}", which is not in left`);
+          if (!rightSet.has(right))
+            issue("key", `key uses "${right}", which is not in right`);
+          rightUsage.set(right, (rightUsage.get(right) ?? 0) + 1);
+        }
+        for (const [right, count] of rightUsage) {
+          if (count > 1) {
+            issue(
+              "key",
+              `right item "${right}" is used ${count} times; matching allows at most once`,
+            );
+          }
+        }
+        break;
+      }
+      case "multi_matching": {
+        const leftSet = new Set(q.left);
+        const rightSet = new Set(q.right);
+        for (const [left, rights] of Object.entries(q.key)) {
+          if (!leftSet.has(left))
+            issue("key", `key uses "${left}", which is not in left`);
+          for (const right of rights) {
+            if (!rightSet.has(right))
+              issue("key", `key uses "${right}", which is not in right`);
+          }
+        }
+        break;
+      }
+      case "fill_blank": {
+        const placeholders = placeholdersIn(q.prompt);
+        const blankIds = new Set(q.blanks.map((b) => b.id));
+        for (const blank of q.blanks) {
+          if (!placeholders.has(blank.id)) {
+            issue(
+              "blanks",
+              `blank "${blank.id}" has no matching {{${blank.id}}} placeholder in the prompt`,
+            );
+          }
+          if (blank.match === "regex") {
+            for (const pattern of blank.accepted) {
+              try {
+                assertSafeRegex(pattern);
+              } catch (err) {
+                const message =
+                  err instanceof Error ? err.message : String(err);
+                issue(
+                  "blanks",
+                  `blank "${blank.id}" has an unsafe regex pattern "${pattern}": ${message}`,
+                );
+              }
+            }
+          }
+        }
+        for (const placeholder of placeholders) {
+          if (!blankIds.has(placeholder)) {
+            issue(
+              "prompt",
+              `placeholder "{{${placeholder}}}" has no matching blank`,
+            );
+          }
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  });
+
+  if (issues.length > 0) return { ok: false, issues };
+  // Assumed structurally valid (Ajv's job); the two checks above are only
+  // enough to let this function degrade safely on arbitrary `unknown`.
+  return { ok: true, bank: bank as unknown as Bank };
+}
