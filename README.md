@@ -107,6 +107,7 @@ Full architecture, candidate journey and data model: the [PRD](docs/PRD.md). Hig
 | [Question format](docs/question-format.md) | `pariksha/question@1` — the 12 types and how they are scored |
 | [Test format](docs/test-format.md) | `pariksha/test@1` — timing, access, registration form, sections, release |
 | [Worked example](examples/reasoning-aptitude/) | One whole test, from input to results CSV |
+| [Design system](DESIGN.md) | `DESIGN.md` — colours, type, components and the rules behind them, machine-readable |
 | [Architecture decisions](docs/adr/) | Why Cloudflare + adapters, why Apache-2.0 |
 | [JSON Schemas](schemas/) | Machine-readable question, bank and test schemas |
 

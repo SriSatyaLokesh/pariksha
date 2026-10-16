@@ -11,6 +11,7 @@ All notable changes to this project are documented here. The format follows [Kee
 - Open test format `pariksha/test@1` — timing, access, registration form, proctoring, scoring, sections and release — with `schemas/test-1.json` and `docs/test-format.md`.
 - Worked example `examples/reasoning-aptitude/`: a complete 45-minute test with 17 questions covering all 12 types, a registration form using every field type, a candidate list, a results CSV, and a walkthrough of every screen.
 - Question-set example `examples/technical-screening/` (SQL, Python, AI basics), one question per type.
+- `DESIGN.md` — the design system as machine-readable tokens plus the reasoning: 20 colours with measured contrast ratios, 13 type tokens, 43 components spanning marketing surfaces, the registration form, the test runner and the admin tables, a high-contrast mode, and motion rules that keep a live attempt still.
 - `CONTRIBUTORS.md`, recognising every kind of contribution, not only commits.
 - Repository scaffolding: contribution guide, code of conduct, security policy, maintainers list, issue and pull-request templates, Dependabot, and CI that validates every schema and example.
 
