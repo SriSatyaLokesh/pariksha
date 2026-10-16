@@ -46,5 +46,7 @@ Thumbs.db
 Claude outputs/
 .claude/
 .cursor/
+.agents/
+skills-lock.json
 .aider*
 scratch/
