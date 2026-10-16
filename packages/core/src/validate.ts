@@ -20,7 +20,11 @@ import { APPLICABLE_MODES } from "./grade/result.js";
 export interface ImportIssue {
   /** The question's `id`, or null for an issue not about one specific question. */
   questionId: string | null;
-  /** The question's position in `bank.questions` (0-based), or -1 when no question applies. */
+  /**
+   * The entry's position (0-based) in the array the issue is about —
+   * `bank.questions` for every rule above, `bank.groups` for a malformed
+   * group entry — or -1 when no question or group applies.
+   */
   index: number;
   field: string;
   message: string;
@@ -65,17 +69,46 @@ export function validateBank(bank: unknown): ValidationResult {
     };
   }
 
-  const questions = bank.questions as Question[];
-  const groupIds = new Set(
-    Array.isArray(bank.groups)
-      ? (bank.groups as PassageGroup[]).map((g) => g.id)
-      : [],
-  );
-
+  const rawQuestions = bank.questions as unknown[];
   const issues: ImportIssue[] = [];
+
+  // `isRecord(bank)` and `Array.isArray(bank.questions/groups)` only tell us
+  // the *containers* are shaped right — nothing about their elements. An
+  // element that fails `isRecord` (null, a string, a number, a nested array)
+  // is reported as its own issue rather than dereferenced and crashed on;
+  // this is still not schema duplication, because a well-formed element's
+  // *field types* are never checked here, only whether it is an object at
+  // all.
+  const groupIds = new Set<string>();
+  if (Array.isArray(bank.groups)) {
+    bank.groups.forEach((raw: unknown, index) => {
+      if (!isRecord(raw)) {
+        issues.push({
+          questionId: null,
+          index,
+          field: "groups",
+          message: `entry at index ${index} in groups is not a group object`,
+        });
+        return;
+      }
+      groupIds.add((raw as unknown as PassageGroup).id);
+    });
+  }
+
   const seenIds = new Set<string>();
 
-  questions.forEach((q, index) => {
+  rawQuestions.forEach((raw: unknown, index) => {
+    if (!isRecord(raw)) {
+      issues.push({
+        questionId: null,
+        index,
+        field: "questions",
+        message: `entry at index ${index} is not a question object`,
+      });
+      return;
+    }
+    const q = raw as unknown as Question;
+
     const issue = (field: string, message: string): void => {
       issues.push({ questionId: q.id, index, field, message });
     };

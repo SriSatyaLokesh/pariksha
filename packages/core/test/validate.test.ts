@@ -194,4 +194,68 @@ describe("validateBank", () => {
     expect(validateBank({}).ok).toBe(false);
     expect(validateBank("not a bank").ok).toBe(false);
   });
+
+  it("does not crash on a malformed element in questions, and names its index", () => {
+    const bank = { format: "pariksha/bank@1", name: "x", questions: [null] };
+    expect(() => validateBank(bank)).not.toThrow();
+    const r = validateBank(bank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: null,
+        index: 0,
+        field: "questions",
+      }),
+    );
+  });
+
+  it("does not crash on a malformed element in groups, and names its index", () => {
+    const bank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      groups: [null],
+      questions: [{ id: "Q1", type: "true_false", prompt: "True?", key: true }],
+    };
+    expect(() => validateBank(bank)).not.toThrow();
+    const r = validateBank(bank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({ questionId: null, index: 0, field: "groups" }),
+    );
+  });
+
+  it("does not crash on a non-object, non-null element (a string or a number)", () => {
+    expect(() =>
+      validateBank({
+        format: "pariksha/bank@1",
+        name: "x",
+        questions: ["nope"],
+      }),
+    ).not.toThrow();
+    expect(
+      validateBank({
+        format: "pariksha/bank@1",
+        name: "x",
+        questions: ["nope"],
+      }).ok,
+    ).toBe(false);
+    expect(() =>
+      validateBank({ format: "pariksha/bank@1", name: "x", questions: [42] }),
+    ).not.toThrow();
+    expect(
+      validateBank({ format: "pariksha/bank@1", name: "x", questions: [42] })
+        .ok,
+    ).toBe(false);
+  });
+
+  it("a well-formed bank still validates clean after the element guard", () => {
+    const bank: Bank = {
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [{ id: "Q1", type: "true_false", prompt: "True?", key: true }],
+    };
+    expect(validateBank(bank).ok).toBe(true);
+  });
 });
