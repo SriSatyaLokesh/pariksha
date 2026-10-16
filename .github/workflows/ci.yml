@@ -30,19 +30,4 @@ jobs:
           -s schemas/test-1.json
           -d "examples/*/test.json"
 
-  build:
-    name: Lint, type-check and test
-    runs-on: ubuntu-latest
-    # Runs once the code base (package.json) exists.
-    if: ${{ hashFiles('package.json') != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm lint
-      - run: pnpm typecheck
-      - run: pnpm test
+  # The lint / type-check / test job is added together with the code base in v0.1.
