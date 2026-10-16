@@ -1,0 +1,1940 @@
+{
+  "_description": "AC-06 fixture matrix: one entry per (type, mode, case) triple. Expected points are derived from docs/question-format.md's 'Scoring modes' table and grade/result.ts's applyMode arithmetic, not observed by running the code. 'partial' entries (a partially-correct response) exist only where the mode under test actually grants graduated credit (scoring.mode 'partial', or 'position' for ordering) — see APPLICABLE_MODES in grade/result.ts for which modes apply to which type.",
+  "_knownDefects": [
+    "issue #128: ordering's graduated scoring mode is 'position', not 'partial' — docs/PRD.md's scoring table wrongly lists 'partial' for ordering. docs/question-format.md and APPLICABLE_MODES agree on 'position', and this matrix follows them.",
+    "issue #130: short_answer carries no 'rubric' array (only long_answer does — see types.ts's ShortAnswerQuestion vs LongAnswerQuestion, and docs/question-format.md's type table). Its only applicable mode is 'rubric', so the sum of awarded levels is always 0 — short_answer can never score above zero, even graded directly through gradeManual with a full reviewer award. See the short_answer entries below and acceptance.test.ts's dedicated test."
+  ],
+  "cases": [
+    {
+      "type": "single",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "LOG-001",
+        "type": "single",
+        "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+        "options": [
+          { "id": "a", "text": "95" },
+          { "id": "b", "text": "117" },
+          { "id": "c", "text": "127" },
+          { "id": "d", "text": "131" }
+        ],
+        "key": "c",
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "option", "option": "c" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "single",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-001",
+        "type": "single",
+        "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+        "options": [
+          { "id": "a", "text": "95" },
+          { "id": "b", "text": "117" },
+          { "id": "c", "text": "127" },
+          { "id": "d", "text": "131" }
+        ],
+        "key": "c",
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "option", "option": "a" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "single",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "LOG-001",
+        "type": "single",
+        "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+        "options": [
+          { "id": "a", "text": "95" },
+          { "id": "b", "text": "117" },
+          { "id": "c", "text": "127" },
+          { "id": "d", "text": "131" }
+        ],
+        "key": "c",
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "single",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "LOG-001",
+        "type": "single",
+        "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+        "options": [
+          { "id": "a", "text": "95" },
+          { "id": "b", "text": "117" },
+          { "id": "c", "text": "127" },
+          { "id": "d", "text": "131" }
+        ],
+        "key": "c",
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "option", "option": "c" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "single",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-001",
+        "type": "single",
+        "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+        "options": [
+          { "id": "a", "text": "95" },
+          { "id": "b", "text": "117" },
+          { "id": "c", "text": "127" },
+          { "id": "d", "text": "131" }
+        ],
+        "key": "c",
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "option", "option": "a" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "single",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "LOG-001",
+        "type": "single",
+        "prompt": "What comes next in the series?\n\n3, 7, 15, 31, 63, ?",
+        "options": [
+          { "id": "a", "text": "95" },
+          { "id": "b", "text": "117" },
+          { "id": "c", "text": "127" },
+          { "id": "d", "text": "131" }
+        ],
+        "key": "c",
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "true_false",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "LOG-007",
+        "type": "true_false",
+        "prompt": "In a certain code, EARTH is written as FBSUI. Statement: each letter has been replaced by the letter that follows it in the alphabet.",
+        "key": true,
+        "scoring": { "mode": "all_or_nothing", "points": 1 }
+      },
+      "response": { "kind": "boolean", "value": true },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1
+    },
+    {
+      "type": "true_false",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-007",
+        "type": "true_false",
+        "prompt": "In a certain code, EARTH is written as FBSUI. Statement: each letter has been replaced by the letter that follows it in the alphabet.",
+        "key": true,
+        "scoring": { "mode": "all_or_nothing", "points": 1 }
+      },
+      "response": { "kind": "boolean", "value": false },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "true_false",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "LOG-007",
+        "type": "true_false",
+        "prompt": "In a certain code, EARTH is written as FBSUI. Statement: each letter has been replaced by the letter that follows it in the alphabet.",
+        "key": true,
+        "scoring": { "mode": "all_or_nothing", "points": 1 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "true_false",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "LOG-007",
+        "type": "true_false",
+        "prompt": "In a certain code, EARTH is written as FBSUI. Statement: each letter has been replaced by the letter that follows it in the alphabet.",
+        "key": true,
+        "scoring": { "mode": "negative", "points": 1, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "boolean", "value": true },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1
+    },
+    {
+      "type": "true_false",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-007",
+        "type": "true_false",
+        "prompt": "In a certain code, EARTH is written as FBSUI. Statement: each letter has been replaced by the letter that follows it in the alphabet.",
+        "key": true,
+        "scoring": { "mode": "negative", "points": 1, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "boolean", "value": false },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.25
+    },
+    {
+      "type": "true_false",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "LOG-007",
+        "type": "true_false",
+        "prompt": "In a certain code, EARTH is written as FBSUI. Statement: each letter has been replaced by the letter that follows it in the alphabet.",
+        "key": true,
+        "scoring": { "mode": "negative", "points": 1, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "assertion_reason",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "LOG-005",
+        "type": "assertion_reason",
+        "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+        "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does not follow that some roses fade quickly.",
+        "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+        "key": "both_true_explains",
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "option", "option": "both_true_explains" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "assertion_reason",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-005",
+        "type": "assertion_reason",
+        "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+        "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does not follow that some roses fade quickly.",
+        "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+        "key": "both_true_explains",
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "option", "option": "a_true_r_false" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "assertion_reason",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "LOG-005",
+        "type": "assertion_reason",
+        "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+        "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does not follow that some roses fade quickly.",
+        "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+        "key": "both_true_explains",
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "assertion_reason",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "LOG-005",
+        "type": "assertion_reason",
+        "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+        "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does not follow that some roses fade quickly.",
+        "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+        "key": "both_true_explains",
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "option", "option": "both_true_explains" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "assertion_reason",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-005",
+        "type": "assertion_reason",
+        "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+        "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does not follow that some roses fade quickly.",
+        "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+        "key": "both_true_explains",
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "option", "option": "a_true_r_false" },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "assertion_reason",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "LOG-005",
+        "type": "assertion_reason",
+        "prompt": "Read the assertion and the reason, then choose the option that describes them.",
+        "assertion": "From \"all roses are flowers\" and \"some flowers fade quickly\", it does not follow that some roses fade quickly.",
+        "reason": "A valid conclusion must hold in every situation that satisfies the premises, not merely in some of them.",
+        "key": "both_true_explains",
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "numeric",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "QNT-001",
+        "type": "numeric",
+        "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+        "unit": "km/h",
+        "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "number", "value": 72 },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "numeric",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-001",
+        "type": "numeric",
+        "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+        "unit": "km/h",
+        "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "number", "value": 999 },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "numeric",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "QNT-001",
+        "type": "numeric",
+        "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+        "unit": "km/h",
+        "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "numeric",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "QNT-001",
+        "type": "numeric",
+        "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+        "unit": "km/h",
+        "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "number", "value": 72 },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "numeric",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-001",
+        "type": "numeric",
+        "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+        "unit": "km/h",
+        "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "number", "value": 999 },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "numeric",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "QNT-001",
+        "type": "numeric",
+        "prompt": "A train 180 metres long passes a pole in 9 seconds. What is the speed of the train in kilometres per hour?",
+        "unit": "km/h",
+        "key": { "value": 72, "tolerance": 0, "tolerance_type": "absolute" },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "multiple",
+      "mode": "partial",
+      "case": "correct",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["a", "c", "e"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "multiple",
+      "mode": "partial",
+      "case": "partial",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["a", "c"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1.33,
+      "note": "2 of 3 key options chosen, none wrong: points x (2-0)/3 = 1.3333... -> round2 1.33"
+    },
+    {
+      "type": "multiple",
+      "mode": "partial",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["b", "d"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multiple",
+      "mode": "partial",
+      "case": "blank",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multiple",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["a", "c", "e"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "multiple",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["b", "d"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multiple",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multiple",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "options", "options": ["a", "c", "e"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "multiple",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "options", "options": ["a", "b"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5,
+      "note": "any wrong part (here 'b') triggers the flat negative penalty regardless of how many correct parts were also chosen"
+    },
+    {
+      "type": "multiple",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "QNT-004",
+        "type": "multiple",
+        "prompt": "Which of these numbers are divisible by 6? (Select all that apply.)",
+        "options": [
+          { "id": "a", "text": "114" },
+          { "id": "b", "text": "128" },
+          { "id": "c", "text": "222" },
+          { "id": "d", "text": "345" },
+          { "id": "e", "text": "432" }
+        ],
+        "key": ["a", "c", "e"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "select_k",
+      "mode": "partial",
+      "case": "correct",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["b", "d"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "select_k",
+      "mode": "partial",
+      "case": "partial",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["b"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1,
+      "note": "1 of 2 key options chosen, within k, none wrong: points x (1-0)/2 = 1"
+    },
+    {
+      "type": "select_k",
+      "mode": "partial",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["b", "d", "c"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0,
+      "note": "AC-07: 3 options chosen with k=2, even though two of them (b, d) are the correct key. A naive implementation that only intersected sets would score this (2-1)/2 = 0.5; select_k's rule treats more-than-k as wrong across every part instead of silently truncating, so this scores 0."
+    },
+    {
+      "type": "select_k",
+      "mode": "partial",
+      "case": "blank",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "select_k",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["b", "d"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "select_k",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "options", "options": ["a", "c"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "select_k",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "select_k",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "options", "options": ["b", "d"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "select_k",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "options", "options": ["b", "a"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "select_k",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "QNT-003",
+        "type": "select_k",
+        "k": 2,
+        "prompt": "Choose exactly two numbers below that are prime.",
+        "options": [
+          { "id": "a", "text": "51" },
+          { "id": "b", "text": "53" },
+          { "id": "c", "text": "57" },
+          { "id": "d", "text": "59" },
+          { "id": "e", "text": "91" }
+        ],
+        "key": ["b", "d"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "matching",
+      "mode": "partial",
+      "case": "correct",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "matching",
+      "mode": "partial",
+      "case": "partial",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "1, 4, 9, 16": "Squares of the natural numbers"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1,
+      "note": "2 of 4 left items answered correctly, the other 2 omitted (not wrong): points x (2-0)/4 = 1. Also shows a partially-filled matching response is answered, scored only on the entries present, not treated as blank."
+    },
+    {
+      "type": "matching",
+      "mode": "partial",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Multiples of 3",
+          "2, 5, 10, 17": "Squares of the natural numbers",
+          "1, 4, 9, 16": "Add the next odd number, starting at 3",
+          "3, 6, 9, 12": "Each term is twice the one before it"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "matching",
+      "mode": "partial",
+      "case": "blank",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "matching",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "matching",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Multiples of 3",
+          "2, 5, 10, 17": "Squares of the natural numbers",
+          "1, 4, 9, 16": "Add the next odd number, starting at 3",
+          "3, 6, 9, 12": "Each term is twice the one before it"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "matching",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "matching",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "matching",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": {
+        "kind": "map",
+        "pairs": {
+          "2, 4, 8, 16": "Add the next odd number, starting at 3",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5,
+      "note": "one wrong left item (the first) is enough to trigger the flat negative penalty, even though the other three are correct"
+    },
+    {
+      "type": "matching",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "LOG-003",
+        "type": "matching",
+        "prompt": "Match each series to the rule that generates it.",
+        "left": ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"],
+        "right": [
+          "Each term is twice the one before it",
+          "Add the next odd number, starting at 3",
+          "Squares of the natural numbers",
+          "Multiples of 3"
+        ],
+        "key": {
+          "2, 4, 8, 16": "Each term is twice the one before it",
+          "2, 5, 10, 17": "Add the next odd number, starting at 3",
+          "1, 4, 9, 16": "Squares of the natural numbers",
+          "3, 6, 9, 12": "Multiples of 3"
+        },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "multi_matching",
+      "mode": "partial",
+      "case": "correct",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2,
+      "note": "AC-07: '36' maps to three right items, all accepted as separate correct parts (not just the first) -> correct 6 of 6 parts"
+    },
+    {
+      "type": "multi_matching",
+      "mode": "partial",
+      "case": "partial",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Even"],
+          "17": [],
+          "36": ["Even", "Perfect square"],
+          "45": ["Divisible by 9", "Prime"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1,
+      "note": "parts: '12' Even correct(+1); '17' left untouched (0); '36' both chosen are in the key (+2); '45' Divisible by 9 correct(+1) but Prime is not one of '45's right items, so wrong(+1). correct=4, wrong=1, total=6 (the key's pair count) -> points x (4-1)/6 = 1"
+    },
+    {
+      "type": "multi_matching",
+      "mode": "partial",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Prime"],
+          "17": ["Perfect square"],
+          "36": ["Prime"],
+          "45": ["Even"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multi_matching",
+      "mode": "partial",
+      "case": "blank",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multi_matching",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "multi_matching",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Prime"],
+          "17": ["Perfect square"],
+          "36": ["Prime"],
+          "45": ["Even"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multi_matching",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "multi_matching",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "multi_matching",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": {
+        "kind": "multimap",
+        "pairs": {
+          "12": ["Prime"],
+          "17": ["Perfect square"],
+          "36": ["Prime"],
+          "45": ["Even"]
+        }
+      },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "multi_matching",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "LOG-004",
+        "type": "multi_matching",
+        "prompt": "Tick every property that each number has. A number can have more than one.",
+        "left": ["12", "17", "36", "45"],
+        "right": ["Even", "Prime", "Perfect square", "Divisible by 9"],
+        "key": {
+          "12": ["Even"],
+          "17": ["Prime"],
+          "36": ["Even", "Perfect square", "Divisible by 9"],
+          "45": ["Divisible by 9"]
+        },
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "ordering",
+      "mode": "position",
+      "case": "correct",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "position", "points": 2 }
+      },
+      "response": { "kind": "order", "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2,
+      "note": "issue #128: ordering's graduated mode is 'position', not 'partial' (docs/PRD.md's table is wrong here) -- see APPLICABLE_MODES.ordering in grade/result.ts"
+    },
+    {
+      "type": "ordering",
+      "mode": "position",
+      "case": "partial",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "position", "points": 2 }
+      },
+      "response": { "kind": "order", "items": ["Abandon", "Abdomen", "Ability", "Abide", "Abject"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1.2,
+      "note": "positions 0,1,4 match the key, positions 2 and 3 are swapped: 3 of 5 in place -> points x 3/5 = 1.2"
+    },
+    {
+      "type": "ordering",
+      "mode": "position",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "position", "points": 2 }
+      },
+      "response": { "kind": "order", "items": ["Abject", "Abandon", "Abdomen", "Abide", "Ability"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0,
+      "note": "a rotation by one puts every item one position off from the key: 0 of 5 match -> points x 0/5 = 0"
+    },
+    {
+      "type": "ordering",
+      "mode": "position",
+      "case": "blank",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "position", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "ordering",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "order", "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "ordering",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "order", "items": ["Abject", "Abandon", "Abdomen", "Abide", "Ability"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0,
+      "note": "under all_or_nothing the 3-of-5-in-place response from the 'position' rows above would also score 0 -- all_or_nothing grants no partial credit; the fully-wrong rotation is used here for a crisp 'wrong' example"
+    },
+    {
+      "type": "ordering",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "ordering",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "order", "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "ordering",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "order", "items": ["Abject", "Abandon", "Abdomen", "Abide", "Ability"] },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "ordering",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "LOG-006",
+        "type": "ordering",
+        "prompt": "Arrange these words as they would appear in a dictionary, first to last.",
+        "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "fill_blank",
+      "mode": "partial",
+      "case": "correct",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "56", "b2": "224" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "fill_blank",
+      "mode": "partial",
+      "case": "partial",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "56" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 1,
+      "note": "b1 right, b2 left empty (unattempted, not wrong): points x (1-0)/2 = 1"
+    },
+    {
+      "type": "fill_blank",
+      "mode": "partial",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "11", "b2": "22" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "fill_blank",
+      "mode": "partial",
+      "case": "blank",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "partial", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "fill_blank",
+      "mode": "all_or_nothing",
+      "case": "correct",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "56", "b2": "224" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "fill_blank",
+      "mode": "all_or_nothing",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "11", "b2": "22" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "fill_blank",
+      "mode": "all_or_nothing",
+      "case": "blank",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "all_or_nothing", "points": 2 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "fill_blank",
+      "mode": "negative",
+      "case": "correct",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "56", "b2": "224" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 2
+    },
+    {
+      "type": "fill_blank",
+      "mode": "negative",
+      "case": "wrong",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": { "kind": "blanks", "values": { "b1": "56", "b2": "22" } },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": -0.5
+    },
+    {
+      "type": "fill_blank",
+      "mode": "negative",
+      "case": "blank",
+      "question": {
+        "id": "QNT-005",
+        "type": "fill_blank",
+        "prompt": "Complete the series: 7, 14, 28, {{b1}}, 112, {{b2}}.",
+        "blanks": [
+          { "id": "b1", "accepted": ["56"], "match": "exact" },
+          { "id": "b2", "accepted": ["224"], "match": "exact" }
+        ],
+        "scoring": { "mode": "negative", "points": 2, "negative_fraction": 0.25 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "short_answer",
+      "mode": "rubric",
+      "case": "correct",
+      "question": {
+        "id": "WRI-001",
+        "type": "short_answer",
+        "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
+        "max_length": 200,
+        "model_answer": "The nth term is n x (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+        "scoring": { "mode": "rubric", "points": 3 }
+      },
+      "response": { "kind": "text", "text": "The nth term is n(n+1)." },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0,
+      "note": "gradeQuestion never grades manual types (short_answer/long_answer): grade/index.ts hands gradeManual a null award, by design, because a reviewer's RubricAward is not a candidate ResponseValue -- see grade/manual.test.ts. So this entry is 0 regardless of response content, for both short_answer and long_answer, via gradeQuestion. In ADDITION, short_answer carries no 'rubric' array at all (issue #130): even graded directly via gradeManual with a real, full-credit award, it sums to 0 because there is nothing to look up. See acceptance.test.ts's dedicated test, which exercises gradeManual directly to prove this second, independent defect."
+    },
+    {
+      "type": "short_answer",
+      "mode": "rubric",
+      "case": "wrong",
+      "question": {
+        "id": "WRI-001",
+        "type": "short_answer",
+        "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
+        "max_length": 200,
+        "model_answer": "The nth term is n x (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+        "scoring": { "mode": "rubric", "points": 3 }
+      },
+      "response": { "kind": "text", "text": "I don't know." },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "short_answer",
+      "mode": "rubric",
+      "case": "blank",
+      "question": {
+        "id": "WRI-001",
+        "type": "short_answer",
+        "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
+        "max_length": 200,
+        "model_answer": "The nth term is n x (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+        "scoring": { "mode": "rubric", "points": 3 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+
+    {
+      "type": "long_answer",
+      "mode": "rubric",
+      "case": "correct",
+      "question": {
+        "id": "WRI-002",
+        "type": "long_answer",
+        "prompt": "A college wants to cut printing costs. Identify the weakness in the committee's argument and describe one piece of evidence that would test it.",
+        "max_length": 2000,
+        "rubric": [
+          { "level": "No credit", "points": 0, "description": "No answer, or does not engage with the argument." },
+          { "level": "Partial", "points": 2, "description": "Notices that the conclusion is not supported, but does not name the flaw or propose usable evidence." },
+          { "level": "Good", "points": 4, "description": "Names the flaw (treating a correlation as a cause) and proposes one relevant piece of evidence." },
+          { "level": "Excellent", "points": 5, "description": "Names the flaw, offers at least one plausible alternative explanation, and proposes evidence that would separate the explanations." }
+        ],
+        "scoring": { "mode": "rubric", "points": 5 }
+      },
+      "response": { "kind": "text", "text": "The committee treats a correlation as a cause. Enrolment growth or a new course could explain the rise; comparing pages printed per student before and after would separate the explanations." },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0,
+      "note": "via gradeQuestion this is 0 for the same reason as short_answer above (no award channel in the dispatcher) -- but unlike short_answer, long_answer DOES carry a 'rubric' array, so a reviewer's real award (applied via gradeManual, see acceptance.test.ts's contrast test) can score it above zero. This is the intended design, not a defect."
+    },
+    {
+      "type": "long_answer",
+      "mode": "rubric",
+      "case": "wrong",
+      "question": {
+        "id": "WRI-002",
+        "type": "long_answer",
+        "prompt": "A college wants to cut printing costs. Identify the weakness in the committee's argument and describe one piece of evidence that would test it.",
+        "max_length": 2000,
+        "rubric": [
+          { "level": "No credit", "points": 0, "description": "No answer, or does not engage with the argument." },
+          { "level": "Partial", "points": 2, "description": "Notices that the conclusion is not supported, but does not name the flaw or propose usable evidence." },
+          { "level": "Good", "points": 4, "description": "Names the flaw (treating a correlation as a cause) and proposes one relevant piece of evidence." },
+          { "level": "Excellent", "points": 5, "description": "Names the flaw, offers at least one plausible alternative explanation, and proposes evidence that would separate the explanations." }
+        ],
+        "scoring": { "mode": "rubric", "points": 5 }
+      },
+      "response": { "kind": "text", "text": "I have no idea." },
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    },
+    {
+      "type": "long_answer",
+      "mode": "rubric",
+      "case": "blank",
+      "question": {
+        "id": "WRI-002",
+        "type": "long_answer",
+        "prompt": "A college wants to cut printing costs. Identify the weakness in the committee's argument and describe one piece of evidence that would test it.",
+        "max_length": 2000,
+        "rubric": [
+          { "level": "No credit", "points": 0, "description": "No answer, or does not engage with the argument." },
+          { "level": "Partial", "points": 2, "description": "Notices that the conclusion is not supported, but does not name the flaw or propose usable evidence." },
+          { "level": "Good", "points": 4, "description": "Names the flaw (treating a correlation as a cause) and proposes one relevant piece of evidence." },
+          { "level": "Excellent", "points": 5, "description": "Names the flaw, offers at least one plausible alternative explanation, and proposes evidence that would separate the explanations." }
+        ],
+        "scoring": { "mode": "rubric", "points": 5 }
+      },
+      "response": null,
+      "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
+      "expected": 0
+    }
+  ]
+}

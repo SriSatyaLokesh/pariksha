@@ -110,6 +110,7 @@ Full architecture, candidate journey and data model: the [PRD](docs/PRD.md). Hig
 | [Design system](DESIGN.md) | `DESIGN.md` — colours, type, components and the rules behind them, machine-readable |
 | [Architecture decisions](docs/adr/) | Why Cloudflare + adapters, why Apache-2.0 |
 | [JSON Schemas](schemas/) | Machine-readable question, bank and test schemas |
+| [Phase 1 plan](docs/superpowers/plans/2026-10-16-phase-1-foundation-and-scoring.md) | How `packages/core` (question types, scoring, selection and import validation — pure TypeScript, zero I/O) was built, task by task |
 
 ## Repository layout
 
@@ -171,7 +172,7 @@ Pariksha is at the best possible moment to join: the shape is decided, the code 
 | 🌐 **Translations** | Interface strings and candidate-facing text in Indian and other languages |
 | 🔍 **Review the design** | Read the [PRD](docs/PRD.md) and argue with it in an issue. Especially the [open questions](docs/PRD.md#risks-and-open-questions) |
 | 🧪 **Formats** | Try writing a real test in [`pariksha/test@1`](docs/test-format.md) and tell us what you could not express |
-| 💻 **Code** | From v0.1: `packages/core` (scoring), `apps/api` (Hono), `apps/web` (React) |
+| 💻 **Code** | `packages/core` (scoring) has shipped — see [the phase 1 plan](docs/superpowers/plans/2026-10-16-phase-1-foundation-and-scoring.md). Still open for v0.1: `apps/api` (Hono), `apps/web` (React) |
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues go through [SECURITY.md](SECURITY.md) — never a public issue.
 
