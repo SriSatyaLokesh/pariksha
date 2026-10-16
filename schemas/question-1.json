@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pariksha.local/schemas/question-1.json",
+  "title": "Pariksha question (pariksha/question@1)",
+  "description": "One question in the Pariksha open question format. See docs/question-format.md.",
+  "type": "object",
+  "required": ["id", "type", "prompt"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+    "type": {
+      "enum": [
+        "single", "multiple", "select_k", "true_false", "assertion_reason",
+        "matching", "multi_matching", "ordering", "fill_blank", "numeric",
+        "short_answer", "long_answer"
+      ]
+    },
+    "prompt": { "type": "string", "minLength": 1, "description": "Markdown. Code blocks and LaTeX ($...$) allowed." },
+    "media": { "type": "array", "items": { "$ref": "#/$defs/media" } },
+    "group": { "type": "string", "description": "ID of a passage group this question belongs to." },
+    "difficulty": { "enum": ["easy", "medium", "hard"] },
+    "tags": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+    "scoring": { "$ref": "#/$defs/scoring" },
+    "explanation": { "type": "string", "description": "Markdown shown only in review." },
+    "shuffle_options": { "type": "boolean", "default": true }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "type": { "const": "single" } } },
+      "then": {
+        "required": ["options", "key"],
+        "properties": { "options": { "$ref": "#/$defs/options" }, "key": { "type": "string" } }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "multiple" } } },
+      "then": {
+        "required": ["options", "key"],
+        "properties": {
+          "options": { "$ref": "#/$defs/options" },
+          "key": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "select_k" } } },
+      "then": {
+        "required": ["options", "key", "k"],
+        "properties": {
+          "options": { "$ref": "#/$defs/options" },
+          "k": { "type": "integer", "minimum": 1 },
+          "key": { "type": "array", "items": { "type": "string" }, "minItems": 1, "uniqueItems": true }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "true_false" } } },
+      "then": { "required": ["key"], "properties": { "key": { "type": "boolean" } } }
+    },
+    {
+      "if": { "properties": { "type": { "const": "assertion_reason" } } },
+      "then": {
+        "required": ["assertion", "reason", "key"],
+        "properties": {
+          "assertion": { "type": "string", "minLength": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "key": {
+            "enum": ["both_true_explains", "both_true_not_explains", "a_true_r_false", "a_false_r_true"]
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "matching" } } },
+      "then": {
+        "required": ["left", "right", "key"],
+        "properties": {
+          "left": { "$ref": "#/$defs/stringList" },
+          "right": { "$ref": "#/$defs/stringList" },
+          "key": { "type": "object", "additionalProperties": { "type": "string" }, "minProperties": 2 }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "multi_matching" } } },
+      "then": {
+        "required": ["left", "right", "key"],
+        "properties": {
+          "left": { "$ref": "#/$defs/stringList" },
+          "right": { "$ref": "#/$defs/stringList" },
+          "key": {
+            "type": "object",
+            "additionalProperties": { "type": "array", "items": { "type": "string" }, "uniqueItems": true },
+            "minProperties": 1
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "ordering" } } },
+      "then": {
+        "required": ["items"],
+        "properties": {
+          "items": { "$ref": "#/$defs/stringList", "description": "Listed in the CORRECT order; shown shuffled." }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "fill_blank" } } },
+      "then": {
+        "required": ["blanks"],
+        "properties": {
+          "blanks": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": ["id", "accepted"],
+              "properties": {
+                "id": { "type": "string", "description": "Matches a {{id}} placeholder in the prompt." },
+                "accepted": { "type": "array", "items": { "type": "string" }, "minItems": 1 },
+                "match": { "enum": ["exact", "case_insensitive", "regex"], "default": "case_insensitive" }
+              },
+              "additionalProperties": false
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "numeric" } } },
+      "then": {
+        "required": ["key"],
+        "properties": {
+          "unit": { "type": "string" },
+          "key": {
+            "type": "object",
+            "required": ["value"],
+            "properties": {
+              "value": { "type": "number" },
+              "tolerance": { "type": "number", "minimum": 0, "default": 0 },
+              "tolerance_type": { "enum": ["absolute", "percent"], "default": "absolute" }
+            },
+            "additionalProperties": false
+          }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "short_answer" } } },
+      "then": {
+        "properties": {
+          "max_length": { "type": "integer", "minimum": 1, "maximum": 500, "default": 500 },
+          "model_answer": { "type": "string" }
+        }
+      }
+    },
+    {
+      "if": { "properties": { "type": { "const": "long_answer" } } },
+      "then": {
+        "properties": {
+          "max_length": { "type": "integer", "minimum": 1, "maximum": 5000, "default": 5000 },
+          "rubric": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["level", "points"],
+              "properties": {
+                "level": { "type": "string" },
+                "points": { "type": "number", "minimum": 0 },
+                "description": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "options": {
+      "type": "array",
+      "minItems": 2,
+      "items": {
+        "type": "object",
+        "required": ["id", "text"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "text": { "type": "string", "minLength": 1 },
+          "pinned": { "type": "boolean", "default": false, "description": "Never shuffled (e.g. 'All of the above')." }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stringList": { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 2, "uniqueItems": true },
+    "media": {
+      "type": "object",
+      "required": ["kind", "src", "alt"],
+      "properties": {
+        "kind": { "enum": ["image"] },
+        "src": { "type": "string" },
+        "alt": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "scoring": {
+      "type": "object",
+      "properties": {
+        "mode": { "enum": ["all_or_nothing", "partial", "negative", "position", "rubric"] },
+        "points": { "type": "number", "exclusiveMinimum": 0 },
+        "negative_fraction": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pariksha.local/schemas/bank-1.json",
+  "title": "Pariksha question bank (pariksha/bank@1)",
+  "description": "A named collection of questions, used for import and export. See docs/question-format.md.",
+  "type": "object",
+  "required": ["format", "name", "questions"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "format": { "const": "pariksha/bank@1" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+    "description": { "type": "string" },
+    "license": { "type": "string", "description": "SPDX identifier for the bank's content, e.g. CC-BY-4.0." },
+    "groups": {
+      "type": "array",
+      "description": "Passage groups: shared reading text, tables or code shown above their questions.",
+      "items": {
+        "type": "object",
+        "required": ["id", "passage"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "passage": { "type": "string", "description": "Markdown." }
+        },
+        "additionalProperties": false
+      }
+    },
+    "questions": { "type": "array", "minItems": 1, "items": { "$ref": "question-1.json" } }
+  },
+  "additionalProperties": false
+}
