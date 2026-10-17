@@ -10,9 +10,13 @@ permissions:
 
 jobs:
   deploy:
-    name: Build and deploy to Cloudflare
+    name: Build, test and deploy to Cloudflare
     runs-on: ubuntu-latest
-    if: github.repository == 'SriSatyaLokesh/pariksha'
+    # Opt-in: set the repository variable DEPLOY_WEB to "true" (Settings >
+    # Secrets and variables > Actions > Variables) once the Cloudflare
+    # credentials are in place. Until then this job is skipped, so merging to
+    # main never produces a failing run for a deployment nobody asked for.
+    if: github.repository == 'SriSatyaLokesh/pariksha' && vars.DEPLOY_WEB == 'true'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -25,13 +29,29 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Lint
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm typecheck
+
       - name: Build
         run: pnpm build
 
-      - name: Check Cloudflare secrets are configured
+      # The site's correctness guarantees — the Content-Security-Policy, the
+      # contrast ratios, the no-hex-literal rule, the candidate/admin bundle
+      # split — are all tests. CI runs on this same event but as a separate
+      # workflow, so without this step a red CI run would not stop a deploy.
+      - name: Test
+        run: pnpm test
+
+      - name: Check Cloudflare credentials are configured
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
-          if [ -z "${{ secrets.CLOUDFLARE_API_TOKEN }}" ] || [ -z "${{ secrets.CLOUDFLARE_ACCOUNT_ID }}" ]; then
-            echo "::error::CLOUDFLARE_API_TOKEN and/or CLOUDFLARE_ACCOUNT_ID repository secrets are not set. Add them under Settings > Secrets and variables > Actions before this workflow can deploy."
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::DEPLOY_WEB is set, but CLOUDFLARE_API_TOKEN and/or CLOUDFLARE_ACCOUNT_ID are not. Add them under Settings > Secrets and variables > Actions > Secrets."
             exit 1
           fi
 

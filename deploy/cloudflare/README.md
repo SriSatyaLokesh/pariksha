@@ -23,7 +23,14 @@ pnpm --filter @pariksha/web deploy
 
 The app goes live at `https://pariksha-web.<your-subdomain>.workers.dev`. To use a custom domain instead, add it in the Cloudflare dashboard under **Workers & Pages → pariksha-web → Settings → Domains & Routes**, or add a `routes` entry to `apps/web/wrangler.jsonc`.
 
-`.github/workflows/deploy-web.yml` deploys automatically on every push to `main`, using the `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` repository secrets. It only runs against `SriSatyaLokesh/pariksha`, so forks never attempt a deploy, and it fails with an explanation instead of a wrangler stack trace if the secrets aren't set.
+### Automatic deployment
+
+`.github/workflows/deploy-web.yml` can deploy on every push to `main`, but it is **off until you turn it on**, so a repository with no Cloudflare account never gets a failing workflow run for a deployment nobody asked for. To enable it, under **Settings → Secrets and variables → Actions**:
+
+1. Add two **secrets**: `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
+2. Add one **variable**: `DEPLOY_WEB` set to `true`.
+
+The job then lints, type-checks, builds and runs the full test suite before it deploys — a red test run stops the deploy rather than shipping past it. It only runs against `SriSatyaLokesh/pariksha`, so forks never attempt a deploy, and if `DEPLOY_WEB` is set while a secret is missing it fails with an explanation instead of a wrangler stack trace.
 
 ## API, D1 and R2
 

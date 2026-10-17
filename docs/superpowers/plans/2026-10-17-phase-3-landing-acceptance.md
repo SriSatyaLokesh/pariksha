@@ -66,8 +66,8 @@ Each line is a statement that is either true or false today. A failing line is a
 
 - [x] `apps/web/wrangler.jsonc` declares `assets.directory` and no `main`, so no Worker script runs and no request counts against the free plan's 100,000/day.
 - [x] `wrangler deploy --dry-run` succeeds with no Cloudflare credentials present.
-- [x] `_headers` reaches `dist/` on build and carries `default-src 'self'` with no `'unsafe-inline'` and no `'unsafe-eval'`.
-- [x] The deploy workflow never runs on a fork and fails readably when the account secrets are absent.
+- [x] `_headers` reaches `dist/` on build and carries `default-src 'self'` with no `'unsafe-inline'` and no `'unsafe-eval'`. The build link itself — Vite's `publicDir` copy, which carries both `_headers` and `/fonts/` into `dist/` — is asserted by `apps/web/test/hosting.test.ts`, which fails if the copy is disabled or a font face has no file.
+- [x] The deploy workflow never runs on a fork, is skipped entirely until the repository variable `DEPLOY_WEB` is set to `true`, runs lint, type-check, build and the full test suite before deploying, and fails readably when `DEPLOY_WEB` is set but the account secrets are absent.
 - [ ] **Not verified — a later session's work:** a real deployment. Nobody has run `wrangler deploy` against a Cloudflare account, so the live URL, the headers as actually served and the workflow's end-to-end behaviour are all untested.
 
 ## What the next session should do, in order
