@@ -150,6 +150,7 @@ describe("HeroSection", () => {
             Read the code on GitHub
           </a>
         }
+        masthead={<div data-testid="masthead">Pariksha</div>}
         bridge={<div data-testid="bridge">bridge content</div>}
       />,
     );
@@ -170,19 +171,22 @@ describe("HeroSection", () => {
       "hero-section--display-lg",
     );
 
-    // Source order is the contract (§3.1): the demo sits between the h1
-    // and the lead, never reordered by CSS.
+    // Source order is the contract (v4 §3): the head block reads chip, h1,
+    // lead, links, with the masthead beside it, and the demo follows the
+    // whole head row — never reordered by CSS. The demo left the copy
+    // column because the three cards span the hero's full width.
     const order = Array.from(
       container.querySelectorAll(
-        ".hero-chip, h1, [data-testid='demo'], .hero-lead, .hero-links, [data-testid='bridge']",
+        ".hero-chip, h1, .hero-lead, .hero-links, [data-testid='masthead'], [data-testid='demo'], [data-testid='bridge']",
       ),
     ).map((el) => el.getAttribute("data-testid") ?? el.className.split(" ")[0]);
     expect(order).toEqual([
       "hero-chip",
       "hero-heading",
-      "demo",
       "hero-lead",
       "hero-links",
+      "masthead",
+      "demo",
       "bridge",
     ]);
   });

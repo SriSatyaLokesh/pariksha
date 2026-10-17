@@ -41,3 +41,12 @@
   font-display: swap;
   unicode-range: U+0900-097F, U+200C-200D;
 }
+
+@font-face {
+  font-family: "Kalam";
+  src: url("/fonts/kalam-wordmark-700.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+50, U+61, U+68-69, U+6B, U+72-73;
+}

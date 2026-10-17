@@ -40,8 +40,11 @@ describe("artefact: the island, bundled and minified in isolation", () => {
     console.log(`[island.test.ts] exam-demo.ts minified: ${Buffer.byteLength(built, "utf8")} bytes`);
   });
 
-  it("stays at or under the 10 KB minified budget (I-2, informational proxy for T35)", () => {
-    expect(Buffer.byteLength(built, "utf8")).toBeLessThanOrEqual(10 * 1024);
+  // v4: 10 KB -> 14 KB. The three-card hero grades three question types
+  // through two @pariksha/core graders instead of one; prerender.test.ts
+  // asserts the same ceiling on the artefact that actually ships.
+  it("stays at or under the 14 KB minified budget (I-2, informational proxy for T35)", () => {
+    expect(Buffer.byteLength(built, "utf8")).toBeLessThanOrEqual(14 * 1024);
   });
 
   it("contains no network, storage, cookie or telemetry identifier (I-3)", () => {

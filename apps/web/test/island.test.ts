@@ -1,71 +1,97 @@
-// Tests for the hero's exam-demo island (ASSIGNMENT 1).
+// Tests for the hero's v4 exam-demo island — three cards scored at once
+// (single, multiple, matching), owner-approved prototype at
+// .planning/landing/v4-hero-prototype.html.
 //
-// Behaviour tests (state machine, no-markup no-op, error path) run the
-// TypeScript module directly under jsdom, against a hand-built fixture that
-// matches the data-attribute contract in v3 spec §2.3 — this file does not
-// depend on apps/web/src/sections/s1-s3/Hero.tsx, which is another
-// assignment's ownership and may not exist yet.
+// Behaviour tests (answered-detection, pips/count, the enable rule, scoring,
+// no-markup no-op, error path) run the TypeScript module directly under
+// jsdom, against a hand-built fixture that matches the data-attribute
+// contract documented at the top of src/island/exam-demo.ts — this file
+// does not depend on apps/web/src/sections/s1-s3/Hero.tsx, which is another
+// assignment's ownership and may not reflect the v4 markup yet.
 //
 // The artefact checks (network/storage ban, no timers, no inline style or
-// colour literal, size budget) live in island-artefact.test.ts: esbuild's
-// API refuses to run under jsdom, so that file asks for the node
-// environment and this one keeps the DOM.
+// colour literal, size budget) live in island-artefact.test.ts, which is
+// NOT owned by this assignment: esbuild's API refuses to run under jsdom
+// (that file asks for the node environment), so a jsdom file cannot host
+// them without splitting its environment mid-file, which Vitest does not
+// support. See the handoff note in this PR's deviations for the measured
+// bundle size and the budget-file amendment that file still needs.
 import { beforeEach, describe, expect, it } from "vitest";
 import { init } from "../src/island/exam-demo";
 
-// ---------------------------------------------------------------------------
-// Fixture: hand-built prerendered markup matching v3 spec §2.3 and §3.2 —
-// three real questions, a fallback link, an inert palette, an empty live
-// region and a hidden result panel.
-// ---------------------------------------------------------------------------
-
 const FALLBACK_HREF = "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude";
 const FALLBACK_TEXT = "These three questions, and fourteen more, are in the worked example";
-const NOJS_SENTENCE = "Scoring, and questions 2 and 3, need JavaScript.";
+const NOJS_SENTENCE = "Scoring needs JavaScript.";
+
+// ---------------------------------------------------------------------------
+// Fixture: hand-built prerendered markup for the v4 contract — three cards
+// always visible side by side, a pips/count status row, one Score button
+// disabled until the first answer, and a per-card verdict slot.
+// ---------------------------------------------------------------------------
+
+function matchingSelect(left: string, right: readonly string[]): string {
+  const options = right.map((r) => `<option value="${r}">${r}</option>`).join("");
+  return `<select data-demo-match data-left="${left}"><option value="">Choose a rule…</option>${options}</select>`;
+}
+
+const RIGHT = [
+  "Each term is twice the one before it",
+  "Add the next odd number, starting at 3",
+  "Squares of the natural numbers",
+  "Multiples of 3",
+];
+const LEFT = ["2, 4, 8, 16", "2, 5, 10, 17", "1, 4, 9, 16", "3, 6, 9, 12"];
 
 function fixtureHTML(): string {
   return `
     <div class="runner-mock runner-mock--demo" data-demo>
       <h2 id="demo-heading">Try three questions</h2>
-      <p class="visually-hidden" aria-live="polite" data-demo-live></p>
-      <ol>
-        <li data-demo-q data-qid="LOG-001" id="demo-q-1" tabindex="-1" aria-labelledby="demo-stem-1">
+      <div class="runner-mock__cards">
+        <article data-demo-card data-qid="LOG-001" aria-labelledby="c1p">
+          <p id="c1p">What comes next in the series?</p>
           <fieldset>
-            <legend id="demo-stem-1">What comes next in the series?</legend>
+            <legend class="visually-hidden">Options</legend>
             <label><input type="radio" name="LOG-001" value="a" /><span>95</span></label>
             <label><input type="radio" name="LOG-001" value="b" /><span>117</span></label>
             <label><input type="radio" name="LOG-001" value="c" /><span>127</span></label>
             <label><input type="radio" name="LOG-001" value="d" /><span>131</span></label>
           </fieldset>
-        </li>
-        <li data-demo-q data-qid="LOG-007" id="demo-q-2" tabindex="-1" aria-labelledby="demo-stem-2" hidden>
+          <p data-demo-verdict hidden></p>
+        </article>
+        <article data-demo-card data-qid="QNT-004" aria-labelledby="c2p">
+          <p id="c2p">Which are divisible by 6?</p>
           <fieldset>
-            <legend id="demo-stem-2">EARTH is written as FBSUI.</legend>
-            <label><input type="radio" name="LOG-007" value="true" /><span>True</span></label>
-            <label><input type="radio" name="LOG-007" value="false" /><span>False</span></label>
-          </fieldset>
-        </li>
-        <li data-demo-q data-qid="QNT-004" id="demo-q-3" tabindex="-1" aria-labelledby="demo-stem-3" hidden>
-          <fieldset>
-            <legend id="demo-stem-3">Which are divisible by 6?</legend>
+            <legend class="visually-hidden">Options</legend>
             <label><input type="checkbox" name="QNT-004" value="a" /><span>114</span></label>
             <label><input type="checkbox" name="QNT-004" value="b" /><span>128</span></label>
             <label><input type="checkbox" name="QNT-004" value="c" /><span>222</span></label>
             <label><input type="checkbox" name="QNT-004" value="d" /><span>345</span></label>
             <label><input type="checkbox" name="QNT-004" value="e" /><span>432</span></label>
           </fieldset>
-        </li>
-      </ol>
-      <div data-demo-palette aria-hidden="true">
-        <span class="runner-mock__square runner-mock__square--current">1</span>
-        <span class="runner-mock__square">2</span>
-        <span class="runner-mock__square">3</span>
+          <p data-demo-verdict hidden></p>
+        </article>
+        <article data-demo-card data-qid="LOG-003" aria-labelledby="c3p">
+          <p id="c3p">Match each series to the rule that generates it.</p>
+          <div class="runner-mock__match">
+            ${LEFT.map((l) => matchingSelect(l, RIGHT)).join("")}
+          </div>
+          <p data-demo-verdict hidden></p>
+        </article>
       </div>
-      <div data-demo-controls>
-        <p class="runner-mock__nojs">${NOJS_SENTENCE}</p>
+      <div class="runner-mock__status">
+        <ul data-demo-pips aria-label="Questions answered">
+          <li data-demo-pip data-on="0">1</li>
+          <li data-demo-pip data-on="0">2</li>
+          <li data-demo-pip data-on="0">3</li>
+        </ul>
+        <span data-demo-count aria-live="polite">0 of 3 answered</span>
+      </div>
+      <div class="runner-mock__actions">
+        <span data-demo-score aria-live="polite" hidden></span>
+        <button type="button" data-demo-score-btn disabled>Score my answers</button>
+        <p data-demo-nojs>${NOJS_SENTENCE}</p>
         <a class="runner-mock__fallback" href="${FALLBACK_HREF}">${FALLBACK_TEXT}</a>
       </div>
-      <div data-demo-result hidden></div>
     </div>
   `;
 }
@@ -74,11 +100,11 @@ function mount() {
   document.body.innerHTML = fixtureHTML();
   return {
     root: document.querySelector<HTMLElement>("[data-demo]")!,
-    live: document.querySelector<HTMLElement>("[data-demo-live]")!,
-    palette: document.querySelector<HTMLElement>("[data-demo-palette]")!,
-    controls: document.querySelector<HTMLElement>("[data-demo-controls]")!,
-    result: document.querySelector<HTMLElement>("[data-demo-result]")!,
-    questions: Array.from(document.querySelectorAll<HTMLElement>("[data-demo-q]")),
+    cards: Array.from(document.querySelectorAll<HTMLElement>("[data-demo-card]")),
+    pips: Array.from(document.querySelectorAll<HTMLElement>("[data-demo-pip]")),
+    count: document.querySelector<HTMLElement>("[data-demo-count]")!,
+    scoreBtn: document.querySelector<HTMLButtonElement>("[data-demo-score-btn]")!,
+    scoreLive: document.querySelector<HTMLElement>("[data-demo-score]")!,
   };
 }
 
@@ -87,12 +113,22 @@ function check(input: HTMLInputElement): void {
   input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
+function uncheck(input: HTMLInputElement): void {
+  input.checked = false;
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function select(sel: HTMLSelectElement, value: string): void {
+  sel.value = value;
+  sel.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
 function click(el: Element): void {
   el.dispatchEvent(new MouseEvent("click", { bubbles: true }));
 }
 
-function controlButtons(controls: HTMLElement): HTMLButtonElement[] {
-  return Array.from(controls.querySelectorAll("button"));
+function selectsOf(card: HTMLElement): HTMLSelectElement[] {
+  return Array.from(card.querySelectorAll("select"));
 }
 
 beforeEach(() => {
@@ -100,206 +136,132 @@ beforeEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// The state machine: answer, change an answer, advance, finish, restart.
+// Answered-detection, the count, the pips, and the enable rule.
 // ---------------------------------------------------------------------------
 
-describe("state machine", () => {
-  it("upgrades the controls to four buttons and the palette to three, keeping the fallback link", () => {
-    const { controls, palette } = mount();
+describe("answered-detection, count, pips and the enable rule", () => {
+  it("starts with nothing answered and the Score button disabled", () => {
+    const { pips, count, scoreBtn } = mount();
     init(document);
-
-    const buttons = controlButtons(controls);
-    expect(buttons.map((b) => b.textContent)).toEqual(["Back", "Mark for review", "Next Enter →", "Finish"]);
-    expect(controls.textContent).not.toContain(NOJS_SENTENCE);
-    const link = controls.querySelector("a");
-    expect(link).not.toBeNull();
-    expect(link!.getAttribute("href")).toBe(FALLBACK_HREF);
-    expect(controls.lastElementChild).toBe(link);
-
-    const squares = palette.querySelectorAll("button");
-    expect(squares).toHaveLength(3);
-    // §3.6: the 36px square is an inner span so the button around it can
-    // carry the 44px hit area without growing the visual box.
-    expect(palette.querySelectorAll("button > span.runner-mock__square")).toHaveLength(3);
-    expect(squares[0]!.getAttribute("aria-current")).toBe("true");
-    expect(palette.hasAttribute("aria-hidden")).toBe(false);
+    expect(pips.map((p) => p.dataset.on)).toEqual(["0", "0", "0"]);
+    expect(count.textContent).toBe("0 of 3 answered");
+    expect(scoreBtn.disabled).toBe(true);
   });
 
-  it("answering does not advance the question, and updates the Finish label", () => {
-    const { root, controls, questions } = mount();
+  it("a single-choice answer updates its pip, the count, and enables Score", () => {
+    const { root, pips, count, scoreBtn } = mount();
     init(document);
-    const finishBtn = controlButtons(controls)[3]!;
-    expect(finishBtn.textContent).toBe("Finish");
+    check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!);
+    expect(pips[0]!.dataset.on).toBe("1");
+    expect(count.textContent).toBe("1 of 3 answered");
+    expect(scoreBtn.disabled).toBe(false);
+  });
 
+  it("a multiple-choice answer counts as answered the instant any box is checked", () => {
+    const { root, pips, count } = mount();
+    init(document);
+    check(root.querySelector<HTMLInputElement>('input[name="QNT-004"][value="a"]')!);
+    expect(pips[1]!.dataset.on).toBe("1");
+    expect(count.textContent).toBe("1 of 3 answered");
+  });
+
+  it("a matching card counts as answered once any row has a selection, before all four are filled", () => {
+    const { cards, pips, count } = mount();
+    init(document);
+    const [first] = selectsOf(cards[2]!);
+    select(first!, RIGHT[0]!);
+    expect(pips[2]!.dataset.on).toBe("1");
+    expect(count.textContent).toBe("1 of 3 answered");
+  });
+
+  it("clearing the only answer disables Score again and un-marks its pip", () => {
+    const { root, pips, scoreBtn } = mount();
+    init(document);
     const optionC = root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!;
     check(optionC);
-
-    expect(questions[0]!.hidden).toBe(false);
-    expect(questions[1]!.hidden).toBe(true);
-    expect(finishBtn.textContent).toBe("Finish (1 of 3 answered)");
+    expect(scoreBtn.disabled).toBe(false);
+    uncheck(optionC);
+    expect(pips[0]!.dataset.on).toBe("0");
+    expect(scoreBtn.disabled).toBe(true);
   });
 
-  it("changing an answer before advancing keeps only the latest choice", () => {
-    const { root, controls } = mount();
-    init(document);
-    check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="a"]')!);
-    check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!);
-
-    const optionA = root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="a"]')!;
-    const optionC = root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!;
-    expect(optionA.checked).toBe(false);
-    expect(optionC.checked).toBe(true);
-    expect(controlButtons(controls)[3]!.textContent).toBe("Finish (1 of 3 answered)");
-  });
-
-  it("Next advances, hides the previous question, moves focus and announces", () => {
-    const { controls, questions, live } = mount();
-    init(document);
-    click(controlButtons(controls)[2]!); // Next
-
-    expect(questions[0]!.hidden).toBe(true);
-    expect(questions[1]!.hidden).toBe(false);
-    expect(document.activeElement).toBe(questions[1]!);
-    expect(live.textContent).toBe("Question 2 of 3. True or false. 1 point.");
-
-    click(controlButtons(controls)[2]!); // Next again
-    expect(questions[2]!.hidden).toBe(false);
-    expect(live.textContent).toBe("Question 3 of 3. Select all that apply. 2 points.");
-  });
-
-  it("Back reverses Next, and a palette click jumps directly", () => {
-    const { controls, palette, questions } = mount();
-    init(document);
-    click(controlButtons(controls)[2]!); // -> Q2
-    click(controlButtons(controls)[0]!); // Back -> Q1
-    expect(questions[0]!.hidden).toBe(false);
-    expect(controlButtons(controls)[0]!.disabled).toBe(true); // Back disabled on Q1
-
-    click(palette.querySelectorAll("button")[2]!); // jump to Q3
-    expect(questions[2]!.hidden).toBe(false);
-    expect(controlButtons(controls)[2]!.disabled).toBe(true); // Next disabled on Q3
-  });
-
-  it("Mark for review toggles aria-pressed and composes with answered in the palette label", () => {
-    const { root, controls, palette } = mount();
+  it("all three answered reads 3 of 3", () => {
+    const { root, cards, count } = mount();
     init(document);
     check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!);
-    const markBtn = controlButtons(controls)[1]!;
-    click(markBtn);
-    expect(markBtn.getAttribute("aria-pressed")).toBe("true");
-    const square1 = palette.querySelectorAll("button")[0]!;
-    expect(square1.querySelector("span")!.className).toContain("runner-mock__square--marked");
-    expect(square1.getAttribute("aria-label")).toBe("Question 1, marked for review, answered");
-
-    click(markBtn);
-    expect(markBtn.getAttribute("aria-pressed")).toBe("false");
-    expect(square1.getAttribute("aria-label")).toBe("Question 1, answered");
+    check(root.querySelector<HTMLInputElement>('input[name="QNT-004"][value="a"]')!);
+    selectsOf(cards[2]!).forEach((s, i) => select(s, RIGHT[i]!));
+    expect(count.textContent).toBe("3 of 3 answered");
   });
+});
 
-  it("Finish calls the real scoring, in question order, and total 2.67 out of 5", () => {
-    const { root, controls, result, live } = mount();
+// ---------------------------------------------------------------------------
+// Scoring — through @pariksha/core, never reimplemented arithmetic.
+// ---------------------------------------------------------------------------
+
+describe("scoring", () => {
+  it("scores single (all-or-nothing), multiple (partial) and matching (partial) and totals them", () => {
+    const { root, cards, scoreBtn, scoreLive } = mount();
     init(document);
+
+    // LOG-001: correct -> 2.00 / 2.
     check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!);
-    click(controlButtons(controls)[2]!);
-    check(root.querySelector<HTMLInputElement>('input[name="LOG-007"][value="false"]')!);
-    click(controlButtons(controls)[2]!);
+    // QNT-004: a and c correct, b wrong -> correct=2, wrong=1, total=3 -> 2*(2-1)/3 = 0.67.
     check(root.querySelector<HTMLInputElement>('input[name="QNT-004"][value="a"]')!);
     check(root.querySelector<HTMLInputElement>('input[name="QNT-004"][value="c"]')!);
     check(root.querySelector<HTMLInputElement>('input[name="QNT-004"][value="b"]')!);
-    click(controlButtons(controls)[3]!); // Finish
+    // LOG-003: rows 0 and 2 correct, row 1 wrong, row 3 left blank ->
+    // correct=2, wrong=1, total=4 (left.length) -> 2*(2-1)/4 = 0.50.
+    const matchSelects = selectsOf(cards[2]!);
+    select(matchSelects[0]!, RIGHT[0]!); // correct
+    select(matchSelects[1]!, RIGHT[3]!); // wrong
+    select(matchSelects[2]!, RIGHT[2]!); // correct
+    // row 3 left blank on purpose.
 
-    expect(result.hidden).toBe(false);
-    const h3 = result.querySelector("h3")!;
-    expect(h3.textContent).toBe("You scored 2.67 out of 5");
-    const rows = Array.from(result.querySelectorAll(".runner-mock__result-row")).map((r) => r.textContent);
-    expect(rows[0]!).toContain("2.00 / 2");
-    expect(rows[0]!).toContain("Correct");
-    expect(rows[1]!).toContain("0.00 / 1");
-    expect(rows[1]!).toContain("Wrong");
-    expect(rows[2]!).toContain("0.67 / 2");
-    expect(rows[2]!).toContain("Partly correct");
-    expect(document.activeElement).toBe(h3);
-    expect(live.textContent).toBe("");
+    click(scoreBtn);
+
+    expect(scoreLive.hidden).toBe(false);
+    expect(scoreLive.textContent).toBe("You scored 3.17 out of 6");
+    expect(cards[0]!.dataset.state).toBe("right");
+    expect(cards[0]!.querySelector("[data-demo-verdict]")!.textContent).toContain("2.00 / 2");
+    expect(cards[1]!.dataset.state).toBe("wrong");
+    expect(cards[1]!.querySelector("[data-demo-verdict]")!.textContent).toContain("0.67 / 2");
+    expect(cards[2]!.dataset.state).toBe("wrong");
+    expect(cards[2]!.querySelector("[data-demo-verdict]")!.textContent).toContain("0.50 / 2");
+
+    expect(scoreBtn.disabled).toBe(true);
+    expect(scoreBtn.textContent).toBe("Scored");
   });
 
-  it("an unattempted question shows no explanation, and a wholly unanswered attempt scores zero", () => {
-    const { controls, result } = mount();
+  it("an unattempted card shows no explanation and a blank response scores zero, not negative", () => {
+    const { root, cards, scoreBtn, scoreLive } = mount();
     init(document);
-    click(controlButtons(controls)[3]!); // Finish with nothing answered
-    const h3 = result.querySelector("h3")!;
-    expect(h3.textContent).toBe("You scored 0.00 out of 5");
-    expect(result.querySelectorAll(".runner-mock__result-row")).toHaveLength(3);
-    expect(result.querySelectorAll(".runner-mock__result-explanation")).toHaveLength(0);
-    expect(result.textContent).toContain("Not answered");
+    check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="a"]')!); // wrong, to enable Score
+    click(scoreBtn);
+    expect(scoreLive.textContent).toBe("You scored 0.00 out of 6");
+    expect(cards[1]!.dataset.state).toBe("unanswered");
+    expect(cards[1]!.querySelector("[data-demo-verdict]")!.querySelector(".runner-mock__result-explanation")).toBeNull();
+    expect(cards[1]!.querySelector("[data-demo-verdict]")!.textContent).toContain("Not answered");
   });
 
-  it("Try again restarts cleanly: inputs, palette, marks, and focus all reset", () => {
-    const { root, controls, result, palette, questions } = mount();
+  it("a fully correct matching card scores the full 2 points with no explanation shown", () => {
+    const { cards, scoreBtn } = mount();
+    init(document);
+    selectsOf(cards[2]!).forEach((s, i) => select(s, RIGHT[i]!));
+    click(scoreBtn);
+    expect(cards[2]!.dataset.state).toBe("right");
+    const verdict = cards[2]!.querySelector("[data-demo-verdict]")!;
+    expect(verdict.textContent).toContain("2.00 / 2");
+    expect(verdict.querySelector(".runner-mock__result-explanation")).toBeNull();
+  });
+
+  it("does not steal focus when scoring", () => {
+    const { root, scoreBtn } = mount();
     init(document);
     check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!);
-    click(controlButtons(controls)[1]!); // mark Q1
-    click(controlButtons(controls)[3]!); // Finish
-
-    click(result.querySelector<HTMLButtonElement>("[data-demo-retry]")!);
-
-    expect(result.hidden).toBe(true);
-    expect(result.innerHTML).toBe("");
-    expect(questions[0]!.hidden).toBe(false);
-    expect(questions[1]!.hidden).toBe(true);
-    expect(document.activeElement).toBe(questions[0]!);
-    expect(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!.checked).toBe(false);
-    expect(palette.querySelector("button > span")!.className).not.toContain("--marked");
-    expect(palette.querySelector("button > span")!.className).not.toContain("--answered");
-    expect(controlButtons(controls)[3]!.textContent).toBe("Finish");
-  });
-
-  it("the Enter guard: Enter on Back/Mark/a palette square never double-fires the custom binding", () => {
-    const { controls, palette, questions, root } = mount();
-    init(document);
-    click(controlButtons(controls)[2]!); // -> Q2, so Back is enabled
-
-    const backBtn = controlButtons(controls)[0]!;
-    backBtn.focus();
-    backBtn.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    // jsdom does not synthesise a native click from this keydown (a real
-    // browser would); the assertion is that the CUSTOM handler did nothing —
-    // still on Q2, not jumped forward to Q3 as an unguarded handler would.
-    expect(questions[1]!.hidden).toBe(false); // still on Q2
-    expect(questions[2]!.hidden).toBe(true);
-    click(backBtn); // simulate the native activation a real Enter press causes
-    expect(questions[0]!.hidden).toBe(false);
-
-    const markBtn = controlButtons(controls)[1]!;
-    markBtn.focus();
-    markBtn.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(questions[1]!.hidden).toBe(true); // did not advance
-
-    const square3 = palette.querySelectorAll("button")[2]!;
-    square3.focus();
-    square3.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(root.querySelector("[data-demo-result]")!.hasAttribute("hidden")).toBe(true); // did not finish
-  });
-
-  it("Enter on a question advances, and finishes on the last question", () => {
-    const { questions, result } = mount();
-    init(document);
-    questions[0]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(questions[1]!.hidden).toBe(false);
-    questions[1]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(questions[2]!.hidden).toBe(false);
-    questions[2]!.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    expect(result.hidden).toBe(false);
-  });
-
-  it("pre-init checked state is preserved, not reset", () => {
-    document.body.innerHTML = fixtureHTML();
-    const root = document.querySelector<HTMLElement>("[data-demo]")!;
-    root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="b"]')!.checked = true;
-    init(document);
-    const controls = document.querySelector<HTMLElement>("[data-demo-controls]")!;
-    expect(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="b"]')!.checked).toBe(true);
-    expect(controlButtons(controls)[3]!.textContent).toBe("Finish (1 of 3 answered)");
-    expect(document.querySelector("[data-demo-palette] button > span")!.className).toContain("--answered");
+    scoreBtn.focus();
+    click(scoreBtn);
+    expect(document.activeElement).toBe(scoreBtn);
   });
 });
 
@@ -316,15 +278,15 @@ describe("no-markup no-op", () => {
   });
 
   it("does nothing when a required hook is missing", () => {
-    const html = fixtureHTML().replace('data-demo-palette', 'data-demo-palette-renamed');
+    const html = fixtureHTML().replace("data-demo-pips", "data-demo-pips-renamed");
     document.body.innerHTML = html;
     const before = document.body.innerHTML;
     init(document);
     expect(document.body.innerHTML).toBe(before);
   });
 
-  it("does nothing when the fallback link is missing", () => {
-    const html = fixtureHTML().replace(/<a[^>]*>.*?<\/a>/s, "");
+  it("does nothing when a card's verdict slot is missing", () => {
+    const html = fixtureHTML().replace('<p data-demo-verdict hidden></p>', "");
     document.body.innerHTML = html;
     const before = document.body.innerHTML;
     init(document);
@@ -333,38 +295,42 @@ describe("no-markup no-op", () => {
 });
 
 // ---------------------------------------------------------------------------
-// The error path: a throwing listener falls back to the static markup (I-10).
+// The error path: a throwing listener restores the static hero, not just
+// stops — nothing partially written is left behind (I-10 analogue).
 // ---------------------------------------------------------------------------
 
 describe("error path", () => {
-  it("restores the no-JavaScript page when a listener throws", () => {
-    const { controls, questions, result, live } = mount();
+  it("restores the static hero when scoring throws", () => {
+    const { root, cards, scoreBtn, scoreLive, pips, count } = mount();
     init(document);
+    check(root.querySelector<HTMLInputElement>('input[name="LOG-001"][value="c"]')!);
 
-    const originalFocus = HTMLElement.prototype.focus;
-    HTMLElement.prototype.focus = () => {
+    // Throws inside `score()`, at the total/maxTotal reduce — after Score
+    // was clicked and before any DOM write that method makes.
+    const original = Array.prototype.reduce;
+    Array.prototype.reduce = function () {
       throw new Error("boom");
-    };
+    } as typeof Array.prototype.reduce;
     try {
-      click(controlButtons(controls)[2]!); // Next -> goTo -> .focus() throws
+      click(scoreBtn);
     } finally {
-      HTMLElement.prototype.focus = originalFocus;
+      Array.prototype.reduce = original;
     }
 
-    // Fully restored: original sentence and link back, no buttons, question
-    // 1 visible, result empty and hidden, live region empty.
-    expect(controls.textContent).toContain(NOJS_SENTENCE);
-    expect(controls.querySelectorAll("button")).toHaveLength(0);
-    expect(controls.querySelector("a")!.getAttribute("href")).toBe(FALLBACK_HREF);
-    expect(questions[0]!.hidden).toBe(false);
-    expect(questions[1]!.hidden).toBe(true);
-    expect(result.hidden).toBe(true);
-    expect(result.innerHTML).toBe("");
-    expect(live.textContent).toBe("");
+    expect(scoreLive.hidden).toBe(true);
+    expect(scoreLive.textContent).toBe("");
+    expect(scoreBtn.disabled).toBe(true); // 0 answered again, since state was reset
+    expect(scoreBtn.textContent).toBe("Score my answers");
+    expect(pips.map((p) => p.dataset.on)).toEqual(["0", "0", "0"]);
+    expect(count.textContent).toBe("0 of 3 answered");
+    for (const card of cards) {
+      expect(card.querySelector<HTMLElement>("[data-demo-verdict]")!.hidden).toBe(true);
+      expect(card.dataset.state).toBeUndefined();
+    }
 
-    // And it stays inert: the removed listeners do not fire again.
-    const after = controls.innerHTML;
-    click(controls);
-    expect(controls.innerHTML).toBe(after);
+    // And it stays inert: removed listeners do not fire again.
+    const after = root.innerHTML;
+    click(root);
+    expect(root.innerHTML).toBe(after);
   });
 });

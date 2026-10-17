@@ -21,6 +21,7 @@ export function HeroSection({
   heading,
   chip,
   demo,
+  masthead,
   lead,
   links,
   bridge,
@@ -35,6 +36,10 @@ export function HeroSection({
   chip?: ReactNode;
   /** display-xl only: the prerendered exam demo (v3 §3). */
   demo?: ReactNode;
+  /** display-xl only: the Kalam wordmark filling the head row's right
+   * column (v4 §3). aria-hidden at its call site — the nav already
+   * announces the product name. */
+  masthead?: ReactNode;
   /** Optional: B8 carries four elements and no lead paragraph (v3 §4.7). */
   lead?: ReactNode;
   /** display-xl only: the hero's two secondary text links (v3 §3.1) — the
@@ -75,17 +80,30 @@ export function HeroSection({
     );
   }
 
+  // v4 §3: the hero is exactly one screen and never scrolls inside itself
+  // (owner approval 2026-10-17, from .planning/landing/v4-hero-prototype.html).
+  // Two rows — head, then the demo — so the three cards take every pixel the
+  // head does not. The masthead sits in the head row's right-hand column, the
+  // voltage space the copy column leaves empty. The bridge band left the hero
+  // entirely: a code block and a one-screen hero cannot both be true, so it
+  // renders below the hero now (see routes/landing.tsx).
   return (
-    <section className="hero-section" aria-labelledby={headingId}>
+    <section
+      className="hero-section hero-section--screen"
+      aria-labelledby={headingId}
+    >
       <div className="hero-inner">
-        {chip !== undefined && <p className="hero-chip">{chip}</p>}
-        <h1 id={headingId} className="hero-heading hero-heading--display-xl">
-          {heading}
-        </h1>
-        {demo}
-        {lead !== undefined && <p className="hero-lead">{lead}</p>}
-        {links !== undefined && <div className="hero-links">{links}</div>}
+        <div className="hero-copy">
+          {chip !== undefined && <p className="hero-chip">{chip}</p>}
+          <h1 id={headingId} className="hero-heading hero-heading--display-xl">
+            {heading}
+          </h1>
+          {lead !== undefined && <p className="hero-lead">{lead}</p>}
+          {links !== undefined && <div className="hero-links">{links}</div>}
+        </div>
+        {masthead}
       </div>
+      {demo}
       {bridge}
     </section>
   );

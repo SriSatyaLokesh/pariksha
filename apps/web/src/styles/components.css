@@ -694,3 +694,436 @@
   color: var(--color-cream);
   box-shadow: none;
 }
+
+/* ===================================================================
+   v4 hero — one screen, three type cards, the Kalam masthead.
+   Owner-approved from .planning/landing/v4-hero-prototype.html
+   (2026-10-17). A2: the hero is exactly one screen and never scrolls
+   inside itself; the first scroll lands on the band below.
+   =================================================================== */
+
+.hero-section--screen {
+  /* 64px is TopNav's height. dvh, not vh, so a mobile URL bar does not
+     push the control bar off the screen. */
+  height: calc(100dvh - 64px);
+  min-height: 600px;
+  padding: var(--space-xl) var(--space-xl) var(--space-lg);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: var(--space-lg);
+  scroll-snap-align: start;
+}
+
+.hero-section--screen .hero-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: end;
+  gap: var(--space-2xl);
+  width: 100%;
+}
+
+.hero-section--screen .hero-copy {
+  max-width: 62ch;
+}
+
+/* The head row steps down so the masthead leads (A6). */
+.hero-section--screen .hero-heading--display-xl {
+  font-size: clamp(1.5rem, 1.6vw + 0.75rem, 2rem);
+  margin-bottom: var(--space-md);
+}
+
+.hero-section--screen .hero-lead {
+  margin-bottom: var(--space-md);
+  max-width: 52ch;
+}
+
+.hero-section--screen .hero-links {
+  margin-bottom: 0;
+}
+
+.hero-section--screen .hero-chip {
+  margin-bottom: var(--space-md);
+}
+
+/* --- the masthead ------------------------------------------------- */
+
+.hero-masthead {
+  line-height: 1;
+  color: var(--color-cream);
+}
+
+.hero-masthead__name {
+  display: block;
+  font-family: var(--type-wordmark-display-family);
+  font-size: var(--type-wordmark-display-size);
+  font-weight: var(--type-wordmark-display-weight);
+  line-height: var(--type-wordmark-display-line-height);
+  letter-spacing: var(--type-wordmark-display-letter-spacing);
+}
+
+.hero-masthead__rule {
+  border: 0;
+  border-top: 1px solid rgb(from var(--color-cream) r g b / 0.38);
+  margin: var(--space-md) 0 var(--space-sm);
+}
+
+/* --- the three cards ---------------------------------------------- */
+
+.exam-demo {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: var(--space-md);
+  min-height: 0;
+}
+
+.exam-demo__cards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-md);
+  min-height: 0;
+}
+
+.exam-card {
+  background: var(--color-cream);
+  color: var(--color-ink);
+  border-radius: var(--rounded-lg);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.exam-card__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-sm);
+  flex: 0 0 auto;
+  padding: var(--space-sm) var(--space-lg);
+  border-bottom: 1px solid var(--color-hairline);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+.exam-card__type {
+  text-transform: uppercase;
+}
+
+.exam-card__points {
+  color: var(--color-ink);
+}
+
+/* The card body is the one place on this page allowed to scroll, and only
+   because A2 forbids the hero itself scrolling: a long matching card on a
+   600px viewport has to go somewhere. Everything inside it is focusable,
+   so the region is keyboard-reachable without a tabindex (A7). */
+.exam-card__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.exam-card__fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.exam-card__stem {
+  margin: 0;
+  padding: 0;
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  font-weight: var(--type-question-stem-weight);
+  line-height: var(--type-question-stem-line-height);
+}
+
+.exam-card__series {
+  margin: 0;
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+  line-height: var(--type-mono-md-line-height);
+  letter-spacing: 0.06em;
+}
+
+.exam-card__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.exam-card__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  cursor: pointer;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .exam-card__option {
+    transition:
+      border-color 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+}
+
+.exam-card__option:hover {
+  border-color: var(--color-voltage);
+}
+
+.exam-card__option input {
+  accent-color: var(--color-voltage);
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  flex: 0 0 auto;
+}
+
+/* Two carriers for the selected state, never colour alone (A11): the
+   border thickens and the fill changes, and the native control is checked. */
+.exam-card__option:has(input:checked) {
+  border-color: var(--color-voltage);
+  border-width: 2px;
+  padding: calc(var(--space-sm) - 1px) calc(var(--space-md) - 1px);
+  background: var(--color-cream);
+}
+
+.exam-card__value {
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+}
+
+.exam-card__match {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.exam-card__match-row {
+  display: grid;
+  grid-template-columns: minmax(70px, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.exam-card__match-key {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-body-sm-size);
+  color: var(--color-ink);
+}
+
+.exam-card__match-row select {
+  width: 100%;
+  min-height: 44px;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+}
+
+/* The verdict the island writes after scoring. The word carries the state;
+   the border is the second carrier (A11). */
+.exam-card__verdict {
+  margin: 0;
+  padding: var(--space-md);
+  border-left: 3px solid var(--color-muted);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+}
+
+.exam-card[data-state="right"] .exam-card__verdict {
+  border-left-color: var(--color-state-answered);
+}
+
+.exam-card[data-state="wrong"] .exam-card__verdict {
+  border-left-color: var(--color-flag-risk);
+}
+
+/* --- the control bar ---------------------------------------------- */
+
+/* A1/A2: the control bar is a cream plane, not cream type on voltage.
+   mono-sm cream on voltage is 3.86:1 and fails AA; the same row on cream
+   is ink at 15.9:1. The bar is the demo's status line, so it is the one
+   part of the hero a visitor reads rather than scans. */
+.exam-demo__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-lg);
+  flex-wrap: wrap;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.exam-demo__status,
+.exam-demo__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.exam-demo__pips {
+  display: flex;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.exam-demo__pip {
+  width: 26px;
+  height: 26px;
+  border-radius: var(--rounded-sm);
+  border: 1px solid var(--color-hairline-strong);
+  display: grid;
+  place-items: center;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
+/* The answered state: voltage-deep on cream, the pair DESIGN.md already
+   sanctions for small type (5.66:1). The digit stays, so the state is not
+   carried by colour alone (A11). */
+.exam-demo__pip[data-on="1"] {
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  border-color: var(--color-voltage-deep);
+}
+
+.exam-demo__count,
+.exam-demo__score,
+.exam-demo__nojs {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+/* The no-JavaScript sentence rides inside the cream bar with everything
+   else small, for the same contrast reason. */
+.exam-demo__nojs {
+  margin: 0;
+  flex-basis: 100%;
+  color: var(--color-muted);
+}
+
+/* --- the bridge band, now below the hero -------------------------- */
+
+.hero-bridge-band {
+  background: var(--color-cream);
+  padding: var(--space-4xl) var(--space-xl);
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.hero-bridge-band .hero-bridge {
+  max-width: 1080px;
+  margin-inline: auto;
+}
+
+/* --- two columns, and the card carousel --------------------------- */
+
+@media (min-width: 900px) {
+  .hero-section--screen .hero-inner {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .hero-masthead {
+    text-align: right;
+  }
+
+}
+
+/* A5: below 860px the three cards become an x-snap carousel at 86% column
+   width, so a card edge peeks and the swipe is discoverable. The pips are
+   the pager. The masthead moves above the headline; its rule and stats go. */
+@media (max-width: 859px) {
+  .hero-section--screen {
+    padding: var(--space-lg) var(--space-md) var(--space-md);
+    gap: var(--space-md);
+    min-height: 560px;
+  }
+
+  .hero-section--screen .hero-inner {
+    gap: var(--space-md);
+  }
+
+  .hero-masthead {
+    order: -1;
+  }
+
+  .hero-masthead__name {
+    font-size: clamp(34px, 11vw, 52px);
+  }
+
+  .hero-masthead__rule {
+    display: none;
+  }
+
+  .exam-demo__cards {
+    grid-template-columns: repeat(3, 86%);
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    padding-bottom: var(--space-xs);
+  }
+
+  .exam-card {
+    scroll-snap-align: center;
+  }
+}
+
+/* The demo Score control. Deliberately NOT .button-primary: T20 keeps the
+   page to one filled primary CTA, in the closing band, and this is a demo
+   control rather than the page asking for anything. */
+.exam-demo__button {
+  font-family: var(--type-button-md-family);
+  /* the bar is cream, so the button inverts to voltage-deep to stay the
+     loudest thing in it — 5.66:1 with a cream label */
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+  min-height: 44px;
+  padding: var(--space-md) var(--space-xl);
+  border: 1px solid var(--color-voltage-deep);
+  border-radius: var(--rounded-full);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  cursor: pointer;
+}
+
+/* Disabled stays on the cream plane: muted ink on cream is 5.18:1, where
+   cream on voltage would have been 3.86:1. Opacity is not used to signal
+   it, because opacity multiplies against a contrast that already passes. */
+.exam-demo__button[disabled] {
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  border-color: var(--color-hairline-strong);
+  cursor: not-allowed;
+}

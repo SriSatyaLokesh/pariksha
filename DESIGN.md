@@ -113,6 +113,12 @@ typography:
     fontWeight: 400
     lineHeight: 18px
     letterSpacing: "0.3px"
+  wordmark-display:
+    fontFamily: '"Kalam", cursive'
+    fontSize: "clamp(44px, 6.2vw, 94px)"
+    fontWeight: 700
+    lineHeight: "1"
+    letterSpacing: "-0.01em"
 
 rounded:
   none: "0px"
@@ -521,6 +527,8 @@ Three states, three colours, and every one of them legible as text at 12px — t
 
 The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `sans-serif`, so a Telugu glyph in an otherwise-Latin sentence is drawn by a sibling face rather than by whatever the operating system volunteers.
 
+**Kalam** sets the product name alone, in the hero masthead, at `{typography.wordmark-display}`. It is a handwritten weight-700 mark, not a reading face: self-hosted, SIL OFL, text-subset to the eight glyphs "Pariksha" needs. It never substitutes for Anek elsewhere — body copy, headings, buttons and the nav/footer wordmark stay on the family above.
+
 ### Hierarchy
 
 | Token                        | Size | Weight | Line height | Tracking | Use                                                                                                         |
@@ -539,10 +547,11 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 | `{typography.timer-numeric}` | 20px | 500    | 24px        | 0        | **Tabular numerals.** Countdowns, scores, attempt references                                                |
 | `{typography.mono-md}`       | 15px | 400    | 24px        | 0        | Code blocks inside question prompts                                                                         |
 | `{typography.mono-sm}`       | 12px | 400    | 18px        | 0.3px    | Small-caps labels, palette numbers, footnotes, badges                                                       |
+| `{typography.wordmark-display}` | clamp(44px, 6.2vw, 94px) | 700 | 1 | -0.01em | The hero masthead's product name ("Pariksha") only — nowhere else                           |
 
 ### Principles
 
-**Display stays at 500.** 56px with -1.4px tracking is confidence through tracking and scale, not weight. Pushing to 700 turns an editorial dek into a SaaS hero and loses the whole register.
+**Display stays at 500.** 56px with -1.4px tracking is confidence through tracking and scale, not weight. Pushing to 700 turns an editorial dek into a SaaS hero and loses the whole register. `{typography.wordmark-display}` is not an exception to this: it is not display text at all but a handwritten mark standing in for a logo, so its 700 weight doesn't reopen the rule for headings or decks.
 
 **Reading text is not display text.** The display tier sets line-height equal to font size (56/56). The reading tier does not: `{typography.question-stem}` runs 18/29 — a ratio of 1.6, the loosest value in the system, because a candidate reads it once, under a clock, possibly at 200% zoom. Copying the display's tight leading onto a question stem is the single easiest way to make this product feel hostile.
 

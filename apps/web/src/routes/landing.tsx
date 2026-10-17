@@ -6,7 +6,7 @@
 // only wires TopNav, the skip link, the one <main> landmark and the eight
 // surviving sections in the new spine's order, plus the footer landmark.
 import { TopNav } from "../components/TopNav";
-import { Hero } from "../sections/s1-s3/Hero";
+import { Hero, HeroBridge } from "../sections/s1-s3/Hero";
 import { WhatIsPariksha } from "../sections/s1-s3/WhatIsPariksha";
 import { HowItWorks } from "../sections/s1-s3/HowItWorks";
 import { S4Comparison } from "../sections/s4-s6/S4Comparison";
@@ -26,6 +26,7 @@ export function Landing() {
       <main id="main-content">
         <Hero />
         <WhatIsPariksha />
+        <HeroBridge />
         <HowItWorks />
         <S4Comparison />
         <CostSection />

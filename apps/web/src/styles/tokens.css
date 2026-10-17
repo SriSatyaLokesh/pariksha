@@ -103,6 +103,11 @@
   --type-mono-sm-line-height: 18px;
   --type-mono-sm-letter-spacing: 0.3px;
   --type-mono-sm-family: "JetBrains Mono", monospace;
+  --type-wordmark-display-size: clamp(44px, 6.2vw, 94px);
+  --type-wordmark-display-weight: 700;
+  --type-wordmark-display-line-height: 1;
+  --type-wordmark-display-letter-spacing: -0.01em;
+  --type-wordmark-display-family: "Kalam", cursive;
   --rounded-none: 0px;
   --rounded-xs: 3px;
   --rounded-sm: 4px;

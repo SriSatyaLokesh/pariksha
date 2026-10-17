@@ -1,5 +1,6 @@
 import { HeroSection } from "../../components/HeroSection";
 import { CodeBlock } from "../../components/CodeBlock";
+import { PROMPTS, type Prompt } from "../../island/questions";
 
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
 const WORKED_EXAMPLE = `${REPO}/tree/main/examples/reasoning-aptitude`;
@@ -33,11 +34,19 @@ export function Hero() {
       heading={HEADING}
       chip="PRE-ALPHA · APACHE-2.0"
       demo={<ExamDemo />}
+      masthead={
+        // v4 §3: the product name in Kalam, filling the voltage the copy
+        // column leaves empty. aria-hidden because TopNav already announces
+        // "Pariksha" — a screen reader should not hear it twice before it
+        // reaches the headline.
+        <div className="hero-masthead" aria-hidden="true">
+          <span className="hero-masthead__name">Pariksha</span>
+          <hr className="hero-masthead__rule" />
+        </div>
+      }
       lead={
         <>
-          Pariksha is an open-source exam platform you deploy yourself; as of
-          October 2026 the formats, the scoring engine and worked example are
-          published, and the application lands with v0.1.
+          Open source, self-hosted, pre-alpha as of October 2026.
         </>
       }
       links={
@@ -50,8 +59,21 @@ export function Hero() {
           </a>
         </>
       }
-      bridge={<BridgeBand />}
     />
+  );
+}
+
+/**
+ * v4: the hero is one screen (A2), so the bridge band can no longer live
+ * inside it — a code block and a non-scrolling hero cannot both be true.
+ * It renders immediately below instead, on cream, carrying exactly the
+ * same prose and the same CB-1 excerpt. Nothing was cut; it moved.
+ */
+export function HeroBridge() {
+  return (
+    <div className="hero-bridge-band">
+      <BridgeBand />
+    </div>
   );
 }
 
@@ -67,196 +89,129 @@ export function Hero() {
  */
 function ExamDemo() {
   return (
-    <div className="runner-mock runner-mock--demo" data-demo>
-      <h2 className="runner-mock__title" id="demo-heading">
+    <div className="exam-demo" data-demo>
+      <h2 className="visually-hidden" id="demo-heading">
         Try three questions
       </h2>
 
-      <div
-        className="runner-mock__panel"
-        role="group"
-        aria-labelledby="demo-heading"
-      >
-        <div className="runner-mock__header">
-          <span className="runner-mock__section">
-            DEMO · 3 QUESTIONS · ABOUT 30 SECONDS
-          </span>
-          <span className="runner-mock__section">Timer off</span>
-          <span className="runner-mock__section runner-mock__privacy">
-            Scored in your browser by Pariksha&rsquo;s own scoring engine.
-            Nothing you type leaves this page.
+      <div className="exam-demo__cards" role="group" aria-labelledby="demo-heading">
+        {PROMPTS.map((q, i) => (
+          <article
+            key={q.id}
+            className="exam-card"
+            data-demo-card
+            data-qid={q.id}
+            aria-labelledby={`demo-stem-${String(i + 1)}`}
+          >
+            <div className="exam-card__bar">
+              <span className="exam-card__type">{TYPE_LABEL[q.type]}</span>
+              <span className="exam-card__points">
+                {q.points} pts{q.type === "single" ? "" : " · partial credit"}
+              </span>
+            </div>
+            <div className="exam-card__body">
+              {q.type === "matching" ? (
+                <MatchingRows q={q} stemId={`demo-stem-${String(i + 1)}`} />
+              ) : (
+                <ChoiceOptions q={q} stemId={`demo-stem-${String(i + 1)}`} />
+              )}
+              <p className="exam-card__verdict" data-demo-verdict hidden></p>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="exam-demo__bar">
+        <div className="exam-demo__status">
+          <ul className="exam-demo__pips" data-demo-pips aria-hidden="true">
+            {PROMPTS.map((q, i) => (
+              <li key={q.id} className="exam-demo__pip" data-demo-pip data-on="0">
+                {i + 1}
+              </li>
+            ))}
+          </ul>
+          <span className="exam-demo__count" data-demo-count aria-live="polite">
+            0 of 3 answered
           </span>
         </div>
-
-        {/* §3.6: the one live region, present and empty — the island
-            writes announcements here, nothing does before it loads. */}
-        <p className="visually-hidden" aria-live="polite" data-demo-live></p>
-
-        <ol className="runner-mock__list">
-          {/* LOG-001 — shortest stem in the set, so its first option is
-              the one that has to clear the fold (§3.3, E-9). */}
-          <li
-            className="runner-mock__question"
-            id="demo-q-1"
-            data-demo-q
-            data-qid="LOG-001"
-            tabIndex={-1}
-            aria-labelledby="demo-stem-1"
-          >
-            <div className="runner-mock__stem-row">
-              <span className="runner-mock__question-of">
-                Question 1 of 3
-              </span>
-              <span className="runner-mock__points">single · 2 pts</span>
-            </div>
-            <fieldset className="runner-mock__fieldset">
-              <legend className="runner-mock__stem" id="demo-stem-1">
-                What comes next in the series?
-                <br />
-                3, 7, 15, 31, 63, ?
-              </legend>
-              <div className="runner-mock__options">
-                <label className="runner-mock__option">
-                  <input type="radio" name="LOG-001" value="a" />
-                  <span>95</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="radio" name="LOG-001" value="b" />
-                  <span>117</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="radio" name="LOG-001" value="c" />
-                  <span>127</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="radio" name="LOG-001" value="d" />
-                  <span>131</span>
-                </label>
-              </div>
-            </fieldset>
-          </li>
-
-          {/* LOG-007 */}
-          <li
-            className="runner-mock__question"
-            id="demo-q-2"
-            data-demo-q
-            data-qid="LOG-007"
-            tabIndex={-1}
-            aria-labelledby="demo-stem-2"
-            hidden
-          >
-            <div className="runner-mock__stem-row">
-              <span className="runner-mock__question-of">
-                Question 2 of 3
-              </span>
-              <span className="runner-mock__points">true_false · 1 pts</span>
-            </div>
-            <fieldset className="runner-mock__fieldset">
-              <legend className="runner-mock__stem" id="demo-stem-2">
-                In a certain code, EARTH is written as FBSUI.{" "}
-                <strong>Statement:</strong> each letter has been replaced by
-                the letter that follows it in the alphabet.
-              </legend>
-              <div className="runner-mock__options">
-                <label className="runner-mock__option">
-                  <input type="radio" name="LOG-007" value="true" />
-                  <span>True</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="radio" name="LOG-007" value="false" />
-                  <span>False</span>
-                </label>
-              </div>
-            </fieldset>
-          </li>
-
-          {/* QNT-004 — the load-bearing question: five options, a
-              three-option key, partial credit (§3.3). */}
-          <li
-            className="runner-mock__question"
-            id="demo-q-3"
-            data-demo-q
-            data-qid="QNT-004"
-            tabIndex={-1}
-            aria-labelledby="demo-stem-3"
-            hidden
-          >
-            <div className="runner-mock__stem-row">
-              <span className="runner-mock__question-of">
-                Question 3 of 3
-              </span>
-              <span className="runner-mock__points">multiple · 2 pts</span>
-            </div>
-            <fieldset className="runner-mock__fieldset">
-              <legend className="runner-mock__stem" id="demo-stem-3">
-                Which of these numbers are divisible by 6? (Select all that
-                apply.)
-              </legend>
-              <div className="runner-mock__options">
-                <label className="runner-mock__option">
-                  <input type="checkbox" name="QNT-004" value="a" />
-                  <span>114</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="checkbox" name="QNT-004" value="b" />
-                  <span>128</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="checkbox" name="QNT-004" value="c" />
-                  <span>222</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="checkbox" name="QNT-004" value="d" />
-                  <span>345</span>
-                </label>
-                <label className="runner-mock__option">
-                  <input type="checkbox" name="QNT-004" value="e" />
-                  <span>432</span>
-                </label>
-              </div>
-            </fieldset>
-          </li>
-        </ol>
-
-        {/* §3.5: the palette ships as inert status — bare numbers, no
-            navigation — until the island replaces its contents with
-            buttons. E-7: the strip holds the same 44px height in both
-            states. */}
-        <div
-          className="runner-mock__palette"
-          aria-hidden="true"
-          data-demo-palette
-        >
-          <span className="runner-mock__square runner-mock__square--current">
-            1
-          </span>
-          <span className="runner-mock__square">2</span>
-          <span className="runner-mock__square">3</span>
-        </div>
-
-        {/* §2.8: the sentence is not optional. With JavaScript off this is
-            what the control row can honestly offer — nothing it cannot
-            deliver, and the one link that delivers all seventeen
-            questions anyway. The island removes the sentence and inserts
-            its four buttons ahead of this link; the link itself survives
-            every upgrade and every island error (I-9). */}
-        <div className="runner-mock__controls" data-demo-controls>
-          <p className="runner-mock__section runner-mock__nojs">
-            Scoring, and questions 2 and 3, need JavaScript.
-          </p>
-          <a className="runner-mock__fallback" href={WORKED_EXAMPLE}>
-            These three questions, and fourteen more, are in the worked
-            example
+        <div className="exam-demo__actions">
+          <span className="exam-demo__score" data-demo-score aria-live="polite" hidden></span>
+          <button className="exam-demo__button" type="button" data-demo-score-btn disabled>
+            Score my answers
+          </button>
+          <a className="hero-text-link" href={WORKED_EXAMPLE}>
+            All seventeen questions
           </a>
         </div>
+      </div>
 
-        {/* §3.2: the result panel must not contain a score, a verdict
-            word, or anything else in any form in the prerendered HTML — an
-            answer engine lifting a result would be lifting a claim about
-            an application that does not run yet (D5). The island writes
-            into this element; nothing writes into it before that. */}
-        <div className="runner-mock__result" data-demo-result hidden></div>
+      <p className="exam-demo__nojs" data-demo-nojs>
+        Scoring needs JavaScript. Every question above reads without it.
+      </p>
+    </div>
+  );
+}
+
+const TYPE_LABEL: Record<Prompt["type"], string> = {
+  single: "Single choice",
+  multiple: "Select all that apply",
+  matching: "Matching",
+};
+
+/** single and multiple: native radios and checkboxes, so the keyboard works
+ * before a line of JavaScript runs. `name` is the question id — the island's
+ * contract reads `input[name=qid]`. */
+function ChoiceOptions({ q, stemId }: { q: Prompt; stemId: string }) {
+  const [stem, series] = q.prompt.split("\n\n");
+  return (
+    <fieldset className="exam-card__fieldset">
+      <legend className="exam-card__stem" id={stemId}>
+        {stem}
+      </legend>
+      {series !== undefined && <p className="exam-card__series">{series}</p>}
+      <div className="exam-card__options">
+        {(q.options ?? []).map((o) => (
+          <label className="exam-card__option" key={o.id}>
+            <input
+              type={q.type === "single" ? "radio" : "checkbox"}
+              name={q.id}
+              value={o.id}
+            />
+            <span className="exam-card__value">{o.text}</span>
+          </label>
+        ))}
+      </div>
+    </fieldset>
+  );
+}
+
+/** matching: one <select> per left item. The value is the right-item string
+ * itself, not an index — the island compares it to the key unchanged. */
+function MatchingRows({ q, stemId }: { q: Prompt; stemId: string }) {
+  return (
+    <div className="exam-card__fieldset">
+      <p className="exam-card__stem" id={stemId}>
+        {q.prompt}
+      </p>
+      <div className="exam-card__match">
+        {(q.left ?? []).map((l, i) => {
+          const id = `demo-match-${String(i + 1)}`;
+          return (
+            <div className="exam-card__match-row" key={l}>
+              <label className="exam-card__match-key" htmlFor={id}>
+                {l}
+              </label>
+              <select id={id} data-demo-match data-left={l} defaultValue="">
+                <option value="">Choose…</option>
+                {(q.right ?? []).map((r) => (
+                  <option value={r} key={r}>
+                    {r}
+                  </option>
+                ))}
+              </select>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

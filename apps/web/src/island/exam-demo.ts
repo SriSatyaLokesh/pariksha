@@ -1,120 +1,142 @@
 // The hero's interactive exam demo — the one island this page ships.
 //
-// Progressive enhancement, not hydration (D2): this module upgrades
-// prerendered markup in place and never renders a question from scratch.
-// With no JavaScript, or on any failure, the prerendered page (static
-// question 1, the no-JavaScript sentence, the fallback link) is what the
-// visitor sees — this file's job is to never make that worse.
+// v4: three cards (single, multiple, matching), scored together, replacing
+// the v3 one-question-at-a-time runner. Owner-approved prototype:
+// .planning/landing/v4-hero-prototype.html.
 //
-// No network call, no storage, no telemetry, ever (D3). See the forbidden
-// list in `apps/web/test/island.test.ts`.
+// Progressive enhancement, not hydration: this module upgrades prerendered
+// markup in place and never renders a card from scratch. With no
+// JavaScript, or on any failure, the prerendered page — all three cards,
+// real inputs, the no-JavaScript sentence, the fallback link — is what the
+// visitor sees; this file's job is to never make that worse.
 //
-// Spec: docs/superpowers/specs/2026-10-17-landing-page-v3-interactive.md §2-§3.
+// No network call, no storage, no telemetry, ever. See the forbidden list
+// in apps/web/test/island-artefact.test.ts.
+//
+// -----------------------------------------------------------------------
+// The public contract with the prerendered markup (data attributes only,
+// never class names — a renamed block must not break the demo):
+//
+//   data-demo                  the root. Absent -> the island returns,
+//                               having touched nothing.
+//   data-demo-card + data-qid  each card; data-qid is the key into GRADING,
+//                               in the same order.
+//   data-demo-verdict          inside each card: an empty, hidden element
+//                               the island writes a verdict into on Score.
+//   input[name=qid]            single/multiple cards: same as before.
+//   select[data-demo-match]
+//     + data-left="<left>"     matching card: one <select> per left row;
+//                               its value is the chosen right-item string
+//                               (not an index — it is compared to
+//                               MatchingQuestion.key[left] unchanged).
+//   data-demo-pips             the status strip; data-demo-pip x N,
+//                               GRADING.length of them, each toggling
+//                               data-on="0"|"1".
+//   data-demo-count            a polite live region: "N of 3 answered".
+//   data-demo-score-btn        a real, prerendered <button disabled>. The
+//                               island enables/disables it; never replaced.
+//   data-demo-score            a polite live region, hidden until Score is
+//                               pressed; then holds the total.
+//   data-demo-nojs (optional)  a sentence explaining Score needs
+//                               JavaScript; removed on successful init.
+//
+// The island writes only: `hidden` and `textContent`/`innerHTML` on the
+// nodes above, `disabled` and the label on the Score button, `data-on` on
+// the pips, and `data-state` on a card ("right" | "wrong" | "unanswered").
+// It sets no `style` attribute and no `element.style` property, ever.
+// -----------------------------------------------------------------------
+//
+// Scores through `gradeQuestion`, the public dispatcher, rather than
+// deep-importing `grade/structured.js` (forbidden: packages/core's own
+// acceptance test rejects a deep import, and only `gradeChoice` is a
+// direct public export today). The cost: `gradeQuestion` statically
+// references `grade/text.ts`'s pattern compiler and `grade/manual.ts`,
+// about 4.4 KB minified this demo never reaches (measured by bundling
+// `gradeChoice`+a direct `gradeStructured` import in isolation vs.
+// `gradeQuestion` alone). See this PR's deviations: if
+// `packages/core/src/index.ts` gains a direct `gradeStructured` export
+// (the same shape as its existing `gradeChoice` one, for the same reason),
+// switching to it recovers that 4.4 KB — a budget optimisation, not a
+// correctness fix, since `gradeQuestion` already dispatches to the same
+// `gradeStructured` internally for a `matching` question.
 
-import { gradeChoice, round2, type ChoiceQuestion } from "@pariksha/core";
+import { gradeQuestion, round2, type Question } from "@pariksha/core";
 
 import { GRADING, type GradingQuestion } from "./questions";
 
-// §2.4: the only arithmetic this island is permitted to contain is the
+// The only arithmetic this island is permitted to contain is the
 // `round2(sum)` below. Every point value it renders comes out of
-// `gradeChoice` (I-5). `DEFAULTS` never applies — every demo question
-// declares its own `scoring.mode` and `scoring.points` — it is passed
-// because the signature requires it. No `passMarkPercent` anywhere.
+// `gradeQuestion`. `DEFAULTS` never applies — every demo question declares
+// its own `scoring.mode` — it is passed because the signature requires it.
 const DEFAULTS = { mode: "all_or_nothing", negativeFraction: 0.25 } as const;
 
-// `GRADING` carries only the five fields `gradeChoice` reads (§2.2); the
-// two `QuestionBase` fields it never reads — `prompt` and `options` — are
-// deliberately absent so the island does not ship a second copy of what the
-// React hero already prerenders from `PROMPTS`. This cast is what that
-// omission costs, and it is the only one in the file.
-function asChoiceQuestion(q: GradingQuestion): ChoiceQuestion {
-  return q as unknown as ChoiceQuestion;
+// `GradingQuestion` carries only the fields `gradeQuestion` reads for these
+// three types; the `QuestionBase` fields it never reads (`prompt`,
+// `options`, `right`) are deliberately absent so the island does not ship a
+// second copy of what the React hero already prerenders from `PROMPTS`.
+// This cast is what that omission costs, and it is the only one in the file.
+function asQuestion(q: GradingQuestion): Question {
+  return q as unknown as Question;
 }
-
-const EXAMPLES_HREF = "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude";
-const CORE_HREF = "https://github.com/SriSatyaLokesh/pariksha/tree/main/packages/core";
-
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
 
 type ResponseValue =
   | { kind: "option"; option: string }
   | { kind: "options"; options: string[] }
-  | { kind: "boolean"; value: boolean };
+  | { kind: "map"; pairs: Record<string, string> };
 
-/** One question, resolved once in `init()` so no index access can miss. */
 interface Item {
-  li: HTMLElement;
+  card: HTMLElement;
   qid: string;
   q: GradingQuestion;
+  verdict: HTMLElement;
 }
 
 interface State {
-  phase: "answering" | "finished";
-  current: number;
+  scored: boolean;
   answers: Record<string, ResponseValue | null>;
-  marked: Set<string>;
 }
 
-const KIND_LABEL: Record<GradingQuestion["type"], string> = {
-  single: "Single choice.",
-  true_false: "True or false.",
-  multiple: "Select all that apply.",
+const TYPE_LABEL: Record<GradingQuestion["type"], string> = {
+  single: "single",
+  multiple: "multiple",
+  matching: "matching",
 };
-
-function pointsLabel(n: number): string {
-  return `${n} point${n === 1 ? "" : "s"}.`;
-}
-
-function paletteLabel(num: number, answered: boolean, marked: boolean): string {
-  const state = marked
-    ? answered
-      ? "marked for review, answered"
-      : "marked for review, not answered"
-    : answered
-      ? "answered"
-      : "not answered";
-  return `Question ${num}, ${state}`;
-}
-
-// ---------------------------------------------------------------------------
-// Init — upgrades prerendered markup in place. Never throws past this
-// function: every failure, found here or in a listener, falls back to the
-// untouched static page (I-10).
-// ---------------------------------------------------------------------------
 
 export function init(doc: Document = document): void {
   const root = doc.querySelector<HTMLElement>("[data-demo]");
   if (!root) return;
 
-  const liveNode = root.querySelector<HTMLElement>("[data-demo-live]");
-  const paletteNode = root.querySelector<HTMLElement>("[data-demo-palette]");
-  const controlsNode = root.querySelector<HTMLElement>("[data-demo-controls]");
-  const resultNode = root.querySelector<HTMLElement>("[data-demo-result]");
-  const linkNode = controlsNode?.querySelector("a") ?? null;
+  const pipsNode = root.querySelector<HTMLElement>("[data-demo-pips]");
+  const countNode = root.querySelector<HTMLElement>("[data-demo-count]");
+  const scoreBtnNode = root.querySelector<HTMLButtonElement>("[data-demo-score-btn]");
+  const scoreLiveNode = root.querySelector<HTMLElement>("[data-demo-score]");
+  const cardNodes = Array.from(root.querySelectorAll<HTMLElement>("[data-demo-card]"));
 
-  // Rule 1 (§2.8): nothing is mutated before everything is found. The
-  // aliases below are what carry that narrowing into every closure.
-  if (!liveNode || !paletteNode || !controlsNode || !resultNode || !linkNode) return;
-  const live = liveNode;
-  const palette = paletteNode;
-  const controls = controlsNode;
-  const result = resultNode;
-  const fallbackLink = linkNode;
+  // Rule 1: nothing is mutated before everything is found. A single missing
+  // hook means an immediate return with the DOM untouched.
+  if (!pipsNode || !countNode || !scoreBtnNode || !scoreLiveNode) return;
+  const countEl = countNode;
+  const scoreBtn = scoreBtnNode;
+  const scoreLive = scoreLiveNode;
+  const pips = Array.from(pipsNode.querySelectorAll<HTMLElement>("[data-demo-pip]"));
+  if (pips.length !== GRADING.length || cardNodes.length !== GRADING.length) return;
 
   const items: Item[] = [];
-  for (const [i, li] of Array.from(root.querySelectorAll<HTMLElement>("[data-demo-q]")).entries()) {
-    const qid = li.dataset.qid;
+  for (const [i, card] of cardNodes.entries()) {
+    const qid = card.dataset.qid;
     const q = GRADING[i];
-    if (!qid || !q || q.id !== qid) return;
-    items.push({ li, qid, q });
+    const verdict = card.querySelector<HTMLElement>("[data-demo-verdict]");
+    if (!qid || !q || q.id !== qid || !verdict) return;
+    items.push({ card, qid, q, verdict });
   }
-  if (items.length === 0 || items.length !== GRADING.length) return;
 
-  // Rule 2 (§2.8): the original markup is captured before the first write.
-  const controlsHTML = controls.innerHTML;
-  const paletteHTML = palette.innerHTML;
+  // Rule 2: the original markup is captured before the first write.
+  const initial = {
+    count: countEl.textContent ?? "",
+    scoreBtnText: scoreBtn.textContent ?? "",
+    scoreBtnDisabled: scoreBtn.disabled,
+    scoreLiveHidden: scoreLive.hidden,
+  };
 
   const cleanups: Array<() => void> = [];
   function on<K extends keyof HTMLElementEventMap>(
@@ -130,21 +152,23 @@ export function init(doc: Document = document): void {
 
   function restore(): void {
     for (const off of cleanups.splice(0)) off();
-    controls.innerHTML = controlsHTML;
-    controls.hidden = false;
-    palette.innerHTML = paletteHTML;
-    palette.hidden = false;
-    palette.setAttribute("aria-hidden", "true");
-    items.forEach((item, i) => {
-      item.li.hidden = i !== 0;
+    pips.forEach((pip) => {
+      pip.dataset.on = "0";
     });
-    result.hidden = true;
-    result.innerHTML = "";
-    live.textContent = "";
+    countEl.textContent = initial.count;
+    scoreBtn.textContent = initial.scoreBtnText;
+    scoreBtn.disabled = initial.scoreBtnDisabled;
+    scoreLive.hidden = initial.scoreLiveHidden;
+    scoreLive.textContent = "";
+    for (const item of items) {
+      item.verdict.hidden = true;
+      item.verdict.innerHTML = "";
+      delete item.card.dataset.state;
+    }
   }
 
-  // Rule 3/4 (§2.8): every listener body runs inside `run`; on a throw the
-  // page is restored to the no-JavaScript state and nothing is reported.
+  // Rule 3/4: every listener body runs inside `run`; on a throw the page is
+  // restored to the no-JavaScript-equivalent state and nothing is reported.
   function run(fn: () => void): void {
     try {
       fn();
@@ -159,275 +183,98 @@ export function init(doc: Document = document): void {
 
   run(() => {
     function readResponse(item: Item): ResponseValue | null {
-      const inputs = Array.from(item.li.querySelectorAll<HTMLInputElement>(`input[name="${item.qid}"]`));
       if (item.q.type === "multiple") {
+        const inputs = Array.from(item.card.querySelectorAll<HTMLInputElement>(`input[name="${item.qid}"]`));
         const selected = inputs.filter((input) => input.checked).map((input) => input.value);
         return selected.length ? { kind: "options", options: selected } : null;
       }
-      const checked = inputs.find((input) => input.checked);
-      if (!checked) return null;
-      if (item.q.type === "true_false") return { kind: "boolean", value: checked.value === "true" };
-      return { kind: "option", option: checked.value };
+      if (item.q.type === "single") {
+        const inputs = Array.from(item.card.querySelectorAll<HTMLInputElement>(`input[name="${item.qid}"]`));
+        const checked = inputs.find((input) => input.checked);
+        return checked ? { kind: "option", option: checked.value } : null;
+      }
+      // matching: one <select> per left row; a row left blank is simply
+      // absent from `pairs` — a partially filled map still counts as
+      // answered (gradeStructured scores only the entries present).
+      const pairs: Record<string, string> = {};
+      for (const sel of Array.from(item.card.querySelectorAll<HTMLSelectElement>("select[data-demo-match]"))) {
+        const left = sel.dataset.left;
+        if (left && sel.value) pairs[left] = sel.value;
+      }
+      return Object.keys(pairs).length ? { kind: "map", pairs } : null;
     }
 
-    function at(index: number): Item | null {
-      return items[index] ?? null;
-    }
-
-    // On init the island reads the DOM's current checked state into its
-    // model rather than resetting it (§3.2): a visitor who ticks an option
-    // before the module arrives keeps that answer.
+    // On init the island reads the DOM's current state into its model
+    // rather than resetting it: a visitor who answers before the module
+    // arrives keeps that answer.
     const answers: Record<string, ResponseValue | null> = {};
     for (const item of items) answers[item.qid] = readResponse(item);
+    const state: State = { scored: false, answers };
 
-    const state: State = { phase: "answering", current: 0, answers, marked: new Set() };
-
-    // -- build controls: Back / Mark for review / Next / Finish, ahead of
-    //    the fallback link, which stays (I-9). -----------------------------
-    //    I-8: none of these is `ButtonPrimary` and none carries its class.
-    function makeButton(label: string, modifier: string): HTMLButtonElement {
-      const btn = doc.createElement("button");
-      btn.type = "button";
-      btn.className = `runner-mock__control runner-mock__control--${modifier}`;
-      btn.textContent = label;
-      return btn;
-    }
-
-    const backBtn = makeButton("Back", "secondary");
-    const markBtn = makeButton("Mark for review", "tertiary");
-    markBtn.setAttribute("aria-pressed", "false");
-    const nextBtn = makeButton("Next", "secondary");
-    // §3.6: the one custom shortcut is announced, never hidden.
-    const hint = doc.createElement("span");
-    hint.className = "runner-mock__hint";
-    hint.setAttribute("aria-hidden", "true");
-    hint.textContent = "Enter →";
-    nextBtn.append(" ", hint);
-    const finishBtn = makeButton("Finish", "primary");
-
-    for (const node of Array.from(controls.childNodes)) {
-      if (node !== fallbackLink) controls.removeChild(node);
-    }
-    const buttons = doc.createDocumentFragment();
-    buttons.append(backBtn, markBtn, nextBtn, finishBtn);
-    controls.insertBefore(buttons, fallbackLink);
-
-    // -- build the palette as navigation ------------------------------------
-    //    §3.6: a 36x36 visual square inside a 44x44 hit area, which is why
-    //    the square is an inner span and the button around it is the target.
-    palette.innerHTML = "";
-    palette.removeAttribute("aria-hidden");
-    const paletteButtons = items.map((_item, i) => {
-      const btn = doc.createElement("button");
-      btn.type = "button";
-      btn.className = "runner-mock__square-button";
-      const square = doc.createElement("span");
-      square.className = "runner-mock__square";
-      square.textContent = String(i + 1);
-      btn.append(square);
-      palette.append(btn);
-      return { btn, square };
-    });
-
-    function renderPanel(): void {
-      items.forEach((item, i) => {
-        item.li.hidden = i !== state.current;
+    function updateStatus(): void {
+      const answeredFlags = items.map((item) => state.answers[item.qid] != null);
+      pips.forEach((pip, i) => {
+        pip.dataset.on = answeredFlags[i] ? "1" : "0";
       });
-      paletteButtons.forEach(({ btn, square }, i) => {
-        const item = at(i);
-        if (!item) return;
-        const answered = state.answers[item.qid] != null;
-        const marked = state.marked.has(item.qid);
-        const isCurrent = i === state.current;
-        square.classList.toggle("runner-mock__square--current", isCurrent);
-        square.classList.toggle("runner-mock__square--marked", marked);
-        square.classList.toggle("runner-mock__square--answered", answered && !marked);
-        if (isCurrent) btn.setAttribute("aria-current", "true");
-        else btn.removeAttribute("aria-current");
-        btn.setAttribute("aria-label", paletteLabel(i + 1, answered, marked));
-      });
-      backBtn.disabled = state.current === 0;
-      nextBtn.disabled = state.current === items.length - 1;
-      const current = at(state.current);
-      markBtn.setAttribute("aria-pressed", String(current !== null && state.marked.has(current.qid)));
-      const answeredCount = items.filter((item) => state.answers[item.qid] != null).length;
-      // §2.4: at rest the label reads `Finish` and nothing else; the count
-      // arrives with the first answer and stays.
-      finishBtn.textContent = answeredCount > 0 ? `Finish (${answeredCount} of ${items.length} answered)` : "Finish";
+      const n = answeredFlags.filter(Boolean).length;
+      countEl.textContent = `${n} of ${items.length} answered`;
+      if (!state.scored) scoreBtn.disabled = n === 0;
     }
 
-    function goTo(index: number): void {
-      const item = at(index);
-      if (!item) return;
-      state.current = index;
-      renderPanel();
-      item.li.focus();
-      live.textContent = `Question ${index + 1} of ${items.length}. ${KIND_LABEL[item.q.type]} ${pointsLabel(
-        item.q.scoring.points,
-      )}`;
-    }
-
-    function renderResult(): void {
-      // I-5: every point value below comes out of `gradeChoice`, and the
-      // one sum is rounded by the engine's own `round2`, not a local copy.
-      const results = items.map((item) =>
-        gradeChoice(asChoiceQuestion(item.q), state.answers[item.qid] ?? null, DEFAULTS),
-      );
+    function score(): void {
+      // Every point value below comes out of `gradeQuestion`; the one sum
+      // is rounded by the engine's own `round2`, not a local copy.
+      const results = items.map((item) => gradeQuestion(asQuestion(item.q), state.answers[item.qid] ?? null, DEFAULTS));
       const total = round2(results.reduce((sum, r) => sum + r.points, 0));
       const maxTotal = round2(results.reduce((sum, r) => sum + r.max, 0));
-      const answeredCount = items.filter((item) => state.answers[item.qid] != null).length;
-      const allCorrect = results.every((r) => r.points === r.max);
 
-      let secondLine: string;
-      if (answeredCount === 0) {
-        secondLine = "You did not answer any of them. Try again, or read the file below.";
-      } else if (allCorrect) {
-        secondLine = "All three. The worked example has fourteen more.";
-      } else {
-        secondLine = `${Math.round((total / maxTotal) * 100)}% · this demo sets no pass mark`;
-      }
-
-      const rows = items
-        .map((item, i) => {
-          const r = results[i];
-          if (!r) return "";
-          const answered = state.answers[item.qid] != null;
-          const correct = r.points === r.max;
-          // §3.7: `Not answered` comes from the island's own null check, not
-          // from `GradeResult.correct` — the distinction is presentation.
-          const verdict = !answered ? "Not answered" : correct ? "Correct" : r.points > 0 ? "Partly correct" : "Wrong";
-          const showExplanation = answered && !correct;
-          return (
-            `<li class="runner-mock__result-row">` +
-            `<span class="runner-mock__result-type">${item.q.type}</span>` +
-            `<span class="runner-mock__result-points">${r.points.toFixed(2)} / ${r.max}</span>` +
-            `<span class="runner-mock__result-verdict">${verdict}</span>` +
-            (showExplanation ? `<p class="runner-mock__result-explanation">${item.q.explanation}</p>` : "") +
-            `</li>`
-          );
-        })
-        .join("");
-
-      result.innerHTML =
-        `<h3 class="runner-mock__title runner-mock__result-score" tabindex="-1">You scored ${total.toFixed(2)} out of ${maxTotal}</h3>` +
-        `<p class="runner-mock__result-summary">${secondLine}</p>` +
-        `<ol class="runner-mock__result-rows">${rows}</ol>` +
-        `<p class="runner-mock__result-link"><a href="${EXAMPLES_HREF}">Read the whole test — seventeen questions, three sections, the scoring</a></p>` +
-        `<p class="runner-mock__result-prose"><strong>What just happened.</strong> The scoring is real: ` +
-        `<code>@pariksha/core</code>, the module that will grade every attempt, is bundled into this page, and ` +
-        `it is the part of Pariksha that is built and tested today. Questions 1 and 2 are all-or-nothing; ` +
-        `question 3 is partial-credit, which is why its score has a decimal. A question left blank scores ` +
-        `zero and never loses points, and the options are not shuffled here.</p>` +
-        `<p class="runner-mock__result-prose"><strong>What is not real.</strong> This demo scores in your ` +
-        `browser because there is nothing to call. A real Pariksha test does the opposite: the answer key ` +
-        `stays on the server and never reaches a candidate, every rule is re-checked there, and the clock ` +
-        `runs there too. The scoring engine, the formats, the schemas and this worked example are published ` +
-        `today; the runner, the server, proctoring and the results CSV land with v0.1.</p>` +
-        `<p class="runner-mock__result-link"><a href="${CORE_HREF}">See how that was scored</a> · ` +
-        `<a href="#hero-bridge">the question, the key and the explanation</a></p>` +
-        `<p class="runner-mock__result-link"><a href="#how-it-works">How you would run this yourself</a></p>` +
-        `<button type="button" class="runner-mock__control runner-mock__control--tertiary" data-demo-retry>Try again</button>`;
-
-      result.hidden = false;
-      for (const item of items) item.li.hidden = true;
-      palette.hidden = true;
-      controls.hidden = true;
-      // §3.6: on Finish the live region receives nothing — the focus move
-      // announces the score, and two mechanisms on one event double-announce.
-      live.textContent = "";
-      result.querySelector<HTMLElement>(".runner-mock__result-score")?.focus();
-    }
-
-    function finish(): void {
-      state.phase = "finished";
-      renderResult();
-    }
-
-    function tryAgain(): void {
-      state.phase = "answering";
-      state.current = 0;
-      state.marked.clear();
       items.forEach((item, i) => {
-        state.answers[item.qid] = null;
-        item.li.querySelectorAll<HTMLInputElement>("input").forEach((input) => {
-          input.checked = false;
-        });
-        item.li.hidden = i !== 0;
+        const r = results[i]!;
+        const answered = state.answers[item.qid] != null;
+        const correct = r.points === r.max;
+        const showExplanation = answered && !correct;
+        const verdictWord = !answered ? "Not answered" : correct ? "Correct" : r.points > 0 ? "Partly correct" : "Wrong";
+        item.card.dataset.state = !answered ? "unanswered" : correct ? "right" : "wrong";
+        item.verdict.hidden = false;
+        item.verdict.innerHTML =
+          `<span class="runner-mock__result-type">${TYPE_LABEL[item.q.type]}</span>` +
+          `<span class="runner-mock__result-verdict">${verdictWord}</span>` +
+          `<span class="runner-mock__result-points">${r.points.toFixed(2)} / ${r.max}</span>` +
+          (showExplanation ? `<p class="runner-mock__result-explanation">${item.q.explanation}</p>` : "");
       });
-      palette.hidden = false;
-      controls.hidden = false;
-      result.hidden = true;
-      result.innerHTML = "";
-      live.textContent = "";
-      renderPanel();
-      at(0)?.li.focus();
+
+      scoreLive.hidden = false;
+      scoreLive.textContent = `You scored ${total.toFixed(2)} out of ${maxTotal}`;
+      state.scored = true;
+      scoreBtn.disabled = true;
+      scoreBtn.textContent = "Scored";
     }
 
     on(root, "change", (e) => {
       run(() => {
         const target = e.target as HTMLElement;
-        if (target.tagName !== "INPUT") return;
-        const li = target.closest<HTMLElement>("[data-demo-q]");
-        if (!li) return;
-        const item = items.find((candidate) => candidate.li === li);
+        const card = target.closest<HTMLElement>("[data-demo-card]");
+        if (!card) return;
+        const item = items.find((candidate) => candidate.card === card);
         if (!item) return;
         state.answers[item.qid] = readResponse(item);
-        renderPanel();
+        updateStatus();
       });
     });
 
     on(root, "click", (e) => {
       run(() => {
         const btn = (e.target as HTMLElement).closest("button");
-        if (!btn) return;
-        if (btn === backBtn) {
-          if (state.current > 0) goTo(state.current - 1);
-          return;
-        }
-        if (btn === nextBtn) {
-          if (state.current < items.length - 1) goTo(state.current + 1);
-          return;
-        }
-        if (btn === finishBtn) {
-          finish();
-          return;
-        }
-        if (btn === markBtn) {
-          const item = at(state.current);
-          if (!item) return;
-          if (state.marked.has(item.qid)) state.marked.delete(item.qid);
-          else state.marked.add(item.qid);
-          renderPanel();
-          live.textContent = `Question ${state.current + 1} marked for review.`;
-          return;
-        }
-        const paletteIndex = paletteButtons.findIndex((entry) => entry.btn === btn);
-        if (paletteIndex !== -1) {
-          goTo(paletteIndex);
-          return;
-        }
-        if (btn.hasAttribute("data-demo-retry")) {
-          tryAgain();
-        }
+        if (btn === scoreBtn && !scoreBtn.disabled) score();
       });
     });
 
-    // The one custom keyboard binding (§3.6): Enter advances, or finishes
-    // on the last question. Guarded so it never double-fires a native
-    // button or link activation (§2.4's "Enter guard").
-    on(root, "keydown", (e) => {
-      run(() => {
-        if (e.key !== "Enter") return;
-        const target = e.target as HTMLElement;
-        if (target.closest("button, a")) return;
-        if (!target.closest("[data-demo-q]")) return;
-        e.preventDefault();
-        if (state.current < items.length - 1) goTo(state.current + 1);
-        else finish();
-      });
-    });
+    // §2.8-equivalent: once the island is live, Score is the real control;
+    // the no-JavaScript sentence is no longer the honest description.
+    const nojs = root.querySelector<HTMLElement>("[data-demo-nojs]");
+    if (nojs) nojs.hidden = true;
 
-    renderPanel();
+    updateStatus();
   });
 }
 

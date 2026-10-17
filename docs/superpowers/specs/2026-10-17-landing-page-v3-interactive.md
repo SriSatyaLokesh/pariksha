@@ -29,6 +29,7 @@ sourcing rule, the prose shape, the invariants.
 8. [Left to the implementer](#8-left-to-the-implementer)
 9. [Where the three plans conflict, and the call](#9-where-the-three-plans-conflict-and-the-call)
 10. [Rejected review findings](#10-rejected-review-findings)
+11. [v4 amendment — the three-card hero](#11-v4-amendment--the-three-card-hero)
 
 ---
 
@@ -209,7 +210,7 @@ reshape `packages/core/src/grade/text.ts` to make a marketing page smaller.
 
 | Artefact | Budget | Measured where |
 | --- | ---: | --- |
-| The island, minified | **≤ 10 KB** | CI, printed in the build log (`I-2`) |
+| The island, minified | **≤ 14 KB** (v4, §11 — was ≤ 10 KB) | CI, printed in the build log (`I-2`) |
 | …of which `@pariksha/core` | ~2.2 KB | informational; recorded in the PR |
 | `dist/index.html`, uncompressed | **≤ 46 KB** | `P2`, amended (§5); derived in §4.9 |
 | HTML + island + CSS | **≤ 86 KB** | informational budget; fonts excluded |
@@ -1209,7 +1210,7 @@ own acceptance-criterion numbers is talking to a contributor, not a reader.
 | Artefact | v3 | v2 / today | Rule |
 | --- | ---: | ---: | --- |
 | `dist/index.html`, uncompressed | **≤ 46 KB** | 100 KB / 53.4 KB | `P2` amended. See the note below: 40 KB was set before anyone measured what a three-question exam costs in prerendered HTML |
-| The island, minified | **≤ 10 KB** | — | D1 |
+| The island, minified | **≤ 14 KB** (v4, §11) | — | D1 |
 | HTML + island + CSS | **≤ 86 KB** | 83.8 KB | CSS should shrink — M-1's and M-2's mock rules and S9's ledger grid rules all go — against new rules for the demo's interactive states, which are the most stateful thing on the page. Fonts excluded |
 | Content bands | **8** + footer | 11 + footer | V2 |
 | Code blocks | **4** — `CB-1a` (hero), CB-1, CB-2, CB-4 | 6 | CB-3 and CB-5 deleted; CB-6 dissolves into one prose sentence in the demo's result panel; `CB-1a` is the hero's four-line excerpt (§3.8) |
@@ -1268,7 +1269,7 @@ Anything not listed is unchanged and binding.
 
 | id | Change |
 | --- | --- |
-| **P1** | **Amended.** Was: `dist/index.html` contains no `<script type="module">` and no `<script src="/assets/`; the page ships 0 bytes of JavaScript. Now: `dist/index.html` contains **exactly one** `<script type="module" src="/assets/…">`, which is the exam-demo island, and **no inline script of any kind**. The island is ≤ 10 KB minified. Nothing else about P1's reasoning changes: no framework runtime reaches the browser, no third-party origin is contacted, and the page's content is still entirely in the prerendered HTML |
+| **P1** | **Amended.** Was: `dist/index.html` contains no `<script type="module">` and no `<script src="/assets/`; the page ships 0 bytes of JavaScript. Now: `dist/index.html` contains **exactly one** `<script type="module" src="/assets/…">`, which is the exam-demo island, and **no inline script of any kind**. The island is ≤ 14 KB minified (v4, §11 — was ≤ 10 KB). Nothing else about P1's reasoning changes: no framework runtime reaches the browser, no third-party origin is contacted, and the page's content is still entirely in the prerendered HTML |
 | **P2** | **Amended.** 100 KB → **46 KB** uncompressed, island counted separately against its own budget. 40 KB was the figure before the band table was measured; §4.9 shows the derivation and the deletion order that replaces `P2`'s |
 | **P3** | Unchanged. One stylesheet, hashed, from `/assets/`. The island is a script, not a stylesheet |
 | **P4, P5** | Unchanged |
@@ -1319,7 +1320,7 @@ Anything not listed is unchanged and binding.
 | **T23** | **Amended.** The allow-list becomes `["Try three questions", "Questions and answers", "Read one real test, end to end.", "Footer"]`. `Try three questions` is new on the list and must be on it: the hero's demo panel carries an `h2`, it is declarative, and an earlier draft both omitted it and miscounted the page's `h2`s as six. The page carries **nine** `h2`s, of which four are allow-listed and **five** are question-shaped. The rule is **extended to the three absorbed `h3`s**: each ends in `?` and is followed by a `<p>` of 40–60 words whose first sentence contains `Pariksha` — including `What does Pariksha do?`, whose paragraph is **new copy** written to §4.3 item 5a, not S5's reprinted one |
 | **T25** | **Amended.** "Every code block" now means four, not six — `CB-1a`, `CB-1`, `CB-2`, `CB-4`. The `ProductMock` clause applies to **M-3 only**; M-1, M-2 and M-4 no longer exist, and the demo panel is explicitly exempt because `A8` no longer applies to it |
 | **T27** | **Amended in scope, not in shape.** The `SURFACE` map is rewritten again, wholesale: the demo's new selectors arrive (on cream) and M-1's, M-2's, M-4's and the ledger's leave. Budget for it as a real task; its three structural tests and its per-selector WCAG test are unchanged |
-| **T32** | **Amended, and converted from a ratio to an absolute offset.** Was: the byte index of B2's definitional sentence divided by the file length stays under 0.30. Now: **that byte index is under 13,500**, full stop. A ratio is the wrong instrument for this change and would have failed for the reason v3 exists — the numerator necessarily grows (V1 puts a 3,786-byte exam in the hero) while the denominator necessarily shrinks (V2 cuts three bands), so every later deletion pushes the test redder. The absolute figure is derived and stated: head and nav measure 6,632 today and do not change, which leaves **6,868 bytes for all of B1** against §4's derived 6,790, with 78 bytes of margin. Today the sentence sits at 9,322; 13,500 is 4.2 KB later, and that 4.2 KB is the measured cost of putting an exam and its source file in the hero. **T32 is still the hero's byte ceiling** and the test's comment should say so. If B1 grows, the cut order is §3.8's: the bridge band's `H-3`/`H-4` prose shortens first, then `CB-1a` loses its `scoring` line |
+| **T32** | **Amended, and converted from a ratio to an absolute offset.** Was: the byte index of B2's definitional sentence divided by the file length stays under 0.30. Now: **that byte index is under 13,500**, full stop. A ratio is the wrong instrument for this change and would have failed for the reason v3 exists — the numerator necessarily grows (V1 puts a 3,786-byte exam in the hero) while the denominator necessarily shrinks (V2 cuts three bands), so every later deletion pushes the test redder. The absolute figure is derived and stated: head and nav measure 6,632 today and do not change, which leaves **6,868 bytes for all of B1** against §4's derived 6,790, with 78 bytes of margin. Today the sentence sits at 9,322; 13,500 is 4.2 KB later, and that 4.2 KB is the measured cost of putting an exam and its source file in the hero. **T32 is still the hero's byte ceiling** and the test's comment should say so. If B1 grows, the cut order is §3.8's: the bridge band's `H-3`/`H-4` prose shortens first, then `CB-1a` loses its `scoring` line. **v4 (§11): the 6,790-byte B1 target this derivation rests on no longer describes the three-card hero** — the number is left unmoved pending a real measurement (not a guess) against the built Hero.tsx/CSS; §11 names the deletion order if it is breached |
 | **T33 – T40** | **New.** §6 |
 
 **Tests that die with their sections.** No `T`-numbered test disappears outright, but four existing
@@ -1594,3 +1595,129 @@ v2's own deletion order because the two other carriers of the privacy claim were
 the same change. §4.6 is unchanged by this revision; the only FAQ movement is in §4.9's overflow
 order, which now drains Q13 — the one pair the demo genuinely made redundant — and puts Q14 and Q6
 at the bottom of the list where that review said they belong.
+
+---
+
+## 11. v4 amendment — the three-card hero
+
+This section amends §3 (the hero) by id, the same way §1–§10 amend v2. Everything in §3 not named
+below stays as written — the chip, the lead's 30-word budget and dated status clause, the two
+secondary text links, the demo's state machine, scoring, keyboard and honesty rules (§2.4, §3.4–§3.9,
+§7). What changes is the hero's **layout**: one question stacked vertically becomes three questions
+side by side, and the product name moves out of the `h1` into a dedicated masthead.
+
+**Reference.** The owner reviewed a working, clickable prototype and approved it as-is:
+`.planning/landing/v4-hero-prototype.html`. Where this section and that file disagree, the
+prototype is the specification — it is a real document with real tokens, real questions from
+`examples/reasoning-aptitude/questions.json` and working scoring, not a sketch. The prototype
+carries chrome that does not ship: the font switcher, the `PROTOTYPE` badge, the next-band stub and
+its inline `<script>` scoring (real builds grade through `@pariksha/core` in the island, never
+inline — `P1`, `I-1`).
+
+### 11.1 Three cards, not one question
+
+The demo panel's single `<ol>` of three sequential questions (§3.2) becomes three cards in a row,
+each one question, answerable independently and all visible at once — no `Next`/`Back`/`Finish`
+sequencing, no palette as a jump list. Verbatim from `questions.json`, six points total:
+
+| Card | id | type | mode | points | control |
+| --- | --- | --- | --- | ---: | --- |
+| 1 | `LOG-001` | `single` | `all_or_nothing` | 2 | four radios, `name="LOG-001"` |
+| 2 | `QNT-004` | `multiple` | `partial` | 2 | five checkboxes |
+| 3 | `LOG-003` | `matching` | `partial` | 2 | four `<select>` rows, one per left item |
+
+This replaces §3.3's three-question table for the hero (`LOG-007` leaves the hero entirely — it was
+never load-bearing to any id outside §3.3, and nothing elsewhere cites it by number). The scoring
+rules of §2.4 still apply per card; a `Score my answers` control replaces `Finish` and scores all
+three at once rather than gating on a current question. **Two grading paths, not one**: `LOG-001`
+and `QNT-004` still go through `gradeChoice` (§2.5) unchanged, but `LOG-003` is a `matching`
+question, which `gradeChoice`/`ChoiceQuestion` cannot grade — it needs `gradeStructured` and
+`StructuredQuestion` from `packages/core/src/grade/structured.ts`. **`packages/core/src/index.ts`
+must export both, the same way §2.5 added `gradeChoice`/`ChoiceQuestion`**; this is the island
+assignment's change, not this document's, and is named here so the island budget rationale below is
+traceable to a real cause. `packages/core/package.json`'s `"sideEffects": false` (§2.5) already lets
+Rollup tree-shake `grade/choice.ts` and `grade/structured.ts` independently of `grade/text.ts`, so
+adding the second grading path does not reopen the door to `grade/text.ts`'s pattern compiler.
+
+### 11.2 One screen, never scrolling inside itself
+
+The hero is exactly one screen and does not scroll internally: `height: calc(100dvh - 64px)`
+(64px being the sticky nav), `min-height: 600px`, `overflow: hidden`, laid out as a three-row grid
+— head / cards / control bar — with the first scroll the visitor makes landing on the next band,
+not inside the hero. This replaces §3.1's fold arithmetic (the 400px stack counted "to the top of
+the first option"): with three cards and no scrolling, every card's content must fit the hero's
+fixed height at once rather than clearing a scroll-fold, which is a stricter constraint than §3.1's
+and supersedes it for the hero specifically. `scroll-snap-type: y proximity` on `body` (not
+`mandatory` — mandatory hijacks the wheel, and the owner saw and approved proximity), with
+`scroll-snap-align: start` on the hero `<section>` and on every band `<section>` after it.
+
+### 11.3 The masthead, and where the two scripts live now
+
+"Pariksha" moves out of the voltage-on-cream running text and becomes its own object: large, in the
+right-hand voltage space, set in **Kalam 700** — the owner's choice from eleven typeface candidates
+trialled in the prototype's font switcher (chunky, handwritten and brush families, plus the earlier
+drawn-shirorekha treatment). `apps/web/public/fonts/kalam-wordmark-700.woff2` (Kalam v18 weight 700,
+text-subset to the eight letters of "Pariksha", `unicode-range: U+50, U+61, U+68-69, U+6B, U+72-73`)
+and `apps/web/public/fonts/OFL-kalam.txt` (SIL OFL 1.1) ship alongside the existing Telugu and
+Devanagari wordmark slices, built the same way.
+
+**Telugu and Devanagari are not in the masthead.** The product name stands alone in English there.
+The two scripts are unchanged everywhere else they already appear — the nav wordmark
+(`పరీక్ష · परीक्षा` beside "Pariksha") and the footer — because A4's heading-order guarantee and the
+entity-reconciliation `alternateName`s in `jsonld.ts` (unaffected by this section; neither name the
+hero) have no dependency on where in the hero the English name sits.
+
+**The h1 stepped down, not away.** `h1` drops from v3's size to `clamp(24px, 1.6vw + 12px, 32px)` so
+the masthead leads visually; the element keeps its one-`h1`-per-page semantics and its SEO weight —
+`T19`'s budget and heading-order assertions are unaffected by a `font-size` change. The prototype's
+own `h1` text, `Run real exams you host yourself.` (33 characters, well under `T19`'s 45), drops the
+leading `Pariksha — ` the written contract's "product name first" rule (§3, opening paragraph) had
+required, on the reasoning that the name is now the loudest object on the screen half a second to
+its right rather than absent — but **that is a copy decision for whoever implements `Hero.tsx`, not
+settled here**: see `needs_from_others` in this assignment's report. `apps/web/test/landing.test.tsx`'s
+`HERO_HEADING` constant must match whatever is actually shipped, verbatim, the day the hero lands.
+
+### 11.4 Below 860px: a carousel, not a stack
+
+Below 860px the three cards stop being a grid row and become a horizontal, `x`-snap carousel at 86%
+of the column's width per card, so the next card's edge peeks (the visitor's cue that there is one).
+The palette pips (§3.5's three squares, now status dots rather than a jump list — §11.1 removes
+their navigation role) double as the carousel's pager. The masthead moves above the `h1` and its
+rule, and the stats line (question-type count, cost) drops rather than wrapping. This section
+replaces §3.10's 400px/320px rules for the hero; §3.10 continues to govern every other band.
+
+### 11.5 Size budget: the island moves from 10 KB to 14 KB
+
+`I-2`'s ceiling (§2.6, §4.9, §5 `P1`) moves from **≤ 10 KB minified to ≤ 14 KB minified**. The cause
+is §11.1, stated plainly so the number is never re-derived from nothing: three question types
+instead of one, rendered as three independent interactive cards instead of one sequential panel,
+graded through **two** grading functions (`gradeChoice` and, newly, `gradeStructured`) instead of
+one, with a third control shape — four bound `<select>` elements for the matching card — that v3's
+island never had to construct or read. `apps/web/test/prerender.test.ts`'s `T2` and `I-2` assertions
+are raised to 14 KB accordingly (this assignment). **`apps/web/test/island-artefact.test.ts` carries
+the same 10 KB ceiling and is not owned by this assignment** — see `needs_from_others`. If the built
+island lands under 14 KB, per this document's standing instruction (§2.5) the number should be
+tightened to the measured size plus 1 KB rather than left at the round figure; that measurement can
+only be taken once `exam-demo.ts` grades all three cards, so it is not taken here.
+
+### 11.6 What could not be verified here, and why
+
+`T32`'s 13,500-byte ceiling and `P2`'s 46 KB page-size gate (§4.9, §5) are **left numerically
+unchanged** by this amendment, not because they are known to still hold but because neither can be
+measured without the real three-card `Hero.tsx`, its CSS and the island's final size, none of which
+this assignment owns or built. Measured today, against the unmodified v3 (single-question) hero:
+`dist/index.html` is 43,705 bytes (42.68 KB, under the 46 KB gate with 2.3 KB to spare) and the
+island is 9.78 KB (under even the old 10 KB ceiling). Neither number says anything about the
+three-card hero — both are expected to grow, the first substantially, once the masthead, three
+cards and carousel CSS land. Whoever lands `Hero.tsx`/CSS/the island must run
+`pnpm --filter @pariksha/web exec vitest run test/prerender.test.ts` and either come in under both
+ceilings or report the measured figures and apply §4.9's fixed deletion order (B2's verification
+strip → B5's interoperability strip → FAQ Q13 → …) — never relax either number on an estimate.
+
+### Review
+
+- **2026-10-17.** The owner reviewed the three-card hero as a working, clickable prototype —
+  `.planning/landing/v4-hero-prototype.html` — rather than as a document, and approved it for
+  implementation as specified in A1–A6 of the build task. This section records that approval and
+  amends §3 accordingly; the prototype remains the reference for any point where this section and it
+  disagree.

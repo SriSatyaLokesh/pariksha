@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { Hero } from "../src/sections/s1-s3/Hero";
+import { Hero, HeroBridge } from "../src/sections/s1-s3/Hero";
 import { WhatIsPariksha } from "../src/sections/s1-s3/WhatIsPariksha";
 import { HowItWorks } from "../src/sections/s1-s3/HowItWorks";
 
@@ -80,31 +80,81 @@ describe("S1 — Hero", () => {
     ).toHaveAttribute("href", "#status");
   });
 
-  // §3.2/§2.8: the demo is prerendered as real HTML — one visible question,
-  // two more present but hidden — with the no-JavaScript sentence and its
-  // fallback link, never a score or verdict in the markup D5 forbids.
-  it("prerenders the demo with one visible question, two hidden, and the no-JS sentence", () => {
+  // v4 A1/D2: the demo is prerendered as real HTML — THREE cards, one per
+  // question type, all three visible, every option and every matching row in
+  // the markup. This is what a crawler and a visitor with JavaScript off get,
+  // and it is the most important assertion in this file.
+  it("prerenders three complete, visible question cards — one per type (A1, D2)", () => {
     const { container } = render(<Hero />);
-    const demo = container.querySelector("[data-demo]");
-    expect(demo).not.toBeNull();
-    const questions = container.querySelectorAll("[data-demo-q]");
-    expect(questions).toHaveLength(3);
-    expect(questions[0]).not.toHaveAttribute("hidden");
-    expect(questions[1]).toHaveAttribute("hidden");
-    expect(questions[2]).toHaveAttribute("hidden");
-    expect(
-      screen.getByText("Scoring, and questions 2 and 3, need JavaScript."),
-    ).toBeInTheDocument();
-    expect(container.querySelector("[data-demo-result]")).toHaveAttribute(
-      "hidden",
+    expect(container.querySelector("[data-demo]")).not.toBeNull();
+
+    const cards = container.querySelectorAll("[data-demo-card]");
+    expect(cards).toHaveLength(3);
+    for (const card of Array.from(cards)) {
+      expect(card).not.toHaveAttribute("hidden");
+    }
+    expect(Array.from(cards).map((c) => c.getAttribute("data-qid"))).toEqual([
+      "LOG-001",
+      "QNT-004",
+      "LOG-003",
+    ]);
+
+    // card 1 — single choice, four radios
+    const single = container.querySelectorAll('input[name="LOG-001"][type="radio"]');
+    expect(single).toHaveLength(4);
+    expect(container.textContent).toMatch(/3, 7, 15, 31, 63, ?/);
+    for (const v of ["95", "117", "127", "131"]) {
+      expect(screen.getByText(v)).toBeInTheDocument();
+    }
+
+    // card 2 — select all that apply, five checkboxes
+    const multiple = container.querySelectorAll(
+      'input[name="QNT-004"][type="checkbox"]',
     );
+    expect(multiple).toHaveLength(5);
+    for (const v of ["114", "128", "222", "345", "432"]) {
+      expect(screen.getByText(v)).toBeInTheDocument();
+    }
+
+    // card 3 — matching, four selects, each offering all four rules
+    const selects = container.querySelectorAll("select[data-demo-match]");
+    expect(selects).toHaveLength(4);
+    for (const sel of Array.from(selects)) {
+      // four rules plus the empty "Choose a rule…" placeholder
+      expect(sel.querySelectorAll("option")).toHaveLength(5);
+      expect(sel.getAttribute("data-left")).toBeTruthy();
+    }
+    expect(screen.getByText("Match each series to the rule that generates it.")).toBeInTheDocument();
+  });
+
+  // The control bar is prerendered and inert: three pips, the count, a real
+  // disabled button the island enables, and the sentence saying what needs
+  // JavaScript. D5: no score, verdict or result anywhere in the markup.
+  it("prerenders an inert control bar and no result of any kind (D5)", () => {
+    const { container } = render(<Hero />);
+    expect(container.querySelectorAll("[data-demo-pip]")).toHaveLength(3);
+    expect(container.querySelector("[data-demo-count]")).toHaveTextContent(
+      "0 of 3 answered",
+    );
+
+    const button = container.querySelector("[data-demo-score-btn]");
+    expect(button).not.toBeNull();
+    expect(button).toBeDisabled();
+    expect(button?.tagName).toBe("BUTTON");
+
+    expect(container.querySelector("[data-demo-score]")).toHaveAttribute("hidden");
+    for (const verdict of Array.from(container.querySelectorAll("[data-demo-verdict]"))) {
+      expect(verdict).toHaveAttribute("hidden");
+      expect(verdict.textContent).toBe("");
+    }
+    expect(container.querySelector("[data-demo-nojs]")).not.toBeNull();
     expect(container.textContent).not.toMatch(/You scored/);
   });
 
   // §3.8: the bridge band carries CB-1a and the key-never-reaches-the-
   // browser honesty prose, prerendered and always visible.
   it("carries the bridge band's CB-1a excerpt and honesty prose", () => {
-    const { container } = render(<Hero />);
+    const { container } = render(<HeroBridge />);
     expect(
       screen.getByText("The three questions above are this file."),
     ).toBeInTheDocument();

@@ -115,6 +115,34 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // clear 4.5:1 on voltage in any colour (see components.css).
   ".hero-text-link": "cream",
 
+  // ---- components.css: the v4 three-card hero (A1) ----------------------
+  // The masthead is cream type straight on the hero's voltage fill — it is
+  // the wordmark at 44px and up, so the 24px+ rule DESIGN.md sets for
+  // cream-on-voltage is met with room to spare.
+  ".hero-masthead": "voltage",
+
+  // Each card is its own cream plane on the voltage field, so everything
+  // inside one renders on cream — except the option rows and the matching
+  // selects, which set their own canvas fill.
+  ".exam-card": "cream",
+  ".exam-card__bar": "cream",
+  ".exam-card__points": "cream",
+  ".exam-card__match-key": "cream",
+  ".exam-card__match-row select": "canvas",
+
+  // The control bar sits on voltage. Its small type is cream, which cannot
+  // reach 4.5:1 there at mono-sm — so every value it carries is also
+  // announced through a live region and drawn by a control that repeats it
+  // (the pips, the button label). The pip's filled state inverts to a cream
+  // plane, which is where its own small type is legible.
+  ".exam-demo__bar": "cream",
+  ".exam-demo__pip": "cream",
+  ".exam-demo__pip[data-on=\"1\"]": "voltage-deep",
+  ".exam-demo__count, .exam-demo__score, .exam-demo__nojs": "cream",
+  ".exam-demo__nojs": "cream",
+  ".exam-demo__button": "voltage-deep",
+  ".exam-demo__button[disabled]": "canvas",
+
   // ---- components.css: the hero demo and its bridge band (v3 §3) ---------
   // The demo is a cream card on the voltage field, so everything in the
   // panel — the prerendered half and everything the island builds into it
@@ -282,6 +310,29 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
 // supply exactly this and nothing else — foreground and surface are still
 // resolved independently, from the selector's own declarations.
 const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
+  // ---- the v4 three-card hero (A1) --------------------------------------
+  // Wrappers that set a colour for their subtree but no size of their own.
+  // Each entry names the SMALLEST type that colour actually paints, which
+  // is the conservative case for the threshold this test applies.
+  //
+  // .hero-masthead: cream for the whole block. Its smallest text is the
+  // stats row (mono-sm, 12px) — which is why the stats are hidden below
+  // 860px, where the masthead keeps only the 34px+ wordmark.
+  ".hero-masthead": { px: 44, weight: 700 },
+  // .exam-card: ink on the card's own cream fill. Its smallest text is the
+  // card bar's mono-sm label.
+  ".exam-card": { px: 12, weight: 400 },
+  // Same element as .exam-card__bar; only the colour changes.
+  ".exam-card__points": { px: 12, weight: 400 },
+  // .exam-demo__bar: cream on voltage, wrapping the pips and the count.
+  ".exam-demo__bar": { px: 12, weight: 400 },
+  ".exam-demo__pip": { px: 12, weight: 400 },
+  // The pip's filled state inverts to a cream plane; the digit is mono-sm.
+  '.exam-demo__pip[data-on="1"]': { px: 12, weight: 400 },
+  // Same element as .exam-demo__button; the disabled state changes colour
+  // and background only.
+  ".exam-demo__button[disabled]": { px: 16, weight: 500 },
+  ".exam-demo__nojs": { px: 12, weight: 400 },
   // Same element as .nav-link; only colour/background change on hover.
   ".nav-link:hover, .nav-link:focus-visible": { px: 16, weight: 500 },
   // Same element as .button-primary; only colour/background change.

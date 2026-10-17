@@ -98,3 +98,14 @@ a {
   outline-color: var(--color-cream);
   box-shadow: 0 0 0 3px rgb(from var(--color-cream) r g b / 0.25);
 }
+
+/* v4 A3: proximity, never mandatory. The hero and each band are snap
+   points, so the first scroll off a one-screen hero lands on the band
+   below — but a reader scrolling through prose is never grabbed. */
+body {
+  scroll-snap-type: y proximity;
+}
+
+.section {
+  scroll-snap-align: start;
+}
