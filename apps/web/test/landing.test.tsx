@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -13,51 +13,99 @@ const FONTS_CSS_PATH = resolve(__dirname, "../src/styles/fonts.css");
 const INDEX_HTML_PATH = resolve(__dirname, "../index.html");
 const ADMIN_HTML_PATH = resolve(__dirname, "../admin.html");
 
+const REPO = "https://github.com/SriSatyaLokesh/pariksha";
+const HERO_HEADING = "Pariksha — run real exams you host yourself.";
+
+// landing.css no longer carries any component's CSS inline (the rewrite for
+// docs/superpowers/specs/2026-10-17-landing-page-v2-design.md moved it into
+// components.css/blocks.css/sections-*.css, imported from the top of
+// landing.css) — so a test that wants "the effective stylesheet" has to
+// follow the @import chain itself rather than reading one file.
+function resolveStylesheet(entryPath: string, seen = new Set<string>()): string {
+  if (seen.has(entryPath)) return "";
+  seen.add(entryPath);
+  const css = readFileSync(entryPath, "utf8");
+  const dir = dirname(entryPath);
+  const imports = [...css.matchAll(/@import\s+["']([^"']+)["'];/g)].map(
+    (match) => match[1] ?? "",
+  );
+  const importedCss = imports
+    .map((target) => resolveStylesheet(resolve(dir, target), seen))
+    .join("\n");
+  const ownCss = css.replace(/@import\s+["'][^"']+["'];/g, "");
+  return `${importedCss}\n${ownCss}`;
+}
+
 describe("Landing", () => {
-  // The brief's sketch expects the h1 itself to contain "Pariksha", but the
-  // controller-authored copy (landing-content.md, which overrides the
-  // brief's test sketches) puts the product name in the nav wordmark and
-  // gives the h1 the hero sentence instead. This test asserts the real,
-  // verbatim structure: exactly one h1 with the hero headline, and the
-  // product name present elsewhere on the page.
-  it("renders exactly one h1 with the hero headline, and the product name on the page", () => {
+  // docs/superpowers/specs/2026-10-17-landing-page-v2-design.md §3 S1, T19:
+  // the h1 is a 45-character budget, not only a fixed string, so both the
+  // exact copy and the length survive a later edit independently.
+  it("renders exactly one h1 with the verbatim, budget-compliant hero heading", () => {
     render(<Landing />);
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]).toHaveTextContent(
-      "Run real exams on the internet, for free, on infrastructure you own.",
-    );
+    expect(headings[0]).toHaveTextContent(HERO_HEADING);
+    expect(HERO_HEADING.length).toBeLessThanOrEqual(45);
     expect(screen.getAllByText("Pariksha").length).toBeGreaterThan(0);
   });
 
-  it("has exactly one CTA-shaped link, the hero's worked-example link", () => {
-    render(<Landing />);
-    const ctas = screen.getAllByRole("link", { name: /start|deploy|try/i });
-    expect(ctas).toHaveLength(1);
-    expect(ctas[0]).toHaveAccessibleName("Start with the worked example →");
-    expect(ctas[0]).toHaveAttribute(
-      "href",
-      "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude",
+  // T20: (a) the first link inside .hero-section is the worked-example CTA,
+  // with no arrow in its accessible name (the arrow is aria-hidden); (b)
+  // every CTA-shaped link on the page — ButtonPrimary or ButtonSecondary —
+  // points at a github.com/SriSatyaLokesh/pariksha URL, so nothing on a
+  // pre-alpha page links to a product that does not exist yet.
+  it("the hero's first link is the worked-example CTA, and every CTA points at the real repo", () => {
+    const { container } = render(<Landing />);
+    const heroSection = container.querySelector(".hero-section");
+    expect(heroSection).not.toBeNull();
+    const firstHeroLink = within(heroSection as HTMLElement).getAllByRole(
+      "link",
+    )[0];
+    expect(firstHeroLink).toHaveAccessibleName(
+      "Start with the worked example",
     );
+    expect(firstHeroLink).toHaveAttribute(
+      "href",
+      `${REPO}/tree/main/examples/reasoning-aptitude`,
+    );
+
+    const ctaLinks = container.querySelectorAll(
+      "a.button-primary, a.button-secondary",
+    );
+    expect(ctaLinks.length).toBeGreaterThan(0);
+    for (const link of ctaLinks) {
+      expect(link.getAttribute("href")).toMatch(
+        /^https:\/\/github\.com\/SriSatyaLokesh\/pariksha/,
+      );
+    }
   });
 
+  // T21 (unchanged and binding, #3): the hero carries the hero-section
+  // class from the design system.
   it("the hero carries the hero-section class from the design system", () => {
     const { container } = render(<Landing />);
     expect(container.querySelector(".hero-section")).not.toBeNull();
   });
 
+  // T21 (#4): tokens.css defines the voltage colour the hero is wired to.
   it("tokens.css defines the voltage colour the hero is wired to", () => {
     const css = readFileSync(TOKENS_CSS_PATH, "utf8");
     expect(css).toMatch(/--color-voltage:\s*#e24c18;/);
   });
 
-  it("the stylesheet wires the hero background to the voltage token, not a literal", () => {
-    const css = readFileSync(LANDING_CSS_PATH, "utf8");
+  // T21 (#5) / the hard invariant (§7): the first .hero-section rule in the
+  // effective stylesheet stays flat and keeps the literal declaration
+  // background: var(--color-voltage) — never behind @supports/@layer/
+  // @container, which would silently bypass the contrast guard.
+  it("the effective stylesheet's first .hero-section rule is flat and wires the voltage token", () => {
+    const css = resolveStylesheet(LANDING_CSS_PATH);
     const heroRule = /\.hero-section\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
     expect(heroRule).not.toBe("");
     expect(heroRule).toMatch(/background:\s*var\(--color-voltage\)/);
   });
 
+  // T21 (#6): every font is self-hosted under /fonts/, never a third-party
+  // origin.
   it("every font is self-hosted under /fonts/, never a third-party origin", () => {
     const css = readFileSync(FONTS_CSS_PATH, "utf8");
     const sources = [...css.matchAll(/url\((["']?)(.*?)\1\)/g)].map(
@@ -70,11 +118,13 @@ describe("Landing", () => {
     expect(sources.some((source) => source.startsWith("http"))).toBe(false);
   });
 
+  // T21 (#7): index.html and admin.html both declare lang=en.
   it("index.html and admin.html both declare lang=en", () => {
     expect(readFileSync(INDEX_HTML_PATH, "utf8")).toMatch(/<html lang="en">/);
     expect(readFileSync(ADMIN_HTML_PATH, "utf8")).toMatch(/<html lang="en">/);
   });
 
+  // T21 (#8): the skip link survives.
   it("provides a skip-to-content link targeting the main landmark", () => {
     render(<Landing />);
     const skip = screen.getByRole("link", { name: /skip to content/i });
@@ -82,6 +132,7 @@ describe("Landing", () => {
     expect(document.getElementById("main-content")).not.toBeNull();
   });
 
+  // T21 (#9): heading order, no level skipped.
   it("has a sane heading order with no skipped level", () => {
     render(<Landing />);
     const headings = screen.getAllByRole("heading");
@@ -93,11 +144,13 @@ describe("Landing", () => {
     }
   });
 
+  // T21 (#10): zero [style] attributes anywhere in the rendered markup.
   it("has no inline style attributes anywhere in the rendered markup", () => {
     const { container } = render(<Landing />);
     expect(container.querySelectorAll("[style]")).toHaveLength(0);
   });
 
+  // T21 (#11): zero axe violations.
   it("is free of axe violations", async () => {
     const { container } = render(<Landing />);
     const results = await axe(container);
