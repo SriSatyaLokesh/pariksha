@@ -147,6 +147,47 @@ describe("gradeStructured", () => {
       expect(result.correct).toBe(false);
     });
 
+    // An unsupplied position is not a wrong position — the same rule
+    // `matching` applies to an omitted left item and `fill_blank` to an
+    // unfilled blank. Four fixtures: correct, partial, wrong, blank.
+    it("counts only supplied positions, so an unsubmitted tail is not wrong", () => {
+      const negative: OrderingQuestion = {
+        ...LOG_006,
+        scoring: { mode: "negative", points: 2, negative_fraction: 0.25 },
+      };
+
+      // correct: every position supplied, every one right.
+      const correct = gradeStructured(negative, { kind: "order", items: [...LOG_006.items] }, defaults);
+      expect(correct.parts).toEqual({ correct: 5, wrong: 0, total: 5 });
+      expect(correct.points).toBe(2);
+      expect(correct.correct).toBe(true);
+
+      // partial: the first three positions supplied and right, the last two
+      // never supplied. Nothing is wrong, so nothing is deducted.
+      const partial = gradeStructured(negative, { kind: "order", items: ["Abandon", "Abdomen", "Abide"] }, defaults);
+      expect(partial.parts).toEqual({ correct: 3, wrong: 0, total: 5 });
+      expect(partial.points).toBe(0);
+      expect(partial.correct).toBe(false);
+
+      // wrong: a position supplied with the wrong item costs the penalty.
+      const wrong = gradeStructured(negative, { kind: "order", items: ["Abdomen", "Abandon", "Abide"] }, defaults);
+      expect(wrong.parts).toEqual({ correct: 1, wrong: 2, total: 5 });
+      expect(wrong.points).toBe(-0.5);
+      expect(wrong.correct).toBe(false);
+
+      // blank: nothing supplied at all, nothing lost.
+      const blank = gradeStructured(negative, null, defaults);
+      expect(blank.parts).toEqual({ correct: 0, wrong: 0, total: 5 });
+      expect(blank.points).toBe(0);
+    });
+
+    it("under position, an unsubmitted tail scores only the supplied positions", () => {
+      const result = gradeStructured(LOG_006, { kind: "order", items: ["Abandon", "Abdomen", "Abide"] }, position);
+      // position: points * correct / total = 2 * 3 / 5 = 1.2
+      expect(result.parts).toEqual({ correct: 3, wrong: 0, total: 5 });
+      expect(result.points).toBe(1.2);
+    });
+
     it("under all_or_nothing, scores zero unless the whole sequence matches", () => {
       const allOrNothing: OrderingQuestion = {
         ...LOG_006,
