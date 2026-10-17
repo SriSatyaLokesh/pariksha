@@ -73,11 +73,20 @@ function evaluate(q: StructuredQuestion, r: ResponseValue | null): { answered: b
       if (r === null || r.kind !== "order" || r.items.length === 0) {
         return { answered: false, parts: { correct: 0, wrong: 0, total } };
       }
+      // Only positions the candidate actually supplied are counted. A
+      // position never submitted is unattempted, not wrong — the same rule
+      // `matching` applies to an omitted left item and `fill_blank` to an
+      // unfilled blank, so a partial submission costs the same under
+      // `negative` whatever the question type. `total` still spans every
+      // item, so the unsupplied ones still cost the credit they would have
+      // earned.
       let correct = 0;
-      for (let i = 0; i < total; i += 1) {
+      let wrong = 0;
+      for (let i = 0; i < r.items.length; i += 1) {
         if (r.items[i] === q.items[i]) correct += 1;
+        else wrong += 1;
       }
-      return { answered: true, parts: { correct, wrong: total - correct, total } };
+      return { answered: true, parts: { correct, wrong, total } };
     }
   }
 }

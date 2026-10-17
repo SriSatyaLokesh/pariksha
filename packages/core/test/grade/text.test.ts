@@ -224,6 +224,22 @@ describe("assertSafeRegex — permitted subset", () => {
     expect(() => assertSafeRegex("(?<year>\\d{4})")).not.toThrow();
   });
 
+  // `(`, `?` and `=` as literal members of a character class are not a
+  // lookahead: inside `[...]` they are three ordinary characters. The rest
+  // of the scanner is already inClass-aware; this check was not.
+  it("does not ban (?= , (?! , (?<= or (?<! inside a character class", () => {
+    expect(() => assertSafeRegex("[(?=]")).not.toThrow();
+    expect(() => assertSafeRegex("[(?!]")).not.toThrow();
+    expect(() => assertSafeRegex("x[(?<=]y")).not.toThrow();
+    // an escaped `]` inside the class must not end it early
+    expect(() => assertSafeRegex("[\\](?=]")).not.toThrow();
+  });
+
+  it("still bans a lookaround that follows a character class", () => {
+    expect(() => assertSafeRegex("[abc](?=x)")).toThrow(/lookahead|lookbehind/i);
+    expect(() => assertSafeRegex("[abc](?<=a)")).toThrow(/lookahead|lookbehind/i);
+  });
+
   // There was a test here asserting that `(a|a)+` — the round-1 bypass — is
   // *slow* when run unguarded, to show the rejection matters. It asserted a
   // lower bound on elapsed time, which measures the machine rather than this
@@ -295,6 +311,27 @@ describe("assertSafeRegex — accepted set is fast at the input cap (regression 
   });
 });
 
+// The compiled-pattern cache memoises both the safety verdict and the
+// compiled regex by pattern string. It changes no result — this is the
+// guard that keeps it that way: a rejected pattern must stay rejected after
+// a safe one is cached, distinct patterns must not collide, and a repeated
+// call must not drift (a cached RegExp with a stateful lastIndex would).
+describe("compiled-pattern cache", () => {
+  const regexBlank = (pattern: string) => ({ id: "b1", accepted: [pattern], match: "regex" as const });
+
+  it("returns the same verdict on repeated and interleaved calls", () => {
+    for (let i = 0; i < 3; i++) {
+      expect(matchBlank("42", regexBlank("[0-9]+"))).toBe(true);
+      expect(matchBlank("4x2", regexBlank("[0-9]+"))).toBe(false);
+      // unsafe: rejected every time, never matched from a stale entry
+      expect(matchBlank("aaa", regexBlank("(a|a)+"))).toBe(false);
+      // invalid syntax: likewise
+      expect(matchBlank("abc", regexBlank("(unclosed"))).toBe(false);
+      expect(matchBlank("abc", regexBlank("[a-c]{3}"))).toBe(true);
+    }
+  });
+});
+
 describe("gradeText", () => {
   it("grades QNT-001 (numeric, tolerance 0) exactly", () => {
     expect(gradeText(QNT_001, { kind: "number", value: 72 }, DEFAULTS).points).toBe(2);
@@ -325,6 +362,38 @@ describe("gradeText", () => {
 
     // A null response is blank: scores 0, never negative.
     expect(gradeText(QNT_005, null, DEFAULTS).points).toBe(0);
+  });
+
+  // A regex blank whose pattern puts `(`, `?` and `=` inside a character
+  // class — three literal members, not a lookahead. Four fixtures: correct,
+  // partial, wrong, blank.
+  it("grades a fill_blank whose regex uses (?= as literal character-class members", () => {
+    const q: Question = {
+      id: "PUNCT-001",
+      type: "fill_blank",
+      prompt: "Type any one of ( ? = in {{b1}}, and the answer to 6 x 7 in {{b2}}.",
+      blanks: [
+        { id: "b1", accepted: ["[(?=]"], match: "regex" },
+        { id: "b2", accepted: ["42"], match: "exact" },
+      ],
+      scoring: { mode: "partial", points: 2 },
+    };
+
+    // correct: both blanks right.
+    expect(gradeText(q, { kind: "blanks", values: { b1: "?", b2: "42" } }, DEFAULTS).points).toBe(2);
+
+    // partial: the regex blank right, the other left empty.
+    const partial = gradeText(q, { kind: "blanks", values: { b1: "(", b2: "" } }, DEFAULTS);
+    expect(partial.parts).toEqual({ correct: 1, wrong: 0, total: 2 });
+    expect(partial.points).toBe(1);
+
+    // wrong: a character that is not a member of the class.
+    const wrong = gradeText(q, { kind: "blanks", values: { b1: "x", b2: "42" } }, DEFAULTS);
+    expect(wrong.parts).toEqual({ correct: 1, wrong: 1, total: 2 });
+    expect(wrong.points).toBe(0);
+
+    // blank: no response at all.
+    expect(gradeText(q, null, DEFAULTS).points).toBe(0);
   });
 
   it("a blank response scores 0 and never loses points, even under negative mode", () => {

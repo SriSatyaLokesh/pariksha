@@ -196,9 +196,39 @@ function hasBackreference(pattern: string): boolean {
   return false;
 }
 
-/** Whether `pattern` contains a lookahead or lookbehind group. */
+/**
+ * Whether `pattern` contains a lookahead or lookbehind group.
+ *
+ * Scanned character by character rather than with a regex over the raw
+ * string, because `(`, `?` and `=` inside a character class are literal
+ * members of that class, not a lookahead: `[(?=]` matches any one of
+ * those three characters and was being rejected as `(?=`. Every other
+ * scanner in this file is already `inClass`-aware; this one was not.
+ */
 function hasLookaround(pattern: string): boolean {
-  return /\(\?=|\(\?!|\(\?<=|\(\?<!/.test(pattern);
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "\\") {
+      // An escaped character is never structure, inside a class or out.
+      i++;
+      continue;
+    }
+    if (inClass) {
+      if (c === "]") inClass = false;
+      continue;
+    }
+    if (c === "[") {
+      inClass = true;
+      continue;
+    }
+    if (c === "(" && pattern[i + 1] === "?") {
+      const third = pattern[i + 2];
+      if (third === "=" || third === "!") return true;
+      if (third === "<" && (pattern[i + 3] === "=" || pattern[i + 3] === "!")) return true;
+    }
+  }
+  return false;
 }
 
 // --- Recursive regex structure -------------------------------------------
@@ -423,6 +453,57 @@ function validateAlternation(node: Alternation): void {
 }
 
 /**
+ * How many distinct patterns `compilePattern` will remember. Grading runs
+ * the same handful of patterns over and over — every candidate, every
+ * blank, every attempt — so the cache is nearly always warm after the
+ * first attempt, and a bank with more than this many *distinct* regex
+ * blanks simply stops adding new entries rather than growing without
+ * bound. Nothing is evicted: an uncached pattern still grades correctly,
+ * it just pays the parse-and-compile cost it paid before this cache
+ * existed. At `MAX_REGEX_LENGTH` (200) per key this ceiling is well under
+ * a megabyte of keys plus compiled objects.
+ *
+ * ponytail: a plain size cap, not an LRU. Swap in eviction only if a real
+ * bank is ever found with more than 500 distinct regex blanks *and* the
+ * uncached ones measurably matter.
+ */
+const PATTERN_CACHE_LIMIT = 500;
+
+/** Pattern string -> compiled regex, or null if the pattern is unsafe or invalid. */
+const patternCache = new Map<string, RegExp | null>();
+
+/**
+ * The compiled form of an author-supplied `regex` pattern, or `null` if it
+ * is unsafe or not valid regex syntax.
+ *
+ * This never throws, regardless of what `assertSafeRegex` does: a pattern
+ * can reach grading without having passed it (stored before that check
+ * existed, or a future gap in it), and an author's typo must not crash
+ * grading for every attempt that touches the question. `assertSafeRegex`
+ * at import gives the author the good error message; this is the
+ * unconditional guarantee for grading — belt and braces, not either/or.
+ *
+ * The verdict is memoised by pattern string because both halves of it —
+ * the safety parse and the compile — are pure functions of that string,
+ * and grading repeats them for every candidate, every blank, every
+ * attempt.
+ */
+function compilePattern(pattern: string): RegExp | null {
+  // `null` is a real cached verdict ("rejected"), so ask whether the key
+  // is present rather than whether the value is truthy.
+  if (patternCache.has(pattern)) return patternCache.get(pattern) ?? null;
+  let compiled: RegExp | null;
+  try {
+    assertSafeRegex(pattern);
+    compiled = new RegExp(`^(?:${pattern})$`, "u");
+  } catch {
+    compiled = null;
+  }
+  if (patternCache.size < PATTERN_CACHE_LIMIT) patternCache.set(pattern, compiled);
+  return compiled;
+}
+
+/**
  * Whether `given` matches one of `blank.accepted`, under `blank.match`
  * (default `case_insensitive`). Both sides are normalised to NFC and
  * trimmed before comparing: text can arrive decomposed from one keyboard
@@ -451,20 +532,8 @@ export function matchBlank(given: string, blank: Blank): boolean {
     // thrown — so a candidate pasting an essay into a blank scores as a
     // non-match instead of breaking grading for everyone else's attempt.
     if (candidate.length > MAX_BLANK_INPUT_LENGTH) return false;
-    try {
-      // This function must never throw, regardless of what `assertSafeRegex`
-      // does: a pattern can reach grading without having passed it (stored
-      // before this check existed, or a future gap in it), and an author's
-      // typo must not crash grading for every attempt that touches the
-      // question. `assertSafeRegex` at import gives the author the good
-      // error message; this is the unconditional guarantee for grading —
-      // belt and braces, not either/or.
-      assertSafeRegex(accepted);
-      const re = new RegExp(`^(?:${accepted})$`, "u");
-      return re.test(candidate);
-    } catch {
-      return false;
-    }
+    const re = compilePattern(accepted);
+    return re !== null && re.test(candidate);
   });
 }
 
