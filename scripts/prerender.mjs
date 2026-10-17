@@ -1,0 +1,241 @@
+// Prerenders the landing page to static HTML at build time (design contract
+// §5, SEO-1 through SEO-6). Runs after `vite build` — see
+// apps/web/package.json's "build" script.
+//
+// Three jobs, in order:
+//   1. SSR-bundle apps/web/src/entry-prerender.tsx with Vite, so its JSX/TS
+//      and its "./routes/landing" + "./seo/*" imports resolve in Node, then
+//      import the built module for its exports.
+//   2. Replace dist/index.html's `<div id="root"></div>` with the rendered
+//      markup, strip the client `<script type="module">`/modulepreload tags
+//      main.tsx's bundle left behind (SEO-2: the page ships 0 bytes of JS),
+//      and inject the <head> payload + JSON-LD that apps/web/src/seo/ builds.
+//   3. Write dist/robots.txt, dist/llms.txt and dist/sitemap.xml.
+//
+// No new dependency: react-dom/server ships with react-dom, and the Vite
+// build this reuses is already a devDependency.
+import { readFile, writeFile, rm, mkdtemp } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { resolve, dirname, join } from "node:path";
+import { fileURLToPath, pathToFileURL, URL } from "node:url";
+import process from "node:process";
+
+const __filename = fileURLToPath(import.meta.url);
+export const REPO_ROOT = resolve(dirname(__filename), "..");
+export const WEB_ROOT = resolve(REPO_ROOT, "apps/web");
+
+// "vite" is a devDependency of apps/web, not of the repo root — pnpm's
+// workspace layout does not hoist it there, so a static `import "vite"` from
+// this repo-root file fails to resolve (and, loaded under Vitest, would also
+// be rewritten by Vite's own import-analysis transform before Node ever sees
+// it). Resolve and import it the way Node would if this file lived inside
+// apps/web; the computed (non-literal) specifier below is why that transform
+// leaves this import alone.
+const viteEntry = createRequire(resolve(WEB_ROOT, "package.json")).resolve(
+  "vite",
+);
+const { build } = await import(pathToFileURL(viteEntry).href);
+
+/**
+ * SEO-6 / OQ-1: there is no placeholder origin. Throws when `raw` is unset
+ * or is not a bare absolute `https` origin (no path, query or hash beyond
+ * `/`). Returns the origin with no trailing slash (e.g. "https://pariksha.example").
+ */
+export function resolveSiteUrl(raw) {
+  if (!raw) {
+    throw new Error(
+      'SITE_URL is not set. Pass the real absolute https origin the build ' +
+        '(design contract §10, OQ-1) — e.g. SITE_URL="https://<name>.workers.dev" ' +
+        'pnpm build. There is no fallback: a canonical pointing at a host that ' +
+        'does not serve the page is worse than no canonical.',
+    );
+  }
+  let url;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error(`SITE_URL "${raw}" is not a valid URL.`);
+  }
+  if (url.protocol !== "https:") {
+    throw new Error(`SITE_URL "${raw}" must be an https:// origin.`);
+  }
+  if (url.pathname !== "/" || url.search || url.hash) {
+    throw new Error(
+      `SITE_URL "${raw}" must be a bare origin with no path, query or hash (e.g. "https://pariksha.example").`,
+    );
+  }
+  return url.origin;
+}
+
+// SEO-19's DATE_MODIFIED: the last commit date touching the page's source,
+// falling back to the build date where .git is absent (a source tarball,
+// some build containers) — a hint, not a fact worth failing a deploy over.
+function getDateModified(webRoot) {
+  try {
+    const out = execFileSync(
+      "git",
+      ["log", "-1", "--format=%cs", "--", "src", "index.html"],
+      { cwd: webRoot, encoding: "utf8" },
+    ).trim();
+    if (out) return out;
+  } catch {
+    // no .git, or git not on PATH
+  }
+  return new Date().toISOString().slice(0, 10);
+}
+
+function escapeAttr(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
+}
+
+// Vite's built `<script type="module" ...></script>` and any
+// `<link rel="modulepreload" ...>` it emits for the (now-unused) client
+// entry. Stripped from the already-built HTML rather than from
+// apps/web/index.html's source, so this script is the one place that owns
+// "ships 0 bytes of JS" regardless of whether the client entry is still
+// wired in index.html.
+function stripClientAssets(page) {
+  return page
+    .replace(/\s*<script[^>]*\btype="module"[^>]*>\s*<\/script>/g, "")
+    .replace(/\s*<link[^>]*\brel="modulepreload"[^>]*>/g, "");
+}
+
+function injectHead(page, head, jsonLd) {
+  if (head.lang) {
+    page = page.replace(/<html lang="[^"]*"/, `<html lang="${head.lang}"`);
+  }
+  if (head.title) {
+    page = page.replace(
+      /<title>[^<]*<\/title>/,
+      `<title>${escapeAttr(head.title)}</title>`,
+    );
+  }
+
+  const tags = [
+    `<meta name="description" content="${escapeAttr(head.description)}">`,
+    `<link rel="canonical" href="${escapeAttr(head.canonical)}">`,
+    ...Object.entries(head.openGraph ?? {}).map(
+      ([property, content]) =>
+        `<meta property="${property}" content="${escapeAttr(content)}">`,
+    ),
+    ...Object.entries(head.twitter ?? {}).map(
+      ([name, content]) =>
+        `<meta name="${name}" content="${escapeAttr(content)}">`,
+    ),
+    `<meta name="theme-color" content="${escapeAttr(head.themeColor.light)}" media="(prefers-color-scheme: light)">`,
+    `<meta name="theme-color" content="${escapeAttr(head.themeColor.dark)}" media="(prefers-color-scheme: dark)">`,
+    ...(head.icons ?? []).map((icon) => {
+      const sizes = icon.sizes ? ` sizes="${escapeAttr(icon.sizes)}"` : "";
+      const type = icon.type ? ` type="${escapeAttr(icon.type)}"` : "";
+      return `<link rel="${escapeAttr(icon.rel)}" href="${escapeAttr(icon.href)}"${sizes}${type}>`;
+    }),
+    // SEO-19: the HTML spec stops processing a ld+json block before it is
+    // ever executed, so only `</script>` inside the JSON needs escaping.
+    `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`,
+  ];
+
+  return page.replace("</head>", `  ${tags.join("\n  ")}\n</head>`);
+}
+
+/**
+ * Runs the whole prerender against an already-built `outDir` (a prior
+ * `vite build` with the normal two-entry config must have produced
+ * `${outDir}/index.html`). `outDir` is caller-supplied so tests can point it
+ * at a throwaway temp directory instead of the shared `apps/web/dist` other
+ * agents may be building into concurrently.
+ */
+export async function runPrerender({ webRoot, outDir, siteUrl }) {
+  const origin = resolveSiteUrl(siteUrl);
+
+  // A scratch dir for the SSR sub-build, nested *inside* webRoot — never
+  // under the caller's `outDir` — for two reasons: (1) the built
+  // entry-prerender.mjs imports bare specifiers ("react-dom/server", "react")
+  // that only resolve by walking up through apps/web/node_modules, which a
+  // `outDir` outside apps/web (a test's temp directory, say) has no path to;
+  // (2) a random suffix under webRoot means two concurrent runs (another
+  // agent, a test, a real build) never share — or empty — the same directory.
+  const ssrOutDir = await mkdtemp(join(webRoot, ".prerender-"));
+
+  try {
+    // SSR-bundle only the landing tree (+ the seo/ builders it re-exports),
+    // so JSX/TS/imports resolve in Node. `build.ssr` as a string wins over
+    // vite.config.ts's two-entry `rollupOptions.input` (Vite resolves the
+    // SSR input from `build.ssr` first), so the shared config is reused
+    // as-is.
+    await build({
+      root: webRoot,
+      configFile: resolve(webRoot, "vite.config.ts"),
+      logLevel: "warn",
+      build: {
+        ssr: resolve(webRoot, "src/entry-prerender.tsx"),
+        outDir: ssrOutDir,
+        emptyOutDir: true,
+        ssrEmitAssets: false,
+        rollupOptions: {
+          // Force a predictable, always-ESM filename: apps/web/package.json
+          // has no "type": "module", so a bare ".js" output could otherwise
+          // resolve as CommonJS depending on Vite's module-type detection.
+          output: { entryFileNames: "entry-prerender.mjs" },
+        },
+      },
+    });
+
+    const entryUrl = pathToFileURL(
+      resolve(ssrOutDir, "entry-prerender.mjs"),
+    ).href;
+    const {
+      html,
+      buildHead,
+      buildRobotsTxt,
+      buildLlmsTxt,
+      buildSitemapXml,
+      buildJsonLd,
+    } = await import(entryUrl);
+
+    const indexPath = resolve(outDir, "index.html");
+    let page = await readFile(indexPath, "utf8");
+
+    page = page.replace(
+      '<div id="root"></div>',
+      `<div id="root">${html}</div>`,
+    );
+    // SEO-1's guard: fails the build if the string replace above ever
+    // silently no-ops, rather than shipping an empty page.
+    if (!page.includes("<h1")) {
+      throw new Error(
+        'prerender produced no markup: <div id="root"></div> was not found ' +
+          "(or replaced with empty content) in dist/index.html",
+      );
+    }
+
+    page = stripClientAssets(page);
+
+    const dateModified = getDateModified(webRoot);
+    const head = buildHead(origin);
+    const jsonLd = buildJsonLd({ siteUrl: origin, dateModified });
+    page = injectHead(page, head, jsonLd);
+
+    await writeFile(indexPath, page);
+    await writeFile(resolve(outDir, "robots.txt"), buildRobotsTxt(origin));
+    await writeFile(resolve(outDir, "llms.txt"), buildLlmsTxt(origin));
+    await writeFile(
+      resolve(outDir, "sitemap.xml"),
+      buildSitemapXml(origin, dateModified),
+    );
+  } finally {
+    await rm(ssrOutDir, { recursive: true, force: true });
+  }
+}
+
+if (process.argv[1] === __filename) {
+  await runPrerender({
+    webRoot: WEB_ROOT,
+    outDir: resolve(WEB_ROOT, "dist"),
+    siteUrl: process.env.SITE_URL,
+  });
+}
