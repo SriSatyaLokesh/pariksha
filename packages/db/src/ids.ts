@@ -1,8 +1,19 @@
 // Prefixed identifiers. Every row in every table is addressed by one, and the
 // prefix is part of the value so a stray ID in a log or a URL says what it is.
 
-/** One prefix per entity in the PRD's data model. */
+/**
+ * One prefix per table.
+ *
+ * The first nine are the PRD's own list, for the entities an organiser or a
+ * candidate ever sees. The rest address the child tables — the PRD describes
+ * those by their natural key, but every table here carries a surrogate `id`
+ * so one repository shape fits all of them, and each needs a prefix of its
+ * own: an ID that reads `qst_` for a row in `response` is worse than an
+ * unprefixed one, because it is confidently wrong to whoever is reading a log
+ * to find a candidate's lost answer.
+ */
 export const ID_PREFIXES = [
+  // The PRD's list.
   "wsp",
   "usr",
   "tst",
@@ -12,6 +23,15 @@ export const ID_PREFIXES = [
   "att",
   "key",
   "whk",
+  // The child tables.
+  "mbr", // membership
+  "ver", // test_version
+  "set", // set
+  "rsp", // response
+  "evt", // event
+  "snp", // snapshot
+  "rev", // review
+  "aud", // audit_log
 ] as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[number];

@@ -22,12 +22,34 @@ export type Dialect = "d1" | "sqlite" | "pg";
  * asking the database what it contains.
  */
 interface RawOps {
-  /** Run one or more statements for their effect. */
+  /** Run one or more statements for their effect. No parameters: migrations only. */
   exec(sql: string): Promise<void>;
-  /** Run one statement and return its rows. */
+  /** Run one statement with no parameters and return its rows. */
   all<T = Record<string, unknown>>(sql: string): Promise<T[]>;
+  /**
+   * Run one parameterised statement and return its rows. `?` marks a
+   * parameter in every dialect; the Postgres client rewrites them to `$n`.
+   * Every value a caller supplies goes through here — identifiers are written
+   * as text, values are never interpolated.
+   */
+  query<T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]>;
+  /** Run one parameterised statement for its effect, and say how many rows it changed. */
+  run(sql: string, params?: unknown[]): Promise<{ changes: number }>;
+  /**
+   * Encode a value bound for a JSON column. SQLite stores JSON as text and
+   * Postgres as jsonb, so the two drivers want different things — the one
+   * place that difference is allowed to live.
+   */
+  jsonParam(value: unknown): unknown;
+  /** Decode a value read from a JSON column. */
+  jsonValue<T = unknown>(raw: unknown): T;
   /** Release the underlying connection. A no-op on D1. */
   close(): Promise<void>;
+}
+
+/** SQLite and D1 store JSON as text; Postgres hands back a parsed value. */
+function parseJsonText<T>(raw: unknown): T {
+  return typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
 }
 
 export type DbClient =
@@ -46,6 +68,14 @@ export function sqliteClient(path: string): DbClient {
     drizzle: drizzleSqlite(sqlite),
     exec: (sql) => Promise.resolve(void sqlite.exec(sql)),
     all: <T>(sql: string) => Promise.resolve(sqlite.prepare(sql).all() as T[]),
+    query: <T>(sql: string, params: unknown[] = []) =>
+      Promise.resolve(sqlite.prepare(sql).all(...params) as T[]),
+    run: (sql, params = []) => {
+      const { changes } = sqlite.prepare(sql).run(...params);
+      return Promise.resolve({ changes });
+    },
+    jsonParam: (value) => JSON.stringify(value),
+    jsonValue: parseJsonText,
     close: () => {
       sqlite.close();
       return Promise.resolve();
@@ -65,6 +95,22 @@ export function d1Client(binding: D1Database): DbClient {
       const { results } = await binding.prepare(sql).all<T>();
       return results;
     },
+    query: async <T>(sql: string, params: unknown[] = []) => {
+      const { results } = await binding
+        .prepare(sql)
+        .bind(...params)
+        .all<T>();
+      return results;
+    },
+    run: async (sql, params = []) => {
+      const { meta } = await binding
+        .prepare(sql)
+        .bind(...params)
+        .run();
+      return { changes: meta.changes ?? 0 };
+    },
+    jsonParam: (value) => JSON.stringify(value),
+    jsonValue: parseJsonText,
     // D1 is a binding, not a connection: there is nothing to release.
     close: () => Promise.resolve(),
   };
@@ -81,12 +127,38 @@ export function pgClient(url: string): DbClient {
     },
     all: async <T>(statement: string) =>
       (await sql.unsafe(statement)) as unknown as T[],
+    query: async <T>(statement: string, params: unknown[] = []) =>
+      (await sql.unsafe(toNumberedPlaceholders(statement), params as never[])) as unknown as T[],
+    run: async (statement, params = []) => {
+      const result = await sql.unsafe(
+        toNumberedPlaceholders(statement),
+        params as never[],
+      );
+      return { changes: result.count };
+    },
+    // postgres.js serialises a JS value into jsonb; handing it a JSON string
+    // would store the string itself, quotes and all.
+    jsonParam: (value) => sql.json(value as never),
+    jsonValue: <T>(raw: unknown) => parseJsonText<T>(raw),
     close: () => sql.end(),
   };
 }
 
 export function closeClient(db: DbClient): Promise<void> {
   return db.close();
+}
+
+/**
+ * Repository SQL is written once with `?` placeholders, because SQLite and D1
+ * both take them. Postgres numbers its parameters instead, so they are
+ * rewritten here — the only dialect difference in the query path, and it is
+ * mechanical. A `?` inside a string literal would be rewritten wrongly, which
+ * is why no repository function puts one there: values are bound, never
+ * written into the SQL.
+ */
+function toNumberedPlaceholders(sql: string): string {
+  let n = 0;
+  return sql.replace(/\?/g, () => `$${++n}`);
 }
 
 /**
