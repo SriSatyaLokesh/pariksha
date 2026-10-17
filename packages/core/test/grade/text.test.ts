@@ -311,6 +311,27 @@ describe("assertSafeRegex — accepted set is fast at the input cap (regression 
   });
 });
 
+// The compiled-pattern cache memoises both the safety verdict and the
+// compiled regex by pattern string. It changes no result — this is the
+// guard that keeps it that way: a rejected pattern must stay rejected after
+// a safe one is cached, distinct patterns must not collide, and a repeated
+// call must not drift (a cached RegExp with a stateful lastIndex would).
+describe("compiled-pattern cache", () => {
+  const regexBlank = (pattern: string) => ({ id: "b1", accepted: [pattern], match: "regex" as const });
+
+  it("returns the same verdict on repeated and interleaved calls", () => {
+    for (let i = 0; i < 3; i++) {
+      expect(matchBlank("42", regexBlank("[0-9]+"))).toBe(true);
+      expect(matchBlank("4x2", regexBlank("[0-9]+"))).toBe(false);
+      // unsafe: rejected every time, never matched from a stale entry
+      expect(matchBlank("aaa", regexBlank("(a|a)+"))).toBe(false);
+      // invalid syntax: likewise
+      expect(matchBlank("abc", regexBlank("(unclosed"))).toBe(false);
+      expect(matchBlank("abc", regexBlank("[a-c]{3}"))).toBe(true);
+    }
+  });
+});
+
 describe("gradeText", () => {
   it("grades QNT-001 (numeric, tolerance 0) exactly", () => {
     expect(gradeText(QNT_001, { kind: "number", value: 72 }, DEFAULTS).points).toBe(2);
