@@ -1,8 +1,7 @@
 {
   "_description": "AC-06 fixture matrix: one entry per (type, mode, case) triple. Expected points are derived from docs/question-format.md's 'Scoring modes' table and grade/result.ts's applyMode arithmetic, not observed by running the code. 'partial' entries (a partially-correct response) exist only where the mode under test actually grants graduated credit (scoring.mode 'partial', or 'position' for ordering) — see APPLICABLE_MODES in grade/result.ts for which modes apply to which type.",
   "_knownDefects": [
-    "issue #128: ordering's graduated scoring mode is 'position', not 'partial' — docs/PRD.md's scoring table wrongly lists 'partial' for ordering. docs/question-format.md and APPLICABLE_MODES agree on 'position', and this matrix follows them.",
-    "issue #130: short_answer carries no 'rubric' array (only long_answer does — see types.ts's ShortAnswerQuestion vs LongAnswerQuestion, and docs/question-format.md's type table). Its only applicable mode is 'rubric', so the sum of awarded levels is always 0 — short_answer can never score above zero, even graded directly through gradeManual with a full reviewer award. See the short_answer entries below and acceptance.test.ts's dedicated test."
+    "issue #128: ordering's graduated scoring mode is 'position', not 'partial' — docs/PRD.md's scoring table wrongly lists 'partial' for ordering. docs/question-format.md and APPLICABLE_MODES agree on 'position', and this matrix follows them."
   ],
   "cases": [
     {
@@ -1832,12 +1831,17 @@
         "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
         "max_length": 200,
         "model_answer": "The nth term is n x (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+        "rubric": [
+          { "level": "No credit", "points": 0, "description": "No answer, or no rule stated." },
+          { "level": "Partial", "points": 1, "description": "Describes the growing gaps but states no rule for the nth term." },
+          { "level": "Full", "points": 3, "description": "States n x (n + 1), or an equivalent rule for the nth term." }
+        ],
         "scoring": { "mode": "rubric", "points": 3 }
       },
       "response": { "kind": "text", "text": "The nth term is n(n+1)." },
       "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
       "expected": 0,
-      "note": "gradeQuestion never grades manual types (short_answer/long_answer): grade/index.ts hands gradeManual a null award, by design, because a reviewer's RubricAward is not a candidate ResponseValue -- see grade/manual.test.ts. So this entry is 0 regardless of response content, for both short_answer and long_answer, via gradeQuestion. In ADDITION, short_answer carries no 'rubric' array at all (issue #130): even graded directly via gradeManual with a real, full-credit award, it sums to 0 because there is nothing to look up. See acceptance.test.ts's dedicated test, which exercises gradeManual directly to prove this second, independent defect."
+      "note": "gradeQuestion never grades manual types (short_answer/long_answer): grade/index.ts hands gradeManual a null award, by design, because a reviewer's RubricAward is not a candidate ResponseValue -- see grade/manual.test.ts. So this entry is 0 regardless of response content, for both short_answer and long_answer, via gradeQuestion. Applied directly via gradeManual with a real award, this question DOES score above zero against its 'rubric' array (issue #130, fixed) -- see acceptance.test.ts's dedicated test."
     },
     {
       "type": "short_answer",
@@ -1849,6 +1853,11 @@
         "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
         "max_length": 200,
         "model_answer": "The nth term is n x (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+        "rubric": [
+          { "level": "No credit", "points": 0, "description": "No answer, or no rule stated." },
+          { "level": "Partial", "points": 1, "description": "Describes the growing gaps but states no rule for the nth term." },
+          { "level": "Full", "points": 3, "description": "States n x (n + 1), or an equivalent rule for the nth term." }
+        ],
         "scoring": { "mode": "rubric", "points": 3 }
       },
       "response": { "kind": "text", "text": "I don't know." },
@@ -1865,6 +1874,11 @@
         "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
         "max_length": 200,
         "model_answer": "The nth term is n x (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+        "rubric": [
+          { "level": "No credit", "points": 0, "description": "No answer, or no rule stated." },
+          { "level": "Partial", "points": 1, "description": "Describes the growing gaps but states no rule for the nth term." },
+          { "level": "Full", "points": 3, "description": "States n x (n + 1), or an equivalent rule for the nth term." }
+        ],
         "scoring": { "mode": "rubric", "points": 3 }
       },
       "response": null,
@@ -1892,7 +1906,7 @@
       "response": { "kind": "text", "text": "The committee treats a correlation as a cause. Enrolment growth or a new course could explain the rise; comparing pages printed per student before and after would separate the explanations." },
       "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
       "expected": 0,
-      "note": "via gradeQuestion this is 0 for the same reason as short_answer above (no award channel in the dispatcher) -- but unlike short_answer, long_answer DOES carry a 'rubric' array, so a reviewer's real award (applied via gradeManual, see acceptance.test.ts's contrast test) can score it above zero. This is the intended design, not a defect."
+      "note": "via gradeQuestion this is 0 for the same reason as short_answer above (no award channel in the dispatcher); a reviewer's real award, applied via gradeManual (see acceptance.test.ts), scores it above zero against its 'rubric' array. This is the intended design, not a defect."
     },
     {
       "type": "long_answer",

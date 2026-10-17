@@ -151,7 +151,8 @@
       "then": {
         "properties": {
           "max_length": { "type": "integer", "minimum": 1, "maximum": 500, "default": 500 },
-          "model_answer": { "type": "string" }
+          "model_answer": { "type": "string" },
+          "rubric": { "$ref": "#/$defs/rubric" }
         }
       }
     },
@@ -160,23 +161,25 @@
       "then": {
         "properties": {
           "max_length": { "type": "integer", "minimum": 1, "maximum": 5000, "default": 5000 },
-          "rubric": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "required": ["level", "points"],
-              "properties": {
-                "level": { "type": "string" },
-                "points": { "type": "number", "minimum": 0 },
-                "description": { "type": "string" }
-              }
-            }
-          }
+          "rubric": { "$ref": "#/$defs/rubric" }
         }
       }
     }
   ],
   "$defs": {
+    "rubric": {
+      "type": "array",
+      "description": "Optional on both manually-graded types. A reviewer picks levels; their points are summed.",
+      "items": {
+        "type": "object",
+        "required": ["level", "points"],
+        "properties": {
+          "level": { "type": "string" },
+          "points": { "type": "number", "minimum": 0 },
+          "description": { "type": "string" }
+        }
+      }
+    },
     "options": {
       "type": "array",
       "minItems": 2,
