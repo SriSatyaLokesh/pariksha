@@ -2,9 +2,17 @@ import { SectionHeading } from "../../components/SectionHeading";
 import { MonoCaption } from "../../components/MonoCaption";
 
 const HEADING_ID = "what-it-is-heading";
+const REPO = "https://github.com/SriSatyaLokesh/pariksha";
+const blob = (path: string) => `${REPO}/blob/main/${path}`;
+const tree = (path: string) => `${REPO}/tree/main/${path}`;
 
 /**
- * S2 — What is Pariksha? landing-page-v2-design.md §3 S2.
+ * S2 — What is Pariksha? landing-page-v2-design.md §3 S2, amended by
+ * landing-page-v3-interactive.md §4.2: a three-item verification strip
+ * re-tenants the social-proof slot a product with no users cannot fill.
+ * No star/fork/adoption counts (§4.2's standing prohibition) and no
+ * coverage tuple (§4.2 declines it — that register belongs on the README,
+ * not the landing page).
  *
  * The only band whose job is to be quoted: an answer-first paragraph
  * (content-inventory.md §7 Q1, PRD :31) and a numeral row rather than a
@@ -53,6 +61,24 @@ export function WhatIsPariksha() {
           </div>
         </div>
         <MonoCaption>Apache-2.0 · pre-alpha, October 2026</MonoCaption>
+        <ul className="verification-strip">
+          <li>
+            <a href={blob("docs/adr/0003-license-apache-2-0.md")}>
+              Apache-2.0
+            </a>
+            , with an explicit patent grant.
+          </li>
+          <li>
+            A worked example of{" "}
+            <a href={tree("examples/reasoning-aptitude")}>
+              seventeen questions
+            </a>
+            , covering all twelve types.
+          </li>
+          <li>
+            The <a href={tree("schemas")}>JSON Schemas</a> are published.
+          </li>
+        </ul>
       </div>
     </section>
   );

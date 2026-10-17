@@ -64,35 +64,30 @@
   border-top: none;
 }
 
-.cost-deploy-grid {
-  display: grid;
-  gap: var(--space-xl);
-  margin-block: var(--space-2xl);
-}
-
-@media (min-width: 720px) {
-  .cost-deploy-grid {
-    grid-template-columns: 1fr 1fr;
-  }
-}
-
-.cost-deploy-card__title {
-  margin: 0 0 var(--space-sm);
-  font-family: var(--type-heading-sm-family);
-  font-size: var(--type-heading-sm-size);
-  font-weight: var(--type-heading-sm-weight);
-  line-height: var(--type-heading-sm-line-height);
-  letter-spacing: var(--type-heading-sm-letter-spacing);
-  color: var(--color-ink);
-}
-
-.cost-deploy-card__body {
-  margin: 0 0 var(--space-lg);
+/* §4.4: the two deploy cards collapse to one line each. */
+.cost-deploy-line {
+  max-width: 760px;
+  margin: 0 0 var(--space-md);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   line-height: var(--type-body-md-line-height);
   letter-spacing: var(--type-body-md-letter-spacing);
   color: var(--color-ink);
+}
+
+/* §4.4: the interoperability strip — four text labels, no logos, no brand
+   marks, the re-tenanting of the integration-logo slot. */
+.interop-strip {
+  list-style: none;
+  margin: var(--space-2xl) 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md) var(--space-xl);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
 }
 
 .cost-architecture,
@@ -123,7 +118,21 @@
   color: var(--color-ink);
 }
 
-/* ---- S9 - status ------------------------------------------------------- */
+/* ---- S9 - status, merged into B6 as an h3 (v3-interactive.md §4.5) ----- */
+
+/* The twelve-row roadmap ledger is deleted outright (v3-cull.md §3): one
+   sentence and a link to docs/ROADMAP.md replace it, carried by
+   .status-group__lead below, so no .roadmap-ledger* rule survives here. */
+
+.status-heading {
+  margin: var(--space-3xl) 0 var(--space-lg);
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+  letter-spacing: var(--type-heading-md-letter-spacing);
+  color: var(--color-ink);
+}
 
 .status-group__heading {
   margin: var(--space-2xl) 0 var(--space-md);
@@ -165,87 +174,6 @@
   background: var(--color-cream);
   padding: 0 4px;
   border-radius: var(--rounded-xs);
-}
-
-.roadmap-ledger {
-  list-style: none;
-  margin: var(--space-xl) 0;
-  padding: 0;
-  width: 100%;
-}
-
-.roadmap-ledger__row {
-  display: grid;
-  grid-template-columns: 56px 40px 1fr auto;
-  align-items: baseline;
-  gap: var(--space-md);
-  padding-block: var(--space-md);
-  border-top: 1px solid var(--color-hairline);
-}
-
-/* 132px of fixed columns leaves too little for titles like "Results,
-   monitoring, grading and data lifecycle" at 320px. The milestone and
-   ordinal keep their own row; the title and (when present) the tag each
-   take the row's full width below it. */
-@media (max-width: 480px) {
-  .roadmap-ledger__row {
-    grid-template-columns: 56px 1fr;
-    grid-template-areas:
-      "milestone ordinal"
-      "title title"
-      "tag tag";
-    align-items: start;
-    row-gap: var(--space-xs);
-  }
-
-  .roadmap-ledger__milestone {
-    grid-area: milestone;
-  }
-
-  .roadmap-ledger__ordinal {
-    grid-area: ordinal;
-  }
-
-  .roadmap-ledger__title {
-    grid-area: title;
-  }
-
-  .roadmap-ledger__tag {
-    grid-area: tag;
-  }
-}
-
-.roadmap-ledger__milestone {
-  font-family: var(--type-mono-sm-family);
-  font-size: var(--type-mono-sm-size);
-  letter-spacing: var(--type-mono-sm-letter-spacing);
-  color: var(--color-muted);
-}
-
-.roadmap-ledger__ordinal {
-  margin: 0;
-}
-
-.roadmap-ledger__title {
-  font-family: var(--type-body-md-family);
-  font-size: var(--type-body-md-size);
-  line-height: var(--type-body-md-line-height);
-  letter-spacing: var(--type-body-md-letter-spacing);
-}
-
-.roadmap-ledger__row--pending .roadmap-ledger__title {
-  color: var(--color-muted);
-  font-weight: 400;
-}
-
-.roadmap-ledger__row--done .roadmap-ledger__title,
-.roadmap-ledger__row--part .roadmap-ledger__title {
-  color: var(--color-ink);
-  font-weight: 500;
-}
-
-.roadmap-ledger__tag {
-  margin: 0;
 }
 
 .status-byok {

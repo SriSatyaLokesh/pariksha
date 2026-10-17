@@ -34,14 +34,29 @@ const FLAG_TEXT: Record<(typeof RESULTS_ROWS)[number]["flag"], string> = {
   high_risk: "high risk",
 };
 
+const TYPE_NAMES = [
+  "Single choice",
+  "Multiple choice",
+  "Select exactly K",
+  "True/false",
+  "Assertion–reason",
+  "Matching",
+  "Multi-matching",
+  "Ordering",
+  "Fill in the blank",
+  "Numeric with tolerance",
+  "Short answer",
+  "Long answer",
+];
+
 /**
- * S3 — How running an exam works. landing-page-v2-design.md §3 S3.
- *
- * The teach spine: three StepRows, each with its real artefact (CB-1, CB-2,
- * CB-3 — §4, verified verbatim against the files they quote) and a
- * rendered `results-table` using DESIGN.md's `results-table` and
- * `integrity-badge-*` tokens. The three CSV rows and the Divya caption are
- * content-inventory.md §4.3, sourced to `examples/reasoning-aptitude/`.
+ * B3 — How running an exam works. landing-page-v3-interactive.md §4.3,
+ * v3-cull.md §2: the band doing the absorbing. Three steps (CB-1 in full,
+ * CB-2 with the negative-marking sentence beside it, M-3), then two
+ * absorbed h3s carrying what survives of S5 (`#features`) and S6
+ * (`#no-code`) so neither anchor link-rots. CB-3 (the results CSV code
+ * block) is deleted as a duplicate of M-3; M-2 (the editor mock) is
+ * deleted outright, per D5, as a fictional screen beside a working demo.
  */
 export function HowItWorks() {
   return (
@@ -50,7 +65,7 @@ export function HowItWorks() {
       aria-labelledby={HEADING_ID}
       className="section-s3 wrap"
     >
-      <SectionHeading id={HEADING_ID} scale="chapter">
+      <SectionHeading id={HEADING_ID} scale="chapter" eyebrow="HOW IT WORKS">
         How does running an exam on Pariksha actually work?
       </SectionHeading>
       <p className="section-s3__answer">
@@ -82,100 +97,100 @@ export function HowItWorks() {
                 {"{\n"}
                 {"  "}
                 <span className="tok-key">&quot;id&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;LOG-001&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;type&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;single&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;prompt&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">
                   &quot;What comes next in the series?\n\n3, 7, 15, 31, 63,
                   ?&quot;
                 </span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;options&quot;</span>
-                <span className="tok-punct">: [</span>
+                {": ["}
                 {"\n    "}
-                <span className="tok-punct">{"{ "}</span>
+                {"{ "}
                 <span className="tok-key">&quot;id&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;a&quot;</span>
-                <span className="tok-punct">, </span>
+                {", "}
                 <span className="tok-key">&quot;text&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;95&quot;</span>
-                <span className="tok-punct">{" }"},</span>
+                {" },"}
                 {"\n    "}
-                <span className="tok-punct">{"{ "}</span>
+                {"{ "}
                 <span className="tok-key">&quot;id&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;b&quot;</span>
-                <span className="tok-punct">, </span>
+                {", "}
                 <span className="tok-key">&quot;text&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;117&quot;</span>
-                <span className="tok-punct">{" }"},</span>
+                {" },"}
                 {"\n    "}
-                <span className="tok-punct">{"{ "}</span>
+                {"{ "}
                 <span className="tok-key">&quot;id&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;c&quot;</span>
-                <span className="tok-punct">, </span>
+                {", "}
                 <span className="tok-key">&quot;text&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;127&quot;</span>
-                <span className="tok-punct">{" }"},</span>
+                {" },"}
                 {"\n    "}
-                <span className="tok-punct">{"{ "}</span>
+                {"{ "}
                 <span className="tok-key">&quot;id&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;d&quot;</span>
-                <span className="tok-punct">, </span>
+                {", "}
                 <span className="tok-key">&quot;text&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;131&quot;</span>
-                <span className="tok-punct">{" }"}</span>
+                {" }"}
                 {"\n  "}
-                <span className="tok-punct">],</span>
+                {"],"}
                 {"\n  "}
                 <span className="tok-key">&quot;key&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;c&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;difficulty&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;easy&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;tags&quot;</span>
-                <span className="tok-punct">: [</span>
+                {": ["}
                 <span className="tok-string">&quot;reasoning&quot;</span>
-                <span className="tok-punct">, </span>
+                {", "}
                 <span className="tok-string">&quot;series&quot;</span>
-                <span className="tok-punct">],</span>
+                {"],"}
                 {"\n  "}
                 <span className="tok-key">&quot;scoring&quot;</span>
-                <span className="tok-punct">: {"{ "}</span>
+                {": { "}
                 <span className="tok-key">&quot;mode&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">
                   &quot;all_or_nothing&quot;
                 </span>
-                <span className="tok-punct">, </span>
+                {", "}
                 <span className="tok-key">&quot;points&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-number">2</span>
-                <span className="tok-punct">{" },"}</span>
+                {" },"}
                 {"\n  "}
                 <span className="tok-key">&quot;explanation&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">
                   &quot;Each term is double the previous term plus one: 63 ×
                   2 + 1 = 127.&quot;
@@ -217,65 +232,70 @@ export function HowItWorks() {
               >
                 {"{\n  "}
                 <span className="tok-key">&quot;id&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;quant&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;title&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">
                   &quot;Quantitative aptitude&quot;
                 </span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">
                   &quot;time_limit_minutes&quot;
                 </span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-number">15</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">
                   &quot;shuffle_questions&quot;
                 </span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-number">true</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n  "}
                 <span className="tok-key">&quot;source&quot;</span>
-                <span className="tok-punct">: {"{"}</span>
+                {": {"}
                 {"\n    "}
                 <span className="tok-key">&quot;kind&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;pool&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n    "}
                 <span className="tok-key">&quot;bank&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-string">&quot;questions.json&quot;</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n    "}
                 <span className="tok-key">&quot;count&quot;</span>
-                <span className="tok-punct">: </span>
+                {": "}
                 <span className="tok-number">4</span>
-                <span className="tok-punct">,</span>
+                {","}
                 {"\n    "}
                 <span className="tok-key">&quot;filter&quot;</span>
-                <span className="tok-punct">: {"{ "}</span>
+                {": { "}
                 <span className="tok-key">&quot;tags&quot;</span>
-                <span className="tok-punct">: [</span>
+                {": ["}
                 <span className="tok-string">
                   &quot;quantitative&quot;
                 </span>
-                <span className="tok-punct">{"] }"}</span>
+                {"] }"}
                 {"\n  "}
-                <span className="tok-punct">{"}"}</span>
+                {"}"}
                 {"\n"}
                 {"}"}
               </CodeBlock>
               <p className="step-row__caption">
                 Four questions drawn at random, for each candidate, from
                 everything tagged <code>quantitative</code>.
+              </p>
+              <p className="step-row__caption">
+                The worked example&apos;s own test deducts a quarter of a
+                question&apos;s points for a wrong answer; a blank costs
+                nothing.
               </p>
             </>
           }
@@ -293,49 +313,6 @@ export function HowItWorks() {
           title="They sit it; you download the results"
           artefact={
             <>
-              <CodeBlock
-                caption="examples/reasoning-aptitude/results.csv"
-                footer="29 columns in the real file — one per registration field, one per section"
-              >
-                <span className="tok-key">Full name</span>
-                <span className="tok-punct">,...,Set,...,Score,Max </span>
-                <span className="tok-key">score</span>
-                <span className="tok-punct">
-                  ,Percent,Rank,Result,...,Integrity flag,Reviewer
-                  verdict,...
-                </span>
-                {"\n"}
-                Fatima Sheikh,...,A,...,
-                <span className="tok-number">24.00</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">27</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">88.9</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">1</span>
-                ,Pass,...,clean,,...
-                {"\n"}
-                Ananya Rao,...,A,...,
-                <span className="tok-number">21.50</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">27</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">79.6</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">2</span>
-                ,Pass,...,review,Clear,...
-                {"\n"}
-                Divya Menon,...,A,...,
-                <span className="tok-number">9.50</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">27</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">35.2</span>
-                <span className="tok-punct">,</span>
-                <span className="tok-number">6</span>
-                ,Fail,...,high_risk,Suspicious,...
-              </CodeBlock>
-
               {/* A7: the scrolling container carries tabIndex, role="region"
                   and an accessible name, like CodeBlock and ComparisonTable. */}
               <div
@@ -383,13 +360,74 @@ export function HowItWorks() {
             </>
           }
         >
-          <p>
-            Server-enforced clock, answers queued and synced, one row per
-            candidate out. Integrity comes out as a flag, never a verdict —
-            a reviewer makes the call.
-          </p>
+          {null}
         </StepRow>
       </div>
+
+      <h3 id="features" className="absorbed-heading">
+        What does Pariksha do?
+      </h3>
+      <p>
+        Pariksha groups what it does by the organiser&apos;s job rather than
+        by the shape of the codebase: clean registration that blocks
+        duplicate sign-ups, proctoring that never records video or audio,
+        flags instead of verdicts so a person always decides, and results
+        that land in a spreadsheet already. The scoring and selection
+        engines behind them are built and tested today.
+      </p>
+      <p className="feature-lead">
+        The scoring and selection engines are built and tested; everything
+        else on this page is specified. All twelve question types, the test
+        builder and the candidate runtime land with v0.1; proctoring and
+        results follow in v0.2.
+      </p>
+      <ul className="type-list">
+        {TYPE_NAMES.map((name) => (
+          <li key={name}>{name}</li>
+        ))}
+      </ul>
+      <ul className="capability-list">
+        <li>
+          A registration form you design per test, with a field you can mark
+          unique to block repeat sign-ups.
+        </li>
+        <li>
+          Proctoring that never records: no video and no audio are ever
+          recorded.
+        </li>
+        <li>
+          Every attempt is flagged <code>clean</code>, <code>review</code> or{" "}
+          <code>high_risk</code> — the app flags, a person decides.
+        </li>
+        <li>
+          Results as a CSV: one row per candidate, with scores and integrity
+          flags.
+        </li>
+      </ul>
+
+      <h3 id="no-code" className="absorbed-heading">
+        Does an organiser ever have to write JSON?
+      </h3>
+      <p>
+        No, organisers build questions and tests in a Pariksha UI: one
+        editing screen for all twelve types, a type picker, a
+        drag-to-reorder section list, live pool counts and a publish
+        checklist. The JSON exists so that you can hand-author, script, diff
+        or export a test if you want to — and so that nothing you build is
+        locked into Pariksha.
+      </p>
+      <p className="no-code-pull-quote">
+        You will never have to write this. It is here so that you can — and
+        so that nothing you build is trapped.
+      </p>
+      <p>
+        The format is published anyway: you can hand-author a question in a
+        text editor against the documented schema, generate a bank from a
+        script, diff a test in a pull request, or export a whole test as one
+        file and import it into a different installation. Nothing you build
+        this way is locked in, and the authoring interface itself is
+        designed and not yet built.
+      </p>
     </section>
   );
 }

@@ -4,11 +4,14 @@ const REPO = "https://github.com/SriSatyaLokesh/pariksha";
 const blob = (path: string) => `${REPO}/blob/main/${path}`;
 const tree = (path: string) => `${REPO}/tree/main/${path}`;
 
-// S12 — Footer (design contract §3, S12). Unchanged from v1 except the
-// Documentation column gains the schemas directory and the roadmap. The
-// visually-hidden <h2>Footer</h2> is load-bearing for the heading-order test
-// (A4). There is no paragraph under it: T23 exempts the three allow-listed
-// headings entirely, so a band with no prose of its own gets no manufactured
+// S12 — Footer (design contract §3, S12). The Documentation column gains
+// the schemas directory and the roadmap. The Licence column gains a
+// sentence mitigating FAQ Q15's deletion (landing-page-v3-interactive.md
+// §4.6): the explicit patent grant and commercial-use strings survive here
+// even though the question-shaped heading does not. The visually-hidden
+// <h2>Footer</h2> is load-bearing for the heading-order test (A4). There is
+// no paragraph under it: T23 exempts the three allow-listed headings
+// entirely, so a band with no prose of its own gets no manufactured
 // answer-shaped paragraph.
 export function Footer() {
   return (
@@ -65,6 +68,12 @@ export function Footer() {
           <p>
             Code under Apache-2.0. Documentation, schemas and the example
             tests under CC BY 4.0. No contributor licence agreement.
+          </p>
+          <p>
+            Apache-2.0 carries an explicit patent grant: self-host, modify,
+            embed or sell a service built on it, including as a closed
+            hosted service. The name Pariksha itself is not licensed with
+            the code.
           </p>
         </div>
       </div>

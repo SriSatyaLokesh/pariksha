@@ -56,7 +56,11 @@ export function S4Comparison() {
       aria-labelledby="comparison-heading"
       className="section wrap"
     >
-      <SectionHeading id="comparison-heading" scale="chapter">
+      <SectionHeading
+        id="comparison-heading"
+        scale="chapter"
+        eyebrow="COMPARISON"
+      >
         Why not a form tool, and why not a paid assessment platform?
       </SectionHeading>
       <p className="comparison-intro">

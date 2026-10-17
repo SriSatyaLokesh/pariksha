@@ -2,22 +2,22 @@ import { SectionHeading } from "../../components/SectionHeading";
 import { CardVoltage } from "../../components/CardVoltage";
 import { CardHairline } from "../../components/CardHairline";
 import { CodeBlock } from "../../components/CodeBlock";
-import { ButtonSecondary } from "../../components/ButtonSecondary";
 
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
-const tree = (path: string) => `${REPO}/tree/main/${path}`;
 const blob = (path: string) => `${REPO}/blob/main/${path}`;
 
-// Design contract §3 S7 (2026-10-17-landing-page-v2-design.md): the page's
-// one in-body voltage object, beside the published arithmetic and the two
-// deploy targets. Every number is sourced in content-inventory.md §8 — the
-// $0/500 pair is explicitly an estimate and a design target, never a
-// measured claim (T26b), and the CB-5 deploy block carries its own caveat
-// that this deploys the website, not the exam API.
+// Design contract §3 S7 (2026-10-17-landing-page-v2-design.md), amended by
+// landing-page-v3-interactive.md §4.4: the $0 card, both qualifications and
+// the budget table are unchanged. The two deploy cards collapse to one line
+// each; CB-5 (the three-line website deploy snippet) is deleted, its
+// binding truth ("the exam API is Phase 2") kept as a clause beside the
+// Cloudflare line. The band gains the interoperability strip — four text
+// labels, no logos, no brand marks — and CB-4 (`npx ajv`), the only command
+// on the page a visitor can run today that does something real.
 export function CostSection() {
   return (
     <section id="cost" aria-labelledby="cost-heading" className="section wrap">
-      <SectionHeading id="cost-heading" scale="chapter">
+      <SectionHeading id="cost-heading" scale="chapter" eyebrow="COST">
         What does it cost to run an exam on Pariksha?
       </SectionHeading>
       <p>
@@ -68,27 +68,16 @@ export function CostSection() {
         </CardHairline>
       </div>
 
-      <div className="cost-deploy-grid">
-        <CardHairline>
-          <h3 className="cost-deploy-card__title">Cloudflare, free plan</h3>
-          <p className="cost-deploy-card__body">Workers, D1, R2 and Cron.</p>
-          <ButtonSecondary href={tree("deploy/cloudflare")}>
-            Cloudflare setup
-          </ButtonSecondary>
-        </CardHairline>
-        <CardHairline>
-          <h3 className="cost-deploy-card__title">
-            Docker, any server · planned
-          </h3>
-          <p className="cost-deploy-card__body">
-            Node 22 with SQLite or Postgres 16, MinIO, S3 or disk storage, and
-            Caddy — Phase 11, not built yet.
-          </p>
-          <ButtonSecondary href={tree("deploy/docker")}>
-            Docker setup
-          </ButtonSecondary>
-        </CardHairline>
-      </div>
+      <p className="cost-deploy-line">
+        <strong>Cloudflare, free plan</strong> — Workers, D1, R2 and Cron.
+        This deploys the site you are reading; the exam API is Phase 2 and
+        not built.
+      </p>
+      <p className="cost-deploy-line">
+        <strong>Docker, any server · planned</strong> — Node 22 with SQLite
+        or Postgres 16, MinIO, S3 or disk storage, and Caddy — Phase 11, not
+        built yet.
+      </p>
 
       <p className="cost-architecture">
         The architecture is three adapter seams — database, object storage,
@@ -110,13 +99,22 @@ export function CostSection() {
         magic links instead.
       </p>
 
+      <ul className="interop-strip">
+        <li>JSON Schema in</li>
+        <li>CSV out</li>
+        <li>Cloudflare free plan</li>
+        <li>Docker (planned, Phase 11)</li>
+      </ul>
+
       <CodeBlock
-        caption="deploy/cloudflare/README.md"
-        footer="this deploys the site you are reading. The exam API is Phase 2."
+        caption="Validate questions against the schema — no install"
+        footer="Write your own questions, validate them, and they will import into Pariksha on day one."
       >
-        {
-          "pnpm install && pnpm build\npnpm --filter @pariksha/web exec wrangler login\npnpm --filter @pariksha/web deploy"
-        }
+        {`git clone https://github.com/SriSatyaLokesh/pariksha.git
+cd pariksha
+
+npx -y -p ajv-cli@5.0.0 -p ajv-formats@2.1.1 ajv validate --spec=draft2020 --strict=false -c ajv-formats \\
+  -s schemas/bank-1.json -r schemas/question-1.json -d "examples/*/questions.json"`}
       </CodeBlock>
     </section>
   );

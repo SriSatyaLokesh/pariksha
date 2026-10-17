@@ -1,9 +1,12 @@
 import { SectionHeading } from "../../components/SectionHeading";
 
-// S10 — Questions and answers (design contract §3, S10). Thirteen literal
-// questions, each a plain <h3>, each followed by one 40-60 word <p> sourced
-// from content-inventory.md §7 (Q2-Q11, Q13-Q15; Q1 and Q12 are dropped
-// because S2 and S6 already are those questions).
+// S10 — Questions and answers, cut to nine pairs by
+// landing-page-v3-interactive.md §4.6 (v3-cull.md §4). Q3 (what the name
+// means), Q4 (a pure duplicate of B5's h2), Q9 (its substance moved to
+// NotForSection's ninth sentence) and Q15 (mitigated by a sentence in the
+// footer's licence column) are deleted outright — a test asserting one of
+// them must be removed, not skipped. Each surviving question is a plain
+// <h3> followed by one 40-60 word <p> sourced from content-inventory.md §7.
 //
 // content-inventory.md's own answers often open on a bare negation with no
 // subject ("Not as an application.", "No. No video..."). Lifted alone by an
@@ -15,16 +18,6 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
     question: "Can I use Pariksha today?",
     answer:
       "You cannot run Pariksha as an application today. The repository holds the product requirements, the open question and test formats, their JSON Schemas, a complete worked example and the scoring engine, which is built and tested. The application lands with v0.1; the formats are stable enough to write questions against right now.",
-  },
-  {
-    question: 'What does "Pariksha" mean?',
-    answer:
-      'Pariksha — పరీక్ష in Telugu, परीक्षा in Hindi — means "examination". The project\'s typeface, Anek, ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. The name is still being checked for trademark and domain conflicts before public launch.',
-  },
-  {
-    question: "How much does it cost to run?",
-    answer:
-      "Pariksha is designed to cost nothing on the reference deployment. Five hundred candidates in one hour is estimated to fit inside Cloudflare's free tier: about 55,000 Worker requests against 100,000 a day, 55,000 D1 row writes against 100,000, and 0.75 GB of snapshots against 10 GB. The arithmetic is published, not asserted.",
   },
   {
     question: "Where is candidate data stored?",
@@ -47,11 +40,6 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
       "Pariksha does not record video or audio of candidates. Strict proctoring instead takes 320×240 JPEG snapshots, about 25 KB each, every sixty seconds and on each violation, stored in a private bucket behind signed URLs that expire in ten minutes. Face counting runs on-device and stores no biometric template.",
   },
   {
-    question: "Can browser proctoring actually prevent cheating?",
-    answer:
-      "Pariksha's own documentation says browser proctoring cannot actually prevent cheating. Browser checks deter and record; a second phone is invisible to all of them. Pariksha marks an attempt clean, review or high risk and leaves the judgement to a person, and for high-stakes use the docs recommend a supervised follow-up round.",
-  },
-  {
     question: "Is Pariksha better than Google Forms for an exam?",
     answer:
       "Pariksha answers this with its own specified list rather than a claim about Google Forms: question pools so no two candidates share a paper, twelve question types including matching, ordering and numeric with tolerance, answer keys that never reach the browser, a server-enforced timer, and tab-switch logging. Compare that with Microsoft Forms as it stands in October 2026.",
@@ -70,11 +58,6 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
     question: "Can Pariksha generate questions with AI?",
     answer:
       "Pariksha cannot generate questions with AI yet. Phase 9 plans bring-your-own-key drafting: your own Anthropic or OpenAI key, stored encrypted per workspace and never sent to the browser, drafting questions into a bank — never whole tests. Every draft is schema-validated and waits for a human to accept it, and nothing auto-publishes.",
-  },
-  {
-    question: "What licence is it under, and can I sell a service built on it?",
-    answer:
-      "Pariksha's code is licensed Apache-2.0, which carries an explicit patent grant, so you may self-host, modify, embed or sell a service built on it, including as a closed hosted service. Documentation, the JSON Schemas and the sample tests are CC BY 4.0. The name Pariksha itself is not licensed with the code.",
   },
 ];
 

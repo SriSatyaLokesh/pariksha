@@ -1,18 +1,17 @@
-// Landing page v2 — the full assembly.
-// docs/superpowers/specs/2026-10-17-landing-page-v2-design.md.
-// Every section is its own component (§3.0, §6); this file only wires
-// TopNav, the skip link, the one <main> landmark and the twelve sections in
-// the order §3.0's spine table fixes, plus the footer landmark after it.
+// Landing page v3 — the full assembly, culled.
+// docs/superpowers/specs/2026-10-17-landing-page-v3-interactive.md §4: twelve
+// bands become eight plus the footer. S5 and S6 are absorbed into
+// HowItWorks as h3s (#features, #no-code); S9's roadmap ledger is deleted
+// and its honesty merges into NotForSection as an h3 (#status). This file
+// only wires TopNav, the skip link, the one <main> landmark and the eight
+// surviving sections in the new spine's order, plus the footer landmark.
 import { TopNav } from "../components/TopNav";
 import { Hero } from "../sections/s1-s3/Hero";
 import { WhatIsPariksha } from "../sections/s1-s3/WhatIsPariksha";
 import { HowItWorks } from "../sections/s1-s3/HowItWorks";
 import { S4Comparison } from "../sections/s4-s6/S4Comparison";
-import { S5Features } from "../sections/s4-s6/S5Features";
-import { S6NoCode } from "../sections/s4-s6/S6NoCode";
 import { CostSection } from "../sections/s7-s9/CostSection";
 import { NotForSection } from "../sections/s7-s9/NotForSection";
-import { StatusSection } from "../sections/s7-s9/StatusSection";
 import { Faq } from "../sections/s10-s12/Faq";
 import { Closing } from "../sections/s10-s12/Closing";
 import { Footer } from "../sections/s10-s12/Footer";
@@ -29,11 +28,8 @@ export function Landing() {
         <WhatIsPariksha />
         <HowItWorks />
         <S4Comparison />
-        <S5Features />
-        <S6NoCode />
         <CostSection />
         <NotForSection />
-        <StatusSection />
         <Faq />
         <Closing />
       </main>

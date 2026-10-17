@@ -98,9 +98,6 @@
   color: var(--color-data-blue);
 }
 
-.tok-punct {
-  color: var(--color-muted);
-}
 
 /* ---- StepRow (S3) -------------------------------------------------- */
 

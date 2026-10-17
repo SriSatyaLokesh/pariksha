@@ -36,52 +36,36 @@
   margin: 0;
 }
 
-/* --- S11: the worked-example file listing (M-4), on the hero's cream mock plane --- */
+/* --- S11/B8: the ask. v3-interactive.md §4.7 — no artefact, no file
+   listing (M-4 deleted). One secondary text link and one mono honesty
+   line are the band's only remaining content below the primary button. --- */
 
-.closing-files {
-  list-style: none;
-  margin: 0;
-  padding: var(--space-2xl);
+/* Both sit in B8, a voltage band, where no colour clears 4.5:1 at these
+   sizes (A1/T27 — cream 3.86:1, white 3.96:1, ink 4.11:1). So both take
+   their own cream plane, the same answer the hero's chip and links use and
+   the same one v2's closing file listing used. Neither is a filled control:
+   the link is underlined text, the honesty line is a stamp. */
+.closing-watch-link {
+  display: inline-block;
   background: var(--color-cream);
-  border-radius: var(--rounded-lg);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-lg);
+  color: var(--color-voltage-deep);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--rounded-full);
+  text-decoration: underline;
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
 }
 
-.closing-files li {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: var(--space-xs) var(--space-lg);
-}
-
-.closing-files__name {
+.closing-honesty {
+  display: inline-block;
+  margin: 0;
+  background: var(--color-cream);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--rounded-full);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
   color: var(--color-ink);
-  background: none;
-}
-
-.closing-files__lines {
-  font-family: var(--type-body-sm-family);
-  font-size: var(--type-body-sm-size);
-  color: var(--color-muted);
-  white-space: nowrap;
-}
-
-.closing-files__detail {
-  font-family: var(--type-body-sm-family);
-  font-size: var(--type-body-sm-size);
-  color: var(--color-ink-soft);
-  flex-basis: 100%;
-}
-
-@media (min-width: 560px) {
-  .closing-files__detail {
-    flex-basis: auto;
-  }
 }
 
 /* --- S12: the footer ------------------------------------------------------ */
