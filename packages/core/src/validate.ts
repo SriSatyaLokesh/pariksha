@@ -1,11 +1,19 @@
 // Cross-field import validation: the rules a JSON Schema cannot express.
 // Structural checks ("is `prompt` a string", "is `type` one of the twelve")
-// are Ajv's job against schemas/bank-1.json and schemas/question-1.json.
-// This file assumes the document already passed that and checks only
-// relationships *between* fields — option IDs a key names, option counts a
+// are Ajv's job against schemas/bank-1.json, schemas/question-1.json and
+// schemas/test-1.json. This file assumes the document already passed that
+// and checks only relationships *between* fields.
+//
+// `validateBank` covers one bank: option IDs a key names, option counts a
 // `select_k` promises, placeholders a `fill_blank` prompt and its blanks
 // must agree on, IDs and group references unique and resolvable within the
 // bank, regex safety, and scoring-mode applicability.
+//
+// `validateTest` covers one test against the questions its banks hold —
+// the rules that need both documents at once, which is why no schema can
+// reach them: a `scoring.default_mode` that does not apply to a type a
+// section draws, a pool smaller than its `count`, sets of unequal total
+// points, and the question IDs a section names.
 //
 // Import is all-or-nothing: every issue found is collected and returned,
 // never only the first, so an author fixes their file once.
@@ -19,17 +27,23 @@ import type {
   PassageGroup,
   Question,
   QuestionOption,
+  Section,
+  Test,
 } from "./types.js";
 import { assertSafeRegex } from "./grade/text.js";
-import { APPLICABLE_MODES } from "./grade/result.js";
+import type { ScoringDefaults } from "./grade/result.js";
+import { APPLICABLE_MODES, resolveScoring, round2 } from "./grade/result.js";
+import { matchesFilter } from "./select.js";
 
 export interface ImportIssue {
   /** The question's `id`, or null for an issue not about one specific question. */
   questionId: string | null;
   /**
    * The entry's position (0-based) in the array the issue is about —
-   * `bank.questions` for every rule above, `bank.groups` for a malformed
-   * group entry — or -1 when no question or group applies.
+   * `bank.questions` for every bank rule, `bank.groups` for a malformed
+   * group entry, `test.sections` for every section rule — or -1 when the
+   * issue is about the document as a whole (`access`, `release`, or a
+   * `sections` that is not an array at all).
    */
   index: number;
   field: string;
@@ -312,4 +326,221 @@ export function validateBank(bank: unknown): ValidationResult {
   // Assumed structurally valid (Ajv's job); the two checks above are only
   // enough to let this function degrade safely on arbitrary `unknown`.
   return { ok: true, bank: bank as unknown as Bank };
+}
+
+export interface TestValidationOptions {
+  /**
+   * How far two sets' total points may differ before it is reported, in
+   * points. PRD T-11 and docs/test-format.md both state the rule only as
+   * sets differing "by more than a set amount" / drifting apart, and name
+   * no amount — so the default is the strict reading, 0: any difference at
+   * all is reported. Raise it where an organiser accepts some drift.
+   */
+  setPointsTolerance?: number;
+}
+
+type TestValidationResult =
+  | { ok: true; test: Test }
+  | { ok: false; issues: ImportIssue[] };
+
+/**
+ * Only `.points` of what `resolveScoring` returns is read below, and
+ * `points` falls back to the engine's own per-question default rather than
+ * to anything passed in here — so these two fields are inert placeholders
+ * satisfying the parameter's shape, not a claim about what a test with no
+ * `scoring` block grades under.
+ */
+const POINTS_ONLY_DEFAULTS: ScoringDefaults = {
+  mode: "all_or_nothing",
+  negativeFraction: 0,
+};
+
+function totalPoints(questions: readonly Question[]): number {
+  return round2(
+    questions.reduce(
+      (sum, q) => sum + resolveScoring(q, POINTS_ONLY_DEFAULTS).points,
+      0,
+    ),
+  );
+}
+
+/**
+ * Checks one `pariksha/test@1` document against the questions its `banks`
+ * hold — the caller merges every bank into `bank`, because this package
+ * does no I/O and cannot resolve a bank path itself.
+ *
+ * Assumes `test` already passed Ajv validation against schemas/test-1.json
+ * (the `sections` check below exists only so this degrades safely on
+ * arbitrary `unknown`, as `validateBank`'s does). The rules enforced:
+ *
+ * - `scoring.default_mode` applies to every type a section can draw, for
+ *   the questions that do not set their own `scoring.mode` — the mode most
+ *   questions actually grade under, since `resolveScoring` falls back to
+ *   it. docs/question-format.md's "Scoring modes" table is the source of
+ *   applicability, via APPLICABLE_MODES.
+ * - a `pool` filter matches at least `count` questions
+ *   (docs/test-format.md, "Rules checked on import").
+ * - the sets of a `sets` source hold equal total points, within
+ *   `setPointsTolerance` (PRD T-11).
+ * - `at` is present when `release.when` is `on_date`, and `access_code`
+ *   when `access.mode` is `link_code` (docs/test-format.md, "Rules checked
+ *   on import"). The schema's `if`/`then` says the same; it is repeated
+ *   here so a document reaching this function by another route still gets
+ *   the rule, and so the whole report arrives in one shape.
+ * - every question ID a `fixed` or `sets` source names exists in `bank`.
+ */
+export function validateTest(
+  test: unknown,
+  bank: readonly Question[],
+  options: TestValidationOptions = {},
+): TestValidationResult {
+  if (!isRecord(test) || !Array.isArray(test.sections)) {
+    return {
+      ok: false,
+      issues: [
+        {
+          questionId: null,
+          index: -1,
+          field: "sections",
+          message: "test.sections must be an array",
+        },
+      ],
+    };
+  }
+
+  const doc = test as unknown as Test;
+  const issues: ImportIssue[] = [];
+  const tolerance = options.setPointsTolerance ?? 0;
+  const defaultMode = doc.scoring?.default_mode;
+  const byId = new Map(bank.map((q) => [q.id, q]));
+
+  if (doc.access?.mode === "link_code" && doc.access.access_code === undefined) {
+    issues.push({
+      questionId: null,
+      index: -1,
+      field: "access.access_code",
+      message: 'access mode "link_code" requires an access_code',
+    });
+  }
+
+  if (doc.release?.when === "on_date" && doc.release.at === undefined) {
+    issues.push({
+      questionId: null,
+      index: -1,
+      field: "release.at",
+      message: 'release "on_date" requires an "at" timestamp',
+    });
+  }
+
+  (test.sections as unknown[]).forEach((raw: unknown, index) => {
+    if (!isRecord(raw) || !isRecord(raw.source)) {
+      issues.push({
+        questionId: null,
+        index,
+        field: "sections",
+        message: `entry at index ${index} is not a section object with a source`,
+      });
+      return;
+    }
+    const section = raw as unknown as Section;
+
+    const issue = (field: string, message: string): void => {
+      issues.push({ questionId: null, index, field, message });
+    };
+
+    // Keyed by ID so a question named by two sets of the same section is
+    // judged once, and in the order the author wrote it.
+    const drawable = new Map<string, Question>();
+
+    /** Resolves named IDs, reporting (and skipping) any the banks lack. */
+    const resolve = (ids: readonly string[], field: string): Question[] => {
+      const found: Question[] = [];
+      for (const id of ids) {
+        const q = byId.get(id);
+        if (q === undefined) {
+          issues.push({
+            questionId: id,
+            index,
+            field,
+            message: `question "${id}" is not in the banks this test draws from`,
+          });
+          continue;
+        }
+        found.push(q);
+        drawable.set(q.id, q);
+      }
+      return found;
+    };
+
+    // The same backstop `validateBank` keeps: whatever shape a future rule
+    // reaches into, an error escaping this section's rules becomes one
+    // issue at this section's index rather than an uncaught throw that
+    // aborts the scan.
+    try {
+      const source = section.source;
+      switch (source.kind) {
+        case "fixed":
+          resolve(source.questions, "source.questions");
+          break;
+
+        case "pool": {
+          const matching = bank.filter((q) => matchesFilter(q, source.filter));
+          if (matching.length < source.count) {
+            issue(
+              "source.count",
+              `section "${section.id}" draws ${source.count} questions but only ${matching.length} match its filter`,
+            );
+          }
+          for (const q of matching) drawable.set(q.id, q);
+          break;
+        }
+
+        case "sets": {
+          const totals = source.sets.map((set) => ({
+            set: set.set,
+            points: totalPoints(resolve(set.questions, "source.sets")),
+          }));
+          const points = totals.map((t) => t.points);
+          const low = Math.min(...points);
+          const high = Math.max(...points);
+          if (round2(high - low) > tolerance) {
+            issue(
+              "source.sets",
+              `section "${section.id}" has sets of unequal total points (${totals
+                .map((t) => `${t.set}: ${t.points}`)
+                .join(", ")}); the tolerance is ${tolerance}`,
+            );
+          }
+          break;
+        }
+      }
+
+      if (defaultMode !== undefined) {
+        for (const q of drawable.values()) {
+          // A question with its own mode never grades under the test
+          // default, so the default's applicability says nothing about it.
+          // `validateBank` already checked that own mode.
+          if (q.scoring?.mode !== undefined) continue;
+          const allowed = APPLICABLE_MODES[q.type];
+          if (!allowed.includes(defaultMode)) {
+            issues.push({
+              questionId: q.id,
+              index,
+              field: "scoring.default_mode",
+              message: `default scoring mode "${defaultMode}" does not apply to question "${q.id}" of type "${q.type}" drawn by section "${section.id}" (allowed: ${allowed.join(", ")})`,
+            });
+          }
+        }
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      issue(
+        "section",
+        `section at index ${index} is structurally malformed: ${message}`,
+      );
+    }
+  });
+
+  if (issues.length > 0) return { ok: false, issues };
+  return { ok: true, test: doc };
 }

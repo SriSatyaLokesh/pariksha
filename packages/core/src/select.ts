@@ -27,7 +27,13 @@ function findQuestion(bank: readonly Question[], id: string): Question {
   return question;
 }
 
-function matchesFilter(question: Question, filter: PoolFilter | undefined): boolean {
+/**
+ * Exported within the package only (not from index.ts) so `validate.ts`
+ * counts a pool's matches with the very arithmetic that will later draw
+ * from it — an import-time "this pool is too small" that disagreed with
+ * the run-time `PoolTooSmallError` would be worse than no check at all.
+ */
+export function matchesFilter(question: Question, filter: PoolFilter | undefined): boolean {
   if (!filter) return true;
   if (filter.tags && !filter.tags.some((tag) => question.tags?.includes(tag))) return false;
   if (filter.difficulty && (question.difficulty === undefined || !filter.difficulty.includes(question.difficulty)))

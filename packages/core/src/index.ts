@@ -35,10 +35,13 @@ export { makeRng, shuffleOptions } from "./rng.js";
 
 // Question selection and per-attempt layout. `PoolTooSmallError` must be a
 // value export (not just a type) so callers can `catch` and `instanceof`
-// it. `selectForSection` stays internal: later packages only need the
-// whole-attempt `layoutForAttempt`, which already calls it per section.
+// it. `selectForSection` and `matchesFilter` stay internal: later packages
+// only need the whole-attempt `layoutForAttempt`, which already calls
+// `selectForSection` per section, and `matchesFilter` is exported from
+// select.ts solely so validate.ts counts a pool with the same arithmetic
+// that draws from it.
 export type { AttemptLayout } from "./select.js";
 export { PoolTooSmallError, assignSet, layoutForAttempt } from "./select.js";
 
-// Cross-field import validation.
+// Cross-field import validation, for a bank and for a test document.
 export * from "./validate.js";
