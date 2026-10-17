@@ -21,6 +21,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- `docs/PRD.md` no longer lists ordering under partial credit. `ordering` is scored by `position` ("points × items in the right position ÷ items"), which already is partial credit for a sequence; `docs/question-format.md` and `APPLICABLE_MODES` always said so.
+- `docs/PRD.md` T-10 no longer promises section shuffling. Nothing expressed it — there is no `shuffle_sections` field — and per-section time limits (T-12) and `per_section` navigation (T-13) both assume a stable section order. Shuffling questions within a section stays.
 - `DESIGN.md` gains a `hero-lead` typography token (24px). Cream on the voltage canvas measures 3.86:1, which WCAG AA permits only at 24px and above, so the hero's lead sentence has a size floor rather than a tint exception.
 - Licence is **Apache-2.0**, replacing the proposed AGPL-3.0. Reasoning recorded in `docs/adr/0003-license-apache-2-0.md`. Documentation, schemas and examples remain CC BY 4.0.
 - `examples/` is organised one folder per subject, each holding its own questions, test and README, replacing the single `examples/banks/` directory.

@@ -165,7 +165,7 @@ A **passage group** (one reading passage, table or code sample followed by sever
 | Mode | Applies to | Rule |
 | --- | --- | --- |
 | All-or-nothing | Every auto-graded type | Full points only if the answer exactly matches the key |
-| Partial credit | Multiple choice, select K, matching, multi-matching, ordering, fill in the blank | Points × (correct parts − wrong parts) ÷ total parts, never below 0 |
+| Partial credit | Multiple choice, select K, matching, multi-matching, fill in the blank | Points × (correct parts − wrong parts) ÷ total parts, never below 0 |
 | Negative marking | Any auto-graded type | Wrong answer loses a set fraction of the points (for example 0.25); blank loses nothing |
 | Ordering by position | Ordering | Points × items in the right position ÷ items |
 | Rubric | Short and long answer | Reviewer picks rubric levels; points summed |
@@ -201,7 +201,7 @@ A workspace can hold any number of tests. Each is created from scratch, from a t
   - **Random from pool** — "N questions from bank B with tags X and difficulty Y", repeatable within a section
   - **Sets (forms)** — several fixed papers (Set A, B, C…) with one set given to each candidate
 - **T-09** How sets are assigned: round-robin by registration order (default; neighbours get different sets), random, by a hash of the candidate ID, or by a column in an uploaded candidate list.
-- **T-10** Shuffle options: shuffle questions within a section, shuffle sections, and shuffle answer options (except pinned ones). The order is stored per attempt, so it survives a refresh.
+- **T-10** Shuffle options: shuffle questions within a section and shuffle answer options (except pinned ones). The order is stored per attempt, so it survives a refresh.
 - **T-11** Before publishing, the builder warns if a pool has fewer questions than requested, or if sets differ in total points by more than a set amount.
 
 ### Timing and navigation
