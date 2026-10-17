@@ -5,6 +5,14 @@ import type { ReactNode } from "react";
 // instead of 7fr/5fr). One component doing more, not a second one — the
 // variant drives both the heading level/size and the column ratio, since
 // those two facts move together for every instance this page has.
+//
+// v3 §3.1 changes display-xl's shape only: the source order is now
+// chip → h1 → demo → lead → links → bridge, with the demo placed in the
+// grid's 5fr column by CSS (grid-column/grid-row on .hero-demo in
+// components.css), never by nesting it inside a column wrapper — nesting
+// is what would have forced a choice between the right DOM order and the
+// right visual column. display-lg (S11/Closing) keeps v2's own shape
+// untouched: chip/heading/lead/ctas in one column, mock in the other.
 export type HeroSectionVariant = "display-xl" | "display-lg";
 
 export function HeroSection({
@@ -12,7 +20,10 @@ export function HeroSection({
   headingId,
   heading,
   chip,
+  demo,
   lead,
+  links,
+  bridge,
   primaryCta,
   secondaryCta,
   mock,
@@ -22,37 +33,60 @@ export function HeroSection({
   heading: ReactNode;
   /** The pre-alpha status chip — S1 only. */
   chip?: ReactNode;
-  lead: ReactNode;
-  primaryCta: ReactNode;
+  /** display-xl only: the prerendered exam demo (v3 §3). */
+  demo?: ReactNode;
+  /** Optional: B8 carries four elements and no lead paragraph (v3 §4.7). */
+  lead?: ReactNode;
+  /** display-xl only: the hero's two secondary text links (v3 §3.1) — the
+   * primary CTA moved to the closing band, so there is no button here. */
+  links?: ReactNode;
+  /** display-xl only: the bridge band closing the hero's foot (v3 §3.8). */
+  bridge?: ReactNode;
+  /** display-lg only (S11/Closing). */
+  primaryCta?: ReactNode;
   secondaryCta?: ReactNode;
-  /** The right-column slot: a ProductMock, or S11's file listing. */
+  /** display-lg only (S11/Closing): the right-column slot. */
   mock?: ReactNode;
 }) {
-  const HeadingTag = variant === "display-lg" ? "h2" : "h1";
-  const sectionClassName =
-    variant === "display-lg"
-      ? "hero-section hero-section--display-lg"
-      : "hero-section";
+  if (variant === "display-lg") {
+    return (
+      <section
+        className="hero-section hero-section--display-lg"
+        aria-labelledby={headingId}
+      >
+        <div className="hero-inner">
+          <div className="hero-copy">
+            {chip !== undefined && <p className="hero-chip">{chip}</p>}
+            <h2
+              id={headingId}
+              className="hero-heading hero-heading--display-lg"
+            >
+              {heading}
+            </h2>
+            {lead !== undefined && <p className="hero-lead">{lead}</p>}
+            <div className="hero-ctas">
+              {primaryCta}
+              {secondaryCta}
+            </div>
+          </div>
+          {mock !== undefined && <div className="hero-mock">{mock}</div>}
+        </div>
+      </section>
+    );
+  }
 
   return (
-    <section className={sectionClassName} aria-labelledby={headingId}>
+    <section className="hero-section" aria-labelledby={headingId}>
       <div className="hero-inner">
-        <div className="hero-copy">
-          {chip !== undefined && <p className="hero-chip">{chip}</p>}
-          <HeadingTag
-            id={headingId}
-            className={`hero-heading hero-heading--${variant}`}
-          >
-            {heading}
-          </HeadingTag>
-          <p className="hero-lead">{lead}</p>
-          <div className="hero-ctas">
-            {primaryCta}
-            {secondaryCta}
-          </div>
-        </div>
-        {mock !== undefined && <div className="hero-mock">{mock}</div>}
+        {chip !== undefined && <p className="hero-chip">{chip}</p>}
+        <h1 id={headingId} className="hero-heading hero-heading--display-xl">
+          {heading}
+        </h1>
+        {demo}
+        {lead !== undefined && <p className="hero-lead">{lead}</p>}
+        {links !== undefined && <div className="hero-links">{links}</div>}
       </div>
+      {bridge}
     </section>
   );
 }

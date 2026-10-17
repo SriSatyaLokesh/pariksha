@@ -2,15 +2,22 @@
 // §5, SEO-1 through SEO-6). Runs after `vite build` — see
 // apps/web/package.json's "build" script.
 //
-// Three jobs, in order:
+// Four jobs, in order:
 //   1. SSR-bundle apps/web/src/entry-prerender.tsx with Vite, so its JSX/TS
 //      and its "./routes/landing" + "./seo/*" imports resolve in Node, then
 //      import the built module for its exports.
 //   2. Replace dist/index.html's `<div id="root"></div>` with the rendered
-//      markup, strip the client `<script type="module">`/modulepreload tags
-//      main.tsx's bundle left behind (SEO-2: the page ships 0 bytes of JS),
-//      and inject the <head> payload + JSON-LD that apps/web/src/seo/ builds.
-//   3. Write dist/robots.txt, dist/llms.txt and dist/sitemap.xml.
+//      markup, strip every `<script type="module">`/modulepreload tag the
+//      build left behind (I-1: the page ships no client JS of its own
+//      making), and inject the <head> payload + JSON-LD that
+//      apps/web/src/seo/ builds.
+//   3. Inject the one sanctioned script: the exam-demo island, found in
+//      dist/.vite/manifest.json and added as a single
+//      `<script type="module" src="/assets/…">` immediately before
+//      `</body>` (v3 design contract §2.7, I-1). Strip-then-inject keeps one
+//      rule in one place — the prerender alone decides which scripts reach
+//      the public page.
+//   4. Write dist/robots.txt, dist/llms.txt and dist/sitemap.xml.
 //
 // No new dependency: react-dom/server ships with react-dom, and the Vite
 // build this reuses is already a devDependency.
@@ -149,6 +156,46 @@ function injectHead(page, head, jsonLd) {
   return page.replace("</head>", `  ${tags.join("\n  ")}\n</head>`);
 }
 
+// v3 design contract §2.7 / I-1. The exam-demo island is a third Rollup
+// entry (`island: .../src/island/exam-demo.ts`) built alongside index.html
+// and admin.html; Vite's manifest (`build.manifest: true`) is the one place
+// that names its hashed output file, so this reads the manifest rather than
+// guessing a filename. Returns the tag text; throws if the manifest doesn't
+// name exactly one "island" entry, because I-1 requires exactly one module
+// script and a design that silently shipped zero or two would be the wrong
+// design (D2: "if the island cannot do this, it does not ship").
+export async function buildIslandScriptTag(outDir) {
+  const manifestPath = resolve(outDir, ".vite/manifest.json");
+  let manifest;
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (cause) {
+    throw new Error(
+      `Could not read the Vite manifest at ${manifestPath} to find the ` +
+        "exam-demo island's built file (design contract §2.7). Build with " +
+        '"manifest: true" and a Rollup input named "island" first.',
+      { cause },
+    );
+  }
+
+  const islandEntries = Object.values(manifest).filter(
+    (entry) => entry?.isEntry && entry?.name === "island",
+  );
+  if (islandEntries.length !== 1) {
+    throw new Error(
+      'Expected exactly one Vite entry named "island" (the exam-demo ' +
+        `module, design contract §2.7) in ${manifestPath}; found ` +
+        `${islandEntries.length}.`,
+    );
+  }
+
+  return `<script type="module" src="/${islandEntries[0].file}"></script>`;
+}
+
+function injectIslandScript(page, scriptTag) {
+  return page.replace("</body>", `    ${scriptTag}\n  </body>`);
+}
+
 // SEO-4: dist/404.html is emitted here, carrying the same shell as the real
 // page — same stylesheet link, so it is never an unstyled orphan — rather
 // than being a static apps/web/public/404.html copy, which had no
@@ -254,6 +301,9 @@ export async function runPrerender({ webRoot, outDir, siteUrl }) {
     const head = buildHead(origin);
     const jsonLd = buildJsonLd({ siteUrl: origin, dateModified });
     page = injectHead(page, head, jsonLd);
+
+    const islandScriptTag = await buildIslandScriptTag(outDir);
+    page = injectIslandScript(page, islandScriptTag);
 
     await writeFile(indexPath, page);
     await writeFile(resolve(outDir, "404.html"), build404Html(page));

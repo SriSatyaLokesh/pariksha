@@ -200,6 +200,419 @@
   min-width: 0;
 }
 
+/* v3 §3.1: the hero's two secondary text links, replacing the old
+   ButtonSecondary pill now that the primary CTA has left the hero. Plain
+   underlined cream text on voltage — shape no longer has to carry
+   hierarchy here because there is nothing left for it to out-rank. */
+.hero-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xl);
+  margin: 0 0 var(--space-xl);
+}
+
+/* A1/T27: 14px text cannot reach 4.5:1 on the voltage field in ANY colour
+   — cream is 3.86:1, white 3.96:1, ink 4.11:1 — so small text in a voltage
+   band takes its own cream plane. That is the band's own existing answer
+   (.hero-chip, directly above these links, and v2's closing file listing);
+   only the h1 and the 24px lead stay cream on voltage, where the 3:1
+   large-text threshold applies. The links stay secondary — no fill, no
+   shadow, no button type, underlined — so §3.1's "exactly one filled
+   control above the fold" is still the demo's Finish. */
+.hero-text-link {
+  display: inline-block;
+  background: var(--color-cream);
+  color: var(--color-voltage-deep);
+  padding: var(--space-xs) var(--space-md);
+  border-radius: var(--rounded-full);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- The hero demo (v3 §2, §3) -------------------------------------- */
+
+/* Reuses the existing .runner-mock family (sections-s1-s3.css, the old
+   static mock's own styling, not touched by this file) wherever its rule
+   already matches what the demo needs untouched — the cream card chrome,
+   the chrome-row layout, the stem row, the option box, the palette square.
+   Only what the old mock never had gets a new selector here:
+   .runner-mock--demo (this instance's own grid placement), the title, the
+   fieldset/list/panel/controls/result wrappers, and the two still-prose
+   classes the bridge band needed. Properties are additive to the existing
+   rules (never the same property on the same selector — see each comment
+   below) so this never depends on import order between the two files. */
+
+/* On the voltage field the default focus ring swaps to cream
+   (base.css's .hero-section :focus-visible); every focusable control in
+   the demo and the bridge band sits on a cream surface instead, where a
+   cream ring would be invisible, so it swaps back to voltage here. Later
+   in the cascade than base.css (index.html loads base.css first), so it
+   wins at equal specificity without !important. */
+.runner-mock--demo :focus-visible,
+.hero-bridge :focus-visible {
+  outline-color: var(--color-voltage);
+  box-shadow: 0 0 0 3px rgb(from var(--color-voltage) r g b / 0.25);
+}
+
+/* Shared with the bridge band's own heading (§3.8) — both are a small ink
+   heading on a cream surface. */
+.runner-mock__title {
+  margin: 0;
+  font-family: var(--type-heading-sm-family);
+  font-weight: var(--type-heading-sm-weight);
+  font-size: var(--type-heading-sm-size);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+.runner-mock__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* §3.9: three lines of mono-sm, always on screen, in the existing
+   .runner-mock__header layout (flex-wrap, justify-between, border-bottom —
+   unchanged). The privacy line reuses .runner-mock__section's own type
+   (it is "the same mono-sm register as the chrome", §2.8) and only adds
+   flex-basis so it falls to its own line under the first two. */
+.runner-mock__privacy {
+  flex-basis: 100%;
+}
+
+.runner-mock__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.runner-mock__question {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* A <fieldset>/<legend> reset: the browser default border, padding and
+   intrinsic legend width would otherwise fight the existing
+   .runner-mock__stem rule's own measure. .runner-mock__stem itself is
+   reused unchanged for the legend text (font/colour); this only adds the
+   properties that rule never declared. */
+.runner-mock__fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.runner-mock__stem {
+  display: block;
+  width: 100%;
+  padding: 0;
+}
+
+/* A real native control inside a real label — nothing here is a div with
+   a click handler. .runner-mock__option's own box (border, padding,
+   canvas background, option-label type) is reused unchanged; the checked
+   state is carried by :has(), so the selected look works before the
+   island (or any script at all) ever runs — the old --selected modifier
+   class this replaces set the same three properties, by hand, from JS. */
+.runner-mock__option:has(input:checked) {
+  background: var(--color-cream);
+  border: 2px solid var(--color-voltage);
+  font-weight: 500;
+}
+
+.runner-mock__option input {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+/* E-7: a 44px strip in both the inert (prerendered) and the navigable
+   (island-upgraded) state, added to the existing .runner-mock__palette
+   flex-wrap rule — align-items: center holds the 36px squares in the
+   middle of it rather than the container growing when the island's
+   buttons arrive. */
+.runner-mock__palette {
+  align-items: center;
+  min-height: 44px;
+}
+
+/* E-6: min-height equal to the upgraded row, so the prerendered sentence
+   and link occupy the space the island's four buttons will later fill
+   rather than the row growing when they arrive. */
+.runner-mock__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md) var(--space-lg);
+  min-height: 44px;
+}
+
+.runner-mock__nojs {
+  margin: 0;
+}
+
+.runner-mock__fallback {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  color: var(--color-voltage-deep);
+}
+
+.runner-mock__result:not([hidden]) {
+  margin-top: var(--space-lg);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--color-hairline-strong);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-lg);
+}
+
+@media (min-width: 900px) {
+  /* The demo lives in the grid's 5fr column without moving in the DOM
+     (v3 §3.1): col 1 gets the chip/h1/lead/links in document order by
+     ordinary auto-placement, this is the only explicit placement needed.
+     span 4 matches that column's four auto-placed items. */
+  .runner-mock.runner-mock--demo {
+    grid-column: 2;
+    grid-row: 1 / span 4;
+    padding: var(--space-lg);
+  }
+}
+
+@media (max-width: 480px) {
+  .runner-mock.runner-mock--demo {
+    padding: var(--space-md);
+  }
+
+  /* §3.10: the control row wraps to two lines below 480px, the fallback
+     link as a third (I-9) — width:100% is what forces that rather than
+     the row trying to fit everything beside the sentence. */
+  .runner-mock__nojs,
+  .runner-mock__fallback {
+    flex-basis: 100%;
+  }
+}
+
+/* ---- What the island creates at runtime (v3 §2.3, §3.5-§3.7) --------- */
+
+/* Every selector below styles an element src/island/exam-demo.ts builds
+   after the page has loaded. The island sets no style attribute and no
+   element.style property (I-7), so these rules are the only place its
+   controls, its palette buttons and its result panel get a colour — which
+   is also what keeps them inside T27's contrast sweep. None of them is a
+   ButtonPrimary and none carries its class (I-8). */
+
+/* §3.6: the square keeps its 36x36 visual box (the existing
+   .runner-mock__square rule, reused unchanged on an inner span) and the
+   button around it carries the 44x44 hit area. The button paints nothing
+   of its own, so it sets no colour and needs no SURFACE entry. */
+.runner-mock__square-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+/* Back / Mark for review / Next / Finish, and the result panel's Try
+   again. 44px tall with at least 8px between adjacent targets (§3.6 —
+   the gap comes from .runner-mock__controls' own flex gap). */
+.runner-mock__control {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  min-height: 44px;
+  padding: var(--space-sm) var(--space-lg);
+  background: none;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-full);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+  color: var(--color-ink);
+  cursor: pointer;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .runner-mock__control {
+    transition:
+      background 120ms ease,
+      border-color 120ms ease;
+  }
+}
+
+/* The page's one filled control above the fold (§3.5). Voltage-deep
+   rather than voltage, the same pairing .button-primary--surface already
+   uses: cream on voltage is 3.86:1 at this size, cream on voltage-deep
+   is 5.66:1. */
+.runner-mock__control--primary {
+  background: var(--color-voltage-deep);
+  border-color: var(--color-voltage-deep);
+  color: var(--color-cream);
+}
+
+/* Tertiary is text only — Mark for review and Try again. */
+.runner-mock__control--tertiary {
+  border-color: transparent;
+  padding-inline: var(--space-sm);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* A disabled Back or Next is exempt from the contrast minimum (WCAG 1.4.3
+   excludes inactive controls), and dimming the whole control rather than
+   re-colouring its text is what keeps it out of the SURFACE map. */
+.runner-mock__control:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+/* §3.6: the Enter shortcut is announced rather than hidden. */
+.runner-mock__hint {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  color: var(--color-muted);
+}
+
+/* ---- The result panel (v3 §3.7) -------------------------------------- */
+
+/* The score <h3> reuses .runner-mock__title for its type and colour (both
+   are a small ink heading on this same cream card); this adds only the
+   tabular figures §3.7 asks for and the focus target's own reset. */
+.runner-mock__result-score {
+  font-variant-numeric: tabular-nums;
+}
+
+.runner-mock__result-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.runner-mock__result-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-xs) var(--space-lg);
+}
+
+/* The format's own vocabulary, in the format's own register (§3.7). */
+.runner-mock__result-type {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  color: var(--color-muted);
+}
+
+/* Points over max, tabular so 2.00 and 0.67 align (§3.7), and the verdict
+   as a word beside them — colour is never the only carrier (A11). */
+.runner-mock__result-points {
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-timer-numeric-size);
+  font-weight: var(--type-timer-numeric-weight);
+  line-height: var(--type-timer-numeric-line-height);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.runner-mock__result-verdict {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 500;
+  line-height: var(--type-body-sm-line-height);
+  color: var(--color-ink);
+}
+
+/* The summary line, the explanation, the two prose lines and the forward
+   links are all body-sm prose on the same cream card, so they are one
+   rule and one entry rather than five of each. */
+.runner-mock__result-summary,
+.runner-mock__result-explanation,
+.runner-mock__result-prose,
+.runner-mock__result-link {
+  max-width: 680px;
+  margin: 0;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+.runner-mock__result-explanation {
+  flex-basis: 100%;
+}
+
+/* The forward actions are text links, never a second filled control, so
+   T20's single-primary rule survives the result state (§3.7 item 3). */
+.runner-mock__result-link a {
+  color: var(--color-voltage-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 480px) {
+  /* §3.10: the key rows stack to two lines each below 480px. */
+  .runner-mock__result-points {
+    flex-basis: 100%;
+  }
+}
+
+/* ---- The hero's bridge band (v3 §3.8) -------------------------------- */
+
+/* A full-bleed cream strip closing the hero's foot — the bleed P10
+   governs, moved from the old static mock to this band. The negative
+   margin only ever cancels .hero-section's own inline padding, and
+   .hero-section's overflow: hidden is what keeps that from ever reaching
+   a body-level horizontal scrollbar (P6, P10). */
+.hero-bridge {
+  background: var(--color-cream);
+  margin: var(--space-3xl) calc(var(--space-xl) * -1)
+    calc(var(--space-5xl) * -1);
+  padding: var(--space-xl) var(--space-xl) var(--space-5xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.runner-mock__note {
+  max-width: 680px;
+  margin: 0;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
 /* Section heading */
 
 .section-eyebrow {

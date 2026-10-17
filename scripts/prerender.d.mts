@@ -10,3 +10,7 @@ export function runPrerender(options: {
   outDir: string;
   siteUrl: string | undefined;
 }): Promise<void>;
+
+// v3 design contract §2.7: looks up the exam-demo island's hashed file in
+// outDir's Vite manifest and returns its <script type="module"> tag.
+export function buildIslandScriptTag(outDir: string): Promise<string>;
