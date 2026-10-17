@@ -1,0 +1,303 @@
+/* CodeBlock, ComparisonTable, StepRow — the four new components (§6).
+   CodeBlock and ComparisonTable rules follow ui-direction.md §3 and §4. */
+
+/* ---- CodeBlock (§3.1–§3.3) --------------------------------------- */
+
+.code-block {
+  margin: 0;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  overflow: hidden;
+}
+
+.code-block__caption {
+  margin: 0;
+  background: var(--color-cream);
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  padding: var(--space-md) var(--space-lg);
+}
+
+.code-block__scroll {
+  background: var(--color-canvas);
+  overflow-x: auto;
+}
+
+.code-block__pre {
+  margin: 0;
+  padding: var(--space-lg);
+  white-space: pre;
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+  font-weight: var(--type-mono-md-weight);
+  line-height: var(--type-mono-md-line-height);
+  letter-spacing: var(--type-mono-md-letter-spacing);
+  color: var(--color-ink);
+}
+
+.code-block__footer {
+  margin: 0;
+  background: var(--color-cream);
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  padding: var(--space-md) var(--space-lg);
+}
+
+/* U §3.3: on voltage, nothing under 24px may sit directly on the voltage
+   fill. The block collapses onto one cream plane; the caption detaches
+   above it at hero-lead (24px) cream text instead of a 12px bar. */
+.code-block--voltage {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.code-block--voltage .code-block__caption {
+  background: transparent;
+  color: var(--color-cream);
+  font-family: var(--type-hero-lead-family);
+  font-size: var(--type-hero-lead-size);
+  font-weight: var(--type-hero-lead-weight);
+  line-height: var(--type-hero-lead-line-height);
+  letter-spacing: var(--type-hero-lead-letter-spacing);
+  padding: 0 0 var(--space-md);
+}
+
+.code-block--voltage .code-block__scroll {
+  background: var(--color-cream);
+  border-radius: var(--rounded-md);
+}
+
+.code-block--voltage .code-block__pre {
+  padding: var(--space-xl);
+}
+
+.code-block--voltage .code-block__footer {
+  border-radius: 0 0 var(--rounded-md) var(--rounded-md);
+}
+
+/* §3.2: four syntax-colour roles, no more, no new hex — written by hand at
+   author time at the call site, checked on both white and cream (A3). */
+.tok-key {
+  color: var(--color-ink);
+}
+
+.tok-string {
+  color: var(--color-voltage-deep);
+}
+
+.tok-number {
+  color: var(--color-data-blue);
+}
+
+.tok-punct {
+  color: var(--color-muted);
+}
+
+/* ---- StepRow (S3) -------------------------------------------------- */
+
+.step-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xl);
+}
+
+.step-row__ordinal {
+  flex: 0 0 auto;
+  font-family: var(--type-display-lg-family);
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line-height);
+  color: var(--color-muted);
+}
+
+.step-row__content {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.step-row__title {
+  margin: 0 0 var(--space-md);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+.step-row__body {
+  margin: 0 0 var(--space-lg);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  color: var(--color-ink);
+}
+
+.step-row__artefact {
+  min-width: 0;
+}
+
+/* ---- ComparisonTable (§4) ------------------------------------------ */
+
+.comparison-table__region {
+  overflow-x: auto;
+}
+
+.comparison-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.comparison-table thead th {
+  text-align: left;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-hairline-strong);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+.comparison-table tbody th[scope="row"] {
+  text-align: left;
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-hairline);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+.comparison-table tbody td {
+  padding: var(--space-md);
+  border-bottom: 1px solid var(--color-hairline);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+/* §4.1: the Pariksha column — the argument is typographic, never colour
+   alone (A11): larger, darker, reading-face text on a continuous cream
+   fill, not a tick, cross or highlight colour. */
+.comparison-table__cell--highlight {
+  background: var(--color-cream);
+  border-left: 1px solid var(--color-hairline-strong);
+  border-right: 1px solid var(--color-hairline-strong);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+th.comparison-table__cell--highlight {
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+}
+
+.comparison-table__footnote {
+  margin: var(--space-md) 0 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+/* §4.2: at <=640px the table reflows to stacked cards, CSS only, same
+   markup. The header row is hidden (not removed) so table semantics
+   survive for assistive tech; a real `.cell-label` span (not generated
+   content) supplies the label sighted narrow readers need. */
+.cell-label {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .comparison-table__region {
+    overflow-x: visible;
+  }
+
+  .comparison-table thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  .comparison-table,
+  .comparison-table tbody,
+  .comparison-table tr,
+  .comparison-table th,
+  .comparison-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .comparison-table tbody tr {
+    background: var(--color-canvas);
+    border: 1px solid var(--color-hairline);
+    border-radius: var(--rounded-md);
+    padding: var(--space-lg);
+    margin-bottom: var(--space-md);
+  }
+
+  .comparison-table tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  .comparison-table tbody th[scope="row"] {
+    border-bottom: none;
+    padding: 0 0 var(--space-sm);
+    font-family: var(--type-heading-sm-family);
+    font-size: var(--type-heading-sm-size);
+    font-weight: var(--type-heading-sm-weight);
+    line-height: var(--type-heading-sm-line-height);
+    letter-spacing: var(--type-heading-sm-letter-spacing);
+    color: var(--color-ink);
+  }
+
+  .comparison-table tbody td {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--space-md);
+    border-bottom: none;
+    padding: var(--space-xs) 0;
+  }
+
+  .cell-label {
+    display: inline-block;
+  }
+
+  .comparison-table__cell--highlight {
+    border: none;
+    margin-inline: calc(var(--space-lg) * -1);
+    padding-inline: var(--space-lg);
+  }
+}
