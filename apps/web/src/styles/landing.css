@@ -8,7 +8,9 @@
 .top-nav__inner {
   max-width: 1080px;
   margin-inline: auto;
-  padding: var(--space-md) var(--space-2xl);
+  min-height: 64px;
+  padding-inline: var(--space-2xl);
+  padding-block: var(--space-sm);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -92,23 +94,30 @@
   font-family: var(--type-display-xl-family);
   font-weight: var(--type-display-xl-weight);
   font-size: clamp(2rem, 1.2rem + 4vw, var(--type-display-xl-size));
-  line-height: 1.05;
+  /* A unitless ratio derived from the token (56px/56px = 1), so the 1.0
+     line-height DESIGN.md specifies for display-xl holds at every clamped
+     size, not just the unclamped 56px. */
+  line-height: calc(
+    var(--type-display-xl-line-height) / var(--type-display-xl-size)
+  );
   letter-spacing: var(--type-display-xl-letter-spacing);
   margin: 0 0 var(--space-xl);
 }
 
 .hero-lead {
   color: var(--color-cream);
-  font-family: var(--type-body-md-family);
-  font-size: var(--type-body-md-size);
-  line-height: var(--type-body-md-line-height);
-  letter-spacing: var(--type-body-md-letter-spacing);
+  font-family: var(--type-hero-lead-family);
+  font-size: var(--type-hero-lead-size);
+  font-weight: var(--type-hero-lead-weight);
+  line-height: var(--type-hero-lead-line-height);
+  letter-spacing: var(--type-hero-lead-letter-spacing);
   margin: 0 0 var(--space-xl);
   max-width: 720px;
 }
 
-.hero-caption {
-  margin-top: var(--space-lg);
+.hero-status-band {
+  padding-block: var(--space-xl);
+  border-bottom: 1px solid var(--color-hairline);
 }
 
 /* Buttons */
@@ -196,17 +205,14 @@
   margin: 0;
 }
 
-.mono-caption--on-voltage {
-  color: var(--color-cream);
-  opacity: 0.85;
-}
-
 .section-heading {
   color: var(--color-ink);
   font-family: var(--type-display-xl-family);
   font-weight: var(--type-display-xl-weight);
   font-size: clamp(1.75rem, 1.3rem + 2.5vw, var(--type-display-xl-size));
-  line-height: 1.05;
+  line-height: calc(
+    var(--type-display-xl-line-height) / var(--type-display-xl-size)
+  );
   letter-spacing: var(--type-display-xl-letter-spacing);
   margin: 0 0 var(--space-xl);
 }
@@ -280,19 +286,24 @@
 }
 
 .card-voltage__heading {
+  color: var(--color-cream);
   font-family: var(--type-display-lg-family);
   font-weight: var(--type-display-lg-weight);
   font-size: clamp(1.75rem, 1.3rem + 2.5vw, var(--type-display-lg-size));
-  line-height: 1.05;
+  line-height: calc(
+    var(--type-display-lg-line-height) / var(--type-display-lg-size)
+  );
   letter-spacing: var(--type-display-lg-letter-spacing);
-  margin: 0 0 var(--space-md);
+  margin: 0;
 }
 
-.card-voltage__body {
+.budget-note {
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   line-height: var(--type-body-md-line-height);
-  margin: 0;
+  letter-spacing: var(--type-body-md-letter-spacing);
+  color: var(--color-ink);
+  margin: 0 0 var(--space-lg);
 }
 
 .card-hairline {

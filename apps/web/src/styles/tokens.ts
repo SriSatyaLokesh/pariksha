@@ -52,6 +52,13 @@ export const tokens = {
       lineHeight: "24px",
       letterSpacing: "-0.2px",
     },
+    "hero-lead": {
+      fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif',
+      fontSize: "24px",
+      fontWeight: 400,
+      lineHeight: "34px",
+      letterSpacing: "-0.2px",
+    },
     "question-stem": {
       fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif',
       fontSize: "18px",

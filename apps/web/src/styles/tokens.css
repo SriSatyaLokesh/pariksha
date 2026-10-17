@@ -45,6 +45,12 @@
   --type-heading-sm-letter-spacing: -0.2px;
   --type-heading-sm-family:
     "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-hero-lead-size: 24px;
+  --type-hero-lead-weight: 400;
+  --type-hero-lead-line-height: 34px;
+  --type-hero-lead-letter-spacing: -0.2px;
+  --type-hero-lead-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
   --type-question-stem-size: 18px;
   --type-question-stem-weight: 400;
   --type-question-stem-line-height: 29px;

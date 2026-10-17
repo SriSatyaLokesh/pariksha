@@ -66,6 +66,16 @@ export function Landing() {
       <main id="main-content">
         <HeroSection />
 
+        {/* DESIGN.md's hero-section holds only the h1, lead sentence and
+            CTA. This caption used to sit on the voltage canvas at 12px,
+            which fails WCAG AA for cream-on-voltage (legal only at 24px+),
+            so it lives here instead: mono-sm muted on cream, 5.18:1. */}
+        <div className="hero-status-band wrap">
+          <MonoCaption>
+            Apache-2.0 · pre-alpha · the application lands with v0.1
+          </MonoCaption>
+        </div>
+
         <section
           id="what-it-does"
           aria-labelledby="what-it-does-heading"
@@ -88,12 +98,13 @@ export function Landing() {
 
         <section aria-label="Cost" className="section wrap">
           <div className="split-band">
-            <CardVoltage heading="$0 to run a test for 500 candidates in one hour.">
-              Not a trial, not a free tier with a candidate cap. The reference
-              deployment fits inside Cloudflare&apos;s free plan, and the
-              numbers are in the requirements document.
-            </CardVoltage>
+            <CardVoltage heading="$0 to run a test for 500 candidates in one hour." />
             <CardHairline>
+              <p className="budget-note">
+                Not a trial, not a free tier with a candidate cap. The reference
+                deployment fits inside Cloudflare&apos;s free plan, and the
+                numbers are in the requirements document.
+              </p>
               <table className="budget-table">
                 <caption className="visually-hidden">
                   Free-tier budget for one test of 500 candidates
@@ -231,7 +242,7 @@ export function Landing() {
             <CardHairline>
               <h3 className="hosting-card__title">Cloudflare, free plan</h3>
               <p className="hosting-card__body">
-                — Workers, D1, R2 and Cron Triggers.
+                Workers, D1, R2 and Cron Triggers.
               </p>
               <p className="hosting-card__stats">
                 about 55,000 requests and 55,000 row writes for 500 candidates
@@ -244,10 +255,10 @@ export function Landing() {
             <CardHairline>
               <h3 className="hosting-card__title">Docker, any server</h3>
               <p className="hosting-card__body">
-                — Node with SQLite or Postgres, and S3 or MinIO for snapshots.
+                Node with SQLite or Postgres, and S3 or MinIO for snapshots.
               </p>
               <p className="hosting-card__stats">
-                for organisers who will not use a managed platform, or who have
+                For organisers who will not use a managed platform, or who have
                 outgrown the free limits.
               </p>
               <ButtonSecondary href={tree("deploy/docker")}>
