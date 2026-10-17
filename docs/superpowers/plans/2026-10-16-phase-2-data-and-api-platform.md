@@ -419,7 +419,7 @@ git commit -s -m "feat(storage): r2, s3, disk and memory adapters with expiring 
 
 `now` is injected for the same reason it is in storage: the server timer (`AC-13`) is tested without faking a global clock.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```ts
 it("GET /api/v1/health reports ok, the dialect and the migration count", async () => {
@@ -446,21 +446,21 @@ it("parseEnv rejects a missing required secret by name", () => {
 });
 ```
 
-- [ ] **Step 2: Run it to make sure it fails**
+- [x] **Step 2: Run it to make sure it fails**
 
 Run: `pnpm vitest run apps/api`
 Expected: FAIL.
 
-- [ ] **Step 3: Implement `createApp` and the middleware**
+- [x] **Step 3: Implement `createApp` and the middleware**
 
 `index.ts` and `node.ts` contain binding code only — they build `AppDeps` from their runtime's environment and call `createApp`. No route, no business logic, nothing worth a test lives in either. The CSP is strict and self-only, matching PRD `S-11`'s "no third-party scripts"; it will gain `blob:` for camera frames in Phase 7 and nothing else.
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `pnpm vitest run apps/api`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api

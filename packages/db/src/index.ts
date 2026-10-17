@@ -1,5 +1,7 @@
-// The public surface of @pariksha/db. Phase 2 fills this in task by task:
-// the dialect clients and the workspace-scoped repository layer are next.
+// The public surface of @pariksha/db.
 
 export * from "./ids.js";
 export * from "./schema/index.js";
+export * from "./client.js";
+export * from "./migrate.js";
+export * from "./repo/index.js";

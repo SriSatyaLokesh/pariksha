@@ -1,0 +1,30 @@
+{
+  "name": "@pariksha/api",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/app.d.ts",
+      "default": "./dist/app.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "dev": "node --experimental-strip-types src/node.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "@pariksha/db": "workspace:*",
+    "@pariksha/storage": "workspace:*",
+    "hono": "^4.13.13",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261016.1",
+    "@types/node": "^22.20.5"
+  }
+}

@@ -10,6 +10,11 @@
       "dependsOn": ["^build"]
     },
     "test": {
+      // apps/api's tests import @pariksha/db and @pariksha/storage by package
+      // name, which resolves to their dist/ — so the suite needs them built,
+      // and depending on it here is what makes `pnpm test` work on a fresh
+      // clone instead of only after someone remembers `pnpm build`.
+      "dependsOn": ["^build"],
       // Turborepo runs tasks in a filtered environment, so a variable set in
       // CI reaches vitest only if it is declared here. Without this line the
       // Postgres cases in packages/db skip silently in CI and the job still
