@@ -56,3 +56,19 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      # Enforces the coverage the Phase 1 review measured by hand on
+      # packages/core/src, so the figure stays true without someone
+      # remembering to re-check it. Each threshold is the measured value
+      # rounded down (97.38 statements / 93.34 branches / 100 functions /
+      # 98.52 lines), so the gate is honest rather than aspirational: it
+      # fails on a real drop in covered code, not on rounding.
+      - name: Coverage (packages/core)
+        run: >
+          pnpm --filter @pariksha/core exec vitest run
+          --coverage.enabled --coverage.provider=v8
+          --coverage.include="src/**" --coverage.reporter=text
+          --coverage.thresholds.statements=97
+          --coverage.thresholds.branches=93
+          --coverage.thresholds.functions=100
+          --coverage.thresholds.lines=98
