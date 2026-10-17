@@ -352,6 +352,21 @@ and `hosting.test.ts` forbids URLs in `_headers` anyway.
 applied and confirm the browser console reports no `securitypolicyviolation` for the ld+json block.
 Record the result in this file rather than writing a headless-browser test for it.
 
+**T18 result (recorded 2026-10-17, assignment D):** not yet confirmed in a live browser — the
+agent sandbox this check ran in has no reachable Chrome instance (`chrome-devtools` and
+`claude-in-chrome` both report no browser connection). Done instead: built a standalone page
+carrying the production `_headers` CSP as a `<meta http-equiv="Content-Security-Policy">` and the
+real `<script type="application/ld+json">` block this change produces (`buildJsonLd` output,
+byte-for-byte), ready to open the moment a browser is available —
+`new URL("file:///.../csp-ldjson-check.html")` then read the console. No violation is expected:
+per the HTML Standard, a `<script>` whose `type` is not a JavaScript MIME type (`application/ld+json`
+is not one) is never executed and is not subject to `script-src` at all — this is categorically
+different from `'unsafe-inline'`, which governs scripts the engine *would* run. **Action for
+whoever deploys first:** reopen that page (or `dist/index.html` once it exists) in a real browser
+with the production `_headers` applied and confirm the console is silent, then replace this note
+with the actual result. If it is not silent, the fix named in SEO-19 is a `'sha256-…'` hash added to
+`script-src` in `_headers` — nothing else.
+
 ---
 
 ## 3. Answer engines (AEO) and generative engines (GEO)
