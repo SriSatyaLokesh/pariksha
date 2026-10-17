@@ -29,9 +29,9 @@ A college placement cell, a training institute or a 40-person company that needs
 
 | | Free form tools | Assessment platforms | **Pariksha** |
 | --- | --- | --- | --- |
-| Cost | Free | Per candidate, per month | **Free** |
+| Cost to run | Free | Per candidate or per month | **Free hosting tier, arithmetic published** |
 | Question pools and sets | No | Yes | **Yes** |
-| Rich question types | 3–4 | Yes | **12** |
+| Rich question types | — | Varies by vendor | **12, including matching, ordering and numeric with tolerance** |
 | Camera, fullscreen, tab-switch checks | No | Yes | **Yes** |
 | Where candidate data lives | Their servers | Their servers | **Your account** |
 | Answer keys hidden from the browser | No | Yes | **Yes** |
@@ -153,12 +153,12 @@ Write your own questions, validate them, and they will import into Pariksha on d
 
 | Release | Focus |
 | --- | --- |
-| **v0.1 Pilot-ready** | Tests with IDs and URLs, sets and pools, 6 core question types, registration forms, access codes, Standard and Strict proctoring, live monitor, CSV export, Cloudflare deploy |
-| **v0.2 Teams and security** | Workspaces, roles, OIDC sign-in, invite links, email codes, audit log, retention jobs |
-| **v0.3 All question types** | Remaining question types, partial and negative scoring, grading queue, item analysis, regrade |
+| **v0.1 Pilot-ready** | All 12 question types, question banks and authoring, the test builder (sets, pools, registration forms, access codes), the candidate runtime, Cloudflare deploy |
+| **v0.2 Teams and security** | Workspaces, roles, OIDC sign-in, invite links, email codes, audit log, retention jobs, Standard and Strict proctoring, live monitor, CSV export |
+| **v0.3 Grading and analytics** | Grading queue, item analysis, per-set comparison, regrade |
 | **v1.0 Public release** | Docker + Postgres, REST API, webhooks, CSV and GIFT import, plugins, WCAG 2.1 AA, translations, signed releases |
 
-Each release has an exit gate — v0.1's is one real test with 300+ candidates and zero lost answers. Details: [PRD roadmap](docs/PRD.md#roadmap).
+Each release has an exit gate — v0.1's is one real test with 300+ candidates and zero lost answers. Details: [PRD roadmap](docs/PRD.md#roadmap). **`docs/ROADMAP.md` is authoritative on phasing** — where the two disagree, re-read that file rather than this table.
 
 ## Contributing
 

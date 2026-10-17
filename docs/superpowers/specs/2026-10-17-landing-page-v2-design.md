@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Ready to build — **revision 2**, against three adversarial reviews ([§14](#14-review)) |
+| **Status** | Built, fix-first corrections applied — **revision 3**, against five adversarial reviews total ([§14](#14-review)) |
 | **Date** | 2026-10-17 |
 | **Branch** | `phase-3/landing-page-v2`, worktree `pariksha-landing` |
 | **Rebuilds** | `apps/web/src/routes/landing.tsx`, `apps/web/src/styles/landing.css`, `apps/web/index.html`, the build step |
@@ -315,9 +315,10 @@ instruction — *"Cropping is a design decision; scaling is an accident"* — pr
 fallback to default. Every §3.3 constraint is intact: true sizes, no scale transform, no clock,
 nothing interactive, `aria-hidden="true"` plus the adjacent `visually-hidden` sentence.
 
-**The bleed is implemented as `overflow: hidden` on the hero section, never as a negative margin on
-the page.** A negative margin on the body produces a document-level horizontal scrollbar at some
-width, which P6 forbids; `P10` makes that explicit. Below the two-column breakpoint the mock
+**The bleed is implemented as a negative margin on the grid item, guarded by `min()`, inside the
+hero section's `overflow: hidden` clip — never as a negative margin outside an overflow-clipped
+section.** A negative margin outside such a clip produces a document-level horizontal scrollbar at
+some width, which P6 forbids; `P10` makes that explicit. Below the two-column breakpoint the mock
 returns inside the wrap and crops from the right there too, per `ui-direction.md` §1.7.
 
 **Source order: the mock's markup follows the hero's text block**, not the other way round, even
@@ -468,7 +469,7 @@ Three defects in the README's wording, each fixed:
 | Row | README today | On the page | Why |
 | --- | --- | --- | --- |
 | Cost | `Free` / `Per candidate, per month` / **`Free`** | **`Cost to run`** — `Free` / `Per candidate or per month` / **`Free hosting tier, arithmetic published`** | Lifted alone, `Pariksha — Cost: Free` is a stronger claim than [S7](#s7--what-it-costs-and-where-it-runs) itself makes, where the same number is carefully an estimate. That is the G5 failure: quotable in six months, and a lie |
-| Rich question types | `3–4` / `Yes` / **`12`** | **`Multiple choice and free text`** / **`Varies by vendor`** / **`12, including matching, ordering and numeric with tolerance`** | `3–4` is a quantitative claim about a named competitor category whose only citation chain is `README.md:34` restating itself. It has no row in `content-inventory.md` §8, which breaks [§9.1](#9-left-to-the-implementer)'s own rule, and it is wrong on the obvious reading — Google Forms offers roughly a dozen answer formats. The row now claims a capability the project can defend without counting someone else's features, and the mixed count/boolean/count vocabulary goes with it |
+| Rich question types | `3–4` / `Yes` / **`12`** | **`—`** / **`Varies by vendor`** / **`12, including matching, ordering and numeric with tolerance`** | `3–4` is a quantitative claim about a named competitor category whose only citation chain is `README.md:34` restating itself, and `Multiple choice and free text` is the same defect in prose rather than digits — neither has a row in `content-inventory.md` §8 carrying an external source, which breaks [§9.1](#9-left-to-the-implementer)'s own rule, and `3–4` is wrong on the obvious reading — Google Forms offers roughly a dozen answer formats. Per the controller's D2 decision the free-form-tools cell makes no capability claim at all rather than a smaller uncited one; the row now claims only what the project can defend about itself |
 | The corner cell | *(empty)* | **`What you need`** | An unlabelled first column parses as a stray data column in some extractors, and a lifted row keeps its axis from the first cell |
 
 The four remaining rows stand: Question pools and sets · Camera, fullscreen and tab-switch checks ·
@@ -551,7 +552,7 @@ feature list, they want to know whether their problem is covered.
 
 | Cell label | Title | Carries |
 | --- | --- | --- |
-| `TWELVE TYPES` | Every type a paper needs | The 12 named types; Markdown, code, LaTeX, images in every one; 5 scoring modes; the type/mode constraint is enforced, not left to arithmetic. Body, binding: *twelve types are defined in the format and graded today in `packages/core`. Six of them ship in v0.1; all twelve by v0.3.* |
+| `TWELVE TYPES` | Every type a paper needs | The 12 named types; Markdown, code, LaTeX, images in every one; 5 scoring modes; the type/mode constraint is enforced, not left to arithmetic. Body, binding: *twelve types are defined in the format and graded today in `packages/core`. All twelve ship with v0.1 (`docs/ROADMAP.md:203`).* |
 | `PER CANDIDATE` | A different paper for everyone | Pools filtered by tag and difficulty, fixed sets round-robin, seeded shuffle that survives a refresh |
 | `REGISTRATION` | A form you design per test | 11 field types, `unique: true` blocking repeat registration, every rule re-checked on the server |
 | `PROCTORING` | Off, Standard or Strict | The escalation; **no video and no audio are ever recorded**; on-device face counting, no biometric template stored |
@@ -574,14 +575,19 @@ that implies a running application. The section's lead line carries the distinct
 cell needs a badge:
 
 > The scoring and selection engines are built and tested; everything else on this page is
-> specified. v0.1 ships six core question types, registration forms, proctoring and CSV results;
-> all twelve types arrive at v0.3.
+> specified. v0.1 ships all twelve question types, the test builder and the candidate runtime;
+> proctoring and results follow in v0.2.
 
-The earlier draft ended *"...is specified and lands with the application"*, which is false for two
-of the page's loudest claims. `README.md:156-159` has **v0.1 Pilot-ready shipping six core question
-types**, with v0.3 carrying "Remaining question types"; and BYOK and the authoring UI are Phases 9
-and 4–5, which do not land with v0.1 either. A reader finishing that page believes the first
-shipped release gives them twelve types. It gives six.
+The earlier draft ended *"...is specified and lands with the application"*, which the first revision
+walked back to a six-in-v0.1 split on the strength of `README.md:156-159` — and that split was
+itself wrong. `docs/ROADMAP.md` is authoritative over `README.md` on phasing (`docs/ROADMAP.md`'s
+own header: "the PRD wins on what and this file wins on when"), and `docs/ROADMAP.md:203` states
+plainly that all 12 question types land in Phase 1, not spread to v0.3; its milestone mapping
+(`:214-215`) puts the test builder (Phase 5) and the candidate runtime (Phase 6) in v0.1 too, with
+proctoring and results (Phases 7–8) following in v0.2. `README.md:156` is corrected in the same pull
+request that corrects this document. Only BYOK (Phase 9) stays off the v0.1 list. A reader finishing
+this page should believe the first shipped release gives them twelve types, a test builder and a
+candidate runtime — because it does.
 
 The twelve are real in `packages/core` today and [S9](#s9--what-is-built-what-is-not) says so
 correctly. **So "12 question types" is a format-and-engine fact everywhere it appears, and the page
@@ -833,6 +839,16 @@ dated sentence.
 (SEO-26), and nobody types two form products at once; the body is where the second proper noun
 belongs, and Q10's body has to be rewritten anyway — see the next rule. The string still reaches
 `dist/index.html`, which is what naming it is for.
+
+**Per the controller's D2 decision, two specific phrasings are barred from Q10's and Q11's bodies.**
+*"Microsoft Forms offers none of those either"* is a capability assertion about a named competitor
+with no `content-inventory.md` §8 row carrying an external source, so it does not appear at all —
+Q10 needs no second negative sentence once the first already names Google Forms. And *"twelve
+question types rather than a form's handful"* is not a claim this project can defend about either
+Forms product; it becomes a claim about Pariksha alone, stated as Pariksha's own fact with no
+implied count for the competitor. **Any sentence naming a vendor carries a dated qualifier** — "as
+published in October 2026" or equivalent — so it is defensible as a snapshot rather than a standing
+comparison. Testportal is named once, in Q11, so its query class is captured too.
 
 **Binding: every answer's first sentence names Pariksha and restates enough of the question to
 stand alone.** `content-inventory.md` §7 is a *source*, not a style guide. Six of its answers never
@@ -1486,7 +1502,7 @@ rule source is named so a reviewer can check the standard rather than the opinio
 | P7 | No third-party origin is fetched by the built page. `public/_headers` keeps `default-src 'self'` on `/*` and contains no `'unsafe-inline'`, no `'unsafe-eval'` and no `https?://` substring | C §2.7, X `third-party-scripts` |
 | P8 | The only CSS transitions are 120ms colour and border on interactive elements, declared inside `@media (prefers-reduced-motion: no-preference)` with `transition: none` as the base. Smooth scroll on in-page anchors sits in the same guard | U §5, X `duration-timing` |
 | P9 | No transform, no keyframe, no scroll-triggered reveal, no counter, no parallax, no hover lift. The motion budget and the prerender constraint are the same constraint: content that appears only after a scroll event is content an answer engine may never see | U §5.2 |
-| P10 | **The hero mock's bleed creates no body-level horizontal scrollbar at any width.** It is implemented as `overflow: hidden` on the hero section, never as a negative margin on the page. P6 is the acceptance; this line names the only construction that satisfies it | S1, U §3.3 |
+| P10 | **The hero mock's bleed creates no body-level horizontal scrollbar at any width.** It is implemented as a negative margin on the grid item, guarded by `min()`, inside the hero section's `overflow: hidden` clip — no negative margin outside an overflow-clipped section. P6 is the acceptance; this line names the only construction that satisfies it | S1, U §3.3 |
 
 ### The invariants this page must not break
 
@@ -1547,7 +1563,7 @@ important test — a non-JS fetch of `/` returns the page text — is green befo
 | T20 | **replace** `landing.test.tsx` #2 | The old "exactly one CTA-shaped link" claim cannot survive a page with a hero CTA, two deploy CTAs and a closing CTA. Two narrower assertions, both still falsifiable: (a) the **first** link inside `.hero-section` has accessible name `Start with the worked example` — no arrow, it is `aria-hidden` — and href `https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude`; (b) **every** CTA-shaped link on the page points at a `github.com/SriSatyaLokesh/pariksha` URL, so nothing is fabricated and nothing points at a product that does not ship |
 | T21 | `landing.test.tsx` #3–#11 | Unchanged and binding: the `.hero-section` class; the voltage token in `tokens.css`; the flat `.hero-section` rule carrying `background: var(--color-voltage)`; self-hosted fonts; the skip link; heading order; **zero `[style]` attributes**; zero axe violations |
 | T22 | **new** `apps/web/test/landing-content.test.tsx` | One assertion per section S1–S12: the section exists with its stated `id`, and its `h2` text content is exactly the verbatim heading in [§3](#3-the-page-section-by-section). Twelve assertions, each of which fails loudly when a section is dropped or silently reworded |
-| T23 | T22 | For every `h2`: the heading ends in `?` **or** is in the allow-list `["Questions and answers", "Read one real test, end to end.", "Footer"]`; the first following `<p>` has a word count between **40 and 60**; and **that paragraph's first sentence contains the string `Pariksha`**. Blunt, and the one mechanical proxy for answer-first writing — it fails the moment someone adds a 200-word preamble, and the `Pariksha` clause enforces SEO-28 across the whole page for one line of test code. [§3](#3-the-page-section-by-section) now specifies the paragraph this asserts, so the test and the design agree |
+| T23 | T22 | For every `h2` **not** in the allow-list `["Questions and answers", "Read one real test, end to end.", "Footer"]`: the heading ends in `?`; the first following `<p>` has a word count between **40 and 60**; and **that paragraph's first sentence contains the string `Pariksha`**. The three allow-listed headings are exempt from this rule entirely — a heading that does not ask a question gets no manufactured answer-shaped paragraph underneath it, which is what lets the footer's visually-hidden paragraph (which existed only to satisfy this test) be deleted. Blunt, and the one mechanical proxy for answer-first writing — it fails the moment someone adds a 200-word preamble, and the `Pariksha` clause enforces SEO-28 across the whole page for one line of test code. [§3](#3-the-page-section-by-section) now specifies the paragraph this asserts, so the test and the design agree |
 | T23b | T22 | Every `h3` inside `#faq` is followed by a `<p>` whose **first sentence contains `Pariksha`**. S10 is the page's densest extraction band; a lifted answer with no subject can be attributed to anything |
 | T24 | T22 | S4 renders a real `<table>` with a `<caption>` and `scope` on every header cell, with four columns and seven body rows, and a **non-empty corner header cell** |
 | T24b | T22 | S4's two prose strings are present verbatim: the dated category-not-product footnote, and the credibility hinge beginning `A paid platform you can buy today`. Both are what keep the table from reading as the X4 brag, and both can be copy-edited away without anything else going red |
@@ -1823,3 +1839,39 @@ Three adversarial reviews, 2026-10-17, against revision 1 of this document. All 
 - Every test from T1 to T32 names a file and an assertion, and every `§5` item has a test or is
   marked manual (T18) or a review gate.
 - The reviews' three "best things" are each named in §14 and each unchanged in substance.
+
+### Revision 3 — fix-first corrections (2026-10-17)
+
+Two further adversarial reviews, 2026-10-17, against the built page and this document together,
+returned fix-first. The findings below are contract or repository defects rather than page defects;
+each is a surgical amendment, not a rewrite. Controller decisions D1–D5 referenced here are recorded
+in the branch's task log and are settled, not reopened.
+
+- **§3 S5's v0.1 sentence corrected (D1).** The lead-line quote and the `TWELVE TYPES` cell body
+  said v0.1 ships six question types with the rest arriving at v0.3, derived from `README.md:156-159`
+  rather than from `docs/ROADMAP.md`. `docs/ROADMAP.md` is authoritative on phasing and `:203`
+  explicitly supersedes the older split: all 12 types, the test builder and the candidate runtime
+  land with v0.1; proctoring and results follow in v0.2. This was the page's worst factual defect,
+  and `README.md:156` is corrected in the same pull request so the two documents agree.
+- **P10's wording corrected (D3).** It read "never as a negative margin on the page", which
+  contradicts the kept implementation — a negative margin on the hero grid item, guarded by `min()`,
+  inside the section's `overflow: hidden` clip. The implementation was always correct; only the
+  sentence was imprecise. Reworded to "no negative margin outside an overflow-clipped section" in
+  both the S1 narrative and the P10 acceptance row, so the rule now describes what is actually built.
+- **T23 amended to exempt the three allow-listed headings (D4).** The 40–60-word paragraph assertion
+  previously applied even to non-question headings once they cleared the allow-list's "ends in `?`"
+  exemption, which is what forced a visually-hidden paragraph to be invented under the footer heading
+  purely to satisfy the test — exactly the gaming SEO-31 forbids. The allow-listed headings are now
+  exempt from the whole rule, and the footer's fake paragraph is deleted.
+- **§3 S4's free-form-tools cell amended (D2).** "Multiple choice and free text" was an uncited
+  capability claim about a competitor category with no `content-inventory.md` §8 row carrying an
+  external source — the same defect as the `3–4` it already replaced, just in prose. The cell now
+  makes no claim about the competitor category at all.
+- **§3 S10's Q10/Q11 wording amended (D2).** "Microsoft Forms offers none of those either" and
+  "twelve question types rather than a form's handful" are barred from the built page's FAQ body for
+  the same reason — uncited competitor capability claims. The twelve-types claim becomes a standalone
+  fact about Pariksha; any sentence naming a vendor now carries a dated qualifier.
+- **§9.1's sourcing rule, checked against D2 — no change needed.** The rule already reads "no number
+  about a competitor category appears on the page at all without a `content-inventory.md` §8 row
+  carrying an external source" (added in revision 2, above). This revision's findings are violations
+  of that existing rule, not gaps in the rule's wording, so §9.1 itself is left as written.

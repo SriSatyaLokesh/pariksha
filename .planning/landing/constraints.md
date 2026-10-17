@@ -407,3 +407,24 @@ lint → typecheck → build → test sequence, then checks the Cloudflare secre
 does not run today. If the rebuild adds a build step to this workflow, test #38 requires
 `pnpm test` to stay before `wrangler deploy`, and test #37 requires any secret to arrive
 through `env:` rather than being interpolated into a `run:` body.
+
+---
+
+## 6. Fix-first findings this branch closes (the documents)
+
+Two adversarial reviews on 2026-10-17 returned fix-first against the built page and the design
+contract. The items below are contract and repository defects rather than page defects — none maps
+to an issue-137 line item (issue 137 is the CSS/lint/accessibility backlog closed by the page
+rebuild itself, §3 above); these are separate findings from the taste/SEO/accuracy review pass on
+this document and `README.md`. Recorded here so the pull request can cite them precisely.
+
+| Finding | Closed by |
+| --- | --- |
+| D1 — v0.1 scope contradiction: `README.md:156` claimed six question types in v0.1, when `docs/ROADMAP.md` (authoritative on phasing) puts all twelve, the test builder and the candidate runtime in v0.1 | `README.md`'s roadmap table corrected, plus a pointer to `docs/ROADMAP.md` as authoritative; the design contract's §3 S5 lead line, `TWELVE TYPES` cell and explanatory paragraph corrected to match, with a dated §14 line |
+| README/page comparison-table drift: `README.md`'s own table repeated the pre-correction wording the page's S4 table had already moved away from | `README.md`'s Cost and Rich-question-types rows brought into line with the page's (D2-compliant) wording |
+| D2 — uncited competitor-capability claims: "Multiple choice and free text", "Microsoft Forms offers none of those either", "twelve question types rather than a form's handful" | §3 S4's free-form-tools cell and §3 S10's Q10/Q11 guidance amended in the contract to bar these phrasings and require a dated qualifier on any vendor-naming sentence; `README.md`'s mirrored table cell corrected the same way |
+| D3 — P10's wording contradicted the kept hero-bleed implementation (negative margin inside an overflow-clipped section, guarded by `min()`) | P10 reworded in both the S1 narrative and the acceptance table to "no negative margin outside an overflow-clipped section"; implementation untouched |
+| D4 — T23 forced a manufactured 40–60-word paragraph under non-question headings, which is why the footer carried a visually-hidden paragraph that existed only to pass the test | T23 amended to exempt the three allow-listed headings from the whole rule, not just the "ends in `?`" clause |
+| §9.1 sourcing rule, checked against D2 | Already carries the external-source clause (added in revision 2); verified, left unchanged |
+| `turbo.json` / `.github/workflows/ci.yml` / `.github/workflows/deploy-web.yml` SITE_URL handling | Verified already compliant — `turbo.json` declares `env: ["SITE_URL"]` on `build`; `ci.yml`'s Build step passes a value with no production-path default (the non-serving placeholder the test suite itself uses); `deploy-web.yml`'s Build step passes `vars.SITE_URL` with no fallback. No edit made |
+| `apps/web/README.md`'s SITE_URL paragraph | Verified already accurate — it attributes the value to the environment, `turbo.json` and the deploy workflow, and does not claim `package.json`'s build script passes it explicitly. No edit made |
