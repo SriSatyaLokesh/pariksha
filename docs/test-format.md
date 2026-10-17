@@ -136,6 +136,8 @@ Browser checks deter and record; they cannot prove or prevent cheating — a sec
 
 `default_mode` applies to every question that does not set its own `scoring.mode`. The modes and their formulas are in [question-format.md](question-format.md#scoring-modes).
 
+A mode only applies to some question types, and that is checked on import against every type the sections can draw — not left to grade by the wrong arithmetic. Pick a `default_mode` that suits every type in the test, and set `scoring.mode` per question for the rest.
+
 ## `sections`
 
 Each section has an `id`, a `title`, optional `instructions` and `time_limit_minutes`, `shuffle_questions`, and one `source`:
@@ -167,7 +169,7 @@ Each section has an `id`, a `title`, optional `instructions` and `time_limit_min
 
 `assignment` is `round_robin` (by registration order, so neighbours differ), `random`, `hash` (of the candidate ID, stable across attempts) or `from_candidate_list` (a `set` column in the uploaded CSV).
 
-Publishing warns you if a pool holds fewer questions than `count`, or if sets drift apart in total points.
+Publishing warns you if a pool holds fewer questions than `count`, or if sets drift apart in total points. Import is stricter: it refuses the file for either (see [Rules checked on import](#rules-checked-on-import)), because an imported file is one an author can still edit.
 
 ## `release`
 
@@ -200,7 +202,9 @@ A daily job deletes anything past its retention period and records the deletion 
 The schema checks structure. The importer also checks:
 
 - every question ID in a `fixed` or `sets` source exists in one of the `banks`
+- `scoring.default_mode` applies to every question type a section can draw, for the questions that do not set their own `scoring.mode` — the modes and the types each applies to are in [question-format.md](question-format.md#scoring-modes). A test defaulting to `partial` over a section of `ordering` questions is an error, not a silent regrade: `ordering` takes `position`
 - a `pool` filter matches at least `count` questions
+- the sets of a `sets` source hold equal total points, within a tolerance the caller may raise (default: 0, so any difference is reported)
 - section IDs and form-field IDs are unique within the test
 - `access_code` is present when `mode` is `link_code`, and `at` is present when `when` is `on_date`
 - `closes_at` is after `opens_at`, and `latest_start_at` falls inside the window

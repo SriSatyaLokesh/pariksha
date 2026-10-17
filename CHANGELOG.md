@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- `validateTest` in `@pariksha/core` — cross-field import validation for `pariksha/test@1` documents, alongside the existing `validateBank`. It checks a test's `scoring.default_mode` against every question type its sections can draw (the mode most questions grade under, since a question's own `scoring` block is optional), a pool whose filter matches fewer questions than its `count`, sets of unequal total points, `release.when: "on_date"` without `at`, and `access.mode: "link_code"` without `access_code`. Line-by-line and all-or-nothing, like the bank importer. Closes #132.
+
 - Design tokens generated from `DESIGN.md`'s front matter by `scripts/tokens.mjs` into committed `tokens.css` and `tokens.ts`, including a `contrastPairs` export of every ratio the design system states. The build regenerates them and the test suite fails if the committed files are stale or if a hex colour literal appears anywhere in `apps/web/src`.
 - `apps/web` — a Vite + React application with the candidate and admin bundles split from the first commit, the design-system components `DESIGN.md` names, and the public landing page. Fonts (Anek Latin, Anek Telugu, Anek Devanagari, JetBrains Mono) are self-hosted, subset and SIL OFL, so the page makes no third-party request. Candidate bundle 75.7 KB gzipped against a 300 KB budget.
 - A contrast test that reads each selector's real `color` and `font-size` declarations out of the stylesheet and asserts the computed WCAG ratio clears its threshold, because axe under jsdom cannot evaluate contrast at all.

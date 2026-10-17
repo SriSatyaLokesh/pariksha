@@ -185,9 +185,12 @@ export interface Bank {
 }
 
 // Test-format types, mirroring schemas/test-1.json's `$defs/section`,
-// `sourceFixed`, `sourcePool` and `sourceSets` exactly. Only what question
-// selection needs — timing, access, the registration form, proctoring,
-// release and retention belong to later phases.
+// `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access` and
+// `release` exactly. Only what question selection and import validation
+// need: `timing`, `consent`, `registration_form`, `proctoring`,
+// `retention` and `branding` are required or optional in the schema but no
+// rule in this package reads them, so they are not modelled here yet. Add
+// each when a phase needs it.
 
 export interface SourceFixed {
   kind: "fixed";
@@ -229,6 +232,47 @@ export interface Section {
   time_limit_minutes?: number;
   shuffle_questions?: boolean;
   source: QuestionSource;
+}
+
+/** The test's `scoring` block: the defaults a question may override. */
+export interface TestScoring {
+  default_mode?: ScoringMode;
+  negative_fraction?: number;
+  pass_mark_percent?: number;
+}
+
+export type AccessMode = "link_code" | "invite_only" | "email_code" | "sso";
+
+export interface TestAccess {
+  mode: AccessMode;
+  access_code?: string;
+  candidate_list?: string;
+  allow_email_domains?: string[];
+  allow_ip_ranges?: string[];
+  captcha?: boolean;
+}
+
+export interface TestRelease {
+  when: "never" | "on_submit" | "on_date";
+  /** Required when `when` is `on_date`. */
+  at?: string;
+  show?: "score_only" | "score_and_sections" | "full_review";
+}
+
+export interface Test {
+  "$schema"?: string;
+  format: "pariksha/test@1";
+  name: string;
+  slug: string;
+  description?: string;
+  tags?: string[];
+  license?: string;
+  /** Bank files this test draws from, relative to the test file. */
+  banks?: string[];
+  scoring?: TestScoring;
+  access?: TestAccess;
+  release?: TestRelease;
+  sections: Section[];
 }
 
 export type ResponseValue =
