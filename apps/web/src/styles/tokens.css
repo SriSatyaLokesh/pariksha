@@ -1,0 +1,116 @@
+/* GENERATED FILE. Do not edit by hand — generated from DESIGN.md by scripts/tokens.mjs. */
+
+:root {
+  --color-voltage: #e24c18;
+  --color-voltage-hover: #f06a38;
+  --color-voltage-soft: #f59a6e;
+  --color-voltage-deep: #b63a10;
+  --color-cream: #fffbf5;
+  --color-canvas: #ffffff;
+  --color-ink: #231f1d;
+  --color-ink-soft: #413c39;
+  --color-muted: #6f6a66;
+  --color-hairline: #efebe6;
+  --color-hairline-strong: #ddd6ce;
+  --color-state-answered: #0d7a51;
+  --color-state-marked: #6a4ddb;
+  --color-state-locked: #6f6a66;
+  --color-flag-clean: #0d7a51;
+  --color-flag-review: #8a5f00;
+  --color-flag-risk: #b3261e;
+  --color-data-blue: #0a6fd4;
+  --color-scrim: rgba(35, 31, 29, 0.55);
+  --color-shadow: #231f1d;
+  --type-display-xl-size: 56px;
+  --type-display-xl-weight: 500;
+  --type-display-xl-line-height: 56px;
+  --type-display-xl-letter-spacing: -1.4px;
+  --type-display-xl-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-display-lg-size: 44px;
+  --type-display-lg-weight: 500;
+  --type-display-lg-line-height: 46px;
+  --type-display-lg-letter-spacing: -1.1px;
+  --type-display-lg-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-heading-md-size: 22px;
+  --type-heading-md-weight: 500;
+  --type-heading-md-line-height: 28px;
+  --type-heading-md-letter-spacing: -0.4px;
+  --type-heading-md-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-heading-sm-size: 18px;
+  --type-heading-sm-weight: 500;
+  --type-heading-sm-line-height: 24px;
+  --type-heading-sm-letter-spacing: -0.2px;
+  --type-heading-sm-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-question-stem-size: 18px;
+  --type-question-stem-weight: 400;
+  --type-question-stem-line-height: 29px;
+  --type-question-stem-letter-spacing: 0;
+  --type-question-stem-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-option-label-size: 16px;
+  --type-option-label-weight: 400;
+  --type-option-label-line-height: 25px;
+  --type-option-label-letter-spacing: 0;
+  --type-option-label-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-body-md-size: 16px;
+  --type-body-md-weight: 400;
+  --type-body-md-line-height: 25px;
+  --type-body-md-letter-spacing: -0.04px;
+  --type-body-md-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-body-sm-size: 14px;
+  --type-body-sm-weight: 400;
+  --type-body-sm-line-height: 21px;
+  --type-body-sm-letter-spacing: -0.1px;
+  --type-body-sm-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-button-md-size: 16px;
+  --type-button-md-weight: 500;
+  --type-button-md-line-height: 24px;
+  --type-button-md-letter-spacing: -0.16px;
+  --type-button-md-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-nav-link-size: 16px;
+  --type-nav-link-weight: 500;
+  --type-nav-link-line-height: 24px;
+  --type-nav-link-letter-spacing: 0;
+  --type-nav-link-family:
+    "Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif;
+  --type-timer-numeric-size: 20px;
+  --type-timer-numeric-weight: 500;
+  --type-timer-numeric-line-height: 24px;
+  --type-timer-numeric-letter-spacing: 0;
+  --type-timer-numeric-family: "JetBrains Mono", monospace;
+  --type-timer-numeric-font-variant-numeric: tabular-nums;
+  --type-mono-md-size: 15px;
+  --type-mono-md-weight: 400;
+  --type-mono-md-line-height: 24px;
+  --type-mono-md-letter-spacing: 0;
+  --type-mono-md-family: "JetBrains Mono", monospace;
+  --type-mono-sm-size: 12px;
+  --type-mono-sm-weight: 400;
+  --type-mono-sm-line-height: 18px;
+  --type-mono-sm-letter-spacing: 0.3px;
+  --type-mono-sm-family: "JetBrains Mono", monospace;
+  --rounded-none: 0px;
+  --rounded-xs: 3px;
+  --rounded-sm: 4px;
+  --rounded-md: 6px;
+  --rounded-lg: 8px;
+  --rounded-full: 9999px;
+  --space-xs: 4px;
+  --space-sm: 6px;
+  --space-base: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 40px;
+  --space-4xl: 64px;
+  --space-5xl: 96px;
+}
