@@ -19,10 +19,20 @@ export * from "./grade/manual.js";
 // import validation (and this package's own acceptance matrix) checks a
 // question's `scoring.mode` against. `GradeResult` / `ScoringDefaults` are
 // the parameter and return types `gradeQuestion` and `scoreAttempt` already
-// expose. `resolveScoring` and `round2` stay internal: no consumer outside
-// this package needs them yet.
+// expose. `round2` is public because the landing page's hero demo
+// (apps/web/src/island/exam-demo.ts) sums three `GradeResult.points` and
+// must round the total with this package's own arithmetic rather than its
+// own — it is the only rounding that island is permitted to do.
+// `resolveScoring` stays internal: no consumer outside this package needs it.
 export type { GradeResult, ScoringDefaults } from "./grade/result.js";
-export { applyMode, APPLICABLE_MODES } from "./grade/result.js";
+export { applyMode, APPLICABLE_MODES, round2 } from "./grade/result.js";
+
+// The choice-family grader on its own. The landing page's hero demo imports
+// it directly rather than `gradeQuestion`, because `gradeQuestion`'s static
+// reference to `grade/text.ts` pulls that file's pattern compiler into a
+// bundle a choice-only demo can never reach (v3 design contract §2.5).
+export { gradeChoice } from "./grade/choice.js";
+export type { ChoiceQuestion } from "./grade/choice.js";
 
 // Attempt aggregation (section and total scoring).
 export * from "./score.js";

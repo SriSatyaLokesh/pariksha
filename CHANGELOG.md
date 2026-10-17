@@ -23,6 +23,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Changed
 
+- The landing page is rebuilt as twelve sections that teach before they compare, and it is prerendered to static HTML at build time, so `/` ships 0 bytes of JavaScript and an answer engine fetching the URL gets the full 52.5 KB of text without running anything. Every absolute URL comes from one build-time origin, `SITE_URL`, which the build requires rather than defaults. The prerender also emits `robots.txt`, `llms.txt`, `sitemap.xml` and a styled `404.html`. Every claim on the page traces to a row in the content inventory with a file path beside it, every status is dated, and no capability claim is made about a competitor without an external source. Closes most of #137.
 - `docs/PRD.md` no longer lists ordering under partial credit. `ordering` is scored by `position` ("points × items in the right position ÷ items"), which already is partial credit for a sequence; `docs/question-format.md` and `APPLICABLE_MODES` always said so.
 - `docs/PRD.md` T-10 no longer promises section shuffling. Nothing expressed it — there is no `shuffle_sections` field — and per-section time limits (T-12) and `per_section` navigation (T-13) both assume a stable section order. Shuffling questions within a section stays.
 - `DESIGN.md` gains a `hero-lead` typography token (24px). Cream on the voltage canvas measures 3.86:1, which WCAG AA permits only at 24px and above, so the hero's lead sentence has a size floor rather than a tint exception.

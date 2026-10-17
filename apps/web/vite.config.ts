@@ -13,6 +13,10 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, "index.html"),
         admin: resolve(__dirname, "admin.html"),
+        // The hero's exam-demo island (v3 spec §2.7) — one vanilla-TS entry,
+        // injected into dist/index.html from the manifest by
+        // scripts/prerender.mjs. Not a page; no HTML entry of its own.
+        island: resolve(__dirname, "src/island/exam-demo.ts"),
       },
     },
   },

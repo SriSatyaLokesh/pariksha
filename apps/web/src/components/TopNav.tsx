@@ -1,7 +1,11 @@
+// landing-page-v2-design.md §3.0 renumbered every section id (the
+// comparison moved to S4, "hosting" became part of "cost", etc.) — these
+// four targets are re-pointed at the new ids so the bar still jumps
+// somewhere real.
 const NAV_LINKS = [
-  { label: "What it does", href: "#what-it-does" },
-  { label: "Question types", href: "#question-types" },
-  { label: "Hosting", href: "#hosting" },
+  { label: "What it is", href: "#what-it-is" },
+  { label: "How it works", href: "#how-it-works" },
+  { label: "Cost", href: "#cost" },
   { label: "Docs", href: "#docs" },
   { label: "GitHub", href: "https://github.com/SriSatyaLokesh/pariksha" },
 ] as const;

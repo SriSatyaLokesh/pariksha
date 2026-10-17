@@ -2,17 +2,22 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, relative, resolve } from "node:path";
+import { hasIllegalColorLiteral } from "../../../scripts/tokens.mjs";
 
-// Controller decision #1: no hex colour literal anywhere in apps/web/src,
-// across .ts, .tsx, .css and .html, excepting the two generated token
-// files. Style exclusively through the token custom properties.
-
+// Controller decision #1, widened by issue 137 (T28, constraints.md §2.1):
+// no colour literal of any kind anywhere in apps/web/src, across .ts, .tsx,
+// .css and .html, excepting the two generated token files. Not just hex any
+// more — rgb()/rgba()/hsl()/hsla()/oklch()/lab() and the named-colour
+// keywords are illegal too, with the one carve-out `base.css` and
+// `components.css` already rely on: `rgb(from var(--color-NAME) r g b / a)`.
+// The check itself lives in scripts/tokens.mjs and is imported rather than
+// re-implemented here, so this guard and the one `pnpm tokens` runs can
+// never drift apart (T28 widens both "together").
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = resolve(__dirname, "..");
 const SRC_DIR = resolve(ROOT_DIR, "src");
 const SCANNED_EXTENSIONS = new Set([".ts", ".tsx", ".css", ".html"]);
 const EXCLUDED_FILENAMES = new Set(["tokens.css", "tokens.ts"]);
-const HEX_COLOR_RE = /#[0-9a-fA-F]{3,8}\b/;
 const INLINE_STYLE_RE = /\sstyle=\{/;
 
 function walk(dir: string, files: string[] = []): string[] {
@@ -35,11 +40,11 @@ const srcFiles = walk(SRC_DIR);
 const htmlFiles = [join(ROOT_DIR, "index.html"), join(ROOT_DIR, "admin.html")];
 const allScannedFiles = [...srcFiles, ...htmlFiles];
 
-describe("no hex colour literal anywhere in apps/web/src", () => {
+describe("no colour literal of any kind anywhere in apps/web/src", () => {
   for (const file of allScannedFiles) {
-    it(`${relative(ROOT_DIR, file)} has no hex colour literal`, () => {
+    it(`${relative(ROOT_DIR, file)} has no illegal colour literal`, () => {
       const content = readFileSync(file, "utf8");
-      expect(content).not.toMatch(HEX_COLOR_RE);
+      expect(hasIllegalColorLiteral(content)).toBe(false);
     });
   }
 });

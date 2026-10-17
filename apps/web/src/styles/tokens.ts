@@ -123,6 +123,13 @@ export const tokens = {
       lineHeight: "18px",
       letterSpacing: "0.3px",
     },
+    "wordmark-display": {
+      fontFamily: '"Kalam", cursive',
+      fontSize: "clamp(44px, 6.2vw, 94px)",
+      fontWeight: 700,
+      lineHeight: "1",
+      letterSpacing: "-0.01em",
+    },
   },
   rounded: {
     none: "0px",

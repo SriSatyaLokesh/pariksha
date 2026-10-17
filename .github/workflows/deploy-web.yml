@@ -37,6 +37,8 @@ jobs:
 
       - name: Build
         run: pnpm build
+        env:
+          SITE_URL: ${{ vars.SITE_URL }}
 
       # The site's correctness guarantees — the Content-Security-Policy, the
       # contrast ratios, the no-hex-literal rule, the candidate/admin bundle
