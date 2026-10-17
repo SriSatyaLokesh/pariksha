@@ -1,0 +1,344 @@
+// The table manifest: one description of every table, as plain data.
+//
+// Both dialect modules are written by hand against this — Drizzle's types come
+// from literal table definitions, so generating them from this manifest would
+// trade away every typed query in the repository layer. `parity.test.ts`
+// asserts the three agree, which is what keeps "SQLite and Postgres drift"
+// from becoming a bug a Postgres user reports months later.
+
+/**
+ * The storage classes a column can have. Each maps to one SQLite type and one
+ * Postgres type, and the two are allowed to differ only here:
+ *
+ * | class       | SQLite    | Postgres  | why                                  |
+ * | ----------- | --------- | --------- | ------------------------------------ |
+ * | `text`      | `text`    | `text`    |                                      |
+ * | `json`      | `text`    | `jsonb`   | SQLite has no JSON type              |
+ * | `int`       | `integer` | `integer` |                                      |
+ * | `bool`      | `integer` | `boolean` | SQLite has no boolean type           |
+ * | `timestamp` | `integer` | `bigint`  | epoch milliseconds overflow int4     |
+ */
+export type ColumnClass = "text" | "json" | "int" | "bool" | "timestamp";
+
+export interface ColumnSpec {
+  name: string;
+  class: ColumnClass;
+  notNull: boolean;
+  primaryKey: boolean;
+}
+
+export interface TableSpec {
+  name: string;
+  /** Holds tenant data, so it carries an indexed `workspace_id`. */
+  tenant: boolean;
+  columns: ColumnSpec[];
+  indexes: string[][];
+  uniques: string[][];
+}
+
+const column =
+  (klass: ColumnClass) =>
+  (
+    name: string,
+    opts: { null?: boolean; pk?: boolean } = {},
+  ): ColumnSpec => ({
+    name,
+    class: klass,
+    notNull: !(opts.null ?? false),
+    primaryKey: opts.pk ?? false,
+  });
+
+const text = column("text");
+const json = column("json");
+const int = column("int");
+const bool = column("bool");
+const ts = column("timestamp");
+
+/** Every tenant table opens with these two, in this order. */
+const tenantHead = (idName = "id"): ColumnSpec[] => [
+  text(idName, { pk: true }),
+  text("workspace_id"),
+];
+
+export const TIMESTAMP_CLASS: ColumnClass = "timestamp";
+
+export const TABLE_MANIFEST: TableSpec[] = [
+  {
+    name: "workspace",
+    tenant: false,
+    columns: [
+      text("id", { pk: true }),
+      text("slug"),
+      text("name"),
+      json("branding_json", { null: true }),
+      json("settings_json", { null: true }),
+      ts("created_at"),
+    ],
+    indexes: [],
+    uniques: [["slug"]],
+  },
+  {
+    name: "user",
+    tenant: false,
+    columns: [
+      text("id", { pk: true }),
+      text("email"),
+      text("auth_provider"),
+      ts("created_at"),
+    ],
+    indexes: [],
+    uniques: [["email"]],
+  },
+  {
+    name: "membership",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("user_id"),
+      text("role"),
+      json("test_grants_json", { null: true }),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["user_id"]],
+    uniques: [["workspace_id", "user_id"]],
+  },
+  {
+    name: "session",
+    tenant: false,
+    columns: [
+      // Only the hash is stored (S-03), so a database dump yields no live
+      // session. The hash is the primary key: a lookup is the only read.
+      text("token_hash", { pk: true }),
+      text("user_id"),
+      ts("created_at"),
+      ts("last_used_at"),
+      ts("expires_at"),
+    ],
+    indexes: [["user_id"]],
+    uniques: [],
+  },
+  {
+    name: "question_bank",
+    tenant: true,
+    columns: [...tenantHead(), text("name"), json("tags_json"), ts("created_at")],
+    indexes: [["workspace_id"]],
+    uniques: [],
+  },
+  {
+    name: "question",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("bank_id"),
+      text("type"),
+      text("prompt_md"),
+      json("media_json", { null: true }),
+      json("options_json", { null: true }),
+      json("key_json", { null: true }),
+      json("scoring_json", { null: true }),
+      int("points"),
+      text("difficulty", { null: true }),
+      json("tags_json"),
+      text("explanation_md", { null: true }),
+      int("version"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["bank_id"]],
+    uniques: [],
+  },
+  {
+    name: "test",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("slug"),
+      text("name"),
+      text("status"),
+      int("current_version", { null: true }),
+      json("tags_json"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["status"]],
+    uniques: [["workspace_id", "slug"]],
+  },
+  {
+    name: "test_version",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("test_id"),
+      int("version"),
+      json("settings_json"),
+      json("sections_json"),
+      ts("published_at", { null: true }),
+    ],
+    indexes: [["workspace_id"], ["test_id"]],
+    uniques: [["test_id", "version"]],
+  },
+  {
+    name: "set",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("test_version_id"),
+      int("set_no"),
+      json("question_ids_json"),
+    ],
+    indexes: [["workspace_id"], ["test_version_id"]],
+    uniques: [["test_version_id", "set_no"]],
+  },
+  {
+    name: "candidate",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("test_id"),
+      json("form_values_json"),
+      text("consent_version"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["test_id"]],
+    uniques: [],
+  },
+  {
+    name: "attempt",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("candidate_id"),
+      text("test_version_id"),
+      int("set_no"),
+      json("layout_json"),
+      ts("started_at"),
+      ts("deadline_at"),
+      ts("submitted_at", { null: true }),
+      text("submit_reason", { null: true }),
+      json("score_json", { null: true }),
+      text("flag"),
+      text("token_hash"),
+    ],
+    indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
+    uniques: [["token_hash"]],
+  },
+  {
+    name: "response",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("attempt_id"),
+      text("question_id"),
+      json("value_json"),
+      ts("saved_at"),
+      int("client_seq"),
+      int("points", { null: true }),
+      text("graded_by", { null: true }),
+    ],
+    indexes: [["workspace_id"], ["attempt_id"]],
+    // The upsert target: one row per question per attempt, which is what makes
+    // `INSERT … ON CONFLICT DO UPDATE WHERE excluded.client_seq > client_seq`
+    // a single statement rather than a read-then-write race.
+    uniques: [["attempt_id", "question_id"]],
+  },
+  {
+    name: "event",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("attempt_id"),
+      text("type"),
+      json("detail_json", { null: true }),
+      ts("client_ts"),
+      ts("server_ts"),
+    ],
+    indexes: [["workspace_id"], ["attempt_id"]],
+    uniques: [],
+  },
+  {
+    name: "snapshot",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("attempt_id"),
+      text("storage_key"),
+      ts("taken_at"),
+      text("reason"),
+      int("face_count", { null: true }),
+    ],
+    indexes: [["workspace_id"], ["attempt_id"]],
+    uniques: [],
+  },
+  {
+    name: "review",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("attempt_id"),
+      text("reviewer"),
+      text("verdict"),
+      text("note", { null: true }),
+      ts("at"),
+    ],
+    indexes: [["workspace_id"], ["attempt_id"]],
+    uniques: [],
+  },
+  {
+    name: "audit_log",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("actor"),
+      text("action"),
+      text("target"),
+      json("detail_json", { null: true }),
+      ts("at"),
+    ],
+    indexes: [["workspace_id"], ["at"]],
+    uniques: [],
+  },
+  {
+    name: "api_key",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("name"),
+      text("secret_hash"),
+      json("scopes_json"),
+      ts("created_at"),
+      ts("last_used_at", { null: true }),
+      ts("revoked_at", { null: true }),
+    ],
+    indexes: [["workspace_id"]],
+    uniques: [["secret_hash"]],
+  },
+  {
+    name: "webhook",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("url"),
+      json("events_json"),
+      text("signing_secret"),
+      bool("active"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"]],
+    uniques: [],
+  },
+];
+
+export const TABLE_NAMES = TABLE_MANIFEST.map((t) => t.name);
+
+/** Every `(table, column)` pair holding epoch milliseconds. */
+export function timestampColumns(): { table: string; column: string }[] {
+  return TABLE_MANIFEST.flatMap((table) =>
+    table.columns
+      .filter((c) => c.class === TIMESTAMP_CLASS)
+      .map((c) => ({ table: table.name, column: c.name })),
+  );
+}
+
+export function tableSpec(name: string): TableSpec {
+  const spec = TABLE_MANIFEST.find((t) => t.name === name);
+  if (!spec) throw new Error(`No table named ${name} in the manifest`);
+  return spec;
+}

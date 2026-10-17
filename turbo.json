@@ -9,6 +9,13 @@
     "typecheck": {
       "dependsOn": ["^build"]
     },
-    "test": {}
+    "test": {
+      // Turborepo runs tasks in a filtered environment, so a variable set in
+      // CI reaches vitest only if it is declared here. Without this line the
+      // Postgres cases in packages/db skip silently in CI and the job still
+      // goes green — which is how the dual-dialect gate can stop gating
+      // without anyone noticing.
+      "env": ["TEST_POSTGRES_URL", "CI"]
+    }
   }
 }
