@@ -3,10 +3,21 @@ import { sqliteClient, pgClient, closeClient, type DbClient } from "../src/clien
 import { migrate, MIGRATIONS_TABLE } from "../src/migrate.js";
 import { TABLE_NAMES } from "../src/schema/columns.js";
 
-// CI sets this; locally the Postgres cases skip rather than fail, so a
-// contributor without a database can still run the suite.
+// Locally the Postgres cases skip rather than fail, so a contributor without
+// a database can still run the suite. In CI they are mandatory: a skip there
+// means the dual-dialect gate has quietly stopped gating, which is exactly
+// what happened once already — Turborepo runs tasks in a filtered environment
+// and did not pass TEST_POSTGRES_URL through, so the job went green with the
+// Postgres cases never running. Silence must not look like success.
 const POSTGRES_URL = process.env.TEST_POSTGRES_URL;
+const IN_CI = process.env.CI === "true";
 const describePostgres = POSTGRES_URL ? describe : describe.skip;
+
+describe("the Postgres gate", () => {
+  it("is not allowed to skip in CI", () => {
+    expect(IN_CI && !POSTGRES_URL).toBe(false);
+  });
+});
 
 async function tableNamesIn(db: DbClient): Promise<string[]> {
   const rows =
