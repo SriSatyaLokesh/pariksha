@@ -7,19 +7,11 @@
 // assignment's ownership and may not exist yet.
 //
 // The artefact checks (network/storage ban, no timers, no inline style or
-// colour literal, size budget) bundle+minify the island in isolation with
-// esbuild, writing to an OS temp directory — never to apps/web/dist, which
-// other agents' tests read concurrently in this shared worktree.
-
-import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+// colour literal, size budget) live in island-artefact.test.ts: esbuild's
+// API refuses to run under jsdom, so that file asks for the node
+// environment and this one keeps the DOM.
+import { beforeEach, describe, expect, it } from "vitest";
 import { init } from "../src/island/exam-demo";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------
 // Fixture: hand-built prerendered markup matching v3 spec §2.3 and §3.2 —
@@ -374,85 +366,5 @@ describe("error path", () => {
     const after = controls.innerHTML;
     click(controls);
     expect(controls.innerHTML).toBe(after);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Artefact checks: bundle+minify in isolation (never touches apps/web/dist).
-// ---------------------------------------------------------------------------
-
-function findEsbuildBin(): string {
-  const repoRoot = path.resolve(__dirname, "..", "..", "..");
-  const pnpmDir = path.join(repoRoot, "node_modules", ".pnpm");
-  const entry = readdirSync(pnpmDir).find((d) => d.startsWith("esbuild@"));
-  if (!entry) throw new Error("esbuild not found under node_modules/.pnpm — cannot measure the island");
-  return path.join(pnpmDir, entry, "node_modules", "esbuild", "bin", "esbuild");
-}
-
-function buildIslandMinified(): string {
-  const entry = path.join(__dirname, "..", "src", "island", "exam-demo.ts");
-  const outDir = mkdtempSync(path.join(tmpdir(), "pariksha-island-"));
-  const outFile = path.join(outDir, "exam-demo.min.js");
-  execFileSync(process.execPath, [
-    findEsbuildBin(),
-    entry,
-    "--bundle",
-    "--minify",
-    "--format=esm",
-    "--target=es2020",
-    `--outfile=${outFile}`,
-  ]);
-  return readFileSync(outFile, "utf8");
-}
-
-describe("artefact: the island, bundled and minified in isolation", () => {
-  let built: string;
-
-  beforeAll(() => {
-    built = buildIslandMinified();
-    // I-2 / T35: printed whether this run passes or fails the budget.
-    console.log(`[island.test.ts] exam-demo.ts minified: ${Buffer.byteLength(built, "utf8")} bytes`);
-  });
-
-  it("stays at or under the 10 KB minified budget (I-2, informational proxy for T35)", () => {
-    expect(Buffer.byteLength(built, "utf8")).toBeLessThanOrEqual(10 * 1024);
-  });
-
-  it("contains no network, storage, cookie or telemetry identifier (I-3)", () => {
-    const forbidden = [
-      "fetch(",
-      "XMLHttpRequest",
-      "WebSocket",
-      "EventSource",
-      "sendBeacon",
-      "localStorage",
-      "sessionStorage",
-      "cookie",
-      "indexedDB",
-      "caches",
-      "PerformanceObserver",
-      "clipboard",
-    ];
-    for (const token of forbidden) {
-      expect(built, `must not contain "${token}"`).not.toContain(token);
-    }
-  });
-
-  it("contains no interval, animation-frame or delayed timer (I-4)", () => {
-    expect(built).not.toContain("setInterval");
-    expect(built).not.toContain("requestAnimationFrame");
-    expect(built).not.toContain("setTimeout");
-  });
-
-  it("sets no style attribute, no element.style, and no colour literal (I-7)", () => {
-    expect(built).not.toContain(".style");
-    expect(built).not.toMatch(/setAttribute\(["']style["']/);
-    expect(built).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
-    expect(built).not.toMatch(/\brgb\(/);
-    expect(built).not.toMatch(/\bhsl\(/);
-  });
-
-  it("does not use ButtonPrimary's class on any control it creates (I-8)", () => {
-    expect(built).not.toContain("button-primary");
   });
 });
