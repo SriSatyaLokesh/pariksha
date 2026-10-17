@@ -1,8 +1,5 @@
 {
   "_description": "AC-06 fixture matrix: one entry per (type, mode, case) triple. Expected points are derived from docs/question-format.md's 'Scoring modes' table and grade/result.ts's applyMode arithmetic, not observed by running the code. 'partial' entries (a partially-correct response) exist only where the mode under test actually grants graduated credit (scoring.mode 'partial', or 'position' for ordering) — see APPLICABLE_MODES in grade/result.ts for which modes apply to which type.",
-  "_knownDefects": [
-    "issue #128: ordering's graduated scoring mode is 'position', not 'partial' — docs/PRD.md's scoring table wrongly lists 'partial' for ordering. docs/question-format.md and APPLICABLE_MODES agree on 'position', and this matrix follows them."
-  ],
   "cases": [
     {
       "type": "single",
@@ -1498,7 +1495,7 @@
       "response": { "kind": "order", "items": ["Abandon", "Abdomen", "Abide", "Ability", "Abject"] },
       "defaults": { "mode": "all_or_nothing", "negativeFraction": 0 },
       "expected": 2,
-      "note": "issue #128: ordering's graduated mode is 'position', not 'partial' (docs/PRD.md's table is wrong here) -- see APPLICABLE_MODES.ordering in grade/result.ts"
+      "note": "ordering's graduated mode is 'position', not 'partial' -- see APPLICABLE_MODES.ordering in grade/result.ts. docs/PRD.md once listed ordering under partial credit; issue #128 corrected it, and all three sources now agree."
     },
     {
       "type": "ordering",
