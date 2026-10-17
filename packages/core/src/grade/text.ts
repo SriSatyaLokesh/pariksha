@@ -196,9 +196,39 @@ function hasBackreference(pattern: string): boolean {
   return false;
 }
 
-/** Whether `pattern` contains a lookahead or lookbehind group. */
+/**
+ * Whether `pattern` contains a lookahead or lookbehind group.
+ *
+ * Scanned character by character rather than with a regex over the raw
+ * string, because `(`, `?` and `=` inside a character class are literal
+ * members of that class, not a lookahead: `[(?=]` matches any one of
+ * those three characters and was being rejected as `(?=`. Every other
+ * scanner in this file is already `inClass`-aware; this one was not.
+ */
 function hasLookaround(pattern: string): boolean {
-  return /\(\?=|\(\?!|\(\?<=|\(\?<!/.test(pattern);
+  let inClass = false;
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === "\\") {
+      // An escaped character is never structure, inside a class or out.
+      i++;
+      continue;
+    }
+    if (inClass) {
+      if (c === "]") inClass = false;
+      continue;
+    }
+    if (c === "[") {
+      inClass = true;
+      continue;
+    }
+    if (c === "(" && pattern[i + 1] === "?") {
+      const third = pattern[i + 2];
+      if (third === "=" || third === "!") return true;
+      if (third === "<" && (pattern[i + 3] === "=" || pattern[i + 3] === "!")) return true;
+    }
+  }
+  return false;
 }
 
 // --- Recursive regex structure -------------------------------------------
