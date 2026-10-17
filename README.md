@@ -48,7 +48,7 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
 - **Results that fit your spreadsheet.** Live monitor, grading queue, item analysis, a results CSV with one column per form field and section, per-answer and event exports, a REST API and signed webhooks.
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
-- **Two deployment targets, one codebase.** Cloudflare's free plan (Pages, Workers, D1, R2) or Docker on any server (Node, SQLite or Postgres, S3/MinIO).
+- **Two deployment targets, one codebase.** Cloudflare's free plan (Workers, Workers Static Assets, D1, R2) or Docker on any server (Node, SQLite or Postgres, S3/MinIO).
 
 ## See a real test
 
