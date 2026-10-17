@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **Status** | Active |
-| **Last updated** | 2026-10-16 |
+| **Last updated** | 2026-10-17 |
 | **Implements** | [PRD.md](PRD.md) |
 | **Design system** | [DESIGN.md](../DESIGN.md) |
 
@@ -13,13 +13,38 @@ Read this with the PRD. Where the two disagree, the PRD wins on *what* and this 
 
 ## Contents
 
-1. [Phases](#phases)
-2. [Gates](#gates)
-3. [Dependency order](#dependency-order)
-4. [Decisions that extend the PRD](#decisions-that-extend-the-prd)
-5. [Mapping to PRD milestones](#mapping-to-prd-milestones)
-6. [Plan documents](#plan-documents)
-7. [What is needed from the operator](#what-is-needed-from-the-operator)
+1. [Progress](#progress)
+2. [Phases](#phases)
+3. [Gates](#gates)
+4. [Dependency order](#dependency-order)
+5. [Decisions that extend the PRD](#decisions-that-extend-the-prd)
+6. [Mapping to PRD milestones](#mapping-to-prd-milestones)
+7. [Plan documents](#plan-documents)
+8. [What is needed from the operator](#what-is-needed-from-the-operator)
+
+## Progress
+
+Where the build actually stands. Update this table when a phase's state changes; the
+per-phase sections below describe the *plan*, this table describes the *state*.
+
+| Phase | State | Landed | Next |
+| --- | --- | --- | --- |
+| 1 — Foundation and scoring core | **Done** | `packages/core`: all 12 question types, all 5 scoring modes, seeded shuffling, pool draws, set assignment, import rules. Monorepo, CI, 173 tests. Merged as [#134](https://github.com/SriSatyaLokesh/pariksha/pull/134) | Four small items deferred from its review: [#130](https://github.com/SriSatyaLokesh/pariksha/issues/130)–[#133](https://github.com/SriSatyaLokesh/pariksha/issues/133) |
+| 2 — Data and API platform | Not started | — | `packages/db`, `packages/storage`, `apps/api`. Needs live Cloudflare credentials ([what is needed from the operator](#what-is-needed-from-the-operator)) |
+| 3 — Organiser auth, roles, first run and landing page | **Part done** | Design tokens generated from `DESIGN.md` ([#31](https://github.com/SriSatyaLokesh/pariksha/issues/31)) and the web shell, design-system components and landing page ([#32](https://github.com/SriSatyaLokesh/pariksha/issues/32)), on branch `phase-3/design-tokens-and-landing` | Cloudflare hosting is configured and committed; publishing it is a later session's work. Next are the auth tasks [#25](https://github.com/SriSatyaLokesh/pariksha/issues/25)–[#30](https://github.com/SriSatyaLokesh/pariksha/issues/30) and [#33](https://github.com/SriSatyaLokesh/pariksha/issues/33), all of which need Phase 2's API first |
+| 4–12 | Not started | — | Planned in detail when their turn comes |
+
+**The landing page is independent of the API** — it is static output with no backend call,
+which is why Phase 3's tasks 7 and 8 could ship ahead of Phase 2. The rest of Phase 3
+(sign-in, the first-run wizard, the dashboard) consumes `/api/v1/*` and cannot start until
+Phase 2 exists.
+
+**Plans are executed with [superpowers subagent-driven-development](https://github.com/obra/superpowers)**:
+one implementer subagent per task, a spec-and-quality review after each, and a ledger at
+`.superpowers/sdd/<plan-name>/progress.md` recording every completed task, every deferred
+minor finding and every ruling made while the plan ran. That ledger is git-ignored and
+local to the machine that ran it — read it before resuming a part-done phase, and if it is
+gone, `git log` plus the closed issues are the record.
 
 ## Phases
 

@@ -29,80 +29,86 @@ colors:
 
 typography:
   display-xl:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 56px
     fontWeight: 500
     lineHeight: 56px
     letterSpacing: "-1.4px"
   display-lg:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 44px
     fontWeight: 500
     lineHeight: 46px
     letterSpacing: "-1.1px"
   heading-md:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 22px
     fontWeight: 500
     lineHeight: 28px
     letterSpacing: "-0.4px"
   heading-sm:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 18px
     fontWeight: 500
     lineHeight: 24px
     letterSpacing: "-0.2px"
+  hero-lead:
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
+    fontSize: 24px
+    fontWeight: 400
+    lineHeight: 34px
+    letterSpacing: "-0.2px"
   question-stem:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 18px
     fontWeight: 400
     lineHeight: 29px
     letterSpacing: "0"
   option-label:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 16px
     fontWeight: 400
     lineHeight: 25px
     letterSpacing: "0"
   body-md:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 16px
     fontWeight: 400
     lineHeight: 25px
     letterSpacing: "-0.04px"
   body-sm:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 14px
     fontWeight: 400
     lineHeight: 21px
     letterSpacing: "-0.1px"
   button-md:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 16px
     fontWeight: 500
     lineHeight: 24px
     letterSpacing: "-0.16px"
   nav-link:
-    fontFamily: "\"Anek Latin\", \"Anek Telugu\", \"Anek Devanagari\", sans-serif"
+    fontFamily: '"Anek Latin", "Anek Telugu", "Anek Devanagari", sans-serif'
     fontSize: 16px
     fontWeight: 500
     lineHeight: 24px
     letterSpacing: "0"
   timer-numeric:
-    fontFamily: "\"JetBrains Mono\", monospace"
+    fontFamily: '"JetBrains Mono", monospace'
     fontSize: 20px
     fontWeight: 500
     lineHeight: 24px
     letterSpacing: "0"
     fontVariantNumeric: "tabular-nums"
   mono-md:
-    fontFamily: "\"JetBrains Mono\", monospace"
+    fontFamily: '"JetBrains Mono", monospace'
     fontSize: 15px
     fontWeight: 400
     lineHeight: 24px
     letterSpacing: "0"
   mono-sm:
-    fontFamily: "\"JetBrains Mono\", monospace"
+    fontFamily: '"JetBrains Mono", monospace'
     fontSize: 12px
     fontWeight: 400
     lineHeight: 18px
@@ -411,7 +417,7 @@ Machine-readable tokens plus the reasoning behind them. Feed this file to Claude
 
 Pariksha runs on one disciplined inversion and one hard rule that limits it.
 
-**Voltage as canvas.** The brand colour, Voltage `{colors.voltage}` (#e24c18), is not held in reserve for a CTA fill. On the landing page, the test start page and the finish page, it *is* the surface — a full-bleed vermilion block carrying a 56px display headline in cream `{colors.cream}` (#fffbf5, never pure white) with a fully-rounded cream pill CTA beneath. The confidence comes from one saturated field and one sentence, not from a gradient mesh or a hero illustration.
+**Voltage as canvas.** The brand colour, Voltage `{colors.voltage}` (#e24c18), is not held in reserve for a CTA fill. On the landing page, the test start page and the finish page, it _is_ the surface — a full-bleed vermilion block carrying a 56px display headline in cream `{colors.cream}` (#fffbf5, never pure white) with a fully-rounded cream pill CTA beneath. The confidence comes from one saturated field and one sentence, not from a gradient mesh or a hero illustration.
 
 **The clock kills the canvas.** The moment an attempt starts, the system inverts. The test runner is cream and ink, hairline-ruled, and the voltage survives only as the "you are here" square in the question palette and the focus ring on a selected answer row. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The marketing canvas and the exam canvas are deliberately different places.
 
@@ -439,62 +445,62 @@ Ratios below are measured against `{colors.cream}` (#fffbf5) unless stated. AA n
 
 ### Brand
 
-| Token | Hex | On cream | Allowed use |
-|---|---|---|---|
-| `{colors.voltage}` | #e24c18 | **3.86:1** | Canvas fills, borders, focus rings, icons, display text at 24px+. **Never body text.** |
-| `{colors.voltage-hover}` | #f06a38 | 2.99:1 | Hover fills only. Never text, at any size. |
-| `{colors.voltage-soft}` | #f59a6e | — | Illustration and gradient end-stop only. |
-| `{colors.voltage-deep}` | #b63a10 | **5.66:1** | The only voltage permitted as running text, and the fill under cream button labels (cream on it: **5.66:1**). |
+| Token                    | Hex     | On cream   | Allowed use                                                                                                   |
+| ------------------------ | ------- | ---------- | ------------------------------------------------------------------------------------------------------------- |
+| `{colors.voltage}`       | #e24c18 | **3.86:1** | Canvas fills, borders, focus rings, icons, display text at 24px+. **Never body text.**                        |
+| `{colors.voltage-hover}` | #f06a38 | 2.99:1     | Hover fills only. Never text, at any size.                                                                    |
+| `{colors.voltage-soft}`  | #f59a6e | —          | Illustration and gradient end-stop only.                                                                      |
+| `{colors.voltage-deep}`  | #b63a10 | **5.66:1** | The only voltage permitted as running text, and the fill under cream button labels (cream on it: **5.66:1**). |
 
 That four-step split is the system's main departure from the brand colour it descends from. A single orange cannot be both a canvas and a link colour and stay legal; `{colors.voltage-deep}` exists so the voltage can appear in a sentence without failing AA.
 
 ### Surface
 
-| Token | Hex | Use |
-|---|---|---|
-| `{colors.cream}` | #fffbf5 | Every "white" that sits over or beside the voltage: hero display text, CTA pill fill, consent block, timer chip, the test-runner body canvas. |
-| `{colors.canvas}` | #ffffff | Card interiors, table bodies, the top-nav, answer rows. Used where cream's warmth would compete with content. |
+| Token             | Hex     | Use                                                                                                                                           |
+| ----------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{colors.cream}`  | #fffbf5 | Every "white" that sits over or beside the voltage: hero display text, CTA pill fill, consent block, timer chip, the test-runner body canvas. |
+| `{colors.canvas}` | #ffffff | Card interiors, table bodies, the top-nav, answer rows. Used where cream's warmth would compete with content.                                 |
 
 The cream/white difference is small enough that most people never name it and consistent enough that mixing the two reads as a bug.
 
 ### Text
 
-| Token | Hex | On cream | Use |
-|---|---|---|---|
-| `{colors.ink}` | #231f1d | **15.85:1** | Display below the fold, question stems, answer labels, table cells. Never pure black. |
-| `{colors.ink-soft}` | #413c39 | **10.55:1** | Long-form running copy where ink feels heavy. |
-| `{colors.muted}` | #6f6a66 | **5.18:1** | Help text, captions, inactive nav, "View all" links. Still passes AA — a form's help text is not decoration. |
+| Token               | Hex     | On cream    | Use                                                                                                          |
+| ------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
+| `{colors.ink}`      | #231f1d | **15.85:1** | Display below the fold, question stems, answer labels, table cells. Never pure black.                        |
+| `{colors.ink-soft}` | #413c39 | **10.55:1** | Long-form running copy where ink feels heavy.                                                                |
+| `{colors.muted}`    | #6f6a66 | **5.18:1**  | Help text, captions, inactive nav, "View all" links. Still passes AA — a form's help text is not decoration. |
 
 ### Hairline
 
-| Token | Hex | On cream | Use |
-|---|---|---|---|
-| `{colors.hairline}` | #efebe6 | 1.15:1 | Decorative rules: section dividers, nav underline, table row separators, card outlines whose edge carries no meaning. |
-| `{colors.hairline-strong}` | #ddd6ce | 1.4:1 | **Every boundary a candidate must perceive**: input outlines, answer rows, palette squares, secondary-button borders. |
+| Token                      | Hex     | On cream | Use                                                                                                                   |
+| -------------------------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `{colors.hairline}`        | #efebe6 | 1.15:1   | Decorative rules: section dividers, nav underline, table row separators, card outlines whose edge carries no meaning. |
+| `{colors.hairline-strong}` | #ddd6ce | 1.4:1    | **Every boundary a candidate must perceive**: input outlines, answer rows, palette squares, secondary-button borders. |
 
-Neither tone reaches 3:1, so neither may be the *only* signal that a control exists. An input is recognisable by its outline plus its label plus its 44px height; a palette square by its outline plus its number. Where a border alone must carry meaning — focus, error, selection — the colour steps up to `{colors.voltage}`, `{colors.flag-risk}` or a state token.
+Neither tone reaches 3:1, so neither may be the _only_ signal that a control exists. An input is recognisable by its outline plus its label plus its 44px height; a palette square by its outline plus its number. Where a border alone must carry meaning — focus, error, selection — the colour steps up to `{colors.voltage}`, `{colors.flag-risk}` or a state token.
 
 ### Attempt state
 
 The question palette is the densest colour surface in the product. These four tokens own it.
 
-| Token | Hex | On cream | Meaning |
-|---|---|---|---|
-| `{colors.state-answered}` | #0d7a51 | **5.2:1** | Answered. Cream on it: **5.2:1**. |
-| `{colors.state-marked}` | #6a4ddb | **5.51:1** | Marked for review. Violet, deliberately far from the voltage — an amber "marked" state beside an orange "current" state is unreadable at 36px. |
-| `{colors.voltage}` | #e24c18 | 3.86:1 | Current question — rendered as a 2px outline with `{colors.voltage-deep}` text, never as a fill. |
-| `{colors.hairline-strong}` | #ddd6ce | — | Not answered. |
-| `{colors.state-locked}` | #6f6a66 | 5.18:1 | A section the candidate has left and cannot return to. |
+| Token                      | Hex     | On cream   | Meaning                                                                                                                                        |
+| -------------------------- | ------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `{colors.state-answered}`  | #0d7a51 | **5.2:1**  | Answered. Cream on it: **5.2:1**.                                                                                                              |
+| `{colors.state-marked}`    | #6a4ddb | **5.51:1** | Marked for review. Violet, deliberately far from the voltage — an amber "marked" state beside an orange "current" state is unreadable at 36px. |
+| `{colors.voltage}`         | #e24c18 | 3.86:1     | Current question — rendered as a 2px outline with `{colors.voltage-deep}` text, never as a fill.                                               |
+| `{colors.hairline-strong}` | #ddd6ce | —          | Not answered.                                                                                                                                  |
+| `{colors.state-locked}`    | #6f6a66 | 5.18:1     | A section the candidate has left and cannot return to.                                                                                         |
 
 Colour is never the only carrier here. Answered squares are filled, marked squares carry a corner notch, the current square carries a ring, locked squares carry a lock glyph — a candidate with deuteranopia reads the palette from shape alone.
 
 ### Integrity state
 
-| Token | Hex | On cream | Meaning |
-|---|---|---|---|
-| `{colors.flag-clean}` | #0d7a51 | **5.2:1** | `clean` — nothing to look at. |
+| Token                  | Hex     | On cream   | Meaning                                                                            |
+| ---------------------- | ------- | ---------- | ---------------------------------------------------------------------------------- |
+| `{colors.flag-clean}`  | #0d7a51 | **5.2:1**  | `clean` — nothing to look at.                                                      |
 | `{colors.flag-review}` | #8a5f00 | **5.48:1** | `review` — a person should look. Also the offline-sync and violation-warning tone. |
-| `{colors.flag-risk}` | #b3261e | **6.34:1** | `high_risk`, destructive actions, field errors, final-two-minutes timer. |
+| `{colors.flag-risk}`   | #b3261e | **6.34:1** | `high_risk`, destructive actions, field errors, final-two-minutes timer.           |
 
 Three states, three colours, and every one of them legible as text at 12px — these appear in results tables and CSV-shaped views where a badge is often the only cell content.
 
@@ -517,21 +523,22 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 
 ### Hierarchy
 
-| Token | Size | Weight | Line height | Tracking | Use |
-|---|---|---|---|---|---|
-| `{typography.display-xl}` | 56px | 500 | 56px | -1.4px | Hero h1 on the voltage canvas; section h2 below the fold |
-| `{typography.display-lg}` | 44px | 500 | 46px | -1.1px | Split-panel headlines, finish-page confirmation |
-| `{typography.heading-md}` | 22px | 500 | 28px | -0.4px | Section titles inside the admin app, test names |
-| `{typography.heading-sm}` | 18px | 500 | 24px | -0.2px | Card titles, form field labels |
-| `{typography.question-stem}` | 18px | 400 | 29px | 0 | **The question itself.** 1.6 line-height, the loosest in the system |
-| `{typography.option-label}` | 16px | 400 | 25px | 0 | Answer options, matching rows, ordering items |
-| `{typography.body-md}` | 16px | 400 | 25px | -0.04px | Default running text |
-| `{typography.body-sm}` | 14px | 400 | 21px | -0.1px | Help text, captions, table cells |
-| `{typography.button-md}` | 16px | 500 | 24px | -0.16px | Button labels |
-| `{typography.nav-link}` | 16px | 500 | 24px | 0 | Nav labels |
-| `{typography.timer-numeric}` | 20px | 500 | 24px | 0 | **Tabular numerals.** Countdowns, scores, attempt references |
-| `{typography.mono-md}` | 15px | 400 | 24px | 0 | Code blocks inside question prompts |
-| `{typography.mono-sm}` | 12px | 400 | 18px | 0.3px | Small-caps labels, palette numbers, footnotes, badges |
+| Token                        | Size | Weight | Line height | Tracking | Use                                                                                                         |
+| ---------------------------- | ---- | ------ | ----------- | -------- | ----------------------------------------------------------------------------------------------------------- |
+| `{typography.display-xl}`    | 56px | 500    | 56px        | -1.4px   | Hero h1 on the voltage canvas; section h2 below the fold                                                    |
+| `{typography.display-lg}`    | 44px | 500    | 46px        | -1.1px   | Split-panel headlines, finish-page confirmation                                                             |
+| `{typography.heading-md}`    | 22px | 500    | 28px        | -0.4px   | Section titles inside the admin app, test names                                                             |
+| `{typography.heading-sm}`    | 18px | 500    | 24px        | -0.2px   | Card titles, form field labels                                                                              |
+| `{typography.hero-lead}`     | 24px | 400    | 34px        | -0.2px   | The hero lead sentence on the voltage canvas; 24px is the smallest size at which cream on voltage clears AA |
+| `{typography.question-stem}` | 18px | 400    | 29px        | 0        | **The question itself.** 1.6 line-height, the loosest in the system                                         |
+| `{typography.option-label}`  | 16px | 400    | 25px        | 0        | Answer options, matching rows, ordering items                                                               |
+| `{typography.body-md}`       | 16px | 400    | 25px        | -0.04px  | Default running text                                                                                        |
+| `{typography.body-sm}`       | 14px | 400    | 21px        | -0.1px   | Help text, captions, table cells                                                                            |
+| `{typography.button-md}`     | 16px | 500    | 24px        | -0.16px  | Button labels                                                                                               |
+| `{typography.nav-link}`      | 16px | 500    | 24px        | 0        | Nav labels                                                                                                  |
+| `{typography.timer-numeric}` | 20px | 500    | 24px        | 0        | **Tabular numerals.** Countdowns, scores, attempt references                                                |
+| `{typography.mono-md}`       | 15px | 400    | 24px        | 0        | Code blocks inside question prompts                                                                         |
+| `{typography.mono-sm}`       | 12px | 400    | 18px        | 0.3px    | Small-caps labels, palette numbers, footnotes, badges                                                       |
 
 ### Principles
 
@@ -542,6 +549,8 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 **Numbers never jitter.** `{typography.timer-numeric}` sets `font-variant-numeric: tabular-nums`. A countdown whose digits change width every second pulls the eye away from the question — which is the one thing a timer must not do.
 
 **The mono voice does label duty.** No uppercase-tracked sans tier exists. If you reach for `letter-spacing: 0.08em; text-transform: uppercase` on Anek, you have broken the split.
+
+**Cream on voltage has a size floor.** The Brand colour table sanctions `{colors.cream}` on `{colors.voltage}` only at 24px and above (3:1, the large-text AA threshold); under 24px it drops to 3.86:1 and fails. `{typography.hero-lead}` exists so the hero's lead sentence can sit on the voltage canvas at a legal size instead of being re-tinted — nothing smaller than 24px may set cream text on the voltage fill.
 
 ### Substitutes
 
@@ -602,14 +611,14 @@ As specified above. The only mode the marketing site ships.
 
 Required by the PRD (C-04) as a candidate-facing toggle, alongside font size. It is a token swap, not a separate design:
 
-| Token | Default | High contrast |
-|---|---|---|
-| `{colors.ink}` | #231f1d | #000000 |
-| `{colors.muted}` | #6f6a66 | #3d3935 (**9.2:1**) |
-| `{colors.hairline}` | #efebe6 | #231f1d |
-| `{colors.hairline-strong}` | #ddd6ce | #231f1d |
-| `{colors.cream}` | #fffbf5 | #ffffff |
-| `{colors.voltage}` as border | #e24c18 | #b63a10 |
+| Token                        | Default | High contrast       |
+| ---------------------------- | ------- | ------------------- |
+| `{colors.ink}`               | #231f1d | #000000             |
+| `{colors.muted}`             | #6f6a66 | #3d3935 (**9.2:1**) |
+| `{colors.hairline}`          | #efebe6 | #231f1d             |
+| `{colors.hairline-strong}`   | #ddd6ce | #231f1d             |
+| `{colors.cream}`             | #fffbf5 | #ffffff             |
+| `{colors.voltage}` as border | #e24c18 | #b63a10             |
 
 Borders go to 2px, focus rings to 3px, and the voltage canvas on the start page drops to a cream canvas with a `{colors.voltage-deep}` rule. Every state keeps its non-colour carrier (fill, notch, ring, glyph), so the palette stays readable with no colour at all.
 
@@ -641,7 +650,7 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 **`button-primary`** — Cream fill, ink label, full pill, 46px tall, no border, one soft shadow. "Start the test →" is the canonical instance. Highest-contrast element on the hero (15.85:1) by inverting the figure-ground.
 
-**`button-primary-hover`** — Flips to `{colors.voltage-deep}` with a cream label (**5.66:1**). The flip to the *deep* step, not the hover step, is what keeps the label legal.
+**`button-primary-hover`** — Flips to `{colors.voltage-deep}` with a cream label (**5.66:1**). The flip to the _deep_ step, not the hover step, is what keeps the label legal.
 
 **`button-secondary`** — White fill, ink label, 1px `{colors.hairline-strong}`, 6px radius, 40px.
 
@@ -711,7 +720,7 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 **Do** give the voltage the whole canvas on marketing, start and finish pages. Holding it back for a button misses the one move this system has.
 
-**Do** take the voltage *away* the moment the clock starts. The test runner is cream, ink and hairlines, with voltage only on the current-question ring, the input focus ring and the proctor banner.
+**Do** take the voltage _away_ the moment the clock starts. The test runner is cream, ink and hairlines, with voltage only on the current-question ring, the input focus ring and the proctor banner.
 
 **Do** use `{colors.cream}`, never `#ffffff`, for any white that touches the voltage.
 
@@ -739,7 +748,7 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 ## Known gaps
 
-- **Dark mode.** Deferred by decision, not oversight. See *Modes*.
+- **Dark mode.** Deferred by decision, not oversight. See _Modes_.
 - **Charts.** The four-series data palette is specified; axis treatment, grid-line weight, tooltip surface and the item-analysis chart types (distribution, discrimination scatter, option pick rates) are not yet designed.
 - **Live monitor.** The 15-second-refresh proctor table needs a specification for how a row changes without stealing focus from the proctor's current action. Not yet written.
 - **Snapshot timeline.** The review screen's snapshot strip — thumbnail size, flagged-frame treatment, scrub behaviour — is unspecified.
