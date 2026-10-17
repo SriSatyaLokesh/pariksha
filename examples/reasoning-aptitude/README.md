@@ -54,7 +54,7 @@ The 17 questions in this example use **all twelve question types**, so the file 
 | 13 | LOG-008 | `true_false` | A contrapositive | 1 |
 | 14 | DIN-001 | `single` | Reads a table (passage group) | 2 |
 | 15 | DIN-002 | `numeric` | Percentage rise from the same table | 2 |
-| 16 | WRI-001 | `short_answer` | State a rule in one sentence — **marked by a person** | 3 |
+| 16 | WRI-001 | `short_answer` | State a rule in one sentence — **marked with a rubric** | 3 |
 | 17 | WRI-002 | `long_answer` | Find the flaw in an argument — **marked with a rubric** | 5 |
 
 DIN-001 and DIN-002 share a **passage group**: one table is shown once, above both questions.

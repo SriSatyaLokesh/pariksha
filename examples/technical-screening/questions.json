@@ -157,6 +157,11 @@
       "prompt": "An API intermittently returns HTTP 429. In one or two sentences, how should a client handle it?",
       "max_length": 300,
       "model_answer": "Retry with exponential backoff and jitter, respecting any Retry-After header.",
+      "rubric": [
+        { "level": "No credit", "points": 0, "description": "Retries immediately, or treats 429 as a fatal error." },
+        { "level": "Partial", "points": 1, "description": "Backs off before retrying, but does not mention Retry-After or jitter." },
+        { "level": "Full", "points": 2, "description": "Retries with exponential backoff and jitter, respecting any Retry-After header." }
+      ],
       "difficulty": "easy",
       "tags": ["http"],
       "scoring": { "mode": "rubric", "points": 2 }

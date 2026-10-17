@@ -31,10 +31,11 @@ export interface RubricAward {
  * (`scoreAttempt`) is what turns this into a `pending` entry, since only it
  * knows whether the candidate even answered.
  *
- * `short_answer` carries no authored `rubric` array (only `long_answer`
- * does — see `docs/question-format.md`), so an award against one sums to 0:
- * there is nothing to look up. In practice a reviewer UI would not offer a
- * rubric-level picker for a type with no rubric to pick from.
+ * Both manual types may carry an authored `rubric` array (see
+ * `docs/question-format.md`), and an award names levels from it by their
+ * `level` field. A level the question does not define is worth nothing, so a
+ * question authored without a rubric sums to 0 whatever a reviewer picks —
+ * in practice a reviewer UI would not offer a picker with no levels in it.
  */
 export function gradeManual(q: ManualQuestion, award: RubricAward | null, d: ScoringDefaults): GradeResult {
   const { points } = resolveScoring(q, d);
@@ -44,7 +45,7 @@ export function gradeManual(q: ManualQuestion, award: RubricAward | null, d: Sco
     return { points: 0, max, correct: null };
   }
 
-  const pointsByLevel = new Map(q.type === "long_answer" ? (q.rubric ?? []).map((l) => [l.level, l.points]) : []);
+  const pointsByLevel = new Map((q.rubric ?? []).map((l) => [l.level, l.points]));
   const sum = award.levels.reduce((total, level) => total + (pointsByLevel.get(level) ?? 0), 0);
   return { points: round2(sum), max, correct: null };
 }

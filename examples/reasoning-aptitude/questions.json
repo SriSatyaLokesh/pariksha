@@ -230,6 +230,11 @@
       "prompt": "State in one sentence the rule that generates the series 2, 6, 12, 20, 30.",
       "max_length": 200,
       "model_answer": "The nth term is n × (n + 1); equivalently, the gaps between terms grow by 2 each time (4, 6, 8, 10).",
+      "rubric": [
+        { "level": "No credit", "points": 0, "description": "No answer, or no rule that generates the series." },
+        { "level": "Partial", "points": 1, "description": "Describes the gaps growing by 2, but states no rule for the nth term." },
+        { "level": "Full", "points": 3, "description": "States n × (n + 1), or an equivalent rule for the nth term." }
+      ],
       "difficulty": "medium",
       "tags": ["reasoning", "series", "manual"],
       "scoring": { "mode": "rubric", "points": 3 },

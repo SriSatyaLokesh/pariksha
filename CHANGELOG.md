@@ -26,3 +26,8 @@ All notable changes to this project are documented here. The format follows [Kee
 - `DESIGN.md` gains a `hero-lead` typography token (24px). Cream on the voltage canvas measures 3.86:1, which WCAG AA permits only at 24px and above, so the hero's lead sentence has a size floor rather than a tint exception.
 - Licence is **Apache-2.0**, replacing the proposed AGPL-3.0. Reasoning recorded in `docs/adr/0003-license-apache-2-0.md`. Documentation, schemas and examples remain CC BY 4.0.
 - `examples/` is organised one folder per subject, each holding its own questions, test and README, replacing the single `examples/banks/` directory.
+
+### Fixed
+
+- A `short_answer` question can now score above zero. `rubric` is the only scoring mode applicable to it, and rubric scoring sums the levels a reviewer picks — but only `long_answer` declared a `rubric` field, so every `short_answer` scored 0 for every candidate and the type was inert ([#130](https://github.com/SriSatyaLokesh/pariksha/issues/130)). `short_answer` now takes the same **optional** `rubric` that `long_answer` takes, in `schemas/question-1.json` (as a shared `$defs/rubric` both types reference), in `docs/question-format.md`'s type table and in `@pariksha/core`'s `ShortAnswerQuestion`. The change is strictly additive — nothing is renamed, removed or made required — so it stays inside `pariksha/question@1` and every existing bank file keeps validating.
+- The two worked `short_answer` examples (`WRI-001`, `GEN-002`) now carry a rubric, so they can be marked for the points they advertise.

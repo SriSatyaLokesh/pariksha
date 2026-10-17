@@ -151,6 +151,7 @@ export interface ShortAnswerQuestion extends QuestionBase {
   type: "short_answer";
   max_length?: number;
   model_answer?: string;
+  rubric?: RubricLevel[];
 }
 
 export interface LongAnswerQuestion extends QuestionBase {

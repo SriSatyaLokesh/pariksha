@@ -91,15 +91,37 @@ describe("AC-07: data-model halves (the interaction halves — disabling, drag, 
   });
 });
 
-describe("known spec defects (documented here per Task 11, never silently fixed by this branch)", () => {
-  it("issue #130: short_answer can never score above zero, even graded directly through gradeManual with a full reviewer award", () => {
+describe("issue #130: manual grading against a rubric, for both manually-graded types", () => {
+  // Was: an assertion that short_answer can never score above zero, because
+  // only long_answer carried a `rubric` array while `rubric` was the only
+  // mode applicable to either — so every short_answer scored 0 for every
+  // candidate and the type was inert. Issue #130 resolved that by adding the
+  // same optional `rubric` to short_answer (an additive change inside
+  // `@1`), so both manual types now grade the same way.
+  it("short_answer sums the rubric levels a reviewer picked, like long_answer", () => {
     const c = entry("short_answer", "rubric", "correct");
     const shortAnswer = c.question as ManualQuestion;
-    const award: RubricAward = { levels: ["full-credit", "anything-at-all"] };
-    expect(gradeManual(shortAnswer, award, c.defaults).points).toBe(0);
+    expect(shortAnswer.rubric).toBeDefined();
+    const award: RubricAward = { levels: ["Full"] };
+    expect(gradeManual(shortAnswer, award, c.defaults).points).toBe(3);
   });
 
-  it("contrast: long_answer carries a rubric array and DOES score above zero through the same gradeManual path", () => {
+  it("a partial award on a short_answer scores between zero and its points", () => {
+    const c = entry("short_answer", "rubric", "correct");
+    const shortAnswer = c.question as ManualQuestion;
+    const result = gradeManual(shortAnswer, { levels: ["Partial"] }, c.defaults);
+    expect(result.points).toBe(1);
+    expect(result.max).toBe(3);
+  });
+
+  it("a no-credit award, and an unreviewed short_answer, both score zero", () => {
+    const c = entry("short_answer", "rubric", "correct");
+    const shortAnswer = c.question as ManualQuestion;
+    expect(gradeManual(shortAnswer, { levels: ["No credit"] }, c.defaults).points).toBe(0);
+    expect(gradeManual(shortAnswer, null, c.defaults).points).toBe(0);
+  });
+
+  it("long_answer still sums the rubric levels a reviewer picked, through the same gradeManual path", () => {
     const c = entry("long_answer", "rubric", "correct");
     const longAnswer = c.question as ManualQuestion;
     const award: RubricAward = { levels: ["Excellent"] };

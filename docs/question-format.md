@@ -46,8 +46,8 @@ A bank is a named list of questions, plus optional passage groups.
 | `ordering` | `items` | `items` are written in the correct order; Pariksha shuffles them for candidates |
 | `fill_blank` | `blanks: [{id, accepted, match}]`; prompt contains `{{id}}` placeholders | `accepted`: list of answers; `match`: `exact`, `case_insensitive` (default) or `regex` |
 | `numeric` | `unit?` | `key: {value, tolerance, tolerance_type}`; `tolerance_type` is `absolute` or `percent` |
-| `short_answer` | `max_length` (≤ 500), `model_answer?` | Graded manually |
-| `long_answer` | `max_length` (≤ 5,000), `rubric: [{level, points, description}]` | Graded manually with the rubric |
+| `short_answer` | `max_length` (≤ 500), `model_answer?`, `rubric?: [{level, points, description}]` | Graded manually, with the rubric if one is given |
+| `long_answer` | `max_length` (≤ 5,000), `rubric?: [{level, points, description}]` | Graded manually, with the rubric if one is given |
 
 ## Scoring modes
 
@@ -57,7 +57,7 @@ A bank is a named list of questions, plus optional passage groups.
 | `partial` | `multiple`, `select_k`, `matching`, `multi_matching`, `fill_blank` | points × (correct parts − wrong parts) ÷ total parts, never below 0 |
 | `negative` | All auto-graded types | A wrong answer loses `negative_fraction` × points; a blank loses nothing |
 | `position` | `ordering` | points × items in the correct position ÷ items |
-| `rubric` | `short_answer`, `long_answer` | Sum of the rubric levels a reviewer picks |
+| `rubric` | `short_answer`, `long_answer` | Sum of the rubric levels a reviewer picks; a question with no `rubric` scores 0 |
 
 ## Rules checked on import
 
