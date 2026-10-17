@@ -6,7 +6,9 @@
       "outputs": ["dist/**"],
       "env": ["SITE_URL"]
     },
-    "lint": {},
+    "lint": {
+      "dependsOn": ["^build"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },
