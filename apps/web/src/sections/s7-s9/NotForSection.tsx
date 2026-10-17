@@ -53,8 +53,8 @@ export function NotForSection() {
         <p>
           Organisations whose policy requires a vendor to carry the
           liability. Self-hosting means the data, the retention and the
-          consent text are an organiser&apos;s own to get right; Pariksha
-          ships a template, not an indemnity.
+          consent text are an organiser&apos;s own to get right; what
+          Pariksha specifies is a template, not an indemnity.
         </p>
         <p>
           Anyone who wants an AI to decide who cheated. Pariksha flags an

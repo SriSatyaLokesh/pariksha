@@ -77,10 +77,12 @@ export function CostSection() {
           </ButtonSecondary>
         </CardHairline>
         <CardHairline>
-          <h3 className="cost-deploy-card__title">Docker, any server</h3>
+          <h3 className="cost-deploy-card__title">
+            Docker, any server · planned
+          </h3>
           <p className="cost-deploy-card__body">
-            Node 22 with SQLite or Postgres 16, MinIO, S3 or disk storage,
-            and Caddy.
+            Node 22 with SQLite or Postgres 16, MinIO, S3 or disk storage, and
+            Caddy — Phase 11, not built yet.
           </p>
           <ButtonSecondary href={tree("deploy/docker")}>
             Docker setup

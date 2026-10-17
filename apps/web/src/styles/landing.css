@@ -49,11 +49,12 @@
   margin: 0;
 }
 
-/* Padding and height stay DESIGN.md's `button-secondary` box (10px 14px,
-   40px — §6 reuses this component unchanged, and T30 compares both against
-   tokens.components). The A10 hit-area floor is added on top as
-   `min-height: 44px`, which is the mechanism ui-direction.md §7 names:
-   a 44px touch target without redrawing the visual box. */
+/* D5: the 44px A10 hit area is reached with block padding alone, never a
+   min-height stacked on top of a height that it then silently overrides
+   (9px block padding + the 1px border on each side + button-md's 24px
+   line-height = 44px exactly) — the same mechanism .nav-link already uses
+   above. Horizontal padding (14px) stays DESIGN.md's `button-secondary`
+   value; T30 checks it and the effective 44px box. */
 .button-secondary {
   display: inline-flex;
   align-items: center;
@@ -67,9 +68,8 @@
   letter-spacing: var(--type-button-md-letter-spacing);
   border: 1px solid var(--color-hairline-strong);
   border-radius: var(--rounded-md);
-  padding: 10px 14px;
-  height: 40px;
-  min-height: 44px;
+  padding-block: 9px;
+  padding-inline: 14px;
   text-decoration: none;
   transition: none;
 }

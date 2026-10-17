@@ -60,7 +60,7 @@ describe("S10 Faq", () => {
     expect(section).not.toBeNull();
     expect(section).toHaveAttribute("aria-labelledby", "faq-heading");
     const heading = screen.getByRole("heading", { level: 2 });
-    expect(heading).toHaveTextContent("Questions and answers");
+    expect(heading.textContent).toBe("Questions and answers");
     expect(heading.id).toBe("faq-heading");
   });
 
@@ -170,7 +170,7 @@ describe("S11 Closing", () => {
   it("is the HeroSection's display-lg variant with the verbatim heading", () => {
     const { container } = render(<Closing />);
     const heading = screen.getByRole("heading", { level: 2 });
-    expect(heading).toHaveTextContent("Read one real test, end to end.");
+    expect(heading.textContent).toBe("Read one real test, end to end.");
     const section = container.querySelector(".hero-section");
     expect(section).toHaveClass("hero-section--display-lg");
     expect(section).toHaveAttribute("aria-labelledby", heading.id);
@@ -237,27 +237,11 @@ describe("S12 Footer", () => {
     expect(footer).not.toBeNull();
     const heading = footer?.querySelector("h2");
     expect(heading).toHaveClass("visually-hidden");
-    expect(heading).toHaveTextContent("Footer");
+    expect(heading?.textContent).toBe("Footer");
   });
 
-  it("T23: the first <p> after the h2 is 40-60 words and names Pariksha first (heading is allow-listed)", () => {
-    const { container } = render(<Footer />);
-    const heading = container.querySelector("h2");
-    let node: Element | null = heading;
-    let firstP: Element | null = null;
-    while (node) {
-      node = node.nextElementSibling;
-      if (!node) break;
-      firstP = node.matches("p") ? node : node.querySelector("p");
-      if (firstP) break;
-    }
-    expect(firstP).not.toBeNull();
-    const text = firstP?.textContent ?? "";
-    const words = wordCount(text);
-    expect(words).toBeGreaterThanOrEqual(40);
-    expect(words).toBeLessThanOrEqual(60);
-    expect(firstSentence(text)).toContain("Pariksha");
-  });
+  // T23 exempts the three allow-listed headings entirely (contract §8, D4),
+  // so the footer carries no paragraph to assert on.
 
   it("has three columns — Documentation (with schemas and roadmap), Project, Licence", () => {
     render(<Footer />);

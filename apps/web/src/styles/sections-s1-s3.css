@@ -86,10 +86,31 @@
   margin-top: var(--space-xl);
 }
 
+/* P6: a 44px ordinal plus a 24px gap leaves too little of the 320px content
+   box for the step's own text, so the row stacks below the breakpoint where
+   that starts to bite. */
+@media (max-width: 480px) {
+  .step-row {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+}
+
 /* ---- Results table (S3, step 03) — DESIGN.md's results-table token --- */
+
+/* The fourth wide object P6 names: the same overflow-x scroll region as
+   CodeBlock's .code-block__scroll and ComparisonTable's
+   .comparison-table__region (the wrapping tabIndex/role/aria-labelledby
+   markup is a .tsx change — see needs_from_others). */
+.results-table__region {
+  overflow-x: auto;
+}
 
 .results-table {
   width: 100%;
+  /* Keeps its natural four-column reading width so it scrolls inside the
+     region above instead of being squeezed to ~214px at 320px. */
+  min-width: 480px;
   border-collapse: collapse;
   background: var(--color-canvas);
 }
@@ -285,10 +306,12 @@
   color: var(--color-voltage-deep);
 }
 
+/* Stays the same 36x36 square as every other palette cell (its 12px
+   mono-sm font-size and size come from the base rule above, unchanged) —
+   "Locked" wraps inside it rather than the box growing into a pill. */
 .runner-mock__square--locked {
-  width: auto;
-  padding: 0 var(--space-sm);
   color: var(--color-state-locked);
-  font-size: 10px;
-  letter-spacing: 0.3px;
+  line-height: 1.1;
+  text-align: center;
+  overflow-wrap: break-word;
 }

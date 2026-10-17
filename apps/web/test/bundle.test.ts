@@ -77,12 +77,13 @@ describe("the prerender's SSR bundle excludes admin code (T4, T29)", () => {
 });
 
 describe("the candidate and admin bundles are separate Vite entries", () => {
-  it("produces separate entry chunks for index.html and admin.html", () => {
+  // SEO-2/P1: index.html carries no module script, so the two-HTML build emits
+  // a JS entry chunk for admin only. The guard is that admin's chunk still
+  // exists and separately that `/` gets no JS entry chunk at all.
+  it("emits an admin entry chunk and none for index.html (T4, SEO-2)", () => {
     const entryChunks = twoEntryChunks.filter((chunk) => chunk.isEntry);
-    const indexChunk = entryChunks.find((chunk) => chunk.name === "index");
     const adminChunk = entryChunks.find((chunk) => chunk.name === "admin");
-    expect(indexChunk).toBeDefined();
     expect(adminChunk).toBeDefined();
-    expect(indexChunk?.fileName).not.toBe(adminChunk?.fileName);
+    expect(entryChunks.find((chunk) => chunk.name === "index")).toBeUndefined();
   });
 });

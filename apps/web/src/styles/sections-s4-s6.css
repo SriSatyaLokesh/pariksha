@@ -47,11 +47,13 @@
 
 /* ---- S5 — features ---------------------------------------------------- */
 
+/* Hairline, not voltage (§3.0 authorises exactly three voltage objects —
+   hero, card-voltage, closing — and this would have been a fourth). */
 .feature-lead {
   max-width: 680px;
   margin: 0 0 var(--space-2xl);
   padding-left: var(--space-lg);
-  border-left: 2px solid var(--color-voltage);
+  border-left: 2px solid var(--color-hairline-strong);
   color: var(--color-ink-soft);
 }
 

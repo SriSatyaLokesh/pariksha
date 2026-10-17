@@ -3,6 +3,7 @@ import { StepRow } from "../../components/StepRow";
 import { CodeBlock } from "../../components/CodeBlock";
 
 const HEADING_ID = "how-it-works-heading";
+const RESULTS_CAPTION_ID = "how-it-works-results-caption";
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
 const blob = (path: string) => `${REPO}/blob/main/${path}`;
 
@@ -193,8 +194,9 @@ export function HowItWorks() {
             A question is a small documented object: a prompt, options, a
             key, a score and an explanation. The key and the explanation
             live in the file and are never sent to a candidate&apos;s
-            browser. An organiser builds this in a Pariksha UI, not by
-            hand-writing the file above.
+            browser. An organiser is meant to build this in a Pariksha UI,
+            not by hand-writing the file above — that screen is specified,
+            not yet built.
           </p>
         </StepRow>
 
@@ -334,39 +336,49 @@ export function HowItWorks() {
                 ,Fail,...,high_risk,Suspicious,...
               </CodeBlock>
 
-              <table className="results-table">
-                <caption className="visually-hidden">
-                  Three example rows from a results CSV
-                </caption>
-                <thead>
-                  <tr>
-                    <th scope="col">Candidate</th>
-                    <th scope="col">Score</th>
-                    <th scope="col">Result</th>
-                    <th scope="col">Integrity flag</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {RESULTS_ROWS.map((row) => (
-                    <tr key={row.name}>
-                      <th scope="row">{row.name}</th>
-                      <td className="results-table__numeric">{row.score}</td>
-                      <td>{row.result}</td>
-                      <td>
-                        <span className={`integrity-badge-${row.flag === "high_risk" ? "risk" : row.flag}`}>
-                          {FLAG_TEXT[row.flag]}
-                        </span>
-                      </td>
+              {/* A7: the scrolling container carries tabIndex, role="region"
+                  and an accessible name, like CodeBlock and ComparisonTable. */}
+              <div
+                className="results-table__region"
+                role="region"
+                aria-labelledby={RESULTS_CAPTION_ID}
+                tabIndex={0}
+              >
+                <table className="results-table">
+                  <caption id={RESULTS_CAPTION_ID} className="visually-hidden">
+                    Three example rows from a results CSV
+                  </caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Candidate</th>
+                      <th scope="col">Score</th>
+                      <th scope="col">Result</th>
+                      <th scope="col">Integrity flag</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {RESULTS_ROWS.map((row) => (
+                      <tr key={row.name}>
+                        <th scope="row">{row.name}</th>
+                        <td className="results-table__numeric">{row.score}</td>
+                        <td>{row.result}</td>
+                        <td>
+                          <span className={`integrity-badge-${row.flag === "high_risk" ? "risk" : row.flag}`}>
+                            {FLAG_TEXT[row.flag]}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
               <p className="step-row__caption">
-                Divya&apos;s row is the whole design in one line. The app
-                recorded five tab switches and three fullscreen exits and
-                marked the attempt <code>high_risk</code>. It did not cancel
-                her result. A reviewer looked, wrote a note, and invited her
-                to a supervised re-test.
+                As specified in the worked example, not a live recording:
+                Divya&apos;s row is the whole design in one line. Her attempt
+                shows five tab switches and three fullscreen exits, marked{" "}
+                <code>high_risk</code>. It did not cancel her result. A
+                reviewer looked, wrote a note, and invited her to a
+                supervised re-test.
               </p>
             </>
           }

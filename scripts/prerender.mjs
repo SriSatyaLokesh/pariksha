@@ -105,6 +105,18 @@ function stripClientAssets(page) {
     .replace(/\s*<link[^>]*\brel="modulepreload"[^>]*>/g, "");
 }
 
+// Title, description, og:type/site_name/title/description/locale,
+// twitter:card/title/description and the three icon <link>s need no
+// build-time origin, so they are now static in apps/web/index.html (design
+// contract §5) — a path that never runs this script (vite dev, a bare
+// `vite build`, a source tarball) still serves a correct head. The
+// lang/title replace below is kept anyway as a belt-and-suspenders guard:
+// it forces head.ts's TITLE into dist regardless of whether index.html's
+// static copy has drifted. Only what genuinely cannot be static — values
+// built from the build-time origin (OQ-1/SEO-6: canonical, og:url, the
+// og/twitter image URLs) and the one raw hex literal index.html must stay
+// free of for the colour guard (SEO-15: theme-color) — is injected here,
+// plus the JSON-LD block (needs git-derived dateModified).
 function injectHead(page, head, jsonLd) {
   if (head.lang) {
     page = page.replace(/<html lang="[^"]*"/, `<html lang="${head.lang}"`);
@@ -116,30 +128,53 @@ function injectHead(page, head, jsonLd) {
     );
   }
 
+  const og = head.openGraph ?? {};
+  const tw = head.twitter ?? {};
   const tags = [
-    `<meta name="description" content="${escapeAttr(head.description)}">`,
     `<link rel="canonical" href="${escapeAttr(head.canonical)}">`,
-    ...Object.entries(head.openGraph ?? {}).map(
-      ([property, content]) =>
-        `<meta property="${property}" content="${escapeAttr(content)}">`,
-    ),
-    ...Object.entries(head.twitter ?? {}).map(
-      ([name, content]) =>
-        `<meta name="${name}" content="${escapeAttr(content)}">`,
-    ),
+    `<meta property="og:url" content="${escapeAttr(og["og:url"])}">`,
+    `<meta property="og:image" content="${escapeAttr(og["og:image"])}">`,
+    `<meta property="og:image:width" content="${escapeAttr(og["og:image:width"])}">`,
+    `<meta property="og:image:height" content="${escapeAttr(og["og:image:height"])}">`,
+    `<meta property="og:image:alt" content="${escapeAttr(og["og:image:alt"])}">`,
+    `<meta name="twitter:image" content="${escapeAttr(tw["twitter:image"])}">`,
+    `<meta name="twitter:image:alt" content="${escapeAttr(tw["twitter:image:alt"])}">`,
     `<meta name="theme-color" content="${escapeAttr(head.themeColor.light)}" media="(prefers-color-scheme: light)">`,
     `<meta name="theme-color" content="${escapeAttr(head.themeColor.dark)}" media="(prefers-color-scheme: dark)">`,
-    ...(head.icons ?? []).map((icon) => {
-      const sizes = icon.sizes ? ` sizes="${escapeAttr(icon.sizes)}"` : "";
-      const type = icon.type ? ` type="${escapeAttr(icon.type)}"` : "";
-      return `<link rel="${escapeAttr(icon.rel)}" href="${escapeAttr(icon.href)}"${sizes}${type}>`;
-    }),
     // SEO-19: the HTML spec stops processing a ld+json block before it is
     // ever executed, so only `</script>` inside the JSON needs escaping.
     `<script type="application/ld+json">${JSON.stringify(jsonLd).replace(/</g, "\\u003c")}</script>`,
   ];
 
   return page.replace("</head>", `  ${tags.join("\n  ")}\n</head>`);
+}
+
+// SEO-4: dist/404.html is emitted here, carrying the same shell as the real
+// page — same stylesheet link, so it is never an unstyled orphan — rather
+// than being a static apps/web/public/404.html copy, which had no
+// stylesheet link at all and which the project's colour guard never walked
+// because public/ sits outside its scan root.
+function build404Html(page) {
+  const styleTag =
+    /<link rel="stylesheet"[^>]*href="[^"]+">/.exec(page)?.[0] ?? "";
+  return `<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Page not found — Pariksha</title>
+    ${styleTag}
+  </head>
+  <body>
+    <main class="section">
+      <div class="wrap">
+        <p>This page does not exist. <a href="/">Return to the Pariksha homepage.</a></p>
+      </div>
+    </main>
+  </body>
+</html>
+`;
 }
 
 /**
@@ -221,6 +256,7 @@ export async function runPrerender({ webRoot, outDir, siteUrl }) {
     page = injectHead(page, head, jsonLd);
 
     await writeFile(indexPath, page);
+    await writeFile(resolve(outDir, "404.html"), build404Html(page));
     await writeFile(resolve(outDir, "robots.txt"), buildRobotsTxt(origin));
     await writeFile(resolve(outDir, "llms.txt"), buildLlmsTxt(origin));
     await writeFile(

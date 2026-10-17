@@ -38,18 +38,15 @@ const HEADING_ALLOW_LIST = [
   "Footer",
 ];
 
-// T23's "first sentence" proxy. A naive split on ". " breaks S6's verbatim
-// answer paragraph after its deliberate one-word opening ("No."), so a
-// sentence under four words is folded into the next one before the check —
-// matching T23's own note that "the design and the test agree".
+// T23's "first sentence" proxy, literally: the text up to the first
+// sentence-ending punctuation. (A previous version folded any sentence under
+// four words into the next one so S6's deliberate one-word opening ("No.")
+// would never actually be checked — which is the gaming T23 exists to catch,
+// not a reading of it. §8 says "that paragraph's first sentence", not "the
+// first sentence at least four words long".)
 function firstSentence(text: string): string {
-  const parts = text.match(/[^.!?]+[.!?]+/g) ?? [text];
-  let acc = "";
-  for (const part of parts) {
-    acc += part;
-    if (acc.trim().split(/\s+/).length > 3) break;
-  }
-  return acc;
+  const match = /^[^.!?]*[.!?]/.exec(text.trim());
+  return match ? match[0] : text.trim();
 }
 
 function wordCount(text: string): number {
@@ -208,7 +205,7 @@ describe("S5 features", () => {
     expect(cells).toHaveLength(6);
     expect(
       screen.getByText(
-        "The scoring and selection engines are built and tested; everything else on this page is specified. v0.1 ships six core question types, registration forms, proctoring and CSV results; all twelve types arrive at v0.3.",
+        "The scoring and selection engines are built and tested; everything else on this page is specified. All twelve question types, the test builder and the candidate runtime land with v0.1; proctoring and results follow in v0.2.",
       ),
     ).toBeInTheDocument();
   });
@@ -242,7 +239,7 @@ describe("S6 no-code", () => {
       screen.getByText(
         (_, node) =>
           node?.textContent ===
-          "No. Organisers build questions and tests in a Pariksha UI: one editing screen for all twelve types, a type picker, a drag-to-reorder section list, live pool counts and a publish checklist. The JSON exists so that you can hand-author, script, diff or export a test if you want to — and so that nothing you build is locked into Pariksha.",
+          "No, organisers build questions and tests in a Pariksha UI: one editing screen for all twelve types, a type picker, a drag-to-reorder section list, live pool counts and a publish checklist. The JSON exists so that you can hand-author, script, diff or export a test if you want to — and so that nothing you build is locked into Pariksha.",
       ),
     ).toBeInTheDocument();
     expect(

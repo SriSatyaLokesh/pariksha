@@ -44,7 +44,7 @@ describe("Landing", () => {
     render(<Landing />);
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]).toHaveTextContent(HERO_HEADING);
+    expect(headings[0]?.textContent).toBe(HERO_HEADING);
     expect(HERO_HEADING.length).toBeLessThanOrEqual(45);
     expect(screen.getAllByText("Pariksha").length).toBeGreaterThan(0);
   });
@@ -118,9 +118,14 @@ describe("Landing", () => {
     expect(sources.some((source) => source.startsWith("http"))).toBe(false);
   });
 
-  // T21 (#7): index.html and admin.html both declare lang=en.
-  it("index.html and admin.html both declare lang=en", () => {
-    expect(readFileSync(INDEX_HTML_PATH, "utf8")).toMatch(/<html lang="en">/);
+  // T21 (#7) / SEO-16: British spelling is a project rule, so the public
+  // landing page says so in its lang attribute. admin.html is never
+  // prerendered or indexed (§9.7 leaves its lang to the implementer) and
+  // keeps lang=en, unchanged.
+  it("index.html declares lang=en-GB; admin.html keeps lang=en", () => {
+    expect(readFileSync(INDEX_HTML_PATH, "utf8")).toMatch(
+      /<html lang="en-GB">/,
+    );
     expect(readFileSync(ADMIN_HTML_PATH, "utf8")).toMatch(/<html lang="en">/);
   });
 

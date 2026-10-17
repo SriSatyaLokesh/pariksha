@@ -110,9 +110,11 @@
   gap: var(--space-xl);
 }
 
+/* StepRow's own comment and §3 S3: mono-sm's face at display-lg's scale —
+   the family is mono, the size/weight/line-height stay display-lg's. */
 .step-row__ordinal {
   flex: 0 0 auto;
-  font-family: var(--type-display-lg-family);
+  font-family: var(--type-mono-sm-family);
   font-size: var(--type-display-lg-size);
   font-weight: var(--type-display-lg-weight);
   line-height: var(--type-display-lg-line-height);

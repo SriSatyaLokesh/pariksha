@@ -71,7 +71,13 @@ a {
   top: var(--space-lg);
 }
 
+/* ui-direction.md §5.1 / P8: smooth scroll on in-page anchors, in the same
+   reduced-motion guard as every other transition on the page. */
 @media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+
   .skip-link {
     transition: top 120ms ease-out;
   }

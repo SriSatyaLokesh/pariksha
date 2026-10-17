@@ -46,7 +46,7 @@ describe("S1 — Hero", () => {
     render(<Hero />);
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
-    expect(headings[0]).toHaveTextContent(H1_TEXT);
+    expect(headings[0]?.textContent).toBe(H1_TEXT);
     expect(H1_TEXT.length).toBeLessThanOrEqual(45);
   });
 
@@ -116,7 +116,7 @@ describe("S2 — What is Pariksha?", () => {
     expect(section).not.toBeNull();
     const headingId = section!.getAttribute("aria-labelledby");
     expect(headingId).toBeTruthy();
-    expect(document.getElementById(headingId!)).toHaveTextContent(
+    expect(document.getElementById(headingId!)?.textContent).toBe(
       S2_HEADING,
     );
   });
@@ -124,8 +124,8 @@ describe("S2 — What is Pariksha?", () => {
   it("the h2 text is exactly the verbatim heading (T22)", () => {
     render(<WhatIsPariksha />);
     expect(
-      screen.getByRole("heading", { level: 2, name: S2_HEADING }),
-    ).toHaveTextContent(S2_HEADING);
+      screen.getByRole("heading", { level: 2, name: S2_HEADING }).textContent,
+    ).toBe(S2_HEADING);
   });
 
   it("the first following <p> is 40-60 words and its first sentence names Pariksha (T23)", () => {
@@ -162,7 +162,7 @@ describe("S3 — How running an exam works", () => {
     expect(section).not.toBeNull();
     const headingId = section!.getAttribute("aria-labelledby");
     expect(headingId).toBeTruthy();
-    expect(document.getElementById(headingId!)).toHaveTextContent(
+    expect(document.getElementById(headingId!)?.textContent).toBe(
       S3_HEADING,
     );
   });
@@ -170,8 +170,8 @@ describe("S3 — How running an exam works", () => {
   it("the h2 text is exactly the verbatim, question-shaped heading (T22)", () => {
     render(<HowItWorks />);
     expect(
-      screen.getByRole("heading", { level: 2, name: S3_HEADING }),
-    ).toHaveTextContent(S3_HEADING);
+      screen.getByRole("heading", { level: 2, name: S3_HEADING }).textContent,
+    ).toBe(S3_HEADING);
     expect(S3_HEADING.endsWith("?")).toBe(true);
   });
 

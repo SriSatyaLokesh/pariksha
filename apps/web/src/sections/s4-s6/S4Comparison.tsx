@@ -26,7 +26,7 @@ const ROWS = [
   {
     label: "Rich question types",
     values: [
-      "Multiple choice and free text",
+      "—",
       "Varies by vendor",
       "12, including matching, ordering and numeric with tolerance",
     ],

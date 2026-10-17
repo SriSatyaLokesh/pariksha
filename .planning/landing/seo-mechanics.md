@@ -352,20 +352,23 @@ and `hosting.test.ts` forbids URLs in `_headers` anyway.
 applied and confirm the browser console reports no `securitypolicyviolation` for the ld+json block.
 Record the result in this file rather than writing a headless-browser test for it.
 
-**T18 result (recorded 2026-10-17, assignment D):** not yet confirmed in a live browser — the
-agent sandbox this check ran in has no reachable Chrome instance (`chrome-devtools` and
-`claude-in-chrome` both report no browser connection). Done instead: built a standalone page
-carrying the production `_headers` CSP as a `<meta http-equiv="Content-Security-Policy">` and the
-real `<script type="application/ld+json">` block this change produces (`buildJsonLd` output,
-byte-for-byte), ready to open the moment a browser is available —
-`new URL("file:///.../csp-ldjson-check.html")` then read the console. No violation is expected:
-per the HTML Standard, a `<script>` whose `type` is not a JavaScript MIME type (`application/ld+json`
-is not one) is never executed and is not subject to `script-src` at all — this is categorically
-different from `'unsafe-inline'`, which governs scripts the engine *would* run. **Action for
-whoever deploys first:** reopen that page (or `dist/index.html` once it exists) in a real browser
-with the production `_headers` applied and confirm the console is silent, then replace this note
-with the actual result. If it is not silent, the fix named in SEO-19 is a `'sha256-…'` hash added to
-`script-src` in `_headers` — nothing else.
+**T18 result (recorded 2026-10-17, assignment D, fix-first pass):** still not confirmed in a live
+browser. This pass went one step further than the previous attempt — a real `vite build` plus
+`scripts/prerender.mjs` into a throwaway temp `outDir` (the same two-step pipeline CI runs),
+served over plain HTTP from a throwaway Node server (`createServer`) with the production
+`_headers` block's exact `Content-Security-Policy` value attached to every response (verified with
+`curl -I`: the header is present, byte-for-byte), listening on `localhost:5137` — rather than the
+`file://` + `<meta http-equiv>` stand-in the previous attempt used. Both `chrome-devtools` (connect
+to `127.0.0.1:9222`) and `claude-in-chrome` (`list_connected_browsers` → `[]`) report no reachable
+Chrome instance in this sandbox either, so the page was never actually opened. No violation is
+still expected, for the reason already on record: per the HTML Standard, a `<script>` whose `type`
+is not a JavaScript MIME type (`application/ld+json` is not one) is never executed and is not
+subject to `script-src` at all — categorically different from `'unsafe-inline'`, which governs
+scripts the engine *would* run. **Action for whoever deploys first (unchanged):** serve `dist/`
+with the production `_headers` applied (a throwaway static server reproducing the CSP header is
+enough, as above — no deploy needed), open `dist/index.html` in a real browser, confirm the console
+is silent, and replace this note with the actual result. If it is not silent, the fix named in
+SEO-19 is a `'sha256-…'` hash added to `script-src` in `_headers` — nothing else.
 
 ---
 

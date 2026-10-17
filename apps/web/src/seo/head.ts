@@ -10,7 +10,12 @@ import { tokens } from "../styles/tokens";
 // line, so the four can never say different things.
 export const DESCRIPTION =
   "Pariksha is an open-source, self-hosted exam platform: question pools, 12 question types, browser proctoring, CSV results.";
-export const STATUS_LINE = "Pre-alpha as of October 2026.";
+// SEO-32 needs the literal lowercase substring "pre-alpha" to survive in
+// every one of its three load-bearing homes (T17); "Pre-alpha" (capital P,
+// as a sentence's first word) does not contain that substring, which is
+// exactly the bug T17 is rewritten to catch rather than paper over by
+// lowercasing both sides of the comparison.
+export const STATUS_LINE = "Status: pre-alpha, October 2026.";
 export const META_DESCRIPTION = `${DESCRIPTION} ${STATUS_LINE}`;
 
 // SEO-8. Matches the h1 (T19) except for the h1's trailing full stop.

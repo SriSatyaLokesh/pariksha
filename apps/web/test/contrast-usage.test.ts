@@ -34,6 +34,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
+const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 
 function hexToRgb(hex: string): [number, number, number] {
   const normalized = hex.replace("#", "");
@@ -66,6 +67,15 @@ function contrastRatio(fg: string, bg: string): number {
 // bundles. base.css and fonts.css are deliberately NOT in this chain (they
 // never were, even before the split) — they're a separate top-level import
 // in main.tsx, not part of landing.css's own tree.
+//
+// base.css is not folded into the generic sweep below: it carries selectors
+// this parser was never built for (`a { color: inherit }`, `:focus-visible`'s
+// non-token `outline-color`) that would need their own special-casing for no
+// real gain. But A1's point is coverage, not which file a selector lives in
+// — base.css declares `color:` on exactly two selectors that paint visible
+// text, `body` and `.skip-link`, and both are checked directly, by the same
+// WCAG formula, in the "base.css" describe block below. That closes the gap
+// a plain exclusion comment would otherwise leave undocumented.
 const IMPORT_RE = /@import\s+["']\.\/([a-zA-Z0-9_-]+\.css)["'];?/g;
 
 function stripComments(css: string): string {
@@ -540,5 +550,59 @@ describe("every colour-on-surface usage clears its real WCAG threshold", () => {
         ).toBeGreaterThanOrEqual(threshold);
       });
     }
+  }
+});
+
+// A1, extended per the file-level comment above: base.css's two
+// colour-bearing selectors, checked directly with the same parsing and the
+// same WCAG formula as the generic sweep, rather than left to an exclusion
+// comment with nothing behind it.
+describe("base.css: the two colour-bearing selectors outside landing.css's own import chain (A1)", () => {
+  const baseCss = readResolvedCss(BASE_CSS_PATH);
+  const baseRules = parseRuleBodies(baseCss);
+  const baseBodies = new Map<string, string>();
+  for (const rule of baseRules) {
+    const existing = baseBodies.get(rule.selector);
+    baseBodies.set(
+      rule.selector,
+      existing ? `${existing};${rule.body}` : rule.body,
+    );
+  }
+
+  function backgroundOf(selector: string): ColorName {
+    const body = baseBodies.get(selector) ?? "";
+    const value = findDeclaration(body, "background");
+    const match = value ? COLOR_VAR_RE.exec(value) : null;
+    const name = match?.[1];
+    if (!name || !(name in tokens.colors)) {
+      throw new Error(`${selector}: cannot parse a var(--color-*) background`);
+    }
+    return name as ColorName;
+  }
+
+  for (const selector of ["body", ".skip-link"]) {
+    it(`${selector} clears its real WCAG threshold`, () => {
+      const body = baseBodies.get(selector);
+      expect(body, `${selector} not found in base.css`).toBeDefined();
+      if (!body) return;
+      const fg = parseColor(body);
+      expect(
+        fg,
+        `${selector}: cannot parse a var(--color-*) foreground`,
+      ).not.toBeNull();
+      if (!fg) return;
+      const bg = backgroundOf(selector);
+      // Neither declares its own font-size: `body` sets the page's base
+      // body-md text directly, and `.skip-link` inherits it — 16px/400
+      // either way, the same fallback INHERITED_SIZE_WEIGHT uses above.
+      const px = parseFontSizePx(body) ?? 16;
+      const weight = parseFontWeight(body) ?? 400;
+      const threshold = px >= 24 || (px >= 18.66 && weight >= 700) ? 3 : 4.5;
+      const ratio = contrastRatio(tokens.colors[fg], tokens.colors[bg]);
+      expect(
+        ratio,
+        `${selector} on ${bg}: ${fg} on ${bg} at ${px}px/${weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
+      ).toBeGreaterThanOrEqual(threshold);
+    });
   }
 });

@@ -231,6 +231,9 @@
   font-size: var(--type-heading-md-size);
   line-height: var(--type-heading-md-line-height);
   letter-spacing: var(--type-heading-md-letter-spacing);
+  /* Opens the gap to the h3s beneath a band heading into its own tier,
+     rather than the base .section-heading rule's 24px. */
+  margin-bottom: var(--space-2xl);
 }
 
 /* Button primary */

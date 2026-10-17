@@ -30,7 +30,7 @@ export function Closing() {
       variant="display-lg"
       headingId="closing-heading"
       heading="Read one real test, end to end."
-      lead="Pariksha's worked example, examples/reasoning-aptitude, is one complete test from end to end: the question bank, the test definition that draws from it, six sample candidates, and the results CSV their attempts produced — the same files an organiser writes, nothing simplified for the page."
+      lead="Pariksha's worked example, examples/reasoning-aptitude, is one complete test from end to end: the question bank, the test definition that draws from it, six sample candidates, and the results CSV their attempts produced — the exact files committed in the repository, nothing simplified for the page."
       primaryCta={
         <ButtonPrimary href={`${REPO}/tree/main/examples/reasoning-aptitude`}>
           Start with the worked example

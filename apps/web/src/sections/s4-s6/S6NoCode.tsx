@@ -18,7 +18,7 @@ export function S6NoCode() {
         Does an organiser ever have to write JSON?
       </SectionHeading>
       <p>
-        No. Organisers build questions and tests in a Pariksha UI: one editing
+        No, organisers build questions and tests in a Pariksha UI: one editing
         screen for all twelve types, a type picker, a drag-to-reorder section
         list, live pool counts and a publish checklist. The JSON exists so
         that you can hand-author, script, diff or export a test if you want to

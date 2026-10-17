@@ -37,19 +37,14 @@ function words(text: string): string[] {
   return text.trim().split(/\s+/).filter(Boolean);
 }
 
-// The blunt, mechanical proxy T23 asks for: split on sentence-ending
-// punctuation, then — because a paragraph may open with a sentence too
-// short to carry a subject on its own (S6's "No.") — fold anything under
-// four words into the sentence after it before checking for "Pariksha".
+// The blunt, mechanical proxy T23 asks for, literally: the text up to the
+// first sentence-ending punctuation. (A previous version folded any sentence
+// under four words into the one after it, which meant S6's deliberate
+// one-word opening ("No.") was never actually checked — §8 says "that
+// paragraph's first sentence", not "first sentence of at least four words".)
 function firstSentence(text: string): string {
-  const sentences = text.trim().split(/(?<=[.?!])\s+/);
-  let first = sentences[0] ?? "";
-  let i = 1;
-  while (words(first).length < 4 && i < sentences.length) {
-    first = `${first} ${sentences[i]}`;
-    i++;
-  }
-  return first;
+  const match = /^[^.?!]*[.?!]/.exec(text.trim());
+  return match ? match[0] : text.trim();
 }
 
 // The first <p> that follows a given heading in document order — immune to
@@ -76,7 +71,7 @@ describe("landing content — Wave 4 (§8)", () => {
       const h1 = within(hero as HTMLElement).getByRole("heading", {
         level: 1,
       });
-      expect(h1).toHaveTextContent(
+      expect(h1.textContent).toBe(
         "Pariksha — run real exams you host yourself.",
       );
     });
@@ -89,7 +84,7 @@ describe("landing content — Wave 4 (§8)", () => {
         const heading = within(el as HTMLElement).getByRole("heading", {
           level: 2,
         });
-        expect(heading).toHaveTextContent(section.heading);
+        expect(heading.textContent).toBe(section.heading);
       });
     }
 
@@ -100,7 +95,7 @@ describe("landing content — Wave 4 (§8)", () => {
       const h2 = within(closing as HTMLElement).getByRole("heading", {
         level: 2,
       });
-      expect(h2).toHaveTextContent("Read one real test, end to end.");
+      expect(h2.textContent).toBe("Read one real test, end to end.");
     });
   });
 
@@ -118,6 +113,11 @@ describe("landing content — Wave 4 (§8)", () => {
         text.endsWith("?") || H2_ALLOW_LIST.includes(text),
         `"${text}" is neither question-shaped nor allow-listed`,
       ).toBe(true);
+
+      // The three allow-listed headings are exempt from the rest of T23
+      // entirely: a heading that asks no question gets no manufactured
+      // answer-shaped paragraph underneath it.
+      if (H2_ALLOW_LIST.includes(text)) continue;
 
       const paragraph = firstParagraphAfter(h2, all);
       expect(paragraph, `no <p> follows h2 "${text}"`).toBeDefined();

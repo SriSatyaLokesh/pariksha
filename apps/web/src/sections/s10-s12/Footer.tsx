@@ -7,24 +7,15 @@ const tree = (path: string) => `${REPO}/tree/main/${path}`;
 // S12 — Footer (design contract §3, S12). Unchanged from v1 except the
 // Documentation column gains the schemas directory and the roadmap. The
 // visually-hidden <h2>Footer</h2> is load-bearing for the heading-order test
-// (A4); the visually-hidden <p> right after it exists only so T23's
-// allow-listed-heading rule — a 40-60 word first paragraph naming Pariksha —
-// has something to measure on a band with no visible prose of its own. Its
-// claim is content-inventory.md §7 Q1's own sourced definition (PRD :31),
-// already carried on the page at S2, not a new one.
+// (A4). There is no paragraph under it: T23 exempts the three allow-listed
+// headings entirely, so a band with no prose of its own gets no manufactured
+// answer-shaped paragraph.
 export function Footer() {
   return (
     <footer id="docs" className="site-footer" aria-labelledby="footer-heading">
       <h2 id="footer-heading" className="visually-hidden">
         Footer
       </h2>
-      <p className="visually-hidden">
-        Pariksha is a free, open-source exam platform that any school,
-        company or community can run on its own account at zero cost, and
-        this footer links to its documentation, project files and licence.
-        The code is Apache-2.0; the documentation, schemas and example tests
-        are CC BY 4.0.
-      </p>
       <div className="footer-grid wrap">
         <div className="footer-col">
           <h3 className="footer-col__heading">Documentation</h3>

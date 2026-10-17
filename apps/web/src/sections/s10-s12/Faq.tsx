@@ -24,7 +24,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "How much does it cost to run?",
     answer:
-      "Pariksha costs nothing to run on the reference deployment. Five hundred candidates in one hour fits inside Cloudflare's free tier: about 55,000 Worker requests against 100,000 a day, 55,000 D1 row writes against 100,000, and 0.75 GB of snapshots against 10 GB. The arithmetic is published, not asserted.",
+      "Pariksha is designed to cost nothing on the reference deployment. Five hundred candidates in one hour is estimated to fit inside Cloudflare's free tier: about 55,000 Worker requests against 100,000 a day, 55,000 D1 row writes against 100,000, and 0.75 GB of snapshots against 10 GB. The arithmetic is published, not asserted.",
   },
   {
     question: "Where is candidate data stored?",
@@ -54,12 +54,12 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Is Pariksha better than Google Forms for an exam?",
     answer:
-      "Pariksha is better than Google Forms for an exam on the things that matter: question pools so no two candidates share a paper, twelve question types to choose from rather than a form's handful, answer keys that never reach the browser, a server-enforced timer, unique-field checks that block repeat registrations, and tab-switch logging. Microsoft Forms offers none of those either.",
+      "Pariksha answers this with its own specified list rather than a claim about Google Forms: question pools so no two candidates share a paper, twelve question types including matching, ordering and numeric with tolerance, answer keys that never reach the browser, a server-enforced timer, and tab-switch logging. Compare that with Microsoft Forms as it stands in October 2026.",
   },
   {
     question: "How is it different from Mettl, HackerEarth or Testlify?",
     answer:
-      "Pariksha differs from Mettl, HackerEarth and Testlify in not charging per candidate or per month and not keeping candidate data on their servers. It is Apache-2.0, self-hosted, and designed to cost nothing, with scoring code you can read and change, and a whole test exports as one JSON file that imports into any other installation, so nothing is trapped.",
+      "Pariksha differs from platforms such as Mettl, HackerEarth, Testlify and Testportal, whose pricing, as published in October 2026, is per candidate or per month, and which host candidate data on their own servers. Pariksha is Apache-2.0, self-hosted and free to run, with scoring code you can read and change and a whole test that exports as one portable JSON file.",
   },
   {
     question: "Can I write questions before the app exists?",
@@ -84,6 +84,15 @@ export function Faq() {
       <SectionHeading id="faq-heading" scale="band" eyebrow="FAQ">
         Questions and answers
       </SectionHeading>
+      {/* Not a <p>: T23/landing-content.test.tsx's "first following <p>"
+          proxy would otherwise pick this up instead of the first FAQ
+          answer, and this one-line note is deliberately far short of the
+          40-60 word answer-first rule. */}
+      <div className="faq-status-line">
+        These answers describe Pariksha as specified. The application is
+        pre-alpha as of October 2026 — see <a href="#status">what is built</a>
+        .
+      </div>
       <div className="faq-grid">
         {FAQ_ITEMS.map((item) => (
           <div className="faq-item" key={item.question}>

@@ -24,14 +24,14 @@ export function S5Features() {
         Pariksha groups what it does by the organiser&apos;s job, not by the
         shape of the codebase. Six cells below answer six different problems:
         worthwhile questions, a different paper for everyone, clean
-        registration, controlled access, proctoring that never records, and
-        results that land in a spreadsheet already.
+        registration, proctoring that never records, flags instead of
+        verdicts, and results that land in a spreadsheet already.
       </p>
       <p className="feature-lead">
         The scoring and selection engines are built and tested; everything
-        else on this page is specified. v0.1 ships six core question types,
-        registration forms, proctoring and CSV results; all twelve types
-        arrive at v0.3.
+        else on this page is specified. All twelve question types, the test
+        builder and the candidate runtime land with v0.1; proctoring and
+        results follow in v0.2.
       </p>
       <div className="feature-grid feature-grid--s5">
         <FeatureCell
@@ -45,8 +45,7 @@ export function S5Features() {
               — every one taking Markdown, fenced code and LaTeX, each with up
               to five scoring modes and only the modes its type supports.
               Twelve types are defined in the format and graded today in{" "}
-              <code>packages/core</code>; six ship in v0.1, all twelve by
-              v0.3.
+              <code>packages/core</code>.
             </>
           }
         />
