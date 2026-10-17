@@ -4,46 +4,18 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { S4Comparison } from "../src/sections/s4-s6/S4Comparison";
-import { S5Features } from "../src/sections/s4-s6/S5Features";
-import { S6NoCode } from "../src/sections/s4-s6/S6NoCode";
 
-// Design contract §3/§6/§7/§8 (2026-10-17-landing-page-v2-design.md) — S4-S6.
-// Each test cites the test id or acceptance line it covers.
+// landing-page-v3-interactive.md §4 (amending v2 §3/§6/§7/§8) — S4 only.
+// S5 (features) and S6 (no-code) are deleted from this file: they are
+// absorbed into HowItWorks as h3s (test/sections-s1-s3.test.tsx) and a test
+// asserting a band that no longer exists is removed, not skipped.
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CSS_PATH = resolve(__dirname, "../src/styles/sections-s4-s6.css");
-const css = readFileSync(CSS_PATH, "utf8");
+const css = readFileSync(CSS_PATH, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 
-const SECTIONS = [
-  {
-    Component: S4Comparison,
-    id: "comparison",
-    heading: "Why not a form tool, and why not a paid assessment platform?",
-  },
-  {
-    Component: S5Features,
-    id: "features",
-    heading: "What does Pariksha do?",
-  },
-  {
-    Component: S6NoCode,
-    id: "no-code",
-    heading: "Does an organiser ever have to write JSON?",
-  },
-] as const;
+const HEADING = "Why not a form tool, and why not a paid assessment platform?";
 
-const HEADING_ALLOW_LIST = [
-  "Questions and answers",
-  "Read one real test, end to end.",
-  "Footer",
-];
-
-// T23's "first sentence" proxy, literally: the text up to the first
-// sentence-ending punctuation. (A previous version folded any sentence under
-// four words into the next one so S6's deliberate one-word opening ("No.")
-// would never actually be checked — which is the gaming T23 exists to catch,
-// not a reading of it. §8 says "that paragraph's first sentence", not "the
-// first sentence at least four words long".)
 function firstSentence(text: string): string {
   const match = /^[^.!?]*[.!?]/.exec(text.trim());
   return match ? match[0] : text.trim();
@@ -53,24 +25,24 @@ function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
 }
 
-describe.each(SECTIONS)("$id", ({ Component, id, heading }) => {
+describe("comparison", () => {
   // T22: the section exists with its stated id, and its h2 text content is
   // exactly the verbatim heading in §3.
   it("renders with its stated id and the exact verbatim h2", () => {
-    const { container } = render(<Component />);
-    const section = container.querySelector(`#${id}`);
+    const { container } = render(<S4Comparison />);
+    const section = container.querySelector("#comparison");
     expect(section).not.toBeNull();
     expect(section?.tagName).toBe("SECTION");
     const h2 = within(section as HTMLElement).getByRole("heading", {
       level: 2,
     });
-    expect(h2.textContent).toBe(heading);
+    expect(h2.textContent).toBe(HEADING);
   });
 
   // A5: every <section> is labelled by its heading via aria-labelledby.
   it("is labelled by its own heading", () => {
-    const { container } = render(<Component />);
-    const section = container.querySelector(`#${id}`) as HTMLElement;
+    const { container } = render(<S4Comparison />);
+    const section = container.querySelector("#comparison") as HTMLElement;
     const labelledBy = section.getAttribute("aria-labelledby");
     expect(labelledBy).toBeTruthy();
     const heading = container.querySelector(`#${labelledBy}`);
@@ -78,15 +50,12 @@ describe.each(SECTIONS)("$id", ({ Component, id, heading }) => {
     expect(heading?.tagName).toBe("H2");
   });
 
-  // T23: the heading ends in "?" or sits in the allow-list; the first <p>
-  // after it is 40–60 words; that paragraph's first sentence names Pariksha.
+  // T23: the heading ends in "?"; the first <p> after it is 40–60 words;
+  // that paragraph's first sentence names Pariksha.
   it("satisfies the answer-first heading contract (T23)", () => {
-    expect(
-      heading.endsWith("?") || HEADING_ALLOW_LIST.includes(heading),
-    ).toBe(true);
-
-    const { container } = render(<Component />);
-    const section = container.querySelector(`#${id}`) as HTMLElement;
+    expect(HEADING.endsWith("?")).toBe(true);
+    const { container } = render(<S4Comparison />);
+    const section = container.querySelector("#comparison") as HTMLElement;
     const h2 = within(section).getByRole("heading", { level: 2 });
     let node: Element | null = h2.nextElementSibling;
     while (node && node.tagName !== "P") node = node.nextElementSibling;
@@ -98,51 +67,29 @@ describe.each(SECTIONS)("$id", ({ Component, id, heading }) => {
     expect(firstSentence(text)).toContain("Pariksha");
   });
 
+  it("carries the eyebrow (every band, including 96px chapter openings — v3-interactive.md §4)", () => {
+    const { container } = render(<S4Comparison />);
+    expect(container.querySelector(".section-eyebrow")?.textContent).toBe(
+      "COMPARISON",
+    );
+  });
+
   // A13: no emoji anywhere in rendered text.
   it("carries no emoji", () => {
-    render(<Component />);
+    render(<S4Comparison />);
     const text = document.body.textContent ?? "";
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
   // T26: no AI-marketing phrases anywhere.
   it("makes no AI claims", () => {
-    render(<Component />);
+    render(<S4Comparison />);
     const text = document.body.textContent ?? "";
     expect(text).not.toContain("AI-powered");
     expect(text).not.toContain("AI question generation");
     expect(text).not.toContain("generate a test with AI");
   });
 
-  // T26b: every occurrence of the three bare numbers/claims sits within 200
-  // characters of a qualifier.
-  it("keeps every guarded number within 200 characters of a qualifier (T26b)", () => {
-    render(<Component />);
-    const text = document.body.textContent ?? "";
-    const qualifiers = [
-      "estimate",
-      "target",
-      "specified",
-      "v0.1",
-      "v0.3",
-      "pre-alpha",
-    ];
-    for (const needle of ["500", "zero hosting cost", "12 question types"]) {
-      let from = 0;
-      let index: number;
-      while ((index = text.indexOf(needle, from)) !== -1) {
-        const windowText = text.slice(
-          Math.max(0, index - 200),
-          index + needle.length + 200,
-        );
-        expect(qualifiers.some((q) => windowText.includes(q))).toBe(true);
-        from = index + needle.length;
-      }
-    }
-  });
-});
-
-describe("S4 comparison", () => {
   // T24: a real <table> with a <caption>, scope on every header cell, four
   // columns, seven body rows, and a non-empty corner header cell.
   it("renders the comparison table with four columns and seven rows", () => {
@@ -195,102 +142,23 @@ describe("S4 comparison", () => {
     const labels = screen.getAllByText("Pariksha", { selector: "span" });
     expect(labels.length).toBeGreaterThan(0);
   });
-});
 
-describe("S5 features", () => {
-  // S5: six FeatureCells, the lead line binding the shipped/specified split.
-  it("renders six FeatureCells with the binding status lead line", () => {
-    render(<S5Features />);
-    const cells = document.querySelectorAll(".feature-cell");
-    expect(cells).toHaveLength(6);
-    expect(
-      screen.getByText(
-        "The scoring and selection engines are built and tested; everything else on this page is specified. All twelve question types, the test builder and the candidate runtime land with v0.1; proctoring and results follow in v0.2.",
-      ),
-    ).toBeInTheDocument();
+  it("has no inline style attribute", () => {
+    const source = readFileSync(
+      resolve(__dirname, "../src/sections/s4-s6/S4Comparison.tsx"),
+      "utf8",
+    );
+    expect(source).not.toMatch(/\sstyle=\{/);
   });
 
-  // The grid is asymmetric: the first cell spans two columns.
-  it("spans the first feature cell across two columns", () => {
-    render(<S5Features />);
-    expect(css).toMatch(
-      /\.feature-grid--s5\s*>\s*\.feature-cell:first-child[^{]*\{[^}]*grid-column:\s*span 2/,
-    );
-  });
-
-  // T25 / A7: CB-6's code block renders inside a labelled, keyboard-reachable
-  // scroll region. A section with an accessible name is itself an implicit
-  // ARIA "region", so this scopes to the explicit code-block one.
-  it("renders CB-6 as a labelled, keyboard-reachable code block", () => {
-    const { container } = render(<S5Features />);
-    const region = container.querySelector(".code-block__scroll");
-    expect(region).not.toBeNull();
-    expect(region).toHaveAttribute("role", "region");
-    expect(region).toHaveAttribute("tabIndex", "0");
-    expect(region?.textContent).toContain("negative_fraction");
-  });
-});
-
-describe("S6 no-code", () => {
-  // The answer-first paragraph and the pull quote, both verbatim.
-  it("carries the verbatim answer paragraph and pull quote", () => {
-    render(<S6NoCode />);
-    expect(
-      screen.getByText(
-        (_, node) =>
-          node?.textContent ===
-          "No, organisers build questions and tests in a Pariksha UI: one editing screen for all twelve types, a type picker, a drag-to-reorder section list, live pool counts and a publish checklist. The JSON exists so that you can hand-author, script, diff or export a test if you want to — and so that nothing you build is locked into Pariksha.",
-      ),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "You will never have to write this. It is here so that you can — and so that nothing you build is trapped.",
-      ),
-    ).toBeInTheDocument();
-  });
-
-  // Honesty, binding: the authoring column says plainly it is not built.
-  it("states plainly that the authoring interface is not yet built", () => {
-    render(<S6NoCode />);
-    const text = document.body.textContent ?? "";
-    expect(text).toContain(
-      "the authoring interface is designed and not yet built",
-    );
-  });
-
-  // T25 / A8: the ProductMock is hidden from the accessibility tree with a
-  // sibling visually-hidden description of at least ten words, which itself
-  // repeats the "not yet built" honesty statement.
-  it("hides the editor mock from the accessibility tree with a real description", () => {
-    const { container } = render(<S6NoCode />);
-    const hidden = container.querySelector('[aria-hidden="true"]');
-    expect(hidden).not.toBeNull();
-    const description = container.querySelector(".visually-hidden");
-    expect(description).not.toBeNull();
-    expect(wordCount(description?.textContent ?? "")).toBeGreaterThanOrEqual(
-      10,
-    );
-    expect(description?.textContent).toContain("not yet built");
-  });
-
-  // CB-4: the only command on the page a visitor can run today, verbatim.
-  // A section with an accessible name is itself an implicit ARIA "region",
-  // so this scopes to the explicit code-block scroll regions only.
-  it("renders CB-4 verbatim in a labelled, keyboard-reachable region", () => {
-    const { container } = render(<S6NoCode />);
-    const regions = Array.from(
-      container.querySelectorAll(".code-block__scroll"),
-    );
-    const cb4 = regions.find((r) =>
-      r.textContent?.includes("ajv-cli@5.0.0"),
-    );
-    expect(cb4).toBeDefined();
-    expect(cb4).toHaveAttribute("tabIndex", "0");
-    expect(cb4?.textContent).toContain(
-      "git clone https://github.com/SriSatyaLokesh/pariksha.git",
-    );
-    expect(cb4?.textContent).toContain(
-      '-s schemas/bank-1.json -r schemas/question-1.json -d "examples/*/questions.json"',
-    );
+  it("the stylesheet has no hex colour literal, and every colour function reads from a token", () => {
+    expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    const colorFunctionCalls =
+      css.match(/\b(?:rgb|rgba|hsl|hsla|oklch|lab)\(/g) ?? [];
+    for (const call of colorFunctionCalls) {
+      const index = css.indexOf(call);
+      const slice = css.slice(index, index + 80);
+      expect(slice).toMatch(/\(from var\(--color-[a-z0-9-]+\)/);
+    }
   });
 });

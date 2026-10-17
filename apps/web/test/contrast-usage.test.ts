@@ -110,6 +110,31 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".hero-heading": "voltage",
   ".hero-lead": "voltage",
 
+  // The hero's two secondary text links (v3 §3.1); the primary CTA left
+  // the hero for B8. Each sets its own cream plane — nothing at 14px can
+  // clear 4.5:1 on voltage in any colour (see components.css).
+  ".hero-text-link": "cream",
+
+  // ---- components.css: the hero demo and its bridge band (v3 §3) ---------
+  // The demo is a cream card on the voltage field, so everything in the
+  // panel — the prerendered half and everything the island builds into it
+  // — renders on cream. .runner-mock__title is shared with the bridge
+  // band's h3, which is cream too.
+  ".runner-mock__title": "cream",
+  ".runner-mock__fallback": "cream",
+  ".runner-mock__note": "cream",
+  // Created at runtime by src/island/exam-demo.ts. The island sets no
+  // colour of its own (I-7), so these rules are the whole of its palette.
+  ".runner-mock__control": "cream",
+  ".runner-mock__control--primary": "voltage-deep",
+  ".runner-mock__hint": "cream",
+  ".runner-mock__result-type": "cream",
+  ".runner-mock__result-points": "cream",
+  ".runner-mock__result-verdict": "cream",
+  ".runner-mock__result-summary, .runner-mock__result-explanation, .runner-mock__result-prose, .runner-mock__result-link":
+    "cream",
+  ".runner-mock__result-link a": "cream",
+
   // ---- components.css: section heading -----------------------------------
   // Used on both cream bands (S2, S3, S5, S6, S7, S8, S10) and canvas bands
   // (S4, S6, S9) — cream is cream's own token, strictly the lower-luminance
@@ -140,7 +165,6 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".tok-key": ["canvas", "cream"],
   ".tok-string": ["canvas", "cream"],
   ".tok-number": ["canvas", "cream"],
-  ".tok-punct": ["canvas", "cream"],
 
   // ---- blocks.css: StepRow (S3 only) --------------------------------------
   ".step-row__ordinal": "cream",
@@ -180,25 +204,21 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".runner-mock__square--answered": "state-answered",
   ".runner-mock__square--marked": "state-marked",
   ".runner-mock__square--current": "canvas",
-  ".runner-mock__square--locked": "canvas",
+
+  // ---- sections-s1-s3.css: B2 and B3 (both cream, v3 §4) ------------------
+  ".verification-strip": "cream",
+  ".absorbed-heading": "cream",
+  ".type-list": "cream",
+  ".capability-list": "cream",
 
   // ---- sections-s4-s6.css: S4 (ambient #comparison = canvas) --------------
   ".comparison-intro": "canvas",
   ".comparison-conclusion p": "canvas",
 
-  // ---- sections-s4-s6.css: S5 (ambient #features = cream) -----------------
+  // ---- sections-s4-s6.css: S5/S6, now absorbed into B3 as h3s (v3 §4.1).
+  // Both bands are gone; what survives of them renders on B3's cream.
   ".feature-lead": "cream",
-
-  // ---- sections-s4-s6.css: S6 (ambient #no-code = canvas) -----------------
-  ".no-code-pull-quote": "canvas",
-  ".no-code-ux-list, .no-code-format-list": "canvas",
-  // The editor mock (M-2, aria-hidden): .editor-mock itself sets its own
-  // canvas background; .editor-mock__input sets its own cream.
-  ".editor-mock__tab": "canvas",
-  ".editor-mock__tab--active": "canvas",
-  ".editor-mock__field-label": "canvas",
-  ".editor-mock__input": "cream",
-  ".editor-mock__option": "canvas",
+  ".no-code-pull-quote": "cream",
 
   // ---- sections-s7-s9.css: S7 (ambient #cost = cream) ---------------------
   // The budget note/table and the two deploy card selectors sit inside a
@@ -207,8 +227,6 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".cost-budget-note": "canvas",
   ".cost-budget-table th, .cost-budget-table td": "canvas",
   '.cost-budget-table th[scope="col"]': "canvas",
-  ".cost-deploy-card__title": "canvas",
-  ".cost-deploy-card__body": "canvas",
   ".cost-architecture, .cost-risk": "cream",
 
   // ---- sections-s7-s9.css: S8 (ambient #not-for = cream) ------------------
@@ -218,21 +236,26 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".status-group__heading": "canvas",
   ".status-group__lead, .status-group__links, .status-byok-note": "canvas",
   ".status-list": "canvas",
-  ".roadmap-ledger__milestone": "canvas",
-  ".roadmap-ledger__row--pending .roadmap-ledger__title": "canvas",
-  ".roadmap-ledger__row--done .roadmap-ledger__title, .roadmap-ledger__row--part .roadmap-ledger__title":
-    "canvas",
 
   // ---- sections-s10-s12.css: S10 (ambient #faq = cream) -------------------
   ".faq-item__question": "cream",
   ".faq-item__answer": "cream",
 
   // ---- sections-s10-s12.css: S11 (the hero's own cream mock plane) --------
-  ".closing-files__name": "cream",
-  ".closing-files__lines": "cream",
-  ".closing-files__detail": "cream",
 
   // ---- sections-s10-s12.css: S12 (.site-footer sets its own canvas) ------
+  // ---- sections-s7-s9.css: B5's deploy lines and interop strip (cream),
+  //      B6's absorbed #status heading (canvas) -----------------------------
+  ".cost-deploy-line": "cream",
+  ".interop-strip": "cream",
+  ".status-heading": "canvas",
+
+  // ---- sections-s10-s12.css: B8, the ask — a voltage band (v3 §4.7).
+  //      Both elements set their own cream plane, for the same reason the
+  //      hero's links do. ---------------------------------------------------
+  ".closing-watch-link": "cream",
+  ".closing-honesty": "cream",
+
   ".footer-col__heading": "canvas",
   ".footer-col a": "canvas",
   ".footer-col p": "canvas",
@@ -276,12 +299,11 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // Same story: size lives on the co-applied `--chapter`/`--band` variant.
   // The smaller of the two (band, heading-md) is the conservative case.
   ".section-heading": { px: 22, weight: 500 },
-  // The four syntax-colour spans set colour only; size/weight come from
-  // their ancestor .code-block__pre (mono-md, 15px/400).
+  // The three surviving syntax-colour spans set colour only; size/weight
+  // come from their ancestor .code-block__pre (mono-md, 15px/400).
   ".tok-key": { px: 15, weight: 400 },
   ".tok-string": { px: 15, weight: 400 },
   ".tok-number": { px: 15, weight: 400 },
-  ".tok-punct": { px: 15, weight: 400 },
   // Each sets colour and border-colour only; size/weight come from the
   // shared group rule (mono-sm, 12px/400).
   ".integrity-badge-clean": { px: 12, weight: 400 },
@@ -292,9 +314,6 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".runner-mock__square--answered": { px: 12, weight: 400 },
   ".runner-mock__square--marked": { px: 12, weight: 400 },
   ".runner-mock__square--current": { px: 12, weight: 400 },
-  // Its own font-size is a literal "10px", not a var(--type-*-size)
-  // reference — this is the designed escape hatch for exactly that case.
-  ".runner-mock__square--locked": { px: 10, weight: 400 },
   // No ancestor in the bundle sets a font-size; these inherit the page's
   // base body-md size (16px/400) from base.css.
   ".comparison-intro": { px: 16, weight: 400 },
@@ -302,19 +321,12 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".feature-lead": { px: 16, weight: 400 },
   ".footer-col a": { px: 16, weight: 400 },
   ".footer-col p": { px: 16, weight: 400 },
-  // No font-size on this element's own selector; size comes from the base
-  // .roadmap-ledger__title rule for the same element (body-md, 16px).
-  ".roadmap-ledger__row--pending .roadmap-ledger__title": {
-    px: 16,
-    weight: 400,
-  },
-  ".roadmap-ledger__row--done .roadmap-ledger__title, .roadmap-ledger__row--part .roadmap-ledger__title":
-    { px: 16, weight: 400 },
-  // Sets colour only; size/weight come from the shared .editor-mock__tab
-  // base rule (mono-sm, 12px/400).
-  ".editor-mock__tab--active": { px: 12, weight: 400 },
-  // No font-size of its own; inherits the page's base body-md (16px/400).
-  ".editor-mock__option": { px: 16, weight: 400 },
+  // Sets colour only; size and weight come from the shared
+  // .runner-mock__control base rule (button-md, 16px/500).
+  ".runner-mock__control--primary": { px: 16, weight: 500 },
+  // Sets colour only; size and weight come from the shared body-sm rule
+  // for the paragraph this anchor sits in (14px/400).
+  ".runner-mock__result-link a": { px: 14, weight: 400 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with

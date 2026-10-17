@@ -28,6 +28,22 @@ describe("_headers", () => {
     expect(headers).not.toMatch(/https?:\/\//);
   });
 
+  // I-6 (v3 design contract §2.9): the exam-demo island ships as a
+  // same-origin `<script type="module" src="/assets/…">` and needs no
+  // relaxation here — script-src 'self' already permits it, which is the
+  // test that this construction (manifest-driven injection, §2.7) is the
+  // right one. A design that needed a CSP change would be the wrong design.
+  it("script-src 'self' already permits the same-origin island script, unchanged", () => {
+    const blockStart = headers.indexOf("/*");
+    const nextBlock = headers.indexOf("\n/", blockStart + 1);
+    const block = headers.slice(
+      blockStart,
+      nextBlock === -1 ? undefined : nextBlock,
+    );
+    const csp = block.match(/Content-Security-Policy:\s*(.+)/)?.[1];
+    expect(csp).toContain("script-src 'self'");
+  });
+
   // T11
   it("gives /index.html a no-cache block, so a redeploy is visible", () => {
     const blockStart = headers.indexOf("/index.html");

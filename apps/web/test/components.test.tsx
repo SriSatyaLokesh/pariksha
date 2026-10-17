@@ -133,24 +133,24 @@ describe("TopNav", () => {
 // --- HeroSection -------------------------------------------------------
 
 describe("HeroSection", () => {
-  it("renders the opening (display-xl) variant as an h1 in a two-column layout, with chip, secondary link and mock slot", () => {
+  // v3 §3.1: display-xl's shape is chip -> h1 -> demo -> lead -> links ->
+  // bridge, in that source order at every width. There is no primaryCta,
+  // no secondaryCta and no mock slot in this variant any more — the CTA
+  // moved to B8 and the static mock became the demo.
+  it("renders the opening (display-xl) variant as an h1 with the chip, demo, lead, links and bridge in source order", () => {
     const { container } = render(
       <HeroSection
         headingId="hero-heading"
         heading="Pariksha — run real exams you host yourself."
         chip="PRE-ALPHA · APACHE-2.0"
+        demo={<div data-testid="demo">demo content</div>}
         lead="Question pools, twelve question types."
-        primaryCta={
-          <ButtonPrimary href="https://example.com/primary">
-            Start with the worked example
-          </ButtonPrimary>
-        }
-        secondaryCta={
-          <a className="button-secondary" href="https://example.com/secondary">
+        links={
+          <a className="hero-text-link" href="https://example.com/secondary">
             Read the code on GitHub
           </a>
         }
-        mock={<div data-testid="mock">mock content</div>}
+        bridge={<div data-testid="bridge">bridge content</div>}
       />,
     );
     const heading = screen.getByRole("heading", { level: 1 });
@@ -161,13 +161,30 @@ describe("HeroSection", () => {
     expect(container.querySelector(".hero-chip")).toHaveTextContent(
       "PRE-ALPHA · APACHE-2.0",
     );
-    expect(screen.getByTestId("mock")).not.toBeNull();
+    expect(screen.getByTestId("demo")).not.toBeNull();
+    expect(screen.getByTestId("bridge")).not.toBeNull();
     expect(
       screen.getByRole("link", { name: "Read the code on GitHub" }),
     ).not.toBeNull();
     expect(container.querySelector(".hero-section")).not.toHaveClass(
       "hero-section--display-lg",
     );
+
+    // Source order is the contract (§3.1): the demo sits between the h1
+    // and the lead, never reordered by CSS.
+    const order = Array.from(
+      container.querySelectorAll(
+        ".hero-chip, h1, [data-testid='demo'], .hero-lead, .hero-links, [data-testid='bridge']",
+      ),
+    ).map((el) => el.getAttribute("data-testid") ?? el.className.split(" ")[0]);
+    expect(order).toEqual([
+      "hero-chip",
+      "hero-heading",
+      "demo",
+      "hero-lead",
+      "hero-links",
+      "bridge",
+    ]);
   });
 
   it("renders the closing (display-lg) variant as an h2, with no chip and no secondary required", () => {

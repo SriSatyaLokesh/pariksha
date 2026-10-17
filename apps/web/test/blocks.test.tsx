@@ -6,7 +6,6 @@ import { dirname, resolve } from "node:path";
 import { CodeBlock } from "../src/components/CodeBlock";
 import { ComparisonTable } from "../src/components/ComparisonTable";
 import { StepRow } from "../src/components/StepRow";
-import { ProductMock } from "../src/components/ProductMock";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const BLOCKS_CSS_PATH = resolve(__dirname, "../src/styles/blocks.css");
@@ -47,9 +46,12 @@ describe("CodeBlock", () => {
     ).toBeInTheDocument();
   });
 
-  // A3: the four syntax-colour roles are checked on both white and cream
-  // fills, including the hero's on-voltage block (ui-direction.md §3.3).
-  it("exposes the four syntax-colour role classes with the sanctioned tokens", () => {
+  // A3: the three surviving syntax-colour roles are checked on both white
+  // and cream fills, including the hero's on-voltage block
+  // (ui-direction.md §3.3). .tok-punct is deleted (v3 §4.9): punctuation
+  // carries no type distinction and took 2,201 bytes across 71 spans, so
+  // it takes the block's default code colour and must not come back.
+  it("exposes the three syntax-colour role classes with the sanctioned tokens, and no .tok-punct", () => {
     expect(blocksCss).toMatch(/\.tok-key[^{]*\{[^}]*color:\s*var\(--color-ink\)/);
     expect(blocksCss).toMatch(
       /\.tok-string[^{]*\{[^}]*color:\s*var\(--color-voltage-deep\)/,
@@ -57,9 +59,7 @@ describe("CodeBlock", () => {
     expect(blocksCss).toMatch(
       /\.tok-number[^{]*\{[^}]*color:\s*var\(--color-data-blue\)/,
     );
-    expect(blocksCss).toMatch(
-      /\.tok-punct[^{]*\{[^}]*color:\s*var\(--color-muted\)/,
-    );
+    expect(blocksCss).not.toContain(".tok-punct");
   });
 
   // A3 / U §3.3: the voltage surface renders the same four roles on its own
@@ -216,27 +216,5 @@ describe("StepRow", () => {
     ).toBeInTheDocument();
     // The artefact slot's own CodeBlock still satisfies A7 inside a StepRow.
     expect(screen.getByRole("region")).toBeInTheDocument();
-  });
-});
-
-describe("ProductMock", () => {
-  // T25 / A8: every ProductMock renders aria-hidden="true" plus a sibling
-  // visually-hidden paragraph of at least ten words.
-  it("hides the mock from the accessibility tree and describes it in prose", () => {
-    const description =
-      "A rendered test screen showing a locked question palette and a running timer, for illustration only.";
-    const { container } = render(
-      <ProductMock description={description} className="hero-mock">
-        <div className="hero-mock__chip">PRE-ALPHA</div>
-      </ProductMock>,
-    );
-    const hidden = container.querySelector('[aria-hidden="true"]');
-    expect(hidden).not.toBeNull();
-    expect(hidden).toHaveClass("hero-mock");
-    expect(hidden?.textContent).toContain("PRE-ALPHA");
-
-    const sibling = screen.getByText(description);
-    expect(sibling).toHaveClass("visually-hidden");
-    expect(description.trim().split(/\s+/).length).toBeGreaterThanOrEqual(10);
   });
 });

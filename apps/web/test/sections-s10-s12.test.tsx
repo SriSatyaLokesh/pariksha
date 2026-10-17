@@ -64,13 +64,26 @@ describe("S10 Faq", () => {
     expect(heading.id).toBe("faq-heading");
   });
 
-  it("has exactly thirteen question-shaped h3s", () => {
+  // v3-interactive.md §4.6: cut from thirteen to nine pairs — Q3, Q4, Q9
+  // and Q15 are deleted outright.
+  it("has exactly nine question-shaped h3s", () => {
     render(<Faq />);
     const headings = screen.getAllByRole("heading", { level: 3 });
-    expect(headings).toHaveLength(13);
+    expect(headings).toHaveLength(9);
     for (const h of headings) {
       expect(h.textContent?.trim().endsWith("?")).toBe(true);
     }
+  });
+
+  it("deletes Q3, Q4, Q9 and Q15 outright", () => {
+    render(<Faq />);
+    const text = document.body.textContent ?? "";
+    expect(text).not.toMatch(/What does "Pariksha" mean\?/);
+    expect(text).not.toMatch(/How much does it cost to run\?/);
+    expect(text).not.toMatch(/Can browser proctoring actually prevent cheating\?/);
+    expect(text).not.toMatch(
+      /What licence is it under, and can I sell a service built on it\?/,
+    );
   });
 
   it("T23b: every h3 is immediately followed by a <p> whose first sentence contains Pariksha", () => {
@@ -107,7 +120,7 @@ describe("S10 Faq", () => {
   it("every answer paragraph is between 40 and 60 words", () => {
     const { container } = render(<Faq />);
     const paragraphs = Array.from(container.querySelectorAll("h3 + p"));
-    expect(paragraphs).toHaveLength(13);
+    expect(paragraphs).toHaveLength(9);
     for (const p of paragraphs) {
       const words = wordCount(p.textContent ?? "");
       expect(words).toBeGreaterThanOrEqual(40);
@@ -164,9 +177,13 @@ describe("S10 Faq", () => {
   });
 });
 
-// --- S11 — Closing --------------------------------------------------------
+// --- B8 — the ask (formerly S11 Closing) -----------------------------------
 
-describe("S11 Closing", () => {
+// v3-interactive.md §4.7: four elements and nothing else — a declarative
+// heading, one filled button, one secondary text link ("watch the
+// repository for v0.1"), and one mono honesty line last. M-4 (the five-file
+// listing) is deleted outright — no artefact in the closing band.
+describe("B8 Closing — the ask", () => {
   it("is the HeroSection's display-lg variant with the verbatim heading", () => {
     const { container } = render(<Closing />);
     const heading = screen.getByRole("heading", { level: 2 });
@@ -176,40 +193,41 @@ describe("S11 Closing", () => {
     expect(section).toHaveAttribute("aria-labelledby", heading.id);
   });
 
-  it("T23: the lead paragraph is 40-60 words and its first sentence names Pariksha", () => {
+  it("the primary CTA points at the worked example on github.com/SriSatyaLokesh/pariksha", () => {
     render(<Closing />);
-    const lead = document.querySelector(".hero-lead");
-    expect(lead).not.toBeNull();
-    const text = lead?.textContent ?? "";
-    const words = wordCount(text);
-    expect(words).toBeGreaterThanOrEqual(40);
-    expect(words).toBeLessThanOrEqual(60);
-    expect(firstSentence(text)).toContain("Pariksha");
-  });
-
-  it("the CTA points at the worked example on github.com/SriSatyaLokesh/pariksha", () => {
-    render(<Closing />);
-    const link = screen.getByRole("link");
+    const link = screen.getByRole("link", {
+      name: "Start with the worked example",
+    });
     expect(link).toHaveAttribute(
       "href",
       "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude",
     );
   });
 
-  it("M-4: renders the five-file listing as real, non-hidden content with its line counts", () => {
+  it("carries one secondary text link watching the repository for v0.1", () => {
+    render(<Closing />);
+    const link = screen.getByRole("link", {
+      name: /Watch the repository for v0\.1/,
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://github.com/SriSatyaLokesh/pariksha",
+    );
+  });
+
+  // §4.7: no artefact — M-4's file listing is gone outright.
+  it("renders no file listing and no code block (M-4 deleted)", () => {
     const { container } = render(<Closing />);
-    const mock = container.querySelector(".hero-mock");
-    expect(mock).not.toBeNull();
-    expect(mock).not.toHaveAttribute("aria-hidden");
-    const text = mock?.textContent ?? "";
-    expect(text).toContain("questions.json");
-    expect(text).toContain("260 lines");
-    expect(text).toContain("test.json");
-    expect(text).toContain("213 lines");
-    expect(text).toContain("candidates.csv");
-    expect(text).toContain("results.csv");
-    expect(text).toContain("README.md");
-    expect(text).toContain("451 lines");
+    expect(container.querySelector(".closing-files")).toBeNull();
+    expect(container.querySelector(".code-block")).toBeNull();
+  });
+
+  it("carries one mono honesty line as the last element, naming pre-alpha and v0.1", () => {
+    const { container } = render(<Closing />);
+    const honesty = container.querySelector(".closing-honesty");
+    expect(honesty).not.toBeNull();
+    expect(honesty?.textContent).toContain("Pre-alpha");
+    expect(honesty?.textContent).toContain("v0.1");
   });
 
   it("A13: no emoji anywhere", () => {
@@ -260,6 +278,16 @@ describe("S12 Footer", () => {
       "href",
       "https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/ROADMAP.md",
     );
+  });
+
+  // v3-interactive.md §4.6: mitigates FAQ Q15's deletion — the explicit
+  // patent grant and commercial-use strings survive here.
+  it("carries the Q15-mitigating licence sentence (patent grant, commercial use)", () => {
+    const { container } = render(<Footer />);
+    const text = container.textContent ?? "";
+    expect(text).toContain("explicit patent grant");
+    expect(text).toMatch(/sell a service built on it/);
+    expect(text).toContain("is not licensed with the code");
   });
 
   it("carries the Telugu and Devanagari closing gloss with lang attributes", () => {

@@ -1,11 +1,15 @@
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { build } from "vite";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile, mkdir } from "node:fs/promises";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { runPrerender, resolveSiteUrl } from "../../../scripts/prerender.mjs";
+import {
+  runPrerender,
+  resolveSiteUrl,
+  buildIslandScriptTag,
+} from "../../../scripts/prerender.mjs";
 import { hasIllegalColorLiteral } from "../../../scripts/tokens.mjs";
 
 // Design contract §8 Wave 1 (T1, T2, T3, T5): runs a real `vite build` plus
@@ -27,6 +31,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(__dirname, "..");
 const SITE_URL = "https://pariksha.example";
 
+// Wrapped in its own describe (rather than file-scoped hooks) so that a
+// throw in this beforeAll — currently expected, since the island entry and
+// vite.config.ts's third Rollup input it depends on (design contract §2.7)
+// are a different assignment's work — skips only the tests that genuinely
+// need a full build, not resolveSiteUrl's and buildIslandScriptTag's
+// pure-function tests below, which must stay provable on their own.
+describe("the full build (vite build + prerender into a disposable outDir)", () => {
 let outDir: string;
 let indexHtml: string;
 
@@ -53,9 +64,32 @@ describe("the prerendered dist/index.html", () => {
     expect(indexHtml).toMatch(/<section[\s>]/);
   });
 
-  it("T2: ships no client JavaScript — no module script, no /assets/ script", () => {
-    expect(indexHtml).not.toMatch(/<script[^>]*\btype="module"/);
-    expect(indexHtml).not.toMatch(/<script[^>]*\bsrc="\/assets\//);
+  it("T2: ships exactly one module script, from /assets/, deferred to the end of body, under the 10 KB island budget, and no inline script but the one ld+json block (v3 §5, I-1)", () => {
+    const moduleScripts = [
+      ...indexHtml.matchAll(/<script[^>]*\btype="module"[^>]*><\/script>/g),
+    ];
+    expect(moduleScripts).toHaveLength(1);
+
+    const tag = moduleScripts[0]![0]!;
+    const src = /\bsrc="(\/assets\/[^"]+)"/.exec(tag)?.[1];
+    expect(src).toBeDefined();
+
+    const assetPath = resolve(outDir, src!.slice(1));
+    expect(existsSync(assetPath)).toBe(true);
+    expect(statSync(assetPath).size).toBeLessThanOrEqual(10 * 1024);
+
+    // type="module" is deferred by the HTML spec on its own; this also
+    // checks it sits after <main>, i.e. at the end of body, never in <head>.
+    expect(indexHtml.indexOf(tag)).toBeGreaterThan(indexHtml.indexOf("</main>"));
+    expect(tag).not.toContain(" defer");
+    expect(tag).not.toContain(" async");
+
+    // I-1: no inline <script> other than the one application/ld+json block.
+    const inlineScripts = [
+      ...indexHtml.matchAll(/<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/g),
+    ].filter((m) => !m[0].includes('type="module"'));
+    expect(inlineScripts).toHaveLength(1);
+    expect(inlineScripts[0]![0]).toContain('type="application/ld+json"');
   });
 
   it("T3: links a stylesheet whose target exists in dist/ and is non-empty", async () => {
@@ -258,20 +292,45 @@ describe("T17 — the literal string pre-alpha in the artefact", () => {
   });
 });
 
-describe("T32 — S2's definitional sentence lands within the first 30% of the artefact", () => {
-  it("byte index of the sentence divided by dist/index.html's byte length is under 0.30", () => {
+describe("T32 — B2's definitional sentence, against the hero's byte ceiling (v3 §5: ratio -> absolute offset)", () => {
+  // v3 amends this from a ratio (byteIndex / totalBytes < 0.30) to an
+  // absolute offset: a ratio punishes every later deletion as the
+  // denominator shrinks, which is the opposite of what a shorter page is
+  // being asked to do. 13,500 is derived in §4.9 — head and nav measure
+  // 6,632 and do not change, leaving 6,868 bytes for all of B1 (the hero)
+  // against its own ~6,790-byte target. T32 is still the hero's byte
+  // ceiling; it is just stated as one now instead of as a fraction of a
+  // shrinking whole.
+  it("byte index of the sentence is under 13,500 bytes into dist/index.html", () => {
     const needle = "Pariksha is a free, open-source exam platform";
     const index = indexHtml.indexOf(needle);
     expect(index).toBeGreaterThan(-1);
     const byteIndex = Buffer.byteLength(indexHtml.slice(0, index), "utf8");
-    const totalBytes = Buffer.byteLength(indexHtml, "utf8");
-    expect(byteIndex / totalBytes).toBeLessThan(0.3);
+    expect(byteIndex).toBeLessThan(13_500);
   });
 });
 
-describe("P2 — artefact size budget", () => {
-  it("dist/index.html is under 100 KB uncompressed", () => {
-    expect(Buffer.byteLength(indexHtml, "utf8")).toBeLessThan(100 * 1024);
+describe("P2 / T43 — artefact size budget (v3 §4.9: amended 100 KB -> 46 KB)", () => {
+  it("dist/index.html is under 46 KB uncompressed, with the byte count printed", () => {
+    const bytes = Buffer.byteLength(indexHtml, "utf8");
+    // T43: printed whether it passes or fails, so a PR that moves the
+    // number shows it rather than only its verdict.
+    console.log(`dist/index.html: ${bytes} bytes (${(bytes / 1024).toFixed(2)} KB)`);
+    expect(bytes).toBeLessThan(46 * 1024);
+  });
+});
+
+describe("I-2 — the island's own budget, as shipped in the artefact", () => {
+  it("the module script dist/index.html references is ≤ 10 KB minified", () => {
+    const src = indexHtml.match(
+      /<script[^>]*\btype="module"[^>]*\bsrc="(\/assets\/[^"]+)"/,
+    )?.[1];
+    expect(src).toBeDefined();
+    const size = statSync(resolve(outDir, src!.slice(1))).size;
+    // Printed whether it passes or fails, per I-2 ("printed in the build
+    // log, pass or fail").
+    console.log(`exam-demo island: ${(size / 1024).toFixed(2)} KB`);
+    expect(size).toBeLessThanOrEqual(10 * 1024);
   });
 });
 
@@ -293,6 +352,66 @@ describe("dist/404.html", () => {
   it("is brought inside the project's colour guard: no illegal colour literal", async () => {
     const page = await readFile(resolve(outDir, "404.html"), "utf8");
     expect(hasIllegalColorLiteral(page)).toBe(false);
+  });
+});
+
+}); // end "the full build"
+
+describe("buildIslandScriptTag — the manifest lookup, in isolation (design contract §2.7)", () => {
+  // Exercises the lookup against a hand-built manifest rather than a real
+  // `vite build`, so this test does not depend on apps/web/src/island/ or
+  // vite.config.ts's third Rollup input existing yet — both owned by a
+  // different assignment. The full-build T2 above is the integration proof
+  // once those land.
+  let tmpOutDir: string;
+
+  beforeAll(async () => {
+    tmpOutDir = await mkdtemp(join(tmpdir(), "pariksha-manifest-"));
+  });
+
+  afterAll(async () => {
+    await rm(tmpOutDir, { recursive: true, force: true });
+  });
+
+  async function writeManifest(manifest: unknown) {
+    await mkdir(resolve(tmpOutDir, ".vite"), { recursive: true });
+    await writeFile(
+      resolve(tmpOutDir, ".vite/manifest.json"),
+      JSON.stringify(manifest),
+    );
+  }
+
+  it("returns a module script tag pointing at the island entry's hashed file", async () => {
+    await writeManifest({
+      "src/island/exam-demo.ts": {
+        file: "assets/exam-demo-abc123.js",
+        name: "island",
+        isEntry: true,
+      },
+      "index.html": { file: "assets/index-xyz.js", isEntry: true },
+    });
+    const tag = await buildIslandScriptTag(tmpOutDir);
+    expect(tag).toBe(
+      '<script type="module" src="/assets/exam-demo-abc123.js"></script>',
+    );
+  });
+
+  it("throws when no entry is named \"island\"", async () => {
+    await writeManifest({
+      "index.html": { file: "assets/index-xyz.js", isEntry: true },
+    });
+    await expect(buildIslandScriptTag(tmpOutDir)).rejects.toThrow(/island/i);
+  });
+
+  it("throws when the manifest is missing entirely", async () => {
+    const emptyDir = await mkdtemp(join(tmpdir(), "pariksha-no-manifest-"));
+    try {
+      await expect(buildIslandScriptTag(emptyDir)).rejects.toThrow(
+        /manifest/i,
+      );
+    } finally {
+      await rm(emptyDir, { recursive: true, force: true });
+    }
   });
 });
 

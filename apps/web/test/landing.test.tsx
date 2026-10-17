@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -49,22 +49,26 @@ describe("Landing", () => {
     expect(screen.getAllByText("Pariksha").length).toBeGreaterThan(0);
   });
 
-  // T20: (a) the first link inside .hero-section is the worked-example CTA,
-  // with no arrow in its accessible name (the arrow is aria-hidden); (b)
-  // every CTA-shaped link on the page — ButtonPrimary or ButtonSecondary —
-  // points at a github.com/SriSatyaLokesh/pariksha URL, so nothing on a
-  // pre-alpha page links to a product that does not exist yet.
-  it("the hero's first link is the worked-example CTA, and every CTA points at the real repo", () => {
+  // T20, as amended by v3 §5. (a) the hero carries no ButtonPrimary at all
+  // — the primary CTA moved to B8 (§3.1) — and the page's only
+  // ButtonPrimary is in the closing band, with the worked example's
+  // accessible name and href. I-8 is what keeps this honest at runtime:
+  // the demo's Finish is a filled control but is not the ButtonPrimary
+  // component and must not carry its class, so the island cannot satisfy
+  // this selector either. (b) survives unchanged: every CTA-shaped link on
+  // the page points at a github.com/SriSatyaLokesh/pariksha URL, so
+  // nothing on a pre-alpha page links to a product that does not exist yet.
+  it("the hero carries no primary CTA, the page's one ButtonPrimary is the closing ask, and every CTA points at the real repo", () => {
     const { container } = render(<Landing />);
     const heroSection = container.querySelector(".hero-section");
     expect(heroSection).not.toBeNull();
-    const firstHeroLink = within(heroSection as HTMLElement).getAllByRole(
-      "link",
-    )[0];
-    expect(firstHeroLink).toHaveAccessibleName(
-      "Start with the worked example",
-    );
-    expect(firstHeroLink).toHaveAttribute(
+    expect(heroSection!.querySelector(".button-primary")).toBeNull();
+
+    const primaries = container.querySelectorAll(".button-primary");
+    expect(primaries).toHaveLength(1);
+    const primary = primaries[0]!;
+    expect(primary).toHaveAccessibleName("Start with the worked example");
+    expect(primary).toHaveAttribute(
       "href",
       `${REPO}/tree/main/examples/reasoning-aptitude`,
     );
