@@ -2,7 +2,7 @@
 
 The reference deployment: Workers Static Assets (web app), Workers (API), D1 (database), R2 (snapshots), Turnstile (bot check) and Cron Triggers (retention jobs), all on the free plan.
 
-**Status:** shipped for the web app, planned for the API. Free-tier sizing is in [PRD — Non-functional requirements](../../docs/PRD.md#non-functional-requirements).
+**Status:** configured for the web app but not yet published — deploying the site is deliberately deferred, and the configuration below has had no code review. Planned for the API. Free-tier sizing is in [PRD — Non-functional requirements](../../docs/PRD.md#non-functional-requirements).
 
 ## Web app
 

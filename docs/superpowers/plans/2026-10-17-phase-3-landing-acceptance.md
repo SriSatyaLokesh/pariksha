@@ -62,18 +62,23 @@ Each line is a statement that is either true or false today. A failing line is a
 
 ### AC-L6 — Hosting is free and locked down
 
+**Deprioritised on 2026-10-17.** Publishing the site is not wanted yet. The configuration is committed and its checks pass, but nothing below blocks this branch from merging, and its task review was deliberately stopped rather than finished — treat the hosting files as unreviewed until somebody actually wants the site live.
+
 - [x] `apps/web/wrangler.jsonc` declares `assets.directory` and no `main`, so no Worker script runs and no request counts against the free plan's 100,000/day.
 - [x] `wrangler deploy --dry-run` succeeds with no Cloudflare credentials present.
 - [x] `_headers` reaches `dist/` on build and carries `default-src 'self'` with no `'unsafe-inline'` and no `'unsafe-eval'`.
 - [x] The deploy workflow never runs on a fork and fails readably when the account secrets are absent.
-- [ ] **Not yet verified:** a real deployment. Nobody has run `wrangler deploy` against a Cloudflare account, so the live URL, the headers as actually served, and the workflow's end-to-end behaviour are all untested. This is the single biggest unknown on the branch.
+- [ ] **Not verified, and deliberately not now:** a real deployment. Nobody has run `wrangler deploy` against a Cloudflare account, so the live URL, the headers as actually served and the workflow's end-to-end behaviour are all untested.
 
 ## What the next session should do, in order
 
-1. **Resolve the outstanding reviews.** Task C's task review and the whole-branch review were still running when this was written. Their findings — if any — are in the ledger at `.superpowers/sdd/2026-10-16-phase-3-auth-roles-and-landing/progress.md` on the machine that ran them, and that directory is git-ignored, so if it is gone, re-run a review of the branch rather than assuming it was clean.
-2. **Deploy once, by hand.** `pnpm --filter @pariksha/web exec wrangler login`, then `pnpm --filter @pariksha/web deploy`. Then check the live URL against AC-L6: the CSP as served, the fonts loading from `/fonts/`, no console error, and the page rendered at 400px and at 1440px. Put the URL in `deploy/cloudflare/README.md` and in the repository's About field.
-3. **Take PR #136 out of draft** once 1 and 2 pass, and squash-merge it.
-4. **Then Phase 2** ([#15](https://github.com/SriSatyaLokesh/pariksha/issues/15) and its tasks). Everything else in Phase 3 — sign-in, sessions, OIDC, magic link, the permission middleware, the first-run wizard, the dashboard screens — consumes `/api/v1/*` and cannot start before it. Do not attempt Task 9 of the Phase 3 plan first; it will stall.
+1. **Review the whole branch.** The whole-branch review never ran, and the hosting task's review was stopped part-way when hosting was deprioritised, so `apps/web/wrangler.jsonc`, `apps/web/public/_headers`, `apps/web/test/hosting.test.ts` and `.github/workflows/deploy-web.yml` have had no review at all. Findings from the reviews that did run are in the ledger at `.superpowers/sdd/2026-10-16-phase-3-auth-roles-and-landing/progress.md` on the machine that ran them; that directory is git-ignored, so if it is gone, re-review rather than assume.
+2. **Take PR #136 out of draft** once 1 is clean, and squash-merge it. Publishing the site is not a prerequisite — the hosting configuration can sit unused in the repository indefinitely without costing anything.
+3. **Then Phase 2** ([#15](https://github.com/SriSatyaLokesh/pariksha/issues/15) and its tasks). Everything else in Phase 3 — sign-in, sessions, OIDC, magic link, the permission middleware, the first-run wizard, the dashboard screens — consumes `/api/v1/*` and cannot start before it. Do not attempt Task 9 of the Phase 3 plan first; it will stall.
+
+### When publishing the site is wanted (not now)
+
+`pnpm --filter @pariksha/web exec wrangler login`, then `pnpm --filter @pariksha/web deploy`. Then check the live URL against AC-L6: the CSP as served, the fonts loading from `/fonts/`, no console error, and the page rendered at 400px and at 1440px. Put the URL in `deploy/cloudflare/README.md` and in the repository's About field. Review the four hosting files first — they have not been.
 
 ## Known deferrals, recorded so they are not rediscovered as bugs
 
