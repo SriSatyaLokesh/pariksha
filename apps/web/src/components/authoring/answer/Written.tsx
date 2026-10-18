@@ -117,7 +117,9 @@ function FillBlankAnswer({
           <select
             id={`${uid}-${blank.id}-match`}
             value={blank.match ?? "case_insensitive"}
-            onChange={(event) => updateBlank(blank.id, { match: event.target.value as Blank["match"] })}
+            onChange={(event) =>
+              updateBlank(blank.id, { match: event.target.value as Exclude<Blank["match"], undefined> })
+            }
           >
             {MATCH_MODES.map((mode) => (
               <option key={mode} value={mode}>
@@ -153,8 +155,9 @@ function NumericAnswer({
 
   function setTolerance(raw: string): void {
     if (raw === "") {
-      const { tolerance: _tolerance, ...rest } = question.key;
-      onChange({ ...question, key: rest });
+      const key = { ...question.key };
+      delete key.tolerance;
+      onChange({ ...question, key });
       return;
     }
     const tolerance = Number(raw);
@@ -195,7 +198,9 @@ function NumericAnswer({
       <select
         id={`${uid}-tolerance-type`}
         value={question.key.tolerance_type ?? "absolute"}
-        onChange={(event) => setKey({ tolerance_type: event.target.value as NumericKey["tolerance_type"] })}
+        onChange={(event) =>
+          setKey({ tolerance_type: event.target.value as Exclude<NumericKey["tolerance_type"], undefined> })
+        }
       >
         <option value="absolute">absolute</option>
         <option value="percent">percent</option>
