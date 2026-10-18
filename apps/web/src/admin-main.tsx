@@ -12,7 +12,15 @@ if (!container) {
 
 // The raw query value, not a sanitised one: validation belongs in one place
 // (lib/api's safeReturnTo), at the point the value becomes a URL.
-const returnTo = new URLSearchParams(window.location.search).get("returnTo");
+//
+// Falling back to this page rather than to safeReturnTo's "/": a sign-in
+// started here has to end here. "/" is the landing page, so an organiser who
+// opened the app directly would come back from the identity provider onto
+// the marketing site, signed in and with nothing to show for it — which is
+// what the end-to-end first-run flow caught.
+const returnTo =
+  new URLSearchParams(window.location.search).get("returnTo") ??
+  window.location.pathname;
 
 createRoot(container).render(
   <StrictMode>

@@ -167,9 +167,23 @@ export function createApiClient(): ApiClient {
   return {
     setupStatus: () => json<SetupStatus>("/setup/status"),
 
+    // The two routes below answer envelopes the screens do not use. This
+    // file was written against a sketch of the API months before the
+    // routes shipped, and the end-to-end flow is what caught the drift:
+    // `/me` nests the account under `user`, and `/workspaces` returns a
+    // named list rather than a bare array. The decoding belongs here — the
+    // screens and their tests speak `Actor` and `Workspace`.
     async me() {
       try {
-        return await json<Actor>("/me");
+        const body = await json<{
+          user: { id: string; email: string };
+          memberships: Membership[];
+        }>("/me");
+        return {
+          userId: body.user.id,
+          email: body.user.email,
+          memberships: body.memberships,
+        };
       } catch (error) {
         // 401 is the ordinary answer for "nobody is signed in", not a
         // failure worth showing anyone.
@@ -178,7 +192,8 @@ export function createApiClient(): ApiClient {
       }
     },
 
-    workspaces: () => json<Workspace[]>("/workspaces"),
+    workspaces: async () =>
+      (await json<{ workspaces: Workspace[] }>("/workspaces")).workspaces,
 
     completeSetup: (input) =>
       json<Workspace>("/setup/complete", post({ name: input.workspaceName })),

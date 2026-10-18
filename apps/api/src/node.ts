@@ -3,7 +3,7 @@
 // exactly what Workers runs.
 
 import { serve } from "@hono/node-server";
-import { pgClient, sqliteClient } from "@pariksha/db";
+import { migrate, pgClient, sqliteClient } from "@pariksha/db";
 import { diskAdapter } from "@pariksha/storage";
 import { createApp } from "./app.js";
 import { parseEnv } from "./env.js";
@@ -14,6 +14,11 @@ if (env.target !== "node") throw new Error("unreachable");
 const db = env.databaseUrl.startsWith("postgres")
   ? pgClient(env.databaseUrl)
   : sqliteClient(env.databaseUrl);
+
+// Before the first request, not on a deploy step: a Docker install, a
+// `pnpm dev` and an in-memory database all have to arrive at the same
+// schema, and `migrate` is a no-op once there is nothing left to apply.
+await migrate(db);
 
 const app = createApp({
   db,
