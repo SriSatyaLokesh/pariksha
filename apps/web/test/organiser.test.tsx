@@ -66,6 +66,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used by this test file");
     },
     listTags: async () => [],
+    listGroups: async () => [],
+    createGroup: async () => {
+      throw new Error("not used by this test file");
+    },
+    updateGroup: async () => {
+      throw new Error("not used by this test file");
+    },
+    deleteGroup: async () => undefined,
     ...overrides,
   };
 }

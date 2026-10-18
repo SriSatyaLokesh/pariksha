@@ -61,10 +61,16 @@ const options = (question: Question): QuestionOption[] =>
 
 export function PreviewPane({
   question,
+  passage,
   reveal,
   onRevealChange,
 }: {
   question: Question;
+  /** Phase 4 Task 6 (#50, P4.6): the Markdown passage of the question's
+   * group, when it has one and the group is still known — rendered above
+   * the prompt, through the same `renderMarkdown` (ADR 0004), because that
+   * is the order a candidate reads it in. */
+  passage?: string;
   reveal: boolean;
   onRevealChange: (next: boolean) => void;
 }) {
@@ -90,7 +96,15 @@ export function PreviewPane({
         </button>
       </div>
 
-      <RenderedHtml className="rendered--stem" markdown={question.prompt} />
+      {passage !== undefined && (
+        <div className="preview__passage" data-preview-section="passage">
+          <RenderedHtml className="rendered--stem" markdown={passage} />
+        </div>
+      )}
+
+      <div data-preview-section="prompt">
+        <RenderedHtml className="rendered--stem" markdown={question.prompt} />
+      </div>
 
       {question.media?.map((image) => (
         <img className="preview__media" key={image.src} src={image.src} alt={image.alt} />

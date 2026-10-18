@@ -9,7 +9,7 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type { Difficulty, Question, QuestionType, Role } from "@pariksha/core";
+import type { Difficulty, PassageGroup, Question, QuestionType, Role } from "@pariksha/core";
 export type { Role };
 
 // Phase 4 Task 2: banks and questions. Mirrors
@@ -35,6 +35,11 @@ export interface QuestionSummary {
   usedInTests: number;
   updatedAt: number;
 }
+
+/** Phase 4 Task 6: a bank's passage groups, each with how many of the
+ * bank's questions currently reference it — `packages/db/src/repo/banks.ts`'s
+ * `listGroups` return type, unchanged over the wire. */
+export type PassageGroupSummary = PassageGroup & { questionCount: number };
 
 export interface QuestionListFilter {
   type?: QuestionType;
@@ -134,6 +139,23 @@ export interface ApiClient {
   saveQuestion(workspaceId: string, bankId: string, doc: Question): Promise<QuestionSummary>;
   /** Tags already used anywhere in the workspace (UX-03's autocomplete). */
   listTags(workspaceId: string): Promise<string[]>;
+
+  /** Phase 4 Task 6: a bank's passage groups — a handful at most, so one
+   * route answers all of them (`GET /banks/:bankId/groups`), the same shape
+   * `listQuestions` for tags already follows. */
+  listGroups(workspaceId: string, bankId: string): Promise<PassageGroupSummary[]>;
+  createGroup(
+    workspaceId: string,
+    bankId: string,
+    input: { id: string; title?: string; passage: string },
+  ): Promise<PassageGroupSummary>;
+  updateGroup(
+    workspaceId: string,
+    bankId: string,
+    groupId: string,
+    patch: { title?: string; passage?: string },
+  ): Promise<PassageGroupSummary>;
+  deleteGroup(workspaceId: string, bankId: string, groupId: string): Promise<void>;
 }
 
 const API = "/api/v1";
@@ -315,5 +337,18 @@ export function createApiClient(): ApiClient {
       json<QuestionSummary>(`/workspaces/${workspaceId}/banks/${bankId}/questions`, post(doc)),
 
     listTags: async (workspaceId) => (await json<{ tags: string[] }>(`/workspaces/${workspaceId}/tags`)).tags,
+
+    listGroups: async (workspaceId, bankId) =>
+      (await json<{ groups: PassageGroupSummary[] }>(`/workspaces/${workspaceId}/banks/${bankId}/groups`)).groups,
+
+    createGroup: (workspaceId, bankId, input) =>
+      json<PassageGroupSummary>(`/workspaces/${workspaceId}/banks/${bankId}/groups`, post(input)),
+
+    updateGroup: (workspaceId, bankId, groupId, patch) =>
+      json<PassageGroupSummary>(`/workspaces/${workspaceId}/banks/${bankId}/groups/${groupId}`, patchBody(patch)),
+
+    async deleteGroup(workspaceId, bankId, groupId) {
+      await request(`/workspaces/${workspaceId}/banks/${bankId}/groups/${groupId}`, { method: "DELETE" });
+    },
   };
 }

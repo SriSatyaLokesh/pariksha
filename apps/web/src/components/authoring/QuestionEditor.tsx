@@ -8,7 +8,7 @@ import {
   type QuestionType,
   type ScoringConfig,
 } from "@pariksha/core";
-import { ApiError, type ApiClient } from "../../lib/api";
+import { ApiError, type ApiClient, type PassageGroupSummary } from "../../lib/api";
 import { PromptEditor } from "./PromptEditor";
 import { PreviewPane } from "./PreviewPane";
 import { ScoringRow } from "./ScoringRow";
@@ -215,6 +215,7 @@ export function QuestionEditor({
   const [question, setQuestion] = useState<Question>(
     () => initial ?? withType({ id: freshQuestionId(), prompt: "" }, "single"),
   );
+  const [groups, setGroups] = useState<PassageGroupSummary[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pendingType, setPendingType] = useState<QuestionType | null>(null);
   const [reveal, setReveal] = useState(false);
@@ -232,6 +233,20 @@ export function QuestionEditor({
   useEffect(() => {
     if (pendingType !== null) dialogRef.current?.focus();
   }, [pendingType]);
+
+  // The meta block's group select, and the preview's passage, both need
+  // every group the bank has — a handful at most (#50, P4.6), so one fetch
+  // on mount is enough; nothing here edits a group, so there is nothing to
+  // keep in sync afterwards.
+  useEffect(() => {
+    let current = true;
+    void client.listGroups(workspaceId, bankId).then((rows) => {
+      if (current) setGroups(rows);
+    });
+    return () => {
+      current = false;
+    };
+  }, [client, workspaceId, bankId]);
 
   function applyType(type: QuestionType): void {
     setQuestion(withType(sharedFieldsOf(question), type));
@@ -257,7 +272,7 @@ export function QuestionEditor({
     setPendingType(type);
   }
 
-  function setMetaField<K extends "difficulty" | "tags" | "explanation">(
+  function setMetaField<K extends "group" | "difficulty" | "tags" | "explanation">(
     key: K,
     value: Question[K] | undefined,
   ): void {
@@ -298,6 +313,7 @@ export function QuestionEditor({
   // document going out through *this* editor — the server-side guard is
   // expected to land with the import path (Task 7).
   const blockingIssues = effectiveQuestion.type === "fill_blank" ? fillBlankIssues(effectiveQuestion) : [];
+  const groupPassage = groups.find((group) => group.id === effectiveQuestion.group)?.passage;
 
   return (
     <div className="question-editor">
@@ -368,6 +384,24 @@ export function QuestionEditor({
         />
         <p className="field-help">Letters, numbers, underscore, dot or hyphen — up to 64 characters.</p>
 
+        <label className="field-label" htmlFor={`${metaId}-group`}>
+          Passage group
+        </label>
+        <select
+          id={`${metaId}-group`}
+          value={question.group ?? ""}
+          onChange={(event) =>
+            setMetaField("group", event.target.value === "" ? undefined : event.target.value)
+          }
+        >
+          <option value="">No group</option>
+          {groups.map((group) => (
+            <option key={group.id} value={group.id}>
+              {group.title ?? group.id}
+            </option>
+          ))}
+        </select>
+
         <label className="field-label" htmlFor={`${metaId}-difficulty`}>
           Difficulty
         </label>
@@ -409,7 +443,12 @@ export function QuestionEditor({
         />
       </section>
 
-      <PreviewPane question={effectiveQuestion} reveal={reveal} onRevealChange={setReveal} />
+      <PreviewPane
+        question={effectiveQuestion}
+        {...(groupPassage !== undefined && { passage: groupPassage })}
+        reveal={reveal}
+        onRevealChange={setReveal}
+      />
 
       {notice !== undefined && (
         <p className="field-error" role="alert">

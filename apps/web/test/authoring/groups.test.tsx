@@ -57,12 +57,12 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     }),
     listTags: async () => [],
     listGroups: async () => [ORDERS_TABLE, LIBRARY_LOANS],
-    createGroup: async (_workspaceId, _bankId, input) => ({ ...input, title: input.title, questionCount: 0 }),
+    createGroup: async (_workspaceId, _bankId, input) => ({ ...input, questionCount: 0 }),
     updateGroup: async (_workspaceId, _bankId, groupId, patch) => ({
       id: groupId,
-      title: patch.title,
       passage: patch.passage ?? "",
       questionCount: 0,
+      ...(patch.title !== undefined && { title: patch.title }),
     }),
     deleteGroup: async () => undefined,
     ...overrides,
@@ -166,7 +166,12 @@ describe("GroupEditor", () => {
     const client = fakeClient({
       updateGroup: async (_workspaceId, _bankId, groupId, patch) => {
         updates.push([groupId, patch]);
-        return { id: groupId, title: patch.title, passage: patch.passage ?? "", questionCount: 1 };
+        return {
+          id: groupId,
+          passage: patch.passage ?? "",
+          questionCount: 1,
+          ...(patch.title !== undefined && { title: patch.title }),
+        };
       },
     });
     const onSaved = vi.fn();

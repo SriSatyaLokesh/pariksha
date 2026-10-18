@@ -48,6 +48,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       updatedAt: 0,
     }),
     listTags: async () => [],
+    listGroups: async () => [],
+    createGroup: async () => {
+      throw new Error("not used");
+    },
+    updateGroup: async () => {
+      throw new Error("not used");
+    },
+    deleteGroup: async () => undefined,
     ...overrides,
   };
 }
