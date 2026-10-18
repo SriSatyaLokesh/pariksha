@@ -569,6 +569,19 @@ export const listGroups = scoped(
  * `UPDATE` writing it back with `group` added (a fresh `id`) or replaced (an
  * existing one) — never a statement per field, and never more than the one
  * `UPDATE` the brief asks for.
+ *
+ * ponytail: no optimistic concurrency — two concurrent calls for the same
+ * bank both read the same `current`, and whichever `UPDATE` lands last wins,
+ * silently dropping the other's group. Inherent to the JSON-column design
+ * the brief chose over a `passage_group` table (a bank holds a handful of
+ * groups and every read wants all of them); a Workspace's banks are edited
+ * by its handful of Authors, not a crowd, so two Authors creating a group in
+ * the same bank in the same instant is rare enough to accept today. Upgrade
+ * path if it ever bites: a `version` column on `question_bank` checked by
+ * the `UPDATE`'s `WHERE` clause (compare-and-swap), retrying `upsertGroup`
+ * on a mismatch — the same shape a real `passage_group` table would get for
+ * free from row-level locking, without yet paying for the table and the
+ * migration it needs.
  */
 export const upsertGroup = scoped(
   "upsertGroup",
