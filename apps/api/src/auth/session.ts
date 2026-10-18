@@ -22,6 +22,7 @@ import {
 } from "@pariksha/db";
 import type { Role } from "@pariksha/core";
 import type { AppDeps } from "../app.js";
+import { randomToken, sha256Hex } from "./tokens.js";
 
 export const SESSION_COOKIE = "pk_session";
 export const SESSION_IDLE_MS = 12 * 60 * 60 * 1000;
@@ -44,7 +45,7 @@ export async function issueSession(
   const now = deps.now();
   const expiresAt = now + SESSION_IDLE_MS;
   await insertSession(deps.db, {
-    tokenHash: await hashToken(token),
+    tokenHash: await sha256Hex(token),
     userId,
     now,
     expiresAt,
@@ -63,7 +64,7 @@ export async function readSession(
   token: string,
 ): Promise<Actor | null> {
   const now = deps.now();
-  const tokenHash = await hashToken(token);
+  const tokenHash = await sha256Hex(token);
   const rows = await readSessionActor(deps.db, tokenHash, now);
 
   const first = rows[0];
@@ -98,7 +99,7 @@ export async function rotateSession(
   deps: AppDeps,
   token: string,
 ): Promise<{ token: string } | null> {
-  const tokenHash = await hashToken(token);
+  const tokenHash = await sha256Hex(token);
   const rows = await readSessionActor(deps.db, tokenHash, deps.now());
 
   const first = rows[0];
@@ -113,7 +114,7 @@ export async function revokeSession(
   deps: AppDeps,
   token: string,
 ): Promise<void> {
-  await deleteSession(deps.db, await hashToken(token));
+  await deleteSession(deps.db, await sha256Hex(token));
 }
 
 export async function revokeAllSessions(
@@ -130,28 +131,4 @@ export async function revokeAllSessions(
  */
 function grantsOf(raw: unknown): { testId: string; role: Role }[] {
   return Array.isArray(raw) ? (raw as { testId: string; role: Role }[]) : [];
-}
-
-function randomToken(): string {
-  const bytes = new Uint8Array(32);
-  crypto.getRandomValues(bytes);
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  // base64url, so the value survives a Set-Cookie header unescaped. `btoa`
-  // and Web Crypto are globals on both Workers and Node 22, which is why
-  // neither half of this file reaches for `node:crypto` or `Buffer`.
-  return btoa(binary)
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
-}
-
-async function hashToken(token: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(token),
-  );
-  return [...new Uint8Array(digest)]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
 }

@@ -58,6 +58,19 @@ export const session = sqliteTable(
   (t) => [index("session_user_idx").on(t.userId)],
 );
 
+export const authToken = sqliteTable(
+  "auth_token",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    kind: text("kind").notNull(),
+    payloadJson: text("payload_json", { mode: "json" }).notNull(),
+    createdAt: integer("created_at").notNull(),
+    expiresAt: integer("expires_at").notNull(),
+    usedAt: integer("used_at"),
+  },
+  (t) => [index("auth_token_expires_idx").on(t.expiresAt)],
+);
+
 export const questionBank = sqliteTable(
   "question_bank",
   {

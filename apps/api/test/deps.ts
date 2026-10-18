@@ -14,7 +14,7 @@ export async function testDeps(
   // Expiry tests need one database read through several points in time, which
   // an injected clock covers and a second `testDeps()` would not: a new call
   // is a new, empty database.
-  options: { now?: () => number } = {},
+  options: { now?: () => number; env?: Record<string, unknown> } = {},
 ): Promise<{
   deps: AppDeps;
   migrations: number;
@@ -26,7 +26,10 @@ export async function testDeps(
       db,
       storage: memoryAdapter(),
       now: options.now ?? (() => FIXED_NOW),
-      env: parseEnv({ SESSION_SECRET: "test-session-secret" }, "workers"),
+      env: parseEnv(
+        { SESSION_SECRET: "test-session-secret", ...options.env },
+        "workers",
+      ),
     },
     migrations: applied.length,
   };

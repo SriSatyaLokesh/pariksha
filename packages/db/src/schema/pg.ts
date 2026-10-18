@@ -71,6 +71,19 @@ export const session = pgTable(
   (t) => [index("session_user_idx").on(t.userId)],
 );
 
+export const authToken = pgTable(
+  "auth_token",
+  {
+    tokenHash: text("token_hash").primaryKey(),
+    kind: text("kind").notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    expiresAt: bigint("expires_at", { mode: "number" }).notNull(),
+    usedAt: bigint("used_at", { mode: "number" }),
+  },
+  (t) => [index("auth_token_expires_idx").on(t.expiresAt)],
+);
+
 export const questionBank = pgTable(
   "question_bank",
   {

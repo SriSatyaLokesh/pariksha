@@ -40,6 +40,72 @@ export async function createUser(
   return id;
 }
 
+/**
+ * The account lookup both sign-in flows share. Email is the account key in
+ * this schema — `user.email` is unique — so an organiser who started with a
+ * magic link and later signs in through Google lands on the same row rather
+ * than colliding with their own address.
+ */
+export async function findUserByEmail(
+  db: DbClient,
+  email: string,
+): Promise<string | null> {
+  const rows = await db.query<{ id: string }>(
+    'SELECT id FROM "user" WHERE email = ?',
+    [email],
+  );
+  return rows[0]?.id ?? null;
+}
+
+export async function insertAuthToken(
+  db: DbClient,
+  input: {
+    tokenHash: string;
+    kind: string;
+    payload: unknown;
+    now: number;
+    expiresAt: number;
+  },
+): Promise<void> {
+  await db.run(
+    "INSERT INTO auth_token (token_hash, kind, payload_json, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?, NULL)",
+    [
+      input.tokenHash,
+      input.kind,
+      db.jsonParam(input.payload),
+      input.now,
+      input.expiresAt,
+    ],
+  );
+}
+
+/**
+ * Marks the token used and hands back its payload in one statement, so two
+ * callbacks arriving together cannot both win: the second `UPDATE` matches no
+ * row and returns nothing. A select-then-update would leave exactly that race
+ * open, which is the whole of Review Focus 3 and half of 5.
+ *
+ * `kind` is in the WHERE clause so a magic-link token cannot be presented as
+ * an OIDC `state`, and expiry is too, so an expired token is indistinguishable
+ * from one that never existed.
+ */
+export async function consumeAuthToken(
+  db: DbClient,
+  tokenHash: string,
+  kind: string,
+  now: number,
+): Promise<unknown> {
+  const rows = await db.query<{ payload_json: unknown }>(
+    "UPDATE auth_token SET used_at = ? WHERE token_hash = ? AND kind = ? " +
+      "AND used_at IS NULL AND expires_at > ? RETURNING payload_json",
+    [now, tokenHash, kind, now],
+  );
+  const first = rows[0];
+  // `null` for "no such live token", which is also a payload this module
+  // never writes, so a caller cannot confuse the two.
+  return first === undefined ? null : db.jsonValue(first.payload_json);
+}
+
 export async function insertSession(
   db: DbClient,
   input: {
