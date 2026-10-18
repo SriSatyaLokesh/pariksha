@@ -116,6 +116,15 @@ const MULTI_MATCHING_FIXTURE: MultiMatchingQuestion = {
   key: {},
 };
 
+const EMPTY_MATCHING_FIXTURE: MatchingQuestion = {
+  id: "QM3",
+  type: "matching",
+  prompt: "p",
+  left: [],
+  right: [],
+  key: {},
+};
+
 describe("StructuredAnswer (UX-07/UX-08)", () => {
   it("UX-08: the ordering editor states that candidates see a shuffled list", () => {
     render(
@@ -212,5 +221,115 @@ describe("StructuredAnswer (UX-07/UX-08)", () => {
       expect(await axe(container)).toHaveNoViolations();
       cleanup();
     }
+  });
+
+  // Round 1, finding 1 + 2: renaming an item used to change its
+  // ReorderableList identity (the text itself was the key), so committing a
+  // rename unmounted the row — dropping focus and swallowing the key
+  // rewrite's own correctness check along with it. One test covers both:
+  // focus must stay on the very same field, and the rename must still carry
+  // the key along with it.
+  it("renaming an item commits on Enter, keeps focus on the same field, and the saved key follows the new name", async () => {
+    const saved = await renderAndSave(MATCHING_WITH_KEY_FIXTURE, () => {
+      const field = screen.getByRole("textbox", { name: /left item 1 text/i });
+      field.focus();
+      fireEvent.change(field, { target: { value: "Z" } });
+      fireEvent.keyDown(field, { key: "Enter" });
+      expect(document.activeElement).toBe(field);
+    });
+    expect((saved as MatchingQuestion).key).toEqual({ Z: "X" });
+  });
+
+  // Round 1, finding 3: the UX-08 note must be the list's accessible
+  // description, not merely text that happens to sit after it in the DOM.
+  it("UX-08: the shuffled-candidates note is the items list's accessible description", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={ORDERING_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    const group = screen.getByRole("group", { name: /items/i });
+    const note = screen.getByText(/candidates see these shuffled/i);
+    expect(group).toHaveAccessibleDescription(note.textContent ?? "");
+  });
+
+  // Round 1, finding 4: a radio grid can't be unchecked by clicking it
+  // again, so without a "no match" option a mis-click is permanent.
+  it("matching: a 'No match' option lets the author undo a mis-click", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={MATCHING_WITH_KEY_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    expect(screen.getByRole("radio", { name: /A matches X/i })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: /no match for A/i }));
+    expect(screen.getByRole("radio", { name: /A matches X/i })).not.toBeChecked();
+  });
+
+  // Round 1, finding 5: `reordered()` and each type's own `onReorder` wiring
+  // had no coverage — a `moveLeft` that spliced the wrong array, or an
+  // off-by-one, would have passed every other test in this file.
+  it("moving a left item down in matching reorders only the left column", async () => {
+    const saved = await renderAndSave(MATCHING_FIXTURE, () => {
+      fireEvent.click(screen.getByRole("button", { name: /move INNER JOIN down/i }));
+    });
+    expect((saved as MatchingQuestion).left).toEqual(["LEFT JOIN", "INNER JOIN"]);
+    expect((saved as MatchingQuestion).right).toEqual(MATCHING_FIXTURE.right);
+  });
+
+  it("moving a right item down in matching reorders only the right column", async () => {
+    const saved = await renderAndSave(MATCHING_FIXTURE, () => {
+      fireEvent.click(screen.getByRole("button", { name: /move Only matching rows down/i }));
+    });
+    expect((saved as MatchingQuestion).right).toEqual(["All left rows plus matches", "Only matching rows"]);
+    expect((saved as MatchingQuestion).left).toEqual(MATCHING_FIXTURE.left);
+  });
+
+  it("moving a left item down in multi_matching reorders only the left column", async () => {
+    const saved = await renderAndSave(MULTI_MATCHING_FIXTURE, () => {
+      fireEvent.click(screen.getByRole("button", { name: /move A down/i }));
+    });
+    expect((saved as MultiMatchingQuestion).left).toEqual(["B", "A"]);
+    expect((saved as MultiMatchingQuestion).right).toEqual(MULTI_MATCHING_FIXTURE.right);
+  });
+
+  it("moving a right item down in multi_matching reorders only the right column", async () => {
+    const saved = await renderAndSave(MULTI_MATCHING_FIXTURE, () => {
+      fireEvent.click(screen.getByRole("button", { name: /move X down/i }));
+    });
+    expect((saved as MultiMatchingQuestion).right).toEqual(["Y", "X"]);
+    expect((saved as MultiMatchingQuestion).left).toEqual(MULTI_MATCHING_FIXTURE.left);
+  });
+
+  it("moving an ordering item down changes the saved order", async () => {
+    const saved = await renderAndSave(ORDERING_FIXTURE, () => {
+      fireEvent.click(screen.getByRole("button", { name: /move Mix down/i }));
+    });
+    expect((saved as OrderingQuestion).items).toEqual(["Bake", "Mix", "Cool"]);
+  });
+
+  // Round 1, finding 7: the empty-columns prompt is the first thing an
+  // author sees after switching a question to `matching`, and until now the
+  // only coverage of it was the axe test passing vacuously over it.
+  it("matching shows a prompt instead of an empty grid until both columns have an item", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={EMPTY_MATCHING_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    expect(screen.getByText(/add at least one left item and one right item/i)).toBeVisible();
+    expect(screen.queryByRole("table")).toBeNull();
   });
 });
