@@ -17,8 +17,23 @@
  * | `int`       | `integer` | `integer` |                                      |
  * | `bool`      | `integer` | `boolean` | SQLite has no boolean type           |
  * | `timestamp` | `integer` | `bigint`  | epoch milliseconds overflow int4     |
+ * | `decimal`   | `real`    | `numeric` | scores are fractional; keep them exact |
+ *
+ * `decimal` is Postgres `numeric` rather than `double precision` because the
+ * values are scores: packages/core rounds every one to 2dp precisely so no
+ * `26.800000000000004` reaches a results CSV, and `numeric` stores that
+ * decimal rather than the nearest binary approximation of it. SQLite offers
+ * no exact decimal, so `real` is the closest it has — which is also why a
+ * fractional value has to be asserted through a real round trip and not
+ * inferred from SQLite going green (see `test/migrate.test.ts`).
  */
-export type ColumnClass = "text" | "json" | "int" | "bool" | "timestamp";
+export type ColumnClass =
+  | "text"
+  | "json"
+  | "int"
+  | "bool"
+  | "timestamp"
+  | "decimal";
 
 export interface ColumnSpec {
   name: string;
@@ -53,6 +68,7 @@ const json = column("json");
 const int = column("int");
 const bool = column("bool");
 const ts = column("timestamp");
+const decimal = column("decimal");
 
 /** Every tenant table opens with these two, in this order. */
 const tenantHead = (idName = "id"): ColumnSpec[] => [
@@ -162,7 +178,7 @@ export const TABLE_MANIFEST: TableSpec[] = [
       json("options_json", { null: true }),
       json("key_json", { null: true }),
       json("scoring_json", { null: true }),
-      int("points"),
+      decimal("points"),
       text("difficulty", { null: true }),
       json("tags_json"),
       text("explanation_md", { null: true }),
@@ -256,7 +272,7 @@ export const TABLE_MANIFEST: TableSpec[] = [
       json("value_json"),
       ts("saved_at"),
       int("client_seq"),
-      int("points", { null: true }),
+      decimal("points", { null: true }),
       text("graded_by", { null: true }),
     ],
     indexes: [["workspace_id"], ["attempt_id"]],

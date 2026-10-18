@@ -3,15 +3,17 @@
 // agree. This module exports tables and nothing else — the parity test reads
 // it with `Object.values`.
 //
-// Two types differ from SQLite by design: JSON columns are `jsonb` rather than
-// `text`, and timestamps are `bigint` because a millisecond epoch overflowed
-// `integer` in 1970.
+// Three types differ from SQLite by design: JSON columns are `jsonb` rather
+// than `text`, timestamps are `bigint` because a millisecond epoch overflowed
+// `integer` in 1970, and points are `numeric` because SQLite has no exact
+// decimal and `real` is the nearest it offers.
 
 import {
   pgTable,
   text,
   integer,
   bigint,
+  numeric,
   jsonb,
   boolean,
   index,
@@ -108,7 +110,7 @@ export const question = pgTable(
     optionsJson: jsonb("options_json"),
     keyJson: jsonb("key_json"),
     scoringJson: jsonb("scoring_json"),
-    points: integer("points").notNull(),
+    points: numeric("points", { mode: "number" }).notNull(),
     difficulty: text("difficulty"),
     tagsJson: jsonb("tags_json").notNull(),
     explanationMd: text("explanation_md"),
@@ -225,7 +227,7 @@ export const response = pgTable(
     valueJson: jsonb("value_json").notNull(),
     savedAt: bigint("saved_at", { mode: "number" }).notNull(),
     clientSeq: integer("client_seq").notNull(),
-    points: integer("points"),
+    points: numeric("points", { mode: "number" }),
     gradedBy: text("graded_by"),
   },
   (t) => [

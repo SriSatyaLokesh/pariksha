@@ -109,6 +109,7 @@ const SQL_TYPES = {
   int: { sqlite: "integer", pg: "integer" },
   bool: { sqlite: "integer", pg: "boolean" },
   timestamp: { sqlite: "integer", pg: "bigint" },
+  decimal: { sqlite: "real", pg: "numeric" },
 } as const;
 
 describe("the two dialects agree", () => {

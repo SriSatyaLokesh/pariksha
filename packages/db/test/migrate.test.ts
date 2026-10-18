@@ -31,6 +31,56 @@ async function tableNamesIn(db: DbClient): Promise<string[]> {
   return rows.map((r) => r.name);
 }
 
+// `response.points` is fractional in the normal case, not the exceptional one:
+// `partial` scoring is points × (correct parts − wrong parts) ÷ total parts and
+// `position` is points × items in place ÷ items, neither of which lands on an
+// integer except by coincidence. packages/core rounds every question, section
+// and attempt total to 2dp, so this column's whole job is to hand back exactly
+// what core computed — including a negative, which `negative` scoring produces.
+//
+// SQLite will not fail this on the value alone: it has type *affinity*, not
+// types, and a column with INTEGER affinity handed 2.33 cannot convert it
+// losslessly, so it quietly stores a REAL. Only Postgres rejects or rounds.
+// The declared type is asserted next to the value so that a wrong column class
+// is red on a laptop too, and not only in the job that has a Postgres.
+const FRACTIONAL = [2.33, 0.125, -0.75];
+
+async function roundTripPoints(db: DbClient): Promise<number[]> {
+  const read: number[] = [];
+  for (const [i, points] of FRACTIONAL.entries()) {
+    const id = `rsp_frac_${i}`;
+    await db.run(
+      "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      // A literal rather than `db.jsonParam`, which is not what is under test
+      // here: `value_json` only has to be non-null so the insert reaches the
+      // column that is.
+      [id, "ws_frac", "att_frac", `q_${i}`, "{}", 0, 1, points],
+    );
+    const rows = await db.query<{ points: number | string }>(
+      "SELECT points FROM response WHERE id = ?",
+      [id],
+    );
+    // Postgres hands `numeric` back as a string, exactly as the repository
+    // layer already assumes where it reads this column with `Number(…)`.
+    read.push(Number(rows[0]?.points));
+  }
+  return read;
+}
+
+async function pointsColumnType(db: DbClient): Promise<string> {
+  const rows =
+    db.dialect === "pg"
+      ? await db.all<{ type: string }>(
+          "select data_type as type from information_schema.columns " +
+            "where table_name = 'response' and column_name = 'points'",
+        )
+      : await db.all<{ type: string }>(
+          "select type from pragma_table_info('response') where name = 'points'",
+        );
+  return (rows[0]?.type ?? "").toLowerCase();
+}
+
 describe("sqlite", () => {
   const db = sqliteClient(":memory:");
   afterAll(() => closeClient(db));
@@ -44,6 +94,11 @@ describe("sqlite", () => {
 
   it("is idempotent: running twice applies nothing the second time", async () => {
     expect((await migrate(db)).applied).toEqual([]);
+  });
+
+  it("stores a fractional points value and gives it back unchanged", async () => {
+    expect(await roundTripPoints(db)).toEqual(FRACTIONAL);
+    expect(await pointsColumnType(db)).toBe("real");
   });
 
   it("records what it applied, so a later migration is the only thing that runs", async () => {
@@ -66,5 +121,10 @@ describePostgres("postgres", () => {
 
   it("is idempotent on Postgres too", async () => {
     expect((await migrate(db)).applied).toEqual([]);
+  });
+
+  it("stores a fractional points value and gives it back unchanged", async () => {
+    expect(await roundTripPoints(db)).toEqual(FRACTIONAL);
+    expect(await pointsColumnType(db)).toBe("numeric");
   });
 });

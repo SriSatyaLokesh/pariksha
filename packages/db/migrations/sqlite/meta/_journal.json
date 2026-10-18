@@ -15,6 +15,13 @@
       "when": 1792331444750,
       "tag": "0001_last_vengeance",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1792332887114,
+      "tag": "0002_dapper_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }
