@@ -69,9 +69,15 @@ const newGroup = z.object({
   passage: z.string().min(1).max(20_000),
 });
 
+// Fix round 1, finding 6: `title` has no `.min(1)` here, unlike `newGroup`'s
+// — on a PATCH, an empty string is how an author clears a title that was
+// set at creation, distinct from the field being absent at all (which means
+// "leave it alone", the PATCH route's existing `?? existing.title`
+// fallback). `newGroup` needs no such sentinel: a group that never had a
+// title just never sends the field.
 const groupPatch = z
   .object({
-    title: z.string().min(1).max(200).optional(),
+    title: z.string().max(200).optional(),
     passage: z.string().min(1).max(20_000).optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
@@ -227,10 +233,13 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
 
     const patch = parse(groupPatch, await json(c.req.raw));
     const title = patch.title !== undefined ? patch.title : existing.title;
+    // An empty string (only reachable by an explicit `title: ""` in the
+    // patch — `existing.title` is never `""`, `upsertGroup` never persists
+    // one) collapses to "no title" rather than being stored verbatim.
     const group: PassageGroup = {
       id: groupId,
       passage: patch.passage ?? existing.passage,
-      ...(title !== undefined && { title }),
+      ...(title !== undefined && title !== "" && { title }),
     };
 
     const now = deps.now();

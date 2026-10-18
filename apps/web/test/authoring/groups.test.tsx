@@ -58,11 +58,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     listTags: async () => [],
     listGroups: async () => [ORDERS_TABLE, LIBRARY_LOANS],
     createGroup: async (_workspaceId, _bankId, input) => ({ ...input, questionCount: 0 }),
+    // Mirrors the real route's own normalisation (apps/api/src/routes/
+    // banks.ts's PATCH handler, fix round 1 finding 6): an explicit empty
+    // `title` clears it rather than being stored as `""`.
     updateGroup: async (_workspaceId, _bankId, groupId, patch) => ({
       id: groupId,
       passage: patch.passage ?? "",
       questionCount: 0,
-      ...(patch.title !== undefined && { title: patch.title }),
+      ...(patch.title !== undefined && patch.title !== "" && { title: patch.title }),
     }),
     deleteGroup: async () => undefined,
     ...overrides,
@@ -128,6 +131,15 @@ describe("passage groups in the question editor", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]?.group).toBe("orders-table");
+
+    // Fix round 1, finding 5: the test's own name promised this half too —
+    // clearing the selection back to "No group" must unset `group` rather
+    // than leaving the last-picked one behind.
+    fireEvent.change(select, { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(saved).toHaveLength(2));
+    expect(saved[1]?.group).toBeUndefined();
+    expect(Object.keys(saved[1] ?? {})).not.toContain("group");
   });
 });
 
@@ -170,7 +182,7 @@ describe("GroupEditor", () => {
           id: groupId,
           passage: patch.passage ?? "",
           questionCount: 1,
-          ...(patch.title !== undefined && { title: patch.title }),
+          ...(patch.title !== undefined && patch.title !== "" && { title: patch.title }),
         };
       },
     });
@@ -179,11 +191,44 @@ describe("GroupEditor", () => {
       <GroupEditor bankId="bnk_1" workspaceId="wsp_1" client={client} group={ORDERS_TABLE} onSaved={onSaved} />,
     );
 
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Orders v2" } });
     fireEvent.change(screen.getByLabelText("Passage"), { target: { value: "new passage" } });
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
 
     await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
-    expect(updates).toEqual([["orders-table", { title: "Orders", passage: "new passage" }]]);
+    expect(updates).toEqual([["orders-table", { title: "Orders v2", passage: "new passage" }]]);
+  });
+
+  // Fix round 1, finding 6: `onSave`'s update branch used to send `title`
+  // only when non-empty, so clearing the field silently resent the old
+  // title (and the test above, unmodified, would have kept asserting that
+  // resend rather than ever exercising a clear). Verifies the field reaches
+  // the client as an explicit `""` and the saved group comes back with no
+  // title at all — the same normalisation the real route performs.
+  it("clears an existing group's title", async () => {
+    const updates: unknown[] = [];
+    const client = fakeClient({
+      updateGroup: async (_workspaceId, _bankId, groupId, patch) => {
+        updates.push(patch);
+        return {
+          id: groupId,
+          passage: patch.passage ?? "",
+          questionCount: 1,
+          ...(patch.title !== undefined && patch.title !== "" && { title: patch.title }),
+        };
+      },
+    });
+    const onSaved = vi.fn();
+    render(
+      <GroupEditor bankId="bnk_1" workspaceId="wsp_1" client={client} group={ORDERS_TABLE} onSaved={onSaved} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Title"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    expect(updates).toEqual([{ title: "", passage: "| a |\n| - |" }]);
+    expect(onSaved.mock.calls[0]?.[0]).not.toHaveProperty("title");
   });
 
   it("the group editor has no axe violations", async () => {

@@ -41,11 +41,15 @@ export function GroupEditor({
     setNotice(undefined);
     setSaving(true);
     try {
+      // Fix round 1, finding 6: an edit always sends the title field as it
+      // stands — including empty — so clearing a previously-set title
+      // actually clears it server-side (`groupPatch`, apps/api/src/routes/
+      // banks.ts, treats an empty string as "remove the title", distinct
+      // from the field being absent, which means "leave it alone"). A
+      // create has no "leave it alone" to distinguish from, so an empty
+      // title there is simply not sent — `newGroup` never accepted one.
       const saved = isEdit
-        ? await client.updateGroup(workspaceId, bankId, group.id, {
-            passage,
-            ...(title !== "" && { title }),
-          })
+        ? await client.updateGroup(workspaceId, bankId, group.id, { passage, title })
         : await client.createGroup(workspaceId, bankId, {
             id,
             passage,

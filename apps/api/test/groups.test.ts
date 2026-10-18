@@ -250,6 +250,28 @@ it("updates a group's title and passage", async () => {
   expect(await res.json()).toMatchObject({ id: "orders-table", title: "Orders v2", passage: "new" });
 });
 
+// Fix round 1, finding 6: an explicit `title: ""` clears a title that was
+// set at creation — distinct from omitting the field, which leaves it
+// alone (the test above never changes title through an omission, so this
+// is the only coverage of the clear path).
+it("clears a group's title with an explicit empty string", async () => {
+  await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,
+    post({ id: "orders-table", title: "Orders", passage: "x" }, authorCookie),
+  );
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups/orders-table`,
+    patch({ title: "" }, authorCookie),
+  );
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body).not.toHaveProperty("title");
+
+  const listed = await app.request(`/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`, get(authorCookie));
+  const row = (await listed.json()).groups.find((g: { id: string }) => g.id === "orders-table");
+  expect(row).not.toHaveProperty("title");
+});
+
 it("deletes a group nothing references", async () => {
   await app.request(
     `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,
