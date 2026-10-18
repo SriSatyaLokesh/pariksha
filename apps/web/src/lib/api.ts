@@ -125,6 +125,13 @@ export interface ApiClient {
     filter?: QuestionListFilter,
   ): Promise<{ questions: QuestionSummary[]; cursor?: string }>;
   deleteQuestion(workspaceId: string, bankId: string, questionId: string): Promise<void>;
+  /**
+   * Phase 4 Task 3. One route for create and update: `POST
+   * /banks/:bankId/questions` (`apps/api/src/routes/questions.ts`) matches
+   * on `(bankId, doc.id)` and upserts either way, returning the saved row
+   * directly — no follow-up GET, and no second method for "update".
+   */
+  saveQuestion(workspaceId: string, bankId: string, doc: Question): Promise<QuestionSummary>;
   /** Tags already used anywhere in the workspace (UX-03's autocomplete). */
   listTags(workspaceId: string): Promise<string[]>;
 }
@@ -303,6 +310,9 @@ export function createApiClient(): ApiClient {
         method: "DELETE",
       });
     },
+
+    saveQuestion: (workspaceId, bankId, doc) =>
+      json<QuestionSummary>(`/workspaces/${workspaceId}/banks/${bankId}/questions`, post(doc)),
 
     listTags: async (workspaceId) => (await json<{ tags: string[] }>(`/workspaces/${workspaceId}/tags`)).tags,
   };
