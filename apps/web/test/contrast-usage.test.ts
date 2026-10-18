@@ -34,6 +34,7 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
+const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 
 function hexToRgb(hex: string): [number, number, number] {
@@ -298,6 +299,25 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".feature-cell__title": "canvas",
   ".feature-cell__body": "canvas",
   ".card-voltage__heading": "voltage",
+
+  // ---- admin.css: the organiser screens (P3.9) ---------------------------
+  // The page is the body's cream; every panel is a CardHairline, which sets
+  // its own canvas fill, so the form trio and the empty state render on
+  // canvas. docs/design.md's screen-inventory note — "cream and ink
+  // surfaces, hairline rules" — is the whole palette here; voltage survives
+  // only on the primary action (.button-primary--surface, already above)
+  // and the focus ring (base.css).
+  ".organiser__title": "cream",
+  ".organiser__lead": "cream",
+  ".organiser-bar__mark": "canvas",
+  ".organiser__notice": "canvas",
+  ".organiser__status": "canvas",
+  ".organiser-empty__title": "canvas",
+  ".organiser-empty__body": "canvas",
+  ".field-label": "canvas",
+  ".field-help": "canvas",
+  ".field-error": "canvas",
+  ".text-input": "canvas",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
@@ -509,7 +529,16 @@ let resolutionErrors: string[];
 let resolved: Map<string, Resolved>;
 
 beforeAll(() => {
-  const css = readResolvedCss(LANDING_CSS_PATH);
+  // P3.9: the organiser screens are a second real stylesheet entry
+  // (admin.css, loaded only by src/admin-main.tsx) and every colour it
+  // declares has to clear the same bar. One shared `seen` set so
+  // primitives.css — imported by both entries — is read exactly once.
+  const seen = new Set<string>();
+  const css = `${readResolvedCss(LANDING_CSS_PATH, seen)}
+${readResolvedCss(
+    ADMIN_CSS_PATH,
+    seen,
+  )}`;
   const rules = parseRuleBodies(css);
   // A selector can appear more than once (e.g. a base rule plus its
   // declarations re-opened inside a @media block for a reflow or reduced-
