@@ -41,6 +41,16 @@ const QUESTION: QuestionSummary = {
   updatedAt: 1_700_000_000_000,
 };
 
+const QUESTION_2: QuestionSummary = {
+  id: "qst_2",
+  bankId: "bnk_1",
+  refId: "Q2",
+  document: { id: "Q2", type: "true_false", prompt: "TCP is connectionless.", key: false },
+  points: 1,
+  usedInTests: 0,
+  updatedAt: 1_700_000_000_000,
+};
+
 // One typed object literal implementing ApiClient, same convention as
 // apps/web/test/organiser.test.tsx's `fakeClient` — no MSW, no fetch mock.
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
@@ -64,8 +74,15 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 }
 
 describe("BankBrowser", () => {
-  it("UX-04: the browser is a table with prompt, type, difficulty, tags, points, last edited and used-in", () => {
+  it("UX-04: the browser is a table with prompt, type, difficulty, tags, points, last edited and used-in", async () => {
     render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} />);
+    // The headers are static JSX and render before `load()`'s promise
+    // settles, but awaiting a `findBy` here (rather than asserting
+    // synchronously) lets that promise's state update land inside an
+    // RTL-managed act() scope instead of after the test body returns — the
+    // "Also" note in fixture review's act() warning, caught by pasting the
+    // raw run into the fix report rather than trusting a green summary line.
+    await screen.findByText(DOCUMENT.prompt);
     for (const h of ["Prompt", "Type", "Difficulty", "Tags", "Points", "Last edited", "Used in"]) {
       expect(screen.getByRole("columnheader", { name: new RegExp(h, "i") })).toBeVisible();
     }
@@ -94,6 +111,28 @@ describe("BankBrowser", () => {
     render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
     fireEvent.click(await screen.findByRole("button", { name: /delete/i }));
     expect(await screen.findByText(/Midterm/)).toBeVisible();
+  });
+
+  it("finding 10: each row's delete button has a distinct accessible name", async () => {
+    const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }) });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    const deleteButtons = await screen.findAllByRole("button", { name: /^delete question:/i });
+    expect(deleteButtons).toHaveLength(2);
+    const names = deleteButtons.map((button) => button.getAttribute("aria-label"));
+    expect(new Set(names).size).toBe(2);
+  });
+
+  it("finding 12: changing a filter clears the selection", async () => {
+    const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }) });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    const checkboxes = await screen.findAllByRole("checkbox", { name: /select question/i });
+    fireEvent.click(checkboxes[0]!);
+    expect(screen.getByText(/1 selected/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "sdlc / agile" }));
+    expect(screen.queryByText(/selected/)).not.toBeInTheDocument();
   });
 
   it("the bank list and the browser have no axe violations", async () => {

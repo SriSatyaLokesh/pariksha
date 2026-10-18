@@ -46,6 +46,21 @@ async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
   return bank;
 }
 
+// `limit` and `cursor` cross a trust boundary that `type`/`difficulty`'s
+// simple allowlist check doesn't need to: `Number("abc")` is `NaN`, and
+// `NaN ?? 50` is `NaN` too (`??` is nullish-only), so an unchecked `?limit=`
+// would reach `listQuestions`' `LIMIT ?` as `NaN` — and an unchecked cursor
+// with no `:` would silently decode to `[NaN, "<whole string>"]` and return
+// an empty page instead of failing loudly. Both 400 here instead.
+const limitSchema = z.coerce.number().int().positive().max(200);
+const cursorSchema = z.string().regex(/^\d+:.+$/, "is not a valid cursor");
+
+function invalidQuery(field: string, message: string): never {
+  throw new ApiError(400, "invalid_request", "The query string is not valid.", {
+    issues: [{ path: field, message }],
+  });
+}
+
 // Built key-by-key, present only when the query string actually named it:
 // `QuestionFilter`'s fields are `T | undefined`-free (brief's own
 // signature), and `exactOptionalPropertyTypes` holds a query string's
@@ -56,8 +71,8 @@ function filterFromQuery(c: Context<AppBindings>): QuestionFilter {
   const difficulty = c.req.query("difficulty");
   const tag = c.req.query("tag");
   const search = c.req.query("search");
-  const cursor = c.req.query("cursor");
-  const limit = c.req.query("limit");
+  const rawCursor = c.req.query("cursor");
+  const rawLimit = c.req.query("limit");
 
   const filter: QuestionFilter = {};
   if (type && (QUESTION_TYPES as readonly string[]).includes(type)) {
@@ -69,8 +84,17 @@ function filterFromQuery(c: Context<AppBindings>): QuestionFilter {
   if (tag) filter.tag = tag;
   if (c.req.query("unused") === "true") filter.unused = true;
   if (search) filter.search = search;
-  if (cursor) filter.cursor = cursor;
-  if (limit) filter.limit = Number(limit);
+
+  if (rawCursor !== undefined) {
+    const parsed = cursorSchema.safeParse(rawCursor);
+    if (!parsed.success) invalidQuery("cursor", "cursor is not valid.");
+    else filter.cursor = parsed.data;
+  }
+  if (rawLimit !== undefined) {
+    const parsed = limitSchema.safeParse(rawLimit);
+    if (!parsed.success) invalidQuery("limit", "limit must be a whole number from 1 to 200.");
+    else filter.limit = parsed.data;
+  }
   return filter;
 }
 
@@ -94,7 +118,7 @@ export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
 
     const doc = parse(questionDoc, await json(c.req.raw)) as Question;
     const now = deps.now();
-    const { id, created } = await upsertQuestion(deps.db, workspaceId, bankId, doc, now);
+    const { id, created, row } = await upsertQuestion(deps.db, workspaceId, bankId, doc, now);
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,
@@ -104,7 +128,10 @@ export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
       now,
     });
 
-    return c.json(await getQuestion(deps.db, workspaceId, bankId, id), created ? 201 : 200);
+    // `row` is what `upsertQuestion` just wrote — a re-read through
+    // `getQuestion` here would spend a second statement proving what the
+    // first one already returned.
+    return c.json(row, created ? 201 : 200);
   });
 
   routes.get("/:id/banks/:bankId/questions/:qid", requires("banks.edit"), async (c) => {
@@ -138,7 +165,7 @@ export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
     }
 
     const now = deps.now();
-    await upsertQuestion(deps.db, workspaceId, bankId, doc, now);
+    const { row } = await upsertQuestion(deps.db, workspaceId, bankId, doc, now);
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,
       action: "question.update",
@@ -147,7 +174,7 @@ export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
       now,
     });
 
-    return c.json(await getQuestion(deps.db, workspaceId, bankId, qid));
+    return c.json(row);
   });
 
   routes.delete("/:id/banks/:bankId/questions/:qid", requires("banks.edit"), async (c) => {

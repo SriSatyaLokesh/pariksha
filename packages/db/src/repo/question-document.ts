@@ -38,9 +38,14 @@ export interface QuestionRecord {
 // document holds (k, assertion/reason, left/right, items, blanks, unit,
 // max_length, model_answer, rubric, shuffle_options, $schema — one set per
 // type, per packages/core/src/types.ts) has no column of its own and
-// round-trips through `extra_json` wholesale.
+// round-trips through `extra_json` wholesale. `$schema` belongs in that
+// "everything else" set, not here: it is a legal field
+// (schemas/question-1.json declares it) with no column of its own, same as
+// `k` or `unit` — an earlier version of this file listed it in the comment
+// above and then also put it here, which silently dropped it on every
+// write. The round-trip test only missed this because no example question
+// carries `$schema` on itself (only the bank root does).
 const KNOWN_FIELDS = new Set([
-  "$schema",
   "id",
   "type",
   "prompt",
@@ -76,7 +81,14 @@ export function toQuestionRow(doc: Question): QuestionRecord {
     scoring_json: doc.scoring ?? null,
     points: doc.scoring?.points ?? 1,
     difficulty: doc.difficulty ?? null,
-    tags_json: doc.tags ?? [],
+    // `null`, not `[]`: a document with no `tags` field must come back with
+    // none (finding 9) — `toQuestionDocument`'s `row.tags_json ?? undefined`
+    // only restores that absence if this is `null` rather than an empty
+    // array standing in for it. The `question` table's `tags_json` column is
+    // NOT NULL, so the one caller that writes this to a real row
+    // (`upsertQuestion`) coerces `null` to `[]` itself, at the SQL
+    // boundary — this mapper stays a pure, lossless document<->row bridge.
+    tags_json: doc.tags ?? null,
     explanation_md: doc.explanation ?? null,
     extra_json: Object.keys(extra).length > 0 ? extra : null,
   };

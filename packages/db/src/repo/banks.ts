@@ -11,9 +11,19 @@
 // none), so "is this question used by a published test" is answered by
 // searching `test_version.sections_json` for the question's own ID — the ID
 // `response.question_id` already stores, per `select.ts`'s `findQuestion`
-// and the fixed/pool/sets sources in packages/core/src/types.ts. `CAST(...
-// AS TEXT)` rather than a dialect-specific JSON operator keeps the one query
+// and the fixed/sets sources in packages/core/src/types.ts. `CAST(... AS
+// TEXT)` rather than a dialect-specific JSON operator keeps the one query
 // portable across SQLite's text column and Postgres's jsonb one.
+//
+// `SourcePool` (packages/core/src/types.ts) is the exception: a pool section
+// carries `bank` + `count` + `filter` and no question IDs at all — it draws
+// from the whole bank at grading time. So a question is also "used" when a
+// published version's sections name its `bank_id` directly, with no
+// question ID in sight, and every usage check below carries that second
+// arm. Fixture-review finding 1: a prior version of this file matched the
+// question ID only, which reported a pool-drawn question as unused and let
+// both `deleteQuestion` and `deleteBank` remove it (and the whole bank, via
+// `deleteBank`'s cascade) out from under a live published exam.
 
 import type { DbClient } from "../client.js";
 import type { Difficulty, Question, QuestionType } from "@pariksha/core";
@@ -78,12 +88,24 @@ const BANK_SELECT =
   "(SELECT COUNT(*) FROM question q WHERE q.workspace_id = qb.workspace_id AND q.bank_id = qb.id) AS question_count " +
   "FROM question_bank qb";
 
+/**
+ * True when a published `test_version` row (correlated as `tv`) references
+ * the outer `question` row `q` — directly, by `q.id` (a `fixed`/`sets`
+ * source), or indirectly, by `q.bank_id` (a `pool` source, which names only
+ * a bank). Both arms are substring scans over the same `CAST(...AS TEXT)`
+ * blob, so this is still the one correlated subquery `QUESTION_SELECT`'s
+ * header describes, not a second round trip.
+ */
+const TV_REFERENCES_Q_ROW =
+  "(CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%' " +
+  "OR CAST(tv.sections_json AS TEXT) LIKE '%' || q.bank_id || '%')";
+
 const QUESTION_SELECT =
   "SELECT q.id, q.bank_id, q.ref_id, q.group_ref, q.type, q.prompt_md, q.media_json, q.options_json, " +
   "q.key_json, q.scoring_json, q.points, q.difficulty, q.tags_json, q.explanation_md, q.extra_json, " +
   "q.created_at, q.updated_at, " +
-  "(SELECT COUNT(DISTINCT tv.test_id) FROM test_version tv WHERE tv.workspace_id = q.workspace_id " +
-  "AND CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%') AS used_in_tests " +
+  `(SELECT COUNT(DISTINCT tv.test_id) FROM test_version tv WHERE tv.workspace_id = q.workspace_id ` +
+  `AND ${TV_REFERENCES_Q_ROW}) AS used_in_tests ` +
   "FROM question q";
 
 function toBankRow(db: DbClient, row: BankRecord): BankRow {
@@ -126,26 +148,31 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
   };
 }
 
-/** The tests (by name) whose *published* version references `questionId`.
+/** The tests (by name) whose *published* version references `questionId` —
+ * directly (a `fixed`/`sets` source naming it) or through `bankId` (a
+ * `pool` source drawing from its bank, which names no question ID at all).
  * A draft test is freely editable (T-04), so only `test_version` is
  * consulted — never `test` itself. */
 async function testsUsingQuestion(
   db: DbClient,
   workspaceId: string,
+  bankId: string,
   questionId: string,
 ): Promise<string[]> {
   const rows = await db.query<{ name: string }>(
     "SELECT DISTINCT t.name AS name FROM test_version tv " +
       "JOIN test t ON t.id = tv.test_id AND t.workspace_id = tv.workspace_id " +
-      "WHERE tv.workspace_id = ? AND CAST(tv.sections_json AS TEXT) LIKE ?",
-    [workspaceId, `%${questionId}%`],
+      "WHERE tv.workspace_id = ? " +
+      "AND (CAST(tv.sections_json AS TEXT) LIKE ? OR CAST(tv.sections_json AS TEXT) LIKE ?)",
+    [workspaceId, `%${questionId}%`, `%${bankId}%`],
   );
   return rows.map((row) => row.name);
 }
 
-/** The tests (by name) whose published version references any question in
- * `bankId` — one join rather than one `testsUsingQuestion` call per
- * question. */
+/** The tests (by name) whose published version references `bankId` — either
+ * a `pool` source naming the bank directly, or a `fixed`/`sets` source
+ * naming one of its questions. One join plus one direct substring check,
+ * never one `testsUsingQuestion` call per question. */
 async function testsUsingBank(
   db: DbClient,
   workspaceId: string,
@@ -154,9 +181,12 @@ async function testsUsingBank(
   const rows = await db.query<{ name: string }>(
     "SELECT DISTINCT t.name AS name FROM test_version tv " +
       "JOIN test t ON t.id = tv.test_id AND t.workspace_id = tv.workspace_id " +
-      "JOIN question q ON q.workspace_id = tv.workspace_id AND q.bank_id = ? " +
-      "WHERE tv.workspace_id = ? AND CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%'",
-    [bankId, workspaceId],
+      "WHERE tv.workspace_id = ? AND (" +
+      "CAST(tv.sections_json AS TEXT) LIKE ? " +
+      "OR EXISTS (SELECT 1 FROM question q WHERE q.workspace_id = tv.workspace_id AND q.bank_id = ? " +
+      "AND CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%')" +
+      ")",
+    [workspaceId, `%${bankId}%`, bankId],
   );
   return rows.map((row) => row.name);
 }
@@ -279,8 +309,7 @@ export const listQuestions = scoped(
     }
     if (filter.unused) {
       clauses.push(
-        "NOT EXISTS (SELECT 1 FROM test_version tv WHERE tv.workspace_id = q.workspace_id " +
-          "AND CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%')",
+        `NOT EXISTS (SELECT 1 FROM test_version tv WHERE tv.workspace_id = q.workspace_id AND ${TV_REFERENCES_Q_ROW})`,
       );
     }
     if (filter.cursor) {
@@ -320,8 +349,17 @@ export const getQuestion = scoped(
   },
 );
 
-/** Writes the Markdown document. There is no second representation to keep
- * in step (ADR 0004). */
+/**
+ * Writes the Markdown document. There is no second representation to keep
+ * in step (ADR 0004).
+ *
+ * Returns the row it just wrote — `document`, `points` and `updatedAt` are
+ * built from `doc`/`now` with no extra read, and `usedInTests` costs the one
+ * query `testsUsingQuestion` already needs — so a caller (the API route)
+ * that wants the fresh row back never has to issue its own follow-up
+ * `getQuestion`, which would re-read the exact row this statement just
+ * wrote.
+ */
 export const upsertQuestion = scoped(
   "upsertQuestion",
   async (
@@ -330,13 +368,19 @@ export const upsertQuestion = scoped(
     bankId: string,
     doc: Question,
     now: number,
-  ): Promise<{ id: string; created: boolean }> => {
+  ): Promise<{ id: string; created: boolean; row: QuestionRow }> => {
     const existing = await db.query<{ id: string }>(
       "SELECT id FROM question WHERE workspace_id = ? AND bank_id = ? AND ref_id = ?",
       [workspaceId, bankId, doc.id],
     );
     const row = toQuestionRow(doc);
+    // The column is NOT NULL; the pure mapper's `null` (no `tags` field on
+    // the document, finding 9) is coerced to `[]` only here, at the SQL
+    // boundary, so the round-trip identity the mapper promises never leaks
+    // into a column that cannot hold it.
+    const tagsJson = db.jsonParam(row.tags_json ?? []);
     const current = existing[0];
+    const id = current?.id ?? newId("qst");
 
     if (current) {
       await db.run(
@@ -353,7 +397,7 @@ export const upsertQuestion = scoped(
           row.scoring_json == null ? null : db.jsonParam(row.scoring_json),
           row.points,
           row.difficulty,
-          db.jsonParam(row.tags_json),
+          tagsJson,
           row.explanation_md,
           row.extra_json == null ? null : db.jsonParam(row.extra_json),
           now,
@@ -361,37 +405,49 @@ export const upsertQuestion = scoped(
           current.id,
         ],
       );
-      return { id: current.id, created: false };
+    } else {
+      await db.run(
+        "INSERT INTO question (id, workspace_id, bank_id, ref_id, group_ref, type, prompt_md, media_json, " +
+          "options_json, key_json, scoring_json, points, difficulty, tags_json, explanation_md, extra_json, " +
+          "version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+          id,
+          workspaceId,
+          bankId,
+          row.ref_id,
+          row.group_ref,
+          row.type,
+          row.prompt_md,
+          row.media_json == null ? null : db.jsonParam(row.media_json),
+          row.options_json == null ? null : db.jsonParam(row.options_json),
+          row.key_json == null ? null : db.jsonParam(row.key_json),
+          row.scoring_json == null ? null : db.jsonParam(row.scoring_json),
+          row.points,
+          row.difficulty,
+          tagsJson,
+          row.explanation_md,
+          row.extra_json == null ? null : db.jsonParam(row.extra_json),
+          1,
+          now,
+          now,
+        ],
+      );
     }
 
-    const id = newId("qst");
-    await db.run(
-      "INSERT INTO question (id, workspace_id, bank_id, ref_id, group_ref, type, prompt_md, media_json, " +
-        "options_json, key_json, scoring_json, points, difficulty, tags_json, explanation_md, extra_json, " +
-        "version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
+    const usedInTests = (await testsUsingQuestion(db, workspaceId, bankId, id)).length;
+    return {
+      id,
+      created: !current,
+      row: {
         id,
-        workspaceId,
         bankId,
-        row.ref_id,
-        row.group_ref,
-        row.type,
-        row.prompt_md,
-        row.media_json == null ? null : db.jsonParam(row.media_json),
-        row.options_json == null ? null : db.jsonParam(row.options_json),
-        row.key_json == null ? null : db.jsonParam(row.key_json),
-        row.scoring_json == null ? null : db.jsonParam(row.scoring_json),
-        row.points,
-        row.difficulty,
-        db.jsonParam(row.tags_json),
-        row.explanation_md,
-        row.extra_json == null ? null : db.jsonParam(row.extra_json),
-        1,
-        now,
-        now,
-      ],
-    );
-    return { id, created: true };
+        refId: row.ref_id,
+        document: toQuestionDocument(row),
+        points: row.points,
+        usedInTests,
+        updatedAt: now,
+      },
+    };
   },
 );
 
@@ -427,7 +483,7 @@ export const deleteQuestion = scoped(
     bankId: string,
     questionId: string,
   ): Promise<{ deleted: boolean; blockedBy: string[] }> => {
-    const blockedBy = await testsUsingQuestion(db, workspaceId, questionId);
+    const blockedBy = await testsUsingQuestion(db, workspaceId, bankId, questionId);
     if (blockedBy.length > 0) return { deleted: false, blockedBy };
 
     const { changes } = await db.run("DELETE FROM question WHERE workspace_id = ? AND bank_id = ? AND id = ?", [

@@ -75,6 +75,15 @@ export function BankBrowser({
     void load();
   }, [load]);
 
+  // Fixture-review finding 12: a selection made under one filter can name
+  // rows a different filter no longer shows, and a bulk action on an
+  // invisible row is worse than a bulk action on none — so a filter change
+  // (identity change of `filter`, which `load` already depends on) clears
+  // it rather than carrying it forward.
+  useEffect(() => {
+    setSelected(new Set());
+  }, [filter]);
+
   const groups = useMemo(() => groupedTags(tags), [tags]);
 
   function toggleSelected(id: string) {
@@ -243,7 +252,17 @@ export function BankBrowser({
                 <td>{new Date(question.updatedAt).toLocaleDateString()}</td>
                 <td>{question.usedInTests}</td>
                 <td>
-                  <button type="button" className="button-secondary" onClick={() => void onDelete(question)}>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    // Fixture-review finding 10: "Delete" alone repeats once
+                    // per row, which a screen reader listing buttons on the
+                    // page hears as N identical entries — the per-row prompt
+                    // excerpt (same idea as the checkbox's own aria-label
+                    // above) makes each one distinct.
+                    aria-label={`Delete question: ${excerpt(question.document.prompt, 60)}`}
+                    onClick={() => void onDelete(question)}
+                  >
                     Delete
                   </button>
                 </td>

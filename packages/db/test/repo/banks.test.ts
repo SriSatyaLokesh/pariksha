@@ -118,3 +118,204 @@ describe("S-09: workspace isolation", () => {
     expect(await repo.getBank(db, wsA, bankInB)).toBeNull();
   });
 });
+
+// Fixture-review finding 1: a `SourcePool` section (packages/core/src/
+// types.ts) carries `bank` + `count` + `filter` and no question IDs at
+// all — it draws from the whole bank at grading time. A question in a bank
+// a published pool section draws from must therefore be reported used and
+// refused on delete, even though no section anywhere names its own ID.
+describe("pool-sourced usage (fixture-review finding 1)", () => {
+  it("usedInTests, the unused filter, deleteQuestion and deleteBank all see a pool-drawn question as used", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "pool-ws", name: "Pool WS" });
+    const bank = await repo.createBank(db, ws, { name: "Pool bank" });
+    const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
+
+    // Sanity: before anything is published, the question is unused.
+    expect((await repo.getQuestion(db, ws, bank, questionId))!.usedInTests).toBe(0);
+    const beforePublish = await repo.listQuestions(db, ws, bank, { unused: true });
+    expect(beforePublish.rows.map((r) => r.id)).toContain(questionId);
+
+    const testId = await repo.createTest(db, ws, { slug: "mock-exam", name: "Mock Exam" });
+    await repo.publishTestVersion(db, ws, {
+      testId,
+      version: 1,
+      settings: {},
+      sections: [{ id: "s1", title: "Pool section", source: { kind: "pool", bank, count: 1 } }],
+      now: T,
+    });
+
+    const afterPublish = await repo.getQuestion(db, ws, bank, questionId);
+    expect(afterPublish!.usedInTests).toBe(1);
+
+    const unusedAfter = await repo.listQuestions(db, ws, bank, { unused: true });
+    expect(unusedAfter.rows.map((r) => r.id)).not.toContain(questionId);
+
+    expect(await repo.deleteQuestion(db, ws, bank, questionId)).toEqual({
+      deleted: false,
+      blockedBy: ["Mock Exam"],
+    });
+    expect(await repo.deleteBank(db, ws, bank)).toEqual({
+      deleted: false,
+      blockedBy: ["Mock Exam"],
+    });
+  });
+});
+
+describe("deleteBank (fixture-review finding 5)", () => {
+  it("is refused, naming the test, when a published fixed section names one of the bank's questions", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "bank-del-ws", name: "Bank Del WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
+
+    const testId = await repo.createTest(db, ws, { slug: "final", name: "Final" });
+    await repo.publishTestVersion(db, ws, {
+      testId,
+      version: 1,
+      settings: {},
+      sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
+      now: T,
+    });
+
+    expect(await repo.deleteBank(db, ws, bank)).toEqual({ deleted: false, blockedBy: ["Final"] });
+  });
+
+  it("deletes the bank and its questions clean when nothing blocks it", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "bank-del-ws-2", name: "Bank Del WS 2" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    await repo.upsertQuestion(db, ws, bank, singleFixture, T);
+
+    expect(await repo.deleteBank(db, ws, bank)).toEqual({ deleted: true, blockedBy: [] });
+    expect(await repo.getBank(db, ws, bank)).toBeNull();
+  });
+});
+
+describe("toQuestionDocument / toQuestionRow — fixture-review findings 2 and 9", () => {
+  it("$schema round-trips rather than being dropped (finding 2)", () => {
+    const withSchema: Question = {
+      "$schema": "../../schemas/question-1.json",
+      ...singleFixture,
+      id: "Q-SCHEMA",
+    };
+    expect(toQuestionDocument(toQuestionRow(withSchema))).toEqual(withSchema);
+  });
+
+  it("a tagless question round-trips with no `tags` key, not `tags: []` (finding 9)", () => {
+    const tagless: Question = {
+      id: "Q-TAGLESS",
+      type: "true_false",
+      prompt: "True?",
+      key: true,
+    };
+    expect(tagless.tags).toBeUndefined();
+    const roundTripped = toQuestionDocument(toQuestionRow(tagless));
+    expect(roundTripped).toEqual(tagless);
+    // The real assertion finding 9 is about: not `[]` standing in for "no
+    // tags". `toEqual` above already treats an explicit `undefined` and a
+    // missing key as equal, so this is checked separately and explicitly.
+    expect(roundTripped.tags).toBeUndefined();
+  });
+});
+
+describe("listQuestions filters (fixture-review finding 5)", () => {
+  const ws = newId("wsp");
+  let bank: string;
+  let single: string;
+  let numeric: string;
+
+  beforeAll(async () => {
+    await repo.createWorkspace(db, ws, { slug: "filters-ws", name: "Filters WS" });
+    bank = await repo.createBank(db, ws, { name: "Filters bank" });
+    single = (
+      await repo.upsertQuestion(
+        db,
+        ws,
+        bank,
+        {
+          id: "F-SINGLE",
+          type: "single",
+          prompt: "Pick the prime.",
+          options: [
+            { id: "a", text: "4" },
+            { id: "b", text: "5" },
+          ],
+          key: "b",
+          difficulty: "easy",
+          tags: ["sdlc/agile"],
+        },
+        T,
+      )
+    ).id;
+    numeric = (
+      await repo.upsertQuestion(
+        db,
+        ws,
+        bank,
+        {
+          id: "F-NUMERIC",
+          type: "numeric",
+          prompt: "What is 2 + 2?",
+          key: { value: 4 },
+          difficulty: "hard",
+          tags: ["exam/midterm"],
+        },
+        T + 1,
+      )
+    ).id;
+  });
+
+  it("filters by type", async () => {
+    const { rows } = await repo.listQuestions(db, ws, bank, { type: "numeric" });
+    expect(rows.map((r) => r.id)).toEqual([numeric]);
+  });
+
+  it("filters by difficulty", async () => {
+    const { rows } = await repo.listQuestions(db, ws, bank, { difficulty: "easy" });
+    expect(rows.map((r) => r.id)).toEqual([single]);
+  });
+
+  it("filters by tag", async () => {
+    const { rows } = await repo.listQuestions(db, ws, bank, { tag: "exam/midterm" });
+    expect(rows.map((r) => r.id)).toEqual([numeric]);
+  });
+
+  it("filters by a search term matched against the prompt", async () => {
+    const { rows } = await repo.listQuestions(db, ws, bank, { search: "prime" });
+    expect(rows.map((r) => r.id)).toEqual([single]);
+  });
+
+  it("the unused filter includes both questions when nothing is published", async () => {
+    const { rows } = await repo.listQuestions(db, ws, bank, { unused: true });
+    expect(rows.map((r) => r.id).sort()).toEqual([numeric, single].sort());
+  });
+
+  it("paginates with a cursor, one question at a time, in creation order", async () => {
+    const first = await repo.listQuestions(db, ws, bank, { limit: 1 });
+    expect(first.rows.map((r) => r.id)).toEqual([single]);
+    expect(first.cursor).toBeDefined();
+
+    const second = await repo.listQuestions(db, ws, bank, { limit: 1, cursor: first.cursor });
+    expect(second.rows.map((r) => r.id)).toEqual([numeric]);
+    expect(second.cursor).toBeUndefined();
+  });
+});
+
+describe("listWorkspaceTags", () => {
+  it("unions question tags and bank tags, deduplicated and sorted", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "tags-ws", name: "Tags WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    await repo.updateBank(db, ws, bank, { tags: ["zzz-bank-tag", "shared-tag"] });
+    await repo.upsertQuestion(
+      db,
+      ws,
+      bank,
+      { ...singleFixture, id: "T1", tags: ["shared-tag", "aaa-question-tag"] },
+      T,
+    );
+
+    expect(await repo.listWorkspaceTags(db, ws)).toEqual(["aaa-question-tag", "shared-tag", "zzz-bank-tag"]);
+  });
+});

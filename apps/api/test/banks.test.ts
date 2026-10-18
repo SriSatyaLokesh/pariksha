@@ -1,9 +1,9 @@
 // Bank and question CRUD, over the real routes.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { addMembership, closeClient, createUser } from "@pariksha/db";
+import { addMembership, closeClient, createTest, createUser, publishTestVersion } from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS } from "../src/app.js";
-import { mountedRoutes, SUBREQUEST_LIMIT } from "../src/instrument.js";
+import { countingDeps, mountedRoutes, SUBREQUEST_LIMIT } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
 
@@ -126,7 +126,7 @@ it("updates a bank's editable fields and deletes it clean", async () => {
   expect(gone.status).toBe(404);
 });
 
-it("writes a question, lists it, and refuses to delete one a published test holds (UX-05)", async () => {
+it("writes a question, lists it, surfaces its tags, and deletes it clean when nothing blocks it", async () => {
   const bankRes = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "Bank" }, authorCookie));
   const bankId = (await bankRes.json()).id;
 
@@ -154,18 +154,169 @@ it("writes a question, lists it, and refuses to delete one a published test hold
   const tags = await app.request(`/api/v1/workspaces/${workspaceId}/tags`, get(authorCookie));
   expect((await tags.json()).tags).toEqual(["demo"]);
 
-  const refused = await app.request(
+  // Nothing has published a test yet, so this is the "nothing blocks it"
+  // path — fixture-review finding 6's UX-05-proper (a real 409, end to end)
+  // is its own test below.
+  const deleted = await app.request(
     `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${row.id}`,
     del(authorCookie),
   );
-  // Nothing has published a test yet, so the plain delete path is covered by
-  // the DB-level UX-05 test (packages/db/test/repo/banks.test.ts); this one
-  // just proves the route reaches it and answers 204 when nothing blocks it.
-  expect(refused.status).toBe(204);
+  expect(deleted.status).toBe(204);
+});
+
+it("UX-05: refuses to delete a question a published test holds, with a 409 naming it", async () => {
+  const bankRes = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "Bank" }, authorCookie));
+  const bankId = (await bankRes.json()).id;
+
+  const created = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`,
+    post({ id: "Q1", type: "true_false", prompt: "The sky is blue.", key: true }, authorCookie),
+  );
+  const questionId = (await created.json()).id;
+
+  const testId = await createTest(deps.db, workspaceId, { slug: "midterm", name: "Midterm" });
+  await publishTestVersion(deps.db, workspaceId, {
+    testId,
+    version: 1,
+    settings: {},
+    sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
+    now: FIXED_NOW,
+  });
+
+  const refused = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,
+    del(authorCookie),
+  );
+  expect(refused.status).toBe(409);
+  const body = await refused.json();
+  expect(body.error.code).toBe("question_in_use");
+  expect(body.error.message).toContain("Midterm");
+  expect(body.error.details.blockedBy).toEqual(["Midterm"]);
+
+  // Refused, not removed.
+  const stillThere = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,
+    get(authorCookie),
+  );
+  expect(stillThere.status).toBe(200);
+});
+
+it("finding 4: a non-numeric limit is a 400, not a silent NaN reaching the query", async () => {
+  const bankRes = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "Bank" }, authorCookie));
+  const bankId = (await bankRes.json()).id;
+
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions?limit=abc`,
+    get(authorCookie),
+  );
+  expect(res.status).toBe(400);
+});
+
+it("finding 4: a limit over 200 is a 400", async () => {
+  const bankRes = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "Bank" }, authorCookie));
+  const bankId = (await bankRes.json()).id;
+
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions?limit=500`,
+    get(authorCookie),
+  );
+  expect(res.status).toBe(400);
+});
+
+it("finding 4: a cursor with no ':' is a 400, not a silently empty page", async () => {
+  const bankRes = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "Bank" }, authorCookie));
+  const bankId = (await bankRes.json()).id;
+
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions?cursor=not-a-cursor`,
+    get(authorCookie),
+  );
+  expect(res.status).toBe(400);
 });
 
 it("every route this task mounts has a ROUTE_BUDGETS entry under the ceiling", () => {
   for (const r of mountedRoutes(app).filter((route) => route.includes("bank") || route.includes("media"))) {
     expect(ROUTE_BUDGETS[r], r).toBeLessThan(SUBREQUEST_LIMIT);
   }
+});
+
+// Fixture-review finding 3: the declared numbers in `ROUTE_BUDGETS` are
+// measured here, not guessed — each case re-wraps `deps` in a fresh
+// `countingDeps` (the same helper `budget.test.ts` uses for `/health`) so
+// one route's count can never leak into another's, then asserts the
+// measured total against the table in app.ts. A regression that adds a
+// query to any of these routes fails here before it fails in production.
+it("measures the real subrequest cost of every bank/question route against ROUTE_BUDGETS", async () => {
+  const bankRes = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "Bank" }, authorCookie));
+  const bankId = (await bankRes.json()).id;
+  const qRes = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`,
+    post({ id: "Q1", type: "true_false", prompt: "P", key: true }, authorCookie),
+  );
+  const questionId = (await qRes.json()).id;
+
+  async function measure(method: string, routeKey: string, path: string, init: RequestInit): Promise<void> {
+    const counting = countingDeps(deps);
+    const res = await createApp(counting.deps).request(path, { method, ...init });
+    expect(res.status, `${method} ${path} → ${res.status}`).toBeLessThan(400);
+    expect(counting.counts().total, `${method} ${routeKey}`).toBeLessThanOrEqual(ROUTE_BUDGETS[routeKey]!);
+  }
+
+  await measure("GET", "/api/v1/workspaces/:id/banks", `/api/v1/workspaces/${workspaceId}/banks`, get(authorCookie));
+  await measure(
+    "POST",
+    "/api/v1/workspaces/:id/banks",
+    `/api/v1/workspaces/${workspaceId}/banks`,
+    post({ name: "Measured" }, authorCookie),
+  );
+  await measure(
+    "GET",
+    "/api/v1/workspaces/:id/banks/:bankId",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}`,
+    get(authorCookie),
+  );
+  await measure(
+    "PATCH",
+    "/api/v1/workspaces/:id/banks/:bankId",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}`,
+    patch({ description: "d" }, authorCookie),
+  );
+  await measure("GET", "/api/v1/workspaces/:id/tags", `/api/v1/workspaces/${workspaceId}/tags`, get(authorCookie));
+  await measure(
+    "GET",
+    "/api/v1/workspaces/:id/banks/:bankId/questions",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`,
+    get(authorCookie),
+  );
+  await measure(
+    "POST",
+    "/api/v1/workspaces/:id/banks/:bankId/questions",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`,
+    post({ id: "Q2", type: "true_false", prompt: "P2", key: true }, authorCookie),
+  );
+  await measure(
+    "GET",
+    "/api/v1/workspaces/:id/banks/:bankId/questions/:qid",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,
+    get(authorCookie),
+  );
+  await measure(
+    "PATCH",
+    "/api/v1/workspaces/:id/banks/:bankId/questions/:qid",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,
+    patch({ id: "Q1", type: "true_false", prompt: "P changed", key: true }, authorCookie),
+  );
+  // Deletes last: they remove the rows the measurements above still needed.
+  await measure(
+    "DELETE",
+    "/api/v1/workspaces/:id/banks/:bankId/questions/:qid",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,
+    del(authorCookie),
+  );
+  await measure(
+    "DELETE",
+    "/api/v1/workspaces/:id/banks/:bankId",
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}`,
+    del(authorCookie),
+  );
 });

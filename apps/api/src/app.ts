@@ -84,19 +84,23 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // revoke the member's sessions, append the audit row.
   "/api/v1/workspaces/:id/members": 10,
 
-  // Phase 4 Task 2: banks, questions and media. Every number below is the
-  // most expensive method sharing that path — POST/PATCH/DELETE write an
-  // audit row and re-read the row they just changed, which is the one or
-  // two extra statements over the equivalent GET.
-  "/api/v1/workspaces/:id/banks": 3,
-  "/api/v1/workspaces/:id/banks/:bankId": 6,
-  "/api/v1/workspaces/:id/tags": 1,
-  "/api/v1/workspaces/:id/banks/:bankId/questions": 5,
-  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 6,
-  // The upload spends one D1 read (does the bank exist?) and one storage
-  // `put`; the fetch spends one storage `get` and nothing else.
-  "/api/v1/workspaces/:id/banks/:bankId/media": 2,
-  "/api/v1/workspaces/:id/media/:key": 1,
+  // Phase 4 Task 2: banks, questions and media. These numbers are measured
+  // (apps/api/test/banks.test.ts's and media.test.ts's "measures the real
+  // subrequest cost" tests, via `countingDeps` — the same technique
+  // `budget.test.ts` uses for `/health`), not estimated: a first pass here
+  // guessed roughly half these values before `bankOr404`'s existence check
+  // and each write's audit row were accounted for, and fixture review
+  // caught that the declared numbers and the real cost had drifted apart.
+  // Each is the most expensive method sharing that path — authentication
+  // alone costs 2 (the session join and the idle-window write), so even the
+  // cheapest GET here never reads for less than 3.
+  "/api/v1/workspaces/:id/banks": 5,
+  "/api/v1/workspaces/:id/banks/:bankId": 7,
+  "/api/v1/workspaces/:id/tags": 3,
+  "/api/v1/workspaces/:id/banks/:bankId/questions": 7,
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 8,
+  "/api/v1/workspaces/:id/banks/:bankId/media": 4,
+  "/api/v1/workspaces/:id/media/:key": 3,
 };
 
 /**
