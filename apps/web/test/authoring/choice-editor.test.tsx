@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, cleanup, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type {
@@ -105,6 +105,7 @@ const MULTIPLE_FIXTURE: Question = {
 
 const SELECT_K_FIXTURE: SelectKQuestion = {
   id: "Q3",
+  "$schema": "https://pariksha.local/schemas/question-1.json",
   type: "select_k",
   prompt: "Pick two.",
   options: [
@@ -114,6 +115,7 @@ const SELECT_K_FIXTURE: SelectKQuestion = {
   ],
   k: 2,
   key: [],
+  shuffle_options: true,
 };
 
 const TRUE_FALSE_FIXTURE: TrueFalseQuestion = {
@@ -214,7 +216,203 @@ describe("QuestionEditor (UX-07)", () => {
     fireEvent.click(screen.getByRole("button", { name: TYPE_BUTTON_NAME.true_false }));
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent(/options.*key.*k/is);
-    expect(dialog).not.toHaveTextContent(/prompt|tags|difficulty|explanation/i);
+    // Finding 1: shuffle_options and $schema are QuestionBase fields, not
+    // type-specific ones — carried forward silently, so neither they nor
+    // the other genuinely shared fields should ever be named as a loss.
+    expect(dialog).not.toHaveTextContent(/prompt|tags|difficulty|explanation|shuffle|schema/i);
+  });
+
+  it("Finding 2: the dialog takes focus on open and returns it to Change type on Escape", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={SELECT_K_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    const changeTypeButton = screen.getByRole("button", { name: /change type/i });
+    fireEvent.click(changeTypeButton);
+    fireEvent.click(screen.getByRole("button", { name: TYPE_BUTTON_NAME.true_false }));
+    const dialog = screen.getByRole("dialog");
+    expect(document.activeElement).toBe(dialog);
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(changeTypeButton);
+  });
+
+  it("Finding 2: Confirm applies the change and returns focus to Change type too", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={SELECT_K_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    const changeTypeButton = screen.getByRole("button", { name: /change type/i });
+    fireEvent.click(changeTypeButton);
+    fireEvent.click(screen.getByRole("button", { name: TYPE_BUTTON_NAME.true_false }));
+    fireEvent.click(screen.getByRole("button", { name: /^confirm$/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(changeTypeButton);
+  });
+
+  it("Finding 2: the dialog itself has no axe violations while open", async () => {
+    const { container } = render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={SELECT_K_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /change type/i }));
+    fireEvent.click(screen.getByRole("button", { name: TYPE_BUTTON_NAME.true_false }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  it("Finding 3: a scoring mode the new type doesn't support is cleared, not carried forward invisibly", async () => {
+    const fixture: Question = { ...MULTIPLE_FIXTURE, scoring: { mode: "partial", points: 2 } };
+    const saved = await changeType(fixture, "single");
+    expect(saved.scoring?.mode).toBeUndefined();
+    expect(saved.scoring?.points).toBe(2);
+  });
+
+  it("Finding 1: shuffle_options and $schema survive a type change instead of being dropped as if type-specific", async () => {
+    const saved = await changeType(SELECT_K_FIXTURE, "single");
+    expect(saved).toHaveProperty("shuffle_options", true);
+    expect(saved).toHaveProperty("$schema", "https://pariksha.local/schemas/question-1.json");
+  });
+
+  it("Finding 5: an option can be added and removed, guarded at the schema's two-option minimum", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={SINGLE_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^add option$/i }));
+    expect(screen.getByRole("textbox", { name: /option c text/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /remove option c/i }));
+    expect(screen.queryByRole("textbox", { name: /option c text/i })).toBeNull();
+
+    // Back at 2 options — schemas/question-1.json's minItems: 2 — further
+    // removal is refused, not silently ignored.
+    expect(screen.getByRole("button", { name: /remove option a/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /remove option b/i })).toBeDisabled();
+  });
+
+  it("Finding 5: select_k's k is an editable field that governs how many options can be marked correct", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={SELECT_K_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    fireEvent.change(screen.getByRole("spinbutton", { name: /how many options are correct/i }), {
+      target: { value: "1" },
+    });
+    fireEvent.click(screen.getByRole("checkbox", { name: /option a is correct/i }));
+    expect(screen.getByRole("checkbox", { name: /option b is correct/i })).toBeDisabled();
+  });
+
+  it("Finding 6: option letters wrap past Z instead of producing punctuation", () => {
+    const manyOptions = Array.from({ length: 27 }, (_, i) => ({ id: `o${i}`, text: `Text ${i}` }));
+    const manyFixture: Question = {
+      id: "QMANY",
+      type: "multiple",
+      prompt: "Pick many.",
+      options: manyOptions,
+      key: [],
+    };
+    render(
+      <QuestionEditor bankId="bnk_1" workspaceId="wsp_1" initial={manyFixture} client={fakeClient()} onSaved={noop} />,
+    );
+    expect(screen.getByRole("checkbox", { name: /option aa is correct/i })).toBeInTheDocument();
+  });
+
+  it("Finding 7: two editors on the same page don't collide on option-text or correctness-radio ids", () => {
+    const first = render(
+      <QuestionEditor bankId="bnk_1" workspaceId="wsp_1" initial={SINGLE_FIXTURE} client={fakeClient()} onSaved={noop} />,
+    );
+    const second = render(
+      <QuestionEditor bankId="bnk_1" workspaceId="wsp_1" initial={SINGLE_FIXTURE} client={fakeClient()} onSaved={noop} />,
+    );
+    const [firstInput, secondInput] = screen.getAllByRole("textbox", { name: /option a text/i });
+    expect(firstInput!.id).not.toBe(secondInput!.id);
+    first.unmount();
+    second.unmount();
+  });
+
+  it("Finding 9: ScoringRow ignores an unparseable points value instead of writing NaN", () => {
+    // jsdom's own <input type="number"> setter is stricter than a real
+    // browser's: it accepts only a complete valid number or "", resetting
+    // anything else (even a syntactically-valid-so-far "1e" or "-") to ""
+    // before React ever sees a change event — so the NaN this guards
+    // against can't be produced by assigning `target.value` in a test.
+    // Overriding the DOM property directly (the same workaround
+    // render.test.tsx uses for `<input type="file">`'s `.files`) is what
+    // gets an in-progress value past jsdom's own sanitizing setter, the
+    // way a real browser would hand one to React mid-keystroke.
+    const onChange = vi.fn();
+    render(<ScoringRow type="single" value={{ points: 2 }} onChange={onChange} />);
+    const input = screen.getByLabelText("Points") as HTMLInputElement;
+    Object.defineProperty(input, "value", { value: "1e", configurable: true, writable: true });
+    fireEvent.change(input);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("Finding 11: true_false answers by selecting True or False", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={TRUE_FALSE_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    const trueRadio = screen.getByRole("radio", { name: "True" });
+    const falseRadio = screen.getByRole("radio", { name: "False" });
+    expect(falseRadio).toBeChecked();
+    fireEvent.click(trueRadio);
+    expect(trueRadio).toBeChecked();
+    expect(falseRadio).not.toBeChecked();
+  });
+
+  it("Finding 11: assertion_reason edits the assertion/reason text and the correct-answer choice", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={ASSERTION_REASON_FIXTURE}
+        client={fakeClient()}
+        onSaved={noop}
+      />,
+    );
+    const assertionField = screen.getByLabelText("Assertion") as HTMLTextAreaElement;
+    fireEvent.change(assertionField, { target: { value: "Updated assertion text." } });
+    expect(assertionField.value).toBe("Updated assertion text.");
+
+    const chosen = screen.getByRole("radio", { name: /the assertion is true and the reason is false/i });
+    const original = screen.getByRole("radio", { name: /both true, and the reason explains the assertion/i });
+    expect(original).toBeChecked();
+    fireEvent.click(chosen);
+    expect(chosen).toBeChecked();
+    expect(original).not.toBeChecked();
   });
 
   it("Review Focus 2: a type changed away carries no stale field (select_k -> single keeps no k)", async () => {

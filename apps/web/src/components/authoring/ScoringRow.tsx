@@ -26,14 +26,26 @@ export function ScoringRow({
   function setPoints(raw: string): void {
     const next = { ...value };
     if (raw === "") delete next.points;
-    else next.points = Number(raw);
+    else {
+      const parsed = Number(raw);
+      // An in-progress or unparseable value ("-", "1e") is not a number
+      // yet — ignore the keystroke rather than writing NaN into state,
+      // which would otherwise save and only fail much later, at
+      // validateBank or export.
+      if (!Number.isFinite(parsed)) return;
+      next.points = parsed;
+    }
     onChange(next);
   }
 
   function setNegativeFraction(raw: string): void {
     const next = { ...value };
     if (raw === "") delete next.negative_fraction;
-    else next.negative_fraction = Number(raw);
+    else {
+      const parsed = Number(raw);
+      if (!Number.isFinite(parsed)) return;
+      next.negative_fraction = parsed;
+    }
     onChange(next);
   }
 
