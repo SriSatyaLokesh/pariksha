@@ -202,7 +202,13 @@ describe("toQuestionDocument / toQuestionRow — fixture-review findings 2 and 9
     expect(toQuestionDocument(toQuestionRow(withSchema))).toEqual(withSchema);
   });
 
-  it("a tagless question round-trips with no `tags` key, not `tags: []` (finding 9)", () => {
+  // Direct-mapper sanity check only — it does not touch `toQuestionRowView`
+  // (packages/db/src/repo/banks.ts), which is what every `GET` actually
+  // goes through, and round 2 of fixture review correctly called out an
+  // earlier version of this test for stopping here and calling it covered.
+  // The real covering test, through `upsertQuestion`/`getQuestion`/
+  // `listQuestions`, is below.
+  it("direct mapper: a tagless question round-trips with no `tags` key, not `tags: []`", () => {
     const tagless: Question = {
       id: "Q-TAGLESS",
       type: "true_false",
@@ -212,10 +218,34 @@ describe("toQuestionDocument / toQuestionRow — fixture-review findings 2 and 9
     expect(tagless.tags).toBeUndefined();
     const roundTripped = toQuestionDocument(toQuestionRow(tagless));
     expect(roundTripped).toEqual(tagless);
-    // The real assertion finding 9 is about: not `[]` standing in for "no
-    // tags". `toEqual` above already treats an explicit `undefined` and a
-    // missing key as equal, so this is checked separately and explicitly.
     expect(roundTripped.tags).toBeUndefined();
+  });
+});
+
+describe("a tagless question through the real read path (fixture-review finding 9, round 2)", () => {
+  it("getQuestion and listQuestions both answer with no `tags` key, matching what upsertQuestion returned on write", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "tagless-ws", name: "Tagless WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+
+    const tagless: Question = {
+      id: "Q-TAGLESS-DB",
+      type: "true_false",
+      prompt: "True?",
+      key: true,
+    };
+    const written = await repo.upsertQuestion(db, ws, bank, tagless, T);
+    // What the write itself handed back — the baseline every read must match.
+    expect(written.row.document.tags).toBeUndefined();
+
+    const read = await repo.getQuestion(db, ws, bank, written.id);
+    expect(read!.document.tags).toBeUndefined();
+    expect(read!.document).toEqual(tagless);
+
+    const { rows } = await repo.listQuestions(db, ws, bank, {});
+    const listed = rows.find((r) => r.id === written.id);
+    expect(listed!.document.tags).toBeUndefined();
+    expect(listed!.document).toEqual(tagless);
   });
 });
 

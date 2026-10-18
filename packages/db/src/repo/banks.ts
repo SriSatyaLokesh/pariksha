@@ -122,6 +122,15 @@ function toBankRow(db: DbClient, row: BankRecord): BankRow {
 }
 
 function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
+  // `tags_json` is NOT NULL, so a tagless question is stored as `'[]'`, not
+  // SQL NULL — there is no way for the column itself to tell "no tags" apart
+  // from "explicitly an empty array". Collapsing a decoded empty array back
+  // to `null` here (fixture-review finding 9, round 2) is what lets
+  // `toQuestionDocument`'s existing `tags_json ?? undefined` restore the
+  // absence, the same shape `upsertQuestion`'s freshly-built response
+  // already returns on POST/PATCH — so a question reads the same way on a
+  // GET as it did on the write that just created it.
+  const decodedTags = row.tags_json == null ? null : db.jsonValue<string[]>(row.tags_json);
   const record: QuestionRecord = {
     ref_id: row.ref_id,
     group_ref: row.group_ref,
@@ -133,7 +142,7 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
     scoring_json: row.scoring_json == null ? null : db.jsonValue(row.scoring_json),
     points: Number(row.points),
     difficulty: row.difficulty,
-    tags_json: row.tags_json == null ? [] : db.jsonValue(row.tags_json),
+    tags_json: decodedTags != null && decodedTags.length === 0 ? null : decodedTags,
     explanation_md: row.explanation_md,
     extra_json: row.extra_json == null ? null : db.jsonValue(row.extra_json),
   };
