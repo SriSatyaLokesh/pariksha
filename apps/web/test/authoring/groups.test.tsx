@@ -68,6 +68,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       ...(patch.title !== undefined && patch.title !== "" && { title: patch.title }),
     }),
     deleteGroup: async () => undefined,
+    importBank: async () => ({ imported: 0, issues: [] }),
     ...overrides,
   };
 }

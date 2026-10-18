@@ -86,6 +86,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used");
     },
     deleteGroup: async () => undefined,
+    importBank: async () => ({ imported: 0, issues: [] }),
     ...overrides,
   };
 }
