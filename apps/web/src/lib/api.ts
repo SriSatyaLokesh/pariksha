@@ -9,8 +9,41 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type { Role } from "@pariksha/core";
+import type { Difficulty, Question, QuestionType, Role } from "@pariksha/core";
 export type { Role };
+
+// Phase 4 Task 2: banks and questions. Mirrors
+// `packages/db/src/repo/banks.ts`'s `BankRow`/`QuestionRow` — this is the
+// JSON those rows serialise to, not a separate shape of its own.
+export interface Bank {
+  id: string;
+  name: string;
+  description: string | null;
+  license: string | null;
+  tags: string[];
+  questionCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface QuestionSummary {
+  id: string;
+  bankId: string;
+  refId: string;
+  document: Question;
+  points: number;
+  usedInTests: number;
+  updatedAt: number;
+}
+
+export interface QuestionListFilter {
+  type?: QuestionType;
+  tag?: string;
+  difficulty?: Difficulty;
+  unused?: boolean;
+  search?: string;
+  cursor?: string;
+}
 
 /** `apps/api/src/auth/identity.ts`, per the Phase 3 plan's Task 3. */
 export interface IdentityProvider {
@@ -76,6 +109,24 @@ export interface ApiClient {
   completeSetup(input: { workspaceName: string }): Promise<Workspace>;
   requestMagicLink(email: string): Promise<void>;
   signOut(): Promise<void>;
+
+  listBanks(workspaceId: string): Promise<Bank[]>;
+  createBank(workspaceId: string, input: { name: string }): Promise<Bank>;
+  getBank(workspaceId: string, bankId: string): Promise<Bank>;
+  updateBank(
+    workspaceId: string,
+    bankId: string,
+    patch: { name?: string; description?: string; license?: string; tags?: string[] },
+  ): Promise<Bank>;
+  deleteBank(workspaceId: string, bankId: string): Promise<void>;
+  listQuestions(
+    workspaceId: string,
+    bankId: string,
+    filter?: QuestionListFilter,
+  ): Promise<{ questions: QuestionSummary[]; cursor?: string }>;
+  deleteQuestion(workspaceId: string, bankId: string, questionId: string): Promise<void>;
+  /** Tags already used anywhere in the workspace (UX-03's autocomplete). */
+  listTags(workspaceId: string): Promise<string[]>;
 }
 
 const API = "/api/v1";
@@ -155,12 +206,24 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await request(path, init)).json() as Promise<T>;
 }
 
-function post(body: unknown): RequestInit {
+function withBody(method: string, body: unknown): RequestInit {
   return {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   };
+}
+
+const post = (body: unknown): RequestInit => withBody("POST", body);
+const patchBody = (body: unknown): RequestInit => withBody("PATCH", body);
+
+function query(params: Record<string, string | boolean | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export function createApiClient(): ApiClient {
@@ -205,5 +268,42 @@ export function createApiClient(): ApiClient {
     async signOut() {
       await request("/auth/signout", post({}));
     },
+
+    listBanks: async (workspaceId) =>
+      (await json<{ banks: Bank[] }>(`/workspaces/${workspaceId}/banks`)).banks,
+
+    createBank: (workspaceId, input) =>
+      json<Bank>(`/workspaces/${workspaceId}/banks`, post(input)),
+
+    getBank: (workspaceId, bankId) => json<Bank>(`/workspaces/${workspaceId}/banks/${bankId}`),
+
+    updateBank: (workspaceId, bankId, patch) =>
+      json<Bank>(`/workspaces/${workspaceId}/banks/${bankId}`, patchBody(patch)),
+
+    async deleteBank(workspaceId, bankId) {
+      await request(`/workspaces/${workspaceId}/banks/${bankId}`, { method: "DELETE" });
+    },
+
+    async listQuestions(workspaceId, bankId, filter = {}) {
+      const qs = query({
+        type: filter.type,
+        tag: filter.tag,
+        difficulty: filter.difficulty,
+        unused: filter.unused,
+        search: filter.search,
+        cursor: filter.cursor,
+      });
+      return json<{ questions: QuestionSummary[]; cursor?: string }>(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions${qs}`,
+      );
+    },
+
+    async deleteQuestion(workspaceId, bankId, questionId) {
+      await request(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`, {
+        method: "DELETE",
+      });
+    },
+
+    listTags: async (workspaceId) => (await json<{ tags: string[] }>(`/workspaces/${workspaceId}/tags`)).tags,
   };
 }

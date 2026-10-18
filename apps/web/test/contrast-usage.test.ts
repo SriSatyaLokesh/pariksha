@@ -328,6 +328,19 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".prompt-editor__source": "canvas",
   ".preview__heading": "canvas",
   ".preview__toggle": "canvas",
+
+  // ---- authoring.css: the bank list and bank browser (P4.2) --------------
+  // The list and the browser are both the page's own cream, same as the
+  // dashboard above — `.bank-list__item` and `.bank-browser__tag-chip` are
+  // the only two elements here that fill themselves with canvas (the same
+  // "card on the page" pattern CardHairline uses), so everything else reads
+  // on cream.
+  ".bank-list__item": "canvas",
+  ".bank-list__count": "canvas",
+  ".bank-browser__group-label": "cream",
+  ".bank-browser__tag-chip": "canvas",
+  ".bank-browser__notice": "cream",
+  ".bank-browser__empty": "cream",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
