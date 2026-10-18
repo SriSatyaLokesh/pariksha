@@ -7,10 +7,10 @@
 // the screens take as a prop and the tests satisfy with a typed object
 // literal.
 
-// ponytail: local until @pariksha/core exports it (#25); swap to the import
-// on merge.
-export type Role =
-  "owner" | "admin" | "author" | "proctor" | "reviewer" | "viewer";
+// The matrix these roles index lives in @pariksha/core (#25); the type is
+// re-exported here so the screens have one import for the whole API surface.
+import type { Role } from "@pariksha/core";
+export type { Role };
 
 /** `apps/api/src/auth/identity.ts`, per the Phase 3 plan's Task 3. */
 export interface IdentityProvider {

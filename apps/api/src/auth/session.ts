@@ -20,10 +20,8 @@ import {
   readSessionActor,
   touchSession,
 } from "@pariksha/db";
+import type { Role } from "@pariksha/core";
 import type { AppDeps } from "../app.js";
-
-// ponytail: local until @pariksha/core exports it (#25); swap to the import on merge.
-type Role = "owner" | "admin" | "author" | "proctor" | "reviewer" | "viewer";
 
 export const SESSION_COOKIE = "pk_session";
 export const SESSION_IDLE_MS = 12 * 60 * 60 * 1000;
