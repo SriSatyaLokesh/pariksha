@@ -1,4 +1,13 @@
-name: Deploy web
+# The only deploy workflow, and it publishes one Worker: the static site and
+# the API ship together, because they are one Worker (see the header of
+# deploy/cloudflare/wrangler.toml for why they have to be).
+#
+# Automatic on merge, deliberately — `wrangler deploy` publishes code and
+# nothing else. Schema changes are not in this path: `setup.mjs` applies
+# migrations and a human runs it, so a merge can never rewrite a production
+# table. Making the whole deploy manual to protect the database would make
+# the half that has no database manual too, for no gain.
+name: Deploy
 
 on:
   push:
@@ -10,12 +19,15 @@ permissions:
 
 jobs:
   deploy:
-    name: Build, test and deploy to Cloudflare
+    name: Build, test and deploy the site and API to Cloudflare
     runs-on: ubuntu-latest
     # Opt-in: set the repository variable DEPLOY_WEB to "true" (Settings >
     # Secrets and variables > Actions > Variables) once the Cloudflare
     # credentials are in place. Until then this job is skipped, so merging to
     # main never produces a failing run for a deployment nobody asked for.
+    # The variable keeps its name now that the Worker also serves the API:
+    # renaming it would silently disable the deploy on an instance that had
+    # already set it.
     if: github.repository == 'SriSatyaLokesh/pariksha' && vars.DEPLOY_WEB == 'true'
     # The same Postgres the CI workflow runs. `packages/db`'s migration suite
     # refuses to skip its Postgres cases when CI is set — a deliberate guard,
@@ -78,8 +90,10 @@ jobs:
             exit 1
           fi
 
+      # Publishes `apps/web/dist` as assets and `apps/api/src/index.ts` as the
+      # script, in one upload. No migration step: see the header.
       - name: Deploy
-        run: pnpm --filter @pariksha/web exec wrangler deploy
+        run: pnpm deploy:cf
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

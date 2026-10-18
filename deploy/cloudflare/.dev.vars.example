@@ -1,0 +1,30 @@
+# Copy to `.dev.vars` (gitignored) for `wrangler dev`. Placeholders only —
+# never put a real value in this file. In production these are secrets, set
+# with `wrangler secret put NAME -c deploy/cloudflare/wrangler.toml`, not
+# `[vars]` in wrangler.toml, which is plaintext in the dashboard.
+#
+# DB and FILES are bindings, not variables: Cloudflare injects them, and
+# `wrangler dev` creates local stand-ins. Nothing to set here.
+
+# Required. Signs the session cookie. Any change signs every open session
+# out, which is also how you revoke them all.
+#   openssl rand -base64 32
+SESSION_SECRET=replace-me
+
+# Optional. Origin the magic-link email points at. Defaults to the request's
+# own origin; set it when the Worker sits behind a custom domain.
+# APP_URL=https://pariksha.example
+
+# Optional, all three or none — an endpoint with no token is a sender that
+# fails on the first real sign-in rather than at boot.
+# EMAIL_ENDPOINT=https://api.example/v1/send
+# EMAIL_TOKEN=replace-me
+# EMAIL_FROM=Pariksha <no-reply@pariksha.example>
+
+# Optional. Keeps the console sender past a production deploy — a deliberate
+# choice for a trial instance, never a default.
+# EMAIL_CONSOLE=true
+
+# Optional. A JSON array of OIDC providers, exactly as `env.ts` parses it.
+# `redirectUri` must match the provider's console byte for byte.
+# OIDC_PROVIDERS=[{"id":"google","label":"Google","issuer":"https://accounts.google.com","clientId":"replace-me","clientSecret":"replace-me","redirectUri":"https://pariksha.example/api/v1/auth/google/callback"}]

@@ -28,7 +28,7 @@ export default tseslint.config(
     // pulled from the `globals` package: two names do not need a dependency.
     files: ["**/*.mjs"],
     languageOptions: {
-      globals: { process: "readonly", console: "readonly" },
+      globals: { process: "readonly", console: "readonly", URL: "readonly" },
     },
   },
   {
