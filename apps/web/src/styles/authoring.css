@@ -390,6 +390,42 @@
   text-transform: uppercase;
 }
 
+/* ---- Written answer block (P4.4) ------------------------------------------
+   No colour declared anywhere in this block, same reasoning as the
+   structured block above: every piece of text inherits the page's own
+   ink-on-cream/canvas from base.css, so none of these needs a SURFACE entry
+   in contrast-usage.test.ts. */
+
+.written-blanks,
+.written-numeric,
+.written-manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.written-blank,
+.written-rubric {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.written-rubric-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+}
+
+.written-rubric-row + .written-rubric-row {
+  border-block-start: 1px solid var(--color-hairline);
+}
+
 /* ---- Bank list (UX-02) -------------------------------------------------- */
 
 .bank-list {

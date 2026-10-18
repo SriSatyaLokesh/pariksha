@@ -7,12 +7,12 @@ import { ScoringRow } from "./ScoringRow";
 import { TypePicker, TYPE_LABELS } from "./TypePicker";
 import { Choice, isChoiceQuestion } from "./answer/Choice";
 import { StructuredAnswer, isStructuredQuestion } from "./answer/Structured";
+import { WrittenAnswer, fillBlankIssues, freshBlank } from "./answer/Written";
 
 // UX-07's five-block skeleton, built once for every one of the twelve
 // types: prompt -> answer -> key and scoring -> meta -> preview, with only
-// the answer block swapped. Tasks 4 and 5 add the structured and written
-// answer blocks to the placeholder below; this task implements the choice
-// family (`answer/Choice.tsx`).
+// the answer block swapped — choice (`answer/Choice.tsx`), structured
+// (`answer/Structured.tsx`) and written (`answer/Written.tsx`).
 
 /** The fields UX-06's type change carries forward — every field
  * `QuestionBase` declares (`packages/core/src/types.ts`), none of them
@@ -241,6 +241,10 @@ export function QuestionEditor({
   }
 
   const lost = pendingType !== null ? lostFields(question) : [];
+  // UX-21: an unsafe regex blank is caught inline, before Save is even
+  // reachable — not only at import, where the author would learn about it
+  // long after typing it.
+  const blockingIssues = question.type === "fill_blank" ? fillBlankIssues(question) : [];
 
   return (
     <div className="question-editor">
@@ -249,6 +253,13 @@ export function QuestionEditor({
         <PromptEditor
           value={question.prompt}
           onChange={(prompt) => setQuestion((prev) => ({ ...prev, prompt }))}
+          onPlaceholdersChange={(ids) =>
+            setQuestion((prev) => {
+              if (prev.type !== "fill_blank") return prev;
+              const existing = new Map(prev.blanks.map((blank) => [blank.id, blank]));
+              return { ...prev, blanks: ids.map((id) => existing.get(id) ?? freshBlank(id)) };
+            })
+          }
           label="Prompt"
         />
       </section>
@@ -271,7 +282,7 @@ export function QuestionEditor({
         ) : isStructuredQuestion(question) ? (
           <StructuredAnswer key={question.type} question={question} onChange={setQuestion} />
         ) : (
-          <p className="field-help">This question type&rsquo;s answer editor isn&rsquo;t available yet.</p>
+          <WrittenAnswer key={question.type} question={question} onChange={setQuestion} />
         )}
       </section>
 
@@ -349,7 +360,12 @@ export function QuestionEditor({
           {notice}
         </p>
       )}
-      <button type="button" className="button-primary button-primary--surface" disabled={saving} onClick={() => void onSave()}>
+      <button
+        type="button"
+        className="button-primary button-primary--surface"
+        disabled={saving || blockingIssues.length > 0}
+        onClick={() => void onSave()}
+      >
         Save
       </button>
 
