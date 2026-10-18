@@ -27,6 +27,17 @@ export interface AppDeps {
 
 export type AppBindings = { Variables: RequestIdVariables };
 
+/**
+ * The most subrequests each route may spend on one invocation, against the
+ * platform's 50 (ADR 0002). It lives here, next to the mounting, because
+ * `budget.test.ts` requires the two to agree: mounting a route without
+ * declaring its budget fails the suite, which is how the guard reaches
+ * phases nobody has written yet.
+ */
+export const ROUTE_BUDGETS: Record<string, number> = {
+  "/api/v1/health": 1,
+};
+
 export function createApp(deps: AppDeps): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
 
