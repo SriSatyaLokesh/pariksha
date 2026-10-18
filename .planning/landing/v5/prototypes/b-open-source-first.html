@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype B — open-source-first — Pariksha landing content</title>
+<link rel="stylesheet" href="proto.css">
+</head>
+<body>
+
+<div class="wrap">
+<nav class="top">
+  <p class="brand">Pariksha <span>పరీక్ష · परीक्षा</span></p>
+  <a href="#thesis">Why</a>
+  <a href="#features">Features</a>
+  <a href="#status">Status</a>
+  <a href="#docs">Docs</a>
+  <a href="#repo">GitHub</a>
+  <a class="btn" href="#start">Start your question bank</a>
+</nav>
+</div>
+
+<main>
+
+<!-- ───────────────────────── BAND 1 ───────────────────────── -->
+<section class="band wrap">
+  <p class="rail"><b>Band 1 · Hero</b> — ownership as the whole premise (the Nextcloud / Jitsi model) · 55 words</p>
+
+  <p class="chip">v0.1 in progress · formats and scoring engine shipped · Apache-2.0</p>
+
+  <h1>Exams you own — the code, the data, and the bill.</h1>
+
+  <p class="lead">A free, open-source exam platform that runs in your own account. Twelve question
+  types, a different paper for every candidate, proctoring that records nothing, and a results CSV.
+  No vendor, no per-candidate fee, no data leaving your infrastructure.</p>
+
+  <div class="actions">
+    <a class="btn" href="#start">Start your question bank</a>
+    <a class="btn btn-ghost" href="#example">See a real exam, end to end</a>
+    <a class="btn-text" href="#repo">Read the code</a>
+  </div>
+  <p class="small">No account. No install. One <code>git clone</code> and a schema.</p>
+</section>
+
+<!-- ───────────────────────── BAND 2 ───────────────────────── -->
+<section class="wrap">
+  <p class="rail"><b>Band 2 · Signal strip</b> — the open-source credibility position, directly under the hero</p>
+  <div class="signals">
+    <span>Apache-2.0 + patent grant</span><span>CI green</span>
+    <span>97% coverage on the scoring engine</span><span>12 question types</span>
+    <span>5 scoring modes</span><span>no telemetry, no third-party scripts</span>
+  </div>
+</section>
+
+<!-- ───────────────────────── BAND 3 ───────────────────────── -->
+<section class="band wrap" id="thesis">
+  <p class="rail"><b>Band 3 · The thesis</b> — the sequencing decision, argued rather than disclosed · 150 words</p>
+  <h2>The format came before the software, on purpose.</h2>
+  <p>Most exam platforms hold your questions in a database you cannot read, behind an export button
+  someone else designed. Pariksha published the file format first — <code>pariksha/question@1</code>
+  and <code>pariksha/test@1</code>, with JSON Schemas, a worked example and a validator — and is
+  building the software against it.</p>
+  <p>That ordering has one consequence worth the whole page: <strong>the questions you write today
+  outlive any tool, including this one.</strong> They are plain documented JSON under CC BY 4.0. You
+  can diff them in git, review a question set in a pull request, generate them from a spreadsheet,
+  or hand the bank to someone who has never heard of Pariksha.</p>
+  <p>It also means there is something real to use before the application exists. The format is
+  stable now. The validator runs now.</p>
+
+<pre>git clone https://github.com/SriSatyaLokesh/pariksha.git
+cd pariksha
+
+npx -y -p ajv-cli@5.0.0 -p ajv-formats@2.1.1 ajv validate --spec=draft2020 \
+  --strict=false -c ajv-formats -s schemas/bank-1.json \
+  -r schemas/question-1.json -d "examples/*/questions.json"</pre>
+  <p class="caption">Write your own questions, validate them, and they will import into Pariksha on day one.</p>
+</section>
+
+<!-- ───────────────────────── BAND 4 ───────────────────────── -->
+<section class="band wrap" id="features">
+  <p class="rail"><b>Band 4 · What you get</b> — tagged per feature, never per page · 220 words</p>
+  <h2>Twelve question types, five scoring modes, one open file.</h2>
+  <div class="cards">
+    <div class="card"><h3>Question types <span class="tag tag-live">live</span></h3>
+      <p>Single, multiple, select exactly K, true/false, assertion–reason, matching, multi-matching,
+      ordering, fill in the blank, numeric with tolerance, short and long answer.</p></div>
+    <div class="card"><h3>Scoring <span class="tag tag-live">live</span></h3>
+      <p>All-or-nothing, partial credit, negative marking, ordering by position, rubrics. Applicable
+      modes are enforced per type, so an invalid combination cannot be entered.</p></div>
+    <div class="card"><h3>Selection <span class="tag tag-live">live</span></h3>
+      <p>Pool draws filtered by tag and difficulty, fixed sets A/B/C assigned round-robin, seeded
+      shuffling that survives a refresh, pinned options that never move.</p></div>
+    <div class="card"><h3>Validation <span class="tag tag-live">live</span></h3>
+      <p>Cross-field import rules: keys must exist among the options, every blank needs a row, sets
+      must balance on points. One bad question imports nothing.</p></div>
+    <div class="card"><h3>Authoring and the runner <span class="tag tag-next">v0.1</span></h3>
+      <p>The bank browser, the question editor, the test builder, the candidate runtime and three
+      proctoring profiles.</p></div>
+    <div class="card"><h3>API and results <span class="tag tag-next">v0.1</span></h3>
+      <p>REST under <code>/api/v1</code>, signed webhooks, the live monitor, the grading queue, item
+      analysis and the results CSV.</p></div>
+  </div>
+  <p class="small" style="margin-top:14px">Everything marked <span class="tag tag-live">live</span>
+  is implemented and unit-tested in <code>packages/core</code>, gated in CI. Everything marked
+  <span class="tag tag-next">v0.1</span> is specified in the PRD and the interaction design, and not
+  yet built.</p>
+</section>
+
+<!-- ───────────────────────── BAND 5 ───────────────────────── -->
+<section class="band wrap">
+  <p class="rail"><b>Band 5 · Architecture</b> — the evaluator's band · 140 words</p>
+  <h2>One codebase, two deployment targets, three adapter seams.</h2>
+  <p>The API and all scoring logic are plain TypeScript written against three interfaces — database,
+  object storage, identity — so the same code runs on Cloudflare Workers or in a Docker container.
+  Answer keys, timing and permissions are enforced only on the server.</p>
+<pre>Candidate browser ─┐
+                   ├─→ Pariksha API ─→ D1 · SQLite · Postgres
+Organiser browser ─┘                └─→ R2 · S3 · disk
+                                     └─→ OIDC · email · captcha</pre>
+  <p class="small">Cloudflare free plan today; Docker with Postgres, MinIO and Caddy is Phase 11.
+  Moving between them is configuration, not a rewrite — which is also the mitigation for the one
+  named risk against the zero-cost estimate: free-tier limits can change.</p>
+</section>
+
+<!-- ───────────────────────── BAND 6 ───────────────────────── -->
+<section class="band wrap">
+  <p class="rail"><b>Band 6 · Integrity</b> — the position no proctoring vendor can copy · 170 words</p>
+  <h2>Integrity without surveillance: no video, no audio, no verdicts.</h2>
+  <p>Strict proctoring takes a 320×240 snapshot about every sixty seconds, counts faces on the
+  device itself, and stores no biometric template. Nothing is streamed and nothing is recorded.
+  Snapshots live in your own bucket behind links that expire in ten minutes.</p>
+  <p>Pariksha marks an attempt <strong>clean</strong>, <strong>review</strong> or
+  <strong>high risk</strong> — and stops. Browser checks deter and record; they cannot prove. A
+  second phone is invisible to every one of them, and the documentation says so. That is exactly why
+  no machine here is allowed to reach a verdict.</p>
+</section>
+
+<!-- ───────────────────────── BAND 7 ───────────────────────── -->
+<section class="band wrap" id="cost">
+  <p class="rail"><b>Band 7 · Cost and data</b> — merged for a developer audience · 160 words</p>
+  <h2>Five hundred candidates in an hour, for nothing — in your own account.</h2>
+  <div class="tablewrap">
+  <table>
+    <tr><th>Resource</th><th>Free limit</th><th>One test of 500</th></tr>
+    <tr><td>Worker requests</td><td>100,000 / day</td><td class="us">about 55,000</td></tr>
+    <tr><td>Database rows written</td><td>100,000 / day</td><td class="us">about 55,000</td></tr>
+    <tr><td>Object storage</td><td>10 GB / month</td><td class="us">about 0.75 GB</td></tr>
+  </table>
+  </div>
+  <p class="small">An estimate with published arithmetic. The load test that would prove it
+  (<code>AC-29</code>) is a Phase 12 gate and has not been run.</p>
+  <p>Candidate data lives in your own account. No telemetry, no third-party scripts, no trackers —
+  including on this page, which serves its own fonts under a <code>default-src 'self'</code> policy.
+  Retention, consent text and the data-processing template are yours to set.</p>
+</section>
+
+<!-- ───────────────────────── BAND 8 ───────────────────────── -->
+<section class="band wrap" id="status">
+  <p class="rail"><b>Band 8 · Status ledger + today-you-can</b> — honesty, once · 120 words</p>
+  <h2>What is live today, and what lands with v0.1.</h2>
+  <div class="split">
+    <div class="tablewrap">
+    <table>
+      <tr><th>Live and tested</th><th>Specified — v0.1</th></tr>
+      <tr><td>Formats, schemas, validator</td><td>Authoring UI and test builder</td></tr>
+      <tr><td>12 types graded, 5 scoring modes</td><td>Candidate runtime</td></tr>
+      <tr><td>Pools, sets, seeded shuffling</td><td>Proctoring</td></tr>
+      <tr><td>Import validation</td><td>Results, monitor, grading</td></tr>
+      <tr><td>17-question worked example</td><td>API, webhooks, auth</td></tr>
+      <tr><td>This website</td><td>—</td></tr>
+    </table>
+    </div>
+    <div class="box" id="start">
+      <h3 style="margin-top:0">What you can do today</h3>
+      <p style="font-size:15px">Write a bank against <code>pariksha/question@1</code>. Validate it
+      with one <code>npx ajv</code> run. Read the worked example end to end. Open an issue arguing
+      with the PRD.</p>
+      <p class="small" style="margin-bottom:0"><strong>What you cannot do yet:</strong> run a test.
+      The application lands with v0.1. Twelve public phases; one complete, a second part done.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ───────────────────────── BAND 9 ───────────────────────── -->
+<section class="band wrap" id="repo">
+  <p class="rail"><b>Band 9 · Contribute</b> — the primary conversion for this variant · 140 words</p>
+  <h2>The most useful contribution right now needs no code.</h2>
+  <p>Add a question set in your own subject under <code>examples/</code>. Translate interface
+  strings. Read the PRD and argue with it in an issue. Write a real test in
+  <code>pariksha/test@1</code> and report what you could not express.</p>
+  <p>If you do write TypeScript: the scoring core is pure functions with no I/O and 97% coverage,
+  every architectural choice has a dated decision record, and the build order is twelve public
+  phases with a stated gate each.</p>
+  <div class="actions">
+    <a class="btn" href="#">Good first issues</a>
+    <a class="btn btn-ghost" href="#">Read the PRD</a>
+    <a class="btn-text" href="#">Architecture decisions</a>
+    <a class="btn-text" href="#">Roadmap</a>
+  </div>
+</section>
+
+<!-- ───────────────────────── BAND 10 ───────────────────────── -->
+<section class="band wrap" id="faq">
+  <p class="rail"><b>Band 10 · FAQ</b> — existing nine, verbatim, plus the five additions</p>
+  <h2>Questions and answers</h2>
+  <p class="small">Unchanged from the current page, plus: who it is for · what it costs per candidate
+  · whether a developer is needed · what happens if the project stops · accessibility.</p>
+</section>
+
+<!-- ───────────────────────── BAND 11 ───────────────────────── -->
+<section class="band wrap" id="example">
+  <p class="rail"><b>Band 11 · Closing</b> — same verb as the hero · 40 words</p>
+  <h2>Start your question bank today. It will import on day one.</h2>
+  <div class="actions">
+    <a class="btn" href="#start">Start your question bank</a>
+    <a class="btn btn-ghost" href="#repo">Watch the repo for v0.1</a>
+  </div>
+  <p class="small">Pariksha is the wrong tool if you need to run a test this week, need an
+  invigilated or legally contestable exam, need candidates on phones, need live proctoring, a
+  lockdown browser or a code runner, or want somebody else to host it.
+  <a href="#">The full filter →</a></p>
+</section>
+
+</main>
+
+<footer class="wrap" id="docs">
+  <p><strong>Documentation</strong> — PRD · Question format · Test format · Schemas · Design system
+  · Architecture decisions · Roadmap<br>
+  <strong>Project</strong> — GitHub · Contributing · Code of conduct · Security policy</p>
+  <p class="small">Prototype B — open-source-first. Shorter than A, developer-weighted, the filter
+  compressed into the closing band. Content and structure only.</p>
+</footer>
+
+</body>
+</html>
