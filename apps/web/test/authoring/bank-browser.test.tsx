@@ -68,6 +68,15 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteBank: async () => undefined,
     listQuestions: async () => ({ questions: [QUESTION] }),
     deleteQuestion: async () => undefined,
+    saveQuestion: async (_workspaceId, bankId, doc) => ({
+      id: "qst_1",
+      bankId,
+      refId: doc.id,
+      document: doc,
+      points: 1,
+      usedInTests: 0,
+      updatedAt: 0,
+    }),
     listTags: async () => ["sdlc/agile", "exam/midterm"],
     ...overrides,
   };

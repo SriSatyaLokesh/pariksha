@@ -185,6 +185,167 @@
   margin-block: 0 var(--space-sm);
 }
 
+/* ---- Reorderable list (P4.2 Review Focus 5) ---------------------------- */
+
+/* No colour declared anywhere in this block: every piece of text here
+   inherits the page's own ink-on-cream/canvas from base.css's `body` rule,
+   already checked by contrast-usage.test.ts, so none of these selectors
+   needs its own SURFACE entry. */
+
+.reorderable-list {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.reorderable-list__legend {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* Visually present (not visually-hidden): the move controls already carry
+   the same words as a tooltip would, so the live region doubles as a
+   lightweight on-screen status line rather than a screen-reader-only one. */
+.reorderable-list__announcement {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.reorderable-list__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorderable-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+}
+
+.reorderable-list__controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.reorderable-list__move {
+  min-width: 2.25rem;
+}
+
+.reorderable-list__position {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.reorderable-list__position input {
+  width: 4rem;
+}
+
+.reorderable-list__content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Question editor skeleton (UX-07) ----------------------------------- */
+
+.question-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.question-editor__answer-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.question-editor__dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background-color: var(--color-canvas);
+}
+
+/* ---- Type picker (UX-06) ------------------------------------------------- */
+
+.type-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.type-picker__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.type-picker__group-label {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* ---- Scoring row (P4.2) -------------------------------------------------- */
+
+.scoring-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+
+/* ---- Choice answer block (P4.2) ------------------------------------------ */
+
+.choice-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.choice-option__flag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.choice-true-false,
+.choice-assertion-reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
 /* ---- Bank list (UX-02) -------------------------------------------------- */
 
 .bank-list {

@@ -23,7 +23,7 @@ function Options({ initial }: { initial: string[] }) {
         setItems((prev) => {
           const next = [...prev];
           const [moved] = next.splice(from, 1);
-          next.splice(to, 0, moved);
+          next.splice(to, 0, moved!);
           return next;
         });
       }}
@@ -93,7 +93,7 @@ describe("ReorderableList (Review Focus 5)", () => {
             setItems((prev) => {
               const next = [...prev];
               const [moved] = next.splice(from, 1);
-              next.splice(to, 0, moved);
+              next.splice(to, 0, moved!);
               return next;
             });
           }}

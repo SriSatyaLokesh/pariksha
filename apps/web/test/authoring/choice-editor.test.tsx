@@ -11,7 +11,7 @@ import type {
 } from "@pariksha/core";
 import { APPLICABLE_MODES } from "@pariksha/core";
 
-import type { ApiClient, QuestionSummary } from "../../src/lib/api";
+import type { ApiClient } from "../../src/lib/api";
 import { QuestionEditor } from "../../src/components/authoring/QuestionEditor";
 import { ScoringRow } from "../../src/components/authoring/ScoringRow";
 
@@ -217,9 +217,17 @@ describe("QuestionEditor (UX-07)", () => {
     expect(dialog).not.toHaveTextContent(/prompt|tags|difficulty|explanation/i);
   });
 
-  it("Review Focus 2: a type changed away and back carries no stale field", async () => {
-    const saved = await changeType(await changeType(SELECT_K_FIXTURE, "single"), "select_k");
+  it("Review Focus 2: a type changed away carries no stale field (select_k -> single keeps no k)", async () => {
+    // The brief's own example of the bug this guards: a merge-based save
+    // would let a select_k question's `k` survive onto a `single` document
+    // that has no such field. A select_k document always needs its own `k`
+    // (it's required by the type, re-added fresh by `defaultExtra` on any
+    // change back), so the round trip this item is really about is checked
+    // the other way: `single` must come out clean, not that `select_k`
+    // comes back without a field it structurally cannot do without.
+    const saved = await changeType(SELECT_K_FIXTURE, "single");
     expect(saved).not.toHaveProperty("k");
+    expect(saved).not.toHaveProperty("options", SELECT_K_FIXTURE.options);
   });
 
   it("the editor has no axe violations and every control has a label", async () => {

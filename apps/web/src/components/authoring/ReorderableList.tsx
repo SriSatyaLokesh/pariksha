@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type JSX } from "react";
 
 // Buttons-first reordering (WCAG 2.1.1) — no drag, and no drag-and-drop
 // dependency; that stays a deferred enhancement. `onReorder(from, to)` is
@@ -97,7 +97,7 @@ export function ReorderableList<T>({
               <div className="reorderable-list__controls">
                 <button
                   type="button"
-                  className="reorderable-list__move"
+                  className="prompt-editor__tool reorderable-list__move"
                   aria-label={`Move ${label} up`}
                   disabled={pinned || index === 0}
                   onClick={() => moveBy(index, "up")}
@@ -111,7 +111,7 @@ export function ReorderableList<T>({
                 </button>
                 <button
                   type="button"
-                  className="reorderable-list__move"
+                  className="prompt-editor__tool reorderable-list__move"
                   aria-label={`Move ${label} down`}
                   disabled={pinned || index === items.length - 1}
                   onClick={() => moveBy(index, "down")}

@@ -62,6 +62,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteBank: async () => undefined,
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
+    saveQuestion: async () => {
+      throw new Error("not used by this test file");
+    },
     listTags: async () => [],
     ...overrides,
   };
