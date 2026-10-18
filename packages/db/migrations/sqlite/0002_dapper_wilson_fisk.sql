@@ -1,4 +1,7 @@
-PRAGMA foreign_keys=OFF;--> statement-breakpoint
+-- `PRAGMA foreign_keys` was removed from drizzle-kit's output: D1 runs every
+-- statement in an implicit transaction and cannot honour it during a
+-- migration. The schema declares no foreign keys, so the table rebuild below
+-- needs no deferral. See `no-d1-hostile-sql.test.ts`.
 CREATE TABLE `__new_question` (
 	`id` text PRIMARY KEY NOT NULL,
 	`workspace_id` text NOT NULL,
@@ -20,7 +23,6 @@ CREATE TABLE `__new_question` (
 INSERT INTO `__new_question`("id", "workspace_id", "bank_id", "type", "prompt_md", "media_json", "options_json", "key_json", "scoring_json", "points", "difficulty", "tags_json", "explanation_md", "version", "created_at") SELECT "id", "workspace_id", "bank_id", "type", "prompt_md", "media_json", "options_json", "key_json", "scoring_json", "points", "difficulty", "tags_json", "explanation_md", "version", "created_at" FROM `question`;--> statement-breakpoint
 DROP TABLE `question`;--> statement-breakpoint
 ALTER TABLE `__new_question` RENAME TO `question`;--> statement-breakpoint
-PRAGMA foreign_keys=ON;--> statement-breakpoint
 CREATE INDEX `question_workspace_idx` ON `question` (`workspace_id`);--> statement-breakpoint
 CREATE INDEX `question_bank_idx` ON `question` (`bank_id`);--> statement-breakpoint
 CREATE TABLE `__new_response` (
