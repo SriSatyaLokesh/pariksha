@@ -82,6 +82,15 @@ const groupPatch = z
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
 
+// Fix round 1, finding 8: the four group routes below each repeated
+// `getBank` + a 404 check inline — `questions.ts` already names this exact
+// pattern `bankOr404`.
+async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
+  const bank = await getBank(deps.db, workspaceId, bankId);
+  if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+  return bank;
+}
+
 export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
@@ -181,8 +190,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
   routes.get("/:id/banks/:bankId/groups", requires("banks.edit"), async (c) => {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
-    const bank = await getBank(deps.db, workspaceId, bankId);
-    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+    await bankOr404(deps, workspaceId, bankId);
 
     return c.json({ groups: await listGroups(deps.db, workspaceId, bankId) });
   });
@@ -191,8 +199,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     const actor = actorOr401(c);
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
-    const bank = await getBank(deps.db, workspaceId, bankId);
-    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+    await bankOr404(deps, workspaceId, bankId);
 
     const input = parse(newGroup, await json(c.req.raw));
     const groups = await listGroups(deps.db, workspaceId, bankId);
@@ -224,8 +231,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
     const groupId = c.req.param("groupId");
-    const bank = await getBank(deps.db, workspaceId, bankId);
-    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+    await bankOr404(deps, workspaceId, bankId);
 
     const groups = await listGroups(deps.db, workspaceId, bankId);
     const existing = groups.find((g) => g.id === groupId);
@@ -259,14 +265,16 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
     const groupId = c.req.param("groupId");
-    const bank = await getBank(deps.db, workspaceId, bankId);
-    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+    await bankOr404(deps, workspaceId, bankId);
 
-    const groups = await listGroups(deps.db, workspaceId, bankId);
-    if (!groups.some((g) => g.id === groupId)) throw new ApiError(404, "not_found", "No such resource.");
-
+    // Fix round 1, finding 8: this used to re-fetch `listGroups` only to
+    // check the group exists before calling `deleteGroup`, which now
+    // performs exactly that check itself (the self-review fix that made
+    // `deleteGroup` answer `deleted: false, blockedBy: []` for an unknown
+    // group, rather than falsely reporting it deleted) — a 404 and a 409
+    // read apart on `blockedBy`, not on a second query for the same fact.
     const result = await deleteGroup(deps.db, workspaceId, bankId, groupId);
-    if (!result.deleted) {
+    if (result.blockedBy.length > 0) {
       // Same shape as UX-05's question/bank refusals, named differently: a
       // group is blocked by the questions that still reference it, not by a
       // published test.
@@ -277,6 +285,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
         { questions: result.blockedBy },
       );
     }
+    if (!result.deleted) throw new ApiError(404, "not_found", "No such resource.");
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,

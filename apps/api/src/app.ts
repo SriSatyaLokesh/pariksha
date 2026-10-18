@@ -110,7 +110,12 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // bank (`rawGroups.length === 0` short-circuits) and two once there is a
   // group to count, which is the common case after the first write.
   "/api/v1/workspaces/:id/banks/:bankId/groups": 8,
-  "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId": 9,
+  // Fix round 1, finding 8: PATCH costs 8 (bankOr404, listGroups at 2,
+  // upsertGroup at 2, appendAudit); DELETE dropped from 9 to 7 once it
+  // stopped re-fetching `listGroups` only to check existence — `deleteGroup`
+  // already answers that itself (finding 8's other half). The higher of the
+  // two, not the old padded number.
+  "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId": 8,
 };
 
 /**
