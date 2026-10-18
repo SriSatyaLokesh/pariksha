@@ -82,6 +82,25 @@ export async function listUserWorkspaces(
   return rows;
 }
 
+/**
+ * Whether this instance has been claimed yet — that is, whether any
+ * workspace exists at all. Unscoped for the reason ADR 0006 names: the
+ * question is about the instance, so there is no workspace to scope it to,
+ * and the answer is precisely what decides which workspaces (none) the
+ * caller may see.
+ *
+ * It is a question, never a stored flag. The first-run wizard recomputes it
+ * on every request, and `createFirstWorkspace` re-asks it inside the
+ * statement that inserts — so nothing a redeploy or a restore-from-backup
+ * could reset is able to re-open instance takeover.
+ */
+export async function anyWorkspaceExists(db: DbClient): Promise<boolean> {
+  const rows = await db.query<{ one: number }>(
+    "SELECT 1 AS one FROM workspace LIMIT 1",
+  );
+  return rows.length > 0;
+}
+
 export async function insertAuthToken(
   db: DbClient,
   input: {

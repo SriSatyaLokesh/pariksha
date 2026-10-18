@@ -20,6 +20,9 @@ const UNSCOPED_BY_DESIGN = [
   // A user's workspace list spans every workspace by definition, so there is
   // no single one to scope it to.
   "listUserWorkspaces",
+  // "has this instance been claimed?" is asked by the first-run wizard
+  // before any workspace exists, and the answer is that none does.
+  "anyWorkspaceExists",
   "insertAuthToken",
   "consumeAuthToken",
   "insertSession",

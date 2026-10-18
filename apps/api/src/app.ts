@@ -17,6 +17,7 @@ import { authenticate } from "./middleware/authenticate.js";
 import { health } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { me } from "./routes/me.js";
+import { setupRoutes } from "./routes/setup.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 
 export interface AppDeps {
@@ -67,6 +68,11 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/auth/signout": 12,
   "/api/v1/auth/signout-everywhere": 12,
   "/api/v1/me": 2,
+  // `status` is one statement and costs no authentication: it answers an
+  // unauthenticated sign-in screen. `complete` is authentication, the claim
+  // read, the claiming insert and the owner membership.
+  "/api/v1/setup/status": 1,
+  "/api/v1/setup/complete": 6,
   // Authentication, then one statement: the list, or the create plus the
   // owner membership.
   "/api/v1/workspaces": 6,
@@ -111,6 +117,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.get("/api/v1/health", health(deps));
   app.route("/api/v1/auth", authRoutes(deps));
   app.get("/api/v1/me", me());
+  // Not in ROUTE_ACTIONS: neither route names a workspace, so there is no
+  // membership to guard on. `complete` takes the actor from the session
+  // through `actorOr401`, the way `/me` and `/workspaces` do.
+  app.route("/api/v1/setup", setupRoutes(deps));
   app.route("/api/v1/workspaces", workspaceRoutes(deps));
 
   return app;

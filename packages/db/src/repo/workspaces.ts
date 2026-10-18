@@ -53,6 +53,34 @@ export const createWorkspace = scoped(
   },
 );
 
+/**
+ * The first-run wizard's claim on the instance (Phase 3, Review Focus 1).
+ *
+ * The condition that decides whether setup is still open — "no workspace
+ * exists" — is asked *by the inserting statement*, not by the caller before
+ * it. Two simultaneous completions therefore cannot both win: the database
+ * evaluates `NOT EXISTS` and writes the row as one statement, so the loser
+ * matches nothing, changes nothing and gets `false` back. A caller that read
+ * the condition first and inserted after would leave exactly the window in
+ * which both requests see an unclaimed instance and both mint an owner —
+ * which is an instance takeover, not a lost update.
+ */
+export const createFirstWorkspace = scoped(
+  "createFirstWorkspace",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { slug: string; name: string; now: number },
+  ): Promise<boolean> => {
+    const { changes } = await db.run(
+      "INSERT INTO workspace (id, slug, name, branding_json, settings_json, created_at) " +
+        "SELECT ?, ?, ?, NULL, NULL, ? WHERE NOT EXISTS (SELECT 1 FROM workspace)",
+      [workspaceId, input.slug, input.name, input.now],
+    );
+    return changes > 0;
+  },
+);
+
 export const getWorkspace = scoped(
   "getWorkspace",
   async (db: DbClient, workspaceId: string): Promise<WorkspaceRow | null> => {
