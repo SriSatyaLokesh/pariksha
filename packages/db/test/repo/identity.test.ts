@@ -13,6 +13,12 @@ import * as repo from "../../src/repo/index.js";
 
 const UNSCOPED_BY_DESIGN = [
   "createUser",
+  // Sign-in reads and the short-lived tokens that precede it: there is no
+  // workspace to scope them to, because which workspaces the actor may see
+  // is the answer these produce, not an argument they take (ADR 0006).
+  "findUserByEmail",
+  "insertAuthToken",
+  "consumeAuthToken",
   "insertSession",
   "readSessionActor",
   "touchSession",

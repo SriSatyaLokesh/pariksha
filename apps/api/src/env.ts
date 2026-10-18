@@ -9,9 +9,65 @@ import { z } from "zod";
 
 const secret = z.string().min(1);
 
-const workers = z.object({ SESSION_SECRET: secret });
+/**
+ * One OIDC provider as it is registered. `redirectUri` is per provider rather
+ * than derived from a base URL: it has to match what was entered in the
+ * provider's own console byte for byte, so configuring it anywhere else just
+ * moves where the mismatch is discovered.
+ */
+const oidcProvider = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  issuer: z.url(),
+  clientId: z.string().min(1),
+  clientSecret: secret,
+  redirectUri: z.url(),
+  scopes: z.array(z.string().min(1)).default(["openid", "email", "profile"]),
+});
 
-const node = z.object({
+export type OidcProvider = z.infer<typeof oidcProvider>;
+
+/** A transactional-email endpoint: one adapter, any provider, no SDK. */
+export interface EmailConfig {
+  endpoint: string;
+  token: string;
+  from: string;
+}
+
+const json = <T extends z.ZodType>(schema: T) =>
+  z
+    .string()
+    .transform((raw, ctx) => {
+      try {
+        return JSON.parse(raw) as unknown;
+      } catch {
+        ctx.addIssue({ code: "custom", message: "is not valid JSON" });
+        return z.NEVER;
+      }
+    })
+    .pipe(schema);
+
+/**
+ * Sign-in configuration, identical on both targets: neither OIDC nor the
+ * email sender is a binding the platform injects, so there is nothing for
+ * Workers and Node to disagree about. Every field is optional — an instance
+ * may ship magic link only, OIDC only, or (in development) neither.
+ */
+const auth = z.object({
+  OIDC_PROVIDERS: json(z.array(oidcProvider)).optional(),
+  EMAIL_ENDPOINT: z.url().optional(),
+  EMAIL_TOKEN: secret.optional(),
+  EMAIL_FROM: z.string().min(1).optional(),
+  /** Lets an operator keep the console sender past a production deploy. */
+  EMAIL_CONSOLE: z.literal("true").optional(),
+  NODE_ENV: z.string().min(1).optional(),
+  /** Origin the magic-link URL is built against. */
+  APP_URL: z.url().optional(),
+});
+
+const workers = auth.extend({ SESSION_SECRET: secret });
+
+const node = auth.extend({
   SESSION_SECRET: secret,
   /** A better-sqlite3 path, or a `postgres://` URL. */
   DATABASE_URL: z.string().min(1),
@@ -22,24 +78,42 @@ const node = z.object({
   PORT: z.coerce.number().int().positive().default(8787),
 });
 
+/**
+ * Unset sign-in settings stay `undefined` rather than becoming an empty
+ * array or a `false`: "no provider configured" and "a provider list that
+ * happens to be empty" are the same thing to every reader, and an absent key
+ * is the shape the Workers target's existing contract already asserts.
+ */
+interface AuthEnv {
+  oidcProviders?: OidcProvider[] | undefined;
+  email?: EmailConfig | undefined;
+  allowConsoleEmail?: true | undefined;
+  nodeEnv?: string | undefined;
+  appUrl?: string | undefined;
+}
+
 export type AppEnv =
-  | { target: "workers"; sessionSecret: string }
-  | {
+  | ({ target: "workers"; sessionSecret: string } & AuthEnv)
+  | ({
       target: "node";
       sessionSecret: string;
       databaseUrl: string;
       storageDir: string;
       publicUrl: string;
       port: number;
-    };
+    } & AuthEnv);
 
 export function parseEnv(
   raw: Record<string, unknown>,
   target: "workers" | "node",
 ): AppEnv {
   if (target === "workers") {
-    const { SESSION_SECRET } = take(workers, raw);
-    return { target, sessionSecret: SESSION_SECRET };
+    const parsed = take(workers, raw);
+    return {
+      target,
+      sessionSecret: parsed.SESSION_SECRET,
+      ...authEnv(parsed),
+    };
   }
 
   const parsed = take(node, raw);
@@ -50,6 +124,28 @@ export function parseEnv(
     storageDir: parsed.STORAGE_DIR,
     publicUrl: parsed.PUBLIC_URL,
     port: parsed.PORT,
+    ...authEnv(parsed),
+  };
+}
+
+function authEnv(parsed: z.infer<typeof auth>): AuthEnv {
+  // All three or none: an endpoint with no bearer token is a sender that
+  // fails on the first real sign-in rather than at boot.
+  const email =
+    parsed.EMAIL_ENDPOINT && parsed.EMAIL_TOKEN && parsed.EMAIL_FROM
+      ? {
+          endpoint: parsed.EMAIL_ENDPOINT,
+          token: parsed.EMAIL_TOKEN,
+          from: parsed.EMAIL_FROM,
+        }
+      : undefined;
+
+  return {
+    oidcProviders: parsed.OIDC_PROVIDERS,
+    email,
+    allowConsoleEmail: parsed.EMAIL_CONSOLE === "true" ? true : undefined,
+    nodeEnv: parsed.NODE_ENV,
+    appUrl: parsed.APP_URL,
   };
 }
 

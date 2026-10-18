@@ -65,6 +65,10 @@ export const sqliteMigrations: Migration[] = [
     "CREATE TABLE `workspace` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`slug` text NOT NULL,\n\t`name` text NOT NULL,\n\t`branding_json` text,\n\t`settings_json` text,\n\t`created_at` integer NOT NULL\n);",
     "CREATE UNIQUE INDEX `workspace_slug_uq` ON `workspace` (`slug`);",
   ] },
+  { name: "0001_last_vengeance.sql", statements: [
+    "CREATE TABLE `auth_token` (\n\t`token_hash` text PRIMARY KEY NOT NULL,\n\t`kind` text NOT NULL,\n\t`payload_json` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer\n);",
+    "CREATE INDEX `auth_token_expires_idx` ON `auth_token` (`expires_at`);",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -125,5 +129,9 @@ export const pgMigrations: Migration[] = [
     "CREATE UNIQUE INDEX \"user_email_uq\" ON \"user\" USING btree (\"email\");",
     "CREATE INDEX \"webhook_workspace_idx\" ON \"webhook\" USING btree (\"workspace_id\");",
     "CREATE UNIQUE INDEX \"workspace_slug_uq\" ON \"workspace\" USING btree (\"slug\");",
+  ] },
+  { name: "0001_rainy_morlun.sql", statements: [
+    "CREATE TABLE \"auth_token\" (\n\t\"token_hash\" text PRIMARY KEY NOT NULL,\n\t\"kind\" text NOT NULL,\n\t\"payload_json\" jsonb NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\t\"expires_at\" bigint NOT NULL,\n\t\"used_at\" bigint\n);",
+    "CREATE INDEX \"auth_token_expires_idx\" ON \"auth_token\" USING btree (\"expires_at\");",
   ] },
 ];

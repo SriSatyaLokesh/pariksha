@@ -118,6 +118,32 @@ export const TABLE_MANIFEST: TableSpec[] = [
     uniques: [],
   },
   {
+    // Every short-lived single-use secret the server mints before a session
+    // exists: an OIDC `state` with its PKCE verifier, and a magic-link token.
+    // One table rather than two because the interesting code is the consume
+    // — a single `UPDATE … WHERE used_at IS NULL … RETURNING` that makes a
+    // concurrent replay find nothing — and two tables would mean two copies
+    // of it. `kind` is in that WHERE clause, so a magic-link token cannot be
+    // redeemed as an OIDC state; everything that differs between the two is
+    // payload, which is what a JSON column is for.
+    name: "auth_token",
+    tenant: false,
+    columns: [
+      // Only the hash, for the same reason `session` stores only one: a
+      // database dump must not yield a redeemable link or a hijackable flow.
+      text("token_hash", { pk: true }),
+      text("kind"),
+      json("payload_json"),
+      ts("created_at"),
+      ts("expires_at"),
+      // Set rather than deleted, so a replay is distinguishable from a token
+      // that never existed when someone has to explain a support ticket.
+      ts("used_at", { null: true }),
+    ],
+    indexes: [["expires_at"]],
+    uniques: [],
+  },
+  {
     name: "question_bank",
     tenant: true,
     columns: [...tenantHead(), text("name"), json("tags_json"), ts("created_at")],

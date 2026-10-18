@@ -8,6 +8,13 @@
       "when": 1792220171996,
       "tag": "0000_calm_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1792331444750,
+      "tag": "0001_last_vengeance",
+      "breakpoints": true
     }
   ]
 }
