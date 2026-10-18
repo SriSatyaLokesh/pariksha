@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { QUESTION_TYPES, type Question } from "@pariksha/core";
-import { ApiError, type ApiClient, type QuestionSummary } from "../lib/api";
+import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { MonoCaption } from "../components/MonoCaption";
+import { GroupEditor } from "../components/authoring/GroupEditor";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -54,18 +55,24 @@ export function BankBrowser({
 }) {
   const [questions, setQuestions] = useState<QuestionSummary[]>([]);
   const [tags, setTags] = useState<string[]>([]);
+  const [passageGroups, setPassageGroups] = useState<PassageGroupSummary[]>([]);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({});
   const [notice, setNotice] = useState<string | undefined>(undefined);
+  // `undefined`: no passage-group form open. `"new"`: the "New group" form.
+  // A `PassageGroupSummary`: editing that existing group.
+  const [editingGroup, setEditingGroup] = useState<PassageGroupSummary | "new" | undefined>(undefined);
 
   const load = useCallback(async () => {
     try {
-      const [{ questions: rows }, workspaceTags] = await Promise.all([
+      const [{ questions: rows }, workspaceTags, bankGroups] = await Promise.all([
         client.listQuestions(workspaceId, bankId, filter),
         client.listTags(workspaceId),
+        client.listGroups(workspaceId, bankId),
       ]);
       setQuestions(rows);
       setTags(workspaceTags);
+      setPassageGroups(bankGroups);
     } catch (cause) {
       setNotice(cause instanceof ApiError ? cause.message : "Questions could not be loaded.");
     }
@@ -124,6 +131,21 @@ export function BankBrowser({
         setNotice(`This question is used by: ${blockedBy.join(", ")}.`);
       } else {
         setNotice(cause instanceof ApiError ? cause.message : "The question could not be deleted.");
+      }
+    }
+  }
+
+  async function onDeleteGroup(group: PassageGroupSummary) {
+    setNotice(undefined);
+    try {
+      await client.deleteGroup(workspaceId, bankId, group.id);
+      await load();
+    } catch (cause) {
+      if (cause instanceof ApiError && cause.code === "group_in_use") {
+        const names = (cause.details as { questions?: string[] } | undefined)?.questions ?? [];
+        setNotice(`This group is used by: ${names.join(", ")}.`);
+      } else {
+        setNotice(cause instanceof ApiError ? cause.message : "The group could not be deleted.");
       }
     }
   }
@@ -214,6 +236,62 @@ export function BankBrowser({
             {notice}
           </p>
         )}
+
+        <section aria-labelledby="passage-groups-heading">
+          <div className="question-editor__answer-bar">
+            <h2 id="passage-groups-heading">Passage groups</h2>
+            <button
+              type="button"
+              className="prompt-editor__tool"
+              onClick={() => setEditingGroup((prev) => (prev === "new" ? undefined : "new"))}
+            >
+              New group
+            </button>
+          </div>
+
+          {passageGroups.length > 0 && (
+            <ul className="bank-browser__groups">
+              {passageGroups.map((group) => (
+                // `group.id` is immutable once a group exists (GroupEditor
+                // disables the field on edit) — Task 4's "editable content
+                // as a React key" bug has no path to reach it here.
+                <li key={group.id}>
+                  {group.title ?? group.id} ({group.questionCount} question
+                  {group.questionCount === 1 ? "" : "s"})
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    aria-label={`Edit passage group: ${group.title ?? group.id}`}
+                    onClick={() => setEditingGroup((prev) => (prev === group ? undefined : group))}
+                  >
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    aria-label={`Delete passage group: ${group.title ?? group.id}`}
+                    onClick={() => void onDeleteGroup(group)}
+                  >
+                    Delete
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {editingGroup !== undefined && (
+            <GroupEditor
+              bankId={bankId}
+              workspaceId={workspaceId}
+              client={client}
+              {...(editingGroup !== "new" && { group: editingGroup })}
+              onSaved={() => {
+                setEditingGroup(undefined);
+                void load();
+              }}
+            />
+          )}
+        </section>
 
         <table className="bank-browser__table">
           <thead>

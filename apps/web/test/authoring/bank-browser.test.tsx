@@ -3,7 +3,7 @@ import { render, screen, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { Question } from "@pariksha/core";
 
-import { ApiError, type ApiClient, type Bank, type QuestionSummary } from "../../src/lib/api";
+import { ApiError, type ApiClient, type Bank, type PassageGroupSummary, type QuestionSummary } from "../../src/lib/api";
 import { BankBrowser } from "../../src/routes/bank";
 import { BankList } from "../../src/routes/banks";
 
@@ -161,5 +161,32 @@ describe("BankBrowser", () => {
     const browser = render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} />);
     expect(await browser.findByText("Which HTTP method is idempotent?")).toBeVisible();
     expect(await axe(browser.container)).toHaveNoViolations();
+  });
+
+  // Phase 4 Task 6 (#50, P4.6).
+  it("lists the bank's passage groups and opens a new-group form", async () => {
+    const group: PassageGroupSummary = { id: "orders-table", title: "Orders", passage: "x", questionCount: 2 };
+    const client = fakeClient({ listGroups: async () => [group] });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    expect(await screen.findByText("Orders (2 questions)")).toBeVisible();
+    expect(screen.queryByLabelText("Group ID")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "New group" }));
+    expect(screen.getByLabelText("Group ID")).toBeVisible();
+  });
+
+  it("a refused group delete names the questions holding it", async () => {
+    const group: PassageGroupSummary = { id: "orders-table", title: "Orders", passage: "x", questionCount: 2 };
+    const client = fakeClient({
+      listGroups: async () => [group],
+      deleteGroup: async () => {
+        throw new ApiError(409, "group_in_use", "blocked", { questions: ["DIN-001", "DIN-002"] });
+      },
+    });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete passage group: Orders" }));
+    expect(await screen.findByText(/DIN-001, DIN-002/)).toBeVisible();
   });
 });
