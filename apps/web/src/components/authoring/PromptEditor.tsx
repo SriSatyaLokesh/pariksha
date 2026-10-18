@@ -1,6 +1,5 @@
 import { useId, useRef, useState } from "react";
 import { RenderedHtml } from "./RenderedHtml";
-import { placeholdersIn } from "./answer/Written";
 
 // UX-19: a Markdown text area with a small toolbar and the live preview, and
 // no WYSIWYG document tree. The stored value is exactly what a JSON export
@@ -21,19 +20,11 @@ export function PromptEditor({
   value,
   onChange,
   onUploadImage,
-  onPlaceholdersChange,
   label,
 }: {
   value: string;
   onChange: (next: string) => void;
   onUploadImage?: (file: File) => Promise<{ src: string; alt: string }>;
-  /** UX-21: fired with the fresh `{{id}}` placeholders (prompt order,
-   * deduplicated) whenever this editor's text changes, so a fill_blank
-   * question's blanks can stay derived from the prompt rather than edited
-   * on their own. Additive — every other caller (the choice/structured
-   * editors, and this same component's own Explanation instance) simply
-   * never passes it. */
-  onPlaceholdersChange?: (ids: string[]) => void;
   label: string;
 }) {
   const id = useId();
@@ -97,10 +88,7 @@ export function PromptEditor({
         ref={textarea}
         rows={10}
         value={value}
-        onChange={(event) => {
-          onChange(event.target.value);
-          onPlaceholdersChange?.(placeholdersIn(event.target.value));
-        }}
+        onChange={(event) => onChange(event.target.value)}
       />
 
       {picking && (

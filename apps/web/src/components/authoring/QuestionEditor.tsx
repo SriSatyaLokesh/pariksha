@@ -1,5 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { APPLICABLE_MODES, type Difficulty, type Question, type QuestionType, type ScoringConfig } from "@pariksha/core";
+import {
+  APPLICABLE_MODES,
+  type Blank,
+  type Difficulty,
+  type FillBlankQuestion,
+  type Question,
+  type QuestionType,
+  type ScoringConfig,
+} from "@pariksha/core";
 import { ApiError, type ApiClient } from "../../lib/api";
 import { PromptEditor } from "./PromptEditor";
 import { PreviewPane } from "./PreviewPane";
@@ -7,7 +15,7 @@ import { ScoringRow } from "./ScoringRow";
 import { TypePicker, TYPE_LABELS } from "./TypePicker";
 import { Choice, isChoiceQuestion } from "./answer/Choice";
 import { StructuredAnswer, isStructuredQuestion } from "./answer/Structured";
-import { WrittenAnswer, fillBlankIssues, freshBlank } from "./answer/Written";
+import { WrittenAnswer, fillBlankIssues, freshBlank, isWrittenQuestion, placeholdersIn } from "./answer/Written";
 
 // UX-07's five-block skeleton, built once for every one of the twelve
 // types: prompt -> answer -> key and scoring -> meta -> preview, with only
@@ -158,6 +166,39 @@ function freshQuestionId(): string {
   return `qst-${Date.now()}`;
 }
 
+/**
+ * UX-21: `blanks` is derived from the prompt on every render, never carried
+ * as state that is only ever pushed into from the prompt's own `onChange`
+ * handler — a push only fires on a keystroke in that one textarea, so it
+ * misses both a type change into `fill_blank` (the prompt already has
+ * `{{1}}`, carried forward by `sharedFieldsOf`, but nothing typed after the
+ * switch) and a question loaded from the API already out of sync. Deriving
+ * at render/emit time instead means both self-heal on the very next render,
+ * with no separate code path for "already correct" vs. "needs fixing up".
+ *
+ * `graveyard` is every blank this `QuestionEditor` instance has ever seen,
+ * keyed by id — a author who clears a placeholder (a typo, a select-all
+ * retype) and then retypes the same id gets that blank's accepted answers
+ * and match mode back, rather than a blank one, because the row was merged
+ * into the graveyard before it dropped out of `blanks`. This is a
+ * session-only recovery net (the graveyard lives only as long as this
+ * component instance, in a `useRef`, and is lost on navigation or reload) —
+ * not a replacement for actually saving; `dropped` is what still has
+ * answers attached but no current placeholder, so the author can be told
+ * before those answers are silently left out of what gets saved.
+ */
+function deriveBlanks(
+  question: FillBlankQuestion,
+  graveyard: Map<string, Blank>,
+): { blanks: Blank[]; dropped: Blank[] } {
+  for (const blank of question.blanks) graveyard.set(blank.id, blank);
+  const ids = placeholdersIn(question.prompt);
+  const idSet = new Set(ids);
+  const blanks = ids.map((id) => graveyard.get(id) ?? freshBlank(id));
+  const dropped = [...graveyard.values()].filter((blank) => !idSet.has(blank.id) && blank.accepted.length > 0);
+  return { blanks, dropped };
+}
+
 export function QuestionEditor({
   bankId,
   workspaceId,
@@ -182,6 +223,7 @@ export function QuestionEditor({
   const metaId = useId();
   const changeTypeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const fillBlankGraveyard = useRef(new Map<string, Blank>());
 
   // Review Focus 2's dialog (UX-06) moves focus into itself on open and
   // back to the button that opened it on close — a real focus trap (Tab
@@ -231,7 +273,7 @@ export function QuestionEditor({
     setNotice(undefined);
     setSaving(true);
     try {
-      const saved = await client.saveQuestion(workspaceId, bankId, question);
+      const saved = await client.saveQuestion(workspaceId, bankId, effectiveQuestion);
       onSaved(saved.document);
     } catch (cause) {
       setNotice(cause instanceof ApiError ? cause.message : "The question could not be saved.");
@@ -241,10 +283,21 @@ export function QuestionEditor({
   }
 
   const lost = pendingType !== null ? lostFields(question) : [];
-  // UX-21: an unsafe regex blank is caught inline, before Save is even
-  // reachable — not only at import, where the author would learn about it
-  // long after typing it.
-  const blockingIssues = question.type === "fill_blank" ? fillBlankIssues(question) : [];
+
+  const { blanks: derivedBlanks, dropped: droppedBlanks } =
+    question.type === "fill_blank"
+      ? deriveBlanks(question, fillBlankGraveyard.current)
+      : { blanks: [], dropped: [] };
+  const effectiveQuestion: Question =
+    question.type === "fill_blank" ? { ...question, blanks: derivedBlanks } : question;
+  // UX-21: an unsafe regex blank (or, defensively, a blank/placeholder
+  // mismatch — structurally impossible given `effectiveQuestion` above, but
+  // checked anyway) is caught here as fast, author-facing feedback while
+  // they type. It is not a server-side guarantee: `saveQuestion` runs no
+  // `validateBank` check today, only shape validation, so this only stops a
+  // document going out through *this* editor — the server-side guard is
+  // expected to land with the import path (Task 7).
+  const blockingIssues = effectiveQuestion.type === "fill_blank" ? fillBlankIssues(effectiveQuestion) : [];
 
   return (
     <div className="question-editor">
@@ -253,15 +306,13 @@ export function QuestionEditor({
         <PromptEditor
           value={question.prompt}
           onChange={(prompt) => setQuestion((prev) => ({ ...prev, prompt }))}
-          onPlaceholdersChange={(ids) =>
-            setQuestion((prev) => {
-              if (prev.type !== "fill_blank") return prev;
-              const existing = new Map(prev.blanks.map((blank) => [blank.id, blank]));
-              return { ...prev, blanks: ids.map((id) => existing.get(id) ?? freshBlank(id)) };
-            })
-          }
           label="Prompt"
         />
+        {droppedBlanks.length > 0 && (
+          <p className="field-help" role="status">
+            {`${droppedBlanks.map((blank) => `Blank ${blank.id}`).join(", ")} no longer match a placeholder in the prompt. Their answers are kept if you retype the placeholder, but will be dropped from what you save.`}
+          </p>
+        )}
       </section>
 
       <section>
@@ -281,9 +332,14 @@ export function QuestionEditor({
           <Choice key={question.type} question={question} onChange={setQuestion} />
         ) : isStructuredQuestion(question) ? (
           <StructuredAnswer key={question.type} question={question} onChange={setQuestion} />
-        ) : (
-          <WrittenAnswer key={question.type} question={question} onChange={setQuestion} />
-        )}
+        ) : isWrittenQuestion(effectiveQuestion) ? (
+          <WrittenAnswer
+            key={effectiveQuestion.type}
+            question={effectiveQuestion}
+            onChange={setQuestion}
+            fillBlankIssues={blockingIssues}
+          />
+        ) : null}
       </section>
 
       <section>
@@ -353,7 +409,7 @@ export function QuestionEditor({
         />
       </section>
 
-      <PreviewPane question={question} reveal={reveal} onRevealChange={setReveal} />
+      <PreviewPane question={effectiveQuestion} reveal={reveal} onRevealChange={setReveal} />
 
       {notice !== undefined && (
         <p className="field-error" role="alert">

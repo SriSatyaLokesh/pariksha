@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { useId, useState } from "react";
 import type {
   Blank,
   FillBlankQuestion,
@@ -23,7 +23,9 @@ export function isWrittenQuestion(question: { type: string }): question is Writt
  * deduplicated. Same expression packages/core/src/validate.ts's own
  * (private) `placeholdersIn` uses for the same purpose — the regex is
  * copied, not the rule: this is a UI-side read of the prompt text, not a
- * reimplementation of validateBank's placeholder/blank cross-check. */
+ * reimplementation of validateBank's placeholder/blank cross-check
+ * (that one returns an unordered `Set`; this one keeps prompt order, which
+ * is what the UI needs and the Set-returning version doesn't give). */
 export function placeholdersIn(prompt: string): string[] {
   const seen = new Set<string>();
   const ids: string[] = [];
@@ -44,31 +46,104 @@ export function freshBlank(id: string): Blank {
 }
 
 /**
- * The regex-safety issues `validateBank` (@pariksha/core) would raise for
- * this question's blanks, surfaced inline as the author types rather than
- * only at import. This calls the real `validateBank`/`assertSafeRegex` the
- * same way an import or export would, against a throwaway single-question
- * bank, instead of re-implementing regex-safety rules in the browser.
+ * The cross-field issues `validateBank` (@pariksha/core) would raise for
+ * this question's blanks (an unsafe regex pattern, or — defensively — a
+ * blank/placeholder mismatch, though `QuestionEditor` derives `blanks` from
+ * the prompt precisely so that never actually happens), surfaced inline as
+ * the author types rather than only at import. This calls the real
+ * `validateBank`/`assertSafeRegex` the same way an import or export would,
+ * against a throwaway single-question bank, instead of re-implementing
+ * regex-safety rules in the browser.
+ *
+ * This is fast author feedback only — nothing server-side repeats it today.
+ * `saveQuestion` (apps/api/src/routes/questions.ts) validates only that the
+ * body is *shaped* like a question (id/type/prompt), not that a fill_blank's
+ * regex is safe; a document could still reach storage some other way
+ * without ever going through this check. The server-side guard is expected
+ * to land with the import path (Task 7), the same way `validateBank`
+ * already gates import there.
  */
 export function fillBlankIssues(question: FillBlankQuestion): string[] {
   const result = validateBank({ format: "pariksha/bank@1", name: "preview", questions: [question] });
   if (result.ok) return [];
   return result.issues
-    .filter((issue) => issue.field === "blanks" && /unsafe regex/i.test(issue.message))
+    .filter((issue) => issue.field === "blanks" || issue.field === "prompt")
     .map((issue) => issue.message);
 }
 
 const MATCH_MODES: Blank["match"][] = ["exact", "case_insensitive", "regex"];
 
+/**
+ * A blank's accepted answers as one comma-separated text field, committed
+ * on blur or Enter rather than on every keystroke — the same deferred-
+ * commit pattern `Structured.tsx`'s `ItemText` uses for exactly the same
+ * reason. A controlled input bound directly to `accepted.join(", ")`, with
+ * `onChange` splitting on every keystroke, fights the typist: typing the
+ * separator itself (`,`) yields a trailing empty segment that
+ * `.filter(Boolean)` drops immediately, so the committed value reverts to
+ * `"Delhi"` and the controlled `value` prop erases the comma (and the space
+ * after it) the instant it's typed — a second accepted answer could never
+ * be entered at all. Holding the raw text as an uncommitted `draft` until
+ * blur/Enter means the field only ever gets re-split once the author is
+ * actually done, not mid-keystroke.
+ */
+function AcceptedAnswersField({
+  id,
+  label,
+  accepted,
+  onCommit,
+}: {
+  id: string;
+  label: string;
+  accepted: string[];
+  onCommit: (accepted: string[]) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commit(): void {
+    if (draft === null) return;
+    const text = draft;
+    setDraft(null);
+    onCommit(
+      text
+        .split(",")
+        .map((answer) => answer.trim())
+        .filter(Boolean),
+    );
+  }
+
+  return (
+    <>
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        className="text-input"
+        id={id}
+        type="text"
+        value={draft ?? accepted.join(", ")}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          commit();
+        }}
+      />
+    </>
+  );
+}
+
 function FillBlankAnswer({
   question,
   onChange,
+  issues,
 }: {
   question: FillBlankQuestion;
   onChange: (next: Question) => void;
+  issues: string[];
 }) {
   const uid = useId();
-  const issues = fillBlankIssues(question);
 
   function updateBlank(id: string, patch: Partial<Blank>): void {
     onChange({ ...question, blanks: question.blanks.map((blank) => (blank.id === id ? { ...blank, ...patch } : blank)) });
@@ -93,22 +168,11 @@ function FillBlankAnswer({
         <fieldset className="written-blank" key={blank.id}>
           <legend>{`Blank ${blank.id}`}</legend>
 
-          <label className="field-label" htmlFor={`${uid}-${blank.id}-accepted`}>
-            {`Accepted answers for blank ${blank.id}`}
-          </label>
-          <input
-            className="text-input"
+          <AcceptedAnswersField
             id={`${uid}-${blank.id}-accepted`}
-            type="text"
-            value={blank.accepted.join(", ")}
-            onChange={(event) =>
-              updateBlank(blank.id, {
-                accepted: event.target.value
-                  .split(",")
-                  .map((answer) => answer.trim())
-                  .filter(Boolean),
-              })
-            }
+            label={`Accepted answers for blank ${blank.id}`}
+            accepted={blank.accepted}
+            onCommit={(accepted) => updateBlank(blank.id, { accepted })}
           />
 
           <label className="field-label" htmlFor={`${uid}-${blank.id}-match`}>
@@ -175,7 +239,13 @@ function NumericAnswer({
         type="number"
         value={question.key.value}
         onChange={(event) => {
-          const value = Number(event.target.value);
+          const raw = event.target.value;
+          // Unlike Tolerance (optional — an empty field just deletes it),
+          // `value` is required: there is no "unset" to fall back to, so an
+          // in-progress clear (not yet a real number) is ignored rather than
+          // coerced through `Number("") === 0` into silently zeroing it.
+          if (raw === "") return;
+          const value = Number(raw);
           if (Number.isFinite(value)) setKey({ value });
         }}
       />
@@ -338,15 +408,14 @@ function ManualAnswer({
     }
     const value = Number(raw);
     if (!Number.isInteger(value) || value < 1) return;
-    next.max_length = Math.min(value, ceiling);
+    // Not clamped to `ceiling` here: doing that on every keystroke fights
+    // the typist exactly like the accepted-answers field did — typing "600"
+    // snaps to "500" at the third digit, silently, with no way to tell what
+    // happened. The `max` attribute already tells a spinner/validity-aware
+    // UA the limit; the out-of-range value stands, and the message below
+    // names the violation instead of hiding it behind a forced rewrite.
+    next.max_length = value;
     onChange(next);
-  }
-
-  function setRubric(next: RubricLevel[] | undefined): void {
-    const updated = { ...question };
-    if (next === undefined) delete updated.rubric;
-    else updated.rubric = next;
-    onChange(updated);
   }
 
   return (
@@ -364,8 +433,21 @@ function ManualAnswer({
         onChange={(event) => setMaxLength(event.target.value)}
       />
       <p className="field-help">Up to {ceiling} characters.</p>
+      {question.max_length !== undefined && question.max_length > ceiling && (
+        <p className="field-error" role="alert">
+          {`Maximum length cannot exceed ${ceiling} characters for this type.`}
+        </p>
+      )}
 
-      <RubricEditor rubric={rubric} onChange={setRubric} />
+      <RubricEditor
+        rubric={rubric}
+        onChange={(next) => {
+          const updated = { ...question };
+          if (next === undefined) delete updated.rubric;
+          else updated.rubric = next;
+          onChange(updated);
+        }}
+      />
 
       {rubric.length === 0 && (
         <p className="field-help" role="status">
@@ -379,13 +461,19 @@ function ManualAnswer({
 export function WrittenAnswer({
   question,
   onChange,
+  fillBlankIssues: issues = [],
 }: {
   question: WrittenQuestion;
   onChange: (next: Question) => void;
+  /** `fillBlankIssues(question)`, precomputed by `QuestionEditor` — which
+   * needs the same list to decide whether Save is blocked — and threaded in
+   * here rather than recomputed, so `validateBank` runs once per render,
+   * not twice. Ignored for every type but `fill_blank`. */
+  fillBlankIssues?: string[];
 }) {
   switch (question.type) {
     case "fill_blank":
-      return <FillBlankAnswer question={question} onChange={onChange} />;
+      return <FillBlankAnswer question={question} onChange={onChange} issues={issues} />;
     case "numeric":
       return <NumericAnswer question={question} onChange={onChange} />;
     case "short_answer":
