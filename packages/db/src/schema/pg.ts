@@ -92,8 +92,12 @@ export const questionBank = pgTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     name: text("name").notNull(),
+    description: text("description"),
+    license: text("license"),
+    groupsJson: jsonb("groups_json"),
     tagsJson: jsonb("tags_json").notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }),
   },
   (t) => [index("question_bank_workspace_idx").on(t.workspaceId)],
 );
@@ -104,6 +108,8 @@ export const question = pgTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     bankId: text("bank_id").notNull(),
+    refId: text("ref_id").notNull(),
+    groupRef: text("group_ref"),
     type: text("type").notNull(),
     promptMd: text("prompt_md").notNull(),
     mediaJson: jsonb("media_json"),
@@ -114,12 +120,15 @@ export const question = pgTable(
     difficulty: text("difficulty"),
     tagsJson: jsonb("tags_json").notNull(),
     explanationMd: text("explanation_md"),
+    extraJson: jsonb("extra_json"),
     version: integer("version").notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }),
   },
   (t) => [
     index("question_workspace_idx").on(t.workspaceId),
     index("question_bank_idx").on(t.bankId),
+    uniqueIndex("question_bank_ref_uq").on(t.bankId, t.refId),
   ],
 );
 

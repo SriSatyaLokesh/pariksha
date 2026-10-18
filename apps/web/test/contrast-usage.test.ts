@@ -318,6 +318,16 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".field-help": "canvas",
   ".field-error": "canvas",
   ".text-input": "canvas",
+
+  // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
+  // Same palette and the same reasoning: the editor and the preview are
+  // panels on the body's cream, each filling itself with canvas, so every
+  // colour authoring.css sets is read on canvas.
+  ".rendered--stem": "canvas",
+  ".prompt-editor__tool": "canvas",
+  ".prompt-editor__source": "canvas",
+  ".preview__heading": "canvas",
+  ".preview__toggle": "canvas",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not

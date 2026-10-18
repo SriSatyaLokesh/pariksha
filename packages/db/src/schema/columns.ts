@@ -162,7 +162,21 @@ export const TABLE_MANIFEST: TableSpec[] = [
   {
     name: "question_bank",
     tenant: true,
-    columns: [...tenantHead(), text("name"), json("tags_json"), ts("created_at")],
+    columns: [
+      ...tenantHead(),
+      text("name"),
+      text("description", { null: true }),
+      text("license", { null: true }),
+      // Passage groups live here rather than in a table of their own: a bank
+      // holds a handful, they are always read whole with the bank, and a
+      // table would be three CRUD surfaces for a list nobody queries into.
+      json("groups_json", { null: true }),
+      json("tags_json"),
+      ts("created_at"),
+      // Null until the first edit, so "last edited" can say "never" rather
+      // than repeating the creation time as though someone had touched it.
+      ts("updated_at", { null: true }),
+    ],
     indexes: [["workspace_id"]],
     uniques: [],
   },
@@ -172,6 +186,11 @@ export const TABLE_MANIFEST: TableSpec[] = [
     columns: [
       ...tenantHead(),
       text("bank_id"),
+      // The `id` the question carries *inside the bank file*
+      // (`^[A-Za-z0-9_.-]{1,64}$`). The row's own `id` is a `qst_…` this
+      // installation minted, which is not what an export has to hand back.
+      text("ref_id"),
+      text("group_ref", { null: true }),
       text("type"),
       text("prompt_md"),
       json("media_json", { null: true }),
@@ -182,11 +201,18 @@ export const TABLE_MANIFEST: TableSpec[] = [
       text("difficulty", { null: true }),
       json("tags_json"),
       text("explanation_md", { null: true }),
+      // Every type-specific field with no column of its own: `k`, `left`,
+      // `right`, `items`, `blanks`, `unit`, `assertion`, `reason`,
+      // `max_length`, `model_answer`, `rubric`, `shuffle_options`. Eleven
+      // columns that are null for most types, or one that is replaced whole
+      // when the type changes.
+      json("extra_json", { null: true }),
       int("version"),
       ts("created_at"),
+      ts("updated_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["bank_id"]],
-    uniques: [],
+    uniques: [["bank_id", "ref_id"]],
   },
   {
     name: "test",

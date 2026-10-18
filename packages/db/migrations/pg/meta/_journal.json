@@ -22,6 +22,13 @@
       "when": 1792332894731,
       "tag": "0002_huge_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792336147346,
+      "tag": "0003_majestic_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

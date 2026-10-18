@@ -86,6 +86,21 @@ export const sqliteMigrations: Migration[] = [
     "CREATE INDEX `response_attempt_idx` ON `response` (`attempt_id`);",
     "CREATE UNIQUE INDEX `response_attempt_question_uq` ON `response` (`attempt_id`,`question_id`);",
   ] },
+  { name: "0003_absent_hemingway.sql", statements: [
+    "-- Hand-corrected after `drizzle-kit generate`, which emitted\n-- `ALTER TABLE question ADD ref_id text NOT NULL` for the new column.\n-- SQLite rejects that outright — a NOT NULL column added without a default\n-- has no value for existing rows, and it refuses even when the table is\n-- empty — so `question` is rebuilt instead, the same twelve-step shape\n-- drizzle-kit emitted itself in 0002. Keep this edit when regenerating.\n-- Existing rows take their row id as `ref_id`: nothing has ever written this\n-- table (no repository function or route touches it before Phase 4), so in\n-- practice the copy moves no rows, but a question with no in-file id has\n-- nothing else to be called.\nPRAGMA foreign_keys=OFF;",
+    "CREATE TABLE `__new_question` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`bank_id` text NOT NULL,\n\t`ref_id` text NOT NULL,\n\t`group_ref` text,\n\t`type` text NOT NULL,\n\t`prompt_md` text NOT NULL,\n\t`media_json` text,\n\t`options_json` text,\n\t`key_json` text,\n\t`scoring_json` text,\n\t`points` real NOT NULL,\n\t`difficulty` text,\n\t`tags_json` text NOT NULL,\n\t`explanation_md` text,\n\t`extra_json` text,\n\t`version` integer NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer\n);",
+    "INSERT INTO `__new_question`(\"id\", \"workspace_id\", \"bank_id\", \"ref_id\", \"type\", \"prompt_md\", \"media_json\", \"options_json\", \"key_json\", \"scoring_json\", \"points\", \"difficulty\", \"tags_json\", \"explanation_md\", \"version\", \"created_at\") SELECT \"id\", \"workspace_id\", \"bank_id\", \"id\", \"type\", \"prompt_md\", \"media_json\", \"options_json\", \"key_json\", \"scoring_json\", \"points\", \"difficulty\", \"tags_json\", \"explanation_md\", \"version\", \"created_at\" FROM `question`;",
+    "DROP TABLE `question`;",
+    "ALTER TABLE `__new_question` RENAME TO `question`;",
+    "PRAGMA foreign_keys=ON;",
+    "CREATE INDEX `question_workspace_idx` ON `question` (`workspace_id`);",
+    "CREATE INDEX `question_bank_idx` ON `question` (`bank_id`);",
+    "CREATE UNIQUE INDEX `question_bank_ref_uq` ON `question` (`bank_id`,`ref_id`);",
+    "ALTER TABLE `question_bank` ADD `description` text;",
+    "ALTER TABLE `question_bank` ADD `license` text;",
+    "ALTER TABLE `question_bank` ADD `groups_json` text;",
+    "ALTER TABLE `question_bank` ADD `updated_at` integer;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -154,5 +169,16 @@ export const pgMigrations: Migration[] = [
   { name: "0002_huge_prowler.sql", statements: [
     "ALTER TABLE \"question\" ALTER COLUMN \"points\" SET DATA TYPE numeric;",
     "ALTER TABLE \"response\" ALTER COLUMN \"points\" SET DATA TYPE numeric;",
+  ] },
+  { name: "0003_majestic_senator_kelly.sql", statements: [
+    "ALTER TABLE \"question\" ADD COLUMN \"ref_id\" text NOT NULL;",
+    "ALTER TABLE \"question\" ADD COLUMN \"group_ref\" text;",
+    "ALTER TABLE \"question\" ADD COLUMN \"extra_json\" jsonb;",
+    "ALTER TABLE \"question\" ADD COLUMN \"updated_at\" bigint;",
+    "ALTER TABLE \"question_bank\" ADD COLUMN \"description\" text;",
+    "ALTER TABLE \"question_bank\" ADD COLUMN \"license\" text;",
+    "ALTER TABLE \"question_bank\" ADD COLUMN \"groups_json\" jsonb;",
+    "ALTER TABLE \"question_bank\" ADD COLUMN \"updated_at\" bigint;",
+    "CREATE UNIQUE INDEX \"question_bank_ref_uq\" ON \"question\" USING btree (\"bank_id\",\"ref_id\");",
   ] },
 ];

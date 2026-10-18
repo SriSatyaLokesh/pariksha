@@ -22,6 +22,13 @@
       "when": 1792332887114,
       "tag": "0002_dapper_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1792336038067,
+      "tag": "0003_absent_hemingway",
+      "breakpoints": true
     }
   ]
 }
