@@ -42,16 +42,37 @@ const bankPatch = z
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
 
+// Fix round 1, finding 2: self-review dropped the `id` pattern as
+// "unrequested strictness" on the grounds that no schema or sibling route
+// enforces one — true, but beside the point once a group's `id` became a
+// URL path segment (`:groupId`, below). An id containing `/` creates fine
+// and is then permanently unreachable by PATCH/DELETE (`:groupId` stops at
+// the first `/`), and `..` resolves against the path entirely, reaching the
+// bank route instead of a group. Restored, and the client
+// (`apps/web/src/lib/api.ts`) also `encodeURIComponent`s it — both, not
+// either, because this check only stops a *new* bad id.
+//
+// Fix round 1, finding 7: `passage` had no ceiling while every sibling
+// field does (`description` 4000, `title` 200) — and `groups_json` is
+// parsed by `listGroups` on every question write (`assertValid`,
+// questions.ts), the one path with the tightest CPU budget. 20000 matches
+// `prompt_md`'s own practical ceiling (nothing in the schema bounds a
+// question's prompt either, but a passage is reachable the same way a
+// prompt is, through the same editor toolbar).
 const newGroup = z.object({
-  id: z.string().min(1).max(64),
+  id: z
+    .string()
+    .min(1)
+    .max(64)
+    .regex(/^[A-Za-z0-9_.-]+$/, "must be letters, numbers, underscore, dot or hyphen"),
   title: z.string().min(1).max(200).optional(),
-  passage: z.string().min(1),
+  passage: z.string().min(1).max(20_000),
 });
 
 const groupPatch = z
   .object({
     title: z.string().min(1).max(200).optional(),
-    passage: z.string().min(1).optional(),
+    passage: z.string().min(1).max(20_000).optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
 

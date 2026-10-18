@@ -344,11 +344,21 @@ export function createApiClient(): ApiClient {
     createGroup: (workspaceId, bankId, input) =>
       json<PassageGroupSummary>(`/workspaces/${workspaceId}/banks/${bankId}/groups`, post(input)),
 
+    // Fix round 1, finding 2: `groupId` is author-written (`newGroup.id`,
+    // `apps/api/src/routes/banks.ts`), unlike every other ID this client
+    // interpolates into a path — a question's `:qid` is the server-generated
+    // row id, never what an author typed. Encoded here the way `:qid` never
+    // needs to be.
     updateGroup: (workspaceId, bankId, groupId, patch) =>
-      json<PassageGroupSummary>(`/workspaces/${workspaceId}/banks/${bankId}/groups/${groupId}`, patchBody(patch)),
+      json<PassageGroupSummary>(
+        `/workspaces/${workspaceId}/banks/${bankId}/groups/${encodeURIComponent(groupId)}`,
+        patchBody(patch),
+      ),
 
     async deleteGroup(workspaceId, bankId, groupId) {
-      await request(`/workspaces/${workspaceId}/banks/${bankId}/groups/${groupId}`, { method: "DELETE" });
+      await request(`/workspaces/${workspaceId}/banks/${bankId}/groups/${encodeURIComponent(groupId)}`, {
+        method: "DELETE",
+      });
     },
   };
 }

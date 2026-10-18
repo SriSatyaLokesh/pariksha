@@ -96,6 +96,18 @@ it("a duplicate group id in the same bank is rejected with the field named", asy
   expect((await res.json()).error).toMatchObject({ code: "duplicate_group", details: { field: "id" } });
 });
 
+// Fix round 1, finding 2: a group's id becomes `:groupId` in PATCH/DELETE's
+// path. A `/` in it creates a group PATCH/DELETE can never address again
+// (the segment stops at the first `/`), and `..` resolves against the path
+// before it reaches this server at all — both are rejected here instead.
+it("a group id containing a path separator is rejected", async () => {
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,
+    post({ id: "a/b", passage: "x" }, authorCookie),
+  );
+  expect(res.status).toBe(400);
+});
+
 it("deleting a group that questions reference is refused and names them", async () => {
   await app.request(
     `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,
