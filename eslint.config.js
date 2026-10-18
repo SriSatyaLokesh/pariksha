@@ -23,6 +23,15 @@ export default tseslint.config(
     },
   },
   {
+    // Build scripts inside a package (the migration bundler, generators) run
+    // under Node, so Node's globals are defined there. Declared rather than
+    // pulled from the `globals` package: two names do not need a dependency.
+    files: ["**/*.mjs"],
+    languageOptions: {
+      globals: { process: "readonly", console: "readonly" },
+    },
+  },
+  {
     rules: {
       // No `any` anywhere, which is a strict superset of "no `any` in
       // exported signatures" required by the project's TypeScript policy.

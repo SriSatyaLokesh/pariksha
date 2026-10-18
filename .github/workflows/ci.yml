@@ -33,6 +33,23 @@ jobs:
   build:
     name: Lint, type-check, build and test
     runs-on: ubuntu-latest
+    # The schema has to migrate cleanly onto both dialects on every pull
+    # request, or SQLite and Postgres drift until a Postgres user reports it
+    # months later. packages/db's Postgres cases skip when this is absent, so
+    # a contributor without a database still gets a green local suite.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pariksha
+          POSTGRES_DB: pariksha_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -64,6 +81,8 @@ jobs:
 
       - name: Test
         run: pnpm test
+        env:
+          TEST_POSTGRES_URL: postgres://postgres:pariksha@localhost:5432/pariksha_test
 
       # Enforces the coverage the Phase 1 review measured by hand on
       # packages/core/src, so the figure stays true without someone
