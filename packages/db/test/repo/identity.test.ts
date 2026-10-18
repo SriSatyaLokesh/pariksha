@@ -17,6 +17,9 @@ const UNSCOPED_BY_DESIGN = [
   // workspace to scope them to, because which workspaces the actor may see
   // is the answer these produce, not an argument they take (ADR 0006).
   "findUserByEmail",
+  // A user's workspace list spans every workspace by definition, so there is
+  // no single one to scope it to.
+  "listUserWorkspaces",
   "insertAuthToken",
   "consumeAuthToken",
   "insertSession",

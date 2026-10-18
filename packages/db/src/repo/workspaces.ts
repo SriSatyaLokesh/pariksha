@@ -78,6 +78,30 @@ export const getWorkspace = scoped(
   },
 );
 
+export const updateWorkspace = scoped(
+  "updateWorkspace",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { name?: string | undefined; branding?: unknown; settings?: unknown },
+  ): Promise<void> => {
+    // COALESCE rather than an assembled SET list: the column keeps its
+    // current value when the caller said nothing about it, and the statement
+    // is one string the budget guard and a reader can both see whole.
+    await db.run(
+      "UPDATE workspace SET name = COALESCE(?, name), " +
+        "branding_json = COALESCE(?, branding_json), " +
+        "settings_json = COALESCE(?, settings_json) WHERE id = ?",
+      [
+        input.name ?? null,
+        input.branding === undefined ? null : db.jsonParam(input.branding),
+        input.settings === undefined ? null : db.jsonParam(input.settings),
+        workspaceId,
+      ],
+    );
+  },
+);
+
 export const addMembership = scoped(
   "addMembership",
   async (
@@ -98,6 +122,30 @@ export const addMembership = scoped(
       ],
     );
     return id;
+  },
+);
+
+export const setMembershipRole = scoped(
+  "setMembershipRole",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { userId: string; role: string },
+  ): Promise<void> => {
+    await db.run(
+      "UPDATE membership SET role = ? WHERE workspace_id = ? AND user_id = ?",
+      [input.role, workspaceId, input.userId],
+    );
+  },
+);
+
+export const removeMembership = scoped(
+  "removeMembership",
+  async (db: DbClient, workspaceId: string, userId: string): Promise<void> => {
+    await db.run("DELETE FROM membership WHERE workspace_id = ? AND user_id = ?", [
+      workspaceId,
+      userId,
+    ]);
   },
 );
 
