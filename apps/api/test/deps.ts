@@ -10,7 +10,12 @@ import type { AppDeps } from "../src/app.js";
 /** Fixed, so a test asserting on a timestamp never races a real clock. */
 export const FIXED_NOW = 1_760_000_000_000;
 
-export async function testDeps(): Promise<{
+export async function testDeps(
+  // Expiry tests need one database read through several points in time, which
+  // an injected clock covers and a second `testDeps()` would not: a new call
+  // is a new, empty database.
+  options: { now?: () => number } = {},
+): Promise<{
   deps: AppDeps;
   migrations: number;
 }> {
@@ -20,7 +25,7 @@ export async function testDeps(): Promise<{
     deps: {
       db,
       storage: memoryAdapter(),
-      now: () => FIXED_NOW,
+      now: options.now ?? (() => FIXED_NOW),
       env: parseEnv({ SESSION_SECRET: "test-session-secret" }, "workers"),
     },
     migrations: applied.length,
