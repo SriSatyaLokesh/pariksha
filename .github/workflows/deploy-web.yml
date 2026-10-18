@@ -17,6 +17,25 @@ jobs:
     # credentials are in place. Until then this job is skipped, so merging to
     # main never produces a failing run for a deployment nobody asked for.
     if: github.repository == 'SriSatyaLokesh/pariksha' && vars.DEPLOY_WEB == 'true'
+    # The same Postgres the CI workflow runs. `packages/db`'s migration suite
+    # refuses to skip its Postgres cases when CI is set — a deliberate guard,
+    # because a dual-dialect promise that silently stops being tested is worse
+    # than no promise. Without this service the gate below does not fail
+    # open, it fails closed: every deploy stops on a database that was never
+    # started. The two workflows have to agree about what a passing suite is.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pariksha
+          POSTGRES_DB: pariksha_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -46,6 +65,8 @@ jobs:
       # workflow, so without this step a red CI run would not stop a deploy.
       - name: Test
         run: pnpm test
+        env:
+          TEST_POSTGRES_URL: postgres://postgres:pariksha@localhost:5432/pariksha_test
 
       - name: Check Cloudflare credentials are configured
         env:
