@@ -82,7 +82,9 @@ gone, `git log` plus the closed issues are the record.
 
 **Gate.** `AC-05`. Every type can be authored, previewed and round-tripped through export and import with no loss.
 
-**PRD.** `D-01`, `D-02`, question-format.md.
+**PRD.** `D-01`, `D-02`, question-format.md. Interaction design: [design.md](design.md) `UX-01`–`UX-09`, `UX-19`–`UX-21`, screen inventory rows 1–5. Rendering: [ADR 0004](adr/0004-client-side-rendering-with-lazy-loaded-katex.md).
+
+**Plan.** [`superpowers/plans/2026-10-18-phase-4-question-banks-and-authoring.md`](superpowers/plans/2026-10-18-phase-4-question-banks-and-authoring.md)
 
 ### Phase 5 — Test builder and lifecycle
 
@@ -220,7 +222,14 @@ These are the planner's calls, not the PRD's. They are listed so they can be ove
 
 ## Plan documents
 
-Detailed, task-by-task implementation plans live in [`docs/superpowers/plans/`](superpowers/plans/). Phases 1 to 3 are planned in full. Phases 4 to 12 are scoped above and planned in detail when their turn comes, because a plan written against code that does not exist yet is rewritten before it is read.
+Detailed, task-by-task implementation plans live in [`docs/superpowers/plans/`](superpowers/plans/). Phases 1 to 4 are planned in full. Phases 5 to 12 are scoped above and planned in detail when their turn comes, because a plan written against code that does not exist yet is rewritten before it is read.
+
+| Phase | Plan |
+| --- | --- |
+| 1 | [`2026-10-16-phase-1-foundation-and-scoring.md`](superpowers/plans/2026-10-16-phase-1-foundation-and-scoring.md) |
+| 2 | [`2026-10-16-phase-2-data-and-api-platform.md`](superpowers/plans/2026-10-16-phase-2-data-and-api-platform.md) |
+| 3 | [`2026-10-16-phase-3-auth-roles-and-landing.md`](superpowers/plans/2026-10-16-phase-3-auth-roles-and-landing.md), with [`2026-10-17-phase-3-landing-acceptance.md`](superpowers/plans/2026-10-17-phase-3-landing-acceptance.md) |
+| 4 | [`2026-10-18-phase-4-question-banks-and-authoring.md`](superpowers/plans/2026-10-18-phase-4-question-banks-and-authoring.md) |
 
 ## What is needed from the operator
 
