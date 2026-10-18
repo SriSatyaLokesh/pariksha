@@ -86,43 +86,45 @@ describe("admin.html", () => {
   });
 });
 
-describe("wrangler.jsonc", () => {
-  // No comments or trailing commas in this file, so it's valid JSON — no
-  // JSONC parser dependency needed.
-  const config: {
-    assets?: {
-      directory?: string;
-      not_found_handling?: string;
-    };
-    main?: string;
-    routes?: unknown;
-    workers_dev?: boolean;
-    preview_urls?: boolean;
-  } = JSON.parse(readFileSync(resolve(ROOT, "wrangler.jsonc"), "utf8"));
+// The site and the API ship as one Worker (see the header of the config
+// itself), so its configuration no longer lives in this package — but these
+// are still the web app's hosting guarantees, and they are still asserted
+// here. The file is TOML rather than JSONC so it can carry the comments that
+// explain the single-Worker decision; it is small and flat, so one regex for
+// `key = "value"` beats a parser dependency.
+describe("deploy/cloudflare/wrangler.toml", () => {
+  const CONFIG = resolve(ROOT, "../../deploy/cloudflare/wrangler.toml");
+  const toml = readFileSync(CONFIG, "utf8");
+  const scalar = (key: string) =>
+    new RegExp(`^${key} = "(.*)"$`, "m").exec(toml)?.[1];
 
   it("serves assets from the same directory Vite builds into", () => {
     const outDir = viteConfig.build?.outDir ?? "dist";
-    expect(resolve(ROOT, config.assets?.directory ?? "")).toBe(
+    expect(resolve(dirname(CONFIG), scalar("directory") ?? "")).toBe(
       resolve(ROOT, outDir),
     );
   });
 
-  it("declares no main script, so every request is a free static-asset request", () => {
-    expect(config.main).toBeUndefined();
+  // Replaces "declares no main script": there is a script now, and what keeps
+  // every page, font and bundle request free is that it is invoked only on
+  // `/api/*`. Widening this list is what would start metering the site.
+  it("runs the Worker script on /api/* only, so asset requests stay free", () => {
+    expect(scalar("main")).toBeDefined();
+    expect(toml).toMatch(/^run_worker_first = \["\/api\/\*"\]$/m);
   });
 
   // T11 / SEO-4: a bogus URL must 404, never serve the landing page with a
   // soft-404 HTTP 200.
   it("serves dist/404.html on a miss, never the single-page-application fallback", () => {
-    expect(config.assets?.not_found_handling).toBe("404-page");
+    expect(scalar("not_found_handling")).toBe("404-page");
   });
 
   // SEO-7: once a custom domain is added, the workers.dev and preview URLs
   // must stop indexing alongside it.
   it("disables workers_dev and preview_urls once a route is declared", () => {
-    if (config.routes !== undefined) {
-      expect(config.workers_dev).toBe(false);
-      expect(config.preview_urls).toBe(false);
+    if (/^routes = |^\[\[routes]]$/m.test(toml)) {
+      expect(toml).toMatch(/^workers_dev = false$/m);
+      expect(toml).toMatch(/^preview_urls = false$/m);
     }
   });
 });

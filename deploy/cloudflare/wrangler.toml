@@ -1,0 +1,70 @@
+# One Worker serves the whole product: the built web app as static assets and
+# the Hono API as the script. Not two Workers, because `workers.dev` is on the
+# Public Suffix List — `pariksha-web.workers.dev` and `pariksha-api.workers.dev`
+# would be different *sites*, and the `SameSite=Lax` session cookie
+# (`apps/api/src/middleware/authenticate.ts`) is not sent on a cross-site
+# fetch. Split in two, the organiser app signs in and then gets 401 on every
+# authenticated request, while every test we have still passes. One origin
+# makes the cookie work with no CORS, no `SameSite=None`, and it is the same
+# topology Phase 11 plans for Docker.
+#
+# Asset requests are free and unmetered and never invoke the script, so
+# folding the API in costs nothing against the 100,000 requests/day limit.
+#
+# The name stays `pariksha-web` even though it now serves both halves: the
+# repository variable `SITE_URL` is baked into prerendered canonicals and SEO
+# metadata at build time, and renaming the Worker changes its URL and
+# invalidates all of it. Rename when a real domain arrives, not before.
+
+name = "pariksha-web"
+main = "../../apps/api/src/index.ts"
+# Cannot run ahead of the workerd binary bundled with
+# `@cloudflare/vitest-plugin`: a date that one does not know fails every
+# Miniflare test with "newest date supported by this server binary" while
+# deploying perfectly, which is the worst of both. Raise the two together.
+compatibility_date = "2026-10-18"
+# `@pariksha/db` and `hono` reach node:crypto and node:buffer.
+compatibility_flags = ["nodejs_compat"]
+
+[assets]
+directory = "../../apps/web/dist"
+# The entry point needs to hand unmatched non-API paths back to the asset
+# router; see the comment in `apps/api/src/index.ts`.
+binding = "ASSETS"
+# Unmatched non-API paths get `dist/404.html`, which is what the e2e suite
+# asserts ("the static host serves a 404 page rather than a SPA fallback").
+# Without this they would fall through to the Worker and get the API's JSON
+# error envelope instead of a page.
+not_found_handling = "404-page"
+# The API has no files under `dist/`, so without this every `/api/*` request
+# would be answered by the asset router's 404 before the script ran. With it
+# the script runs first, and the entry point only defers back to `ASSETS` for
+# paths outside `/api/` — so an unknown API path returns Hono's JSON error
+# envelope rather than the 404 page. Widening this list is what would start
+# metering requests that are free today.
+run_worker_first = ["/api/*"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "pariksha"
+# Written by setup.mjs. A named placeholder rather than an empty string, so a
+# deploy that skipped setup fails saying which script to run.
+database_id = "run-setup.mjs-to-fill-this-in"
+
+[[r2_buckets]]
+binding = "FILES"
+bucket_name = "pariksha-files"
+
+# Declared now, handled in Phase 8: the nightly retention job. Declaring the
+# schedule here makes turning it on a code change that a pull request
+# reviews, rather than an edit to production configuration that nobody sees.
+# Until `apps/api/src/index.ts` exports `scheduled`, the nightly invocation
+# has no handler — it costs no quota, but it will show in the dashboard. If
+# that noise is unwelcome before Phase 8, comment this block out; nothing
+# reads it.
+[triggers]
+crons = ["17 3 * * *"]
+
+# No `[vars]` block: everything this Worker reads is a secret, and anything
+# under `[vars]` is plaintext here and in the dashboard. See
+# `.dev.vars.example` for the names and README.md for how to set them.

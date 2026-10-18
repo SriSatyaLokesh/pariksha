@@ -12,7 +12,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && pnpm vitest run scripts",
-    "tokens": "node scripts/tokens.mjs"
+    "tokens": "node scripts/tokens.mjs",
+    "deploy:cf": "pnpm --filter @pariksha/api exec wrangler deploy -c ../../deploy/cloudflare/wrangler.toml"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

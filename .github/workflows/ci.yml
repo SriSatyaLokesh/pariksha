@@ -79,6 +79,20 @@ jobs:
         env:
           SITE_URL: ${{ vars.SITE_URL || 'https://pariksha.example' }}
 
+      # Both of these need the build above and neither needs a Cloudflare
+      # account, which is the point: the deploy configuration is checked on
+      # every pull request, including one from a fork, instead of first being
+      # exercised by the deploy that uses it.
+      - name: Wrangler dry run
+        run: >
+          pnpm --filter @pariksha/api exec wrangler deploy --dry-run
+          --outdir /tmp/worker -c ../../deploy/cloudflare/wrangler.toml
+
+      # Runs setup.mjs twice against an in-memory Cloudflare and asserts the
+      # second run creates nothing and migrates nothing.
+      - name: Setup script is idempotent
+        run: node deploy/cloudflare/setup.mjs --dry-run
+
       - name: Test
         run: pnpm test
         env:
