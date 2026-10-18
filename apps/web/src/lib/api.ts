@@ -9,7 +9,7 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type { Difficulty, PassageGroup, Question, QuestionType, Role } from "@pariksha/core";
+import type { Difficulty, ImportIssue, PassageGroup, Question, QuestionType, Role } from "@pariksha/core";
 export type { Role };
 
 // Phase 4 Task 2: banks and questions. Mirrors
@@ -40,6 +40,13 @@ export interface QuestionSummary {
  * bank's questions currently reference it — `packages/db/src/repo/banks.ts`'s
  * `listGroups` return type, unchanged over the wire. */
 export type PassageGroupSummary = PassageGroup & { questionCount: number };
+
+/** Task 7 (#51, P4.7): `apps/api/src/import/json.ts`'s `ImportReport`,
+ * unchanged over the wire — `issues` is empty on a clean import. */
+export interface ImportReport {
+  imported: number;
+  issues: (ImportIssue & { line?: number })[];
+}
 
 export interface QuestionListFilter {
   type?: QuestionType;
@@ -156,6 +163,20 @@ export interface ApiClient {
     patch: { title?: string; passage?: string },
   ): Promise<PassageGroupSummary>;
   deleteGroup(workspaceId: string, bankId: string, groupId: string): Promise<void>;
+
+  /**
+   * Task 7 (#51, P4.7): whole-bank JSON import. `dryRun: true` validates and
+   * reports without writing. A validation failure (422) and a clean
+   * dry-run both come back as an `ImportReport` rather than a thrown
+   * `ApiError` — `ImportDialog` renders one report shape either way; a
+   * genuine transport/size failure (413, 404, …) still throws.
+   */
+  importBank(
+    workspaceId: string,
+    bankId: string,
+    doc: unknown,
+    opts?: { dryRun?: boolean },
+  ): Promise<ImportReport>;
 }
 
 const API = "/api/v1";
@@ -360,5 +381,27 @@ export function createApiClient(): ApiClient {
         method: "DELETE",
       });
     },
+
+    async importBank(workspaceId, bankId, doc, opts = {}) {
+      const qs = opts.dryRun ? "?dryRun=1" : "";
+      try {
+        return await json<ImportReport>(`/workspaces/${workspaceId}/banks/${bankId}/import${qs}`, post(doc));
+      } catch (error) {
+        // A validation failure (apps/api/src/import/json.ts: structural,
+        // cross-field or duplicate-ref_id issues) is a 422 carrying
+        // `details.issues` — the same shape a clean import's `ImportReport`
+        // already has, just non-empty. Normalised here so `ImportDialog`
+        // renders one report shape whether the import succeeded or not,
+        // rather than a try/catch of its own around every call.
+        if (error instanceof ApiError && error.status === 422 && isIssuesDetails(error.details)) {
+          return { imported: 0, issues: error.details.issues };
+        }
+        throw error;
+      }
+    },
   };
+}
+
+function isIssuesDetails(value: unknown): value is { issues: (ImportIssue & { line?: number })[] } {
+  return typeof value === "object" && value !== null && Array.isArray((value as { issues?: unknown }).issues);
 }
