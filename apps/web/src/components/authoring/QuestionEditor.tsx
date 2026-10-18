@@ -238,11 +238,23 @@ export function QuestionEditor({
   // every group the bank has — a handful at most (#50, P4.6), so one fetch
   // on mount is enough; nothing here edits a group, so there is nothing to
   // keep in sync afterwards.
+  //
+  // Fix round 1, finding 3: an un-caught rejection here (a 403, a dropped
+  // connection) used to become an unhandled promise rejection with the
+  // select silently stuck on "No group" — the same try/catch-into-`notice`
+  // shape `bank.tsx`'s `load()` already uses for the same failure.
   useEffect(() => {
     let current = true;
-    void client.listGroups(workspaceId, bankId).then((rows) => {
-      if (current) setGroups(rows);
-    });
+    client
+      .listGroups(workspaceId, bankId)
+      .then((rows) => {
+        if (current) setGroups(rows);
+      })
+      .catch((cause: unknown) => {
+        if (current) {
+          setNotice(cause instanceof ApiError ? cause.message : "Passage groups could not be loaded.");
+        }
+      });
     return () => {
       current = false;
     };
@@ -308,10 +320,20 @@ export function QuestionEditor({
   // UX-21: an unsafe regex blank (or, defensively, a blank/placeholder
   // mismatch — structurally impossible given `effectiveQuestion` above, but
   // checked anyway) is caught here as fast, author-facing feedback while
-  // they type. It is not a server-side guarantee: `saveQuestion` runs no
-  // `validateBank` check today, only shape validation, so this only stops a
-  // document going out through *this* editor — the server-side guard is
-  // expected to land with the import path (Task 7).
+  // they type.
+  //
+  // Fix round 1, finding 4: this used to be the *only* check — the comment
+  // here said `saveQuestion` ran no `validateBank` check at all. That is no
+  // longer true: `apps/api/src/routes/questions.ts`'s `assertValid` now
+  // blocks a save server-side for exactly two of `validateBank`'s rules, a
+  // bad `group` reference and an unsafe regex (the same rule this local
+  // check already enforces) — not the rest of what `validateBank` covers,
+  // which stays deferred to import and publish so a half-built question can
+  // still be saved. So this client-side check is redundant with the regex
+  // half of the server's guard (fast feedback while typing vs. a round
+  // trip), not a stand-in for a guard that doesn't exist yet; the `group`
+  // half has no client-side equivalent because the select above only ever
+  // offers groups the bank actually has.
   const blockingIssues = effectiveQuestion.type === "fill_blank" ? fillBlankIssues(effectiveQuestion) : [];
   const groupPassage = groups.find((group) => group.id === effectiveQuestion.group)?.passage;
 

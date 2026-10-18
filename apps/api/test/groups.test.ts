@@ -146,6 +146,44 @@ it("a question cannot name a group that does not exist — the same rule validat
   expect((await res.json()).error.details.issues[0]).toMatchObject({ field: "group" });
 });
 
+// Fix round 1, finding 4: the save path enforces only `group` and
+// regex-safety — nothing else `validateBank` checks blocks a draft from
+// being saved, because an author must be able to save a half-built
+// question. A `single` whose `key` is not among its `options` is exactly
+// what the shipped editor produces when the keyed option is deleted
+// (`answer/Choice.tsx`), so this is not a hypothetical malformed body.
+it("a half-built question (key not among its options) still saves — that rule waits for import/publish", async () => {
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`,
+    post(
+      { id: "Q1", type: "single", prompt: "P", options: [{ id: "a", text: "A" }], key: "b" },
+      authorCookie,
+    ),
+  );
+  expect(res.status).toBe(201);
+});
+
+// An unsafe regex is enforced at save time regardless of draft state:
+// grading runs it against every attempt, so a catastrophically
+// backtracking pattern reaching storage is a denial-of-service against the
+// grading path whether or not the question is finished.
+it("an unsafe regex in a fill_blank answer is refused at save time", async () => {
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`,
+    post(
+      {
+        id: "Q1",
+        type: "fill_blank",
+        prompt: "{{a}}",
+        blanks: [{ id: "a", accepted: ["(x)\\1"], match: "regex" }],
+      },
+      authorCookie,
+    ),
+  );
+  expect(res.status).toBe(422);
+  expect((await res.json()).error.details.issues[0]).toMatchObject({ field: "blanks" });
+});
+
 it("the passage is stored as Markdown, verbatim, and the entry carries no rendered form", async () => {
   await app.request(
     `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,

@@ -7,18 +7,13 @@
 // `test_version.sections_json` entry use. `:qid` below is always the latter.
 //
 // `questionDoc` only checks a body is *shaped* like a question — `id`,
-// `type`, `prompt` and nothing else required. Everything cross-field
-// (`validateBank`, @pariksha/core) is the twelve editors' job too, but one
-// of its rules needs data only this route has: whether `group` names a
-// `PassageGroup` that actually exists in the bank (#50, P4.6). `assertValid`
-// below runs the whole of `validateBank` against a one-question "bank" built
-// from the real groups and the document being written, rather than
-// reimplementing the group-exists check by hand — a write with every other
-// field valid gets exactly the one issue a bad `group` deserves.
+// `type`, `prompt` and nothing else required. `assertValid`, below, is what
+// runs `validateBank` against it — see that function's own comment for which
+// of its issues actually block a save (fix round 1, finding 4).
 
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { QUESTION_TYPES, validateBank, type Question } from "@pariksha/core";
+import { QUESTION_TYPES, validateBank, type ImportIssue, type Question } from "@pariksha/core";
 import {
   appendAudit,
   deleteQuestion,
@@ -53,18 +48,52 @@ async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
 }
 
 /**
- * The group-exists rule (and every other cross-field rule `validateBank`
- * covers) is reached by validating the one-question "bank" this builds —
- * the bank's real groups plus only the document being written — not by a
- * second, hand-rolled check here. A 422 names every issue `validateBank`
- * finds, not only a group one: if the document is otherwise valid (the
- * common case), the group issue is the only one there.
+ * Fix round 1, finding 4: an earlier version of this function ran the whole
+ * of `validateBank` and rejected anything it found. That was wrong —
+ * full-document validation is a finished-document, all-or-nothing check
+ * (Task 7's import, and Phase 5 T-11's publish gate), and an author must be
+ * able to save a half-built question: a shape-valid `single` whose `key`
+ * was deleted along with its option (reachable from the shipped editor,
+ * `answer/Choice.tsx`) used to `201` and would have started `422`ing with
+ * no field named — the editor's own `onSave` catch surfaces only
+ * `cause.message`, discarding `details.issues` — a dead end mid-draft.
+ *
+ * Only `SAVE_TIME_ISSUE` issues actually block a save; everything else
+ * `validateBank` finds is returned by it but never acted on here:
+ *   - `group`: a dangling reference breaks the preview and the exam runtime
+ *     for every question in the group, not just this one (#50, P4.6, the
+ *     rule this function was added for).
+ *   - an unsafe regex in a `fill_blank` blank: grading runs it against every
+ *     attempt, so a catastrophically backtracking pattern reaching storage
+ *     is a stored denial-of-service against the grading path regardless of
+ *     whether the rest of the question is finished.
+ * Option/key consistency, matching, scoring-mode applicability and the rest
+ * wait for import and publish, same as before this route called
+ * `validateBank` at all — the *mechanism* (build a one-question "bank" from
+ * the real groups and run the real `validateBank`, not a second hand-rolled
+ * check) is unchanged.
  */
+function isSaveTimeIssue(issue: ImportIssue): boolean {
+  return (
+    issue.field === "group" ||
+    // ponytail: matched by message substring because `ImportIssue` carries
+    // no issue code, only `field` (shared with every other `blanks` issue)
+    // and a free-text `message` — `validate.ts`'s one `assertSafeRegex` call
+    // site is the only place this string is produced today. Upgrade path if
+    // that ever drifts: give `ImportIssue` a `code` and match on that
+    // instead of a message fragment.
+    (issue.field === "blanks" && issue.message.includes("unsafe regex pattern"))
+  );
+}
+
 async function assertValid(deps: AppDeps, workspaceId: string, bankId: string, doc: Question): Promise<void> {
   const groups = await listGroups(deps.db, workspaceId, bankId);
   const result = validateBank({ groups, questions: [doc] });
-  if (!result.ok) {
-    throw new ApiError(422, "invalid_question", "The question is not valid.", { issues: result.issues });
+  if (result.ok) return;
+
+  const blocking = result.issues.filter(isSaveTimeIssue);
+  if (blocking.length > 0) {
+    throw new ApiError(422, "invalid_question", "The question is not valid.", { issues: blocking });
   }
 }
 
