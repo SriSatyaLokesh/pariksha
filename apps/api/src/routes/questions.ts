@@ -73,17 +73,11 @@ async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
  * the real groups and run the real `validateBank`, not a second hand-rolled
  * check) is unchanged.
  */
+// Task 7 (#51): `ImportIssue` now carries a `code` for the one rule this
+// function needs to single out, so the unsafe-regex case is matched on that
+// rather than a `field === "blanks"` plus a message-substring guess.
 function isSaveTimeIssue(issue: ImportIssue): boolean {
-  return (
-    issue.field === "group" ||
-    // ponytail: matched by message substring because `ImportIssue` carries
-    // no issue code, only `field` (shared with every other `blanks` issue)
-    // and a free-text `message` — `validate.ts`'s one `assertSafeRegex` call
-    // site is the only place this string is produced today. Upgrade path if
-    // that ever drifts: give `ImportIssue` a `code` and match on that
-    // instead of a message fragment.
-    (issue.field === "blanks" && issue.message.includes("unsafe regex pattern"))
-  );
+  return issue.field === "group" || issue.code === "unsafe_regex";
 }
 
 async function assertValid(deps: AppDeps, workspaceId: string, bankId: string, doc: Question): Promise<void> {

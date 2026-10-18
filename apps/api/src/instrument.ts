@@ -24,10 +24,12 @@ export interface SubrequestCounts {
  * Wraps the injected dependencies so every call that costs a subrequest on
  * the platform costs one here too.
  *
- * Counted on the database: `exec`, `all`, `query` and `run` — the four that
- * reach D1. Not `jsonParam` or `jsonValue`, which only encode a value, and
- * not `close`, which releases a local connection and is a no-op on D1, the
- * one dialect the budget applies to.
+ * Counted on the database: `exec`, `all`, `query`, `run` and `batch` — the
+ * five that reach D1, `batch` as one regardless of how many statements it
+ * carries (it is one `env.DB.batch()` subrequest). Not `jsonParam` or
+ * `jsonValue`, which only encode a value, and not `close`, which releases a
+ * local connection and is a no-op on D1, the one dialect the budget applies
+ * to.
  *
  * Counted on storage: `put`, `get`, `delete` and `list`. Not `signedUrl`:
  * the S3 and R2 adapters presign locally with `aws4fetch` and issue no
@@ -61,6 +63,13 @@ export function countingDeps(deps: AppDeps): {
     run: (sql: string, params?: unknown[]) => {
       db++;
       return inner.run(sql, params);
+    },
+    // One `batch()` call is one subrequest on D1 regardless of how many
+    // statements it carries (Task 7, Review Focus item 3) — counted the
+    // same way `run` and friends are, not once per statement inside it.
+    batch: (statements) => {
+      db++;
+      return inner.batch(statements);
     },
   };
 

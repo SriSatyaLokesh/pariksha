@@ -460,6 +460,27 @@ export const upsertQuestion = scoped(
   },
 );
 
+/**
+ * Task 7 (#51), Review Focus item 3: one `db.batch()` regardless of how many
+ * `docs` there are, replacing the sequential SELECT-then-INSERT/UPDATE per
+ * question this function used to spend through `upsertQuestion` — ~2N
+ * subrequests against the 50-subrequest Workers ceiling, correct at ten
+ * questions and over budget at sixty.
+ *
+ * Import (`apps/api/src/import/json.ts`), the only caller, has already
+ * checked every `doc.id` against the bank's existing `ref_id`s before
+ * calling this — so every statement built here is an INSERT with a fresh
+ * id, never an UPDATE. `question_bank_ref_uq` (the `(bank_id, ref_id)`
+ * unique index) is the backstop if that check is ever wrong or raced: a
+ * collision throws inside the batch, which rolls the whole import back
+ * rather than silently overwriting a row.
+ *
+ * ponytail: real upsert semantics (an existing `ref_id` updates in place
+ * instead of erroring) would cost one more SELECT up front to resolve which
+ * ids already exist — still a single extra round trip, not one per
+ * question. Add it if a caller other than import ever needs bulk-upsert
+ * rather than bulk-insert; today nothing does.
+ */
 export const upsertQuestions = scoped(
   "upsertQuestions",
   async (
@@ -469,18 +490,62 @@ export const upsertQuestions = scoped(
     docs: readonly Question[],
     now: number,
   ): Promise<{ ids: string[] }> => {
-    // ponytail: sequential single-row writes — each question is its own
-    // SELECT-then-INSERT/UPDATE through `upsertQuestion`, so a bank of N
-    // questions spends roughly 2N subrequests against the 50-subrequest
-    // Workers ceiling. That is fine for the handful of questions this task's
-    // screens write at once; Task 7 (bulk import) adds `DbClient.batch()`
-    // and rewires this to cost one round trip regardless of N.
+    if (docs.length === 0) return { ids: [] };
+
     const ids: string[] = [];
-    for (const doc of docs) {
-      const { id } = await upsertQuestion(db, workspaceId, bankId, doc, now);
+    const statements = docs.map((doc) => {
+      const id = newId("qst");
       ids.push(id);
-    }
+      const row = toQuestionRow(doc);
+      return {
+        sql:
+          "INSERT INTO question (id, workspace_id, bank_id, ref_id, group_ref, type, prompt_md, media_json, " +
+          "options_json, key_json, scoring_json, points, difficulty, tags_json, explanation_md, extra_json, " +
+          "version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        params: [
+          id,
+          workspaceId,
+          bankId,
+          row.ref_id,
+          row.group_ref,
+          row.type,
+          row.prompt_md,
+          row.media_json == null ? null : db.jsonParam(row.media_json),
+          row.options_json == null ? null : db.jsonParam(row.options_json),
+          row.key_json == null ? null : db.jsonParam(row.key_json),
+          row.scoring_json == null ? null : db.jsonParam(row.scoring_json),
+          row.points,
+          row.difficulty,
+          db.jsonParam(row.tags_json ?? []),
+          row.explanation_md,
+          row.extra_json == null ? null : db.jsonParam(row.extra_json),
+          1,
+          now,
+          now,
+        ],
+      };
+    });
+
+    await db.batch(statements);
     return { ids };
+  },
+);
+
+/**
+ * Every `ref_id` already in a bank, for import's own duplicate check
+ * (apps/api/src/import/json.ts) — one query regardless of the bank's size,
+ * and never filtered by an `IN (...)` list of the *incoming* ids: D1 caps
+ * bound parameters per statement, and a 500-question import would need 500
+ * of them in that clause alone.
+ */
+export const listQuestionRefIds = scoped(
+  "listQuestionRefIds",
+  async (db: DbClient, workspaceId: string, bankId: string): Promise<string[]> => {
+    const rows = await db.query<{ ref_id: string }>(
+      "SELECT ref_id FROM question WHERE workspace_id = ? AND bank_id = ?",
+      [workspaceId, bankId],
+    );
+    return rows.map((row) => row.ref_id);
   },
 );
 

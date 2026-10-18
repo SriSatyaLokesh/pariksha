@@ -29,6 +29,7 @@ import {
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
+import { importBankJson } from "../import/json.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 
 const newBank = z.object({ name: z.string().min(1).max(200) });
@@ -295,6 +296,33 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     });
 
     return c.body(null, 204);
+  });
+
+  // Task 7 (#51, P4.7): whole-bank import, all-or-nothing. `?dryRun=1`
+  // validates and reports without writing — the one call the web dialog
+  // makes first, before an author ever clicks "Import".
+  routes.post("/:id/banks/:bankId/import", requires("banks.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    await bankOr404(deps, workspaceId, bankId);
+
+    const dryRun = c.req.query("dryRun") === "1";
+    const body = await json(c.req.raw);
+    const now = deps.now();
+    const report = await importBankJson(deps, workspaceId, bankId, body, { dryRun, now });
+
+    if (!dryRun) {
+      await appendAudit(deps.db, workspaceId, {
+        actor: actor.userId,
+        action: "bank.import",
+        target: bankId,
+        detail: { imported: report.imported },
+        now,
+      });
+    }
+
+    return c.json(report);
   });
 
   return routes;

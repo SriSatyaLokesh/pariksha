@@ -48,6 +48,16 @@ export interface ImportIssue {
   index: number;
   field: string;
   message: string;
+  /**
+   * A stable, machine-matchable identifier for *which* rule fired — set only
+   * where a caller actually needs to act on one specific rule rather than
+   * read `message` to a person. Task 7 (#51): `apps/api/src/routes/
+   * questions.ts`'s `isSaveTimeIssue` used to match the unsafe-regex issue by
+   * `field === "blanks"` plus a message substring, because this field did
+   * not exist; it is added here, narrowly, rather than given to every issue
+   * this file raises, which would be a speculative rename nothing asks for.
+   */
+  code?: string;
 }
 
 type ValidationResult =
@@ -171,8 +181,8 @@ export function validateBank(bank: unknown): ValidationResult {
     }
     const q = raw as unknown as Question;
 
-    const issue = (field: string, message: string): void => {
-      issues.push({ questionId: q.id, index, field, message });
+    const issue = (field: string, message: string, code?: string): void => {
+      issues.push({ questionId: q.id, index, field, message, ...(code !== undefined && { code }) });
     };
 
     // Layer 1 (above, and `optionIds`/`usableBlanks` below) guards the two
@@ -295,6 +305,7 @@ export function validateBank(bank: unknown): ValidationResult {
                   issue(
                     "blanks",
                     `blank "${blank.id}" has an unsafe regex pattern "${pattern}": ${message}`,
+                    "unsafe_regex",
                   );
                 }
               }
