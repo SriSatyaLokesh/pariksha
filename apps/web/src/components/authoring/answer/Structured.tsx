@@ -15,6 +15,13 @@ export function isStructuredQuestion(question: { type: string }): question is St
   return (STRUCTURED_TYPES as readonly string[]).includes(question.type);
 }
 
+function reordered(items: readonly string[], from: number, to: number): string[] {
+  const next = [...items];
+  const [moved] = next.splice(from, 1);
+  next.splice(to, 0, moved!);
+  return next;
+}
+
 function nextDefaultText(existing: readonly string[], noun: string): string {
   let n = existing.length + 1;
   while (existing.includes(`${noun} ${n}`)) n++;
@@ -212,17 +219,11 @@ function MatchingAnswer({
   onChange: (next: MatchingQuestion) => void;
 }) {
   function moveLeft(from: number, to: number): void {
-    const left = [...question.left];
-    const [moved] = left.splice(from, 1);
-    left.splice(to, 0, moved!);
-    onChange({ ...question, left });
+    onChange({ ...question, left: reordered(question.left, from, to) });
   }
 
   function moveRight(from: number, to: number): void {
-    const right = [...question.right];
-    const [moved] = right.splice(from, 1);
-    right.splice(to, 0, moved!);
-    onChange({ ...question, right });
+    onChange({ ...question, right: reordered(question.right, from, to) });
   }
 
   function renameLeftAt(index: number, text: string): void {
@@ -320,17 +321,11 @@ function MultiMatchingAnswer({
   onChange: (next: MultiMatchingQuestion) => void;
 }) {
   function moveLeft(from: number, to: number): void {
-    const left = [...question.left];
-    const [moved] = left.splice(from, 1);
-    left.splice(to, 0, moved!);
-    onChange({ ...question, left });
+    onChange({ ...question, left: reordered(question.left, from, to) });
   }
 
   function moveRight(from: number, to: number): void {
-    const right = [...question.right];
-    const [moved] = right.splice(from, 1);
-    right.splice(to, 0, moved!);
-    onChange({ ...question, right });
+    onChange({ ...question, right: reordered(question.right, from, to) });
   }
 
   function renameLeftAt(index: number, text: string): void {
@@ -430,10 +425,7 @@ function OrderingAnswer({
   onChange: (next: OrderingQuestion) => void;
 }) {
   function moveItem(from: number, to: number): void {
-    const items = [...question.items];
-    const [moved] = items.splice(from, 1);
-    items.splice(to, 0, moved!);
-    onChange({ ...question, items });
+    onChange({ ...question, items: reordered(question.items, from, to) });
   }
 
   function renameAt(index: number, text: string): void {
