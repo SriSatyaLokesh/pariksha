@@ -13,7 +13,7 @@ export default tseslint.config(
     // Type-aware linting only where a package's tsconfig actually includes
     // the files (its `src/`), so this never needs a default/out-of-project
     // fallback for test files or root-level *.config.ts files.
-    files: ["**/src/**/*.ts"],
+    files: ["**/src/**/*.{ts,tsx}"],
     extends: [tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       parserOptions: {

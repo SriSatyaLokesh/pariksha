@@ -198,7 +198,92 @@ export type ContrastPair = (typeof contrastPairs)[number];
   return formatWith("typescript", source);
 }
 
+// Issue-137 widening (T28, constraints.md §2.1): a colour literal is no
+// longer just a hex code. `rgb()`/`rgba()`/`hsl()`/`hsla()`/`oklch()`/`lab()`
+// and the standard CSS named-colour keywords are all illegal too, with one
+// carve-out: `rgb(from var(--color-NAME) r g b / <alpha>)` — the relative-
+// colour syntax `base.css` and `components.css` already use twice. Exported
+// so no-hex-colors.test.ts can widen its own guard from the exact same
+// definition rather than a hand-kept copy that could drift out of sync.
 const HEX_LITERAL_RE = /#([0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/;
+
+const COLOR_FUNCTION_RE =
+  /\b(?:rgb|rgba|hsl|hsla|oklch|lab)\(((?:[^()]|\([^()]*\))*)\)/gi;
+
+function isLegalColorFunctionArgs(args) {
+  return /^\s*from\s+var\(--color-[a-zA-Z0-9-]+\)/.test(args);
+}
+
+// The standard CSS named-colour keywords (CSS Color Module, level 4) —
+// excluding "transparent" and "currentcolor", which are layout keywords
+// this codebase uses legitimately (e.g. `background: transparent`,
+// `color: inherit`), not colours needing a token.
+export const CSS_NAMED_COLORS = [
+  "aliceblue", "antiquewhite", "aqua", "aquamarine", "azure", "beige",
+  "bisque", "black", "blanchedalmond", "blue", "blueviolet", "brown",
+  "burlywood", "cadetblue", "chartreuse", "chocolate", "coral",
+  "cornflowerblue", "cornsilk", "crimson", "cyan", "darkblue", "darkcyan",
+  "darkgoldenrod", "darkgray", "darkgreen", "darkgrey", "darkkhaki",
+  "darkmagenta", "darkolivegreen", "darkorange", "darkorchid", "darkred",
+  "darksalmon", "darkseagreen", "darkslateblue", "darkslategray",
+  "darkslategrey", "darkturquoise", "darkviolet", "deeppink", "deepskyblue",
+  "dimgray", "dimgrey", "dodgerblue", "firebrick", "floralwhite",
+  "forestgreen", "fuchsia", "gainsboro", "ghostwhite", "gold", "goldenrod",
+  "gray", "grey", "green", "greenyellow", "honeydew", "hotpink",
+  "indianred", "indigo", "ivory", "khaki", "lavender", "lavenderblush",
+  "lawngreen", "lemonchiffon", "lightblue", "lightcoral", "lightcyan",
+  "lightgoldenrodyellow", "lightgray", "lightgreen", "lightgrey",
+  "lightpink", "lightsalmon", "lightseagreen", "lightskyblue",
+  "lightslategray", "lightslategrey", "lightsteelblue", "lightyellow",
+  "lime", "limegreen", "linen", "magenta", "maroon", "mediumaquamarine",
+  "mediumblue", "mediumorchid", "mediumpurple", "mediumseagreen",
+  "mediumslateblue", "mediumspringgreen", "mediumturquoise",
+  "mediumvioletred", "midnightblue", "mintcream", "mistyrose", "moccasin",
+  "navajowhite", "navy", "oldlace", "olive", "olivedrab", "orange",
+  "orangered", "orchid", "palegoldenrod", "palegreen", "paleturquoise",
+  "palevioletred", "papayawhip", "peachpuff", "peru", "pink", "plum",
+  "powderblue", "purple", "rebeccapurple", "red", "rosybrown", "royalblue",
+  "saddlebrown", "salmon", "sandybrown", "seagreen", "seashell", "sienna",
+  "silver", "skyblue", "slateblue", "slategray", "slategrey", "snow",
+  "springgreen", "steelblue", "tan", "teal", "thistle", "tomato",
+  "turquoise", "violet", "wheat", "white", "whitesmoke", "yellow",
+  "yellowgreen",
+];
+
+// Hyphen-aware boundaries, not `\b`: `white-space` must never flag as the
+// named colour "white" (`\b` fires on the letter/hyphen transition; a plain
+// `\bwhite\b` would match the first half of that property name).
+const NAMED_COLOR_RE = new RegExp(
+  `(?<![a-zA-Z0-9_-])(?:${CSS_NAMED_COLORS.join("|")})(?![a-zA-Z0-9_-])`,
+  "i",
+);
+
+// Block comments (CSS, and JS/TS, which share the /* */ form) and HTML
+// comments only — never `//`, which would also eat `https://` inside a
+// quoted URL. Comment prose legitimately says things like "checked on both
+// white and cream" without authoring a colour.
+function stripCommentsForScan(content) {
+  return content
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+}
+
+/**
+ * True if `content` contains any illegal colour literal: a hex code, a
+ * named-colour keyword, or a colour function whose first argument is not
+ * the one legal relative-colour form `from var(--color-NAME)`. Comments are
+ * ignored — this checks authored code, not prose about colour.
+ */
+export function hasIllegalColorLiteral(content) {
+  const scanned = stripCommentsForScan(content);
+  if (HEX_LITERAL_RE.test(scanned)) return true;
+  if (NAMED_COLOR_RE.test(scanned)) return true;
+  for (const match of scanned.matchAll(COLOR_FUNCTION_RE)) {
+    if (!isLegalColorFunctionArgs(match[1])) return true;
+  }
+  return false;
+}
+
 const SCANNED_EXTENSIONS = new Set([".ts", ".tsx", ".css", ".html"]);
 
 function walk(dir) {
@@ -225,7 +310,7 @@ export function filesWithHexLiterals(dir, { except = [] } = {}) {
   const exceptSet = new Set(except.map((p) => p.split("/").join(sep)));
   return walk(dir)
     .filter((file) => !exceptSet.has(relative(dir, file)))
-    .filter((file) => HEX_LITERAL_RE.test(readFileSync(file, "utf8")));
+    .filter((file) => hasIllegalColorLiteral(readFileSync(file, "utf8")));
 }
 
 async function main() {

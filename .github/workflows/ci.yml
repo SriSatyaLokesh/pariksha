@@ -68,8 +68,16 @@ jobs:
       - name: Type-check
         run: pnpm typecheck
 
+      # scripts/prerender.mjs throws rather than bake in a placeholder origin
+      # (design contract SEO-6, OQ-1), so the caller supplies SITE_URL. A CI
+      # build is a check whose dist/ is thrown away, so the repository
+      # variable is used once the owner sets it and the tests' own
+      # non-serving origin stands in until then. The deploy workflow passes
+      # vars.SITE_URL with no fallback, because that build is served.
       - name: Build
         run: pnpm build
+        env:
+          SITE_URL: ${{ vars.SITE_URL || 'https://pariksha.example' }}
 
       - name: Test
         run: pnpm test

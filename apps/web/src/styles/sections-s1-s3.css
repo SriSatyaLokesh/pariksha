@@ -1,0 +1,394 @@
+/* S1 (Hero), S2 (What is Pariksha?), S3 (How running an exam works).
+   landing-page-v2-design.md §3.0 padding/measure/density; ui-direction.md
+   §1 (hero), §3 (code/mock surfaces). No colour literal: every colour is a
+   token var(), the one legal alpha form is
+   rgb(from var(--color-NAME) r g b / a). Scoped to this assignment's own
+   section wrappers (.section-s2, .section-s3, .runner-mock) rather than
+   the shared component classes in components.css/blocks.css. */
+
+/* ---- S2 — What is Pariksha? ---------------------------------------- */
+
+/* §3.0: cream band, sparse density, 64px padding; its top edge carries no
+   hairline because the surface changes there (voltage hero above it). */
+.section-s2 {
+  padding-block: var(--space-4xl);
+}
+
+.section-s2__measure {
+  max-width: 760px;
+}
+
+.section-s2__measure p {
+  margin: 0 0 var(--space-2xl);
+}
+
+.numeral-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3xl);
+  margin: 0 0 var(--space-xl);
+}
+
+.numeral-row__item {
+  min-width: 0;
+}
+
+.numeral-row__value {
+  margin: 0;
+  font-family: var(--type-display-lg-family);
+  font-weight: var(--type-display-lg-weight);
+  font-size: var(--type-display-lg-size);
+  line-height: var(--type-display-lg-line-height);
+  letter-spacing: var(--type-display-lg-letter-spacing);
+  color: var(--color-ink);
+}
+
+.numeral-row__label {
+  margin-top: var(--space-xs);
+}
+
+/* v3-interactive.md §4.2: the verification strip. Three artefacts a reader
+   can open, re-tenanting the social-proof slot rather than filling it with
+   a star count or a coverage tuple. */
+.verification-strip {
+  list-style: none;
+  margin: var(--space-lg) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+  color: var(--color-ink-soft);
+}
+
+/* ---- S3 — How running an exam works --------------------------------- */
+
+/* §3.0: cream band, dense density, 96px padding (chapter opening); it
+   follows S2 on the same surface, so it keeps the hairline rule S2 omits. */
+.section-s3 {
+  padding-block: var(--space-5xl);
+  border-top: 1px solid var(--color-hairline);
+}
+
+.section-s3__answer {
+  max-width: 680px;
+  margin: 0 0 var(--space-3xl);
+}
+
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5xl);
+}
+
+.section-s3 .step-row__body,
+.section-s3 .step-row__artefact {
+  max-width: 680px;
+}
+
+.step-row__caption {
+  margin: var(--space-md) 0 0;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+.section-s3 .step-row__artefact > * + * {
+  margin-top: var(--space-xl);
+}
+
+/* P6: a 44px ordinal plus a 24px gap leaves too little of the 320px content
+   box for the step's own text, so the row stacks below the breakpoint where
+   that starts to bite. */
+@media (max-width: 480px) {
+  .step-row {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+}
+
+/* ---- B3's absorbed h3s (#features, #no-code) — v3-interactive.md §4.3 -- */
+
+/* S5 and S6 merge into this band as h3s rather than separate sections; this
+   is the shared sub-heading style the two absorbed titles use so they read
+   as a tier below the band's own h2 (heading-md, like status-group__heading
+   in sections-s7-s9.css — the same visual language, a different file
+   because this band owns these two ids). */
+.absorbed-heading {
+  margin: var(--space-3xl) 0 var(--space-lg);
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+  letter-spacing: var(--type-heading-md-letter-spacing);
+  color: var(--color-ink);
+}
+
+.feature-lead {
+  max-width: 680px;
+  margin: 0 0 var(--space-xl);
+  padding-left: var(--space-lg);
+  border-left: 2px solid var(--color-hairline-strong);
+  color: var(--color-ink-soft);
+}
+
+.type-list {
+  margin: 0 0 var(--space-xl);
+  padding-left: var(--space-xl);
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-xs) var(--space-xl);
+  color: var(--color-ink);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+}
+
+@media (max-width: 480px) {
+  .type-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+.capability-list {
+  margin: 0 0 var(--space-2xl);
+  padding-left: var(--space-xl);
+  display: grid;
+  gap: var(--space-sm);
+  color: var(--color-ink);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+}
+
+.capability-list code {
+  font-family: var(--type-mono-sm-family);
+  background: var(--color-cream);
+  padding: 0 4px;
+  border-radius: var(--rounded-xs);
+}
+
+.no-code-pull-quote {
+  max-width: 680px;
+  margin: 0 0 var(--space-xl);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+/* ---- Results table (S3, step 03) — DESIGN.md's results-table token --- */
+
+/* The fourth wide object P6 names: the same overflow-x scroll region as
+   CodeBlock's .code-block__scroll and ComparisonTable's
+   .comparison-table__region (the wrapping tabIndex/role/aria-labelledby
+   markup is a .tsx change — see needs_from_others). */
+.results-table__region {
+  overflow-x: auto;
+}
+
+.results-table {
+  width: 100%;
+  /* Keeps its natural four-column reading width so it scrolls inside the
+     region above instead of being squeezed to ~214px at 320px. */
+  min-width: 480px;
+  border-collapse: collapse;
+  background: var(--color-canvas);
+}
+
+.results-table th,
+.results-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--color-hairline);
+  text-align: left;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  color: var(--color-ink);
+}
+
+.results-table thead th {
+  border-bottom: 1px solid var(--color-hairline-strong);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+.results-table__numeric {
+  font-family: var(--type-timer-numeric-family);
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Integrity badges (declined as a component, §6: "use the CSS class
+   inline" — three instances, all in this section). The word carries the
+   status; colour is never the only carrier (A11). */
+.integrity-badge-clean,
+.integrity-badge-review,
+.integrity-badge-risk {
+  display: inline-flex;
+  align-items: center;
+  height: 24px;
+  padding: 4px 10px;
+  border: 1px solid;
+  border-radius: var(--rounded-full);
+  background: var(--color-canvas);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+.integrity-badge-clean {
+  color: var(--color-flag-clean);
+  border-color: var(--color-flag-clean);
+}
+
+.integrity-badge-review {
+  color: var(--color-flag-review);
+  border-color: var(--color-flag-review);
+}
+
+.integrity-badge-risk {
+  color: var(--color-flag-risk);
+  border-color: var(--color-flag-risk);
+}
+
+/* ---- Runner mock (S1, M-1) — ui-direction.md §3.3 ------------------- */
+
+/* On the voltage canvas the mock is a cream plane, ink and muted text
+   throughout, --rounded-lg (it is a card), --space-xl padding, internal
+   hairline-strong rules — the exact rule for any non-hero cream surface. */
+.runner-mock {
+  background: var(--color-cream);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-xl);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.runner-mock__header,
+.runner-mock__stem-row,
+.runner-mock__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.runner-mock__header,
+.runner-mock__stem-row {
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-hairline-strong);
+}
+
+.runner-mock__section,
+.runner-mock__points,
+.runner-mock__saved,
+.runner-mock__candidate {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+}
+
+.runner-mock__timer {
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-timer-numeric-size);
+  font-weight: var(--type-timer-numeric-weight);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.runner-mock__question-of {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
+.runner-mock__stem {
+  margin: 0;
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  font-weight: var(--type-question-stem-weight);
+  line-height: var(--type-question-stem-line-height);
+  color: var(--color-ink);
+}
+
+.runner-mock__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.runner-mock__option {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 var(--space-lg);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  font-weight: var(--type-option-label-weight);
+  color: var(--color-ink);
+}
+
+.runner-mock__option--selected {
+  background: var(--color-cream);
+  border: 2px solid var(--color-voltage);
+  font-weight: 500;
+}
+
+.runner-mock__palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.runner-mock__square {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-ink);
+}
+
+.runner-mock__square--answered {
+  background: var(--color-state-answered);
+  border-color: var(--color-state-answered);
+  color: var(--color-cream);
+}
+
+.runner-mock__square--marked {
+  background: var(--color-state-marked);
+  border-color: var(--color-state-marked);
+  color: var(--color-cream);
+}
+
+.runner-mock__square--current {
+  border: 2px solid var(--color-voltage);
+  color: var(--color-voltage-deep);
+}
+

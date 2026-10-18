@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pariksha hero — prototype</title>
+<!--FONTS-->
+<style>
+:root{
+  --voltage:#e24c18; --voltage-hover:#f06a38; --voltage-deep:#b63a10;
+  --cream:#fffbf5; --canvas:#ffffff; --ink:#231f1d; --ink-soft:#413c39; --muted:#6f6a66;
+  --hairline:#efebe6; --hairline-strong:#ddd6ce;
+  --answered:#0d7a51; --marked:#6a4ddb; --risk:#b3261e; --data-blue:#0a6fd4;
+  --sans:"Anek Latin",system-ui,sans-serif; --mono:"JetBrains Mono",ui-monospace,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{scroll-behavior:smooth}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{margin:0;background:var(--cream);color:var(--ink);font-family:var(--sans);
+  scroll-snap-type:y proximity}
+.proto-note{position:fixed;right:12px;bottom:12px;z-index:50;background:var(--ink);color:var(--cream);
+  font-family:var(--mono);font-size:11px;padding:7px 11px;border-radius:999px;opacity:.88}
+
+/* ---------- nav ---------- */
+.nav{position:sticky;top:0;z-index:20;height:64px;background:var(--voltage);color:var(--cream);
+  display:flex;align-items:center;justify-content:space-between;padding:0 32px;
+  border-bottom:1px solid rgb(from var(--ink) r g b / .12)}
+.wordmark{font-size:19px;font-weight:600;letter-spacing:-.2px}
+.wordmark span{font-family:var(--mono);font-size:11px;opacity:.82;margin-left:9px;letter-spacing:.04em}
+.nav-links{display:flex;gap:4px}
+.nav a{color:var(--cream);text-decoration:none;font-size:14px;padding:11px 12px;border-radius:8px;opacity:.9}
+.nav a:hover,.nav a:focus-visible{background:rgb(from var(--cream) r g b / .14);opacity:1}
+
+/* ---------- hero: exactly one screen, never scrolls ---------- */
+.hero{height:calc(100dvh - 64px);min-height:600px;overflow:hidden;background:var(--voltage);
+  color:var(--cream);display:grid;grid-template-rows:auto 1fr auto;gap:16px;
+  padding:22px 32px 18px;scroll-snap-align:start}
+.hero__head{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:end;gap:28px}
+.chip{display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;
+  letter-spacing:.09em;text-transform:uppercase;background:rgb(from var(--cream) r g b / .15);
+  border:1px solid rgb(from var(--cream) r g b / .3);border-radius:999px;padding:5px 11px;margin:0 0 9px}
+h1{margin:0;font-size:clamp(24px,1.6vw + 12px,32px);line-height:1.12;letter-spacing:-.5px;font-weight:500;max-width:22ch}
+.hero__lead{margin:9px 0 0;font-size:15px;line-height:1.45;max-width:46ch;opacity:.93}
+
+/* the masthead: the product name in the mono face, the loudest object on the page */
+.masthead{text-align:right;line-height:1}
+.masthead__name{display:block;font-weight:500;font-size:clamp(44px,6.4vw,96px);
+  letter-spacing:-.055em;margin:0;font-family:var(--mono)}
+.masthead__rule{border:0;border-top:1px solid rgb(from var(--cream) r g b / .38);margin:13px 0 9px}
+
+/* ---- candidate display faces for the wordmark (prototype switcher) ---- */
+[data-face="mono"]   .masthead__name{font-family:var(--mono);font-weight:500;letter-spacing:-.055em}
+[data-face="yatra"]  .masthead__name{font-family:"Yatra One",serif;font-weight:400;letter-spacing:-.01em;font-size:clamp(40px,5.6vw,84px)}
+[data-face="modak"]  .masthead__name{font-family:"Modak",cursive;font-weight:400;letter-spacing:.005em;font-size:clamp(42px,6vw,92px)}
+/* ---- handwritten and brush candidates ---- */
+[data-face="kalam"]   .masthead__name{font-family:"Kalam",cursive;font-weight:700;letter-spacing:-.01em;font-size:clamp(44px,6.2vw,94px)}
+[data-face="caveat"]  .masthead__name{font-family:"Caveat",cursive;font-weight:700;letter-spacing:0;font-size:clamp(54px,7.6vw,118px)}
+[data-face="marker"]  .masthead__name{font-family:"Permanent Marker",cursive;font-weight:400;letter-spacing:-.015em;font-size:clamp(42px,5.9vw,90px)}
+[data-face="kaushan"] .masthead__name{font-family:"Kaushan Script",cursive;font-weight:400;letter-spacing:0;font-size:clamp(46px,6.5vw,98px)}
+[data-face="pacifico"].masthead__name{font-family:"Pacifico",cursive;font-weight:400;letter-spacing:-.01em;font-size:clamp(44px,6.2vw,92px)}
+[data-face="satisfy"] .masthead__name{font-family:"Satisfy",cursive;font-weight:400;letter-spacing:0;font-size:clamp(50px,7vw,108px)}
+[data-face="baloo"]   .masthead__name{font-family:"Baloo 2",cursive;font-weight:800;letter-spacing:-.02em;font-size:clamp(44px,6.3vw,96px)}
+[data-face="rozha"]  .masthead__name{font-family:"Rozha One",serif;font-weight:400;letter-spacing:-.015em;font-size:clamp(46px,6.6vw,100px)}
+[data-face="eczar"]  .masthead__name{font-family:"Eczar",serif;font-weight:700;letter-spacing:-.02em;font-size:clamp(44px,6.2vw,94px)}
+/* drawn: Anek with a shirorekha — the top bar Samarkan borrows from Devanagari. No font file. */
+[data-face="drawn"] .masthead__name{font-family:var(--sans);font-weight:500;letter-spacing:-.025em;
+  font-size:clamp(46px,6.6vw,100px);position:relative;display:inline-block;padding-top:.1em}
+[data-face="drawn"] .masthead__name::before{content:"";position:absolute;left:0;right:0;top:.07em;
+  height:.055em;background:currentColor;border-radius:1px}
+
+/* prototype-only chrome */
+.switch{position:fixed;left:12px;bottom:12px;z-index:50;display:flex;gap:4px;flex-wrap:wrap;
+  align-items:center;max-width:min(620px,92vw);background:var(--ink);padding:8px;border-radius:12px}
+.switch__tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:rgb(from #fffbf5 r g b / .55);padding:0 3px 0 7px}
+.switch__tag:first-child{padding-left:3px}
+.switch button{font-family:var(--mono);font-size:11px;color:var(--cream);background:transparent;
+  border:1px solid rgb(from #fffbf5 r g b / .3);border-radius:7px;padding:7px 10px;cursor:pointer;min-height:34px}
+.switch button[aria-pressed="true"]{background:var(--cream);color:var(--ink);border-color:var(--cream)}
+.masthead__stats{display:flex;justify-content:flex-end;gap:20px;font-family:var(--mono);
+  font-size:11px;letter-spacing:.04em;opacity:.92}
+.masthead__stats b{display:block;font-size:14px;font-weight:500;letter-spacing:-.01em}
+
+/* ---------- three horizontal cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;min-height:0}
+.card{background:var(--cream);color:var(--ink);border-radius:10px;display:flex;flex-direction:column;
+  min-height:0;overflow:hidden;box-shadow:0 1px 0 rgb(from var(--ink) r g b / .14)}
+.card__bar{display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:9px 14px;border-bottom:1px solid var(--hairline);font-family:var(--mono);font-size:11px;
+  letter-spacing:.05em;color:var(--muted);flex:0 0 auto}
+.card__type{text-transform:uppercase}
+.card__pts{color:var(--ink)}
+.card__body{padding:14px;display:flex;flex-direction:column;gap:11px;min-height:0;overflow:auto;flex:1 1 auto}
+.card__prompt{margin:0;font-size:15px;line-height:1.4}
+.series{font-family:var(--mono);font-size:19px;letter-spacing:.06em;color:var(--ink)}
+.opts{display:flex;flex-direction:column;gap:7px;margin:0;padding:0;border:0}
+.opt{display:flex;align-items:center;gap:10px;padding:9px 11px;border:1px solid var(--hairline-strong);
+  border-radius:8px;cursor:pointer;font-size:14.5px;min-height:42px;background:var(--canvas);
+  transition:none}
+@media (prefers-reduced-motion:no-preference){.opt{transition:border-color 120ms ease-out,background-color 120ms ease-out}}
+.opt:hover{border-color:var(--voltage)}
+.opt input{accent-color:var(--voltage);width:17px;height:17px;margin:0;flex:0 0 auto}
+.opt:has(input:checked){border-color:var(--voltage);border-width:2px;padding:8px 10px;background:var(--cream)}
+.opt:has(input:focus-visible){outline:2px solid var(--voltage);outline-offset:2px}
+.mono-val{font-family:var(--mono)}
+/* matching rows */
+.match{display:flex;flex-direction:column;gap:7px}
+.match__row{display:grid;grid-template-columns:minmax(72px,auto) 1fr;align-items:center;gap:9px}
+.match__key{font-family:var(--mono);font-size:13px;color:var(--ink)}
+.match__row select{width:100%;min-height:42px;font:inherit;font-size:13.5px;padding:8px 9px;
+  border:1px solid var(--hairline-strong);border-radius:8px;background:var(--canvas);color:var(--ink)}
+.match__row select:focus-visible{outline:2px solid var(--voltage);outline-offset:2px}
+/* result states */
+.card[data-state="right"] .card__bar{color:var(--answered)}
+.card[data-state="wrong"] .card__bar{color:var(--risk)}
+.verdict{margin:0;font-size:13.5px;line-height:1.45;padding:10px 11px;border-radius:8px;
+  border-left:3px solid var(--muted);background:var(--canvas)}
+.verdict b{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;display:block;margin-bottom:4px}
+.card[data-state="right"] .verdict{border-left-color:var(--answered)}
+.card[data-state="right"] .verdict b{color:var(--answered)}
+.card[data-state="wrong"] .verdict{border-left-color:var(--risk)}
+.card[data-state="wrong"] .verdict b{color:var(--risk)}
+.hidden{display:none}
+
+/* ---------- control row ---------- */
+.bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  border-top:1px solid rgb(from var(--cream) r g b / .28);padding-top:14px}
+.bar__left{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.pips{display:flex;gap:6px;margin:0;padding:0;list-style:none}
+.pip{width:26px;height:26px;border-radius:7px;border:1px solid rgb(from var(--cream) r g b / .45);
+  display:grid;place-items:center;font-family:var(--mono);font-size:11px}
+.pip[data-on="1"]{background:var(--cream);color:var(--voltage-deep);border-color:var(--cream);font-weight:600}
+.count{font-family:var(--mono);font-size:12px;opacity:.92}
+.actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.btn{font:inherit;font-size:15px;font-weight:500;border-radius:999px;padding:11px 22px;min-height:44px;
+  border:1px solid transparent;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center}
+.btn--primary{background:var(--cream);color:var(--ink)}
+.btn--primary:hover{background:#fff}
+.btn--primary[disabled]{opacity:.45;cursor:not-allowed}
+.btn--ghost{background:transparent;color:var(--cream);border-color:rgb(from var(--cream) r g b / .5)}
+.btn--ghost:hover{border-color:var(--cream)}
+.btn:focus-visible{outline:2px solid var(--cream);outline-offset:3px}
+.scoreline{font-family:var(--mono);font-size:13px}
+.scoreline b{font-size:16px}
+.cue{position:absolute;left:50%;transform:translateX(-50%);bottom:6px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;opacity:.72}
+.hero{position:relative}
+
+/* ---------- next band, to prove the scroll ---------- */
+.band{scroll-snap-align:start;padding:88px 32px;border-top:1px solid var(--hairline);background:var(--cream)}
+.band__inner{max-width:760px;margin:0 auto}
+.band h2{font-size:clamp(26px,1.6vw + 18px,40px);line-height:1.1;letter-spacing:-.8px;font-weight:500;margin:0 0 16px}
+.band p{font-size:16.5px;line-height:1.6;color:var(--ink-soft);margin:0 0 14px}
+
+/* ---------- mobile: cards become a snap carousel ---------- */
+@media (max-width:860px){
+  .hero{padding:18px 16px 14px;gap:12px}
+  /* the masthead collapses into the headline's own line; the nav keeps the wordmark */
+  .hero__head{grid-template-columns:minmax(0,1fr)}
+  .masthead{text-align:left;order:-1;margin-bottom:2px}
+  .masthead__name{font-size:clamp(34px,11vw,52px)}
+  .masthead__rule,.masthead__stats{display:none}
+  .masthead__scripts{font-size:14px}
+  .cards{grid-template-columns:repeat(3,86%);overflow-x:auto;scroll-snap-type:x mandatory;
+    -webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .card{scroll-snap-align:center}
+  .nav-links{display:none}
+  .band{padding:56px 16px}
+}
+@media (max-width:860px) and (min-width:0px){ .hero{min-height:560px} }
+</style>
+</head>
+<body>
+
+<header class="nav">
+  <p class="wordmark" style="margin:0">Pariksha<span>పరీక్ష · परीक्षा</span></p>
+  <nav class="nav-links" aria-label="Primary">
+    <a href="#what">What it is</a><a href="#what">Compare</a><a href="#what">Cost</a><a href="#what">Docs</a>
+  </nav>
+</header>
+
+<section class="hero" aria-labelledby="h1">
+  <div class="hero__head">
+    <div>
+      <p class="chip">PRE-ALPHA · APACHE-2.0 · NOTHING LEAVES THIS PAGE</p>
+      <h1 id="h1">Run real exams you host yourself.</h1>
+      <p class="hero__lead">Three question types, scored in your browser by the same engine the server will run. No sign-up, no data sent anywhere.</p>
+    </div>
+    <div class="masthead" aria-hidden="true">
+      <span class="masthead__name">Pariksha</span>
+      <hr class="masthead__rule">
+      <div class="masthead__stats">
+        <span><b>12</b> question types</span>
+        <span><b>$0</b> to run</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <!-- 1. single choice -->
+    <article class="card" id="c1" data-state="idle" aria-labelledby="c1p">
+      <div class="card__bar"><span class="card__type">Single choice</span><span class="card__pts">2 pts</span></div>
+      <div class="card__body">
+        <p class="card__prompt" id="c1p">What comes next in the series?</p>
+        <p class="series" style="margin:0">3, 7, 15, 31, 63, ?</p>
+        <fieldset class="opts"><legend class="hidden">Options</legend>
+          <label class="opt"><input type="radio" name="q1" value="a"><span class="mono-val">95</span></label>
+          <label class="opt"><input type="radio" name="q1" value="b"><span class="mono-val">117</span></label>
+          <label class="opt"><input type="radio" name="q1" value="c"><span class="mono-val">127</span></label>
+          <label class="opt"><input type="radio" name="q1" value="d"><span class="mono-val">131</span></label>
+        </fieldset>
+        <p class="verdict hidden" id="v1"></p>
+      </div>
+    </article>
+
+    <!-- 2. multi select -->
+    <article class="card" id="c2" data-state="idle" aria-labelledby="c2p">
+      <div class="card__bar"><span class="card__type">Select all that apply</span><span class="card__pts">2 pts</span></div>
+      <div class="card__body">
+        <p class="card__prompt" id="c2p">Which of these numbers are divisible by 6?</p>
+        <fieldset class="opts"><legend class="hidden">Options</legend>
+          <label class="opt"><input type="checkbox" name="q2" value="a"><span class="mono-val">114</span></label>
+          <label class="opt"><input type="checkbox" name="q2" value="b"><span class="mono-val">128</span></label>
+          <label class="opt"><input type="checkbox" name="q2" value="c"><span class="mono-val">222</span></label>
+          <label class="opt"><input type="checkbox" name="q2" value="d"><span class="mono-val">345</span></label>
+          <label class="opt"><input type="checkbox" name="q2" value="e"><span class="mono-val">432</span></label>
+        </fieldset>
+        <p class="verdict hidden" id="v2"></p>
+      </div>
+    </article>
+
+    <!-- 3. matching -->
+    <article class="card" id="c3" data-state="idle" aria-labelledby="c3p">
+      <div class="card__bar"><span class="card__type">Matching</span><span class="card__pts">2 pts · partial credit</span></div>
+      <div class="card__body">
+        <p class="card__prompt" id="c3p">Match each series to the rule that generates it.</p>
+        <div class="match" id="m3"></div>
+        <p class="verdict hidden" id="v3"></p>
+      </div>
+    </article>
+  </div>
+
+  <div class="bar">
+    <div class="bar__left">
+      <ul class="pips" aria-label="Questions answered">
+        <li class="pip" data-pip="1" data-on="0">1</li>
+        <li class="pip" data-pip="2" data-on="0">2</li>
+        <li class="pip" data-pip="3" data-on="0">3</li>
+      </ul>
+      <span class="count" id="count" aria-live="polite">0 of 3 answered</span>
+    </div>
+    <div class="actions">
+      <span class="scoreline hidden" id="score" aria-live="polite"></span>
+      <button class="btn btn--primary" id="check" disabled>Score my answers</button>
+      <a class="btn btn--ghost" href="#what">See how it is built</a>
+    </div>
+  </div>
+  <span class="cue">scroll for the rest ↓</span>
+</section>
+
+<section class="band" id="what" aria-labelledby="h2a">
+  <div class="band__inner">
+    <h2 id="h2a">What is Pariksha?</h2>
+    <p>Pariksha is an open-source exam platform you deploy on your own Cloudflare or Docker account, so candidate data never reaches a vendor. It is pre-alpha as of October 2026 — the formats, the schemas, a worked example and the scoring engine are published; the application lands with v0.1.</p>
+    <p style="font-family:var(--mono);font-size:13px;color:var(--muted)">↑ the hero is exactly one screen tall and never scrolls inside itself — this band is the first scroll.</p>
+  </div>
+</section>
+
+<span class="proto-note">PROTOTYPE · not in the repo</span>
+<div class="switch" role="group" aria-label="Wordmark face">
+  <span class="switch__tag">Chunky</span>
+  <button type="button" data-set="modak" aria-pressed="true">Modak</button>
+  <button type="button" data-set="baloo" aria-pressed="false">Baloo 2</button>
+  <span class="switch__tag">Handwritten</span>
+  <button type="button" data-set="kalam" aria-pressed="false">Kalam</button>
+  <button type="button" data-set="caveat" aria-pressed="false">Caveat</button>
+  <button type="button" data-set="marker" aria-pressed="false">Marker</button>
+  <span class="switch__tag">Brush</span>
+  <button type="button" data-set="kaushan" aria-pressed="false">Kaushan</button>
+  <button type="button" data-set="pacifico" aria-pressed="false">Pacifico</button>
+  <button type="button" data-set="satisfy" aria-pressed="false">Satisfy</button>
+  <span class="switch__tag">Earlier</span>
+  <button type="button" data-set="drawn" aria-pressed="false">Drawn</button>
+  <button type="button" data-set="yatra" aria-pressed="false">Yatra</button>
+  <button type="button" data-set="rozha" aria-pressed="false">Rozha</button>
+  <button type="button" data-set="eczar" aria-pressed="false">Eczar</button>
+  <button type="button" data-set="mono" aria-pressed="false">Mono</button>
+</div>
+<script>
+const sw=document.querySelector(".switch");
+document.documentElement.dataset.face="modak";
+sw.addEventListener("click",e=>{
+  const b=e.target.closest("button"); if(!b) return;
+  document.documentElement.dataset.face=b.dataset.set;
+  sw.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(x===b)));
+});
+</script>
+
+<script>
+const LEFT=["2, 4, 8, 16","2, 5, 10, 17","1, 4, 9, 16","3, 6, 9, 12"];
+const RIGHT=["Each term is twice the one before it","Add the next odd number, starting at 3","Squares of the natural numbers","Multiples of 3"];
+const KEY3={"2, 4, 8, 16":0,"2, 5, 10, 17":1,"1, 4, 9, 16":2,"3, 6, 9, 12":3};
+const m3=document.getElementById("m3");
+LEFT.forEach((l,i)=>{
+  const row=document.createElement("div"); row.className="match__row";
+  const id="m"+i;
+  row.innerHTML='<label class="match__key" for="'+id+'">'+l+'</label>'+
+    '<select id="'+id+'" data-left="'+l+'"><option value="">Choose a rule…</option>'+
+    RIGHT.map((r,j)=>'<option value="'+j+'">'+r+'</option>').join("")+'</select>';
+  m3.appendChild(row);
+});
+
+const sels=()=>[...m3.querySelectorAll("select")];
+const answered=()=>[
+  !!document.querySelector('input[name=q1]:checked'),
+  document.querySelectorAll('input[name=q2]:checked').length>0,
+  sels().every(s=>s.value!=="")
+];
+function refresh(){
+  const a=answered();
+  a.forEach((on,i)=>document.querySelector('[data-pip="'+(i+1)+'"]').dataset.on=on?"1":"0");
+  const n=a.filter(Boolean).length;
+  document.getElementById("count").textContent=n+" of 3 answered";
+  document.getElementById("check").disabled=n===0;
+}
+document.addEventListener("change",refresh);
+
+document.getElementById("check").addEventListener("click",()=>{
+  let got=0;
+  // Q1 all-or-nothing
+  const q1=document.querySelector('input[name=q1]:checked');
+  const ok1=q1&&q1.value==="c"; got+=ok1?2:0;
+  show(1,ok1?"right":"wrong",ok1?"Correct · 2.00 / 2":"Not quite · 0.00 / 2",
+    "Each term is double the previous term plus one: 63 × 2 + 1 = 127.");
+  // Q2 partial credit
+  const picked=[...document.querySelectorAll('input[name=q2]:checked')].map(i=>i.value);
+  const key2=["a","c","e"];
+  const right=picked.filter(v=>key2.includes(v)).length, wrong=picked.length-right;
+  const p2=Math.max(0,Math.round(2*(right-wrong)/3*100)/100); got+=p2;
+  show(2,p2===2?"right":"wrong",(p2===2?"Correct · ":"Partial · ")+p2.toFixed(2)+" / 2",
+    "Partial credit: (correct − wrong) ÷ total. 128 fails the digit test and 345 is odd.");
+  // Q3 partial credit
+  const hit=sels().filter(s=>Number(s.value)===KEY3[s.dataset.left]).length;
+  const p3=Math.round(2*hit/4*100)/100; got+=p3;
+  show(3,p3===2?"right":"wrong",(p3===2?"Correct · ":"Partial · ")+p3.toFixed(2)+" / 2",
+    hit+" of 4 pairs matched. In 2, 5, 10, 17 the gaps are 3, 5 and 7.");
+  const s=document.getElementById("score");
+  s.classList.remove("hidden");
+  s.innerHTML="You scored <b>"+got.toFixed(2)+"</b> / 6";
+  document.getElementById("check").textContent="Scored";
+  document.getElementById("check").disabled=true;
+});
+function show(n,state,head,body){
+  document.getElementById("c"+n).dataset.state=state;
+  const v=document.getElementById("v"+n);
+  v.classList.remove("hidden");
+  v.innerHTML="<b>"+head+"</b>"+body;
+}
+refresh();
+</script>
+</body>
+</html>
