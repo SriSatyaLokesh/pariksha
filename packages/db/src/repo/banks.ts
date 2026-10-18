@@ -609,6 +609,7 @@ export const deleteGroup = scoped(
     if (blockedBy.length > 0) return { deleted: false, blockedBy };
 
     const current = await rawGroups(db, workspaceId, bankId);
+    if (!current.some((g) => g.id === groupId)) return { deleted: false, blockedBy: [] };
     const next = current.filter((g) => g.id !== groupId);
 
     const { changes } = await db.run(

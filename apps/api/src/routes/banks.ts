@@ -42,11 +42,8 @@ const bankPatch = z
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
 
-// `id` matches the pattern a question's `group` field names
-// (schemas/question-1.json): letters, digits, underscore, dot or hyphen, so
-// a group ID is always a legal reference from a question that names it.
 const newGroup = z.object({
-  id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.-]+$/),
+  id: z.string().min(1).max(64),
   title: z.string().min(1).max(200).optional(),
   passage: z.string().min(1),
 });

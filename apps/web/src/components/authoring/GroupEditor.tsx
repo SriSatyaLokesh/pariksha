@@ -73,9 +73,7 @@ export function GroupEditor({
         onChange={(event) => setId(event.target.value)}
       />
       <p className="field-help">
-        {isEdit
-          ? "A group's ID cannot change once it exists."
-          : "Letters, numbers, underscore, dot or hyphen — up to 64 characters."}
+        {isEdit ? "A group's ID cannot change once it exists." : "Up to 64 characters. Unique within this bank."}
       </p>
 
       <label className="field-label" htmlFor={`${fieldId}-title`}>
