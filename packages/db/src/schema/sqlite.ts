@@ -84,8 +84,12 @@ export const questionBank = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     name: text("name").notNull(),
+    description: text("description"),
+    license: text("license"),
+    groupsJson: text("groups_json", { mode: "json" }),
     tagsJson: text("tags_json", { mode: "json" }).notNull(),
     createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
   },
   (t) => [index("question_bank_workspace_idx").on(t.workspaceId)],
 );
@@ -96,6 +100,8 @@ export const question = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     bankId: text("bank_id").notNull(),
+    refId: text("ref_id").notNull(),
+    groupRef: text("group_ref"),
     type: text("type").notNull(),
     promptMd: text("prompt_md").notNull(),
     mediaJson: text("media_json", { mode: "json" }),
@@ -106,12 +112,15 @@ export const question = sqliteTable(
     difficulty: text("difficulty"),
     tagsJson: text("tags_json", { mode: "json" }).notNull(),
     explanationMd: text("explanation_md"),
+    extraJson: text("extra_json", { mode: "json" }),
     version: integer("version").notNull(),
     createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
   },
   (t) => [
     index("question_workspace_idx").on(t.workspaceId),
     index("question_bank_idx").on(t.bankId),
+    uniqueIndex("question_bank_ref_uq").on(t.bankId, t.refId),
   ],
 );
 

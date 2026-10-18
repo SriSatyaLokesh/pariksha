@@ -68,6 +68,23 @@ async function roundTripPoints(db: DbClient): Promise<number[]> {
   return read;
 }
 
+// The `(bank_id, ref_id)` unique index, exercised rather than read off the
+// schema: `parity.test.ts` can only say the index is declared, and a declared
+// index that the migration never created would still pass there. `tags_json`
+// is written as a JSON literal — jsonb in Postgres, text in SQLite — so this
+// is also a real JSON write on both dialects and not a SQLite-only path.
+async function insertQuestion(
+  db: DbClient,
+  id: string,
+  refId: string,
+): Promise<void> {
+  await db.run(
+    "INSERT INTO question (id, workspace_id, bank_id, ref_id, type, prompt_md, points, tags_json, version, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [id, "ws_ref", "bnk_ref", refId, "single", "Prompt", 1, "[]", 1, 0, 0],
+  );
+}
+
 async function pointsColumnType(db: DbClient): Promise<string> {
   const rows =
     db.dialect === "pg"
@@ -101,6 +118,13 @@ describe("sqlite", () => {
     expect(await pointsColumnType(db)).toBe("real");
   });
 
+  it("refuses two questions with the same ref_id in one bank", async () => {
+    await insertQuestion(db, "qst_ref_a", "SQL-09");
+    await expect(insertQuestion(db, "qst_ref_b", "SQL-09")).rejects.toThrow(
+      /unique|constraint/i,
+    );
+  });
+
   it("records what it applied, so a later migration is the only thing that runs", async () => {
     const rows = await db.all<{ name: string }>(
       `select name from ${MIGRATIONS_TABLE} order by name`,
@@ -126,5 +150,12 @@ describePostgres("postgres", () => {
   it("stores a fractional points value and gives it back unchanged", async () => {
     expect(await roundTripPoints(db)).toEqual(FRACTIONAL);
     expect(await pointsColumnType(db)).toBe("numeric");
+  });
+
+  it("refuses two questions with the same ref_id in one bank", async () => {
+    await insertQuestion(db, "qst_ref_a", "SQL-09");
+    await expect(insertQuestion(db, "qst_ref_b", "SQL-09")).rejects.toThrow(
+      /unique|constraint/i,
+    );
   });
 });

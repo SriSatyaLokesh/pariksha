@@ -22,7 +22,10 @@ interface BuildOutputChunk {
   name?: string;
   fileName: string;
   modules?: Record<string, unknown>;
+  // `imports` is the static graph and `dynamicImports` is not. ADR 0004
+  // rests entirely on that distinction, so the two are kept apart here.
   imports?: string[];
+  dynamicImports?: string[];
 }
 
 interface BuildOutput {
@@ -70,13 +73,99 @@ async function buildChunks(overrides: Parameters<typeof build>[0]): Promise<Buil
 
 let prerenderChunks: BuildOutputChunk[];
 let twoEntryChunks: BuildOutputChunk[];
+let rendererChunks: BuildOutputChunk[];
 
 beforeAll(async () => {
   prerenderChunks = await buildChunks({
     build: { ssr: "src/entry-prerender.tsx", write: false },
   });
   twoEntryChunks = await buildChunks({ build: { write: false } });
-}, 60_000);
+  // The real entries plus the shared renderer as one of its own. Until a
+  // screen imports it (Task 2) no production entry reaches the renderer at
+  // all, and a guard that walks only admin and the island would be green
+  // whatever markdown.ts imported — true today and vacuous, which is the
+  // worst thing this particular test could be. Building it as an entry
+  // makes the guard load-bearing now; when the editor screens land, admin's
+  // own graph is already covered by the same loop.
+  rendererChunks = await buildChunks({
+    build: {
+      write: false,
+      rollupOptions: {
+        input: { render: resolve(ROOT, "src/render/markdown.ts") },
+        // Vite's application build sets `preserveEntrySignatures: false`,
+        // which drops an entry's exports as unused. For a library-shaped
+        // entry that deletes `renderMarkdown` and with it the dynamic
+        // import, and the katex assertions below would pass against a
+        // module that had been shaken down to nothing.
+        preserveEntrySignatures: "strict",
+      },
+    },
+  });
+}, 120_000);
+
+/** Every module reachable from `entryName` by static `import` alone. */
+function staticModules(chunks: BuildOutputChunk[], entryName: string): string[] {
+  const byFile = new Map(chunks.map((chunk) => [chunk.fileName, chunk]));
+  const entry = chunks.find((chunk) => chunk.isEntry && chunk.name === entryName);
+  expect(entry, entryName).toBeDefined();
+
+  const seen = new Set<string>();
+  const queue = [entry?.fileName ?? ""];
+  while (queue.length > 0) {
+    const file = queue.pop() ?? "";
+    if (seen.has(file)) continue;
+    seen.add(file);
+    for (const next of byFile.get(file)?.imports ?? []) queue.push(next);
+  }
+  return [...seen].flatMap((file) => Object.keys(byFile.get(file)?.modules ?? {}));
+}
+
+const hasKatex = (chunk: BuildOutputChunk) =>
+  Object.keys(chunk.modules ?? {}).some((id) => id.includes("katex"));
+
+describe("KaTeX is lazy and stays lazy (ADR 0004, Review Focus 1)", () => {
+  // The failure this exists for is silent: one static `import "katex"` —
+  // a convenience re-export, a component importing the plugin only to type
+  // a prop — moves 76 KB gzipped into the initial chunk and every rendering
+  // test still passes. Nothing else in the suite measures it.
+  const entries = () =>
+    rendererChunks
+      .filter((chunk) => chunk.isEntry)
+      .map((chunk) => chunk.name ?? chunk.fileName);
+
+  it("no entry can reach katex or its markdown-it plugin by static import", () => {
+    expect(entries()).toContain("render");
+    for (const entry of entries()) {
+      const modules = staticModules(rendererChunks, entry).join("\n");
+      for (const lazy of ["katex", "@vscode/markdown-it-katex"]) {
+        expect(modules, `${lazy} is statically reachable from ${entry}`).not.toContain(
+          lazy,
+        );
+      }
+    }
+  });
+
+  it("markdown-it is static, so the guard above is about loading and not about bundling", () => {
+    // The positive control. Were both libraries behind dynamic imports the
+    // assertion above would hold for a renderer that renders nothing.
+    expect(staticModules(rendererChunks, "render").join("\n")).toContain("markdown-it");
+  });
+
+  it("katex is in the build, in chunks no entry statically reaches", () => {
+    const katexChunks = rendererChunks.filter(hasKatex);
+    expect(katexChunks.length).toBeGreaterThan(0);
+    expect(katexChunks.every((chunk) => !chunk.isEntry)).toBe(true);
+  });
+
+  it("the renderer's chunk names katex as a dynamic import", () => {
+    const renderEntry = rendererChunks.find(
+      (chunk) => chunk.isEntry && chunk.name === "render",
+    );
+    const byFile = new Map(rendererChunks.map((chunk) => [chunk.fileName, chunk]));
+    const dynamic = (renderEntry?.dynamicImports ?? []).map((file) => byFile.get(file));
+    expect(dynamic.some((chunk) => chunk !== undefined && hasKatex(chunk))).toBe(true);
+  });
+});
 
 describe("the prerender's SSR bundle excludes admin code (T4, T29)", () => {
   it("no module in src/entry-prerender.tsx's graph matches src/(routes/)?admin", () => {

@@ -176,6 +176,27 @@ describe("both dialects match the manifest", () => {
   });
 });
 
+describe("the Phase 4 authoring columns", () => {
+  // Named one by one rather than inferred from the manifest: every later
+  // Phase 4 task reads these, so a column silently dropped from the manifest
+  // has to be red here and not only in whichever task notices it missing.
+  const EXPECTED: Record<string, string[]> = {
+    question_bank: ["description", "license", "groups_json", "updated_at"],
+    question: ["ref_id", "group_ref", "extra_json", "updated_at"],
+  };
+
+  for (const [table, columns] of Object.entries(EXPECTED)) {
+    it(`${table} has ${columns.join(", ")} in both dialects`, () => {
+      expect(sqliteByName.get(table)?.columns.map((c) => c.name)).toEqual(
+        expect.arrayContaining(columns),
+      );
+      expect(pgByName.get(table)?.columns.map((c) => c.name)).toEqual(
+        expect.arrayContaining(columns),
+      );
+    });
+  }
+});
+
 describe("the constraints the PRD names", () => {
   it("every tenant table carries workspace_id and indexes it", () => {
     for (const spec of TABLE_MANIFEST.filter((t) => t.tenant)) {
@@ -213,6 +234,32 @@ describe("the constraints the PRD names", () => {
       "attempt_id",
       "question_id",
     ]);
+  });
+
+  it("a bank's questions carry their in-file id, unique within the bank", () => {
+    // `ref_id` is the `id` a `pariksha/bank@1` file carries, not the row's
+    // `qst_…`. Export has to hand back what import read, and two questions
+    // in one bank answering to the same name would make that ambiguous.
+    expect(tableSpec("question").uniques).toContainEqual(["bank_id", "ref_id"]);
+    expect(sqliteByName.get("question")?.uniques).toContainEqual([
+      "bank_id",
+      "ref_id",
+    ]);
+    expect(pgByName.get("question")?.uniques).toContainEqual(["bank_id", "ref_id"]);
+  });
+
+  it("stores no rendered HTML, in either dialect (ADR 0004)", () => {
+    // Markdown is the only stored representation, so there is no cache to
+    // keep in step with the source and no stored-HTML XSS surface. A column
+    // appearing here would reintroduce both without any other test noticing.
+    for (const column of ["prompt_html", "explanation_html", "render_version"]) {
+      expect(sqliteByName.get("question")?.columns.map((c) => c.name)).not.toContain(
+        column,
+      );
+      expect(pgByName.get("question")?.columns.map((c) => c.name)).not.toContain(
+        column,
+      );
+    }
   });
 
   it("stores only a hash for anything that authenticates a request", () => {

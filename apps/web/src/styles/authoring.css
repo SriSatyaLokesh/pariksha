@@ -1,0 +1,186 @@
+/* The authoring side: the prompt editor, the preview pane and the HTML the
+   shared renderer produces. Imported by admin.css, which is loaded by
+   src/admin-main.tsx only — the candidate runtime will import `.rendered`
+   on its own in Phase 6.
+
+   No colour literal: every value is a token var() from tokens.css, which is
+   also why the fenced-code block below has no syntax theme. `language-x` is
+   the only hook markdown-it emits and blocks.css already styles `pre`
+   (ADR 0004, DESIGN.md §3.2). */
+
+/* ---- Rendered question content ---------------------------------------- */
+
+/* Everything here styles HTML that `renderMarkdown` produced in the same
+   tick, from Markdown. There is no stored HTML and no allowlist. */
+.rendered > :first-child {
+  margin-block-start: 0;
+}
+
+.rendered > :last-child {
+  margin-block-end: 0;
+}
+
+.rendered--stem {
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  font-weight: var(--type-question-stem-weight);
+  line-height: var(--type-question-stem-line-height);
+  letter-spacing: var(--type-question-stem-letter-spacing);
+  color: var(--color-ink);
+}
+
+.rendered code {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.rendered pre {
+  overflow-x: auto;
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  background-color: var(--color-cream);
+}
+
+.rendered table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.rendered th,
+.rendered td {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline);
+  text-align: start;
+}
+
+.rendered blockquote {
+  margin-inline: 0;
+  padding-inline-start: var(--space-md);
+  border-inline-start: 2px solid var(--color-hairline-strong);
+}
+
+.rendered img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* KaTeX emits MathML and nothing else, so there is no katex.css to vendor
+   and no woff2 faces to self-host under S-11 — only the inherited font. */
+.rendered math {
+  font-size: inherit;
+}
+
+/* ---- Prompt editor (UX-19) -------------------------------------------- */
+
+.prompt-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.prompt-editor__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.prompt-editor__tool {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  cursor: pointer;
+}
+
+.prompt-editor__source {
+  width: 100%;
+  padding: var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+  line-height: var(--type-mono-md-line-height);
+  resize: vertical;
+}
+
+.prompt-editor__image {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+}
+
+/* ---- Preview pane (UX-09) --------------------------------------------- */
+
+.preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+  background-color: var(--color-canvas);
+}
+
+.preview__bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.preview__heading {
+  margin: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.preview__toggle {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-full);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-body-sm-size);
+  cursor: pointer;
+}
+
+.preview__toggle[aria-checked="true"] {
+  border-color: var(--color-voltage);
+  background-color: var(--color-voltage-soft);
+}
+
+.preview__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.preview__media {
+  max-width: 100%;
+  height: auto;
+}
+
+.preview__key {
+  padding-block-start: var(--space-md);
+  border-block-start: 1px solid var(--color-hairline);
+}
+
+.preview__key-line {
+  margin-block: 0 var(--space-sm);
+}

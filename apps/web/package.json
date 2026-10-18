@@ -14,6 +14,9 @@
   },
   "dependencies": {
     "@pariksha/core": "workspace:*",
+    "@vscode/markdown-it-katex": "^1.1.2",
+    "katex": "^0.16.47",
+    "markdown-it": "^15.0.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
