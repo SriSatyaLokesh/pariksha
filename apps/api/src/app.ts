@@ -19,6 +19,9 @@ import { authRoutes } from "./routes/auth.js";
 import { me } from "./routes/me.js";
 import { setupRoutes } from "./routes/setup.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
+import { bankRoutes } from "./routes/banks.js";
+import { questionRoutes } from "./routes/questions.js";
+import { mediaRoutes } from "./routes/media.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -80,6 +83,20 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // The heaviest: resolve the invitee, list the members, write the change,
   // revoke the member's sessions, append the audit row.
   "/api/v1/workspaces/:id/members": 10,
+
+  // Phase 4 Task 2: banks, questions and media. Every number below is the
+  // most expensive method sharing that path — POST/PATCH/DELETE write an
+  // audit row and re-read the row they just changed, which is the one or
+  // two extra statements over the equivalent GET.
+  "/api/v1/workspaces/:id/banks": 3,
+  "/api/v1/workspaces/:id/banks/:bankId": 6,
+  "/api/v1/workspaces/:id/tags": 1,
+  "/api/v1/workspaces/:id/banks/:bankId/questions": 5,
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 6,
+  // The upload spends one D1 read (does the bank exist?) and one storage
+  // `put`; the fetch spends one storage `get` and nothing else.
+  "/api/v1/workspaces/:id/banks/:bankId/media": 2,
+  "/api/v1/workspaces/:id/media/:key": 1,
 };
 
 /**
@@ -96,6 +113,23 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/members": "members.manage",
   "POST /api/v1/workspaces/:id/members": "members.manage",
   "DELETE /api/v1/workspaces/:id/members": "members.manage",
+
+  // Phase 4 Task 2. There is no `banks.view` (docs/design.md's permission
+  // matrix has only `banks.edit`), so the read routes are guarded by it too
+  // — a Viewer is 403 on all of these, not just the writes.
+  "GET /api/v1/workspaces/:id/banks": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "GET /api/v1/workspaces/:id/tags": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/media": "banks.edit",
+  "GET /api/v1/workspaces/:id/media/:key": "banks.edit",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -122,6 +156,9 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // through `actorOr401`, the way `/me` and `/workspaces` do.
   app.route("/api/v1/setup", setupRoutes(deps));
   app.route("/api/v1/workspaces", workspaceRoutes(deps));
+  app.route("/api/v1/workspaces", bankRoutes(deps));
+  app.route("/api/v1/workspaces", questionRoutes(deps));
+  app.route("/api/v1/workspaces", mediaRoutes(deps));
 
   return app;
 }
