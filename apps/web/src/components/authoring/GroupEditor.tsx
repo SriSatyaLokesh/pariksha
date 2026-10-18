@@ -64,7 +64,9 @@ export function GroupEditor({
   }
 
   return (
-    <div className="group-editor">
+    // Fix round 1, finding 10: `group-editor` had no rule in admin.css and
+    // nothing read it — a wrapper needs no class until something styles it.
+    <div>
       <label className="field-label" htmlFor={`${fieldId}-id`}>
         Group ID
       </label>

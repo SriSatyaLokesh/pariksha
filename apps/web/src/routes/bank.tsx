@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { QUESTION_TYPES, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { MonoCaption } from "../components/MonoCaption";
@@ -62,6 +62,10 @@ export function BankBrowser({
   // `undefined`: no passage-group form open. `"new"`: the "New group" form.
   // A `PassageGroupSummary`: editing that existing group.
   const [editingGroup, setEditingGroup] = useState<PassageGroupSummary | "new" | undefined>(undefined);
+  // Fix round 1, finding 9: a static id collides if `BankBrowser` is ever
+  // rendered twice on one page — `PreviewPane` and `QuestionEditor` both use
+  // `useId()` for exactly this reason.
+  const groupsHeadingId = useId();
 
   const load = useCallback(async () => {
     try {
@@ -237,12 +241,12 @@ export function BankBrowser({
           </p>
         )}
 
-        <section aria-labelledby="passage-groups-heading">
+        <section aria-labelledby={groupsHeadingId}>
           <div className="question-editor__answer-bar">
-            <h2 id="passage-groups-heading">Passage groups</h2>
+            <h2 id={groupsHeadingId}>Passage groups</h2>
             <button
               type="button"
-              className="prompt-editor__tool"
+              className="button-primary button-primary--surface"
               onClick={() => setEditingGroup((prev) => (prev === "new" ? undefined : "new"))}
             >
               New group
@@ -250,7 +254,11 @@ export function BankBrowser({
           </div>
 
           {passageGroups.length > 0 && (
-            <ul className="bank-browser__groups">
+            // Fix round 1, finding 10: `bank-browser__groups` is the filter
+            // rail's own tag-group list reset — borrowed here only because
+            // the name was free, not because this list belongs to that
+            // block. No rule needs this list styled yet.
+            <ul>
               {passageGroups.map((group) => (
                 // `group.id` is immutable once a group exists (GroupEditor
                 // disables the field on edit) — Task 4's "editable content

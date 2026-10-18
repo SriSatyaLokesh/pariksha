@@ -96,8 +96,11 @@ export function PreviewPane({
         </button>
       </div>
 
+      {/* Fix round 1, finding 10: `data-preview-section` already marks this
+          wrapper for `previewOrder()` (apps/web/test/authoring/groups.test.tsx);
+          a `preview__passage` class with no rule in admin.css did nothing. */}
       {passage !== undefined && (
-        <div className="preview__passage" data-preview-section="passage">
+        <div data-preview-section="passage">
           <RenderedHtml className="rendered--stem" markdown={passage} />
         </div>
       )}

@@ -163,6 +163,17 @@ describe("BankBrowser", () => {
     expect(await axe(browser.container)).toHaveNoViolations();
   });
 
+  // Fix round 1, finding 12: the axe pass above ran with an empty
+  // `listGroups`, so the panel's actual rows — the Edit/Delete buttons
+  // among them — were never scanned. A non-empty one here.
+  it("the browser with passage groups listed has no axe violations", async () => {
+    const group: PassageGroupSummary = { id: "orders-table", title: "Orders", passage: "x", questionCount: 2 };
+    const client = fakeClient({ listGroups: async () => [group] });
+    const browser = render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    expect(await browser.findByText("Orders (2 questions)")).toBeVisible();
+    expect(await axe(browser.container)).toHaveNoViolations();
+  });
+
   // Phase 4 Task 6 (#50, P4.6).
   it("lists the bank's passage groups and opens a new-group form", async () => {
     const group: PassageGroupSummary = { id: "orders-table", title: "Orders", passage: "x", questionCount: 2 };
