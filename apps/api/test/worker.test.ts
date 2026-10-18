@@ -49,6 +49,44 @@ it("a second run applies nothing", async () => {
   expect((await migrate(binding())).applied).toEqual([]);
 });
 
+// Task 7 (#51), Review Focus item 3: `d1Client`'s `batch()` is
+// `binding.batch()` — one D1 subrequest carrying every statement. Miniflare
+// embeds the real D1 engine, so this is where that claim is proved against
+// an actual implicit-transaction batch, not just reasoned about.
+it("db.batch() against the real D1 binding commits as one unit and rolls back whole on a conflict", async () => {
+  const db = binding();
+  await migrate(db);
+
+  const insert = (id: string, bankId: string, refId: string) => ({
+    sql:
+      "INSERT INTO question (id, workspace_id, bank_id, ref_id, type, prompt_md, points, tags_json, version, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    params: [id, "ws_d1batch", bankId, refId, "single", "Prompt", 1, "[]", 1, 0, 0],
+  });
+
+  await db.batch([
+    insert("qst_d1_a", "bnk_d1batch", "D1-01"),
+    insert("qst_d1_b", "bnk_d1batch", "D1-02"),
+  ]);
+  const committed = await db.query<{ ref_id: string }>(
+    "SELECT ref_id FROM question WHERE bank_id = ? ORDER BY ref_id",
+    ["bnk_d1batch"],
+  );
+  expect(committed.map((r) => r.ref_id)).toEqual(["D1-01", "D1-02"]);
+
+  await expect(
+    db.batch([
+      insert("qst_d1_rb_a", "bnk_d1rollback", "D1-RB"),
+      insert("qst_d1_rb_b", "bnk_d1rollback", "D1-RB"),
+    ]),
+  ).rejects.toThrow();
+  const rolledBack = await db.query(
+    "SELECT ref_id FROM question WHERE bank_id = ?",
+    ["bnk_d1rollback"],
+  );
+  expect(rolledBack).toEqual([]);
+});
+
 it("the worker entry serves health over the D1 and R2 bindings", async () => {
   await migrate(binding());
 
