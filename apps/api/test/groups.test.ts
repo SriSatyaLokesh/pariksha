@@ -251,6 +251,14 @@ it("every route this task mounts has a ROUTE_BUDGETS entry under the ceiling", (
 // Same technique as banks.test.ts's "measures the real subrequest cost"
 // test: a fresh `countingDeps` per call so one route's count never leaks
 // into another's, measured against the table in app.ts.
+//
+// Fix round 1, finding 1: `listGroups` short-circuits at one query when the
+// bank has no groups yet (`rawGroups.length === 0`) and otherwise spends a
+// second, `GROUP BY` one. A bank's *first* group is the uncommon case — a
+// bank that already has one is what every POST after the first actually
+// costs — so the baseline group below is created uncounted first, and what
+// gets measured (and the number set in ROUTE_BUDGETS) is the cost of
+// creating a *second* group.
 it("measures the real subrequest cost of every group route against ROUTE_BUDGETS", async () => {
   async function measure(method: string, routeKey: string, path: string, init: RequestInit): Promise<void> {
     const counting = countingDeps(deps);
@@ -259,11 +267,18 @@ it("measures the real subrequest cost of every group route against ROUTE_BUDGETS
     expect(counting.counts().total, `${method} ${routeKey}`).toBeLessThanOrEqual(ROUTE_BUDGETS[routeKey]!);
   }
 
+  // Uncounted: establishes the common case (a bank that already has a
+  // group) before anything below is measured.
+  await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,
+    post({ id: "orders-table", passage: "x" }, authorCookie),
+  );
+
   await measure(
     "POST",
     "/api/v1/workspaces/:id/banks/:bankId/groups",
     `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups`,
-    post({ id: "orders-table", passage: "x" }, authorCookie),
+    post({ id: "orders-table-2", passage: "x" }, authorCookie),
   );
   await measure(
     "GET",
@@ -274,14 +289,14 @@ it("measures the real subrequest cost of every group route against ROUTE_BUDGETS
   await measure(
     "PATCH",
     "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId",
-    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups/orders-table`,
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups/orders-table-2`,
     patch({ title: "Measured" }, authorCookie),
   );
   // Delete last: it removes the row the measurements above still needed.
   await measure(
     "DELETE",
     "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId",
-    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups/orders-table`,
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/groups/orders-table-2`,
     del(authorCookie),
   );
 });

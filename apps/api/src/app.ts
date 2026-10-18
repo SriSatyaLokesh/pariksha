@@ -105,7 +105,11 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 10,
   "/api/v1/workspaces/:id/banks/:bankId/media": 4,
   "/api/v1/workspaces/:id/media/:key": 3,
-  "/api/v1/workspaces/:id/banks/:bankId/groups": 7,
+  // Fix round 1, finding 1: measured against a bank that already has a
+  // group, not an empty one — `listGroups` costs one statement on an empty
+  // bank (`rawGroups.length === 0` short-circuits) and two once there is a
+  // group to count, which is the common case after the first write.
+  "/api/v1/workspaces/:id/banks/:bankId/groups": 8,
   "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId": 9,
 };
 
