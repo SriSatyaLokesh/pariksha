@@ -16,11 +16,67 @@ interface MoveTarget {
   dir: "up" | "down";
 }
 
+// By code point rather than a literal invisible character in this source
+// file (easy to lose or mis-copy otherwise).
+const ZERO_WIDTH_SPACE = String.fromCharCode(0x200b);
+
 function isPinned(item: unknown): boolean {
   return (
     typeof item === "object" &&
     item !== null &&
     (item as { pinned?: unknown }).pinned === true
+  );
+}
+
+/**
+ * The position field commits on Enter or blur, not on every keystroke:
+ * committing immediately made any position >= 10 unreachable (typing "1"
+ * of "10" fired a move right away) and a mid-typing value is not a
+ * position yet. Local `draft` state holds what the user is typing until
+ * then; a move leaves focus right here rather than asking ReorderableList
+ * to refocus anything, since the DOM node this input renders into doesn't
+ * change across a reorder (same item, same place in its row).
+ */
+function PositionInput({
+  label,
+  index,
+  total,
+  disabled,
+  onCommit,
+}: {
+  label: string;
+  index: number;
+  total: number;
+  disabled: boolean;
+  onCommit: (position: number) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+
+  function commit(): void {
+    if (draft === null) return;
+    const position = Number(draft);
+    setDraft(null);
+    if (Number.isInteger(position)) onCommit(position);
+  }
+
+  return (
+    <label className="reorderable-list__position">
+      {`Position of ${label}`}
+      <input
+        type="number"
+        min={1}
+        max={total}
+        value={draft ?? String(index + 1)}
+        disabled={disabled}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          commit();
+        }}
+      />
+    </label>
   );
 }
 
@@ -42,6 +98,15 @@ export function ReorderableList<T>({
   const [announcement, setAnnouncement] = useState("");
   const buttons = useRef(new Map<string, { up: HTMLButtonElement | null; down: HTMLButtonElement | null }>());
   const pendingFocus = useRef<MoveTarget | null>(null);
+  // A trailing run of zero-width spaces, one longer every call, so every
+  // announcement this instance ever makes is a distinct string — not just
+  // distinct from whatever is on screen right now. Two moves can land on
+  // identical wording (e.g. "A" down, then up, then down again); without
+  // this, a screen reader that compares a new announcement against a
+  // recently-spoken one (not only the DOM's current value) can treat the
+  // second one as a repeat and skip it. Invisible, and `toHaveTextContent`'s
+  // substring match doesn't care that it's there.
+  const moveCount = useRef(0);
 
   // Runs after `items` has actually been reordered by the caller (the
   // `onReorder` below only asks for that; the caller's own state update is
@@ -56,7 +121,9 @@ export function ReorderableList<T>({
   }, [items]);
 
   function announce(item: T, to: number): void {
-    setAnnouncement(`${labelOf(item)} moved to position ${to + 1} of ${items.length}`);
+    moveCount.current += 1;
+    const nonce = ZERO_WIDTH_SPACE.repeat(moveCount.current);
+    setAnnouncement(`${labelOf(item)} moved to position ${to + 1} of ${items.length}${nonce}`);
   }
 
   function moveBy(from: number, dir: "up" | "down"): void {
@@ -72,11 +139,10 @@ export function ReorderableList<T>({
     const to = position - 1;
     if (!Number.isInteger(to) || to < 0 || to >= items.length || to === from) return;
     const item = items[from]!;
-    // The position field has no up/down identity of its own; the up button
-    // is the closest thing to refocus, since it exists at every position
-    // this move can land on except the very first (where it is disabled,
-    // which is still a defined, reachable focus target).
-    pendingFocus.current = { key: keyOf(item), dir: "up" };
+    // No `pendingFocus` here, unlike `moveBy`: this move came from the
+    // position field, and the field itself keeps focus (PositionInput's
+    // own DOM node is untouched by the reorder), which is a better outcome
+    // than yanking focus to a button the user didn't press.
     onReorder(from, to);
     announce(item, to);
   }
@@ -123,17 +189,13 @@ export function ReorderableList<T>({
                 >
                   <span aria-hidden="true">↓</span>
                 </button>
-                <label className="reorderable-list__position">
-                  {`Position of ${label}`}
-                  <input
-                    type="number"
-                    min={1}
-                    max={items.length}
-                    value={index + 1}
-                    disabled={pinned}
-                    onChange={(event) => moveToPosition(index, Number(event.target.value))}
-                  />
-                </label>
+                <PositionInput
+                  label={label}
+                  index={index}
+                  total={items.length}
+                  disabled={pinned}
+                  onCommit={(position) => moveToPosition(index, position)}
+                />
               </div>
               <div className="reorderable-list__content">{renderItem(item, index)}</div>
             </li>

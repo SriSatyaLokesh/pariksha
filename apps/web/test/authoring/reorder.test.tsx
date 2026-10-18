@@ -47,8 +47,10 @@ describe("ReorderableList (Review Focus 5)", () => {
   // same pair every other apps/web test file uses) — a focused native
   // <button>'s real Enter/Space activation is a `click` in every browser,
   // so `fireEvent.click` after `.focus()` exercises the same code path a
-  // keyboard user reaches without adding a dependency for one test.
-  it("moves an item with the keyboard and keeps focus on the button that moved it", () => {
+  // keyboard user reaches without adding a dependency for one test. Named
+  // for what actually runs (activating a focused button), not "with the
+  // keyboard" — no key event is dispatched here.
+  it("activating a focused move button moves the item and keeps focus on that button", () => {
     render(<Options initial={["A", "B", "C"]} />);
     const down = screen.getByRole("button", { name: /move option a down/i });
     down.focus();
@@ -63,11 +65,48 @@ describe("ReorderableList (Review Focus 5)", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Option A moved to position 2 of 3");
   });
 
-  it("the numeric position field moves an item to an arbitrary index", () => {
+  it("re-announces even when the wording repeats (down, up, down)", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.change(screen.getByRole("spinbutton", { name: /position of option c/i }), {
-      target: { value: "1" },
-    });
+    const status = screen.getByRole("status");
+
+    fireEvent.click(screen.getByRole("button", { name: /move option a down/i }));
+    const first = status.textContent;
+    expect(first).toContain("Option A moved to position 2 of 3");
+
+    fireEvent.click(screen.getByRole("button", { name: /move option a up/i }));
+    expect(status).toHaveTextContent("Option A moved to position 1 of 3");
+
+    fireEvent.click(screen.getByRole("button", { name: /move option a down/i }));
+    const third = status.textContent;
+    // Same wording as the first announcement, but it must be a distinct
+    // state value — otherwise React's bail-out on an unchanged value never
+    // touches this text node, and a screen reader announces nothing.
+    expect(third).toContain("Option A moved to position 2 of 3");
+    expect(third).not.toBe(first);
+  });
+
+  it("the numeric position field commits on Enter, reaches positions >= 10, and leaves focus in the field", () => {
+    const many = Array.from({ length: 11 }, (_, i) => String.fromCharCode(65 + i)); // A..K
+    render(<Options initial={many} />);
+
+    const input = screen.getByRole("spinbutton", { name: /position of option k/i });
+    input.focus();
+    // Typing "1" of "10" must not move anything yet — only Enter commits.
+    fireEvent.change(input, { target: { value: "1" } });
+    expect(visibleOrder()[0]).toBe("A");
+    fireEvent.change(input, { target: { value: "10" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(visibleOrder()[9]).toBe("K");
+    // The field commits in place; no button is refocused on its behalf.
+    expect(document.activeElement).toBe(screen.getByRole("spinbutton", { name: /position of option k/i }));
+  });
+
+  it("the numeric position field also commits on blur", () => {
+    render(<Options initial={["A", "B", "C"]} />);
+    const input = screen.getByRole("spinbutton", { name: /position of option c/i });
+    fireEvent.change(input, { target: { value: "1" } });
+    fireEvent.blur(input);
     expect(visibleOrder()).toEqual(["C", "A", "B"]);
   });
 
