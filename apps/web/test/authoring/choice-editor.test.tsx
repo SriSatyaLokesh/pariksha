@@ -312,6 +312,24 @@ describe("QuestionEditor (UX-07)", () => {
     expect(screen.getByRole("button", { name: /remove option b/i })).toBeDisabled();
   });
 
+  it("Finding 5: a brand new question gets a real, editable ID instead of an empty string", () => {
+    render(<QuestionEditor bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} onSaved={noop} />);
+    const idField = screen.getByLabelText("Question ID") as HTMLInputElement;
+    // A route matching rows on (bankId, doc.id) can't do anything useful
+    // with "" — a fresh question starts with a real id, not a blank one
+    // left for the author to notice is missing.
+    expect(idField.value).not.toBe("");
+    expect(idField.value).toMatch(/^[A-Za-z0-9_.-]{1,64}$/);
+
+    fireEvent.change(idField, { target: { value: "my-question-1" } });
+    expect(idField.value).toBe("my-question-1");
+
+    // Clearing it back out regenerates on blur rather than saving blank.
+    fireEvent.change(idField, { target: { value: "" } });
+    fireEvent.blur(idField);
+    expect(idField.value).not.toBe("");
+  });
+
   it("Finding 5: select_k's k is an editable field that governs how many options can be marked correct", () => {
     render(
       <QuestionEditor
