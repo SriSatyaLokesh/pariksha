@@ -42,7 +42,15 @@ const ROOT = resolve(__dirname, "..");
 
 // T29: widened so both src/routes/admin* and a top-level src/admin-main.tsx
 // (or a src/components/AdminNav.tsx, etc.) are caught.
-const ADMIN_PATH_RE = /src[\\/](routes[\\/])?admin/i;
+//
+// P3.9: widened again. The organiser screens the plan names are
+// src/routes/signin|setup|dashboard|organiser and src/lib/api — none of
+// which contains the word "admin", so the guard above would have watched
+// admin-main.tsx while the three screens it mounts leaked freely. The
+// constraint is "no organiser code in the public bundle", so the pattern
+// now names the organiser module graph, not just the entry file.
+const ADMIN_PATH_RE =
+  /src[\\/](routes[\\/])?admin|src[\\/]routes[\\/](signin|setup|dashboard|organiser)|src[\\/]lib[\\/]api/i;
 
 async function buildChunks(overrides: Parameters<typeof build>[0]): Promise<BuildOutputChunk[]> {
   const result: unknown = await build({

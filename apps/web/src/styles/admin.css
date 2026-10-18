@@ -1,0 +1,269 @@
+/* The organiser screens: sign-in, the first-run wizard, the dashboard.
+   Phase 3 Task 9. Loaded by src/admin-main.tsx only — never by the landing
+   page, and never the other way round (test/bundle.test.ts).
+
+   docs/design.md's screen-inventory note is the whole visual brief for the
+   authoring side: "cream and ink surfaces, hairline rules, JetBrains Mono
+   for every label, count, ID and code sample, and voltage reserved for the
+   primary action and the focus ring. The authoring side is an editing tool,
+   not a marketing page — the full-bleed voltage block appears in none of
+   these screens." So: the body's cream is the page, every panel is a
+   CardHairline, voltage appears on .button-primary--surface and on
+   base.css's focus ring, and nowhere else.
+
+   Everything shaped like a button or a card comes from primitives.css.
+   What is genuinely new here is DESIGN.md's registration-form trio —
+   field-label, field-help, field-error — and the text input they wrap.
+
+   No colour literal: every colour is a token var(). */
+
+@import "./primitives.css";
+
+/* ---- Page ------------------------------------------------------------- */
+
+/* One column, centred, 560px: DESIGN.md has no measure for an application
+   screen, and 560px keeps a 16px body line inside the 60-75 character
+   window the form copy needs. The dashboard widens to the landing page's
+   own 1080px so a future test table has somewhere to go. */
+.organiser {
+  max-width: 560px;
+  margin-inline: auto;
+  padding-block: var(--space-4xl);
+  padding-inline: var(--space-lg);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.organiser--wide {
+  max-width: 1080px;
+}
+
+/* Clamped so the title never eats a 375px screen; the floor (28px) is what
+   the contrast gate measures. */
+.organiser__title {
+  color: var(--color-ink);
+  font-family: var(--type-display-lg-family);
+  font-weight: var(--type-display-lg-weight);
+  font-size: clamp(1.75rem, 1.3rem + 2.5vw, var(--type-display-lg-size));
+  line-height: calc(
+    var(--type-display-lg-line-height) / var(--type-display-lg-size)
+  );
+  letter-spacing: var(--type-display-lg-letter-spacing);
+  margin: 0;
+}
+
+.organiser__lead {
+  color: var(--color-muted);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  margin: 0;
+  max-width: 60ch;
+}
+
+.organiser__panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* A `role="status"` line: what just happened, in the panel it happened in. */
+.organiser__status {
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  margin: 0;
+}
+
+/* The one case where a screen has nothing to offer: an instance with no
+   identity provider configured. Stated, never hidden. */
+.organiser__notice {
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  margin: 0;
+}
+
+/* ---- Dashboard bar ---------------------------------------------------- */
+
+/* The same canvas-plus-hairline construction as the landing page's top nav,
+   without its link list: the organiser side has nowhere else to navigate
+   to yet, and inventing a nav for three screens would be a nav that lies. */
+.organiser-bar {
+  background: var(--color-canvas);
+  border-bottom: 1px solid var(--color-hairline);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding-block: var(--space-md);
+  padding-inline: var(--space-2xl);
+  min-height: 64px;
+}
+
+.organiser-bar__mark {
+  color: var(--color-ink);
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+  letter-spacing: var(--type-heading-md-letter-spacing);
+  margin: 0;
+}
+
+.organiser-bar__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+/* ---- Empty state ------------------------------------------------------ */
+
+.organiser-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+}
+
+.organiser-empty__title {
+  color: var(--color-ink);
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+  letter-spacing: var(--type-heading-md-letter-spacing);
+  margin: 0;
+}
+
+.organiser-empty__body {
+  color: var(--color-muted);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  margin: 0;
+  max-width: 60ch;
+}
+
+/* ---- The registration-form trio (DESIGN.md §"Registration form") ------ */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.field-label {
+  color: var(--color-ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+}
+
+/* "Says what the field wants before it is wrong." */
+.field-help {
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  margin: 0;
+}
+
+/* Prefixed with a ⚠ glyph in the markup so the error never depends on
+   colour alone. */
+.field-error {
+  color: var(--color-flag-risk);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  margin: 0;
+  display: flex;
+  gap: var(--space-xs);
+}
+
+/* DESIGN.md states both a height (44px, which is also the A10 hit-area
+   floor) and a padding for `text-input`. With the global border-box those
+   two agree, so both are declared and T30 checks both — and no
+   `line-height` is declared on top of them, which is what would push the
+   content box past the stated 44px. */
+.text-input {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  padding: 10px var(--space-md);
+  height: 44px;
+  width: 100%;
+}
+
+/* DESIGN.md's `text-input-focus` is "border swaps to voltage at 2px plus a
+   3px voltage ring at 25% alpha". base.css's global :focus-visible already
+   paints exactly that ring, so the only thing left here is the border —
+   recoloured rather than thickened, because growing it to 2px would reflow
+   the field by a pixel on focus. */
+.text-input:focus-visible {
+  border-color: var(--color-voltage);
+}
+
+/* `text-input-error`. Paired with .field-error in the markup; never the
+   only signal. */
+.text-input[aria-invalid="true"] {
+  border-color: var(--color-flag-risk);
+  border-width: 2px;
+}
+
+/* ---- Provider list ---------------------------------------------------- */
+
+/* Each provider is a ButtonSecondary that fills the panel width, so the
+   list reads as a stack of equal choices rather than a ranked one. */
+.organiser-providers {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.organiser-providers .button-secondary {
+  width: 100%;
+}
+
+/* The magic-link form is a second way in, not a second-class one — a
+   hairline rule separates it from the provider stack without ranking it. */
+.organiser-divider {
+  border: 0;
+  border-top: 1px solid var(--color-hairline);
+  margin: 0;
+}
+
+.organiser-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  align-items: flex-start;
+}
+
+.organiser-form .field {
+  width: 100%;
+}

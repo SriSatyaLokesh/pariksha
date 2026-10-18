@@ -1,0 +1,140 @@
+/* The components both entries render.
+
+   Phase 3 Task 9 added a second real page — the organiser app
+   (src/admin-main.tsx → admin.css) — and it reuses ButtonPrimary's and
+   ButtonSecondary's boxes, CardHairline and MonoCaption. Those four rules
+   used to live in landing.css and components.css, which also carry the
+   hero, the twelve bands and the exam-demo island: importing either of
+   those into the organiser entry would have shipped the whole landing page
+   to an admin screen to reuse a button.
+
+   So the shared four moved here, unchanged, and both landing.css and
+   admin.css import this file. Nothing about the landing stylesheet's
+   rendered output changed — the same declarations, one file further up its
+   own @import chain. Anything that is NOT reused by both entries stays
+   where it was.
+
+   No colour literal: every colour is a token var(). */
+
+/* ---- MonoCaption ------------------------------------------------------ */
+
+.mono-caption {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--color-muted);
+  margin: 0;
+}
+
+/* ---- ButtonPrimary (was components.css) ------------------------------- */
+
+.button-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+  border: 0;
+  border-radius: var(--rounded-full);
+  padding: var(--space-md) var(--space-xl);
+  height: 46px;
+  text-decoration: none;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgb(from var(--color-shadow) r g b / 0.08);
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button-primary {
+    transition:
+      background-color 120ms ease-out,
+      color 120ms ease-out;
+  }
+}
+
+.button-primary:hover,
+.button-primary:focus-visible {
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+}
+
+/* The surface variant: a CTA on a cream band takes the already-sanctioned
+   hover colours (voltage-deep fill, cream label, 5.66:1) as its resting
+   state, since the default cream pill would be invisible on cream. The
+   page's one shadow stays on the hero's primary CTA alone.
+
+   This is also the organiser side's only primary action style: docs/design.md
+   reserves voltage for the primary action and the focus ring there, and puts
+   the full-bleed voltage block on none of those screens. */
+.button-primary--surface {
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  box-shadow: none;
+}
+
+/* ---- ButtonSecondary -------------------------------------------------- */
+
+/* D5: the 44px A10 hit area is reached with block padding alone, never a
+   min-height stacked on top of a height that it then silently overrides
+   (9px block padding + the 1px border on each side + button-md's 24px
+   line-height = 44px exactly) — the same mechanism .nav-link uses.
+   Horizontal padding (14px) stays DESIGN.md's `button-secondary` value;
+   T30 checks it and the effective 44px box. */
+.button-secondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  padding-block: 9px;
+  padding-inline: 14px;
+  text-decoration: none;
+  cursor: pointer;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .button-secondary {
+    transition:
+      background-color 120ms ease-out,
+      border-color 120ms ease-out;
+  }
+}
+
+.button-secondary:hover,
+.button-secondary:focus-visible {
+  border-color: var(--color-voltage);
+}
+
+/* Disabled is deliberately opacity, never a colour swap: a disabled control
+   is exempt from WCAG 1.4.3, and an opacity change keeps the box out of the
+   contrast gate rather than needing an exemption inside it. */
+.button-primary:disabled,
+.button-secondary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- CardHairline ----------------------------------------------------- */
+
+.card-hairline {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-xl);
+}
