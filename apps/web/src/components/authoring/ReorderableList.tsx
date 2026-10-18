@@ -87,6 +87,7 @@ export function ReorderableList<T>({
   onReorder,
   renderItem,
   legend,
+  describedBy,
 }: {
   items: readonly T[];
   keyOf: (item: T) => string;
@@ -94,6 +95,12 @@ export function ReorderableList<T>({
   onReorder: (from: number, to: number) => void;
   renderItem: (item: T, index: number) => JSX.Element;
   legend: string;
+  /** Id of an element (a help/explanation paragraph, typically) that
+   * describes this whole list — wired to the fieldset's own
+   * `aria-describedby` so the association survives for assistive tech
+   * instead of relying on the two elements merely sitting next to each
+   * other in the DOM. Optional: most callers have no such paragraph. */
+  describedBy?: string | undefined;
 }) {
   const [announcement, setAnnouncement] = useState("");
   const buttons = useRef(new Map<string, { up: HTMLButtonElement | null; down: HTMLButtonElement | null }>());
@@ -148,7 +155,7 @@ export function ReorderableList<T>({
   }
 
   return (
-    <fieldset className="reorderable-list">
+    <fieldset className="reorderable-list" aria-describedby={describedBy}>
       <legend className="reorderable-list__legend">{legend}</legend>
       <div className="reorderable-list__announcement" role="status" aria-live="polite">
         {announcement}

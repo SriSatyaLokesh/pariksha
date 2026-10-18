@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import type {
   MatchingQuestion,
   MultiMatchingQuestion,
@@ -15,7 +15,7 @@ export function isStructuredQuestion(question: { type: string }): question is St
   return (STRUCTURED_TYPES as readonly string[]).includes(question.type);
 }
 
-function reordered(items: readonly string[], from: number, to: number): string[] {
+function reordered<T>(items: readonly T[], from: number, to: number): T[] {
   const next = [...items];
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved!);
@@ -47,11 +47,12 @@ function renameKeyFor<V>(key: Record<string, V>, from: string, to: string): Reco
 }
 
 /** A single text field that commits on Enter or blur, the same deferred-
- * commit pattern ReorderableList's own position field uses — not a style
- * choice, a correctness one: the field's own committed value doubles as
- * this item's ReorderableList identity (there is no separate id field in
- * the schema), so committing every keystroke would re-key, and remount,
- * the row the user is still typing into. */
+ * commit pattern ReorderableList's own position field uses: a value mid
+ * keystroke is not a committed item name yet. (Finding 1, round 1: this
+ * alone used to be the only thing standing between a keystroke and a
+ * remount, because the committed value *was* this row's React key — it no
+ * longer is, see `ItemList`'s `rowId` below. This still exists because an
+ * uncommitted draft is still the wrong thing to save on every keystroke.) */
 function ItemText({
   id,
   label,
@@ -94,15 +95,33 @@ function ItemText({
   );
 }
 
+let nextRowId = 0;
+function freshRowId(): string {
+  nextRowId += 1;
+  return `row-${nextRowId}`;
+}
+
 /** One reorderable column of plain-string items — left, right, or ordering's
- * own list. All three are schema-level `stringList`s with no id field, so
- * identity for ReorderableList is the item's own (committed) text. */
+ * own list. All three are schema-level `stringList`s with no id field of
+ * their own, so this component mints one: a `useRef` array of synthetic row
+ * ids, the same length as `items` and reordered/extended/shrunk in lockstep
+ * with it by the three handlers below, is what `ReorderableList`'s `keyOf`
+ * is actually given — not the item's own editable text.
+ *
+ * Round 1 finding: with text as the key, committing a rename changed the
+ * `<li key>`, which unmounts and remounts the row — dropping focus to
+ * `document.body` on Enter, swallowing a click on another control in the
+ * same row (it's detached mid-gesture), and colliding outright whenever two
+ * rows share text. A synthetic id never changes just because the text next
+ * to it did, so none of that happens — renaming is purely a text update on
+ * an otherwise untouched row. */
 function ItemList({
   legend,
   items,
   fieldLabel,
   removeLabel,
   addLabel,
+  describedBy,
   onReorder,
   onEditAt,
   onAdd,
@@ -113,36 +132,58 @@ function ItemList({
   fieldLabel: (index: number) => string;
   removeLabel: (text: string) => string;
   addLabel: string;
+  describedBy?: string | undefined;
   onReorder: (from: number, to: number) => void;
   onEditAt: (index: number, text: string) => void;
   onAdd: () => void;
   onRemoveAt: (index: number) => void;
 }) {
   const uid = useId();
+  const idsRef = useRef<string[] | null>(null);
+  if (idsRef.current === null) idsRef.current = items.map(() => freshRowId());
+  const ids = idsRef.current;
+
+  function handleReorder(from: number, to: number): void {
+    idsRef.current = reordered(ids, from, to);
+    onReorder(from, to);
+  }
+
+  function handleAdd(): void {
+    idsRef.current = [...ids, freshRowId()];
+    onAdd();
+  }
+
+  function handleRemoveAt(index: number): void {
+    idsRef.current = ids.filter((_, i) => i !== index);
+    onRemoveAt(index);
+  }
+
+  const rows = items.map((text, index) => ({ id: ids[index] ?? freshRowId(), text }));
 
   return (
     <>
       <ReorderableList
-        items={items}
-        keyOf={(item) => item}
-        labelOf={(item) => item.trim() || "item"}
+        items={rows}
+        keyOf={(row) => row.id}
+        labelOf={(row) => row.text.trim() || "item"}
         legend={legend}
-        onReorder={onReorder}
-        renderItem={(item, index) => (
+        describedBy={describedBy}
+        onReorder={handleReorder}
+        renderItem={(row, index) => (
           <div className="structured-item">
             <ItemText
               id={`${uid}-text-${index}`}
               label={fieldLabel(index)}
-              value={item}
+              value={row.text}
               onCommit={(text) => onEditAt(index, text)}
             />
-            <button type="button" className="button-secondary" onClick={() => onRemoveAt(index)}>
-              {removeLabel(item)}
+            <button type="button" className="button-secondary" onClick={() => handleRemoveAt(index)}>
+              {removeLabel(row.text)}
             </button>
           </div>
         )}
       />
-      <button type="button" className="prompt-editor__tool" onClick={onAdd}>
+      <button type="button" className="prompt-editor__tool" onClick={handleAdd}>
         {addLabel}
       </button>
     </>
@@ -153,7 +194,17 @@ function ItemList({
  * enforced natively by sharing a `name` per row) or `multi_matching`
  * (checkbox, no such limit). Every cell's accessible name states the pair
  * it represents directly (`aria-label`), not just "checkbox" or a row/column
- * index — the defect UX-review sent Task 3 back for once already. */
+ * index — the defect UX-review sent Task 3 back for once already.
+ *
+ * Rows and columns are keyed and grouped by *index*, not by the item's own
+ * text: a grid cell's checked/disabled state is recomputed from `left`/
+ * `right`/the key callbacks on every render regardless of whether React
+ * reuses or recreates the DOM node, so there is no focus to lose here the
+ * way there is in `ItemList` — which makes index safe, and is what keeps
+ * two identically-named left items from sharing one native radio group
+ * (`matching` has no way to disambiguate them in the key itself either,
+ * since the key maps by text — a pre-existing format limit, not one this
+ * grid can paper over, but at least the grid no longer compounds it). */
 function MatchGrid({
   left,
   right,
@@ -161,6 +212,7 @@ function MatchGrid({
   isChecked,
   isDisabled,
   onToggle,
+  onClear,
 }: {
   left: string[];
   right: string[];
@@ -168,6 +220,10 @@ function MatchGrid({
   isChecked: (left: string, right: string) => boolean;
   isDisabled: (left: string, right: string) => boolean;
   onToggle: (left: string, right: string, checked: boolean) => void;
+  /** `matching` only: clears a row back to "no match" — the one-to-one
+   * radio grid otherwise has no way to undo a mis-click once a row has a
+   * selection (native radios can't be unchecked by clicking them again). */
+  onClear?: (left: string) => void;
 }) {
   const uid = useId();
 
@@ -186,28 +242,116 @@ function MatchGrid({
               {r}
             </th>
           ))}
+          {onClear && <th scope="col">No match</th>}
         </tr>
       </thead>
       <tbody>
-        {left.map((l) => (
-          <tr key={l}>
-            <th scope="row">{l}</th>
-            {right.map((r) => (
-              <td key={r}>
-                <input
-                  type={cellType}
-                  name={cellType === "radio" ? `${uid}-row-${l}` : undefined}
-                  aria-label={`${l} matches ${r}`}
-                  checked={isChecked(l, r)}
-                  disabled={isDisabled(l, r)}
-                  onChange={(event) => onToggle(l, r, event.target.checked)}
-                />
-              </td>
-            ))}
-          </tr>
-        ))}
+        {left.map((l, leftIndex) => {
+          const hasMatch = right.some((r) => isChecked(l, r));
+          return (
+            <tr key={leftIndex}>
+              <th scope="row">{l}</th>
+              {right.map((r) => (
+                <td key={r}>
+                  <input
+                    type={cellType}
+                    name={cellType === "radio" ? `${uid}-row-${leftIndex}` : undefined}
+                    aria-label={`${l} matches ${r}`}
+                    checked={isChecked(l, r)}
+                    disabled={isDisabled(l, r)}
+                    onChange={(event) => onToggle(l, r, event.target.checked)}
+                  />
+                </td>
+              ))}
+              {onClear && (
+                <td>
+                  <input
+                    type="radio"
+                    name={`${uid}-row-${leftIndex}`}
+                    aria-label={`No match for ${l}`}
+                    checked={!hasMatch}
+                    onChange={(event) => {
+                      if (event.target.checked) onClear(l);
+                    }}
+                  />
+                </td>
+              )}
+            </tr>
+          );
+        })}
       </tbody>
     </table>
+  );
+}
+
+/** The left/right column editors shared, unchanged, by `matching` and
+ * `multi_matching` (Finding 6, round 1): moving, renaming or removing a
+ * left item is the exact same rewrite regardless of whether `key`'s values
+ * are a `string` or a `string[]` — `withoutKeyFor`/`renameKeyFor` are
+ * already generic over that. Only the right column's rename/remove differ
+ * (the shape of what has to be rewritten inside `key`), so those two stay
+ * the caller's own handlers; everything else — both `<ItemList>`s, the left
+ * column's move/rename/remove/add — lives here exactly once. */
+function ItemColumns<V>({
+  left,
+  right,
+  matchKey,
+  onLeftChange,
+  onRightReorder,
+  onRightAdd,
+  onRenameRightAt,
+  onRemoveRightAt,
+}: {
+  left: string[];
+  right: string[];
+  matchKey: Record<string, V>;
+  onLeftChange: (left: string[], key: Record<string, V>) => void;
+  onRightReorder: (from: number, to: number) => void;
+  onRightAdd: () => void;
+  onRenameRightAt: (index: number, text: string) => void;
+  onRemoveRightAt: (index: number) => void;
+}) {
+  function moveLeft(from: number, to: number): void {
+    onLeftChange(reordered(left, from, to), matchKey);
+  }
+
+  function renameLeftAt(index: number, text: string): void {
+    const from = left[index]!;
+    const nextLeft = left.map((item, i) => (i === index ? text : item));
+    onLeftChange(nextLeft, renameKeyFor(matchKey, from, text));
+  }
+
+  function removeLeftAt(index: number): void {
+    const removed = left[index]!;
+    const nextLeft = left.filter((_, i) => i !== index);
+    onLeftChange(nextLeft, withoutKeyFor(matchKey, removed));
+  }
+
+  return (
+    <>
+      <ItemList
+        legend="Left items"
+        items={left}
+        fieldLabel={(index) => `Left item ${index + 1} text`}
+        removeLabel={(text) => `Remove left item ${text}`}
+        addLabel="Add left item"
+        onReorder={moveLeft}
+        onEditAt={renameLeftAt}
+        onAdd={() => onLeftChange([...left, nextDefaultText(left, "Left item")], matchKey)}
+        onRemoveAt={removeLeftAt}
+      />
+      <ItemList
+        legend="Right items"
+        items={right}
+        fieldLabel={(index) => `Right item ${index + 1} text`}
+        removeLabel={(text) => `Remove right item ${text}`}
+        addLabel="Add right item"
+        onReorder={onRightReorder}
+        onEditAt={onRenameRightAt}
+        onAdd={onRightAdd}
+        onRemoveAt={onRemoveRightAt}
+      />
+    </>
   );
 }
 
@@ -218,18 +362,8 @@ function MatchingAnswer({
   question: MatchingQuestion;
   onChange: (next: MatchingQuestion) => void;
 }) {
-  function moveLeft(from: number, to: number): void {
-    onChange({ ...question, left: reordered(question.left, from, to) });
-  }
-
   function moveRight(from: number, to: number): void {
     onChange({ ...question, right: reordered(question.right, from, to) });
-  }
-
-  function renameLeftAt(index: number, text: string): void {
-    const from = question.left[index]!;
-    const left = question.left.map((item, i) => (i === index ? text : item));
-    onChange({ ...question, left, key: renameKeyFor(question.key, from, text) });
   }
 
   function renameRightAt(index: number, text: string): void {
@@ -238,12 +372,6 @@ function MatchingAnswer({
     const key: Record<string, string> = {};
     for (const [l, r] of Object.entries(question.key)) key[l] = r === from ? text : r;
     onChange({ ...question, right, key });
-  }
-
-  function removeLeftAt(index: number): void {
-    const removed = question.left[index]!;
-    const left = question.left.filter((_, i) => i !== index);
-    onChange({ ...question, left, key: withoutKeyFor(question.key, removed) });
   }
 
   function removeRightAt(index: number): void {
@@ -276,27 +404,17 @@ function MatchingAnswer({
 
   return (
     <div className="structured-matching">
-      <ItemList
-        legend="Left items"
-        items={question.left}
-        fieldLabel={(index) => `Left item ${index + 1} text`}
-        removeLabel={(text) => `Remove left item ${text}`}
-        addLabel="Add left item"
-        onReorder={moveLeft}
-        onEditAt={renameLeftAt}
-        onAdd={() => onChange({ ...question, left: [...question.left, nextDefaultText(question.left, "Left item")] })}
-        onRemoveAt={removeLeftAt}
-      />
-      <ItemList
-        legend="Right items"
-        items={question.right}
-        fieldLabel={(index) => `Right item ${index + 1} text`}
-        removeLabel={(text) => `Remove right item ${text}`}
-        addLabel="Add right item"
-        onReorder={moveRight}
-        onEditAt={renameRightAt}
-        onAdd={() => onChange({ ...question, right: [...question.right, nextDefaultText(question.right, "Right item")] })}
-        onRemoveAt={removeRightAt}
+      <ItemColumns
+        left={question.left}
+        right={question.right}
+        matchKey={question.key}
+        onLeftChange={(left, key) => onChange({ ...question, left, key })}
+        onRightReorder={moveRight}
+        onRightAdd={() =>
+          onChange({ ...question, right: [...question.right, nextDefaultText(question.right, "Right item")] })
+        }
+        onRenameRightAt={renameRightAt}
+        onRemoveRightAt={removeRightAt}
       />
       <MatchGrid
         left={question.left}
@@ -305,6 +423,7 @@ function MatchingAnswer({
         isChecked={isChecked}
         isDisabled={isDisabled}
         onToggle={onToggle}
+        onClear={(left) => onChange({ ...question, key: withoutKeyFor(question.key, left) })}
       />
       <p className="field-help">
         Each left item matches at most one right item, and a right item used once cannot be used again.
@@ -320,18 +439,8 @@ function MultiMatchingAnswer({
   question: MultiMatchingQuestion;
   onChange: (next: MultiMatchingQuestion) => void;
 }) {
-  function moveLeft(from: number, to: number): void {
-    onChange({ ...question, left: reordered(question.left, from, to) });
-  }
-
   function moveRight(from: number, to: number): void {
     onChange({ ...question, right: reordered(question.right, from, to) });
-  }
-
-  function renameLeftAt(index: number, text: string): void {
-    const from = question.left[index]!;
-    const left = question.left.map((item, i) => (i === index ? text : item));
-    onChange({ ...question, left, key: renameKeyFor(question.key, from, text) });
   }
 
   function renameRightAt(index: number, text: string): void {
@@ -342,12 +451,6 @@ function MultiMatchingAnswer({
       key[l] = rights.map((r) => (r === from ? text : r));
     }
     onChange({ ...question, right, key });
-  }
-
-  function removeLeftAt(index: number): void {
-    const removed = question.left[index]!;
-    const left = question.left.filter((_, i) => i !== index);
-    onChange({ ...question, left, key: withoutKeyFor(question.key, removed) });
   }
 
   function removeRightAt(index: number): void {
@@ -382,27 +485,17 @@ function MultiMatchingAnswer({
 
   return (
     <div className="structured-matching">
-      <ItemList
-        legend="Left items"
-        items={question.left}
-        fieldLabel={(index) => `Left item ${index + 1} text`}
-        removeLabel={(text) => `Remove left item ${text}`}
-        addLabel="Add left item"
-        onReorder={moveLeft}
-        onEditAt={renameLeftAt}
-        onAdd={() => onChange({ ...question, left: [...question.left, nextDefaultText(question.left, "Left item")] })}
-        onRemoveAt={removeLeftAt}
-      />
-      <ItemList
-        legend="Right items"
-        items={question.right}
-        fieldLabel={(index) => `Right item ${index + 1} text`}
-        removeLabel={(text) => `Remove right item ${text}`}
-        addLabel="Add right item"
-        onReorder={moveRight}
-        onEditAt={renameRightAt}
-        onAdd={() => onChange({ ...question, right: [...question.right, nextDefaultText(question.right, "Right item")] })}
-        onRemoveAt={removeRightAt}
+      <ItemColumns
+        left={question.left}
+        right={question.right}
+        matchKey={question.key}
+        onLeftChange={(left, key) => onChange({ ...question, left, key })}
+        onRightReorder={moveRight}
+        onRightAdd={() =>
+          onChange({ ...question, right: [...question.right, nextDefaultText(question.right, "Right item")] })
+        }
+        onRenameRightAt={renameRightAt}
+        onRemoveRightAt={removeRightAt}
       />
       <MatchGrid
         left={question.left}
@@ -424,6 +517,8 @@ function OrderingAnswer({
   question: OrderingQuestion;
   onChange: (next: OrderingQuestion) => void;
 }) {
+  const noteId = useId();
+
   function moveItem(from: number, to: number): void {
     onChange({ ...question, items: reordered(question.items, from, to) });
   }
@@ -446,6 +541,7 @@ function OrderingAnswer({
         fieldLabel={(index) => `Item ${index + 1} text`}
         removeLabel={(text) => `Remove item ${text}`}
         addLabel="Add item"
+        describedBy={noteId}
         onReorder={moveItem}
         onEditAt={renameAt}
         onAdd={() => onChange({ ...question, items: [...question.items, nextDefaultText(question.items, "Item")] })}
@@ -453,8 +549,10 @@ function OrderingAnswer({
       />
       {/* UX-08: this is the one type where the author's view and the
           candidate's view deliberately differ — said in plain words, not
-          left for the reader to infer from the absence of a key control. */}
-      <p className="field-help">
+          left for the reader to infer from the absence of a key control.
+          Linked to the list above via `describedBy` (not just placed next
+          to it) so the association survives for assistive tech too. */}
+      <p className="field-help" id={noteId}>
         Write the items in the correct order — the order you set here is the key. Candidates see these shuffled;
         there is no separate key control.
       </p>
