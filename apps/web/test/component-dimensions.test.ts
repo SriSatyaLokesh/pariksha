@@ -132,17 +132,24 @@ function effectiveBoxHeight(body: string): number {
 }
 
 const componentsCss = readCss("components.css");
-const landingCss = readCss("landing.css");
+// P3.9: `.button-primary`, `.button-secondary`, `.card-hairline` and
+// `.mono-caption` moved into primitives.css so the organiser entry
+// (admin.css) can reuse them without dragging the landing page's hero,
+// section and island CSS along. Same rules, one file further up the
+// @import chain — landing.css still imports it, so the rendered landing
+// stylesheet is byte-for-byte the same set of declarations.
+const primitivesCss = readCss("primitives.css");
+const adminCss = readCss("admin.css");
 
 describe("component dimensions match tokens.components (T30)", () => {
   it('.button-primary height matches tokens.components["button-primary"].height', () => {
-    const body = ruleBody(componentsCss, ".button-primary ");
+    const body = ruleBody(primitivesCss, ".button-primary ");
     const height = resolveSpacing(declaration(body, "height"));
     expect(height).toBe(tokens.components["button-primary"].height);
   });
 
   it('.button-secondary padding-inline matches tokens.components["button-secondary"].padding\'s inline value', () => {
-    const body = ruleBody(landingCss, ".button-secondary ");
+    const body = ruleBody(primitivesCss, ".button-secondary ");
     const inline = resolveSpacing(declaration(body, "padding-inline"));
     const tokenInline =
       tokens.components["button-secondary"].padding.split(" ")[1];
@@ -156,13 +163,13 @@ describe("component dimensions match tokens.components (T30)", () => {
   // produce, asserted directly rather than via a declaration that could
   // again say one thing and render another.
   it(".button-secondary has no height or min-height declaration to drift out of sync with its padding", () => {
-    const body = ruleBody(landingCss, ".button-secondary ");
+    const body = ruleBody(primitivesCss, ".button-secondary ");
     expect(tryDeclaration(body, "height")).toBeNull();
     expect(tryDeclaration(body, "min-height")).toBeNull();
   });
 
   it(".button-secondary's effective box (padding-block + border + line-height) is 44px", () => {
-    const body = ruleBody(landingCss, ".button-secondary ");
+    const body = ruleBody(primitivesCss, ".button-secondary ");
     expect(effectiveBoxHeight(body)).toBe(44);
   });
 
@@ -193,5 +200,36 @@ describe("component dimensions match tokens.components (T30)", () => {
     const body = ruleBody(componentsCss, ".top-nav__inner ");
     const height = resolveSpacing(declaration(body, "min-height"));
     expect(height).toBe(tokens.components["top-nav"].height);
+  });
+
+  // P3.9: the one component the organiser screens had to add. DESIGN.md
+  // gives `text-input` a height AND a padding; with the global
+  // `box-sizing: border-box` those two are consistent rather than D5's
+  // conflicting pair, so both are asserted against the token and no
+  // `line-height` is declared that would push the content box past the
+  // stated 44px — which is also the A10 hit-area floor.
+  it('.text-input height matches tokens.components["text-input"].height', () => {
+    const body = ruleBody(adminCss, ".text-input ");
+    expect(resolveSpacing(declaration(body, "height"))).toBe(
+      tokens.components["text-input"].height,
+    );
+  });
+
+  it('.text-input padding matches tokens.components["text-input"].padding', () => {
+    const body = ruleBody(adminCss, ".text-input ");
+    expect(resolveSpacing(declaration(body, "padding"))).toBe(
+      tokens.components["text-input"].padding,
+    );
+  });
+
+  it('.text-input border-radius matches tokens.components["text-input"].rounded', () => {
+    const body = ruleBody(adminCss, ".text-input ");
+    expect(declaration(body, "border-radius")).toBe("var(--rounded-xs)");
+    expect(tokens.rounded.xs).toBe(tokens.components["text-input"].rounded);
+  });
+
+  it(".text-input declares no line-height that would break its stated 44px box", () => {
+    const body = ruleBody(adminCss, ".text-input ");
+    expect(tryDeclaration(body, "line-height")).toBeNull();
   });
 });

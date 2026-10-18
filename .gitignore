@@ -50,3 +50,7 @@ Claude outputs/
 skills-lock.json
 .aider*
 scratch/
+
+# Superpowers scratch: brainstorm servers, prototypes and SDD ledgers are
+# local to the machine that ran them.
+.superpowers/

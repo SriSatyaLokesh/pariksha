@@ -55,3 +55,8 @@ export { PoolTooSmallError, assignSet, layoutForAttempt } from "./select.js";
 
 // Cross-field import validation, for a bank and for a test document.
 export * from "./validate.js";
+
+// The per-workspace permission matrix (docs/PRD.md, "Roles and permissions")
+// and the pure `can()` that the API's route guard and the web interface both
+// answer with, so neither can drift from the table.
+export * from "./permissions.js";

@@ -649,51 +649,10 @@
   margin-bottom: var(--space-2xl);
 }
 
-/* Button primary */
-
-.button-primary {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-xs);
-  background: var(--color-cream);
-  color: var(--color-ink);
-  font-family: var(--type-button-md-family);
-  font-size: var(--type-button-md-size);
-  font-weight: var(--type-button-md-weight);
-  line-height: var(--type-button-md-line-height);
-  letter-spacing: var(--type-button-md-letter-spacing);
-  border: 0;
-  border-radius: var(--rounded-full);
-  padding: var(--space-md) var(--space-xl);
-  height: 46px;
-  text-decoration: none;
-  box-shadow: 0 2px 4px rgb(from var(--color-shadow) r g b / 0.08);
-  transition: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .button-primary {
-    transition:
-      background-color 120ms ease-out,
-      color 120ms ease-out;
-  }
-}
-
-.button-primary:hover,
-.button-primary:focus-visible {
-  background: var(--color-voltage-deep);
-  color: var(--color-cream);
-}
-
-/* The surface variant: a CTA on a cream band takes the already-sanctioned
-   hover colours (voltage-deep fill, cream label, 5.66:1) as its resting
-   state, since the default cream pill would be invisible on cream. The
-   page's one shadow stays on the hero's primary CTA alone. */
-.button-primary--surface {
-  background: var(--color-voltage-deep);
-  color: var(--color-cream);
-  box-shadow: none;
-}
+/* Button primary moved to primitives.css — the organiser entry reuses its
+   box and its `--surface` variant, and must not import this file (and with
+   it the hero, the bands and the island) to get them. landing.css imports
+   primitives.css above components.css, so the cascade is unchanged. */
 
 /* ===================================================================
    v4 hero — one screen, three type cards, the Kalam masthead.
