@@ -3,7 +3,14 @@
 // manifest all agree. This module exports tables and nothing else — the
 // parity test reads it with `Object.values`.
 
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  text,
+  integer,
+  real,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const workspace = sqliteTable(
   "workspace",
@@ -95,7 +102,7 @@ export const question = sqliteTable(
     optionsJson: text("options_json", { mode: "json" }),
     keyJson: text("key_json", { mode: "json" }),
     scoringJson: text("scoring_json", { mode: "json" }),
-    points: integer("points").notNull(),
+    points: real("points").notNull(),
     difficulty: text("difficulty"),
     tagsJson: text("tags_json", { mode: "json" }).notNull(),
     explanationMd: text("explanation_md"),
@@ -212,7 +219,7 @@ export const response = sqliteTable(
     valueJson: text("value_json", { mode: "json" }).notNull(),
     savedAt: integer("saved_at").notNull(),
     clientSeq: integer("client_seq").notNull(),
-    points: integer("points"),
+    points: real("points"),
     gradedBy: text("graded_by"),
   },
   (t) => [

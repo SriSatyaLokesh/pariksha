@@ -69,6 +69,23 @@ export const sqliteMigrations: Migration[] = [
     "CREATE TABLE `auth_token` (\n\t`token_hash` text PRIMARY KEY NOT NULL,\n\t`kind` text NOT NULL,\n\t`payload_json` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`expires_at` integer NOT NULL,\n\t`used_at` integer\n);",
     "CREATE INDEX `auth_token_expires_idx` ON `auth_token` (`expires_at`);",
   ] },
+  { name: "0002_dapper_wilson_fisk.sql", statements: [
+    "PRAGMA foreign_keys=OFF;",
+    "CREATE TABLE `__new_question` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`bank_id` text NOT NULL,\n\t`type` text NOT NULL,\n\t`prompt_md` text NOT NULL,\n\t`media_json` text,\n\t`options_json` text,\n\t`key_json` text,\n\t`scoring_json` text,\n\t`points` real NOT NULL,\n\t`difficulty` text,\n\t`tags_json` text NOT NULL,\n\t`explanation_md` text,\n\t`version` integer NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+    "INSERT INTO `__new_question`(\"id\", \"workspace_id\", \"bank_id\", \"type\", \"prompt_md\", \"media_json\", \"options_json\", \"key_json\", \"scoring_json\", \"points\", \"difficulty\", \"tags_json\", \"explanation_md\", \"version\", \"created_at\") SELECT \"id\", \"workspace_id\", \"bank_id\", \"type\", \"prompt_md\", \"media_json\", \"options_json\", \"key_json\", \"scoring_json\", \"points\", \"difficulty\", \"tags_json\", \"explanation_md\", \"version\", \"created_at\" FROM `question`;",
+    "DROP TABLE `question`;",
+    "ALTER TABLE `__new_question` RENAME TO `question`;",
+    "PRAGMA foreign_keys=ON;",
+    "CREATE INDEX `question_workspace_idx` ON `question` (`workspace_id`);",
+    "CREATE INDEX `question_bank_idx` ON `question` (`bank_id`);",
+    "CREATE TABLE `__new_response` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`attempt_id` text NOT NULL,\n\t`question_id` text NOT NULL,\n\t`value_json` text NOT NULL,\n\t`saved_at` integer NOT NULL,\n\t`client_seq` integer NOT NULL,\n\t`points` real,\n\t`graded_by` text\n);",
+    "INSERT INTO `__new_response`(\"id\", \"workspace_id\", \"attempt_id\", \"question_id\", \"value_json\", \"saved_at\", \"client_seq\", \"points\", \"graded_by\") SELECT \"id\", \"workspace_id\", \"attempt_id\", \"question_id\", \"value_json\", \"saved_at\", \"client_seq\", \"points\", \"graded_by\" FROM `response`;",
+    "DROP TABLE `response`;",
+    "ALTER TABLE `__new_response` RENAME TO `response`;",
+    "CREATE INDEX `response_workspace_idx` ON `response` (`workspace_id`);",
+    "CREATE INDEX `response_attempt_idx` ON `response` (`attempt_id`);",
+    "CREATE UNIQUE INDEX `response_attempt_question_uq` ON `response` (`attempt_id`,`question_id`);",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -133,5 +150,9 @@ export const pgMigrations: Migration[] = [
   { name: "0001_rainy_morlun.sql", statements: [
     "CREATE TABLE \"auth_token\" (\n\t\"token_hash\" text PRIMARY KEY NOT NULL,\n\t\"kind\" text NOT NULL,\n\t\"payload_json\" jsonb NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\t\"expires_at\" bigint NOT NULL,\n\t\"used_at\" bigint\n);",
     "CREATE INDEX \"auth_token_expires_idx\" ON \"auth_token\" USING btree (\"expires_at\");",
+  ] },
+  { name: "0002_huge_prowler.sql", statements: [
+    "ALTER TABLE \"question\" ALTER COLUMN \"points\" SET DATA TYPE numeric;",
+    "ALTER TABLE \"response\" ALTER COLUMN \"points\" SET DATA TYPE numeric;",
   ] },
 ];
