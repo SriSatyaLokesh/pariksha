@@ -184,11 +184,20 @@ export async function handleCallback(
   // Email is the account key here, so an unverified one is an account
   // takeover: anyone who can register `owner@school.test` at a sloppy
   // provider would otherwise sign in as the owner.
-  if (claims.email_verified === false) {
+  //
+  // The claim is OPTIONAL in OpenID Connect, so checking `=== false` would
+  // guard against a provider that admits non-verification and not against one
+  // that says nothing — which is the more common case and the same risk. This
+  // fails closed on absent, and an operator opts a provider out knowingly.
+  // Some providers send the claim as the string "true"; that is the same
+  // assertion, so it is read the same way.
+  if (!provider.allowUnverifiedEmail && !isVerified(claims.email_verified)) {
     throw new ApiError(
       400,
       "email_not_verified",
-      "The provider has not verified this address",
+      claims.email_verified === undefined
+        ? "The provider did not state whether this address is verified"
+        : "The provider has not verified this address",
     );
   }
 
@@ -208,6 +217,14 @@ export async function handleCallback(
   // `provider_identity` table — worth it when someone actually reports a
   // renamed address, not before.
   return { userId, email, returnTo: stored.returnTo };
+}
+
+/**
+ * Only an explicit affirmative counts. Anything else — absent, `false`, a
+ * number, an empty string — is not an assertion that the address was checked.
+ */
+function isVerified(claim: unknown): boolean {
+  return claim === true || claim === "true";
 }
 
 function configured(deps: AppDeps, providerId: string): OidcProvider {

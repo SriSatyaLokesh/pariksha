@@ -23,6 +23,13 @@ const oidcProvider = z.object({
   clientSecret: secret,
   redirectUri: z.url(),
   scopes: z.array(z.string().min(1)).default(["openid", "email", "profile"]),
+  // `email_verified` is OPTIONAL in OpenID Connect, so a provider may simply
+  // stay silent about it. Since the account is keyed by email, a silent
+  // provider is indistinguishable from an unverified address, and sign-in
+  // fails closed. An operator who knows their provider verifies addresses
+  // out of band sets this deliberately, per provider — it is never a default,
+  // because the cost of guessing wrong is signing someone in as the owner.
+  allowUnverifiedEmail: z.boolean().default(false),
 });
 
 export type OidcProvider = z.infer<typeof oidcProvider>;

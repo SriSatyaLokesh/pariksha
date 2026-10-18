@@ -90,7 +90,11 @@ beforeEach(() => {
 /** Starts a flow and signs an ID token carrying the nonce it minted. */
 async function start(
   returnTo = "/w/acme/tests",
-  claims: Record<string, unknown> = { sub: "sub-1", email: "a@example.test" },
+  claims: Record<string, unknown> = {
+    sub: "sub-1",
+    email: "a@example.test",
+    email_verified: true,
+  },
   options: { issuer?: string; audience?: string; expSeconds?: number } = {},
 ): Promise<{ code: string; state: string }> {
   const { url, stateId } = await authorizationUrl(
@@ -275,7 +279,7 @@ it("the callback honours only a safe returnTo", async () => {
 
 it("a second sign-in with the same provider subject reuses the user rather than creating one", async () => {
   const email = "repeat@example.test";
-  const claims = { sub: "stable-subject", email };
+  const claims = { sub: "stable-subject", email, email_verified: true };
 
   const first = await handleCallback(
     deps,
@@ -307,7 +311,7 @@ it("an OIDC sign-in adopts an account that already exists for the address", asyn
   const result = await handleCallback(
     deps,
     "google",
-    await start("/", { sub: "fresh-subject", email }),
+    await start("/", { sub: "fresh-subject", email, email_verified: true }),
     providerFetch,
   );
 
@@ -325,6 +329,85 @@ it("an ID token whose email the provider says is unverified is refused", async (
   ).rejects.toThrow(/verif/i);
 });
 
+// `email_verified` is OPTIONAL in OpenID Connect, so silence is the common
+// case, not the exotic one — and since the account is keyed by email, a
+// silent provider is indistinguishable from an unverified address. Guarding
+// only `=== false` would catch the honest provider and miss the quiet one.
+it("an ID token that says nothing about verification is refused, not trusted", async () => {
+  const params = await start("/", {
+    sub: "silent",
+    email: "silent@example.test",
+  });
+  await expect(
+    handleCallback(deps, "google", params, providerFetch),
+  ).rejects.toThrow(/verif/i);
+});
+
+it("the string \"true\" counts as verified, because some providers send it that way", async () => {
+  const params = await start("/", {
+    sub: "stringy",
+    email: "stringy@example.test",
+    email_verified: "true",
+  });
+  await expect(
+    handleCallback(deps, "google", params, providerFetch),
+  ).resolves.toMatchObject({ email: "stringy@example.test" });
+});
+
+it("a truthy-looking claim that is not an affirmative is still refused", async () => {
+  for (const claim of [1, "yes", "", 0, null]) {
+    const params = await start("/", {
+      sub: `odd-${String(claim)}`,
+      email: `odd-${String(claim)}@example.test`,
+      email_verified: claim,
+    });
+    await expect(
+      handleCallback(deps, "google", params, providerFetch),
+      String(claim),
+    ).rejects.toThrow(/verif/i);
+  }
+});
+
+it("a provider the operator marked allowUnverifiedEmail may stay silent", async () => {
+  const { deps: lax } = await testDeps({
+    env: {
+      OIDC_PROVIDERS: JSON.stringify([
+        {
+          id: "intranet",
+          label: "Intranet",
+          issuer: ISSUER,
+          clientId: CLIENT_ID,
+          clientSecret: "shh",
+          redirectUri: REDIRECT_URI,
+          allowUnverifiedEmail: true,
+        },
+      ]),
+    },
+  });
+  const { url, stateId } = await authorizationUrl(
+    lax,
+    "intranet",
+    "/",
+    providerFetch,
+  );
+  const nonce = new URL(url).searchParams.get("nonce");
+  nextIdToken = await signIdToken({
+    sub: "lax",
+    email: "lax@example.test",
+    nonce,
+  });
+
+  await expect(
+    handleCallback(
+      lax,
+      "intranet",
+      { code: "c", state: stateId },
+      providerFetch,
+    ),
+  ).resolves.toMatchObject({ email: "lax@example.test" });
+  await closeClient(lax.db);
+});
+
 it("discovery and JWKS are fetched once per isolate, not once per sign-in", async () => {
   // Two subrequests on a cold isolate and zero on a warm one, against the
   // platform's 50 (ADR 0002). Every test above has already warmed the cache,
@@ -332,6 +415,7 @@ it("discovery and JWKS are fetched once per isolate, not once per sign-in", asyn
   const params = await start("/", {
     sub: "cached",
     email: "cached@example.test",
+    email_verified: true,
   });
   requests = [];
   await handleCallback(deps, "google", params, providerFetch);
