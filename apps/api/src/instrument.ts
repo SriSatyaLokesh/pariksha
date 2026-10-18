@@ -7,7 +7,9 @@
 import type { Hono } from "hono";
 import type { DbClient } from "@pariksha/db";
 import type { StorageAdapter } from "@pariksha/storage";
+import type { Action } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "./app.js";
+import { guardOf } from "./middleware/authorize.js";
 
 /** Cloudflare Workers, free plan. A paid plan raises it; the guard does not. */
 export const SUBREQUEST_LIMIT = 50;
@@ -105,4 +107,28 @@ export function mountedRoutes(app: Hono<AppBindings>): string[] {
     .filter((route) => !(route.method === "ALL" && route.path.includes("*")))
     .map((route) => route.path);
   return [...new Set(paths)].sort();
+}
+
+/**
+ * The action each guarded route enforces, read off the same live table for
+ * the same reason: `app.use` and `app.get` both record handlers there, and
+ * the authorization middleware carries the action it was built with, so
+ * what comes back is what is mounted rather than what someone wrote down.
+ *
+ * Keyed by method as well as path, because `GET /workspaces/:id` and
+ * `PATCH /workspaces/:id` are one path and two different permissions.
+ */
+export function routeGuards(
+  app: Hono<AppBindings>,
+): Record<string, Action | null> {
+  const guards: Record<string, Action | null> = {};
+  for (const route of app.routes) {
+    const guard = guardOf(route.handler);
+    if (guard) guards[`${route.method} ${route.path}`] = guard.action;
+  }
+  return guards;
+}
+
+export function guardedRoutes(app: Hono<AppBindings>): string[] {
+  return Object.keys(routeGuards(app)).sort();
 }

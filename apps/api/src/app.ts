@@ -7,11 +7,17 @@ import { Hono } from "hono";
 import { requestId, type RequestIdVariables } from "hono/request-id";
 import type { DbClient } from "@pariksha/db";
 import type { StorageAdapter } from "@pariksha/storage";
+import type { Action } from "@pariksha/core";
 import type { AppEnv } from "./env.js";
+import type { Actor } from "./auth/session.js";
 import { securityHeaders } from "./middleware/security.js";
 import { logging } from "./middleware/logging.js";
 import { errorEnvelope, notFoundEnvelope } from "./middleware/errorEnvelope.js";
+import { authenticate } from "./middleware/authenticate.js";
 import { health } from "./routes/health.js";
+import { authRoutes } from "./routes/auth.js";
+import { me } from "./routes/me.js";
+import { workspaceRoutes } from "./routes/workspaces.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -23,9 +29,17 @@ export interface AppDeps {
    */
   now: () => number;
   env: AppEnv;
+  /**
+   * Injected only so the OIDC routes reach a provider a test controls. Left
+   * unset everywhere else, where `globalThis.fetch` is the right answer on
+   * both targets.
+   */
+  http?: typeof globalThis.fetch;
 }
 
-export type AppBindings = { Variables: RequestIdVariables };
+export type AppBindings = {
+  Variables: RequestIdVariables & { actor: Actor | null };
+};
 
 /**
  * The most subrequests each route may spend on one invocation, against the
@@ -36,6 +50,46 @@ export type AppBindings = { Variables: RequestIdVariables };
  */
 export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/health": 1,
+  // Two for authentication on every authenticated route — the session join
+  // and the idle-window write — and then what the route itself spends.
+  "/api/v1/auth/magic-link": 4,
+  "/api/v1/auth/:provider/start": 3,
+  // The three sign-in and sign-out routes carry the same open-ended cost:
+  // S-18 wants the event recorded in each of the actor's workspaces, and the
+  // audit table is workspace-scoped, so the row count is the membership
+  // count.
+  //
+  // ponytail: an organiser belongs to one or two workspaces, so these sit
+  // well under the ceiling in practice and the headroom here is what bounds
+  // them. If an instance ever grows an account in a dozen workspaces, the
+  // move is a multi-row insert in `appendAudit`, not a larger number here.
+  "/api/v1/auth/:provider/callback": 12,
+  "/api/v1/auth/signout": 12,
+  "/api/v1/auth/signout-everywhere": 12,
+  "/api/v1/me": 2,
+  // Authentication, then one statement: the list, or the create plus the
+  // owner membership.
+  "/api/v1/workspaces": 6,
+  "/api/v1/workspaces/:id": 5,
+  // The heaviest: resolve the invitee, list the members, write the change,
+  // revoke the member's sessions, append the audit row.
+  "/api/v1/workspaces/:id/members": 10,
+};
+
+/**
+ * The `Action` each guarded route enforces, or `null` where membership in
+ * the workspace is the whole check. `authorization.test.ts` compares this
+ * against the guards actually mounted on the live Hono instance, in both
+ * directions — so a route mounted without a guard, a guard without a line
+ * here, and a line naming the wrong action are each a failing test rather
+ * than an unguarded endpoint.
+ */
+export const ROUTE_ACTIONS: Record<string, Action | null> = {
+  "GET /api/v1/workspaces/:id": null,
+  "PATCH /api/v1/workspaces/:id": "workspace.settings",
+  "GET /api/v1/workspaces/:id/members": "members.manage",
+  "POST /api/v1/workspaces/:id/members": "members.manage",
+  "DELETE /api/v1/workspaces/:id/members": "members.manage",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -46,11 +100,18 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.use(requestId());
   app.use(securityHeaders);
   app.use(logging(deps.now));
+  // Before every route rather than per route: a route that needs an actor
+  // and did not ask for one is the failure mode worth designing out, and
+  // the cost is the same two statements either way.
+  app.use(authenticate(deps));
 
   app.notFound(notFoundEnvelope);
   app.onError(errorEnvelope);
 
   app.get("/api/v1/health", health(deps));
+  app.route("/api/v1/auth", authRoutes(deps));
+  app.get("/api/v1/me", me());
+  app.route("/api/v1/workspaces", workspaceRoutes(deps));
 
   return app;
 }

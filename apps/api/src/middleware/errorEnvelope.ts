@@ -6,7 +6,7 @@
 import type { ErrorHandler, NotFoundHandler } from "hono";
 import { HTTPException } from "hono/http-exception";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
-import type { RequestIdVariables } from "hono/request-id";
+import type { AppBindings } from "../app.js";
 import { ApiError } from "../errors.js";
 
 export interface ErrorEnvelope {
@@ -32,7 +32,7 @@ function envelope(
 export const notFoundEnvelope: NotFoundHandler = (c) =>
   c.json(envelope("not_found", "No such resource."), 404);
 
-export const errorEnvelope: ErrorHandler<{ Variables: RequestIdVariables }> = (
+export const errorEnvelope: ErrorHandler<AppBindings> = (
   err,
   c,
 ) => {

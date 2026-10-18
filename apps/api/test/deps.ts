@@ -2,10 +2,12 @@
 // database and the in-memory storage adapter, so the whole API is exercised
 // without a container, a network or a mock.
 
+import { Hono } from "hono";
 import { sqliteClient, migrate, type DbClient } from "@pariksha/db";
 import { memoryAdapter } from "@pariksha/storage";
 import { parseEnv } from "../src/env.js";
 import type { AppDeps } from "../src/app.js";
+import { setSessionCookie } from "../src/middleware/authenticate.js";
 
 /** Fixed, so a test asserting on a timestamp never races a real clock. */
 export const FIXED_NOW = 1_760_000_000_000;
@@ -33,4 +35,22 @@ export async function testDeps(
     },
     migrations: applied.length,
   };
+}
+
+/**
+ * A `Cookie` header carrying `token`, signed the way the API signs it —
+ * through the production function, so a test can never hold a cookie the
+ * server would reject.
+ */
+export async function sessionCookie(
+  deps: AppDeps,
+  token: string,
+): Promise<string> {
+  const issuer = new Hono();
+  issuer.get("/", async (c) => {
+    await setSessionCookie(c, deps, token);
+    return c.body(null, 204);
+  });
+  const header = (await issuer.request("/")).headers.get("set-cookie") ?? "";
+  return header.split(";")[0] ?? "";
 }

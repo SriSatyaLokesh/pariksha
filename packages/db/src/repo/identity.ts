@@ -57,6 +57,31 @@ export async function findUserByEmail(
   return rows[0]?.id ?? null;
 }
 
+/**
+ * Every workspace one user belongs to. Unscoped for the same reason
+ * `readSessionActor` is: which workspaces the actor may see is the answer
+ * this produces, not an argument it takes. One statement rather than a
+ * `getWorkspace` per membership, which is the query-per-item shape the
+ * subrequest budget exists to catch.
+ */
+export async function listUserWorkspaces(
+  db: DbClient,
+  userId: string,
+): Promise<{ id: string; slug: string; name: string; role: string }[]> {
+  const rows = await db.query<{
+    id: string;
+    slug: string;
+    name: string;
+    role: string;
+  }>(
+    "SELECT w.id AS id, w.slug AS slug, w.name AS name, m.role AS role " +
+      "FROM membership m JOIN workspace w ON w.id = m.workspace_id " +
+      "WHERE m.user_id = ? ORDER BY m.created_at",
+    [userId],
+  );
+  return rows;
+}
+
 export async function insertAuthToken(
   db: DbClient,
   input: {
