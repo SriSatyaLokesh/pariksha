@@ -197,14 +197,66 @@ async function dryRun() {
   );
 }
 
+/**
+ * A failed `wrangler` call arrives as an execFileSync error whose message is
+ * the command line and whose useful half is on the inherited stderr, already
+ * scrolled past. Left alone, Node prints a stack trace through this script's
+ * internals — which says nothing about the two things that are actually
+ * wrong in practice: the token lacks a permission, or it is for the wrong
+ * account. This is operator-facing tooling, so it names them.
+ */
+function explain(error) {
+  const text = `${error.stdout ?? ""}${error.stderr ?? ""}${error.message ?? ""}`;
+
+  // 10000 is Cloudflare's "authentication error", which `wrangler whoami`
+  // will happily contradict: the token is valid, it just has no grant for
+  // the product being called. Deploying a Worker and creating a D1 database
+  // are separate permissions, so one working says nothing about the other.
+  if (text.includes("10000") || /Authentication error/i.test(text)) {
+    return [
+      "The API token authenticated but is not allowed to do this.",
+      "",
+      "A custom API token carries its own permissions and does NOT inherit",
+      "your user's account role, so a token that deploys a Worker can still",
+      "be unable to create a database. Add these at",
+      "https://dash.cloudflare.com/profile/api-tokens:",
+      "",
+      "  D1                   Edit    create the database, run migrations",
+      "  Workers R2 Storage   Edit    create the bucket",
+      "  Workers Scripts      Edit    deploy (likely already present)",
+      "",
+      "If you rotate the token rather than editing it, update the GitHub",
+      "secret too: gh secret set CLOUDFLARE_API_TOKEN",
+    ].join("\n");
+  }
+
+  // Deliberately narrow, and checked after 10000: wrangler prints the words
+  // "CLOUDFLARE_API_TOKEN" on a perfectly successful `whoami`, so a loose
+  // match here reports "not authenticated" for a token that authenticated
+  // fine and merely lacks a grant.
+  if (/not logged in|you are not authenticated|wrangler login/i.test(text)) {
+    return [
+      "wrangler is not authenticated.",
+      "Set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, or run `wrangler login`.",
+    ].join("\n");
+  }
+
+  return null;
+}
+
 async function main() {
   if (process.argv.includes("--dry-run")) return dryRun();
 
   const result = await setup({
+    // stderr is captured, not inherited: wrangler reports *why* a call failed
+    // there, and inheriting it means the reason reaches the terminal but not
+    // this script, which can then only guess. It is echoed below on failure,
+    // so nothing is hidden — it just arrives after the diagnosis instead of
+    // scrolling past before it.
     cf: (args) =>
       execFileSync(process.execPath, [WRANGLER, ...args], {
         encoding: "utf8",
-        stdio: ["inherit", "pipe", "inherit"],
+        stdio: ["inherit", "pipe", "pipe"],
       }),
     readConfig: () => readFileSync(CONFIG, "utf8"),
     writeConfig: (next) => writeFileSync(CONFIG, next),
@@ -219,4 +271,15 @@ async function main() {
   );
 }
 
-await main();
+try {
+  await main();
+} catch (error) {
+  const advice = explain(error);
+  if (!advice) throw error;
+  // What wrangler said, then what to do about it. Both, in that order.
+  const detail = `${error.stderr ?? ""}`.trim();
+  console.error(
+    `\nSetup stopped.\n${detail ? `\n${detail}\n` : ""}\n${advice}\n`,
+  );
+  process.exitCode = 1;
+}
