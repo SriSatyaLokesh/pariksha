@@ -6,19 +6,25 @@
 // one bank, and the row's own `qst_` ID, which is what a URL and a
 // `test_version.sections_json` entry use. `:qid` below is always the latter.
 //
-// Deep, type-specific validation (does a `single` have `key` among its
-// `options`?) is `validateBank` (@pariksha/core) and the twelve editors'
-// job (Tasks 3-6), not this route's: it checks a body is *shaped* like a
-// question and nothing more.
+// `questionDoc` only checks a body is *shaped* like a question — `id`,
+// `type`, `prompt` and nothing else required. Everything cross-field
+// (`validateBank`, @pariksha/core) is the twelve editors' job too, but one
+// of its rules needs data only this route has: whether `group` names a
+// `PassageGroup` that actually exists in the bank (#50, P4.6). `assertValid`
+// below runs the whole of `validateBank` against a one-question "bank" built
+// from the real groups and the document being written, rather than
+// reimplementing the group-exists check by hand — a write with every other
+// field valid gets exactly the one issue a bad `group` deserves.
 
 import { Hono, type Context } from "hono";
 import { z } from "zod";
-import { QUESTION_TYPES, type Question } from "@pariksha/core";
+import { QUESTION_TYPES, validateBank, type Question } from "@pariksha/core";
 import {
   appendAudit,
   deleteQuestion,
   getBank,
   getQuestion,
+  listGroups,
   listQuestions,
   upsertQuestion,
   type QuestionFilter,
@@ -44,6 +50,22 @@ async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
   const bank = await getBank(deps.db, workspaceId, bankId);
   if (!bank) throw new ApiError(404, "not_found", "No such resource.");
   return bank;
+}
+
+/**
+ * The group-exists rule (and every other cross-field rule `validateBank`
+ * covers) is reached by validating the one-question "bank" this builds —
+ * the bank's real groups plus only the document being written — not by a
+ * second, hand-rolled check here. A 422 names every issue `validateBank`
+ * finds, not only a group one: if the document is otherwise valid (the
+ * common case), the group issue is the only one there.
+ */
+async function assertValid(deps: AppDeps, workspaceId: string, bankId: string, doc: Question): Promise<void> {
+  const groups = await listGroups(deps.db, workspaceId, bankId);
+  const result = validateBank({ groups, questions: [doc] });
+  if (!result.ok) {
+    throw new ApiError(422, "invalid_question", "The question is not valid.", { issues: result.issues });
+  }
 }
 
 // `limit` and `cursor` cross a trust boundary that `type`/`difficulty`'s
@@ -117,6 +139,7 @@ export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
     await bankOr404(deps, workspaceId, bankId);
 
     const doc = parse(questionDoc, await json(c.req.raw)) as Question;
+    await assertValid(deps, workspaceId, bankId, doc);
     const now = deps.now();
     const { id, created, row } = await upsertQuestion(deps.db, workspaceId, bankId, doc, now);
 
@@ -163,6 +186,7 @@ export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
     if (doc.id !== existing.refId) {
       throw new ApiError(400, "invalid_request", "A question's ID cannot change.");
     }
+    await assertValid(deps, workspaceId, bankId, doc);
 
     const now = deps.now();
     const { row } = await upsertQuestion(deps.db, workspaceId, bankId, doc, now);

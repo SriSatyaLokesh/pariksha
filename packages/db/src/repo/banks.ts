@@ -26,7 +26,7 @@
 // `deleteBank`'s cascade) out from under a live published exam.
 
 import type { DbClient } from "../client.js";
-import type { Difficulty, Question, QuestionType } from "@pariksha/core";
+import type { Difficulty, PassageGroup, Question, QuestionType } from "@pariksha/core";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
 import { toQuestionDocument, toQuestionRow, type QuestionRecord } from "./question-document.js";
@@ -522,5 +522,99 @@ export const listWorkspaceTags = scoped(
       for (const tag of list) tags.add(tag);
     }
     return [...tags].sort();
+  },
+);
+
+// Passage groups (#50, P4.6): the shared stimulus (a passage, a table, a
+// diagram) a handful of questions in a bank hang off. A bank holds a
+// handful of them and every read wants all of them, which is why they live
+// in `question_bank.groups_json` rather than a table of their own — there
+// is no migration here, only reads and writes of that one column.
+//
+// `rawGroups` is the one read every group function above builds on; keeping
+// it unexported (same reason `testsUsingBank` is) is what keeps the "one
+// statement per change" rule honest: a caller outside this file reaches
+// `listGroups`/`upsertGroup`/`deleteGroup`, never the column directly.
+async function rawGroups(db: DbClient, workspaceId: string, bankId: string): Promise<PassageGroup[]> {
+  const rows = await db.query<{ groups_json: unknown }>(
+    "SELECT groups_json FROM question_bank WHERE workspace_id = ? AND id = ?",
+    [workspaceId, bankId],
+  );
+  const row = rows[0];
+  return row?.groups_json == null ? [] : db.jsonValue<PassageGroup[]>(row.groups_json);
+}
+
+export const listGroups = scoped(
+  "listGroups",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    bankId: string,
+  ): Promise<(PassageGroup & { questionCount: number })[]> => {
+    const groups = await rawGroups(db, workspaceId, bankId);
+    if (groups.length === 0) return [];
+
+    const counts = await db.query<{ group_ref: string; n: number }>(
+      "SELECT group_ref, COUNT(*) AS n FROM question " +
+        "WHERE workspace_id = ? AND bank_id = ? AND group_ref IS NOT NULL GROUP BY group_ref",
+      [workspaceId, bankId],
+    );
+    const countOf = new Map(counts.map((row) => [row.group_ref, Number(row.n)]));
+    return groups.map((group) => ({ ...group, questionCount: countOf.get(group.id) ?? 0 }));
+  },
+);
+
+/**
+ * Read-modify-write on `groups_json`: one read of the current array, one
+ * `UPDATE` writing it back with `group` added (a fresh `id`) or replaced (an
+ * existing one) — never a statement per field, and never more than the one
+ * `UPDATE` the brief asks for.
+ */
+export const upsertGroup = scoped(
+  "upsertGroup",
+  async (db: DbClient, workspaceId: string, bankId: string, group: PassageGroup, now: number): Promise<void> => {
+    const current = await rawGroups(db, workspaceId, bankId);
+    const index = current.findIndex((g) => g.id === group.id);
+    const next = index === -1 ? [...current, group] : current.map((g, i) => (i === index ? group : g));
+
+    await db.run("UPDATE question_bank SET groups_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?", [
+      db.jsonParam(next),
+      now,
+      workspaceId,
+      bankId,
+    ]);
+  },
+);
+
+/**
+ * Refuses when a question in this bank still names the group — the same
+ * refuse-rather-than-cascade shape `deleteQuestion`/`deleteBank` use for a
+ * published test, here for a question instead: a group's `group_ref` can
+ * never dangle, because there is no path that removes the group out from
+ * under a question that still names it.
+ */
+export const deleteGroup = scoped(
+  "deleteGroup",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    bankId: string,
+    groupId: string,
+  ): Promise<{ deleted: boolean; blockedBy: string[] }> => {
+    const referencing = await db.query<{ ref_id: string }>(
+      "SELECT ref_id FROM question WHERE workspace_id = ? AND bank_id = ? AND group_ref = ? ORDER BY ref_id",
+      [workspaceId, bankId, groupId],
+    );
+    const blockedBy = referencing.map((row) => row.ref_id);
+    if (blockedBy.length > 0) return { deleted: false, blockedBy };
+
+    const current = await rawGroups(db, workspaceId, bankId);
+    const next = current.filter((g) => g.id !== groupId);
+
+    const { changes } = await db.run(
+      "UPDATE question_bank SET groups_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
+      [db.jsonParam(next), Date.now(), workspaceId, bankId],
+    );
+    return { deleted: changes > 0, blockedBy: [] };
   },
 );

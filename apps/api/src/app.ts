@@ -97,10 +97,16 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/workspaces/:id/banks": 5,
   "/api/v1/workspaces/:id/banks/:bankId": 7,
   "/api/v1/workspaces/:id/tags": 3,
-  "/api/v1/workspaces/:id/banks/:bankId/questions": 7,
-  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 8,
+  // Phase 4 Task 6: passage groups. `assertValid` adds one `listGroups` call
+  // (itself one or two statements, depending on whether the bank has any
+  // groups yet) to every question write, which is why these two numbers grew
+  // from Task 2's.
+  "/api/v1/workspaces/:id/banks/:bankId/questions": 9,
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 10,
   "/api/v1/workspaces/:id/banks/:bankId/media": 4,
   "/api/v1/workspaces/:id/media/:key": 3,
+  "/api/v1/workspaces/:id/banks/:bankId/groups": 7,
+  "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId": 9,
 };
 
 /**
@@ -134,6 +140,12 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "DELETE /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
   "POST /api/v1/workspaces/:id/banks/:bankId/media": "banks.edit",
   "GET /api/v1/workspaces/:id/media/:key": "banks.edit",
+
+  // Phase 4 Task 6.
+  "GET /api/v1/workspaces/:id/banks/:bankId/groups": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/groups": "banks.edit",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "banks.edit",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "banks.edit",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {

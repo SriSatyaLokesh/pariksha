@@ -14,14 +14,18 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
+import type { PassageGroup } from "@pariksha/core";
 import {
   appendAudit,
   createBank,
   deleteBank,
+  deleteGroup,
   getBank,
   listBanks,
+  listGroups,
   listWorkspaceTags,
   updateBank,
+  upsertGroup,
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
@@ -35,6 +39,22 @@ const bankPatch = z
     description: z.string().max(4000).optional(),
     license: z.string().max(200).optional(),
     tags: z.array(z.string().min(1)).optional(),
+  })
+  .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
+
+// `id` matches the pattern a question's `group` field names
+// (schemas/question-1.json): letters, digits, underscore, dot or hyphen, so
+// a group ID is always a legal reference from a question that names it.
+const newGroup = z.object({
+  id: z.string().min(1).max(64).regex(/^[A-Za-z0-9_.-]+$/),
+  title: z.string().min(1).max(200).optional(),
+  passage: z.string().min(1),
+});
+
+const groupPatch = z
+  .object({
+    title: z.string().min(1).max(200).optional(),
+    passage: z.string().min(1).optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
 
@@ -133,6 +153,113 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
   routes.get("/:id/tags", requires("banks.edit"), async (c) =>
     c.json({ tags: await listWorkspaceTags(deps.db, c.req.param("id")) }),
   );
+
+  routes.get("/:id/banks/:bankId/groups", requires("banks.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    const bank = await getBank(deps.db, workspaceId, bankId);
+    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+
+    return c.json({ groups: await listGroups(deps.db, workspaceId, bankId) });
+  });
+
+  routes.post("/:id/banks/:bankId/groups", requires("banks.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    const bank = await getBank(deps.db, workspaceId, bankId);
+    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+
+    const input = parse(newGroup, await json(c.req.raw));
+    const groups = await listGroups(deps.db, workspaceId, bankId);
+    if (groups.some((g) => g.id === input.id)) {
+      throw new ApiError(409, "duplicate_group", `A group with id "${input.id}" already exists.`, {
+        field: "id",
+      });
+    }
+
+    const now = deps.now();
+    const group: PassageGroup = {
+      id: input.id,
+      passage: input.passage,
+      ...(input.title !== undefined && { title: input.title }),
+    };
+    await upsertGroup(deps.db, workspaceId, bankId, group, now);
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "group.create",
+      target: input.id,
+      now,
+    });
+
+    return c.json({ ...group, questionCount: 0 }, 201);
+  });
+
+  routes.patch("/:id/banks/:bankId/groups/:groupId", requires("banks.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    const groupId = c.req.param("groupId");
+    const bank = await getBank(deps.db, workspaceId, bankId);
+    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+
+    const groups = await listGroups(deps.db, workspaceId, bankId);
+    const existing = groups.find((g) => g.id === groupId);
+    if (!existing) throw new ApiError(404, "not_found", "No such resource.");
+
+    const patch = parse(groupPatch, await json(c.req.raw));
+    const title = patch.title !== undefined ? patch.title : existing.title;
+    const group: PassageGroup = {
+      id: groupId,
+      passage: patch.passage ?? existing.passage,
+      ...(title !== undefined && { title }),
+    };
+
+    const now = deps.now();
+    await upsertGroup(deps.db, workspaceId, bankId, group, now);
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "group.update",
+      target: groupId,
+      now,
+    });
+
+    return c.json({ ...group, questionCount: existing.questionCount });
+  });
+
+  routes.delete("/:id/banks/:bankId/groups/:groupId", requires("banks.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    const groupId = c.req.param("groupId");
+    const bank = await getBank(deps.db, workspaceId, bankId);
+    if (!bank) throw new ApiError(404, "not_found", "No such resource.");
+
+    const groups = await listGroups(deps.db, workspaceId, bankId);
+    if (!groups.some((g) => g.id === groupId)) throw new ApiError(404, "not_found", "No such resource.");
+
+    const result = await deleteGroup(deps.db, workspaceId, bankId, groupId);
+    if (!result.deleted) {
+      // Same shape as UX-05's question/bank refusals, named differently: a
+      // group is blocked by the questions that still reference it, not by a
+      // published test.
+      throw new ApiError(
+        409,
+        "group_in_use",
+        `This group is used by: ${result.blockedBy.join(", ")}.`,
+        { questions: result.blockedBy },
+      );
+    }
+
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "group.delete",
+      target: groupId,
+      now: deps.now(),
+    });
+
+    return c.body(null, 204);
+  });
 
   return routes;
 }
