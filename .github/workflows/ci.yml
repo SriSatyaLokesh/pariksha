@@ -84,6 +84,32 @@ jobs:
         env:
           TEST_POSTGRES_URL: postgres://postgres:pariksha@localhost:5432/pariksha_test
 
+      # A step in this job, not a job of its own: a separate job would
+      # re-run checkout, `pnpm install` and `pnpm build` — several minutes —
+      # to reach the same state this one is already in, and it could not
+      # start until this job's build finished anyway. As a step it costs the
+      # browser download plus the run itself, roughly a minute.
+      #
+      # Chromium alone. The suite walks one flow against a Node API and an
+      # OpenID provider that both live on localhost; nothing in it is
+      # engine-sensitive, and it is not cross-browser coverage.
+      - name: Install Playwright Chromium
+        run: pnpm --filter @pariksha/web exec playwright install --with-deps chromium
+
+      # `pnpm test` deliberately does not reach this — e2e has its own
+      # script so the unit suite stays fast (apps/web/vite.config.ts excludes
+      # e2e/ from Vitest).
+      - name: End-to-end (first run)
+        run: pnpm --filter @pariksha/web e2e
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results/
+          retention-days: 7
+
       # Enforces the coverage the Phase 1 review measured by hand on
       # packages/core/src, so the figure stays true without someone
       # remembering to re-check it. Each threshold is the measured value

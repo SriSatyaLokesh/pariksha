@@ -19,7 +19,7 @@ Question pools, 12 question types, browser proctoring, a registration form build
 
 ---
 
-> **Status: pre-alpha.** This repository holds the product requirements, the open question and test formats, their JSON Schemas, and a complete worked example. **Code lands with v0.1.** Everything here is reviewable, and the formats are stable enough to write questions against today. Issues and pull requests are open — see [good first issues](#contributing).
+> **Status: pre-alpha.** This repository holds the product requirements, the open question and test formats, their JSON Schemas, and a complete worked example. The scoring core, the database layer, the API's sign-in and workspace routes, and the landing page and organiser screens are built: a fresh instance already runs locally and reaches a signed-in, empty dashboard — see [Running Pariksha locally](#running-pariksha-locally). **Test authoring and the candidate runtime land with v0.1.** Issues and pull requests are open — see [good first issues](#contributing).
 
 *Pariksha* — **పరీక్ష**, **परीक्षा** — means "examination".
 
@@ -131,6 +131,47 @@ pariksha/
 ├── examples/             # complete worked tests, one folder per subject
 └── .github/              # issue and PR templates, CI
 ```
+
+## Running Pariksha locally
+
+Node 22+ and pnpm 10. The API and the web app are separate processes, and the browser must reach both on **one origin** — the session cookie is `HttpOnly`, `SameSite=Lax` and `Secure`, so a cross-origin pair behaves nothing like a deployment. `apps/web/vite.config.ts` proxies `/api` to port 8787 for exactly that reason, which is why you open the Vite URL and never the API's.
+
+```bash
+pnpm install
+pnpm build          # SITE_URL is required by the landing-page prerender
+                    # — SITE_URL="https://pariksha.example" pnpm build
+
+# Terminal 1 — the API. It migrates the database on boot, so a path that
+# does not exist yet is a new, empty instance.
+SESSION_SECRET="$(openssl rand -hex 32)" \
+DATABASE_URL=./pariksha.sqlite \
+STORAGE_DIR=./files \
+PUBLIC_URL=http://localhost:5173 \
+  node apps/api/dist/node.js
+
+# Terminal 2 — the web app, on http://localhost:5173
+pnpm --filter @pariksha/web dev
+```
+
+The organiser app is `http://localhost:5173/admin.html`: sign in, name your first workspace, and you are the owner of the instance. `/` is the landing page, which only has content after `pnpm build` runs the prerender — under `vite dev` it is deliberately empty.
+
+**You need a sign-in method before anyone can sign in.** With neither configured, the sign-in page says so rather than offering a form that cannot work.
+
+| Variable | What it gives you |
+| --- | --- |
+| `OIDC_PROVIDERS` | A JSON array of `{ id, label, issuer, clientId, clientSecret, redirectUri }`. The only way to sign in on a brand-new instance — a magic link is sent to accounts that already exist, and a fresh instance has none. |
+| `EMAIL_ENDPOINT`, `EMAIL_TOKEN`, `EMAIL_FROM` | Magic-link sign-in through any transactional-email HTTP endpoint. |
+| `EMAIL_CONSOLE=true` | Prints the magic-link email to the server log instead of sending it. Refused in production unless you set it deliberately — a sign-in link in a log is a sign-in link. |
+| `APP_URL` | The origin magic-link URLs are built against. |
+| `PORT` | The API's port. Defaults to 8787, which is what the Vite proxy expects. |
+
+To see the whole first run work without configuring any of that:
+
+```bash
+pnpm --filter @pariksha/web e2e
+```
+
+That walks a browser from the landing page to a signed-in, empty dashboard against an in-memory database and an OpenID provider that exists only in `apps/web/e2e/stub-idp.mjs`. It touches no network and leaves nothing behind, so every run is a first run.
 
 ## Try the formats today
 
