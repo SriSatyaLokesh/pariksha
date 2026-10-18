@@ -46,6 +46,23 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     completeSetup: async () => WORKSPACE,
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
+    // Phase 4 Task 2: none of this screen's tests exercise banks or
+    // questions, so these never get called — only present to satisfy
+    // `ApiClient`'s shape.
+    listBanks: async () => [],
+    createBank: async () => {
+      throw new Error("not used by this test file");
+    },
+    getBank: async () => {
+      throw new Error("not used by this test file");
+    },
+    updateBank: async () => {
+      throw new Error("not used by this test file");
+    },
+    deleteBank: async () => undefined,
+    listQuestions: async () => ({ questions: [] }),
+    deleteQuestion: async () => undefined,
+    listTags: async () => [],
     ...overrides,
   };
 }

@@ -283,6 +283,20 @@
   background-color: var(--color-voltage-soft);
 }
 
+.bank-browser__filter-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.bank-browser__filter-select select {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+}
+
 .bank-browser__filter-check {
   display: flex;
   align-items: center;

@@ -76,7 +76,17 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     const bankId = c.req.param("bankId");
     const patch = parse(bankPatch, await json(c.req.raw));
 
-    const updated = await updateBank(deps.db, workspaceId, bankId, patch);
+    // zod's `.optional()` types each field `T | undefined`, which
+    // `exactOptionalPropertyTypes` treats as a stricter type than
+    // `updateBank`'s `name?: string` — spreading only the keys the request
+    // actually named closes that gap rather than widening `updateBank`'s
+    // signature to match a JSON body that can never truly hold `undefined`.
+    const updated = await updateBank(deps.db, workspaceId, bankId, {
+      ...(patch.name !== undefined && { name: patch.name }),
+      ...(patch.description !== undefined && { description: patch.description }),
+      ...(patch.license !== undefined && { license: patch.license }),
+      ...(patch.tags !== undefined && { tags: patch.tags }),
+    });
     if (!updated) throw new ApiError(404, "not_found", "No such resource.");
 
     await appendAudit(deps.db, workspaceId, {

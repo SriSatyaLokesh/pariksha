@@ -14,11 +14,6 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { QUESTION_TYPES, type Question } from "@pariksha/core";
-
-// No runtime array of `Difficulty` is exported from @pariksha/core (only the
-// type), so the query-string allowlist is spelled out here, next to the one
-// route that reads it.
-const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 import {
   appendAudit,
   deleteQuestion,
@@ -31,6 +26,11 @@ import {
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
+
+// No runtime array of `Difficulty` is exported from @pariksha/core (only the
+// type), so the query-string allowlist is spelled out here, next to the one
+// route that reads it.
+const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
 const questionDoc = z
   .object({
@@ -46,22 +46,32 @@ async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
   return bank;
 }
 
+// Built key-by-key, present only when the query string actually named it:
+// `QuestionFilter`'s fields are `T | undefined`-free (brief's own
+// signature), and `exactOptionalPropertyTypes` holds a query string's
+// "absent" and an explicit `undefined` apart even though a URL can never
+// produce the latter.
 function filterFromQuery(c: Context<AppBindings>): QuestionFilter {
   const type = c.req.query("type");
   const difficulty = c.req.query("difficulty");
+  const tag = c.req.query("tag");
+  const search = c.req.query("search");
+  const cursor = c.req.query("cursor");
   const limit = c.req.query("limit");
-  return {
-    type: type && (QUESTION_TYPES as readonly string[]).includes(type) ? (type as QuestionFilter["type"]) : undefined,
-    difficulty:
-      difficulty && (DIFFICULTIES as readonly string[]).includes(difficulty)
-        ? (difficulty as QuestionFilter["difficulty"])
-        : undefined,
-    tag: c.req.query("tag") || undefined,
-    unused: c.req.query("unused") === "true",
-    search: c.req.query("search") || undefined,
-    cursor: c.req.query("cursor") || undefined,
-    limit: limit ? Number(limit) : undefined,
-  };
+
+  const filter: QuestionFilter = {};
+  if (type && (QUESTION_TYPES as readonly string[]).includes(type)) {
+    filter.type = type as (typeof QUESTION_TYPES)[number];
+  }
+  if (difficulty && (DIFFICULTIES as readonly string[]).includes(difficulty)) {
+    filter.difficulty = difficulty as (typeof DIFFICULTIES)[number];
+  }
+  if (tag) filter.tag = tag;
+  if (c.req.query("unused") === "true") filter.unused = true;
+  if (search) filter.search = search;
+  if (cursor) filter.cursor = cursor;
+  if (limit) filter.limit = Number(limit);
+  return filter;
 }
 
 export function questionRoutes(deps: AppDeps): Hono<AppBindings> {

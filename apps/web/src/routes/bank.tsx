@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Question } from "@pariksha/core";
+import { QUESTION_TYPES, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type QuestionSummary } from "../lib/api";
 import { MonoCaption } from "../components/MonoCaption";
+
+const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
 // Screen 2 of the bank-first flow (docs/design.md, Flow 1): the bank
 // browser. UX-04 wants a table, not a card grid, with type/tag/difficulty/
@@ -84,8 +86,17 @@ export function BankBrowser({
     });
   }
 
+  function setFilterField<K extends keyof Filter>(key: K, value: Filter[K] | undefined) {
+    setFilter((prev) => {
+      const next = { ...prev };
+      if (value === undefined) delete next[key];
+      else next[key] = value;
+      return next;
+    });
+  }
+
   function toggleTagFilter(tag: string) {
-    setFilter((prev) => ({ ...prev, tag: prev.tag === tag ? undefined : tag }));
+    setFilterField("tag", filter.tag === tag ? undefined : tag);
   }
 
   async function onDelete(question: QuestionSummary) {
@@ -135,11 +146,48 @@ export function BankBrowser({
           ))}
         </ul>
 
+        <label className="bank-browser__filter-select">
+          Type
+          <select
+            value={filter.type ?? ""}
+            onChange={(event) =>
+              setFilterField("type", event.target.value ? (event.target.value as Question["type"]) : undefined)
+            }
+          >
+            <option value="">Any</option>
+            {QUESTION_TYPES.map((type) => (
+              <option key={type} value={type}>
+                {type}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="bank-browser__filter-select">
+          Difficulty
+          <select
+            value={filter.difficulty ?? ""}
+            onChange={(event) =>
+              setFilterField(
+                "difficulty",
+                event.target.value ? (event.target.value as Filter["difficulty"]) : undefined,
+              )
+            }
+          >
+            <option value="">Any</option>
+            {DIFFICULTIES.map((difficulty) => (
+              <option key={difficulty} value={difficulty}>
+                {difficulty}
+              </option>
+            ))}
+          </select>
+        </label>
+
         <label className="bank-browser__filter-check">
           <input
             type="checkbox"
             checked={filter.unused === true}
-            onChange={(event) => setFilter((prev) => ({ ...prev, unused: event.target.checked || undefined }))}
+            onChange={(event) => setFilterField("unused", event.target.checked ? true : undefined)}
           />
           Not used in any test
         </label>
