@@ -196,6 +196,8 @@ Pariksha itself ships no model keys and makes no outbound AI request on its own 
 
 PRD v0.1 ships a pilot test with an access code and defers workspaces, roles and organiser sign-in to v0.2. This roadmap moves them into Phase 3, because the landing page, the demo and BYOK all need a workspace with an owner and a server-enforced permission check to exist first, and because retrofitting tenant scoping into a schema that was written without it is the expensive mistake this ordering avoids.
 
+Recorded as [ADR 0005](adr/0005-organiser-auth-before-the-candidate-runtime.md), written after Phase 3 had already shipped on it. [ADR 0006](adr/0006-identity-reads-sit-outside-the-workspace-guard.md) records the one structural consequence that surfaced while building it: a session is looked up before any workspace is known, so identity reads sit outside the workspace guard rather than inside an exemption list.
+
 ### Smaller calls made while planning
 
 These are the planner's calls, not the PRD's. They are listed so they can be overruled cheaply.
