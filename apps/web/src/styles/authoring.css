@@ -346,6 +346,50 @@
   gap: var(--space-sm);
 }
 
+/* ---- Structured answer block (P4.3) --------------------------------------
+   No colour declared anywhere in this block, same reasoning as the
+   reorderable list above: every piece of text inherits the page's own
+   ink-on-cream/canvas from base.css, so none of these needs a SURFACE
+   entry in contrast-usage.test.ts. */
+
+.structured-matching,
+.structured-ordering {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.structured-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.structured-grid {
+  border-collapse: collapse;
+}
+
+.structured-grid th,
+.structured-grid td {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline);
+  text-align: center;
+}
+
+.structured-grid th[scope="row"] {
+  text-align: start;
+}
+
+.structured-grid__caption {
+  caption-side: top;
+  padding-block-end: var(--space-xs);
+  text-align: start;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
 /* ---- Bank list (UX-02) -------------------------------------------------- */
 
 .bank-list {

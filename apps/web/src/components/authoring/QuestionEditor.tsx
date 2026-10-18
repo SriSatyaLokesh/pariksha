@@ -6,6 +6,7 @@ import { PreviewPane } from "./PreviewPane";
 import { ScoringRow } from "./ScoringRow";
 import { TypePicker, TYPE_LABELS } from "./TypePicker";
 import { Choice, isChoiceQuestion } from "./answer/Choice";
+import { StructuredAnswer, isStructuredQuestion } from "./answer/Structured";
 
 // UX-07's five-block skeleton, built once for every one of the twelve
 // types: prompt -> answer -> key and scoring -> meta -> preview, with only
@@ -267,6 +268,8 @@ export function QuestionEditor({
         {pickerOpen && <TypePicker value={question.type} onPick={onPickType} />}
         {isChoiceQuestion(question) ? (
           <Choice key={question.type} question={question} onChange={setQuestion} />
+        ) : isStructuredQuestion(question) ? (
+          <StructuredAnswer key={question.type} question={question} onChange={setQuestion} />
         ) : (
           <p className="field-help">This question type&rsquo;s answer editor isn&rsquo;t available yet.</p>
         )}
