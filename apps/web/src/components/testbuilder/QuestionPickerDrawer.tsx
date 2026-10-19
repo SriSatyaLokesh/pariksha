@@ -35,6 +35,17 @@ export function QuestionPickerDrawer({
   workspaceId: string;
 }) {
   const headingId = useId();
+  // Fix round (task 3 review, M9): the drawer's own filter and checkbox
+  // ids were hardcoded (`picker-bank`, `picker-search`, …), two lines below
+  // a `useId()` already used for the heading — harmless while exactly one
+  // drawer mounts, but the tell that the next screen to render a second one
+  // (a preview, a side-by-side) gets duplicate ids and a silently broken
+  // `htmlFor`.
+  const bankFieldId = useId();
+  const searchFieldId = useId();
+  const tagFieldId = useId();
+  const typeFieldId = useId();
+  const difficultyFieldId = useId();
   // Fix round (task 3 review, I9): Escape to close, initial focus into the
   // drawer, and focus back to the control that opened it once this
   // component unmounts — `active: true` for this component's whole life,
@@ -43,6 +54,8 @@ export function QuestionPickerDrawer({
   const [banks, setBanks] = useState<Bank[] | null>(null);
   const [bankId, setBankId] = useState<string | null>(initialBankId);
   const [questions, setQuestions] = useState<QuestionSummary[] | null>(null);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | undefined>(undefined);
   const [picked, setPicked] = useState<Set<string>>(new Set(selected));
   const [pointsById, setPointsById] = useState<Map<string, number>>(new Map());
@@ -55,6 +68,14 @@ export function QuestionPickerDrawer({
     void client.listBanks(workspaceId).then(setBanks);
   }, [client, workspaceId]);
 
+  function rememberPoints(page: readonly QuestionSummary[]): void {
+    setPointsById((prev) => {
+      const next = new Map(prev);
+      for (const q of page) next.set(q.id, q.points);
+      return next;
+    });
+  }
+
   const load = useCallback(async () => {
     if (bankId === null) return;
     try {
@@ -65,11 +86,8 @@ export function QuestionPickerDrawer({
         ...(search && { search }),
       });
       setQuestions(page.questions);
-      setPointsById((prev) => {
-        const next = new Map(prev);
-        for (const q of page.questions) next.set(q.id, q.points);
-        return next;
-      });
+      setCursor(page.cursor);
+      rememberPoints(page.questions);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "Questions could not be loaded.");
     }
@@ -78,6 +96,35 @@ export function QuestionPickerDrawer({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Fix round (task 3 review, I14/M8): `listQuestions` already pages
+  // (Phase 4); the drawer rendered only its first page, with no control to
+  // reach the rest and no way for a 300-question bank's second page to end
+  // up in a fixed list or a set at all. Appends rather than replacing
+  // (`load`, above, still replaces — a filter change starts over at page
+  // one), and `rememberPoints` keeps every page's points, which also fixes
+  // the footer's own undercount (M8) on a selection made under a different
+  // filter.
+  async function loadMore(): Promise<void> {
+    if (bankId === null || cursor === undefined) return;
+    setLoadingMore(true);
+    try {
+      const page = await client.listQuestions(workspaceId, bankId, {
+        ...(type && { type: type as QuestionType }),
+        ...(difficulty && { difficulty: difficulty as Difficulty }),
+        ...(tag && { tag }),
+        ...(search && { search }),
+        cursor,
+      });
+      setQuestions((prev) => [...(prev ?? []), ...page.questions]);
+      setCursor(page.cursor);
+      rememberPoints(page.questions);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "Questions could not be loaded.");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   function toggle(id: string): void {
     setPicked((prev) => {
@@ -103,11 +150,11 @@ export function QuestionPickerDrawer({
 
       {bankId === null ? (
         <div className="field">
-          <label className="field-label" htmlFor="picker-bank">
+          <label className="field-label" htmlFor={bankFieldId}>
             Bank
           </label>
           <select
-            id="picker-bank"
+            id={bankFieldId}
             className="text-input"
             value=""
             onChange={(event) => setBankId(event.target.value || null)}
@@ -128,13 +175,13 @@ export function QuestionPickerDrawer({
             aria-label="Filter questions"
             onSubmit={(event) => event.preventDefault()}
           >
-            <TextField id="picker-search" label="Search" help="By prompt text." value={search} onChange={setSearch} />
-            <TextField id="picker-tag" label="Tag" help="Exact tag match." value={tag} onChange={setTag} />
+            <TextField id={searchFieldId} label="Search" help="By prompt text." value={search} onChange={setSearch} />
+            <TextField id={tagFieldId} label="Tag" help="Exact tag match." value={tag} onChange={setTag} />
             <div className="field">
-              <label className="field-label" htmlFor="picker-type">
+              <label className="field-label" htmlFor={typeFieldId}>
                 Type
               </label>
-              <select id="picker-type" className="text-input" value={type} onChange={(event) => setType(event.target.value)}>
+              <select id={typeFieldId} className="text-input" value={type} onChange={(event) => setType(event.target.value)}>
                 <option value="">All</option>
                 {QUESTION_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -144,11 +191,11 @@ export function QuestionPickerDrawer({
               </select>
             </div>
             <div className="field">
-              <label className="field-label" htmlFor="picker-difficulty">
+              <label className="field-label" htmlFor={difficultyFieldId}>
                 Difficulty
               </label>
               <select
-                id="picker-difficulty"
+                id={difficultyFieldId}
                 className="text-input"
                 value={difficulty}
                 onChange={(event) => setDifficulty(event.target.value)}
@@ -169,7 +216,7 @@ export function QuestionPickerDrawer({
 
           <ul className="picker-drawer__list">
             {(questions ?? []).map((q) => {
-              const checkboxId = `picker-q-${q.id}`;
+              const checkboxId = `${headingId}-q-${q.id}`;
               return (
                 <li key={q.id} className="picker-drawer__row">
                   <input
@@ -185,6 +232,12 @@ export function QuestionPickerDrawer({
               );
             })}
           </ul>
+
+          {cursor !== undefined && (
+            <button type="button" className="button-secondary" onClick={() => void loadMore()} disabled={loadingMore}>
+              {loadingMore ? "Loading…" : "Load more"}
+            </button>
+          )}
         </>
       )}
 

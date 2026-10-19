@@ -334,6 +334,85 @@ describe("SectionList", () => {
     expect(screen.getByRole("heading", { name: /sections/i })).toBeVisible();
   });
 
+  it("Load more appends the next page and keeps the first page's points", async () => {
+    // Fix round (task 3 review, I14): `listQuestions` has paged since Phase 4,
+    // but the drawer rendered only the first page with no control to reach the
+    // rest — a 300-question bank's later pages could not be put in a fixed list
+    // at all. The footer total is the half that would have silently undercounted:
+    // it must count both pages, not only the one currently rendered.
+    const bank: Bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 3,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    const page1 = Array.from({ length: 2 }, (_, i) => ({
+      id: `qst_a${i}`,
+      bankId: "bnk_1",
+      refId: `A${i}`,
+      document: { id: `A${i}`, type: "true_false", prompt: `First ${i}`, key: true },
+      points: 3,
+      usedInTests: 0,
+      updatedAt: 0,
+    }));
+    const page2 = [
+      {
+        id: "qst_b0",
+        bankId: "bnk_1",
+        refId: "B0",
+        document: { id: "B0", type: "true_false", prompt: "Second 0", key: true },
+        points: 5,
+        usedInTests: 0,
+        updatedAt: 0,
+      },
+    ];
+
+    let calls = 0;
+    render(
+      <Harness
+        initial={[
+          {
+            id: "written",
+            title: "Written",
+            source: { kind: "fixed", questions: [...page1, ...page2].map((q) => q.id) },
+          } as StoredSection,
+        ]}
+        client={fakeClient({
+          listBanks: async () => [bank],
+          listQuestions: async () => {
+            calls += 1;
+            return calls === 1
+              ? { questions: page1, cursor: "page-2" }
+              : { questions: page2 };
+          },
+        })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /add questions/i }));
+    await screen.findByRole("option", { name: /reasoning aptitude/i });
+    fireEvent.change(screen.getByLabelText(/bank/i), { target: { value: "bnk_1" } });
+
+    expect(await screen.findByText(/First 0/)).toBeVisible();
+    expect(screen.queryByText(/Second 0/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /load more/i }));
+
+    // Appended, not replaced: page one is still on screen beside page two.
+    expect(await screen.findByText(/Second 0/)).toBeVisible();
+    expect(screen.getByText(/First 0/)).toBeVisible();
+
+    // 2 x 3 + 1 x 5. A total built only from the rendered page would read 5.
+    expect(await screen.findByText(/3 selected . 11 points/i)).toBeVisible();
+
+    // The cursor is spent, so the control retires rather than paging forever.
+    expect(screen.queryByRole("button", { name: /load more/i })).not.toBeInTheDocument();
+  });
+
   it("the collapsed row stays readable at 400 px", () => {
     // Fix round (task 3 review, I11): jsdom performs no layout, so
     // `container.style.width = "400px"` changes nothing a query can see —
