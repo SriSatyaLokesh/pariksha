@@ -301,12 +301,12 @@ describe("the candidate runtime's exam entry (#65, P6.1)", () => {
   it("the exam entry cannot reach the test builder or the QR generator", () => {
     const modules = staticModules(entryChunks, "exam").join("\n");
     expect(modules).not.toContain("qrcode-generator");
-    expect(modules).not.toMatch(/src[\/]components[\/]testbuilder/);
+    expect(modules).not.toMatch(/src[\\/]components[\\/]testbuilder/);
   });
 
   // The positive control: without it the three assertions above would hold
   // for an entry that reached nothing at all.
   it("the exam entry does reach the candidate screens", () => {
-    expect(staticModules(entryChunks, "exam").join("\n")).toMatch(/src[\/]routes[\/]exam/);
+    expect(staticModules(entryChunks, "exam").join("\n")).toMatch(/src[\\/]routes[\\/]exam/);
   });
 });
