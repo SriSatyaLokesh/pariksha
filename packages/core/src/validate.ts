@@ -1011,6 +1011,34 @@ export function validateTest(
 
     for (const field of form.fields) {
       const isChoice = CHOICE_FIELD_TYPES.includes(field.type);
+
+      // The publish-time twins for `$defs/formField.label`'s `minLength`
+      // and its `options.items`' (task 7/8/10 review, M9). Both are
+      // emptiness floors the draft gate strips by keyword and both had no
+      // twin anywhere, so a blank one published: a registration control
+      // whose only accessible name is the empty string, which a candidate
+      // using a screen reader meets as an unlabelled box. Blank in Draft
+      // is ordinary — it is the keystroke before the label — so this is
+      // publish-time, like everything else in this loop.
+      if (field.label.trim() === "") {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form.fields",
+          message: `form field "${field.id}" has no label, so a candidate using a screen reader meets an unnamed box`,
+        });
+      }
+      for (const [at, option] of (field.options ?? []).entries()) {
+        if (option.trim() === "") {
+          issues.push({
+            questionId: null,
+            index: -1,
+            field: "registration_form.fields",
+            message: `form field "${field.id}" has a blank option at position ${at + 1} — give it the words a candidate picks`,
+          });
+        }
+      }
+
       // Publish-time, both directions of the same rule. The schema states
       // the forward half (`$defs/formField`'s `if`/`then`: a choice field
       // requires `options`) and nothing states the reverse, so an `options`

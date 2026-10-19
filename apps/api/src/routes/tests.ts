@@ -193,7 +193,13 @@ function stripDraftFloors(node: unknown): void {
  * `$defs/form`, `$defs/formField`, `$defs/validation`, `$defs/scoring`,
  * `$defs/release` included) runs exactly as import will one day run it.
  */
-function draftSchema(): object {
+/**
+ * Exported for the pin in `apps/api/test/draft.test.ts`: it diffs this
+ * function's real output against the raw schema to list every floor the
+ * strip removes, so the pin cannot drift from the strip the way a second
+ * copy of the walk would.
+ */
+export function draftSchema(): object {
   const schema = structuredClone(testSchema) as { required?: unknown };
   delete schema.required;
   stripDraftFloors(schema);

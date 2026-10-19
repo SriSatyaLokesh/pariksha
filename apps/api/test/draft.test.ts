@@ -8,6 +8,8 @@ import { afterAll, beforeEach, expect, it } from "vitest";
 import { addMembership, closeClient, createUser } from "@pariksha/db";
 import { validateTest } from "@pariksha/core";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
+import { draftSchema } from "../src/routes/tests.js";
+import testSchema from "../../../schemas/test-1.json" with { type: "json" };
 import { countingDeps } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
@@ -756,4 +758,125 @@ it("link_code with no access code yet saves, and so does a half-typed one — bo
     const r = validateTest({ ...stored, access: { mode: "link_code", access_code } }, []);
     expect(r.ok, `access_code "${access_code}"`).toBe(false);
   }
+});
+
+// --- The pin on `draftSchema()` (task 7/8/10 review, M9) ---------------
+//
+// The save gate drops every emptiness floor in schemas/test-1.json by
+// keyword, and the invariant that makes that defensible — *every floor it
+// drops has a publish-time rule that replaces it* — lived in a forty-line
+// docblock checked by nobody. Three widenings in, eight floors were
+// through with no twin and the next person to add a `minLength` got no
+// signal at all. A rule with no enforcement is a comment, and this repo
+// has shipped the same class of bug three times by trusting prose.
+//
+// So the invariant is a test. Add a floor to the schema and this fails
+// until its twin exists and is named below; take one away and it fails
+// until the entry goes. Entries marked UNTWINNED are the honest answer to
+// "what does the gate now accept", each with the reason it is left alone
+// and, where it has one, the task that owes it a rule.
+
+/** Every keyword path `draftSchema()` removes, as `#.a.b.keyword`.
+ *
+ * Diffed from the function's own output rather than from a second copy of
+ * the walk, so the pin cannot drift from the strip — a change to
+ * `stripDraftFloors` moves both sides at once. */
+function removedPaths(full: unknown, draft: unknown, path = "#"): string[] {
+  if (Array.isArray(full)) {
+    if (!Array.isArray(draft)) return [path];
+    return full.flatMap((entry, i) => removedPaths(entry, draft[i], `${path}[${i}]`));
+  }
+  if (typeof full !== "object" || full === null) return [];
+  const kept = (typeof draft === "object" && draft !== null ? draft : {}) as Record<string, unknown>;
+  return Object.entries(full as Record<string, unknown>).flatMap(([key, value]) =>
+    key in kept ? removedPaths(value, kept[key], `${path}.${key}`) : [`${path}.${key}`],
+  );
+}
+
+const DRAFT_FLOOR_TWINS: Readonly<Record<string, string>> = {
+  // Not a floor: the root `required` goes for its own reason, which is
+  // that `settings` is not a whole document.
+  "#.required":
+    "not a floor — `settings` carries no format/name/slug/sections; they live on the test row, and import validates the unstripped schema",
+
+  // --- twinned ---------------------------------------------------------
+  "#.$defs.access.allOf[0].then.required":
+    "validateTest: `access mode \"link_code\" requires an access_code`",
+  "#.$defs.access.properties.access_code.minLength":
+    "validateTest: the same rule, `code.trim().length < 4`",
+  "#.$defs.release.allOf[0].then.required":
+    "validateTest: `release \"on_date\" requires an \"at\" timestamp`",
+  "#.$defs.formField.allOf[0].then.required":
+    "validateTest: `is a ${type} field and needs at least two options`",
+  "#.$defs.formField.properties.options.minItems":
+    "validateTest: the same rule, `(field.options?.length ?? 0) < 2`",
+  "#.$defs.formField.properties.label.minLength":
+    "validateTest: `has no label, so a candidate using a screen reader meets an unnamed box`",
+  "#.$defs.formField.properties.options.items.minLength":
+    "validateTest: `has a blank option at position N`",
+  "#.properties.name.minLength":
+    "apps/api/src/routes/tests.ts, `name: z.string().min(1)` on POST and PATCH /tests — and unreachable from here anyway, since `settings` has no `name`",
+
+  // --- UNTWINNED: deliberate, nothing is lost --------------------------
+  "#.$defs.form.properties.fields.minItems":
+    "UNTWINNED, deliberate: a `fields: []` form has exactly the effect of no `registration_form` key at all, which is legal and ordinary",
+  "#.properties.tags.items.minLength":
+    "UNTWINNED, deliberate: a blank tag matches no filter and is never shown to a candidate",
+  "#.$defs.sourceSets.properties.sets.items.properties.set.minLength":
+    "UNTWINNED, deliberate: the set label is the key of `draw`/`setPoints`, never rendered to a candidate",
+  "#.properties.consent.properties.text.minLength":
+    "UNTWINNED, unreachable: no editor writes `consent` in Phase 5 and import runs the unstripped schema, so only a hand-written PATCH can blank it",
+
+  // --- UNTWINNED: UX-13's own words, owed to the publish checklist -----
+  // "a section may be empty in Draft … the publish checklist is where
+  // emptiness becomes an error rather than a nag". These four are that
+  // sentence; the rule they are owed is a blocking checklist row, and
+  // `buildChecklist` is Task 11's (#62) and does not exist yet.
+  "#.$defs.sourceFixed.properties.questions.minItems":
+    "UNTWINNED: UX-13 emptiness — owed Task 11's `section_empty` blocking row",
+  "#.$defs.sourceSets.properties.sets.minItems":
+    "UNTWINNED: UX-13 emptiness — owed Task 11's `section_empty` blocking row",
+  "#.$defs.sourceSets.properties.sets.items.properties.questions.minItems":
+    "UNTWINNED: UX-13 emptiness — owed Task 11's `section_empty` blocking row",
+  "#.properties.sections.minItems":
+    "UNTWINNED: a test with no sections at all — owed a blocking row Task 11's table does not yet have",
+
+  // --- UNTWINNED: still a gap, named so it stops being a surprise ------
+  "#.$defs.section.properties.title.minLength":
+    "UNTWINNED: a published section with a blank title has no name on the candidate's screen — owed a blocking row Task 11's table does not yet have",
+};
+
+it("every floor draftSchema() removes is listed, with its publish-time twin or the reason it has none", () => {
+  expect(removedPaths(testSchema, draftSchema()).sort()).toEqual(Object.keys(DRAFT_FLOOR_TWINS).sort());
+});
+
+it("the twinned entries are the ones validateTest actually refuses", () => {
+  const base = { format: "pariksha/test@1", name: "M", slug: "m", sections: [] };
+  const refusals: [string, Record<string, unknown>][] = [
+    ["#.$defs.access.properties.access_code.minLength", { access: { mode: "link_code", access_code: "AP" } }],
+    ["#.$defs.release.allOf[0].then.required", { release: { when: "on_date" } }],
+    [
+      "#.$defs.formField.properties.options.minItems",
+      { registration_form: { fields: [{ id: "a", type: "radio", label: "A", options: ["only"] }] } },
+    ],
+    [
+      "#.$defs.formField.properties.label.minLength",
+      { registration_form: { fields: [{ id: "a", type: "short_text", label: " " }] } },
+    ],
+    [
+      "#.$defs.formField.properties.options.items.minLength",
+      { registration_form: { fields: [{ id: "a", type: "radio", label: "A", options: ["yes", ""] }] } },
+    ],
+  ];
+  for (const [path, settings] of refusals) {
+    expect(DRAFT_FLOOR_TWINS[path], path).not.toMatch(/^UNTWINNED/);
+    expect(validateTest({ ...base, ...settings }, []).ok, path).toBe(false);
+  }
+});
+
+it("a floor the gate strips still saves in Draft — the pin does not turn the list back into a save-time gate", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ id: "a", type: "radio", label: "", options: [""] }] } },
+  });
+  expect(status).toBe(200);
 });
