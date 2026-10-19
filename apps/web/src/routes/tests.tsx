@@ -280,6 +280,23 @@ export function TestList({
             onChange={(value) => updateFilter({ tag: value })}
           />
           <div className="field">
+            <label className="field-label" htmlFor="test-status">
+              Status
+            </label>
+            <select
+              id="test-status"
+              className="text-input"
+              value={filter.status}
+              onChange={(event) => updateFilter({ status: event.target.value })}
+            >
+              <option value="">All</option>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="closed">Closed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div className="field">
             <label className="field-label" htmlFor="test-sort">
               Sort
             </label>
@@ -322,6 +339,7 @@ export function TestList({
           <table className="testbuilder-list">
             <thead>
               <tr>
+                <th scope="col">ID</th>
                 <th scope="col" {...sortHeaderProps("name")}>
                   Name
                 </th>
@@ -341,6 +359,9 @@ export function TestList({
                 const shortLinkPath = `/t/${test.shortCode}`;
                 return (
                   <tr key={test.id}>
+                    <td>
+                      <code className="test-id">{test.id}</code>
+                    </td>
                     <td>{test.name}</td>
                     <td>
                       <span className="test-state">

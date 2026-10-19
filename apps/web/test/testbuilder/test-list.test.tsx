@@ -110,6 +110,28 @@ describe("TestList", () => {
     expect(screen.getByRole("columnheader", { name: /name/i })).toHaveAttribute("aria-sort", "ascending");
   });
 
+  it("the tst_ id is selectable mono text with tabular figures (Important 9)", async () => {
+    renderList(fakeClient());
+    const row = (await screen.findByText("Midterm")).closest("tr") as HTMLElement;
+    const idCell = within(row).getByText(PUBLISHED.id);
+    expect(idCell.tagName).toBe("CODE");
+    expect(idCell).toHaveClass("test-id");
+  });
+
+  it("a status filter is reachable, not only promised by the no-results copy (Important 9)", async () => {
+    const tests = vi.fn(async () => [PUBLISHED]);
+    renderList(fakeClient({ tests }));
+    await screen.findByText("Midterm");
+    tests.mockClear();
+
+    fireEvent.change(screen.getByLabelText(/^status$/i), { target: { value: "published" } });
+
+    await waitFor(() => expect(window.location.search).toContain("status=published"));
+    await waitFor(() =>
+      expect(tests).toHaveBeenCalledWith("wsp_1", expect.objectContaining({ status: "published" })),
+    );
+  });
+
   it("state and In review are text plus glyph, never colour alone", async () => {
     renderList(fakeClient({ tests: async () => [DRAFT] }));
     const row = (await screen.findByText("Aptitude")).closest("tr");

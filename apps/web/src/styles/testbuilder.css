@@ -30,6 +30,12 @@
   text-transform: uppercase;
 }
 
+.test-id {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+
 .test-state {
   display: inline-flex;
   align-items: center;
