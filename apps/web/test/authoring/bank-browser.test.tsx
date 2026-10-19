@@ -235,6 +235,45 @@ describe("BankBrowser", () => {
     expect(await screen.findByText("The bank could not be reached.")).toBeVisible();
   });
 
+  // Fix round (whole-branch review, I1): a 422 `not_exportable` carries
+  // `details.issues`, each naming the offending `questionId` — this used to
+  // be dropped on the floor (only `cause.message` rendered), leaving an
+  // Author with no way to tell which of many questions to deselect.
+  it("names the offending question when export refuses a draft-holding bank", async () => {
+    const client = fakeClient({
+      exportBank: async () => {
+        throw new ApiError(
+          422,
+          "not_exportable",
+          "This cannot be exported: the document would fail its own import.",
+          {
+            issues: [
+              { questionId: "Q37", index: 36, field: "key", message: 'key uses "c", which is not in options' },
+            ],
+          },
+        );
+      },
+    });
+    render(
+      <BankBrowser
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        client={client}
+        actorEmail="author@example.edu"
+        onSignOut={() => undefined}
+        onBack={() => undefined}
+        onNewQuestion={() => undefined}
+        onEditQuestion={() => undefined}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /^export bank$/i }));
+
+    expect(await screen.findByText(/this cannot be exported/i)).toBeVisible();
+    expect(screen.getByText("Q37")).toBeVisible();
+    expect(screen.getByText(/not in options/)).toBeVisible();
+  });
+
   // Fix round 1, finding 3: WCAG 2.1 SC 2.5.3, Label in Name — the
   // accessible name must contain the visible label verbatim (as a
   // case-insensitive substring), both with and without a selection, or

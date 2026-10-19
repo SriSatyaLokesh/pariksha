@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { QUESTION_TYPES, type Question } from "@pariksha/core";
+import { QUESTION_TYPES, type ImportIssue, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { MonoCaption } from "../components/MonoCaption";
 import { OrganiserHeader } from "../components/OrganiserHeader";
@@ -93,6 +93,12 @@ export function BankBrowser({
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({});
   const [notice, setNotice] = useState<string | undefined>(undefined);
+  // Fix round (whole-branch review, I1): a 422 `not_exportable` names every
+  // offending question (`apps/api/src/export/bank.ts`'s `exportIssues`
+  // already carries `questionId` per issue) — `notice` alone only ever
+  // showed `cause.message`, a generic sentence with no way to tell a draft
+  // 50-question bank which one question to deselect via "Export selected".
+  const [exportIssues, setExportIssues] = useState<ImportIssue[] | undefined>(undefined);
   // `undefined`: no passage-group form open. `"new"`: the "New group" form.
   // A `PassageGroupSummary`: editing that existing group.
   const [editingGroup, setEditingGroup] = useState<PassageGroupSummary | "new" | undefined>(undefined);
@@ -160,6 +166,7 @@ export function BankBrowser({
 
   async function onDelete(question: QuestionSummary) {
     setNotice(undefined);
+    setExportIssues(undefined);
     try {
       await client.deleteQuestion(workspaceId, bankId, question.id);
       setSelected((prev) => {
@@ -184,18 +191,25 @@ export function BankBrowser({
   // path segment uses) with something selected.
   async function onExport() {
     setNotice(undefined);
+    setExportIssues(undefined);
     try {
       const ids =
         selected.size > 0 ? questions.filter((q) => selected.has(q.id)).map((q) => q.refId) : undefined;
       const doc = await client.exportBank(workspaceId, bankId, ids);
       downloadJson(doc, exportFilename(doc.name));
     } catch (cause) {
-      setNotice(cause instanceof ApiError ? cause.message : "The bank could not be exported.");
+      if (cause instanceof ApiError && cause.code === "not_exportable") {
+        setNotice(cause.message);
+        setExportIssues((cause.details as { issues?: ImportIssue[] } | undefined)?.issues ?? []);
+      } else {
+        setNotice(cause instanceof ApiError ? cause.message : "The bank could not be exported.");
+      }
     }
   }
 
   async function onDeleteGroup(group: PassageGroupSummary) {
     setNotice(undefined);
+    setExportIssues(undefined);
     try {
       await client.deleteGroup(workspaceId, bankId, group.id);
       await load();
@@ -317,6 +331,35 @@ export function BankBrowser({
           <p className="bank-browser__notice" role="alert">
             {notice}
           </p>
+        )}
+
+        {/* Fix round (whole-branch review, I1): the same table shape
+            `ImportDialog` already renders for an import report, so an
+            Author sees exactly which question(s) an export refused on and
+            can deselect them (or select the rest) rather than getting a
+            whole-bank refusal with no way to act on it. Keeps the Task 9
+            ruling intact: export still refuses a document its own import
+            would reject — this only makes the refusal actionable. */}
+        {exportIssues !== undefined && exportIssues.length > 0 && (
+          <table className="import-dialog__table">
+            <caption className="visually-hidden">Export issues, one row per problem found</caption>
+            <thead>
+              <tr>
+                <th scope="col">Question</th>
+                <th scope="col">Field</th>
+                <th scope="col">Problem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {exportIssues.map((issue, index) => (
+                <tr key={index}>
+                  <td>{issue.questionId ?? `entry ${issue.index}`}</td>
+                  <td>{issue.field}</td>
+                  <td>{issue.message}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
 
         {/* Fix round (whole-branch review, C1): the only way into
