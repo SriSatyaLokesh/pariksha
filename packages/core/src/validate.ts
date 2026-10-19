@@ -28,8 +28,10 @@ import type {
   PassageGroup,
   Question,
   QuestionOption,
+  AccessMode,
   Section,
   Test,
+  TestAccess,
   TestTiming,
 } from "./types.js";
 import { assertSafeRegex } from "./grade/text.js";
@@ -463,6 +465,223 @@ export function unsatisfiableValidation(field: FormField): string | null {
   return null;
 }
 
+// --- T-20, T-21: access allowlists (Task 8, #60, P5.7) -----------------
+//
+// An allowlist that silently accepts something nothing can match is worse
+// than no allowlist at all: on test day the candidate is refused, the
+// organiser is told nothing, and the cause is a typo made weeks earlier.
+// So these two parsers are strict, they are the *only* copy (the panel and
+// the save path both call them), and every refusal says what a correct one
+// looks like.
+//
+// ponytail: syntax only — prefix-length and label-shape bounds, no range
+// arithmetic and no address normalisation. `10.0.0.1/24` is accepted with
+// its host bits set, because that is unambiguous shorthand and not a
+// mistake the organiser needs stopping. Upgrade path, when Phase 6
+// actually matches a candidate's address: parse to an integer pair and
+// compare, in a `net.ts` of its own, with these as the first gate.
+
+/** `0`-`255` with no leading zero — `010` is octal in some resolvers and
+ * decimal in others, so it is never a safe thing to store. */
+const IPV4_OCTET = /^(0|[1-9]\d{0,2})$/;
+
+/** One label of a hostname: letters, digits and inner hyphens, 1-63 long. */
+const DOMAIN_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Why this is not a CIDR range, or `null` when it is one. */
+export function invalidCidr(raw: string): string | null {
+  const example = "for example 10.0.0.0/24, or 2001:db8::/32";
+  if (raw !== raw.trim() || raw === "") return `"${raw}" is not a network range — ${example}`;
+
+  const slash = raw.indexOf("/");
+  if (slash === -1 || raw.indexOf("/", slash + 1) !== -1) {
+    return `"${raw}" has no prefix length — a range needs one, ${example}`;
+  }
+  const address = raw.slice(0, slash);
+  const prefix = raw.slice(slash + 1);
+
+  if (!/^(0|[1-9]\d{0,2})$/.test(prefix)) {
+    return `"${raw}" has a prefix length that is not a plain number — ${example}`;
+  }
+  const bits = Number(prefix);
+
+  if (address.includes(":")) {
+    if (!isIpv6(address)) return `"${raw}" is not an IPv6 address — ${example}`;
+    if (bits > 128) return `"${raw}" has a prefix length above 128 — an IPv6 range cannot, ${example}`;
+    return null;
+  }
+
+  const octets = address.split(".");
+  if (octets.length !== 4 || octets.some((octet) => !IPV4_OCTET.test(octet) || Number(octet) > 255)) {
+    return `"${raw}" is not an IPv4 address — four numbers 0-255 with no leading zeros, ${example}`;
+  }
+  if (bits > 32) return `"${raw}" has a prefix length above 32 — an IPv4 range cannot, ${example}`;
+  return null;
+}
+
+/** Plain IPv6 text, `::` compression included. No zone id (`%eth0`) and no
+ * embedded IPv4 (`::ffff:10.0.0.1`): both have two spellings for one
+ * address, which is a matcher bypass waiting to happen. */
+function isIpv6(address: string): boolean {
+  const halves = address.split("::");
+  if (halves.length > 2) return false;
+  const hextets = (part: string): string[] => (part === "" ? [] : part.split(":"));
+  const groups = halves.flatMap(hextets);
+  if (groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return false;
+  return halves.length === 2 ? groups.length <= 7 : groups.length === 8;
+}
+
+/**
+ * Why this is not an email-domain glob, or `null` when it is one.
+ *
+ * ASCII or punycode only: a label written in a non-Latin script is refused
+ * rather than accepted and compared bytewise against the punycode a mail
+ * server will actually present, which would never match.
+ */
+export function invalidDomainGlob(raw: string): string | null {
+  const example = "for example ac.in or *.ac.in";
+  if (raw !== raw.trim() || raw === "") return `"${raw}" is not a domain — ${example}`;
+
+  const lower = raw.toLowerCase();
+  // A wildcard that matches everything is not a restriction, however it is
+  // spelled — and an organiser who typed one believes they have set one.
+  if (lower === "*" || lower === "*.*") {
+    return `"${raw}" matches every domain, which is not an allowlist — remove it, or name a domain, ${example}`;
+  }
+
+  const wildcard = lower.startsWith("*.");
+  const domain = wildcard ? lower.slice(2) : lower;
+  if (domain.includes("*")) {
+    return `"${raw}" uses * somewhere other than the front — only a leading *. is a wildcard, ${example}`;
+  }
+
+  const labels = domain.split(".");
+  if (labels.some((label) => !DOMAIN_LABEL.test(label))) {
+    return `"${raw}" is not a domain — letters, digits and inner hyphens, ${example}`;
+  }
+  if (domain.length > 253) return `"${raw}" is longer than a domain name can be — ${example}`;
+
+  // `*.in` and `*.com` allow a whole country or generic top level, which
+  // reads on the screen as a restriction and is not one; `in` on its own
+  // is not a domain anybody has an address at.
+  if (labels.length < 2) {
+    return wildcard
+      ? `"${raw}" would match every domain under one top level — name at least two labels, ${example}`
+      : `"${raw}" is a single label, not a domain — ${example}`;
+  }
+  return null;
+}
+
+/**
+ * The malformed entries in `access`'s two allowlists, as `{ field, message }`.
+ *
+ * **Save-time**, and the only save-time rule in this file. A half-typed
+ * access code or an unchosen release date is ordinary authoring and the
+ * write path lets it through; a stored range nothing can parse is not —
+ * it becomes a candidate silently refused on test day with the cause
+ * weeks behind them. `apps/api/src/routes/tests.ts` refuses the PATCH on
+ * these, and `validateTest` reports them too so one publish report still
+ * arrives whole.
+ */
+export function allowlistIssues(
+  access: TestAccess | undefined,
+): { field: string; message: string }[] {
+  if (access === undefined) return [];
+  const issues: { field: string; message: string }[] = [];
+  for (const range of access.allow_ip_ranges ?? []) {
+    const why = invalidCidr(range);
+    if (why !== null) issues.push({ field: "access.allow_ip_ranges", message: why });
+  }
+  for (const glob of access.allow_email_domains ?? []) {
+    const why = invalidDomainGlob(glob);
+    if (why !== null) issues.push({ field: "access.allow_email_domains", message: why });
+  }
+  return issues;
+}
+
+/** What the two allowlists, together, let through — in the words the panel
+ * shows an organiser and the words Task 13's checklist row uses, which is
+ * the point of it living here rather than in either. */
+export function describeAllowlists(access: TestAccess): string {
+  const domains = access.allow_email_domains ?? [];
+  const ranges = access.allow_ip_ranges ?? [];
+  const list = (values: readonly string[]): string =>
+    values.length === 1 ? (values[0] ?? "") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1] ?? ""}`;
+
+  if (domains.length > 0 && ranges.length > 0) {
+    return `Only addresses matching ${list(domains)}, and only from ${list(ranges)}.`;
+  }
+  if (domains.length > 0) return `Only addresses matching ${list(domains)}.`;
+  if (ranges.length > 0) return `Only from ${list(ranges)}.`;
+  return UNRESTRICTED[access.mode];
+}
+
+/** What "no allowlist" means, per mode — never the empty string, because a
+ * blank where a restriction should be is the one thing an organiser reads
+ * as "I have not finished" rather than "anyone". */
+const UNRESTRICTED: Readonly<Record<AccessMode, string>> = {
+  link_code: "Anyone with the link and the code.",
+  invite_only: "Anyone holding their own invite link.",
+  email_code: "Anyone who can receive mail at the address they enter.",
+  sso: "Anyone who can sign in with their own account.",
+};
+
+/** `YYYY-MM-DDThh:mm[:ss[.fff]]` followed by `Z` or `±hh:mm` — what
+ * `schemas/test-1.json`'s `format: date-time` means, and nothing looser. */
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+
+/**
+ * An RFC 3339 timestamp as minutes since the epoch, or `null` when it is
+ * not one. Only ever compared against another of these, never rendered.
+ *
+ * Hand-rolled rather than `Date.parse` because this package owns no clock
+ * and calls no `Date` — `packages/core/test/acceptance.test.ts` enforces
+ * that — and because `Date.parse` is engine-dependent outside the ISO
+ * grammar, so the same document could validate differently in two
+ * runtimes. The civil-days arithmetic is Howard Hinnant's, shifted so the
+ * era starts in March and February's length stops being a special case.
+ */
+function instantMinutes(raw: string): number | null {
+  const m = RFC3339.exec(raw);
+  if (!m) return null;
+  const [year, month, day, hour, minute] = [m[1], m[2], m[3], m[4], m[5]].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const second = Number(m[6] ?? "0");
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  // 24:00 and the leap second 23:59:60 are both legal RFC 3339 and neither
+  // is a time any organiser means to type.
+  if (hour > 23 || minute > 59 || second > 59) return null;
+
+  const shifted = month <= 2 ? year - 1 : year;
+  const era = Math.floor(shifted / 400);
+  const yearOfEra = shifted - era * 400;
+  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  const days = era * 146097 + dayOfEra - 719468;
+
+  let offset = 0;
+  if (m[7] === undefined) {
+    const offsetHours = Number(m[9]);
+    const offsetMinutes = Number(m[10]);
+    if (offsetHours > 23 || offsetMinutes > 59) return null;
+    offset = (m[8] === "-" ? -1 : 1) * (offsetHours * 60 + offsetMinutes);
+  }
+  return days * 1440 + hour * 60 + minute - offset;
+}
+
 /**
  * T-12 - T-15's three cross-field timing rules (Task 7, #59, P5.6), as
  * `{ field, message }` pairs so the builder's `TimingPanel` and
@@ -483,14 +702,14 @@ export function timingIssues(
   if (timing === undefined) return [];
   const issues: { field: string; message: string }[] = [];
 
-  /** `NaN` compared against anything is false, so an unparseable timestamp
-   * would silently satisfy every rule below rather than fail one. Reported
-   * as its own issue instead, and withheld from the comparisons. */
+  /** An unparseable timestamp compared as a number would silently satisfy
+   * every rule below rather than fail one. Reported as its own issue
+   * instead, and withheld from the comparisons. */
   const instant = (key: "opens_at" | "closes_at" | "latest_start_at"): number | null => {
     const raw = timing[key];
     if (raw === undefined) return null;
-    const parsed = Date.parse(raw);
-    if (Number.isNaN(parsed)) {
+    const parsed = instantMinutes(raw);
+    if (parsed === null) {
       issues.push({
         field: `timing.${key}`,
         message: `"${raw}" is not a date and time — use an RFC 3339 timestamp, for example 2026-11-14T09:00:00+05:30`,
@@ -631,12 +850,23 @@ export function validateTest(
   const defaultMode = doc.scoring?.default_mode;
   const byId = new Map(bank.map((q) => [q.id, q]));
 
-  if (doc.access?.mode === "link_code" && doc.access.access_code === undefined) {
+  // Task 8 (#60, P5.7) widened this from "undefined" to "shorter than
+  // four characters" (task 5/6 review, M4). `schemas/test-1.json` puts
+  // `minLength: 4` on `access_code`, but `draftSchema()` strips every
+  // `minLength` by keyword, so empty and one-character codes save — and
+  // nothing replaced the floor at publish, which left a test publishable
+  // on `mode: "link_code"` with a one-character code. A half-typed code is
+  // ordinary authoring; a published one is the whole access control.
+  const code = doc.access?.mode === "link_code" ? (doc.access.access_code ?? "") : null;
+  if (code !== null && code.trim().length < 4) {
     issues.push({
       questionId: null,
       index: -1,
       field: "access.access_code",
-      message: 'access mode "link_code" requires an access_code',
+      message:
+        code === ""
+          ? 'access mode "link_code" requires an access_code'
+          : `access mode "link_code" requires an access_code of at least 4 characters; "${code}" is ${code.trim().length}`,
     });
   }
 
@@ -654,6 +884,12 @@ export function validateTest(
   // structurally broken entry is already reported, at its own index, by
   // the per-section pass below.
   for (const issue of timingIssues(doc.timing, Array.isArray(doc.sections) ? doc.sections : [])) {
+    issues.push({ questionId: null, index: -1, ...issue });
+  }
+
+  // Task 8 (#60, P5.7). Save-time in class (see `allowlistIssues`),
+  // reported here so the whole publish report still arrives at once.
+  for (const issue of allowlistIssues(doc.access)) {
     issues.push({ questionId: null, index: -1, ...issue });
   }
 

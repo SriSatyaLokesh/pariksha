@@ -9,7 +9,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import { matchesFilter, type QuestionSource } from "@pariksha/core";
+import { allowlistIssues, matchesFilter, type QuestionSource } from "@pariksha/core";
 import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
 import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
@@ -93,24 +93,42 @@ interface DraftIssue {
 const SCHEMA_MAPS = new Set(["properties", "$defs", "definitions", "patternProperties"]);
 
 /**
- * Every emptiness floor, wherever it sits: `minItems` on an array,
- * `minLength` on a string. Both say the same thing — "this is not filled in
- * yet" — which is the one thing a Draft is allowed to be.
+ * Every floor that says "not filled in yet", wherever it sits:
+ *
+ * - `minItems` on an array and `minLength` on a string — the emptiness
+ *   floors Tasks 3 and 5 removed by name until naming them one at a time
+ *   shipped a bug, after which the rule was stated once instead.
+ * - a `required` inside a `then` — a *conditional* presence floor, which
+ *   is the same statement with a condition on it. `$defs/access` says
+ *   "`link_code` requires `access_code`" and `$defs/release` says
+ *   "`on_date` requires `at`"; both are true of a finished document and
+ *   false of a draft, where picking the mode is necessarily a separate
+ *   keystroke from typing the code. Task 8 (#60, P5.7) found this the way
+ *   Task 5 found the eighth emptiness floor: clicking the "Link and code"
+ *   radio in `AccessPanel` 422'd on its own next save.
+ *
+ * An unconditional `required` below the root is untouched — `$defs/access`
+ * still has to carry a `mode`, a section still has to carry an `id` — and
+ * so is the root's own, which `draftSchema` drops separately for a
+ * different reason.
  */
-function stripEmptinessFloors(node: unknown): void {
+function stripDraftFloors(node: unknown): void {
   if (Array.isArray(node)) {
-    for (const entry of node) stripEmptinessFloors(entry);
+    for (const entry of node) stripDraftFloors(entry);
     return;
   }
   if (typeof node !== "object" || node === null) return;
   const schema = node as Record<string, unknown>;
   delete schema.minItems;
   delete schema.minLength;
+  if (typeof schema.then === "object" && schema.then !== null) {
+    delete (schema.then as Record<string, unknown>).required;
+  }
   for (const [key, value] of Object.entries(schema)) {
     if (SCHEMA_MAPS.has(key) && typeof value === "object" && value !== null) {
-      for (const child of Object.values(value)) stripEmptinessFloors(child);
+      for (const child of Object.values(value)) stripDraftFloors(child);
     } else {
-      stripEmptinessFloors(value);
+      stripDraftFloors(value);
     }
   }
 }
@@ -127,7 +145,8 @@ function stripEmptinessFloors(node: unknown): void {
  * `test` row or in their own column, never in `settings`), not as a whole
  * `pariksha/test@1` document.
  *
- * **Every emptiness floor** (`minItems`, `minLength`), wherever it sits.
+ * **Every draft floor** — `minItems`, `minLength`, and a `required` under
+ * a `then` — wherever it sits.
  * Task 3 removed four of them by name — `sourceFixed.questions`,
  * `sourceSets.sets` and the root `sections` (`minItems`), each an instance
  * of UX-13's "a section may be empty in Draft … the publish checklist is
@@ -140,16 +159,36 @@ function stripEmptinessFloors(node: unknown): void {
  * `title: ""`, so "Add section" answered 422 on the very next debounced
  * save.** Naming the ninth floor after the eighth is how that bug got
  * shipped; the rule is stated once instead, and Tasks 7-10 inherit it
- * rather than rediscovering it per block.
+ * rather than rediscovering it per block. Task 8 (#60, P5.7) then found
+ * the same shape once more in a different keyword: `$defs/access`'s
+ * `if mode === "link_code" then required access_code` and
+ * `$defs/release`'s `if when === "on_date" then required at` are presence
+ * floors with a condition attached, and clicking the "Link and code"
+ * radio 422'd the very next save for exactly the reason "Add section"
+ * used to. Each has its publish-time twin in `validateTest`
+ * (`access.access_code`, `release.at`), as does the third conditional in
+ * the file (`$defs/formField`'s `options`, Task 5's "at least two").
  *
- * This is the whole relaxation. An emptiness floor only ever says "not
- * filled in yet", which is the definition of a draft and is the publish
- * checklist's business (Tasks 11 and 13) — and for the registration form
- * `validateTest` (@pariksha/core) now carries the publish-time replacement
- * ("a choice field needs at least two options"), so no row goes
- * unenforced. Nothing that bounds a *value* is touched: every `type`,
- * `enum`, `pattern` (a form field's id and a section's id still have to
- * parse), `minimum`, `required` below the root and
+ * This is the whole relaxation, and the honest statement of it is that it
+ * strips emptiness floors **by keyword, not by meaning** — a deliberate
+ * trade for not having to name each one, which is how the ninth got
+ * shipped. Nearly every `minItems`/`minLength` in this schema says "not
+ * filled in yet", which is the definition of a draft and the publish
+ * checklist's business (Tasks 11 and 13).
+ *
+ * **The trade has a cost, and it is paid at publish.** A `minLength` that
+ * bounds a *value* rather than emptiness is collateral, and needs a
+ * publish-time rule of its own or it goes unenforced entirely. Two such:
+ * `$defs/formField.options`'s "at least two" (Task 5 replaced it in
+ * `validateTest`) and `$defs/access.access_code`'s `minLength: 4` (task
+ * 5/6 review, M4 — empty and one-character codes saved *and* published
+ * until Task 8 added the replacement rule, also in `validateTest`). Adding
+ * a value-bounding `minLength` to the schema means adding its
+ * publish-time twin in the same change.
+ *
+ * Nothing else that bounds a value is touched: every `type`, `enum`,
+ * `pattern` (a form field's id and a section's id still have to parse),
+ * `minimum`, `format`, `required` below the root and
  * `additionalProperties: false` (`$defs/timing`, `$defs/access`,
  * `$defs/form`, `$defs/formField`, `$defs/validation`, `$defs/scoring`,
  * `$defs/release` included) runs exactly as import will one day run it.
@@ -157,7 +196,7 @@ function stripEmptinessFloors(node: unknown): void {
 function draftSchema(): object {
   const schema = structuredClone(testSchema) as { required?: unknown };
   delete schema.required;
-  stripEmptinessFloors(schema);
+  stripDraftFloors(schema);
   return schema;
 }
 
@@ -545,6 +584,21 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       // `@typescript-eslint/no-unnecessary-type-assertion`, leaving
       // `pnpm lint` red on the branch).
       settings = merged;
+
+      // Task 8 (#60, P5.7): the one save-time rule beyond the schema.
+      // A malformed CIDR or email glob is not a half-built value the way a
+      // missing access code is — it is a stored setting nothing can ever
+      // match, which on test day is a candidate refused with the cause
+      // weeks behind them and no sign of it anywhere. The schema types
+      // both arrays as plain strings and cannot say more; the parsers are
+      // `@pariksha/core`'s, shared with the panel so the browser refuses
+      // exactly what the server refuses.
+      const badAllowlist = allowlistIssues(settings.access);
+      if (badAllowlist.length > 0) {
+        throw new ApiError(422, "invalid_settings", "An allowlist entry cannot be matched.", {
+          issues: badAllowlist,
+        });
+      }
     }
 
     let sections = existing.body.sections;

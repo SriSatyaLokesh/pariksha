@@ -2,7 +2,16 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { timingIssues, unsatisfiableValidation, validateBank, validateTest } from "../src/validate.js";
+import {
+  allowlistIssues,
+  describeAllowlists,
+  invalidCidr,
+  invalidDomainGlob,
+  timingIssues,
+  unsatisfiableValidation,
+  validateBank,
+  validateTest,
+} from "../src/validate.js";
 import { NAVIGATION_CONSEQUENCE } from "../src/types.js";
 import type {
   Bank,
@@ -1056,5 +1065,127 @@ describe("validateTest", () => {
 
   it("the worked example still validates clean, timing and all", () => {
     expect(validateTest(exampleTest, (exampleBank as Bank).questions).ok).toBe(true);
+  });
+  // --- Task 8 (#60, P5.7): access modes and allowlists ------------------
+
+  it.each([
+    "10.0.0.0/24",
+    "0.0.0.0/0",
+    "192.168.1.0/32",
+    "10.0.0.1/24",
+    "2001:db8::/32",
+    "::/0",
+    "fd00:0:0:0:0:0:0:1/128",
+  ])("accepts the CIDR range %s", (range) => {
+    expect(invalidCidr(range)).toBeNull();
+  });
+
+  it.each([
+    ["10.0.0.0/64", /prefix length above 32/],
+    ["2001:db8::/129", /prefix length above 128/],
+    ["10.0.0.0", /has no prefix length/],
+    ["10.0.0.0/24/8", /has no prefix length/],
+    ["10.0.0.0/", /not a plain number/],
+    ["10.0.0.0/+8", /not a plain number/],
+    ["10.0.0.0/0x8", /not a plain number/],
+    ["10.0.0.256/24", /not an IPv4 address/],
+    ["010.0.0.1/24", /no leading zeros/],
+    ["10.0.0/24", /not an IPv4 address/],
+    ["10.0.0.0.0/24", /not an IPv4 address/],
+    ["not-an-address/24", /not an IPv4 address/],
+    ["2001:db8:::1/32", /not an IPv6 address/],
+    ["2001:dg8::/32", /not an IPv6 address/],
+    ["fe80::1%eth0/64", /not an IPv6 address/],
+    ["::ffff:10.0.0.1/96", /not an IPv6 address/],
+    [" 10.0.0.0/24", /not a network range/],
+    ["", /not a network range/],
+  ])("refuses the CIDR range %s, saying what a correct one looks like", (range, why) => {
+    const message = invalidCidr(range);
+    expect(message).toMatch(why);
+    expect(message).toMatch(/for example 10\.0\.0\.0\/24/);
+  });
+
+  it.each(["ac.in", "*.ac.in", "iitb.ac.in", "*.co.uk", "XN--P1AI.ru", "Example.COM"])(
+    "accepts the email domain %s",
+    (glob) => {
+      expect(invalidDomainGlob(glob)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["*", /matches every domain, which is not an allowlist/],
+    ["*.*", /matches every domain, which is not an allowlist/],
+    ["*.in", /every domain under one top level/],
+    ["*.com", /every domain under one top level/],
+    ["in", /single label, not a domain/],
+    ["ac.*.in", /somewhere other than the front/],
+    ["*ac.in", /somewhere other than the front/],
+    [".ac.in", /is not a domain/],
+    ["ac.in.", /is not a domain/],
+    ["-ac.in", /is not a domain/],
+    ["ac-.in", /is not a domain/],
+    ["ac .in", /is not a domain/],
+    ["ac.भारत", /is not a domain/],
+    ["user@ac.in", /is not a domain/],
+    [" ac.in", /is not a domain/],
+    ["", /is not a domain/],
+  ])("refuses the email domain %s, saying what a correct one looks like", (glob, why) => {
+    const message = invalidDomainGlob(glob);
+    expect(message).toMatch(why);
+    expect(message).toMatch(/for example ac\.in or \*\.ac\.in/);
+  });
+
+  it("allowlistIssues names the field each bad entry sits in, and reports every one", () => {
+    expect(
+      allowlistIssues({ mode: "sso", allow_ip_ranges: ["10.0.0.0/64", "10.0.0.0/24"], allow_email_domains: ["*"] }),
+    ).toEqual([
+      { field: "access.allow_ip_ranges", message: expect.stringContaining("10.0.0.0/64") },
+      { field: "access.allow_email_domains", message: expect.stringContaining("every domain") },
+    ]);
+    expect(allowlistIssues(undefined)).toEqual([]);
+    expect(allowlistIssues({ mode: "sso" })).toEqual([]);
+  });
+
+  it("a malformed allowlist entry is an issue on the whole document", () => {
+    const r = validateTest(doc({ access: { mode: "sso", allow_ip_ranges: ["10.0.0.0/64"] } }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({ field: "access.allow_ip_ranges", index: -1, questionId: null });
+  });
+
+  it("describeAllowlists states the combined effect in plain words", () => {
+    expect(
+      describeAllowlists({ mode: "sso", allow_email_domains: ["*.ac.in"], allow_ip_ranges: ["10.0.0.0/24"] }),
+    ).toBe("Only addresses matching *.ac.in, and only from 10.0.0.0/24.");
+    expect(describeAllowlists({ mode: "link_code", access_code: "X" })).toBe("Anyone with the link and the code.");
+    expect(describeAllowlists({ mode: "sso", allow_email_domains: ["*.ac.in", "*.edu.in"] })).toBe(
+      "Only addresses matching *.ac.in or *.edu.in.",
+    );
+    expect(describeAllowlists({ mode: "invite_only", allow_ip_ranges: ["10.0.0.0/24"] })).toBe(
+      "Only from 10.0.0.0/24.",
+    );
+  });
+
+  it("describeAllowlists never answers with a blank for an unrestricted mode", () => {
+    for (const mode of ["link_code", "invite_only", "email_code", "sso"] as const) {
+      expect(describeAllowlists({ mode })).toMatch(/^Anyone .+\.$/);
+    }
+  });
+
+  // Task 5/6 review, M4. `draftSchema()` strips every `minLength` by
+  // keyword, which took `$defs/access.access_code`'s `minLength: 4` — a
+  // floor that bounds a *value*, not emptiness-while-typing — and nothing
+  // replaced it, so a one-character code was publishable.
+  it("an access_code shorter than four characters is reported at publish, not only an absent one", () => {
+    const short = validateTest(doc({ access: { mode: "link_code", access_code: "X" } }), []);
+    expect(short.ok).toBe(false);
+    if (short.ok) throw new Error("expected failure");
+    expect(short.issues[0]).toMatchObject({ field: "access.access_code" });
+    expect(short.issues[0]?.message).toMatch(/at least 4 characters; "X" is 1/);
+
+    expect(validateTest(doc({ access: { mode: "link_code", access_code: "   " } }), []).ok).toBe(false);
+    expect(validateTest(doc({ access: { mode: "link_code", access_code: "APTI-2026" } }), []).ok).toBe(true);
+    // Only under link_code: the code means nothing under the other three.
+    expect(validateTest(doc({ access: { mode: "sso", access_code: "X" } }), []).ok).toBe(true);
   });
 });

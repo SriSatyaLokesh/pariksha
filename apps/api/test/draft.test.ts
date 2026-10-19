@@ -6,6 +6,7 @@
 
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { addMembership, closeClient, createUser } from "@pariksha/db";
+import { validateTest } from "@pariksha/core";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -553,18 +554,52 @@ it.each([
   expect((await patchDraft(workspaceId, testId, authorCookie, { settings: { registration_form } })).status).toBe(200);
 });
 
-it("a choice field with no options key at all is 422 — that floor is deliberately kept", async () => {
-  // `$defs/formField`'s `if`/`then` ("a dropdown requires options") is a
-  // *shape* rule, not an emptiness one, so `draftSchema()` keeps it — which
-  // is exactly why `FormBuilder.newField` gives a new choice field
-  // `options: []` from birth rather than leaving the key out.
-  expect(
-    (
-      await patchDraft(workspaceId, testId, authorCookie, {
-        settings: { registration_form: { fields: [{ id: "b", type: "dropdown", label: "Degree" }] } },
-      })
-    ).status,
-  ).toBe(422);
+// Task 8 (#60, P5.7) reverses this one, deliberately. Task 5 read
+// `$defs/formField`'s `if`/`then` ("a dropdown requires options") as a
+// *shape* rule rather than an emptiness one and kept it at save, relying
+// on `FormBuilder.newField` to give a new choice field `options: []` from
+// birth. Task 8 then hit the identical keyword one block over —
+// `$defs/access`'s "link_code requires access_code" — where no amount of
+// care in the panel helps, because the organiser has to type the code and
+// cannot do it in the same keystroke as picking the mode.
+//
+// A conditional `required` is a presence floor with a condition on it, and
+// the phase has learnt twice now that naming these one at a time is how
+// the next one gets shipped. So `draftSchema()` strips all three, and all
+// three have their publish-time twin in `validateTest` — including this
+// one, whose twin ("a dropdown needs at least two options") fires on an
+// absent `options` key exactly as it does on an empty list, asserted
+// below. Nothing goes unenforced; it is enforced where the document is
+// whole.
+it("a choice field with no options key at all saves in Draft, and is still caught at publish", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ id: "b", type: "dropdown", label: "Degree" }] } },
+  });
+  expect(status).toBe(200);
+  expect(body.body).toMatchObject({ settings: { registration_form: { fields: [{ id: "b" }] } } });
+
+  // The twin, on the real published-document gate.
+  const publish = validateTest(
+    {
+      format: "pariksha/test@1",
+      name: "Midterm",
+      slug: "midterm",
+      sections: [],
+      registration_form: { fields: [{ id: "b", type: "dropdown", label: "Degree" }] },
+    },
+    [],
+  );
+  expect(publish.ok).toBe(false);
+  if (publish.ok) throw new Error("expected failure");
+  expect(publish.issues[0]?.message).toMatch(/needs at least two options/);
+});
+
+// The other two conditionals, which is what sent Task 8 looking.
+it.each([
+  ["link_code with the code not typed yet", { access: { mode: "link_code" } }],
+  ["on_date with the date not chosen yet", { release: { when: "on_date" } }],
+])("UX-13: %s saves in Draft", async (_name, settings) => {
+  expect((await patchDraft(workspaceId, testId, authorCookie, { settings })).status).toBe(200);
 });
 
 it("UX-13: a section whose title is being retyped saves in Draft", async () => {
@@ -614,4 +649,94 @@ it("the registration form replaces whole, so a deleted field does not survive un
 it("GET and PATCH .../draft are both guarded by tests.edit", () => {
   expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.edit");
   expect(ROUTE_ACTIONS["PATCH /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.edit");
+});
+
+// --- Task 8 (#60, P5.7): access modes and allowlists --------------------
+
+/** The issues a 422 carries, as `{ field, message }`. */
+function issuesOf(body: Record<string, unknown>): { field: string; message: string }[] {
+  return (body.error as { details: { issues: { field: string; message: string }[] } }).details.issues;
+}
+
+// Review Focus 3. `access_code` is a legal property of `access` under
+// every mode, so a stale one survives a merge, passes the schema, passes
+// `validateTest` (whose rule fires only *when* the mode is `link_code`),
+// and leaves the workspace inside an exported file.
+//
+// The plan asks for this proof on the *exported* document. `exportTest` is
+// Task 12's and does not exist yet, so the assertion is made one step
+// earlier, on the stored draft read back through `GET .../draft` — which
+// is the document export is a pure function of, and is not the thing the
+// plan warned against (reading back the PATCH *response*, which would pass
+// either way because it echoes what was sent).
+it("switching access.mode away from link_code drops the access code from the stored document", async () => {
+  await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "link_code", access_code: "APTI-2026" } },
+  });
+  await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "sso", allow_email_domains: ["*.ac.in"] } },
+  });
+
+  const { body } = await draft(workspaceId, testId, authorCookie);
+  expect(JSON.stringify(body.body)).not.toContain("APTI-2026");
+  expect((body.body as { settings: { access: unknown } }).settings.access).toEqual({
+    mode: "sso",
+    allow_email_domains: ["*.ac.in"],
+  });
+});
+
+it("a malformed CIDR is refused at save with the field named", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "sso", allow_ip_ranges: ["10.0.0.0/64"] } },
+  });
+  expect(status).toBe(422);
+  expect(issuesOf(body)[0]).toMatchObject({ field: "access.allow_ip_ranges" });
+  expect(issuesOf(body)[0]?.message).toMatch(/for example 10\.0\.0\.0\/24/);
+});
+
+it("a malformed email-domain glob is refused at save", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "sso", allow_email_domains: ["*"] } },
+  });
+  expect(status).toBe(422);
+  expect(issuesOf(body)[0]).toMatchObject({ field: "access.allow_email_domains" });
+});
+
+it("a refused allowlist stores nothing — the whole patch is rejected, not the bad entry", async () => {
+  await patchDraft(workspaceId, testId, authorCookie, { settings: { access: { mode: "sso" } } });
+  await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "sso", allow_ip_ranges: ["10.0.0.0/24", "10.0.0.0/64"] } },
+  });
+
+  const { body } = await draft(workspaceId, testId, authorCookie);
+  expect((body.body as { settings: { access: unknown } }).settings.access).toEqual({ mode: "sso" });
+});
+
+it("a well-formed allowlist saves even when it can match nothing — that is publish-time", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "sso", allow_email_domains: ["nobody.example"], allow_ip_ranges: ["203.0.113.0/32"] } },
+  });
+  expect(status).toBe(200);
+});
+
+// The standing ruling, applied to this block: the write path enforces only
+// what must never reach storage. Both of these are ordinary mid-build
+// states and `validateTest` carries them for publish instead.
+it("link_code with no access code yet saves, and so does a half-typed one — both caught at publish", async () => {
+  expect(
+    (await patchDraft(workspaceId, testId, authorCookie, { settings: { access: { mode: "link_code" } } })).status,
+  ).toBe(200);
+  expect(
+    (await patchDraft(workspaceId, testId, authorCookie, { settings: { access: { mode: "link_code", access_code: "AP" } } }))
+      .status,
+  ).toBe(200);
+
+  // Task 5/6 review, M4: `draftSchema()` strips `access_code`'s
+  // `minLength: 4` along with every other `minLength`, so the save path
+  // cannot be what keeps a one-character code out of a published test.
+  const stored = { format: "pariksha/test@1", name: "M", slug: "m", sections: [] };
+  for (const access_code of ["", "AP"]) {
+    const r = validateTest({ ...stored, access: { mode: "link_code", access_code } }, []);
+    expect(r.ok, `access_code "${access_code}"`).toBe(false);
+  }
 });
