@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ApiError, type ApiClient, type StoredSection, type TestVersionRow } from "../lib/api";
+import { ApiError, type ApiClient, type DraftPatch, type StoredSection, type TestVersionRow } from "../lib/api";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
+import { FormBuilder } from "../components/testbuilder/FormBuilder";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -37,7 +38,12 @@ export function TestBuilder({
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
-  const [pendingSections, setPendingSections] = useState<StoredSection[] | null>(null);
+  // Task 5 (#57, P5.4): a whole `DraftPatch` rather than a sections array —
+  // the registration form is a `settings` block and saves through the same
+  // debounce, the same in-flight guard and the same one route. Each panel
+  // this shell grows (Tasks 7, 8, 10) is one more `save…` helper, not one
+  // more effect.
+  const [pending, setPending] = useState<DraftPatch | null>(null);
   // Fix round (task 3 review, I4): every save increments this, and a
   // response is applied only when it is still the current one by the time
   // it arrives — the guard against a slow request resolving after a faster,
@@ -93,12 +99,12 @@ export function TestBuilder({
   // author, and `saveSeq` (above) drops both responses outright once a
   // newer save has started.
   useEffect(() => {
-    if (pendingSections === null) return;
+    if (pending === null) return;
     const seq = ++saveSeq.current;
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const updated = await client.patchDraft(workspaceId, testId, { sections: pendingSections });
+          const updated = await client.patchDraft(workspaceId, testId, pending);
           if (saveSeq.current !== seq) return;
           setDraft((prev) => (prev === null ? prev : { ...prev, body: updated.body }));
           setError(undefined);
@@ -131,11 +137,18 @@ export function TestBuilder({
       })();
     }, 250);
     return () => clearTimeout(timer);
-  }, [pendingSections, client, workspaceId, testId]);
+  }, [pending, client, workspaceId, testId]);
 
   function saveSections(sections: StoredSection[]): void {
     setDraft((prev) => (prev === null ? prev : { ...prev, body: { ...prev.body, sections } }));
-    setPendingSections(sections);
+    setPending({ sections });
+  }
+
+  function saveSettings(settings: Partial<TestVersionRow["body"]["settings"]>): void {
+    setDraft((prev) =>
+      prev === null ? prev : { ...prev, body: { ...prev.body, settings: { ...prev.body.settings, ...settings } } },
+    );
+    setPending({ settings });
   }
 
   return (
@@ -170,6 +183,13 @@ export function TestBuilder({
             onOpenSection={openSection}
             client={client}
             workspaceId={workspaceId}
+          />
+        )}
+
+        {draft !== null && (
+          <FormBuilder
+            form={draft.body.settings.registration_form}
+            onChange={(registration_form) => saveSettings({ registration_form })}
           />
         )}
       </main>

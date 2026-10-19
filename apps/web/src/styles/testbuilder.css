@@ -262,3 +262,84 @@
   padding-inline-start: var(--space-md);
   color: var(--color-muted);
 }
+
+/* Task 5 (#57, P5.4): the registration form builder and the one renderer
+   its preview and Phase 6's candidate registration share. */
+
+.form-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-block-start: var(--space-xl);
+  padding-block-start: var(--space-lg);
+  border-block-start: 1px solid var(--color-hairline);
+}
+
+.form-builder__templates,
+.form-builder__add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.form-builder__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-md);
+}
+
+.form-builder__field > legend {
+  padding-inline: var(--space-xs);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+.form-builder__flag,
+.registration-form__choice {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.form-builder__fact,
+.registration-form__help,
+.registration-form__legend {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.form-builder__risk,
+.registration-form__error {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}
+
+.form-builder__preview {
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-md);
+}
+
+.registration-form,
+.registration-form__field,
+.registration-form__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.registration-form__group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.registration-form__title {
+  margin: 0;
+}

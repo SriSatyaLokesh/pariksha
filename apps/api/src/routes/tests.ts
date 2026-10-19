@@ -77,37 +77,77 @@ interface DraftIssue {
   message: string;
 }
 
+/** Keys that hold a map of *named* schemas rather than a schema — their
+ * own keys are property names, not keywords, so a property legitimately
+ * called `minItems` must not be mistaken for the floor below. */
+const SCHEMA_MAPS = new Set(["properties", "$defs", "definitions", "patternProperties"]);
+
+/**
+ * Every emptiness floor, wherever it sits: `minItems` on an array,
+ * `minLength` on a string. Both say the same thing — "this is not filled in
+ * yet" — which is the one thing a Draft is allowed to be.
+ */
+function stripEmptinessFloors(node: unknown): void {
+  if (Array.isArray(node)) {
+    for (const entry of node) stripEmptinessFloors(entry);
+    return;
+  }
+  if (typeof node !== "object" || node === null) return;
+  const schema = node as Record<string, unknown>;
+  delete schema.minItems;
+  delete schema.minLength;
+  for (const [key, value] of Object.entries(schema)) {
+    if (SCHEMA_MAPS.has(key) && typeof value === "object" && value !== null) {
+      for (const child of Object.values(value)) stripEmptinessFloors(child);
+    } else {
+      stripEmptinessFloors(value);
+    }
+  }
+}
+
 /**
  * Fix round (task 3 review, C1/C2/I1): the save-time gate is
  * `schemas/test-1.json` itself, run through the `@cfworker/json-schema`
  * `Validator` the repo already owns (`apps/api/src/import/schema.ts`) — not
  * a hand-written field-name check, and not a second validator. Built once,
- * at module scope, from a schema that is the real document minus the four
- * floors UX-13 (a section may be empty in Draft) would otherwise trip:
- * `sourceFixed.questions`'s `minItems`, `sourceSets.sets`'s `minItems`,
- * the root `sections`'s `minItems` (task 3 re-review — the same class as
- * the other two, missed the first time: `createTest` seeds `sections: []`,
- * so an author who adds one section and deletes it again was answered 422
- * on a state the row already holds; "at least one section" is Task 11's
- * publish gate, not a save-time rule), and
- * the root `required` — dropped because `settings` is validated as a plain
- * object missing `format`/`name`/`slug`/`sections` (they live on the `test`
- * row or in their own column, never in `settings`), not as a whole
- * `pariksha/test@1` document. Nothing else is relaxed: every `type`, every
- * `enum`, every other `required` and every `additionalProperties: false`
- * (`$defs/timing`, `$defs/access`, `$defs/scoring`, `$defs/release`
- * included) runs exactly as import will one day run it.
+ * at module scope, from the real document schema minus two things.
+ *
+ * **The root `required`** — dropped because `settings` is validated as a
+ * plain object missing `format`/`name`/`slug`/`sections` (they live on the
+ * `test` row or in their own column, never in `settings`), not as a whole
+ * `pariksha/test@1` document.
+ *
+ * **Every emptiness floor** (`minItems`, `minLength`), wherever it sits.
+ * Task 3 removed four of them by name — `sourceFixed.questions`,
+ * `sourceSets.sets` and the root `sections` (`minItems`), each an instance
+ * of UX-13's "a section may be empty in Draft … the publish checklist is
+ * where emptiness becomes an error rather than a nag". Task 5 (#57, P5.4)
+ * found four more of exactly the same class within one block
+ * (`$defs/form.fields`'s `minItems`, `$defs/formField.label`'s
+ * `minLength`, `$defs/formField.options`'s `minItems` and its items'
+ * `minLength`) and one already live on the branch: **`$defs/section.title`
+ * has `minLength: 1` and `SectionList.addSection()` creates a section with
+ * `title: ""`, so "Add section" answered 422 on the very next debounced
+ * save.** Naming the ninth floor after the eighth is how that bug got
+ * shipped; the rule is stated once instead, and Tasks 7-10 inherit it
+ * rather than rediscovering it per block.
+ *
+ * This is the whole relaxation. An emptiness floor only ever says "not
+ * filled in yet", which is the definition of a draft and is the publish
+ * checklist's business (Tasks 11 and 13) — and for the registration form
+ * `validateTest` (@pariksha/core) now carries the publish-time replacement
+ * ("a choice field needs at least two options"), so no row goes
+ * unenforced. Nothing that bounds a *value* is touched: every `type`,
+ * `enum`, `pattern` (a form field's id and a section's id still have to
+ * parse), `minimum`, `required` below the root and
+ * `additionalProperties: false` (`$defs/timing`, `$defs/access`,
+ * `$defs/form`, `$defs/formField`, `$defs/validation`, `$defs/scoring`,
+ * `$defs/release` included) runs exactly as import will one day run it.
  */
 function draftSchema(): object {
-  const schema = structuredClone(testSchema) as {
-    required?: unknown;
-    properties: { sections: { minItems?: number } };
-    $defs: { sourceFixed: { properties: { questions: { minItems?: number } } }; sourceSets: { properties: { sets: { minItems?: number } } } };
-  };
+  const schema = structuredClone(testSchema) as { required?: unknown };
   delete schema.required;
-  delete schema.properties.sections.minItems;
-  delete schema.$defs.sourceFixed.properties.questions.minItems;
-  delete schema.$defs.sourceSets.properties.sets.minItems;
+  stripEmptinessFloors(schema);
   return schema;
 }
 

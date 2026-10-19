@@ -472,6 +472,145 @@ it("measures the real subrequest cost of GET and PATCH draft", async () => {
   expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/draft"]).toBe(7);
 });
 
+// --- Task 5 (#57, P5.4): the registration form through the same one pair ---
+
+it("a registration form saves through the draft route, with no route of its own", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: {
+      registration_form: {
+        title: "Before you start",
+        fields: [
+          { id: "full_name", type: "short_text", label: "Full name", required: true },
+          { id: "degree", type: "dropdown", label: "Degree", options: ["B.Tech", "B.Sc"] },
+        ],
+      },
+    },
+  });
+  expect(status).toBe(200);
+  expect((body.body as { settings: { registration_form: unknown } }).settings.registration_form).toMatchObject({
+    title: "Before you start",
+    fields: [{ id: "full_name" }, { id: "degree", options: ["B.Tech", "B.Sc"] }],
+  });
+});
+
+it("a field type the schema does not know is 422, so the gate is still the schema", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ id: "x", type: "signature", label: "Sign" }] } },
+  });
+  expect(status).toBe(422);
+});
+
+it("a field id outside the schema's pattern is 422 — a value floor, not an emptiness one", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ id: "Full Name", type: "short_text", label: "Full name" }] } },
+  });
+  expect(status).toBe(422);
+  expect(JSON.stringify(body)).toContain("registration_form.fields[0].id");
+});
+
+it("a key $defs/validation does not know is 422 (link_text belongs to the field, not to validation)", async () => {
+  // The plan's own Interfaces block put `link_text`/`link_target` inside
+  // `FieldValidation`; the schema puts them on the field and
+  // `$defs/validation` carries `additionalProperties: false`, so modelling
+  // them there would have made every consent field a 422 on save. This is
+  // the assertion that would have caught it.
+  expect(
+    (
+      await patchDraft(workspaceId, testId, authorCookie, {
+        settings: {
+          registration_form: {
+            fields: [{ id: "consent", type: "consent", label: "I agree", validation: { link_text: "Why" } }],
+          },
+        },
+      })
+    ).status,
+  ).toBe(422);
+  expect(
+    (
+      await patchDraft(workspaceId, testId, authorCookie, {
+        settings: {
+          registration_form: {
+            fields: [{ id: "consent", type: "consent", label: "I agree", link_text: "Why", link_target: "consent" }],
+          },
+        },
+      })
+    ).status,
+  ).toBe(200);
+});
+
+// UX-13 for the registration form, the same rule `draftSchema()` already
+// applies to sections: an emptiness floor says "not filled in yet", which
+// is what a Draft is. Each case below is a state the builder reaches between
+// two keystrokes, and each one used to be a 422 with the author's optimistic
+// state rolling back under them.
+it.each([
+  ["a form with no fields yet", { fields: [] }],
+  ["a field whose label is being retyped", { fields: [{ id: "a", type: "short_text", label: "" }] }],
+  ["a choice field whose options are still being typed", { fields: [{ id: "b", type: "dropdown", label: "Degree", options: ["B.Tech"] }] }],
+  ["a choice field with no options at all yet", { fields: [{ id: "b", type: "radio", label: "Stream", options: [] }] }],
+  ["an option cleared to be retyped", { fields: [{ id: "b", type: "checkbox", label: "Needs", options: ["", "Extra time"] }] }],
+])("UX-13: %s saves in Draft", async (_name, registration_form) => {
+  expect((await patchDraft(workspaceId, testId, authorCookie, { settings: { registration_form } })).status).toBe(200);
+});
+
+it("a choice field with no options key at all is 422 — that floor is deliberately kept", async () => {
+  // `$defs/formField`'s `if`/`then` ("a dropdown requires options") is a
+  // *shape* rule, not an emptiness one, so `draftSchema()` keeps it — which
+  // is exactly why `FormBuilder.newField` gives a new choice field
+  // `options: []` from birth rather than leaving the key out.
+  expect(
+    (
+      await patchDraft(workspaceId, testId, authorCookie, {
+        settings: { registration_form: { fields: [{ id: "b", type: "dropdown", label: "Degree" }] } },
+      })
+    ).status,
+  ).toBe(422);
+});
+
+it("UX-13: a section whose title is being retyped saves in Draft", async () => {
+  // Live on the branch before Task 5 and caught by generalising the floor
+  // rather than naming the ninth one: `$defs/section.title` has
+  // `minLength: 1` and `SectionList.addSection()` creates `title: ""`, so
+  // "Add section" answered 422 on its own very next debounced save.
+  expect(
+    (
+      await patchDraft(workspaceId, testId, authorCookie, {
+        sections: [{ id: "s1", title: "", source: { kind: "fixed", questions: [] } }],
+      })
+    ).status,
+  ).toBe(200);
+});
+
+it("patching the registration form leaves every other settings block untouched", async () => {
+  await patchDraft(workspaceId, testId, authorCookie, { settings: { access: { mode: "sso" } } });
+  await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ id: "a", type: "email", label: "Email" }] } },
+  });
+  const { body } = await draft(workspaceId, testId, authorCookie);
+  expect((body.body as { settings: Record<string, unknown> }).settings).toMatchObject({
+    access: { mode: "sso" },
+    registration_form: { fields: [{ id: "a" }] },
+  });
+});
+
+it("the registration form replaces whole, so a deleted field does not survive underneath", async () => {
+  await patchDraft(workspaceId, testId, authorCookie, {
+    settings: {
+      registration_form: {
+        fields: [
+          { id: "a", type: "email", label: "Email" },
+          { id: "b", type: "phone", label: "Phone" },
+        ],
+      },
+    },
+  });
+  await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ id: "a", type: "email", label: "Email" }] } },
+  });
+  const { body } = await draft(workspaceId, testId, authorCookie);
+  expect(JSON.stringify(body.body)).not.toContain('"b"');
+});
+
 it("GET and PATCH .../draft are both guarded by tests.edit", () => {
   expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.edit");
   expect(ROUTE_ACTIONS["PATCH /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.edit");
