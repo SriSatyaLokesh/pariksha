@@ -88,6 +88,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => {
       throw new Error("not used");
     },
+    checkUrl: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }

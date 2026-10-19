@@ -343,3 +343,12 @@
 .registration-form__title {
   margin: 0;
 }
+
+/* Task 6 (#58, P5.5): the url field's reachability affordance sits inline
+   with its own control, like every other row in a field editor. */
+.form-builder__field .field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}

@@ -88,6 +88,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => {
       throw new Error("not used");
     },
+    checkUrl: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }
@@ -745,5 +748,85 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       "tst_1",
       { settings: { registration_form: { fields: [{ id: "email", type: "email", label: "Email" }] } } },
     ]);
+  });
+
+  // Task 6 (#58, P5.5). url-check.test.tsx drives `FormBuilder` with a
+  // `checkUrl` closure of its own and so cannot see whether the running app
+  // ever wires one to `ApiClient.checkUrl` — which is the whole wire this
+  // task adds on the browser side.
+  it("reaches T-19's link check from the app's own entry point, through ApiClient.checkUrl", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: {
+        settings: {
+          registration_form: {
+            fields: [
+              {
+                id: "resume_url",
+                type: "url" as const,
+                label: "Link to your resume",
+                validation: { check_reachable: true },
+              },
+            ],
+          },
+        },
+        sections: [],
+      },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const checkUrl = vi.fn(async () => ({
+      state: "unverified" as const,
+      status: 404,
+      checkedAt: 1_760_000_000_000,
+    }));
+
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft: async () => DRAFT,
+          checkUrl,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    fireEvent.change(await screen.findByLabelText(/try a link/i), {
+      target: { value: "https://drive.example/cv.pdf" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^check$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: /link check/i })).toHaveTextContent(/unverified/i),
+    );
+    // Workspace first, then the test, then the URL — the path is
+    // workspace-scoped and `requires()` reads the workspace out of its own
+    // `:id` segment, so the plan's own `checkUrl(testId, url)` sketch could
+    // not have reached the API at all.
+    expect(checkUrl).toHaveBeenCalledWith("wsp_1", "tst_1", "https://drive.example/cv.pdf");
   });
 });

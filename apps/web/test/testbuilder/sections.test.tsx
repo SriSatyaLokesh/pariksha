@@ -63,6 +63,11 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => {
       throw new Error("not used");
     },
+    // Task 6 (#58, P5.5): present only to satisfy `ApiClient`'s shape --
+    // nothing in this file reaches T-19's link check.
+    checkUrl: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

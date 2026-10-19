@@ -47,8 +47,12 @@ const FIELD_LABEL: Readonly<Record<FormFieldType, string>> = {
  * shell (`apps/web/src/routes/test.tsx`) holds. */
 function Harness({ initial }: { initial?: RegistrationFormSpec }) {
   const [form, setForm] = useState<RegistrationFormSpec | undefined>(initial);
-  return <FormBuilder form={form} onChange={setForm} />;
+  // Task 6's affordance has its own file (url-check.test.tsx); nothing here
+  // ticks `check_reachable`, so nothing here calls it.
+  return <FormBuilder form={form} onChange={setForm} checkUrl={neverChecked} />;
 }
+
+const neverChecked = (): Promise<never> => Promise.reject(new Error("not used by this test file"));
 
 function preview(): HTMLElement {
   return screen.getByRole("region", { name: /preview/i });
@@ -249,6 +253,7 @@ describe("FormBuilder (T-16 - T-18)", () => {
             saved.push(next);
             setForm(next);
           }}
+          checkUrl={neverChecked}
         />
       );
     }

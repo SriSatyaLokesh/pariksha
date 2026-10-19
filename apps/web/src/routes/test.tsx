@@ -190,6 +190,7 @@ export function TestBuilder({
           <FormBuilder
             form={draft.body.settings.registration_form}
             onChange={(registration_form) => saveSettings({ registration_form })}
+            checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
           />
         )}
       </main>

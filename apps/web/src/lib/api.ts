@@ -159,6 +159,26 @@ export interface DraftPatch {
   sections?: StoredSection[];
 }
 
+/** Task 6 (#58, P5.5): `POST .../check-url`'s answer. Mirrors
+ * `apps/api/src/net/reachable.ts`'s `ReachResult`, the same boundary every
+ * other wire type here keeps — this package never imports apps/api.
+ *
+ * Advisory in every state. `unverified` means "the link did not answer
+ * 200", never "the link is wrong"; `refused` means the check itself cannot
+ * be made (a network address, a non-web port, a scheme that is not http);
+ * `timeout` is its own state so the screen can offer a retry rather than
+ * report a link as unreachable on one slow response. `status` is null for
+ * every transport-level outcome, deliberately — the server does not tell
+ * the browser which one it was. */
+export type ReachState = "reachable" | "unverified" | "timeout" | "refused";
+
+export interface ReachResult {
+  state: ReachState;
+  status: number | null;
+  reason?: string;
+  checkedAt: number;
+}
+
 export interface QuestionListFilter {
   type?: QuestionType;
   tag?: string;
@@ -324,6 +344,12 @@ export interface ApiClient {
   // all write through.
   draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
   patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
+
+  // Task 6 (#58, P5.5). `workspaceId` first, like every sibling above — the
+  // plan's own sketch wrote `checkUrl(testId, url)`, which cannot reach the
+  // API at all (the path is workspace-scoped, and `requires()` reads the
+  // workspace out of its own `:id` segment).
+  checkUrl(workspaceId: string, testId: string, url: string): Promise<ReachResult>;
 }
 
 const API = "/api/v1";
@@ -579,6 +605,9 @@ export function createApiClient(): ApiClient {
 
     patchDraft: (workspaceId, testId, patch) =>
       json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`, patchBody(patch)),
+
+    checkUrl: (workspaceId, testId, url) =>
+      json<ReachResult>(`/workspaces/${workspaceId}/tests/${testId}/check-url`, post({ url })),
   };
 }
 

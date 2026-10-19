@@ -7,6 +7,7 @@ import {
   type FormFieldType,
   type RegistrationFormSpec,
 } from "@pariksha/core";
+import type { ReachResult } from "../../lib/api";
 import { ReorderableList } from "../authoring/ReorderableList";
 import { FORM_TEMPLATES, RegistrationForm, validateForm } from "./RegistrationForm";
 import { useDialogKeys } from "./useDialogKeys";
@@ -121,9 +122,16 @@ function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
 export function FormBuilder({
   form,
   onChange,
+  checkUrl,
 }: {
   form: RegistrationFormSpec | undefined;
   onChange: (next: RegistrationFormSpec) => void;
+  /** Task 6 (#58, P5.5): T-19's reachability check, already bound to the
+   * workspace and the test. One closure rather than `client` +
+   * `workspaceId` + `testId` (SectionList's three props): this component
+   * makes exactly one call, and three props to reach one method is three
+   * things a later task has to keep threaded. */
+  checkUrl: (url: string) => Promise<ReachResult>;
 }) {
   const spec = form ?? EMPTY_FORM;
   const [addType, setAddType] = useState<FormFieldType>("short_text");
@@ -224,6 +232,7 @@ export function FormBuilder({
             index={index}
             onChange={(updater) => updateField(field.id, updater)}
             onDelete={() => setFields(spec.fields.filter((f) => f.id !== field.id))}
+            checkUrl={checkUrl}
           />
         )}
       />
@@ -302,11 +311,13 @@ function FieldEditor({
   index,
   onChange,
   onDelete,
+  checkUrl,
 }: {
   field: FormField;
   index: number;
   onChange: (updater: (field: FormField) => FormField) => void;
   onDelete: () => void;
+  checkUrl: (url: string) => Promise<ReachResult>;
 }) {
   const ids = useId();
   const unsatisfiable = unsatisfiableValidation(field);
@@ -472,6 +483,31 @@ function FieldEditor({
           onChange((f) => withValidation(f, "allowed_domains", domains.length > 0 ? domains : undefined));
         })}
 
+      {/* T-19 (Task 6, #58, P5.5). The flag is the mechanism; the row under
+          it is the builder affordance — an organiser can see what the
+          check will actually say about a link of the kind they are asking
+          for, before a candidate meets it. The candidate-side check is
+          Phase 6's. */}
+      {field.type === "url" && (
+        <>
+          <label className="form-builder__flag">
+            <input
+              type="checkbox"
+              checked={v?.check_reachable === true}
+              onChange={(event) =>
+                onChange((f) => withValidation(f, "check_reachable", event.target.checked || undefined))
+              }
+            />
+            Check the link is reachable
+          </label>
+          <p className="form-builder__fact">
+            The link a candidate gives is fetched once, at registration. One that does not answer 200 is flagged as
+            unverified for you to look at — it is never refused, and nothing is blocked.
+          </p>
+          {v?.check_reachable === true && <UrlCheck id={`${ids}-try`} check={checkUrl} />}
+        </>
+      )}
+
       {unsatisfiable !== null && (
         <p className="form-builder__risk" role="alert">
           <span aria-hidden="true">⚠</span> {unsatisfiable}
@@ -482,6 +518,105 @@ function FieldEditor({
         Delete field
       </button>
     </fieldset>
+  );
+}
+
+/** The sentence for each outcome — text plus glyph, never colour alone, and
+ * never the word "invalid": an unverified link is one the server could not
+ * confirm, which is not the same as one the organiser got wrong. */
+function reachLine(result: ReachResult): { glyph: string; text: string } {
+  switch (result.state) {
+    case "reachable":
+      return { glyph: "✓", text: "Reachable — the link returned 200." };
+    case "unverified":
+      return {
+        glyph: "⚠",
+        text:
+          result.status === null
+            ? "Unverified — the link did not return 200."
+            : `Unverified — the link did not return 200 (${result.status}).`,
+      };
+    case "timeout":
+      return { glyph: "⚠", text: "The check timed out. The link may still be fine." };
+    case "refused":
+      return { glyph: "⚠", text: `Not checked — ${result.reason ?? "this link cannot be checked"}.` };
+  }
+}
+
+/** Epoch milliseconds as a fixed, locale-independent stamp — the organiser
+ * needs to know whether a result is from a minute ago or last week, not
+ * what their browser calls Tuesday. */
+function stampOf(checkedAt: number): string {
+  return `${new Date(checkedAt).toISOString().slice(0, 16).replace("T", " ")} UTC`;
+}
+
+/**
+ * T-19's builder affordance: try one link and see what the candidate's own
+ * check would say about it. Nothing here is stored on the field, and no
+ * outcome disables anything — an unverified or timed-out result leaves the
+ * form exactly as editable and as saveable as it was.
+ */
+function UrlCheck({ id, check }: { id: string; check: (url: string) => Promise<ReachResult> }) {
+  const [url, setUrl] = useState("");
+  const [checking, setChecking] = useState(false);
+  const [result, setResult] = useState<ReachResult | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  async function run(): Promise<void> {
+    setChecking(true);
+    setFailed(false);
+    try {
+      setResult(await check(url));
+    } catch {
+      // The *request* failed, which is not a statement about the link —
+      // reporting it as "unreachable" would be the wrong fact.
+      setResult(null);
+      setFailed(true);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  const line = result === null ? null : reachLine(result);
+
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        Try a link
+      </label>
+      <input
+        className="text-input"
+        id={id}
+        type="url"
+        value={url}
+        onChange={(event) => setUrl(event.target.value)}
+      />
+      <button
+        type="button"
+        className="button-secondary"
+        disabled={checking || url === ""}
+        onClick={() => void run()}
+      >
+        {result === null && !failed ? "Check" : "Check again"}
+      </button>
+      {/* Named, because `ReorderableList` already has an unnamed
+          `role="status"` on this screen and a test (and a screen reader
+          user moving between live regions) must be able to tell them
+          apart — the same `aria-label` SectionList's own undo row uses. */}
+      <p className="form-builder__fact" role="status" aria-label="Link check">
+        {checking ? (
+          "Checking…"
+        ) : failed ? (
+          "The check could not be run. Try again."
+        ) : line === null ? (
+          "Not checked"
+        ) : (
+          <>
+            <span aria-hidden="true">{line.glyph}</span> {line.text} Checked at {stampOf(result!.checkedAt)}.
+          </>
+        )}
+      </p>
+    </div>
   );
 }
 
