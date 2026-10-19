@@ -146,8 +146,35 @@ it("a test with current_version null resolves to null", async () => {
 });
 
 it("the slug 'attempt' never resolves, so it cannot shadow the attempt routes", async () => {
-  await createWorkspace(db, newId("wsp"), { slug: "attempt", name: "Attempt", now: NOW });
+  // The workspace really exists and really has a published test at this
+  // slug pair — so the only thing that can make this null is the refusal
+  // itself. Asserting against a workspace that happens not to have the
+  // test would pass with the guard deleted.
+  await publish("attempt", "anything", open);
   expect(await resolvePublishedTest(db, "attempt", "anything", NOW)).toBeNull();
+  // The control: the same test, reached by any other workspace slug,
+  // resolves perfectly.
+  await publish("not-attempt", "anything", open);
+  expect(await resolvePublishedTest(db, "not-attempt", "anything", NOW)).not.toBeNull();
+});
+
+it("a current_version pointing at an unpublished row resolves to null", async () => {
+  // `publishDraftVersion` is the only writer of `current_version` and it
+  // stamps `published_at` in the same batch, so this state is not
+  // reachable through the repository — which is exactly why the join's
+  // `published_at IS NOT NULL` is worth having and worth proving. Written
+  // directly, because a half-written lifecycle in a later phase is the
+  // thing that would otherwise serve a candidate an unpublished paper.
+  const { workspaceId, testId } = await publish("alpha-halfway", "halfway", open);
+  await db.run("UPDATE test SET current_version = ? WHERE id = ?", [2, testId]);
+  expect(await resolvePublishedTest(db, "alpha-halfway", "halfway", NOW)).toBeNull();
+  // Version 2 is the draft `publishDraftVersion` opened, and it is really
+  // there — so what refused is the `published_at` predicate, not a missing row.
+  const rows = await db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM test_version WHERE workspace_id = ? AND test_id = ? AND version = 2",
+    [workspaceId, testId],
+  );
+  expect(Number(rows[0]?.n)).toBe(1);
 });
 
 it("an archived test still resolves, carrying its archived state for the route to refuse", async () => {
