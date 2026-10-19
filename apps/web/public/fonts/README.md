@@ -1,6 +1,7 @@
 # Self-hosted fonts
 
-The first four files are variable fonts trimmed to `font-weight: 400 500` (the only two
+The landing page's display and body faces are Bricolage Grotesque and Inter; the rest of the
+application uses Anek. The first four files are variable fonts trimmed to `font-weight: 400 500` (the only two
 weights `DESIGN.md` uses outside the wordmark) and subset per the ranges below. Kalam is
 a static weight-700 cut, subset to the mark it draws. All downloaded once from Google
 Fonts and committed here so the page never makes a third-party font request (`S-11`).
@@ -12,6 +13,8 @@ Fonts and committed here so the page never makes a third-party font request (`S-
 | `anek-telugu-wordmark-500.woff2`     | https://fonts.gstatic.com/l/font?kit=LhWLMVrUNvsddMtYGCx4FcVWOjlwE1WgXdoJ-5XHMl2DkooGK7i13x2-oEie3N0&skey=574bd2feb0646fc0&v=v13      | Anek Telugu v13     | Text-subset to the wordmark glyphs only (`పరీక్ష`); unicode-range U+0C00-0C7F, U+200C-200D                                                                                                                                 | `OFL-anek.txt` (identical text to Anek Latin's licence; see note below) |
 | `anek-devanagari-wordmark-500.woff2` | https://fonts.gstatic.com/l/font?kit=jVyo7nP0CGrUsxB-QiRgw0NlLaVt_QUAkYxLRoCL23mlh20ZVHOMAWbgHLDfku9iDkg8&skey=9455048a98a27cad&v=v17 | Anek Devanagari v17 | Text-subset to the wordmark glyphs only (`परीक्षा`); unicode-range U+0900-097F, U+200C-200D                                                                                                                                | `OFL-anek.txt` (identical text to Anek Latin's licence; see note below) |
 | `kalam-wordmark-700.woff2`           | https://fonts.gstatic.com/l/font?kit=YA9Qr0Wd4kDdMtDqHQLOgCZQ1tHF5YWi&skey=31f303804b29bb6c&v=v18                                     | Kalam v18           | Text-subset to the wordmark glyphs only (`Pariksha`); unicode-range U+50, U+61, U+68-69, U+6B, U+72-73                                                                                                                     | `OFL-kalam.txt` (SIL OFL 1.1; see note below)                           |
+| `bricolage-grotesque-latin-500-800.woff2` | https://fonts.gstatic.com/s/bricolagegrotesque/v9/3y9K6as8bTXq_nANBjzKo3IeZx8z6up5BeSl9D4dj_x9PpZBMlGIInE.woff2 | Bricolage Grotesque v9 | Same range as Anek Latin above; variable on `opsz` 12–96 and `wght` 500–800 | `OFL-bricolage-grotesque.txt` (SIL OFL 1.1) |
+| `inter-latin-400-600.woff2` | https://fonts.gstatic.com/s/inter/v20/UcC73FwrK3iLTeHuS_nVMrMxCp50SjIa1ZL7.woff2 | Inter v20 | Same range as Anek Latin above; variable on `wght` 400–600 | `OFL-inter.txt` (SIL OFL 1.1) |
 
 `OFL-anek.txt` and `OFL-jetbrains-mono.txt` are each family's full SIL Open Font License
 1.1 text. The Anek Telugu and Anek Devanagari OFL texts were compared against Anek
