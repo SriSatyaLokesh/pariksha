@@ -405,6 +405,14 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // **Task 9 will make this route materialise a late submission**; when
   // it does, this is the line that moves and it must be re-measured.
   "/api/v1/run/attempt": 2,
+  // Phase 6 Task 7 (#71, P6.7): one image off the candidate's own paper.
+  // Measured at **2** in `test/run/media.test.ts` — the attempt join the
+  // cookie resolves through, and the one object read. The authorisation
+  // itself costs nothing: it is an `includes` over `layout.media`,
+  // already in memory on the row that join returned. A number above 2
+  // here would mean the route had gone looking at the workspace
+  // instead, which is precisely the reading it exists not to take.
+  "/api/v1/run/attempt/media/:key": 2,
 
   // The one organiser route of this phase: authentication (2), the test
   // and its slugs (1), the candidate list (1), the already-invited set
@@ -598,6 +606,13 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // `attemptContext` fails, and mounting one without declaring it fails
   // too.
   "GET /api/v1/run/attempt": "attempt",
+  // Phase 6 Task 7 (#71, P6.7): the images on the candidate's own paper.
+  // `attempt` is not merely the credential here, it is the *scope*: what
+  // the route serves is bounded by `layout.media` on the very row the
+  // cookie resolved, not by the workspace that row names. Its organiser
+  // sibling `GET /api/v1/workspaces/:id/media/:key` keeps `banks.edit`
+  // and is untouched (standing decision 4).
+  "GET /api/v1/run/attempt/media/:key": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

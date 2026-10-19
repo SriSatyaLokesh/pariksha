@@ -115,7 +115,7 @@ it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", 
       .filter(([, authority]) => authority === "attempt")
       .map(([endpoint]) => endpoint)
       .sort(),
-  ).toEqual(["GET /api/v1/run/attempt"]);
+  ).toEqual(["GET /api/v1/run/attempt", "GET /api/v1/run/attempt/media/:key"]);
 });
 
 it("every endpoint the attempt allowlist names refuses a caller with no cookie", async () => {
@@ -170,6 +170,12 @@ const PROBE_URL: Readonly<Record<string, string>> = {
   // Task 5's start gate, probed with no Authorization header: 401, for
   // the same reason its two neighbours are.
   "POST /api/v1/run/:workspaceSlug/:testSlug/start": "/api/v1/run/alpha/aptitude/start",
+  // Task 7's attempt-scoped media route, probed with no cookie: 401,
+  // which is what every `attempt` endpoint owes a caller who holds
+  // nothing. The key is deliberately one that exists in no layout —
+  // the refusal must come from the missing credential, before any
+  // question of what this paper contains is reached.
+  "GET /api/v1/run/attempt/media/:key": "/api/v1/run/attempt/media/nothing.png",
   "GET /api/v1/auth/:provider/start": "/api/v1/auth/google/start",
   "GET /api/v1/auth/:provider/callback": "/api/v1/auth/google/callback",
   "GET /t/:code": "/t/ABC123",

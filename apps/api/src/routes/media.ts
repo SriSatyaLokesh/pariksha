@@ -37,7 +37,16 @@ const MEDIA_TYPE_EXT: Record<string, string> = {
   "image/gif": "gif",
   "image/webp": "webp",
 };
-const EXT_MEDIA_TYPE: Record<string, string> = Object.fromEntries(
+/**
+ * The reverse table, and the SVG refusal in the header in its usable
+ * form: an extension absent from here is not servable, full stop.
+ *
+ * Exported for Phase 6 Task 7's attempt-scoped sibling in
+ * `run/attempt.ts`, so the candidate route and the organiser route refuse
+ * the same extensions off one list. Two lists would agree today and
+ * disagree on the day somebody adds AVIF to one of them.
+ */
+export const EXT_MEDIA_TYPE: Record<string, string> = Object.fromEntries(
   Object.entries(MEDIA_TYPE_EXT).map(([type, ext]) => [ext, type]),
 );
 

@@ -75,6 +75,7 @@ import { randomToken, sha256Hex } from "../auth/tokens.js";
 import { ATTEMPT_COOKIE, attemptContext } from "../middleware/attemptContext.js";
 import { openTest, REGISTRATION_KIND, refuse, registrationHash } from "./entry.js";
 import { forCandidate, mediaKeysOf, type CandidateQuestion } from "./scrub.js";
+import { EXT_MEDIA_TYPE } from "../routes/media.js";
 
 /** Re-exported here because this is where the brief names it; it is
  *  declared in `middleware/attemptContext.ts`, the module that reads it. */
@@ -83,6 +84,16 @@ export { ATTEMPT_COOKIE } from "../middleware/attemptContext.js";
 /** How long past the deadline the cookie survives, so the candidate can
  *  still read their receipt and result on the finish page. */
 export const RECEIPT_WINDOW_MS = 60 * 60_000;
+
+/**
+ * What every `media.src` on a pinned paper is prefixed with (Task 7,
+ * #71). The scrubber takes it as `mediaBase`, so a storage key becomes a
+ * URL in exactly one place, and the route below is the only thing that
+ * answers it: a candidate's browser never names
+ * `GET /workspaces/:id/media/:key`, which keeps its `banks.edit` guard
+ * (standing decision 4).
+ */
+export const MEDIA_BASE = "/api/v1/run/attempt/media/";
 
 /** Reconciliation row 8: `timing` is optional on `Test` and these
  *  defaults live only in the builder UI, so the server applies its own —
@@ -375,9 +386,10 @@ function paperSections(
             : groups.get(`${held.bankId}:${held.question.group}`);
         return forCandidate(held.question, {
           ...(pinned.optionOrder[id] === undefined ? {} : { optionOrder: pinned.optionOrder[id] }),
-          // Task 7 turns a storage key into a URL; until then the paper
-          // carries the key `layout.media` was pinned from.
-          mediaBase: "",
+          // The paper carries URLs; `layout.media`, pinned from the same
+          // questions by `mediaKeysOf`, carries the bare storage keys the
+          // media route authorises against. One prefix, applied here.
+          mediaBase: MEDIA_BASE,
           ...(group === undefined ? {} : { group }),
         });
       }),
@@ -694,6 +706,61 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         now: deps.now(),
       }),
     );
+  });
+
+  /**
+   * The images on this candidate's own paper (Task 7, #71) — **Review
+   * Focus 2**.
+   *
+   * The authorisation is membership in `attempt.layout.media`, the array
+   * `/start` pinned from the very questions it selected. It is **not**
+   * "the attempt names a workspace, so serve anything under that
+   * workspace's prefix", and the difference is invisible from the
+   * outside: every candidate's own images load either way, every test
+   * passes either way, and the workspace reading additionally hands each
+   * candidate the diagram in a question they were never given, in a bank
+   * belonging to a different test, in a draft nobody published. The keys
+   * are SHA-256 content addresses so guessing is not the threat; a
+   * candidate who sat an earlier version of this test, or who has read a
+   * leaked bank export, is.
+   *
+   * It costs nothing to do it right: the array is already on the row the
+   * cookie resolved, so the check is an `includes` in memory and the
+   * route's whole budget is the attempt join plus the object read. A
+   * measurement above 2 means the workspace was consulted after all.
+   *
+   * The workspace still names the *storage path* — the bytes live under
+   * `media/<workspaceId>/<key>` and nowhere else — which is why the same
+   * key under two tenants serves two different objects. Scoping storage
+   * and authorising access are two questions and this route answers them
+   * from two different places.
+   *
+   * Everything refused is one 404 with one body (`S-10`): a key outside
+   * this paper, a key from another tenant, an extension that is not a
+   * servable image, and an object that is simply missing are
+   * indistinguishable to the holder. Phase 4's two properties come with
+   * it verbatim — `private, max-age=31536000, immutable` (the response
+   * needed a credential and carries no `Vary`), and no `image/svg+xml`,
+   * because an SVG can carry `<script>` and `script-src 'self'` should
+   * not be the only thing between a stored one and XSS.
+   */
+  routes.get("/attempt/media/:key", attemptContext(deps), async (c) => {
+    const attempt = c.get("attempt");
+    const key = c.req.param("key");
+    const contentType = EXT_MEDIA_TYPE[key.slice(key.lastIndexOf(".") + 1)];
+    const notFound = new ApiError(404, "not_found", "No such resource.");
+
+    // Checked before the read, so a key this candidate was never given
+    // costs no storage call and leaves no trace of having been asked for.
+    if (contentType === undefined || !attempt.layout.media.includes(key)) throw notFound;
+
+    const bytes = await deps.storage.get(`media/${attempt.workspaceId}/${key}`);
+    if (!bytes) throw notFound;
+
+    return c.body(bytes, 200, {
+      "Content-Type": contentType,
+      "Cache-Control": "private, max-age=31536000, immutable",
+    });
   });
 
   return routes;
