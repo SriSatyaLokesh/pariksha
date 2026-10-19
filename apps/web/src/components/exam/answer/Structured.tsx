@@ -152,12 +152,40 @@ function MultiMatching({ question, value, onChange, disabled }: AnswerProps) {
   );
 }
 
-function Ordering({ question, value, onChange }: AnswerProps) {
+function Ordering({ question, value, onChange, disabled }: AnswerProps) {
   // UX-08: the dealt order is the shuffled one, and the candidate's own
   // order is the answer. Before they touch it the two are the same, which
   // is why an untouched ordering question is still unanswered — `value`
   // stays null and the palette square stays empty.
   const items = value !== null && value.kind === "order" ? value.items : (question.items ?? []);
+
+  // Fix round 1, C1. `<fieldset disabled>` reaches form controls and
+  // nothing else, so it disables `ReorderableList`'s move buttons and
+  // position fields but NOT its `draggable` rows: a submitted attempt
+  // was reorderable by mouse, and `onChange` fired. A read-only ordering
+  // answer therefore renders as what it actually is — the order the
+  // candidate left, with no affordance at all, so there is no drag path
+  // to make inert.
+  //
+  // The two alternatives were threading `disabled` into
+  // `ReorderableList` (its props must not change — Phase 4's deferral
+  // note, and this task's own constraint) and leaving the rows
+  // `draggable` while short-circuiting the handler, which keeps a
+  // control that looks operable and is not. `index.tsx` states the rule
+  // that second one breaks: "a read-only attempt whose controls still
+  // respond is the kind of lie this screen must not tell."
+  if (disabled) {
+    return (
+      <div className="exam-ordering-readonly">
+        <p className="exam-field-label">Your order</p>
+        <ol className="exam-ordering-list">
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ol>
+      </div>
+    );
+  }
 
   return (
     <ReorderableList

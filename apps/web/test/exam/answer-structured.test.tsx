@@ -213,6 +213,15 @@ describe("ordering (UX-08, AC-07)", () => {
   });
 });
 
+// Fix round 1, C1. The read-only sweep used to name
+// `input,select,button,textarea` and conclude "fully disabled" — true of
+// every selector it looked at and false of the one control this task
+// added, because a `draggable` <li> is not a form control and
+// `<fieldset disabled>` never reaches it. A submitted attempt was
+// reorderable by mouse. This names every interactive affordance instead.
+const AFFORDANCES =
+  "input,select,textarea,button,a[href],[draggable='true'],[contenteditable='true'],[tabindex]:not([tabindex='-1'])";
+
 describe("S-10, read-only and axe", () => {
   it.each([matching, multiMatching, ordering])("$type leaks no key into the DOM", (question) => {
     const { container } = render(<Harness question={question} />);
@@ -227,9 +236,39 @@ describe("S-10, read-only and axe", () => {
 
   it.each([matching, multiMatching, ordering])("$type is fully disabled when read-only", (question) => {
     const { container } = render(<Harness question={question} disabled />);
-    const controls = container.querySelectorAll<HTMLElement>("input,select,button,textarea");
-    expect(controls.length).toBeGreaterThan(0);
-    for (const control of controls) expect(control).toBeDisabled();
+    for (const control of container.querySelectorAll<HTMLElement>(AFFORDANCES)) {
+      // `toBeDisabled` is false for anything that is not a form control,
+      // so a surviving draggable row fails here instead of being
+      // silently skipped the way the old four-selector sweep skipped it.
+      expect(control, control.outerHTML.slice(0, 80)).toBeDisabled();
+    }
+    expect(container.querySelectorAll("[draggable='true']")).toHaveLength(0);
+  });
+
+  // The positive control: without it the sweep above would hold for a
+  // component that rendered no affordance in EITHER state.
+  it.each([matching, multiMatching, ordering])(
+    "$type has affordances to disable in the first place",
+    (question) => {
+      const { container } = render(<Harness question={question} />);
+      expect(container.querySelectorAll(AFFORDANCES).length).toBeGreaterThan(0);
+    },
+  );
+
+  it("a read-only ordering answer cannot be dragged, and still shows the order", () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness question={ordering} onChange={spy} disabled />);
+    expect(container.querySelectorAll("[draggable]")).toHaveLength(0);
+    expect(container.querySelectorAll(".reorderable-list__item")).toHaveLength(0);
+    expect(
+      [...container.querySelectorAll(".exam-ordering-list li")].map((el) => el.textContent),
+    ).toEqual(pinnedShuffledOrder);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("a read-only ordering answer has no axe violations either", async () => {
+    const { container } = render(<Harness question={ordering} disabled />);
+    expect(await axe(container)).toHaveNoViolations();
   });
 
   it("no axe violations at 200% zoom", async () => {

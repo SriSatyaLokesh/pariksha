@@ -896,3 +896,27 @@
   font-size: var(--type-body-md-size);
   cursor: not-allowed;
 }
+
+/* Fix round 1, C1: a read-only ordering answer is the order the
+   candidate left, with no affordance at all — no draggable row, no move
+   buttons, nothing in the tab order that does nothing. */
+.exam-ordering-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-ordering-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 24px;
+}
+
+.exam-ordering-list li {
+  padding: 8px 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
