@@ -10,6 +10,7 @@ import type {
   ShortAnswerQuestion,
 } from "@pariksha/core";
 import { placeholderIds, validateBank } from "@pariksha/core";
+import { MAX_LENGTH_CEILING } from "../../answer-common";
 
 export type WrittenQuestion = FillBlankQuestion | NumericQuestion | ShortAnswerQuestion | LongAnswerQuestion;
 
@@ -279,13 +280,6 @@ function NumericAnswer({
     </div>
   );
 }
-
-/** Longest `max_length` the format allows each type — schemas/question-1.json's
- * own ceilings (`short_answer`: 500, `long_answer`: 5,000), not a number
- * invented here. Neither is exported as a runtime constant from
- * @pariksha/core (only the schema states them), so this is the one place in
- * the UI that names them. */
-const MAX_LENGTH_CEILING = { short_answer: 500, long_answer: 5000 } as const;
 
 function RubricEditor({
   rubric,

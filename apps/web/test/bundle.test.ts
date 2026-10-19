@@ -304,6 +304,41 @@ describe("the candidate runtime's exam entry (#65, P6.1)", () => {
     expect(modules).not.toMatch(/src[\\/]components[\\/]testbuilder/);
   });
 
+  // Phase 6 Task 7 (#71). The candidate side legitimately shares three
+  // Phase 4 modules -- RenderedHtml, ReorderableList and the renderer
+  // behind them -- but NOT the three answer EDITORS beside them.
+  // Measured, not assumed: importing one constant out of
+  // authoring/answer/Choice.tsx put all 10 KB of the option editor into
+  // this graph, because Rollup keeps a module whole, and the three such
+  // imports together cost 35 KB raw of organiser-only code an exam-taker
+  // downloads and never runs. The shared values moved to
+  // src/components/answer-common.ts; this is what stops the next one.
+  // ADMIN_PATH_RE never covered src/components/authoring, so nothing
+  // else in this file would have noticed.
+  // Fix round 1, I2: an ALLOWLIST, not a list of today's editors. A
+  // denylist naming the seven components that exist now is the same flaw
+  // ADMIN_PATH_RE had — the eighth, added next phase, walks straight
+  // through it. Two files are shared with the candidate on purpose; every
+  // other module under src/components/authoring is organiser-only until
+  // somebody deliberately adds it here, which is a line a reviewer sees.
+  it("no authoring module but the two shared ones reaches the exam entry", () => {
+    const SHARED = ["RenderedHtml", "ReorderableList"];
+    const leaked = staticModules(entryChunks, "exam")
+      .filter((id) => /src[\\/]components[\\/]authoring[\\/]/.test(id))
+      .filter((id) => !SHARED.some((name) => id.includes(`${name}.tsx`)));
+    expect(leaked).toEqual([]);
+  });
+
+  // The positive control for the assertion above: the Phase 4 modules the
+  // candidate DOES share are reached, so "no authoring code at all" would
+  // be a different and wrong guard.
+  it("the exam entry does reach the shared renderer and the reorderable list", () => {
+    const modules = staticModules(entryChunks, "exam").join("\n");
+    expect(modules).toMatch(/src[\\/]components[\\/]authoring[\\/]RenderedHtml/);
+    expect(modules).toMatch(/src[\\/]components[\\/]authoring[\\/]ReorderableList/);
+    expect(modules).toContain("markdown-it");
+  });
+
   // The positive control: without it the three assertions above would hold
   // for an entry that reached nothing at all.
   it("the exam entry does reach the candidate screens", () => {

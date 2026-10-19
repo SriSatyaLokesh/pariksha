@@ -2,7 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { QUESTION_TYPES, type Difficulty, type QuestionType } from "@pariksha/core";
 import { ApiError, type ApiClient, type Bank, type QuestionSummary } from "../../lib/api";
 import { TextField } from "../TextField";
-import { useDialogKeys } from "./useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 // UX-14: a drawer over the builder, with the bank browser's own filters
 // (type/difficulty/tag/search — `BankBrowser`, apps/web/src/routes/bank.tsx)

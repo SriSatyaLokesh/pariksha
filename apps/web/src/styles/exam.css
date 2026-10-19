@@ -17,6 +17,8 @@
    Nothing here animates. A candidate sits inside these screens under a
    running clock, often already nervous (DESIGN.md). */
 
+@import "./question.css";
+
 .exam-landing {
   display: flex;
   flex-direction: column;
@@ -158,11 +160,21 @@
   color: var(--color-cream);
 }
 
+/* Fix round 1, C1. This used to fill itself with `hairline` and write an
+   `ink-soft` label on it. `hairline` is one of the tokens the
+   high-contrast block below swaps — to `ink` — and a swapped BACKGROUND
+   inverts a pair that a swapped foreground could only ever improve: the
+   two measured 1.47:1 with high contrast on. A disabled control still has
+   to be readable, so the ground is the page's own canvas in both themes
+   and the de-emphasis is carried by `muted` (5.34:1 default, 11.0:1 high
+   contrast) plus a dashed edge — a carrier that survives greyscale, which
+   a lighter fill never did. */
 .exam-landing-actions button:disabled {
   cursor: not-allowed;
+  border-style: dashed;
   border-color: var(--color-hairline-strong);
-  background: var(--color-hairline);
-  color: var(--color-ink-soft);
+  background: var(--color-canvas);
+  color: var(--color-muted);
 }
 
 .exam-device-report li {
@@ -205,4 +217,706 @@
   max-width: 760px;
   margin: 0 auto;
   padding: 32px;
+}
+
+/* ========================================================================
+   The test runner (C-04, Task 6).
+
+   DESIGN.md, "The clock kills the canvas": the moment an attempt starts
+   the system inverts. Cream and ink, hairline-ruled, and the voltage
+   survives only as the "you are here" square in the palette and the focus
+   ring. The question column is 1fr capped at 680px, the palette rail is a
+   fixed 240px, and below 1024px there is no layout at all because P-01
+   blocks the device before a candidate gets here.
+
+   Nothing below animates, and the rule is enforced: runner.test.tsx reads
+   this file and fails on any transition, animation or @keyframes. The
+   plan's own version of that check walked the rendered DOM, which under
+   `css: false` reports the initial value whatever is written here.
+   ===================================================================== */
+
+.exam-runner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-rows: auto 1fr;
+  gap: 24px;
+  align-items: start;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 32px;
+  /* The one place the text-size control acts: everything in the runner
+     inherits from here, so no component measures a font size and no
+     component branches on the setting. */
+  font-size: calc(var(--type-body-md-size) * var(--exam-font-scale, 1));
+  line-height: var(--type-body-md-line-height);
+}
+
+:root[data-font-scale="1.25"] {
+  --exam-font-scale: 1.25;
+}
+
+:root[data-font-scale="1.5"] {
+  --exam-font-scale: 1.5;
+}
+
+/* DESIGN.md's high-contrast column, as a token swap: the markup is the
+   same in both themes, so no component knows which one is on. ink itself
+   is already 14.6:1 on canvas and has no darker token to swap to; every
+   other row of that table is here. */
+:root[data-contrast="high"] {
+  --color-hairline: var(--color-ink);
+  --color-hairline-strong: var(--color-ink);
+  --color-muted: var(--color-ink-soft);
+  --color-cream: var(--color-canvas);
+  --color-voltage: var(--color-voltage-deep);
+  --exam-edge: 2px;
+  --exam-ring: 3px;
+}
+
+.exam-runner-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-hairline-strong);
+}
+
+/* A skip control, visible the moment it has focus and out of the way
+   otherwise. `clip-path` rather than `display: none`, which would take it
+   out of the tab order and defeat the point. */
+.exam-skip {
+  position: absolute;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  clip-path: inset(50%);
+}
+
+.exam-skip:focus-visible {
+  position: static;
+  clip-path: none;
+}
+
+.exam-runner-clock,
+.exam-runner-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exam-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.exam-font-scale {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 12px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+}
+
+.exam-font-scale legend,
+.exam-view-choice {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+.exam-view-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.exam-contrast-switch,
+.exam-calc-open,
+.exam-button,
+.exam-clear {
+  min-height: 44px;
+  padding: 0 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+/* The switch's own non-colour carrier: a screen reader hears aria-checked,
+   and an eye that cannot separate two fills reads the weight. */
+.exam-contrast-switch[aria-checked="true"] {
+  border-color: var(--color-ink);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: var(--type-button-md-size);
+  font-weight: 700;
+}
+
+.exam-button[aria-pressed="true"] {
+  border-color: var(--color-state-marked);
+  color: var(--color-state-marked);
+  font-size: var(--type-button-md-size);
+  font-weight: 700;
+}
+
+/* Fix round 1, C1 — the same inversion as the landing page's disabled
+   button above, and the one a candidate meets first: `Previous` is
+   disabled on question 1 of every paper. */
+.exam-button:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-button-md-size);
+}
+
+/* DESIGN.md's `button-danger`: white fill, flag-risk label and border,
+   always paired with a confirmation naming what is about to happen. */
+.exam-clear {
+  border-color: var(--color-flag-risk);
+  color: var(--color-flag-risk);
+  font-size: var(--type-button-md-size);
+}
+
+.exam-question {
+  max-width: 680px;
+  font-size: calc(var(--type-question-stem-size) * var(--exam-font-scale, 1));
+  line-height: var(--type-question-stem-line-height);
+}
+
+.exam-question-stem {
+  margin: 0 0 24px;
+  color: var(--color-ink);
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  font-weight: var(--type-question-stem-weight);
+}
+
+.exam-question-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.exam-confirm {
+  margin-top: 24px;
+  padding: 16px;
+  border: var(--exam-edge, 1px) solid var(--color-flag-risk);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+}
+
+.exam-confirm-danger {
+  min-height: 44px;
+  margin-right: 12px;
+  padding: 0 16px;
+  border: var(--exam-edge, 1px) solid var(--color-flag-risk);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-flag-risk);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+/* ---- the palette rail -------------------------------------------------- */
+
+.exam-palette {
+  position: sticky;
+  top: 24px;
+  width: 240px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+}
+
+.exam-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* DESIGN.md's `palette-square`: 36px, 4px radius, mono-sm number.
+   Every state carries a shape as well as a colour — the fill, the corner
+   notch, the ring, the lock glyph — because colour is never the only
+   carrier here. */
+.palette-square {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  line-height: var(--type-mono-sm-line-height);
+  cursor: pointer;
+}
+
+.palette-square.is-filled {
+  border-color: var(--color-state-answered);
+  background: var(--color-state-answered);
+  color: var(--color-cream);
+  font-size: var(--type-mono-sm-size);
+}
+
+.palette-square.has-notch {
+  border-color: var(--color-state-marked);
+  background: var(--color-state-marked);
+  color: var(--color-cream);
+  font-size: var(--type-mono-sm-size);
+}
+
+/* The corner notch — the carrier a greyscale reader sees. A triangle cut
+   out of the top-right corner, drawn in the page's own ground so it reads
+   as missing material rather than as a second colour. */
+.palette-square.has-notch::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--color-canvas);
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+  content: "";
+}
+
+/* The "you are here" square: the one place the voltage survives inside a
+   live attempt. The ring is the carrier, not the colour. */
+.palette-square.has-ring {
+  border-width: var(--exam-ring, 2px);
+  border-color: var(--color-voltage);
+  background: var(--color-canvas);
+  color: var(--color-voltage-deep);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.palette-square.has-lock {
+  border-color: var(--color-state-locked);
+  background: var(--color-state-locked);
+  color: var(--color-cream);
+  font-size: var(--type-mono-sm-size);
+  cursor: not-allowed;
+}
+
+/* The lock glyph. No screen reader reads a ::after, and the square's
+   accessible name already says "locked"; this is for the eye. */
+.palette-square.has-lock::after {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  width: 7px;
+  height: 5px;
+  border: 1px solid var(--color-cream);
+  border-radius: 1px;
+  content: "";
+}
+
+/* ---- the calculator ---------------------------------------------------- */
+
+.exam-calculator {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  width: 240px;
+  padding: 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-lg);
+  background: var(--color-cream);
+  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.exam-calc-display {
+  display: block;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-timer-numeric-size);
+  font-variant-numeric: var(--type-timer-numeric-font-variant-numeric);
+  text-align: right;
+}
+
+.exam-calc-keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.exam-calc-key,
+.exam-calc-close {
+  min-height: 44px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+  cursor: pointer;
+}
+
+.exam-calc-equals {
+  grid-row: span 2;
+}
+
+.exam-calc-close {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* DESIGN.md: focus rings are 2px, 3px in high contrast, and never removed.
+   A candidate driving this screen from the keyboard has to be able to see
+   where they are. */
+.exam-runner :focus-visible {
+  outline: var(--exam-ring, 2px) solid var(--color-voltage-deep);
+  outline-offset: 2px;
+}
+
+/* ---- The answer block (Task 7, #71) ------------------------------------
+
+   One tempo for the whole attempt (DESIGN.md, "Rhythm"): every type uses
+   the same 24px stack and the same option-row box, so moving between a
+   `single` and an `ordering` question does not read as a page reload.
+
+   Nothing here animates. Every state carries a second, non-colour
+   carrier: a filled control plus a 2px edge for a chosen option, a
+   dashed edge for a disabled one, a solid leading bar for a drop
+   target. */
+
+.exam-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0 0 24px;
+  padding: 0;
+  border: 0;
+}
+
+.exam-prompt {
+  margin: 0;
+}
+
+.exam-media {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+}
+
+.exam-passage {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-assertion-reason {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 16px;
+  border-inline-start: 3px solid var(--color-hairline-strong);
+}
+
+.exam-assertion-reason dt {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.exam-assertion-reason dd {
+  margin: 0;
+}
+
+.exam-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.exam-options-legend {
+  padding: 0 0 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* The live region behind the select_k counter and the remaining-character
+   count. Visible, not screen-reader-only: a sighted candidate under a
+   clock needs the same fact, and a greyed-out checkbox explains nothing
+   on its own. */
+.exam-answer-status {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+/* DESIGN.md's `option-row`, pinned against tokens.components by
+   component-dimensions.test.ts: white, 1px hairline-strong, 6px radius,
+   14px 16px padding, minimum height 48px, and THE ENTIRE ROW IS THE HIT
+   TARGET — which is why this is a label wrapping the control rather than
+   a control with a label beside it. */
+.exam-option-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 14px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  font-weight: var(--type-option-label-weight);
+  line-height: var(--type-option-label-line-height);
+  cursor: pointer;
+}
+
+/* DESIGN.md's `option-row-selected`: cream fill, 2px voltage border, PLUS
+   the filled control. Two carriers, so the choice survives a colour-blind
+   reading and a greyscale print. */
+.exam-option-row.is-selected {
+  border-width: 2px;
+  border-color: var(--color-voltage);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: var(--type-option-label-size);
+  font-weight: 500;
+}
+
+/* A locked option (select_k at its limit) and a read-only attempt. The
+   fill stays the page's own canvas in BOTH themes: the high-contrast
+   block swaps hairline to ink, and a lighter fill under an unchanged
+   label is exactly what inverted a pair in Task 6 (fix round 1, C1). The
+   dashed edge is the non-colour carrier a lighter fill never was. */
+.exam-option-row:has(input:disabled) {
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-option-label-size);
+  cursor: not-allowed;
+}
+
+.exam-option-text {
+  flex: 1;
+}
+
+.exam-matching {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exam-match-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-match-left {
+  flex: 1;
+  color: var(--color-ink);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  line-height: var(--type-option-label-line-height);
+}
+
+.exam-match-grid {
+  border-collapse: collapse;
+}
+
+.exam-match-caption {
+  padding-bottom: 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-align: start;
+  text-transform: uppercase;
+}
+
+.exam-match-grid th,
+.exam-match-grid td {
+  min-width: 48px;
+  height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-hairline-strong);
+  text-align: start;
+}
+
+/* The drop-position indicator for AC-07's drag half. A bar on the leading
+   edge rather than a fill: it has to read against every row state the
+   list can be in, and in greyscale. */
+.reorderable-list__item.is-drop-target {
+  border-inline-start: 4px solid var(--color-voltage);
+}
+
+.exam-select,
+.exam-text-input,
+.exam-text-area {
+  min-height: 48px;
+  padding: 12px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+}
+
+.exam-text-area {
+  width: 100%;
+  resize: vertical;
+}
+
+.exam-select:disabled,
+.exam-text-input:disabled,
+.exam-text-area:disabled {
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-body-md-size);
+  cursor: not-allowed;
+}
+
+.exam-field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.exam-numeric,
+.exam-written {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-numeric {
+  align-items: start;
+}
+
+.exam-unit {
+  color: var(--color-muted);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+}
+
+/* The blanks are interleaved into the rendered prompt, so the prompt's
+   own block elements have to lie down in the line: the paragraph
+   markdown-it wraps each block in would otherwise break every blank onto
+   a row of its own. The loose line-height is what keeps the fields from
+   colliding with the line above. */
+.exam-blanks {
+  color: var(--color-ink);
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  line-height: 2.2;
+}
+
+.exam-blanks p {
+  display: inline;
+  margin: 0;
+}
+
+.exam-blank-input {
+  min-width: 10ch;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 0;
+  border-bottom: 2px solid var(--color-hairline-strong);
+  border-radius: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+}
+
+.exam-blank-input:disabled {
+  border-bottom-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-body-md-size);
+  cursor: not-allowed;
+}
+
+/* Fix round 1, C1: a read-only ordering answer is the order the
+   candidate left, with no affordance at all — no draggable row, no move
+   buttons, nothing in the tab order that does nothing. */
+.exam-ordering-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-ordering-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 24px;
+}
+
+.exam-ordering-list li {
+  padding: 8px 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
 }

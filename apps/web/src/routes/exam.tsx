@@ -14,6 +14,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { LandingPayload, RunClient } from "../lib/run";
+import {
+  Runner,
+  readMarked,
+  writeMarked,
+  type AttemptPaper,
+  type CandidateQuestion,
+} from "../components/exam/Runner";
+import { AnswerInput } from "../components/exam/answer";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -116,7 +124,7 @@ function formatInstant(at: number, timezone: string): string {
   }
 }
 
-export function ExamLanding({ test }: { test: LandingPayload }) {
+export function ExamLanding({ test, onStart }: { test: LandingPayload; onStart?: () => void }) {
   const [report, setReport] = useState<ReturnType<typeof deviceReport> | null>(null);
   const notice = STATE_NOTICE[test.state];
 
@@ -209,6 +217,7 @@ export function ExamLanding({ test }: { test: LandingPayload }) {
             className="exam-start"
             aria-label={`Start ${test.name}`}
             disabled={test.state !== "open"}
+            onClick={onStart}
           >
             Start
           </button>
@@ -248,9 +257,72 @@ export function ExamLanding({ test }: { test: LandingPayload }) {
 type View =
   | { kind: "loading" }
   | { kind: "error"; message: string }
-  | { kind: "landing"; test: LandingPayload };
+  | { kind: "landing"; test: LandingPayload }
+  | { kind: "attempt"; paper: AttemptPaper };
 
-export function ExamApp({ client }: { client: RunClient }) {
+/**
+ * Task 5 widens `RunClient` in `lib/run.ts` with exactly these, answering
+ * with the `AttemptPaper` Task 5 defines there. Declared here, structurally
+ * and optional, so Task 6's shell is reachable from the app root — the
+ * pre-submit checklist's first item — before the API half of the phase
+ * lands. The merge deletes this interface and widens the prop to the real
+ * `RunClient`.
+ */
+export interface PaperClient {
+  start(): Promise<AttemptPaper>;
+}
+
+function AttemptView({ paper }: { paper: AttemptPaper }) {
+  const [index, setIndex] = useState(0);
+  const [responses, setResponses] = useState(paper.responses);
+  const [marked, setMarked] = useState<ReadonlySet<string>>(() => readMarked(paper.attemptId));
+
+  /** Task 7's answer block, for all twelve types. Task 8 owns the save
+   * queue; until it lands a response is a local fact only, which is why
+   * `setResponses` is the whole of `onChange` here. */
+  const questionSlot = (question: CandidateQuestion) => (
+    <AnswerInput
+      question={question}
+      value={responses[question.id] ?? null}
+      disabled={false}
+      onChange={(next) => {
+        setResponses((previous) => ({ ...previous, [question.id]: next }));
+      }}
+    />
+  );
+
+  const toggleMark = (questionId: string) => {
+    setMarked((previous) => {
+      const next = new Set(previous);
+      if (!next.delete(questionId)) next.add(questionId);
+      writeMarked(paper.attemptId, next);
+      return next;
+    });
+  };
+
+  return (
+    <Runner
+      paper={{ ...paper, responses }}
+      index={index}
+      onIndex={setIndex}
+      marked={marked}
+      onToggleMark={toggleMark}
+      // Task 8 owns the save queue; until it lands, clearing an answer is
+      // a local fact only, and saying so here is better than a button
+      // that visibly does nothing.
+      onClear={(questionId) => {
+        setResponses((previous) => ({ ...previous, [questionId]: null }));
+      }}
+      questionSlot={questionSlot}
+      // Task 9's clock and Task 8's banner. Empty rather than faked: a
+      // placeholder countdown is the one lie this screen must not tell.
+      clockSlot={<></>}
+      bannerSlot={<></>}
+    />
+  );
+}
+
+export function ExamApp({ client }: { client: RunClient & Partial<PaperClient> }) {
   const [view, setView] = useState<View>({ kind: "loading" });
 
   const boot = useCallback(async () => {
@@ -283,5 +355,25 @@ export function ExamApp({ client }: { client: RunClient }) {
       </main>
     );
   }
-  return <ExamLanding test={view.test} />;
+  if (view.kind === "attempt") {
+    return <AttemptView paper={view.paper} />;
+  }
+  return (
+    <ExamLanding
+      test={view.test}
+      onStart={() => {
+        void (async () => {
+          try {
+            const paper = await client.start?.();
+            if (paper) setView({ kind: "attempt", paper });
+          } catch (error) {
+            setView({
+              kind: "error",
+              message: error instanceof Error ? error.message : "This test could not be started.",
+            });
+          }
+        })();
+      }}
+    />
+  );
 }

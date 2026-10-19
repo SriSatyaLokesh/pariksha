@@ -14,13 +14,17 @@ import { renderMarkdown } from "../../render/markdown";
  * through a dynamic import, and one place doing the await is what stops each
  * call site inventing its own loading state.
  */
-export function RenderedHtml({
-  markdown,
-  className,
-}: {
-  markdown: string;
-  className?: string;
-}) {
+/**
+ * The awaiting half on its own.
+ *
+ * Phase 6 Task 7's `fill_blank` input needs the rendered HTML itself — it
+ * splits that HTML on an invisible marker and interleaves `<input>`s
+ * between the pieces — so it cannot use the component below. It must not
+ * grow a second copy of this effect either: the "a slow KaTeX fetch for an
+ * earlier value must not land on a later one" guard is exactly what a
+ * second copy gets wrong. One hook, two call sites.
+ */
+export function useRenderedMarkdown(markdown: string): string {
   const [html, setHtml] = useState("");
 
   useEffect(() => {
@@ -33,6 +37,18 @@ export function RenderedHtml({
       current = false;
     };
   }, [markdown]);
+
+  return html;
+}
+
+export function RenderedHtml({
+  markdown,
+  className,
+}: {
+  markdown: string;
+  className?: string;
+}) {
+  const html = useRenderedMarkdown(markdown);
 
   return (
     <div
