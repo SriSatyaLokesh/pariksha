@@ -14,7 +14,6 @@ import { render, screen, within, fireEvent, waitFor } from "@testing-library/rea
 import { axe } from "jest-axe";
 
 import type { ApiClient, Actor, TestSummary, TestVersionRow } from "../../src/lib/api";
-import { ApiError } from "../../src/lib/api";
 import { OrganiserApp } from "../../src/routes/organiser";
 
 const WORKSPACE = { id: "wsp_1", name: "Placement cell" };
@@ -92,6 +91,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     closeTest: async () => TEST_ROW,
     archiveTest: async () => TEST_ROW,
     versions: async () => [],
+    checklist: async () => [],
     checkUrl: async () => {
       throw new Error("not used");
     },
@@ -215,23 +215,25 @@ describe("UX-11: who may publish", () => {
     expect(await screen.findByText(/in review/i)).toBeVisible();
   });
 
-  it("an Admin's Publish calls the route and the refusal lists every blocking row", async () => {
-    const publishTest = vi.fn(async () => {
-      throw new ApiError(422, "checklist_blocked", "This test is not ready to publish.", {
-        rows: [
-          { id: "section_empty", severity: "blocking", message: 'section "Quantitative" has no questions', field: "section.source" },
-          { id: "timing_missing", severity: "blocking", message: "this test has no duration", field: "timing.duration_minutes" },
-        ],
-      });
-    });
-    await openBuilder(fakeClient({ me: async () => actorOf("admin"), publishTest }));
+  it("an Admin's Publish opens the checklist rather than publishing outright (UX-17)", async () => {
+    const publishTest = vi.fn(async () => TEST_ROW);
+    const checklist = vi.fn(async () => [
+      {
+        id: "section_empty",
+        severity: "blocking" as const,
+        message: 'section "Quantitative" has no questions',
+        field: "section.source",
+      },
+    ]);
+    await openBuilder(fakeClient({ me: async () => actorOf("admin"), publishTest, checklist }));
 
     fireEvent.click(screen.getByRole("button", { name: /^publish$/i }));
-    await waitFor(() => expect(publishTest).toHaveBeenCalledWith("wsp_1", "tst_1"));
+    await waitFor(() => expect(checklist).toHaveBeenCalledWith("wsp_1", "tst_1"));
 
-    const notice = await screen.findByRole("alert");
-    expect(within(notice).getByText('section "Quantitative" has no questions')).toBeVisible();
-    expect(within(notice).getByText("this test has no duration")).toBeVisible();
+    const dialog = await screen.findByRole("dialog", { name: /publish checklist/i });
+    expect(within(dialog).getByText('section "Quantitative" has no questions')).toBeVisible();
+    // Nothing published: the gate is a checklist, not a button.
+    expect(publishTest).not.toHaveBeenCalled();
   });
 });
 

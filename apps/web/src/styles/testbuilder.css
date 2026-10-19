@@ -537,3 +537,16 @@
   border-inline-start: 2px solid var(--color-hairline);
   color: var(--color-ink-soft);
 }
+
+/* Task 13 (#64, P5.11): the publish checklist. */
+.publish-checklist__rows {
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.publish-checklist__severity {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+}

@@ -18,7 +18,7 @@
 // the publish checklist is where emptiness becomes an error rather than a
 // nag").
 
-import { validateTest, type ImportIssue, type Question, type Test } from "@pariksha/core";
+import { describeAllowlists, validateTest, type ImportIssue, type Question, type Test } from "@pariksha/core";
 import type { StoredSection, TestDocumentBody, TestRow } from "@pariksha/db";
 
 export type ChecklistSeverity = "blocking" | "advisory";
@@ -46,6 +46,14 @@ export interface ChecklistInput {
    * row ids.
    */
   questions: readonly Question[];
+  /**
+   * Task 13 (#64, P5.11): the candidate list's two numbers, from
+   * `countCandidates` (`@pariksha/db`) — one query for both, never one per
+   * candidate. Advisory wherever they appear: the list is test-level data
+   * publish does not pin, and for `invite_only` uploading the roster after
+   * publishing is the ordinary order of work.
+   */
+  candidates: { total: number; withoutSet: number };
   now: number;
 }
 
@@ -79,7 +87,25 @@ const ISSUE_ROWS: Readonly<Record<string, readonly IssueRow[]>> = {
   "access.access_code": [{ id: "access_code_missing", severity: "blocking" }],
   "release.at": [{ id: "release_at_missing", severity: "blocking" }],
   sections: [{ id: "duplicate_ids", severity: "blocking", message: /used more than once/ }],
+
+  // Task 13's two advisory rows. `T-11` says the builder *warns* on both,
+  // while `docs/test-format.md` § "Rules checked on import" says "Import
+  // is stricter: it refuses the file for either, because an imported file
+  // is one an author can still edit" — which is exactly why these are the
+  // same `validateTest` issues wearing a different severity rather than a
+  // second set of rules: the numbers an organiser reads here and the
+  // numbers an import would refuse over are the same numbers.
+  "source.count": [{ id: "pool_short", severity: "advisory" }],
+  "source.sets": [{ id: "sets_unbalanced", severity: "advisory", message: /unequal total points/ }],
 };
+
+/** `scoring.set_points_tolerance` is schema-legal, type-safe and has **no
+ * UI control** — Task 4 shipped it as schema, type and `validateTest`
+ * only. So the row has to say in its own copy that the knob is in the file,
+ * or an organiser meets a permanently red advisory over a legitimate
+ * one-point drift with nothing on the screen to change. */
+const TOLERANCE_NOTE =
+  " — the tolerance is `scoring.set_points_tolerance` in the test file; the builder has no control for it";
 
 /** The row an issue becomes. The fallback is deliberate and deliberately
  * blocking; see `ISSUE_ROWS`. */
@@ -90,7 +116,7 @@ function mapIssue(issue: ImportIssue, sections: readonly StoredSection[]): Check
   return {
     id: match?.id ?? "invalid",
     severity: match?.severity ?? "blocking",
-    message: issue.message,
+    message: match?.id === "sets_unbalanced" ? issue.message + TOLERANCE_NOTE : issue.message,
     field: issue.field,
     ...(sectionId !== undefined && { sectionId }),
   };
@@ -220,10 +246,88 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
     for (const issue of result.issues) rows.push(mapIssue(issue, sections));
   }
 
+  rows.push(...advisoryRows(input));
   return rows;
 }
 
 /** The gate itself: publishing is refused when this is non-empty. */
 export function blockingRows(rows: readonly ChecklistRow[]): ChecklistRow[] {
   return rows.filter((row) => row.severity === "blocking");
+}
+
+/**
+ * Task 13 (#64, P5.11): the advisory rows `validateTest` has no opinion
+ * about — the registration form's uniqueness, the allowlists and the
+ * candidate list. Advisory because nothing here is pinned by publishing:
+ * an organiser uploads the roster after publishing, and a form with no
+ * unique field is a deliberate choice as often as an oversight.
+ */
+function advisoryRows(input: ChecklistInput): ChecklistRow[] {
+  const { settings, sections } = input.body;
+  const rows: ChecklistRow[] = [];
+
+  // UX-17: "the registration form has at least one unique field if repeat
+  // registration is to be blocked". Only when there is a form at all — a
+  // test with no registration form is not collecting anything to be unique.
+  const fields = settings.registration_form?.fields ?? [];
+  if (fields.length > 0 && !fields.some((field) => field.unique === true)) {
+    rows.push({
+      id: "no_unique_field",
+      severity: "advisory",
+      field: "registration_form.fields",
+      message: "no registration field is unique, so a candidate can register twice",
+    });
+  }
+
+  // An allowlist key that is present and empty. The panel leaves one
+  // behind when the last entry is deleted, it renders as a restriction
+  // section with nothing in it, and it restricts nobody — which is the
+  // opposite of what the organiser who typed the first entry meant.
+  const access = settings.access;
+  if (access !== undefined) {
+    const empty = [
+      ["email-domain", access.allow_email_domains],
+      ["network-range", access.allow_ip_ranges],
+    ].filter(([, list]) => Array.isArray(list) && list.length === 0);
+    if (empty.length > 0) {
+      rows.push({
+        id: "allowlist_empty",
+        severity: "advisory",
+        field: "access.allow_email_domains",
+        message: `${describeAllowlists(access)} The ${empty
+          .map(([kind]) => kind as string)
+          .join(" and ")} allowlist is set but empty, so it restricts nobody.`,
+      });
+    }
+  }
+
+  // Shown only when something actually depends on the list — otherwise it
+  // is a row about a feature this test does not use.
+  const needsList =
+    access?.mode === "invite_only" ||
+    sections.some((s) => s.source.kind === "sets" && s.source.assignment === "from_candidate_list");
+  if (needsList && input.candidates.total === 0) {
+    rows.push({
+      id: "candidate_list_empty",
+      severity: "advisory",
+      field: "access.candidate_list",
+      message: "the candidate list has no rows, so nobody can enter yet",
+    });
+  }
+
+  // #56's acceptance. Only meaningful where a section actually assigns from
+  // the list — a candidate with no set cannot start *that* test.
+  const assignsFromList = sections.some(
+    (s) => s.source.kind === "sets" && s.source.assignment === "from_candidate_list",
+  );
+  if (assignsFromList && input.candidates.withoutSet > 0) {
+    rows.push({
+      id: "candidate_no_set",
+      severity: "advisory",
+      field: "access.candidate_list",
+      message: `${input.candidates.withoutSet} of ${input.candidates.total} candidates have no set, and cannot start`,
+    });
+  }
+
+  return rows;
 }

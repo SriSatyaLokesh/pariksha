@@ -22,6 +22,7 @@ import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
+import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
 import { useDialogKeys } from "../components/testbuilder/useDialogKeys";
 
@@ -86,7 +87,11 @@ export function TestBuilder({
   const [test, setTest] = useState<TestSummary | null>(null);
   const [versions, setVersions] = useState<readonly TestVersionSummary[]>([]);
   const [confirming, setConfirming] = useState<"close" | "archive" | null>(null);
-  const [blocked, setBlocked] = useState<readonly ChecklistRow[]>([]);
+  // Task 13 (#64, P5.11): `null` is "the checklist is not open". Publish
+  // opens it rather than publishing (UX-17: "a publish checklist, not a
+  // publish button"), and confirming inside it is what calls the route.
+  const [checklist, setChecklist] = useState<readonly ChecklistRow[] | null>(null);
+  const [rerunning, setRerunning] = useState(false);
   const [publishing, setPublishing] = useState(false);
   // UX-18 (Task 7): a test with a published version behind it is the case
   // where a timing change has to say what happens to attempts already
@@ -277,19 +282,36 @@ export function TestBuilder({
     setPending((prev) => ({ ...prev, settings: { ...prev?.settings, ...settings } }));
   }
 
+  /** Opens the checklist (and re-runs it from inside). The rows are the
+   * server's — this screen never computes one. */
+  async function runChecklist(): Promise<void> {
+    setRerunning(true);
+    try {
+      setChecklist(await client.checklist(workspaceId, testId));
+      setError(undefined);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "The checklist could not be read.");
+    } finally {
+      setRerunning(false);
+    }
+  }
+
   async function onPublish(): Promise<void> {
     setPublishing(true);
-    setBlocked([]);
     try {
       setTest(await client.publishTest(workspaceId, testId));
+      setChecklist(null);
       setError(undefined);
       // The publish opened the next numbered draft server-side (UX-18), so
       // the whole screen is re-read rather than patched up field by field:
       // the draft row, its version number and the history all moved at once.
       await load();
     } catch (cause) {
+      // A 422 means the gate disagreed with the list this screen was
+      // showing — something changed between opening it and confirming. The
+      // honest answer is to show what the gate just said, not to argue.
       const rows = cause instanceof ApiError ? (cause.details as { rows?: ChecklistRow[] } | undefined)?.rows : undefined;
-      if (rows !== undefined) setBlocked(rows);
+      if (rows !== undefined) setChecklist(rows);
       else setError(cause instanceof ApiError ? cause.message : "The test could not be published.");
     } finally {
       setPublishing(false);
@@ -352,7 +374,7 @@ export function TestBuilder({
               aria-disabled={!canPublish || publishing || draft === null}
               aria-describedby={canPublish ? undefined : "publish-why"}
               onClick={() => {
-                if (canPublish && !publishing) void onPublish();
+                if (canPublish && !publishing) void runChecklist();
               }}
             >
               Publish
@@ -393,15 +415,19 @@ export function TestBuilder({
           </p>
         )}
 
-        {blocked.length > 0 && (
-          <div className="organiser__notice" role="alert">
-            <p>This test is not ready to publish.</p>
-            <ul>
-              {blocked.map((row) => (
-                <li key={`${row.id}:${row.sectionId ?? row.field}:${row.message}`}>{row.message}</li>
-              ))}
-            </ul>
-          </div>
+        {checklist !== null && draft !== null && (
+          <PublishChecklist
+            rows={checklist}
+            version={draft.version}
+            rerunning={rerunning}
+            busy={publishing}
+            onGoTo={(row) => {
+              if (row.sectionId !== undefined) openSection(row.sectionId);
+            }}
+            onRerun={() => void runChecklist()}
+            onConfirm={() => void onPublish()}
+            onClose={() => setChecklist(null)}
+          />
         )}
 
         {confirming !== null && (

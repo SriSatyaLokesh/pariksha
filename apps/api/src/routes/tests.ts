@@ -23,6 +23,7 @@ import {
   headVersionsByTest,
   listCandidates,
   replaceCandidateList,
+  countCandidates,
   existingRowIds,
   getDraftVersion,
   getTest,
@@ -765,13 +766,33 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     now: number,
   ): Promise<ChecklistRow[]> {
     const questions = await workspaceQuestions(deps.db, workspaceId);
+    // One statement for both candidate numbers, never one per candidate —
+    // `countCandidates` is a single aggregate (Task 9).
+    const candidates = await countCandidates(deps.db, workspaceId, test.id);
     return buildChecklist({
       test,
       body,
       now,
+      candidates,
       questions: questions.map((q) => ({ ...q.document, id: q.id })),
     });
   }
+
+  // Task 13 (#64, P5.11): the same rows `POST .../publish` enforces,
+  // rendered rather than enforced — `tests.edit`, because an Author who
+  // cannot publish is exactly the person who has to see what is still
+  // wrong (UX-11). Review Focus 4 in one line: one function, two callers.
+  routes.get("/:id/tests/:testId/checklist", requires("tests.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+
+    const test = await getTest(deps.db, workspaceId, testId);
+    if (!test) throw new ApiError(404, "not_found", "No such resource.");
+    const draft = await getDraftVersion(deps.db, workspaceId, testId);
+    if (!draft) throw new ApiError(404, "not_found", "No such resource.");
+
+    return c.json({ rows: await checklistFor(workspaceId, test, draft.body, deps.now()) });
+  });
 
   routes.post("/:id/tests/:testId/publish", requires("tests.publish"), async (c) => {
     const actor = actorOr401(c);

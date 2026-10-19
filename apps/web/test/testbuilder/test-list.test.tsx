@@ -98,6 +98,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used by this test file");
     },
     versions: async () => [],
+    checklist: async () => [],
     checkUrl: async () => {
       throw new Error("not used");
     },

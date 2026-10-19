@@ -227,18 +227,21 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // follows. The two paths differ, so they carry two lines.
   "/api/v1/workspaces/:id/tests/:testId/candidates": 3,
   "/api/v1/workspaces/:id/tests/:testId/candidates/import": 5,
-  // Task 11 (#62, P5.9): the lifecycle. Measured
+  // Task 11 (#62, P5.9) and Task 13 (#64, P5.11): the lifecycle. Measured
   // (`apps/api/test/lifecycle.test.ts`'s own "measures the real subrequest
-  // cost" test), not estimated. Publish costs 8: auth (2) + `getTest` (1)
+  // cost" test), not estimated. Publish costs 9: auth (2) + `getTest` (1)
   // + `getDraftVersion` (1, the body the checklist judges and the route's
-  // 409) + `workspaceQuestions` (1, every question the sections can draw,
-  // one statement for the whole workspace) + `publishDraftVersion`'s own
-  // `getDraftVersion` (1) and its single `db.batch` (1) + `appendAudit`
-  // (1). A refused publish costs 5 — it stops at the checklist — and the
-  // higher of the two is what is pinned, the same rule every number above
-  // follows. The response is built from what was just written rather than
-  // re-read, which is what keeps it off a ninth.
-  "/api/v1/workspaces/:id/tests/:testId/publish": 8,
+  // 409) + the checklist's own two reads, `workspaceQuestions` (1, every
+  // question the sections can draw, one statement for the whole workspace)
+  // and `countCandidates` (1, one aggregate for both candidate rows) +
+  // `publishDraftVersion`'s own `getDraftVersion` (1) and its single
+  // `db.batch` (1) + `appendAudit` (1). A refused publish costs 6 — it
+  // stops at the checklist — and the higher of the two is what is pinned,
+  // the same rule every number above follows. The plan estimated 8,
+  // against a gate that had no candidate rows in it yet; the measurement
+  // wins. The response is built from what was just written rather than
+  // re-read, which is what keeps it off a tenth.
+  "/api/v1/workspaces/:id/tests/:testId/publish": 9,
   // Close and archive are the same handler twice: auth (2) + `getTest` (1,
   // the 404 *and* the legal-transition check) + `setTestStatus` (1) +
   // `appendAudit` (1) + `headVersionsByTest` (1, so the response carries
@@ -253,6 +256,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // the same call `GET .../draft` and `GET .../candidates` both decline to
   // make. The plan estimated 4.
   "/api/v1/workspaces/:id/tests/:testId/versions": 3,
+  // Task 13 (#64, P5.11): the checklist, rendered. Auth (2) + `getTest`
+  // (1) + `getDraftVersion` (1) + `workspaceQuestions` (1) +
+  // `countCandidates` (1, one aggregate for both candidate rows — never
+  // one query per candidate) = 6, and flat in section, question and
+  // candidate count alike. The same five reads publish makes before it
+  // decides, which is the point: one function, two callers.
+  "/api/v1/workspaces/:id/tests/:testId/checklist": 6,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -323,8 +333,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/:testId/publish": "tests.publish",
   "POST /api/v1/workspaces/:id/tests/:testId/close": "tests.publish",
   "POST /api/v1/workspaces/:id/tests/:testId/archive": "tests.publish",
-  // Reading the version history is not publishing it (UX-18).
+  // Reading the version history is not publishing it (UX-18), and nor is
+  // reading the checklist — an Author who cannot publish is exactly who
+  // needs to see what is still wrong (UX-11).
   "GET /api/v1/workspaces/:id/tests/:testId/versions": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/checklist": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this

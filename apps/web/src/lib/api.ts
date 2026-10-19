@@ -368,6 +368,9 @@ export interface ApiClient {
   closeTest(workspaceId: string, testId: string): Promise<TestSummary>;
   archiveTest(workspaceId: string, testId: string): Promise<TestSummary>;
   versions(workspaceId: string, testId: string): Promise<TestVersionSummary[]>;
+  /** Task 13 (#64, P5.11): the same rows `publishTest` enforces, read
+   * rather than enforced — one function, two callers (Review Focus 4). */
+  checklist(workspaceId: string, testId: string): Promise<ChecklistRow[]>;
 
   // Task 6 (#58, P5.5). `workspaceId` first, like every sibling above — the
   // plan's own sketch wrote `checkUrl(testId, url)`, which cannot reach the
@@ -692,6 +695,8 @@ export function createApiClient(): ApiClient {
       json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/archive`, post({})),
     versions: async (workspaceId, testId) =>
       (await json<{ versions: TestVersionSummary[] }>(`/workspaces/${workspaceId}/tests/${testId}/versions`)).versions,
+    checklist: async (workspaceId, testId) =>
+      (await json<{ rows: ChecklistRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/checklist`)).rows,
 
     draft: (workspaceId, testId) => json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
 
