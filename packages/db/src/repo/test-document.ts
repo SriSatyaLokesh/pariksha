@@ -19,7 +19,7 @@
 // replaces both with this workspace's row IDs, and these two functions are
 // the only place that translation happens in either direction.
 
-import type { QuestionSource, Section, Test } from "@pariksha/core";
+import type { QuestionSource, Section, Test, TestTiming } from "@pariksha/core";
 import type { TestRow } from "./tests.js";
 
 /**
@@ -124,4 +124,49 @@ export function toTestDocument(test: TestRow, body: TestDocumentBody, refs: IdRe
     ...body.settings,
     sections: body.sections.map((section) => mapSection(section, refs.refByQuestionId, refs.fileByBankId)),
   };
+}
+
+// --- Task 11 (#62, P5.9): the derived lifecycle state -------------------
+
+/**
+ * The five states `docs/design.md` and the PRD talk about. `test.status`
+ * stores only the four a human causes (`draft`, `published`, `closed`,
+ * `archived`, `TestStatus` in tests.ts); **Scheduled** and **Open** are the
+ * same stored `published` seen against the clock, which is why they are
+ * derived here rather than written to the column (Review Focus 2: a stored
+ * `open` is wrong from the moment it is written until something flips it,
+ * and nothing flips it before Phase 11's scheduler).
+ */
+export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
+
+/** An RFC 3339 timestamp as epoch milliseconds, or `null` when it is absent
+ * or unparseable. An unparseable one is already its own blocking checklist
+ * row (`timingIssues`, `@pariksha/core`); here it simply does not move the
+ * state, which is the same answer as "no window was set". */
+function instant(raw: string | undefined): number | null {
+  if (raw === undefined) return null;
+  const parsed = Date.parse(raw);
+  return Number.isNaN(parsed) ? null : parsed;
+}
+
+/**
+ * Pure, and takes `now` rather than reading a clock, so the API hands it
+ * `deps.now()` and a test hands it whatever instant it is asserting about.
+ *
+ * A closed window wins over an unopened one: a test whose whole window is
+ * in the past reads **Closed**, not Scheduled. No window at all means
+ * **Open** from the moment it is published — the document's `timing` block
+ * makes both ends optional and that is what an absent one means.
+ */
+export function deriveState(
+  status: "draft" | "published" | "closed" | "archived",
+  timing: TestTiming | undefined,
+  now: number,
+): TestState {
+  if (status !== "published") return status;
+  const closes = instant(timing?.closes_at);
+  if (closes !== null && closes <= now) return "closed";
+  const opens = instant(timing?.opens_at);
+  if (opens !== null && opens > now) return "scheduled";
+  return "open";
 }

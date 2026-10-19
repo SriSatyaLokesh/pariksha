@@ -31,13 +31,10 @@ describe("every row is addressed by an ID that names its own table", () => {
     const testId = (await repo.createTest(db, WORKSPACE, { slug: "s", name: "N" })).id;
     expect(testId.startsWith("tst_")).toBe(true);
 
-    const versionId = await repo.publishTestVersion(db, WORKSPACE, {
-      testId,
-      version: 2,
-      settings: {},
-      sections: [],
-    });
-    expect(versionId.startsWith("ver_")).toBe(true);
+    await repo.publishDraftVersion(db, WORKSPACE, testId, Date.now());
+    const published = await repo.getPublishedVersion(db, WORKSPACE, testId);
+    expect(published?.version).toBe(1);
+    expect(published?.id.startsWith("ver_")).toBe(true);
   });
 
   it("gives a membership an mbr_ ID", async () => {

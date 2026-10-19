@@ -4,12 +4,12 @@
 // `source` and of `settings.scoring`, written through Task 3's single
 // `PATCH …/tests/:testId/draft`. So every case here drives the real path —
 // the draft is built through that route, published through
-// `publishTestVersion`, read back through `getTestVersion`, and the
+// `publishDraftVersion`, read back through `getPublishedVersion`, and the
 // sections that come out are handed to `assignSet` / `layoutForAttempt`
 // unmodified. Nothing is composed beside the production call site; the only
 // thing missing versus Phase 6 is the attempt row, which does not exist
 // yet (plan, Global Constraints: "the test reads the published version back
-// through `getTestVersion` and hands it to `layoutForAttempt` / `assignSet`
+// through `getPublishedVersion` and hands it to `layoutForAttempt` / `assignSet`
 // — the real composition, missing only the attempt row").
 
 import { afterAll, beforeAll, expect, it } from "vitest";
@@ -20,7 +20,7 @@ import {
   type Section,
   type SetAssignment,
 } from "@pariksha/core";
-import { closeClient, createUser, getTestVersion, listQuestions, publishTestVersion } from "@pariksha/db";
+import { closeClient, createUser, getPublishedVersion, listQuestions, publishDraftVersion } from "@pariksha/db";
 import { createApp } from "../src/app.js";
 import { issueSession } from "../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
@@ -58,7 +58,7 @@ let bankId = "";
 /** `refId` (the bank file's own id, e.g. `SQL-00`) → the `qst_` row id the
  * stored section actually names. */
 const rowId = new Map<string, string>();
-/** The published sections, straight out of `getTestVersion`. */
+/** The published sections, straight out of `getPublishedVersion`. */
 let sections: Section[] = [];
 /** Every question in the workspace as the engine will see it: the stored
  * document with its row id, which is what a section's source names. */
@@ -184,23 +184,15 @@ beforeAll(async () => {
   expect(saved.status, await saved.clone().text()).toBe(200);
   const savedBody = await saved.json();
 
-  // Task 11 owns the lifecycle route; the repository function it will call
-  // already exists, so this is the published version the engine will read.
-  // Version 2, not 1: `publishTestVersion` INSERTs its own row and
-  // `(test_id, version)` is unique, while `createTest`'s seeded draft
-  // already holds version 1. Stamping the draft in place and starting the
-  // next number is Task 11's own transition, not something to anticipate
-  // here.
-  const versionId = await publishTestVersion(deps.db, workspaceId, {
-    testId,
-    version: 2,
-    settings: savedBody.body.settings,
-    sections: savedBody.body.sections,
-    now: FIXED_NOW,
-  });
-  const version = await getTestVersion(deps.db, workspaceId, versionId);
+  // The draft the PATCH above just saved is stamped in place and becomes
+  // version 1 — the published version the engine reads (Task 11's
+  // `publishDraftVersion`, which replaced Task 2's INSERT-alongside).
+  expect(savedBody.version).toBe(1);
+  await publishDraftVersion(deps.db, workspaceId, testId, FIXED_NOW);
+  const version = await getPublishedVersion(deps.db, workspaceId, testId);
   if (!version) throw new Error("the version just published could not be read back");
-  sections = version.sections as Section[];
+  expect(version.version).toBe(1);
+  sections = version.body.sections as Section[];
 
   const { rows } = await listQuestions(deps.db, workspaceId, bankId, { limit: 200 });
   // The engine reads row ids, because that is what a stored section names.
@@ -225,7 +217,7 @@ function assignmentOf(id: string): SetAssignment {
   // Task 4 review (MAJ-1): read the strategy off the published version rather
   // than restating it. `assignment` is the one field #56 exists for, and
   // hardcoding it here would let a mapper drop it on the PATCH -> publish ->
-  // getTestVersion path while every test in this file still passed and every
+  // getPublishedVersion path while every test in this file still passed and every
   // published test silently fell back to the schema default.
   if (source.assignment === undefined) throw new Error(`section ${id} published no assignment`);
   return source.assignment;

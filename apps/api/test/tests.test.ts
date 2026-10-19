@@ -2,7 +2,7 @@
 // routes.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { addMembership, closeClient, createUser, publishTestVersion, type DbClient } from "@pariksha/db";
+import { addMembership, closeClient, createUser, publishDraftVersion, type DbClient } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps, mountedRoutes } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -169,13 +169,7 @@ it("PATCH locks the slug once the test is published", async () => {
   );
   const testId = (await created.json()).id;
 
-  await publishTestVersion(deps.db, workspaceId, {
-    testId,
-    version: 2,
-    settings: {},
-    sections: [],
-    now: FIXED_NOW,
-  });
+  await publishDraftVersion(deps.db, workspaceId, testId, FIXED_NOW);
 
   const res = await app.request(
     `/api/v1/workspaces/${workspaceId}/tests/${testId}`,

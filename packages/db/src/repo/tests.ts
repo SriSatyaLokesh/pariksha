@@ -56,10 +56,11 @@ const toTestRow = (db: DbClient, row: TestRecord): TestRow => ({
   name: row.name,
   description: row.description,
   shortCode: row.short_code,
-  // Cast: the column is a plain text status. Only "draft" ever reaches it
-  // today — `publishTestVersion` below is the one writer of "published",
-  // "closed" and "archived" are Task 11's (lifecycle transitions this task
-  // does not build).
+  // Cast: the column is a plain text status. The three writers are
+  // `createTest` ("draft"), `publishDraftVersion` ("published") and
+  // `setTestStatus` ("closed"/"archived"); nothing else writes it, and
+  // "open"/"scheduled" never reach it at all — those two are derived from
+  // the window at read time (`deriveState`, repo/test-document.ts).
   status: row.status as TestStatus,
   currentVersion: row.current_version === null ? null : Number(row.current_version),
   reviewRequested: Boolean(row.review_requested),
@@ -273,56 +274,6 @@ export const draftVersionsByTest = scoped(
   },
 );
 
-export const publishTestVersion = scoped(
-  "publishTestVersion",
-  async (
-    db: DbClient,
-    workspaceId: string,
-    input: {
-      testId: string;
-      version: number;
-      settings: unknown;
-      sections: unknown;
-      now?: number;
-    },
-  ): Promise<string> => {
-    const id = newId("ver");
-    const publishedAt = input.now ?? Date.now();
-
-    await db.run(
-      "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, " +
-        "published_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        id,
-        workspaceId,
-        input.testId,
-        input.version,
-        db.jsonParam(input.settings),
-        db.jsonParam(input.sections),
-        publishedAt,
-        publishedAt,
-      ],
-    );
-    // T-04: publishing freezes a numbered version and points the test at it.
-    // Attempts already running keep the version they started on, because an
-    // attempt stores its own test_version_id.
-    //
-    // Review Focus 2 (partial fix — the rest is Task 11's): the status this
-    // writes is "published", one of Task 2's own `TestStatus` values, not
-    // the "open" an earlier version of this function wrote — "open" is not
-    // a legal raw status under that type at all, it is a *derived* state
-    // (Architecture: Draft -> Scheduled -> Open -> Closed -> Archived) that
-    // depends on `timing.opens_at`, a setting this task's data model does
-    // not carry yet. Reporting "Scheduled" instead of "Open" before
-    // `opens_at` is Task 11's `deriveState()`, once `timing` exists to read.
-    await db.run(
-      "UPDATE test SET current_version = ?, status = ? WHERE workspace_id = ? AND id = ?",
-      [input.version, "published", workspaceId, input.testId],
-    );
-    return id;
-  },
-);
-
 export const getTestVersion = scoped(
   "getTestVersion",
   async (
@@ -469,5 +420,150 @@ export const putDraftVersion = scoped(
     // second read proving what the `UPDATE` just wrote — `updateTest`'s own
     // precedent, above.
     return { ...existing, body };
+  },
+);
+
+// --- Task 11 (#62, P5.9): the lifecycle ---------------------------------
+
+export interface TestVersionSummary {
+  version: number;
+  publishedAt: number | null;
+  attemptCount: number;
+}
+
+/**
+ * Every version of `testId`, newest first, with how many attempts are
+ * pinned to each (`UX-18`'s "Attempts in progress stay on version 1" is
+ * this number). The count is a correlated subquery, not a query per
+ * version — the same shape `QUESTION_SELECT`'s own `used_in_tests` keeps
+ * (packages/db/src/repo/banks.ts) — so a test with twenty versions still
+ * costs one statement.
+ *
+ * The open draft is included, with `publishedAt: null`: the version
+ * history is what the builder shows beside the banner, and "Version 3
+ * (draft), not published yet" is a row an organiser needs to see rather
+ * than one to hide.
+ */
+export const listVersions = scoped(
+  "listVersions",
+  async (db: DbClient, workspaceId: string, testId: string): Promise<TestVersionSummary[]> => {
+    const rows = await db.query<{ version: number; published_at: number | null; attempt_count: number }>(
+      "SELECT tv.version, tv.published_at, " +
+        "(SELECT COUNT(*) FROM attempt a WHERE a.workspace_id = tv.workspace_id AND a.test_version_id = tv.id) " +
+        "AS attempt_count " +
+        "FROM test_version tv WHERE tv.workspace_id = ? AND tv.test_id = ? ORDER BY tv.version DESC",
+      [workspaceId, testId],
+    );
+    return rows.map((row) => ({
+      version: Number(row.version),
+      publishedAt: row.published_at === null ? null : Number(row.published_at),
+      attemptCount: Number(row.attempt_count),
+    }));
+  },
+);
+
+/** One frozen version by number, or the latest published one when no
+ * number is given — the sibling of `getDraftVersion`, and what `?version=`
+ * (Task 12's export) and the banner's "view version 1" link both read. */
+export const getPublishedVersion = scoped(
+  "getPublishedVersion",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    testId: string,
+    version?: number,
+  ): Promise<TestVersionRow | null> => {
+    const clauses = ["workspace_id = ?", "test_id = ?", "published_at IS NOT NULL"];
+    const params: unknown[] = [workspaceId, testId];
+    if (version !== undefined) {
+      clauses.push("version = ?");
+      params.push(version);
+    }
+    const rows = await db.query<TestVersionRecord>(
+      `SELECT ${TEST_VERSION_COLUMNS} FROM test_version WHERE ${clauses.join(" AND ")} ORDER BY version DESC`,
+      params,
+    );
+    const row = rows[0];
+    return row ? toTestVersionRow(db, row) : null;
+  },
+);
+
+/**
+ * T-04. Replaces Task 2's `publishTestVersion`, which INSERTed a *new*
+ * row at a version number the caller chose — and `(test_id, version)` is
+ * unique while `createTest` has already seeded the draft as version 1, so
+ * the first publish of any test raised a constraint error and every
+ * fixture that worked around it numbered the product's first published
+ * version 2.
+ *
+ * The real transition, in one `db.batch` so a half-published test cannot
+ * exist:
+ *
+ * 1. stamp `published_at` on the draft head — the row the organiser has
+ *    been editing *becomes* the frozen version, it is not copied;
+ * 2. open version N+1 as the next draft, carrying the same body, so the
+ *    builder has something to edit the moment publishing finishes and
+ *    `UX-18`'s banner ("Version 2 (draft). Attempts in progress stay on
+ *    version 1.") has its number;
+ * 3. point `test.current_version` at the version just frozen and set
+ *    `status = 'published'` — never `'open'` (Review Focus 2): whether a
+ *    published test is Scheduled, Open or Closed is `deriveState`'s answer
+ *    against `timing` and the clock, not a column.
+ */
+export const publishDraftVersion = scoped(
+  "publishDraftVersion",
+  async (db: DbClient, workspaceId: string, testId: string, now: number): Promise<{ version: number }> => {
+    const draft = await getDraftVersion(db, workspaceId, testId);
+    if (!draft) {
+      throw new Error("publishDraftVersion: this test has no open draft to publish.");
+    }
+
+    await db.batch([
+      {
+        sql: "UPDATE test_version SET published_at = ? WHERE workspace_id = ? AND id = ? AND published_at IS NULL",
+        params: [now, workspaceId, draft.id],
+      },
+      {
+        sql:
+          "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, " +
+          "published_at, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
+        params: [
+          newId("ver"),
+          workspaceId,
+          testId,
+          draft.version + 1,
+          db.jsonParam(draft.body.settings),
+          db.jsonParam(draft.body.sections),
+          now,
+        ],
+      },
+      {
+        sql: "UPDATE test SET current_version = ?, status = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
+        params: [draft.version, "published", now, workspaceId, testId],
+      },
+    ]);
+
+    return { version: draft.version };
+  },
+);
+
+/** The Close and Archive transitions. `false` when no such test exists in
+ * this workspace — the caller's 404. Which transitions are legal is the
+ * route's rule (Archived follows Closed), not this function's: this is the
+ * one write, nothing more. */
+export const setTestStatus = scoped(
+  "setTestStatus",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    testId: string,
+    status: TestStatus,
+    now: number,
+  ): Promise<boolean> => {
+    const { changes } = await db.run(
+      "UPDATE test SET status = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
+      [status, now, workspaceId, testId],
+    );
+    return changes > 0;
   },
 );

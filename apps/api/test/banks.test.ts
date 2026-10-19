@@ -1,7 +1,15 @@
 // Bank and question CRUD, over the real routes.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { addMembership, closeClient, createTest, createUser, publishTestVersion } from "@pariksha/db";
+import {
+  addMembership,
+  closeClient,
+  createTest,
+  createUser,
+  getDraftVersion,
+  publishDraftVersion,
+  putDraftVersion,
+} from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps, mountedRoutes, SUBREQUEST_LIMIT } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -175,13 +183,17 @@ it("UX-05: refuses to delete a question a published test holds, with a 409 namin
   const questionId = (await created.json()).id;
 
   const testId = (await createTest(deps.db, workspaceId, { slug: "midterm", name: "Midterm" })).id;
-  await publishTestVersion(deps.db, workspaceId, {
-    testId,
-    version: 2,
-    settings: {},
-    sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
-    now: FIXED_NOW,
-  });
+  // The real transition (Task 11): the draft head is written, then stamped
+  // in place and numbered 1 — never an INSERT alongside it at version 2.
+  const head = await getDraftVersion(deps.db, workspaceId, testId);
+  await putDraftVersion(
+    deps.db,
+    workspaceId,
+    head!,
+    { settings: {}, sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }] },
+    FIXED_NOW,
+  );
+  await publishDraftVersion(deps.db, workspaceId, testId, FIXED_NOW);
 
   const refused = await app.request(
     `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,

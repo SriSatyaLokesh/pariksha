@@ -7,6 +7,7 @@ import { migrate } from "../../src/migrate.js";
 import { newId } from "../../src/ids.js";
 import * as repo from "../../src/repo/index.js";
 import { resolveShortCode } from "../../src/repo/shortlink.js";
+import { deriveState } from "../../src/repo/test-document.js";
 
 const T = 1_700_000_000_000;
 
@@ -31,6 +32,24 @@ beforeAll(async () => {
 });
 
 afterAll(() => closeClient(db));
+
+/** Task 11's real transition, as a fixture: write the draft head, then
+ * stamp it in place. `publishTestVersion`'s "INSERT a row at version 2"
+ * is gone — `createTest` already seeded version 1 and `(test_id, version)`
+ * is unique, so that INSERT could only ever work by mis-numbering the
+ * first published version of every test in the product. */
+async function publishWith(
+  ws: string,
+  testId: string,
+  sections: unknown[] = [],
+  settings: Record<string, unknown> = {},
+  now = T,
+): Promise<{ version: number }> {
+  const head = await repo.getDraftVersion(db, ws, testId);
+  if (!head) throw new Error("publishWith: no draft head");
+  await repo.putDraftVersion(db, ws, head, { settings, sections } as never, now);
+  return repo.publishDraftVersion(db, ws, testId, now);
+}
 
 /** Writes straight into the draft row `createTest` already minted, naming
  * `questionId` in a `fixed` section — the fixture shape Task 3's
@@ -104,29 +123,22 @@ describe("createTest", () => {
   });
 });
 
-describe("publishTestVersion", () => {
-  // Review Focus 2 (partial — the timing-aware half is Task 11's):
-  // `publishTestVersion` used to write `status = "open"` unconditionally, a
-  // value that is not even in this task's own `TestStatus` union. It writes
-  // "published" now; reporting "Scheduled" ahead of `timing.opens_at` is
-  // Task 11's `deriveState()`, once a `timing` setting exists to read.
+describe("publishDraftVersion", () => {
+  // Review Focus 2: `publishTestVersion` used to write `status = "open"`
+  // unconditionally, a value that is not even in `TestStatus`. Publishing
+  // writes "published"; Scheduled and Open are `deriveState`'s answer
+  // against `timing` and the clock.
   it("sets the test's status to 'published', not the old unconditional 'open'", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "w12", name: "W12" });
     const created = await repo.createTest(db, ws, { name: "A", slug: "a12" });
 
-    await repo.publishTestVersion(db, ws, {
-      testId: created.id,
-      version: 2,
-      settings: {},
-      sections: [],
-      now: T,
-    });
+    await publishWith(ws, created.id);
 
     const row = await repo.getTest(db, ws, created.id);
     expect(row?.status).toBe("published");
     expect(row?.status).not.toBe("open");
-    expect(row?.currentVersion).toBe(2);
+    expect(row?.currentVersion).toBe(1);
   });
 });
 
@@ -140,15 +152,9 @@ describe("updateTest", () => {
       slug: "renamed",
     });
 
-    // Version 1 is the draft `createTest` already wrote; publishing a fresh
-    // version (2) is what sets `current_version` and locks the slug.
-    await repo.publishTestVersion(db, ws, {
-      testId: created.id,
-      version: 2,
-      settings: {},
-      sections: [],
-      now: T,
-    });
+    // Publishing stamps the version-1 draft `createTest` already wrote,
+    // which is what sets `current_version` and locks the slug.
+    await publishWith(ws, created.id);
 
     await expect(
       repo.updateTest(db, ws, created.id, { slug: "again" }, T),
@@ -206,13 +212,9 @@ describe("Review Focus 1: draft references do not block a delete", () => {
     const bank = await repo.createBank(db, ws, { name: "Bank" });
     const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
     const test = await repo.createTest(db, ws, { name: "Midterm", slug: "midterm10" });
-    await repo.publishTestVersion(db, ws, {
-      testId: test.id,
-      version: 2,
-      settings: {},
-      sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
-      now: T,
-    });
+    await publishWith(ws, test.id, [
+      { id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } },
+    ]);
 
     expect(await repo.deleteQuestion(db, ws, bank, questionId)).toEqual({
       deleted: false,
@@ -282,7 +284,7 @@ describe("getDraftVersion / putDraftVersion", () => {
     await repo.createWorkspace(db, ws, { slug: "w15", name: "W15" });
     const created = await repo.createTest(db, ws, { name: "A", slug: "a15" });
     const existing = await repo.getDraftVersion(db, ws, created.id);
-    await repo.publishTestVersion(db, ws, { testId: created.id, version: 2, settings: {}, sections: [], now: T });
+    await publishWith(ws, created.id);
     // Clearing the draft row itself is Task 11's lifecycle feature, not this
     // one — stood in for here with a raw delete, the same way Task 2's own
     // `draftNaming` helper (top of this file) stands in for Task 3's own
@@ -342,5 +344,134 @@ describe("existingRowIds / workspaceQuestionSummaries", () => {
       tags: ["demo"],
       type: "single",
     });
+  });
+});
+
+// --- Task 11 (#62, P5.9): the lifecycle ---------------------------------
+
+describe("publishDraftVersion", () => {
+  it("T-04: publishing freezes the draft head as version 1 and points current_version at it", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w20", name: "W20" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a20" });
+
+    // The whole bug this function exists to fix: the first publish of a
+    // brand-new test used to raise `UNIQUE constraint failed:
+    // test_version.test_id, test_version.version`, because `createTest` had
+    // already seeded the draft as version 1 and the old transition INSERTed
+    // a row alongside it.
+    expect(await repo.publishDraftVersion(db, ws, created.id, T)).toEqual({ version: 1 });
+
+    const row = await repo.getTest(db, ws, created.id);
+    expect(row?.status).toBe("published");
+    expect(row?.currentVersion).toBe(1);
+    expect((await repo.getPublishedVersion(db, ws, created.id))?.version).toBe(1);
+  });
+
+  it("UX-18: it opens version 2 as the next draft, carrying the published body", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w21", name: "W21" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a21" });
+    const sections = [{ id: "s1", title: "One", source: { kind: "fixed", questions: [] } }];
+    await publishWith(ws, created.id, sections, { timing: { duration_minutes: 30 } });
+
+    const next = await repo.getDraftVersion(db, ws, created.id);
+    expect(next?.version).toBe(2);
+    expect(next?.publishedAt).toBeNull();
+    expect(next?.body).toEqual({ settings: { timing: { duration_minutes: 30 } }, sections });
+  });
+
+  it("AC-03: editing after a publish writes version 2 and leaves version 1 frozen", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w22", name: "W22" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a22" });
+    const original = [{ id: "s1", title: "One", source: { kind: "fixed", questions: [] } }];
+    await publishWith(ws, created.id, original);
+
+    const head = await repo.getDraftVersion(db, ws, created.id);
+    const edited = { settings: {}, sections: [{ id: "s1", title: "Renamed", source: { kind: "fixed", questions: [] } }] };
+    await repo.putDraftVersion(db, ws, head!, edited as never, T + 1);
+
+    expect((await repo.getDraftVersion(db, ws, created.id))?.version).toBe(2);
+    expect((await repo.getPublishedVersion(db, ws, created.id, 1))?.body.sections).toEqual(original);
+    expect((await repo.getTest(db, ws, created.id))?.currentVersion).toBe(1);
+  });
+
+  it("Review Focus 2: no row ever stores the status 'open'", async () => {
+    const rows = await db.query<{ status: string }>("SELECT DISTINCT status FROM test");
+    expect(rows.map((r) => r.status)).not.toContain("open");
+    expect(rows.map((r) => r.status)).not.toContain("scheduled");
+  });
+
+  it("refuses a test with no open draft rather than inventing one", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w23", name: "W23" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a23" });
+    await db.run("DELETE FROM test_version WHERE workspace_id = ? AND test_id = ?", [ws, created.id]);
+
+    await expect(repo.publishDraftVersion(db, ws, created.id, T)).rejects.toThrow(/no open draft/i);
+  });
+});
+
+describe("listVersions / setTestStatus", () => {
+  it("reports each version's published time and how many attempts are pinned to it", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w24", name: "W24" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a24" });
+    await publishWith(ws, created.id);
+    const published = await repo.getPublishedVersion(db, ws, created.id);
+
+    const candidate = await repo.createCandidate(db, ws, { testId: created.id, formValues: {} });
+    for (const n of [1, 2]) {
+      await repo.createAttempt(db, ws, {
+        candidateId: candidate,
+        testVersionId: published!.id,
+        setNo: n,
+        layout: [],
+        startedAt: T,
+        deadlineAt: T + 1000,
+        tokenHash: `h${n}`,
+      });
+    }
+
+    expect(await repo.listVersions(db, ws, created.id)).toEqual([
+      { version: 2, publishedAt: null, attemptCount: 0 },
+      { version: 1, publishedAt: T, attemptCount: 2 },
+    ]);
+  });
+
+  it("close and archive are writes of the stored status, and report a missing test", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w25", name: "W25" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a25" });
+
+    expect(await repo.setTestStatus(db, ws, created.id, "closed", T + 5)).toBe(true);
+    expect((await repo.getTest(db, ws, created.id))?.status).toBe("closed");
+    expect((await repo.getTest(db, ws, created.id))?.updatedAt).toBe(T + 5);
+    expect(await repo.setTestStatus(db, ws, newId("tst"), "closed", T)).toBe(false);
+  });
+});
+
+describe("deriveState", () => {
+  const NOW = T;
+  const past = new Date(NOW - 86_400_000).toISOString();
+  const future = new Date(NOW + 86_400_000).toISOString();
+  const later = new Date(NOW + 172_800_000).toISOString();
+
+  it.each([
+    ["draft", {}, "draft"],
+    ["published", { opens_at: future, closes_at: later }, "scheduled"],
+    ["published", { opens_at: past, closes_at: future }, "open"],
+    ["published", { opens_at: past, closes_at: past }, "closed"],
+    ["published", {}, "open"],
+    ["published", { opens_at: "not a date" }, "open"],
+    ["closed", { opens_at: past, closes_at: future }, "closed"],
+    ["archived", { opens_at: past, closes_at: future }, "archived"],
+  ] as const)("deriveState(%s, %o) is %s", (status, timing, state) => {
+    expect(deriveState(status, { duration_minutes: 60, ...timing }, NOW)).toBe(state);
+  });
+
+  it("a published test with no timing block at all is Open", () => {
+    expect(deriveState("published", undefined, NOW)).toBe("open");
   });
 });

@@ -90,15 +90,9 @@ describe("UX-05: deleting a question a published version references", () => {
     const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
 
     const testId = (await repo.createTest(db, ws, { slug: "midterm", name: "Midterm" })).id;
-    await repo.publishTestVersion(db, ws, {
-      testId,
-      version: 2,
-      settings: {},
-      sections: [
-        { id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } },
-      ],
-      now: T,
-    });
+    const head = await repo.getDraftVersion(db, ws, testId);
+    await repo.putDraftVersion(db, ws, head!, { settings: {}, sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }] }, T);
+    await repo.publishDraftVersion(db, ws, testId, T);
 
     expect(await repo.deleteQuestion(db, ws, bank, questionId)).toEqual({
       deleted: false,
@@ -137,13 +131,9 @@ describe("pool-sourced usage (fixture-review finding 1)", () => {
     expect(beforePublish.rows.map((r) => r.id)).toContain(questionId);
 
     const testId = (await repo.createTest(db, ws, { slug: "mock-exam", name: "Mock Exam" })).id;
-    await repo.publishTestVersion(db, ws, {
-      testId,
-      version: 2,
-      settings: {},
-      sections: [{ id: "s1", title: "Pool section", source: { kind: "pool", bank, count: 1 } }],
-      now: T,
-    });
+    const head = await repo.getDraftVersion(db, ws, testId);
+    await repo.putDraftVersion(db, ws, head!, { settings: {}, sections: [{ id: "s1", title: "Pool section", source: { kind: "pool", bank, count: 1 } }] }, T);
+    await repo.publishDraftVersion(db, ws, testId, T);
 
     const afterPublish = await repo.getQuestion(db, ws, bank, questionId);
     expect(afterPublish!.usedInTests).toBe(1);
@@ -170,13 +160,9 @@ describe("deleteBank (fixture-review finding 5)", () => {
     const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
 
     const testId = (await repo.createTest(db, ws, { slug: "final", name: "Final" })).id;
-    await repo.publishTestVersion(db, ws, {
-      testId,
-      version: 2,
-      settings: {},
-      sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
-      now: T,
-    });
+    const head = await repo.getDraftVersion(db, ws, testId);
+    await repo.putDraftVersion(db, ws, head!, { settings: {}, sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }] }, T);
+    await repo.publishDraftVersion(db, ws, testId, T);
 
     expect(await repo.deleteBank(db, ws, bank)).toEqual({ deleted: false, blockedBy: ["Final"] });
   });
