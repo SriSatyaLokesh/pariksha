@@ -351,9 +351,55 @@ it("the candidate rows say nothing when nothing depends on the list", async () =
 
 // --- shape and cost -----------------------------------------------------
 
-it("an all-green test returns an empty row list", async () => {
-  await saveDraft({ sections: [{ id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: quantIds } }] });
-  expect(await rows()).toEqual([]);
+const GREEN_SECTIONS = [
+  { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] as string[] } },
+];
+
+it("an all-green test returns nothing that blocks", async () => {
+  await saveDraft({ sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }] });
+  // The fixture's window is already open (`opens_at: past`), which is the
+  // ordinary case and is why `window_open_already` is advisory. Nothing
+  // else has anything to say.
+  expect(await rows()).toEqual([expect.objectContaining({ id: "window_open_already", severity: "advisory" })]);
+});
+
+// Whole-branch spec review, Minor 1. #59 asks for "opens in the past" on
+// blur **and again at the publish checklist (#64)". The blur nag landed
+// (`TimingPanel.tsx:297-306`); the checklist half did not, and the
+// shortfall was recorded nowhere — not in the plan's Known deferrals, not
+// in a ruling, not in the ROADMAP row.
+it("#59: a window already open is an advisory row, never a refusal", async () => {
+  await saveDraft({ sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }] });
+
+  expect((await rows()).find((r) => r.id === "window_open_already")).toMatchObject({
+    severity: "advisory",
+    field: "timing.opens_at",
+    message: expect.stringMatching(/opened \d+ day\(s\) ago, so this test is open the moment it is published/),
+  });
+  // Advisory means it publishes. A blocking row here would refuse the
+  // ordinary case of publishing a test that starts immediately.
+  expect((await publish()).status).toBe(200);
+});
+
+it("#59: a window that has not opened yet says nothing", async () => {
+  await saveDraft({
+    settings: { timing: { duration_minutes: 60, opens_at: future, closes_at: new Date(FIXED_NOW + 2 * DAY).toISOString() } },
+    sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }],
+  });
+  expect(ids(await rows())).not.toContain("window_open_already");
+});
+
+// Already closed is the blocking case and keeps its own row: the two must
+// not both fire, or the screen tells an organiser the test is open and
+// closed at once.
+it("#59: a window that has already closed blocks, and the advisory stays quiet", async () => {
+  await saveDraft({
+    settings: { timing: { duration_minutes: 60, opens_at: past, closes_at: past } },
+    sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }],
+  });
+  const list = ids(await rows());
+  expect(list).toContain("window_past");
+  expect(list).not.toContain("window_open_already");
 });
 
 it("every row names a field a screen can navigate to", async () => {

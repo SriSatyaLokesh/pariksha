@@ -240,6 +240,23 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
+  // #59's second half: "on blur **and again at the publish checklist**".
+  // The builder's blur nag landed (`TimingPanel.tsx:297-306`) and this did
+  // not; the whole-branch spec review found the shortfall recorded nowhere
+  // (Minor 1). **Advisory, not blocking** — publishing a test that is
+  // already open is ordinary work and a refusal would be wrong; the row
+  // exists so an organiser who typed last year's date is told, with the
+  // consequence that makes it matter, before candidates arrive.
+  const opens = instant(settings.timing?.opens_at);
+  if (opens !== null && opens <= now && (closes === null || closes > now)) {
+    rows.push({
+      id: "window_open_already",
+      severity: "advisory",
+      field: "timing.opens_at",
+      message: `the window opened ${daysAgo(opens, now)} day(s) ago, so this test is open the moment it is published`,
+    });
+  }
+
   // The document `validateTest` checks. Built here rather than through
   // `toTestDocument` (packages/db/src/repo/test-document.ts) precisely
   // because no id is translated: `input.questions` are keyed by row id, so
