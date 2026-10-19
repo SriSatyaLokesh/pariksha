@@ -114,6 +114,83 @@ export interface RunClient {
   ): Promise<{ registrationToken: string }>;
 }
 
+/**
+ * `S-07`'s bot protection, candidate side (ADR 0009): find a counter
+ * whose SHA-256 over the challenge starts with `bits` zero bits.
+ *
+ * WebCrypto and nothing else — no widget, no third-party origin, no CSP
+ * change, which is the whole reason this exists instead of Turnstile. In
+ * the page rather than a worker: at the shipped difficulty it is a short
+ * burst, and a worker would be a second bundle entry for a wait a
+ * candidate does not see.
+ *
+ * `bits` comes from the server rather than from a constant here, so
+ * raising the difficulty against an abusive deployment is an API deploy
+ * and not a web one. The cap is the other side of that: a misconfigured
+ * difficulty must fail in a second, not hang a candidate's tab forever.
+ */
+export async function solvePow(challenge: string, bits: number): Promise<string> {
+  const encoder = new TextEncoder();
+  for (let base = 0; base < POW_CEILING; base += POW_BATCH) {
+    // **Batched on purpose, and this is the whole performance story.**
+    // `crypto.subtle.digest` is asynchronous, so hashing forty bytes
+    // costs one promise and one thread hop rather than one SHA-256 — a
+    // measured ~22 microseconds an await on a desktop, which at the
+    // shipped difficulty is a second and a half of a candidate's life
+    // and several times that on a phone. Issuing a block of digests and
+    // awaiting them together pays that overhead once per block instead
+    // of once per hash: ~5 microseconds each, four times faster, for
+    // three lines. A sync SHA-256 of our own would be faster still and
+    // is sixty lines of hand-rolled crypto nobody asked for.
+    const digests = await Promise.all(
+      Array.from({ length: POW_BATCH }, (_, offset) =>
+        crypto.subtle.digest("SHA-256", encoder.encode(`${challenge}:${String(base + offset)}`)),
+      ),
+    );
+    for (let offset = 0; offset < POW_BATCH; offset++) {
+      if (hasLeadingZeroBits(new Uint8Array(digests[offset] as ArrayBuffer), bits)) {
+        return String(base + offset);
+      }
+    }
+  }
+  throw new RunError(0, "bot_check_failed", BOT_CHECK_MESSAGE);
+}
+
+/** How many digests are in flight at once. Large enough to amortise the
+ *  per-call overhead, small enough that the loop is still interruptible
+ *  and allocates nothing memorable. */
+const POW_BATCH = 256;
+
+/** A search that has not finished by here is a misconfigured difficulty,
+ *  not an unlucky candidate: at the shipped 16 bits the chance of
+ *  reaching it is about one in e^256. The ceiling is what keeps a bad
+ *  `bits` from hanging a tab instead of showing a sentence. */
+const POW_CEILING = 1 << 24;
+
+/**
+ * Bits, not bytes and not hex characters — the same arithmetic as the
+ * server's `meetsDifficulty`, which is the only opinion that counts.
+ * Worth writing properly even though 16 happens to land on a byte: the
+ * day someone raises the difficulty to 18 against an abusive deployment,
+ * a byte-counting check would quietly keep charging for 16.
+ */
+function hasLeadingZeroBits(digest: Uint8Array, bits: number): boolean {
+  let left = bits;
+  let index = 0;
+  while (left >= 8) {
+    if (digest[index] !== 0) return false;
+    index += 1;
+    left -= 8;
+  }
+  return left === 0 || (digest[index] ?? 255) >> (8 - left) === 0;
+}
+
+/** The one sentence a candidate sees when the check could not run — an
+ *  ancient browser, a disabled WebCrypto, a difficulty nobody can pay.
+ *  `C-02`: it names the thing that helps. */
+export const BOT_CHECK_MESSAGE =
+  "Your browser could not complete the security check on this page. Reload the page and try again, or ask your organiser.";
+
 /** The error envelope every route answers with: `{ error: { code, message } }`. */
 export class RunError extends Error {
   readonly status: number;
@@ -170,8 +247,8 @@ async function send<T>(path: string, init: RequestInit = {}): Promise<T | null> 
   return (await res.json().catch(() => null)) as T | null;
 }
 
-async function get<T>(path: string): Promise<T> {
-  return (await send<T>(path)) as T;
+async function get<T>(path: string, headers: Record<string, string> = {}): Promise<T> {
+  return (await send<T>(path, { headers })) as T;
 }
 
 async function post<T>(
@@ -204,12 +281,32 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
       send<RegistrationPayload>(`${base}/form`, { headers: bearer(entryToken) }) as Promise<
         RegistrationPayload
       >,
-    register: async (entryToken, values, captchaToken) =>
-      (await post<{ registrationToken: string }>(
-        `${base}/register`,
-        { values, ...(captchaToken === undefined ? {} : { captchaToken }) },
+    register: async (entryToken, values, captchaToken) => {
+      // The proof of work is part of registering, not a separate step a
+      // screen has to remember: the challenge is cut from this very
+      // entry token, so the only caller that could ask for it is this
+      // one. A browser that cannot run it says so in one sentence rather
+      // than leaving a dead Continue button.
+      const { challenge, bits } = await get<{ challenge: string; bits: number }>(
+        `${base}/challenge`,
         bearer(entryToken),
-      )) ?? { registrationToken: "" },
+      );
+      let solution: string;
+      try {
+        solution = await solvePow(challenge, bits);
+      } catch (error) {
+        throw error instanceof RunError
+          ? error
+          : new RunError(0, "bot_check_failed", BOT_CHECK_MESSAGE);
+      }
+      return (
+        (await post<{ registrationToken: string }>(
+          `${base}/register`,
+          { values, solution, ...(captchaToken === undefined ? {} : { captchaToken }) },
+          bearer(entryToken),
+        )) ?? { registrationToken: "" }
+      );
+    },
   };
 }
 

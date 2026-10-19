@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  BOT_CHECK_MESSAGE,
   createRunClient,
   RegistrationInvalid,
   RunError,
   slugPairFromPath,
+  solvePow,
 } from "../../src/lib/run";
 
 // Review finding I-2. `landing.test.tsx` satisfies `RunClient` with an
@@ -33,6 +35,22 @@ function stubFetch(responder: (url: string) => Response): Call[] {
 }
 
 const ok = (body: unknown) => () => Response.json(body);
+
+/**
+ * Task 4 (#68, ADR 0009): `register` now pays a proof of work first, so
+ * every stub a registration runs against has to answer `/challenge` too.
+ * Eight bits here rather than the shipped sixteen — the difficulty is the
+ * *server's* to state, and these tests are about which URL is called with
+ * what, not about how long a search takes. The shipped number is pinned in
+ * `apps/api/test/run/pow.test.ts`, and the cost of paying it is measured
+ * below.
+ */
+const CHALLENGE = { challenge: "stub-challenge", bits: 8 };
+
+const withChallenge =
+  (responder: (url: string) => Response) =>
+  (url: string): Response =>
+    url.endsWith("/challenge") ? Response.json(CHALLENGE) : responder(url);
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -245,21 +263,84 @@ describe("the access gate (Task 2)", () => {
 
   it("posts the registration with its token and resolves the token /start spends", async () => {
     const calls = stubFetch(
-      () =>
-        new Response(JSON.stringify({ registrationToken: "reg" }), {
-          status: 201,
-          headers: { "content-type": "application/json" },
-        }),
+      withChallenge(
+        () =>
+          new Response(JSON.stringify({ registrationToken: "reg" }), {
+            status: 201,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
     );
     await expect(
-      createRunClient("alpha", "signup").register("tok", { email: "a@b.ac.in", consent: true }, "pow"),
+      createRunClient("alpha", "signup").register("tok", { email: "a@b.ac.in", consent: true }, "cap"),
     ).resolves.toEqual({ registrationToken: "reg" });
-    expect(calls[0]?.url).toBe("/api/v1/run/alpha/signup/register");
+
+    // The challenge first, behind the same Bearer header: it is cut from
+    // that token, so no other caller could ask for it.
+    expect(calls[0]?.url).toBe("/api/v1/run/alpha/signup/challenge");
     expect(header(calls[0]?.init)).toBe("Bearer tok");
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
-      values: { email: "a@b.ac.in", consent: true },
-      captchaToken: "pow",
+
+    expect(calls[1]?.url).toBe("/api/v1/run/alpha/signup/register");
+    expect(header(calls[1]?.init)).toBe("Bearer tok");
+    const body = JSON.parse(String(calls[1]?.init?.body)) as Record<string, unknown>;
+    expect(body.values).toEqual({ email: "a@b.ac.in", consent: true });
+    expect(body.captchaToken).toBe("cap");
+    expect(typeof body.solution).toBe("string");
+  });
+
+  it("S-07: the solution it posts really solves the challenge the server stated", async () => {
+    const calls = stubFetch(withChallenge(() => Response.json({ registrationToken: "reg" })));
+    await createRunClient("alpha", "signup").register("tok", {});
+    const { solution } = JSON.parse(String(calls[1]?.init?.body)) as { solution: string };
+    const digest = new Uint8Array(
+      await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(`${CHALLENGE.challenge}:${solution}`),
+      ),
+    );
+    const hex = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    expect(hex.startsWith("00")).toBe(true);
+  });
+
+  it("C-02: a browser that cannot run the check says so, rather than leaving a dead button", async () => {
+    stubFetch(withChallenge(() => Response.json({ registrationToken: "reg" })));
+    vi.stubGlobal("crypto", {
+      ...crypto,
+      subtle: { digest: () => Promise.reject(new Error("no subtle")) },
     });
+    const failure = await createRunClient("alpha", "signup")
+      .register("tok", {})
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RunError);
+    expect((failure as RunError).code).toBe("bot_check_failed");
+    expect((failure as RunError).message).toBe(BOT_CHECK_MESSAGE);
+    expect(BOT_CHECK_MESSAGE).toMatch(/reload|ask|try/i);
+  });
+
+  it("S-11: solving reaches no network at all — it is WebCrypto and nothing else", async () => {
+    const calls = stubFetch(() => Response.json({}));
+    await solvePow("abc", 8);
+    expect(calls).toEqual([]);
+  });
+
+  it("the work is bounded: the shipped difficulty stays well under 3 s here", async () => {
+    // Sixteen bits is what `apps/api/src/run/pow.ts` ships and what
+    // `pow.test.ts` pins. jsdom on a developer machine is not a phone, so
+    // this is a ceiling rather than the measurement — but a change that
+    // made the search an order of magnitude dearer would trip it.
+    const started = performance.now();
+    await solvePow("bounded-challenge", 16);
+    expect(performance.now() - started).toBeLessThan(3000);
+  });
+
+  it("the difficulty is bits, not hex characters, so raising it to 18 really costs more", async () => {
+    const solution = await solvePow("granular", 10);
+    const digest = new Uint8Array(
+      await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`granular:${solution}`)),
+    );
+    // Ten bits: a zero first byte, and the top two bits of the second.
+    expect(digest[0]).toBe(0);
+    expect((digest[1] ?? 255) >> 6).toBe(0);
   });
 
   it("a 422 arrives as RegistrationInvalid carrying every positioned issue", async () => {
@@ -271,13 +352,15 @@ describe("the access gate (Task 2)", () => {
       { field: "roll", code: "pattern", message: "Format: 21CS0147" },
     ];
     stubFetch(
-      () =>
-        new Response(
-          JSON.stringify({
-            error: { code: "invalid_registration", message: "Some answers need another look.", details: { issues } },
-          }),
-          { status: 422, headers: { "content-type": "application/json" } },
-        ),
+      withChallenge(
+        () =>
+          new Response(
+            JSON.stringify({
+              error: { code: "invalid_registration", message: "Some answers need another look.", details: { issues } },
+            }),
+            { status: 422, headers: { "content-type": "application/json" } },
+          ),
+      ),
     );
     const failure = await createRunClient("alpha", "signup")
       .register("tok", {})
@@ -291,11 +374,13 @@ describe("the access gate (Task 2)", () => {
 
   it("a spent entry token is an ordinary RunError, not a validation failure", async () => {
     stubFetch(
-      () =>
-        new Response(
-          JSON.stringify({ error: { code: "entry_expired", message: "Go back to the test page and try again." } }),
-          { status: 410, headers: { "content-type": "application/json" } },
-        ),
+      withChallenge(
+        () =>
+          new Response(
+            JSON.stringify({ error: { code: "entry_expired", message: "Go back to the test page and try again." } }),
+            { status: 410, headers: { "content-type": "application/json" } },
+          ),
+      ),
     );
     const failure = await createRunClient("alpha", "signup")
       .form("spent")
