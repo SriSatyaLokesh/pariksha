@@ -135,7 +135,11 @@ describe("FormBuilder (T-16 - T-18)", () => {
         type === "dropdown"
           ? within(preview()).getByRole("combobox", { name: new RegExp(label, "i") })
           : type === "radio" || type === "checkbox"
-            ? within(preview()).getByRole("group", { name: new RegExp(`^${label}`, "i") })
+            ? // A radio group takes `role="radiogroup"` — the one group role
+              // ARIA lets carry `aria-required` (task 5/6 review, M1).
+              within(preview()).getByRole(type === "radio" ? "radiogroup" : "group", {
+                name: new RegExp(`^${label}`, "i"),
+              })
             : within(preview()).getByLabelText(new RegExp(`^${label}`, "i"));
 
       if (type === "dropdown") {
@@ -171,6 +175,44 @@ describe("FormBuilder (T-16 - T-18)", () => {
     // different string.
     expect(within(preview()).getByLabelText(/^Short text/)).toHaveAccessibleName("Short text*");
     expect(within(preview()).getByText(/Fields marked \* are required/i)).toBeVisible();
+  });
+
+  // task 5/6 review, M1: no test in the suite reached the radio-and-checkbox
+  // branch, so it carried none of `shared`'s ARIA and nothing noticed.
+  it("a required radio group is programmatically required, not only starred", () => {
+    render(<Harness />);
+    addField("radio");
+    fireEvent.click(screen.getByRole("checkbox", { name: /^required$/i }));
+    const options = screen.getByLabelText(/options, one per line/i);
+    typeInto(options, "Science\nCommerce");
+    fireEvent.blur(options);
+
+    const group = within(preview()).getByRole("radiogroup", { name: /^Radio/ });
+    expect(group).toHaveAttribute("aria-required", "true");
+    expect(group).not.toHaveAttribute("aria-invalid");
+  });
+
+  it("a choice group left blank is announced as invalid, with its error text referenced", () => {
+    render(<Harness />);
+    addField("checkbox");
+    fireEvent.click(screen.getByRole("checkbox", { name: /^required$/i }));
+    const options = screen.getByLabelText(/options, one per line/i);
+    typeInto(options, "Morning\nEvening");
+    fireEvent.blur(options);
+
+    // `group` is not a role ARIA lets carry `aria-required`, so each box
+    // does; ticking and unticking is how a candidate reaches "touched and
+    // still blank" without ever leaving the group.
+    const box = within(preview()).getByRole("checkbox", { name: "Morning" });
+    expect(box).toHaveAttribute("aria-required", "true");
+    fireEvent.click(box);
+    fireEvent.click(box);
+
+    const group = within(preview()).getByRole("group", { name: /^Checkbox/ });
+    expect(group).toHaveAttribute("aria-invalid", "true");
+    const describedBy = group.getAttribute("aria-describedby");
+    expect(describedBy).not.toBeNull();
+    expect(document.getElementById(describedBy ?? "")).toHaveTextContent("This answer is required.");
   });
 
   it("the unique flag states its effect in one line", () => {
@@ -281,8 +323,29 @@ describe("FormBuilder (T-16 - T-18)", () => {
   });
 
   it("the builder and the preview have no axe violations", async () => {
-    const { container } = render(<Harness initial={FORM_TEMPLATES.campus_hiring} />);
+    // `campus_hiring`'s only choice field is a `dropdown`, so axing it alone
+    // left the radio-and-checkbox branch unrendered — the blind spot M1 sat
+    // in (task 5/6 review). The two fields below are added to the fixture
+    // rather than to `FORM_TEMPLATES`, which is T-18's three templates
+    // verbatim and not a test fixture.
+    const fixture: RegistrationFormSpec = {
+      ...FORM_TEMPLATES.campus_hiring,
+      fields: [
+        ...FORM_TEMPLATES.campus_hiring.fields,
+        { id: "stream", type: "radio", label: "Stream", required: true, options: ["Science", "Commerce"] },
+        { id: "slots", type: "checkbox", label: "Slots that suit you", required: true, options: ["Morning", "Evening"] },
+      ],
+    };
+    const { container } = render(<Harness initial={fixture} />);
     expect(await axe(container)).toHaveNoViolations();
+    expect(await axe(preview())).toHaveNoViolations();
+
+    // And again once a group is in its errored state, which is the one that
+    // adds `aria-invalid` and `aria-describedby` to the fieldset.
+    const box = within(preview()).getByRole("checkbox", { name: "Morning" });
+    fireEvent.click(box);
+    fireEvent.click(box);
+    expect(within(preview()).getAllByText("This answer is required.").length).toBeGreaterThan(0);
     expect(await axe(preview())).toHaveNoViolations();
   });
 });

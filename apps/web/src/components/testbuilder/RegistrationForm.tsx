@@ -291,8 +291,29 @@ function Field({
   // control, so they carry their own grouping rather than a `<label for>`.
   if (CHOICE_TYPES.includes(field.type) && field.type !== "dropdown") {
     const selected = Array.isArray(value) ? (value as string[]) : [];
+    // `shared` cannot be spread here: its `id`, `disabled` and autocomplete
+    // token belong to a control, not to a group. The three ARIA states that
+    // do belong to the group are placed one by one, because ARIA allows
+    // them in different places (task 5/6 review, M1 — this branch carried
+    // none of them, so a required radio group was not programmatically
+    // required and its error text was referenced by nothing):
+    //
+    //   `aria-invalid`, `aria-describedby`  global — legal on any element.
+    //   `aria-required`                     not allowed on `group`. The
+    //     radio case takes `role="radiogroup"`, where it is allowed; the
+    //     checkbox case has no group role that allows it, so each box
+    //     carries it (`role="checkbox"` does).
+    //
+    // Every other arrangement is an axe `aria-allowed-attr` violation, and
+    // the axe fixture now renders this branch so that stays true.
+    const isRadio = field.type === "radio";
     return (
-      <fieldset className="registration-form__field registration-form__group">
+      <fieldset
+        className="registration-form__field registration-form__group"
+        {...(isRadio && { role: "radiogroup", "aria-required": required })}
+        {...(error !== undefined && { "aria-invalid": true as const })}
+        {...(describedBy !== "" && { "aria-describedby": describedBy })}
+      >
         <legend>
           {field.label}
           <Marker required={required} />
@@ -301,15 +322,16 @@ function Field({
         {(field.options ?? []).map((option) => (
           <label className="registration-form__choice" key={option}>
             <input
-              type={field.type === "radio" ? "radio" : "checkbox"}
+              type={isRadio ? "radio" : "checkbox"}
               name={field.id}
               value={option}
               disabled={disabled}
-              checked={field.type === "radio" ? value === option : selected.includes(option)}
+              {...(!isRadio && required && { "aria-required": true as const })}
+              checked={isRadio ? value === option : selected.includes(option)}
               onChange={() =>
                 onChange(
                   field.id,
-                  field.type === "radio"
+                  isRadio
                     ? option
                     : selected.includes(option)
                       ? selected.filter((o) => o !== option)
