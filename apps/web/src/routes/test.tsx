@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError, type ApiClient, type StoredSection, type TestVersionRow } from "../lib/api";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
@@ -37,6 +37,12 @@ export function TestBuilder({
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
+  const [pendingSections, setPendingSections] = useState<StoredSection[] | null>(null);
+  // Fix round (task 3 review, I4): every save increments this, and a
+  // response is applied only when it is still the current one by the time
+  // it arrives — the guard against a slow request resolving after a faster,
+  // later one already has.
+  const saveSeq = useRef(0);
 
   const load = useCallback(async () => {
     try {
@@ -68,22 +74,38 @@ export function TestBuilder({
     window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
   }
 
-  // ponytail: saves on every `onChange`, with no debounce — a keystroke in
-  // a section's title or instructions is one PATCH. Fine at today's scale
-  // (one organiser editing one test); add a debounce (`TestList`'s own
-  // filter already has the pattern to copy) if a slow connection or a large
-  // test makes this feel laggy.
-  async function saveSections(sections: StoredSection[]): Promise<void> {
-    if (!draft) return;
-    const previous = draft;
-    setDraft({ ...draft, body: { ...draft.body, sections } });
-    try {
-      await client.patchDraft(workspaceId, testId, { sections });
-      setDraft(await client.draft(workspaceId, testId));
-    } catch (cause) {
-      setDraft(previous);
-      setError(cause instanceof ApiError ? cause.message : "The draft could not be saved.");
-    }
+  // Fix round (task 3 review, I4): a keystroke in a section's title or
+  // instructions used to cost one PATCH *and* one full GET, with no
+  // debounce and no in-flight guard — eleven keystrokes on a slow link cost
+  // eleven round trips, and a reply landing after a later keystroke reset
+  // the controlled input mid-type. Debounced the way `TestList`'s own
+  // filter already is (same pattern, copied); the PATCH response's own
+  // `body` replaces local state directly rather than a follow-up GET —
+  // nothing here needs `draw`/`setPoints`/`points` fresher than the next
+  // full reload — and `saveSeq` (above) drops a response whose request is
+  // no longer the latest.
+  useEffect(() => {
+    if (pendingSections === null) return;
+    const seq = ++saveSeq.current;
+    const timer = setTimeout(() => {
+      void (async () => {
+        try {
+          const updated = await client.patchDraft(workspaceId, testId, { sections: pendingSections });
+          if (saveSeq.current !== seq) return;
+          setDraft((prev) => (prev === null ? prev : { ...prev, body: updated.body }));
+          setError(undefined);
+        } catch (cause) {
+          if (saveSeq.current !== seq) return;
+          setError(cause instanceof ApiError ? cause.message : "The draft could not be saved.");
+        }
+      })();
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [pendingSections, client, workspaceId, testId]);
+
+  function saveSections(sections: StoredSection[]): void {
+    setDraft((prev) => (prev === null ? prev : { ...prev, body: { ...prev.body, sections } }));
+    setPendingSections(sections);
   }
 
   return (
@@ -113,7 +135,7 @@ export function TestBuilder({
             draw={draft.draw ?? {}}
             setPoints={draft.setPoints ?? {}}
             points={draft.points ?? {}}
-            onChange={(sections) => void saveSections(sections)}
+            onChange={saveSections}
             openSectionId={openSectionId}
             onOpenSection={openSection}
             client={client}

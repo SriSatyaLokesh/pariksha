@@ -1,12 +1,12 @@
 // Sections and question sources (#55, P5.2) — UX-12, UX-14, UX-15, UX-16.
 
 import { useState } from "react";
-import { describe, it, expect } from "vitest";
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { Section } from "@pariksha/core";
 
-import type { ApiClient, Bank, QuestionSummary, StoredSection } from "../../src/lib/api";
+import { ApiError, type ApiClient, type Bank, type QuestionSummary, type StoredSection, type TestVersionRow } from "../../src/lib/api";
 import { SectionList } from "../../src/components/testbuilder/SectionList";
 import { TestBuilder } from "../../src/routes/test";
 
@@ -336,5 +336,118 @@ describe("TestBuilder (the open section lives in the URL)", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^Quantitative aptitude ·/i }));
     expect(window.location.search).toBe("?section=quant");
+  });
+});
+
+describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => {
+  const BASE_TEST = {
+    id: "tst_1",
+    name: "Midterm",
+    slug: "midterm",
+    description: null,
+    shortCode: "ab12cd",
+    state: "draft" as const,
+    currentVersion: null,
+    draftVersion: 1,
+    reviewRequested: false,
+    tags: [],
+    updatedAt: 0,
+  };
+
+  function baseDraft(sections: StoredSection[]): TestVersionRow {
+    return {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+  }
+
+  function renderBuilder(client: Partial<ApiClient>) {
+    return render(
+      <TestBuilder
+        workspaceId="wsp_1"
+        testId="tst_1"
+        actorEmail="rao@example.edu"
+        onSignOut={noop}
+        onBack={noop}
+        client={fakeClient({ test: async () => BASE_TEST, ...client })}
+      />,
+    );
+  }
+
+  it("collapses rapid edits into one PATCH, not one per keystroke", async () => {
+    const section: Section = { id: "s1", title: "One", source: { kind: "fixed", questions: [] } };
+    const patchDraft = vi.fn(async (_ws: string, _id: string, patch: { sections?: StoredSection[] }) =>
+      baseDraft(patch.sections ?? []),
+    );
+    renderBuilder({ draft: async () => baseDraft([section]), patchDraft });
+
+    const add = await screen.findByRole("button", { name: /add section/i });
+    fireEvent.click(add);
+    fireEvent.click(add);
+    fireEvent.click(add);
+
+    await waitFor(() => expect(patchDraft).toHaveBeenCalledTimes(1));
+    // Four sections: the one the draft loaded with, plus the three clicks —
+    // one request, reflecting where the burst of edits settled.
+    expect(patchDraft.mock.calls[0]![2]).toMatchObject({ sections: expect.arrayContaining([expect.objectContaining({ id: "s1" })]) });
+    expect((patchDraft.mock.calls[0]![2] as { sections: StoredSection[] }).sections).toHaveLength(4);
+  });
+
+  it("a failed save surfaces an error", async () => {
+    const section: Section = { id: "s1", title: "One", source: { kind: "fixed", questions: [] } };
+    renderBuilder({
+      draft: async () => baseDraft([section]),
+      patchDraft: async () => {
+        throw new ApiError(500, "server_error", "The draft could not be saved.");
+      },
+    });
+
+    fireEvent.click(await screen.findByRole("button", { name: /add section/i }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/draft could not be saved/i);
+  });
+
+  it("a slow, superseded response does not clobber a later save", async () => {
+    const section: Section = { id: "s1", title: "One", source: { kind: "fixed", questions: [] } };
+    const resolvers: ((row: TestVersionRow) => void)[] = [];
+    const patchDraft = vi.fn(
+      async () =>
+        new Promise<TestVersionRow>((resolve) => {
+          resolvers.push(resolve);
+        }),
+    );
+    renderBuilder({ draft: async () => baseDraft([section]), patchDraft });
+
+    const add = await screen.findByRole("button", { name: /add section/i });
+    fireEvent.click(add);
+    await waitFor(() => expect(patchDraft).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(add);
+    await waitFor(() => expect(patchDraft).toHaveBeenCalledTimes(2));
+
+    // The second (newer) request resolves first; the first (now stale,
+    // superseded) request resolves after it, with a body that would be
+    // obviously wrong to apply — it must be ignored.
+    resolvers[1]!(
+      baseDraft([
+        section,
+        { id: "s2", title: "S2", source: { kind: "fixed", questions: [] } },
+        { id: "s3", title: "S3", source: { kind: "fixed", questions: [] } },
+      ]),
+    );
+    await screen.findByRole("button", { name: /move section S2 down/i });
+
+    resolvers[0]!(baseDraft([section]));
+    // A macrotask flush, not just a microtask one: the stale response's own
+    // `await client.patchDraft(...)` needs a full turn of the loop to reach
+    // its (ignored) continuation before this assertion can trust the DOM.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.getByRole("button", { name: /move section S2 down/i })).toBeInTheDocument();
   });
 });
