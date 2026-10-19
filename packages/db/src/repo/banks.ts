@@ -823,12 +823,20 @@ export const deleteGroup = scoped(
 /** The columns a pool's live draw (UX-15) and a set's points balance
  * (UX-16) need, and nothing else — never the full `QuestionRow` mapping
  * (`toQuestionDocument`, Markdown and all), which this is deliberately
- * cheaper than. */
+ * cheaper than.
+ *
+ * Fix round (task 3 review, I6): `difficulty` is optional, matching
+ * `@pariksha/core`'s own `QuestionBase.difficulty?: Difficulty` exactly
+ * (not `| null`, and — `exactOptionalPropertyTypes` — not present with an
+ * explicit `undefined` either) so this shape satisfies `Pick<Question,
+ * "tags" | "difficulty" | "type">` with no cast at the one place
+ * `matchesFilter` (`@pariksha/core`) is called with a summary rather than a
+ * full document. */
 export interface QuestionSummary {
   id: string;
   bankId: string;
   points: number;
-  difficulty: Difficulty | null;
+  difficulty?: Difficulty;
   tags: string[];
   type: QuestionType;
 }
@@ -857,7 +865,7 @@ export const workspaceQuestionSummaries = scoped(
       id: row.id,
       bankId: row.bank_id,
       points: Number(row.points),
-      difficulty: row.difficulty as Difficulty | null,
+      ...(row.difficulty !== null && { difficulty: row.difficulty as Difficulty }),
       tags: row.tags_json == null ? [] : db.jsonValue<string[]>(row.tags_json),
       type: row.type as QuestionType,
     }));

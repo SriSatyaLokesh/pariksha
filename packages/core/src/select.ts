@@ -34,8 +34,17 @@ function findQuestion(bank: readonly Question[], id: string): Question {
  * `PoolTooSmallError` would be worse than no check at all — and the test
  * builder's live draw count (UX-15) needs the same guarantee from outside
  * this package.
+ *
+ * Fix round (task 3 review, I6): takes only the three fields it reads, not
+ * the whole `Question` union — the test builder's own caller holds a
+ * lightweight `QuestionSummary` (`packages/db/src/repo/banks.ts`), not a
+ * full `Question`, and a cast from one to the other was sound only by
+ * accident (nothing here checked that a *wider* read would stay safe).
  */
-export function matchesFilter(question: Question, filter: PoolFilter | undefined): boolean {
+export function matchesFilter(
+  question: Pick<Question, "tags" | "difficulty" | "type">,
+  filter: PoolFilter | undefined,
+): boolean {
   if (!filter) return true;
   if (filter.tags && !filter.tags.some((tag) => question.tags?.includes(tag))) return false;
   if (filter.difficulty && (question.difficulty === undefined || !filter.difficulty.includes(question.difficulty)))

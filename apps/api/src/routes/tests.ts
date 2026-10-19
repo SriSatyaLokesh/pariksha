@@ -9,7 +9,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import { matchesFilter, type Question, type QuestionSource } from "@pariksha/core";
+import { matchesFilter, type QuestionSource } from "@pariksha/core";
 import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
 import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
@@ -210,7 +210,7 @@ function sectionPoints(
     return { min: total, max: total };
   }
   const matchingPoints = pool
-    .filter((q) => matchesFilter(q as unknown as Question, source.filter))
+    .filter((q) => matchesFilter(q, source.filter))
     .map((q) => pointsById.get(q.id) ?? 0)
     .sort((a, b) => a - b);
   const count = source.count;
@@ -239,7 +239,7 @@ function draftDerived(
     const source: QuestionSource = section.source;
     const pool = source.kind === "pool" && source.bank !== undefined ? summaries.filter((q) => q.bankId === source.bank) : summaries;
     if (source.kind === "pool") {
-      const matching = pool.filter((q) => matchesFilter(q as unknown as Question, source.filter)).length;
+      const matching = pool.filter((q) => matchesFilter(q, source.filter)).length;
       draw[section.id] = { matching, wanted: source.count };
     } else if (source.kind === "sets") {
       setPoints[section.id] = source.sets.map((set) => ({
