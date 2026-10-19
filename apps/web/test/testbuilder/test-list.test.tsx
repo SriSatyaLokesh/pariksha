@@ -99,6 +99,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     versions: async () => [],
     checklist: async () => [],
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     checkUrl: async () => {
       throw new Error("not used");
     },
@@ -275,6 +282,13 @@ describe("TestList", () => {
     expect(darkCells(container)).not.toEqual(darkCells(wrongSlug.container));
   });
 
+  // Task 12 added a second `role="status"` to this screen (the clone and
+  // export activity line), so these three scope to the short link's own
+  // cell rather than taking whichever live region the query finds first.
+  function shortLinkCell(): HTMLElement {
+    return screen.getByRole("button", { name: /copy short link/i }).closest("td") as HTMLElement;
+  }
+
   it("copying the short link confirms in a live region without moving focus", async () => {
     renderList(fakeClient());
     await screen.findByText("Midterm");
@@ -287,7 +301,7 @@ describe("TestList", () => {
     button.focus();
     fireEvent.click(button);
 
-    expect(await screen.findByRole("status")).toHaveTextContent(/copied/i);
+    await waitFor(() => expect(within(shortLinkCell()).getByRole("status")).toHaveTextContent(/copied/i));
     expect(document.activeElement).toBe(button);
   });
 
@@ -297,7 +311,7 @@ describe("TestList", () => {
 
     // Present and empty up front — an inserted-with-content live region is
     // what screen readers commonly fail to announce.
-    expect(screen.getByRole("status")).toHaveTextContent("");
+    expect(within(shortLinkCell()).getByRole("status")).toHaveTextContent("");
   });
 
   it("clears copiedId so a second copy announces again, instead of staying silent (Minor 15)", async () => {
@@ -305,13 +319,14 @@ describe("TestList", () => {
     await screen.findByText("Midterm");
 
     const button = screen.getByRole("button", { name: /copy short link/i });
+    const status = (): HTMLElement => within(shortLinkCell()).getByRole("status");
     fireEvent.click(button);
-    expect(await screen.findByRole("status")).toHaveTextContent(/copied/i);
+    await waitFor(() => expect(status()).toHaveTextContent(/copied/i));
 
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(""), { timeout: 3000 });
+    await waitFor(() => expect(status()).toHaveTextContent(""), { timeout: 3000 });
 
     fireEvent.click(button);
-    expect(await screen.findByRole("status")).toHaveTextContent(/copied/i);
+    await waitFor(() => expect(status()).toHaveTextContent(/copied/i));
   }, 10_000);
 
   // Task 2 fix round (Minor 17): split, same reason as the state-glyph test

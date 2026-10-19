@@ -20,6 +20,7 @@
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
 import bankSchema from "../../../../schemas/bank-1.json" with { type: "json" };
 import questionSchema from "../../../../schemas/question-1.json" with { type: "json" };
+import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
 
 export interface StructuralIssue {
   questionId: string | null;
@@ -126,6 +127,63 @@ export function validateBankDocumentStructure(doc: unknown): StructuralIssue[] {
     const questionId = isRecord(entry) && typeof entry.id === "string" ? entry.id : null;
 
     issues.push({ questionId, index, field: fieldOf(err, path, container), message: err.error });
+  }
+  return issues;
+}
+
+// --- Phase 5 Task 12 (#63, P5.10): the test document's structural layer --
+//
+// Beside the bank schemas rather than in a validator of its own: same
+// `@cfworker/json-schema` package, same `StructuralIssue` shape, same
+// reason for the choice (Ajv compiles with `new Function`, which Workers
+// forbid), and the same module-scope construction so the schema is
+// dereferenced once per isolate rather than once per request.
+//
+// The schema this runs is the **unstripped** `schemas/test-1.json` — root
+// `required` and every `minItems`/`minLength` included. That is the whole
+// difference between save and import that `draftSchema()`
+// (apps/api/src/routes/tests.ts) documents from the other side: a draft may
+// be half-built, a file an author hands you may not.
+
+const testValidator = new Validator(testSchema as never, "2020-12", false);
+
+/** The field a leaf error is about, for a test document: a dotted path with
+ * array indices in brackets (`sections[1].source.sets`), the same shape
+ * `fieldOfDraftError` (routes/tests.ts) produces for the draft gate. */
+function testFieldOf(err: OutputUnit): string {
+  const segments = pathOf(err.instanceLocation);
+  let field =
+    segments.length === 0
+      ? "document"
+      : segments.reduce((acc, seg, i) => (i === 0 ? seg : /^\d+$/.test(seg) ? `${acc}[${seg}]` : `${acc}.${seg}`), "");
+  if (err.keyword === "required") {
+    const prop = /required property "([^"]+)"/.exec(err.error)?.[1];
+    if (prop !== undefined) field = field === "document" ? prop : `${field}.${prop}`;
+  } else if (err.keyword === "additionalProperties") {
+    const prop = /Property "([^"]+)"/.exec(err.error)?.[1];
+    if (prop !== undefined) field = field === "document" ? prop : `${field}.${prop}`;
+  }
+  return field;
+}
+
+/**
+ * Checks `doc` against `schemas/test-1.json`. Never throws — a document
+ * that is not even an object still comes back as an issue list, the same
+ * contract `validateBankDocumentStructure` keeps.
+ *
+ * `index` is the `sections` entry the issue is about, or -1 for the
+ * document as a whole, so a structural issue and a `validateTest`
+ * cross-field issue read as one shape in the same report.
+ */
+export function validateTestDocumentStructure(doc: unknown): StructuralIssue[] {
+  const { errors } = testValidator.validate(doc);
+
+  const issues: StructuralIssue[] = [];
+  for (const err of errors) {
+    if (WRAPPER_KEYWORDS.has(err.keyword)) continue;
+    const path = pathOf(err.instanceLocation);
+    const index = path[0] === "sections" && Number.isInteger(Number(path[1])) ? Number(path[1]) : -1;
+    issues.push({ questionId: null, index, field: testFieldOf(err), message: err.error });
   }
   return issues;
 }

@@ -100,6 +100,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     versions: async () => [],
     checklist: async () => [],
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     checkUrl: async () => {
       throw new Error("not used");
     },

@@ -88,6 +88,19 @@ export interface TestVersionSummary {
 /** Task 11/13: one row of the publish checklist — mirrors `ChecklistRow`
  * (`apps/api/src/publish/checklist.ts`). The screen renders this array and
  * computes nothing (Review Focus 4). */
+/** One `pariksha/test@1` document, as `GET .../export` hands it out and
+ * `POST .../tests/import` takes it back. `Test` is `@pariksha/core`'s own
+ * type; the `$schema` key export always stamps is the only addition. */
+export type TestDocument = Test & { $schema?: string };
+
+/** Mirrors `TestImportReport` (`apps/api/src/import/test.ts`). */
+export interface TestImportReport {
+  testId: string | null;
+  imported: boolean;
+  issues: (ImportIssue & { line?: number })[];
+  rebound: { questionId: string; bankName: string }[];
+}
+
 export interface ChecklistRow {
   id: string;
   severity: "blocking" | "advisory";
@@ -371,6 +384,22 @@ export interface ApiClient {
   /** Task 13 (#64, P5.11): the same rows `publishTest` enforces, read
    * rather than enforced — one function, two callers (Review Focus 4). */
   checklist(workspaceId: string, testId: string): Promise<ChecklistRow[]>;
+
+  // Task 12 (#63, P5.10): AC-04's three.
+  /** A new Draft from this test's editable head, with a new id, short code
+   * and `-copy` slug. Version history and the review flag are not copied. */
+  cloneTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  /** One `pariksha/test@1` document. `version` names a frozen one; the
+   * default is the current published version, or the draft head when
+   * nothing is published. */
+  exportTest(workspaceId: string, testId: string, version?: number): Promise<TestDocument>;
+  /** Whole-test import. `dryRun: true` validates and reports without
+   * writing. A 422 comes back as a report rather than a thrown `ApiError`,
+   * the same normalisation `importBank` does and for the same reason —
+   * `ImportDialog` renders one shape either way. A **409** (`T-05`: a slug
+   * the file named is already taken) still throws: there is nothing
+   * positioned to render, and the organiser has to change the slug. */
+  importTest(workspaceId: string, doc: unknown, opts?: { dryRun?: boolean }): Promise<TestImportReport>;
 
   // Task 6 (#58, P5.5). `workspaceId` first, like every sibling above — the
   // plan's own sketch wrote `checkUrl(testId, url)`, which cannot reach the
@@ -697,6 +726,34 @@ export function createApiClient(): ApiClient {
       (await json<{ versions: TestVersionSummary[] }>(`/workspaces/${workspaceId}/tests/${testId}/versions`)).versions,
     checklist: async (workspaceId, testId) =>
       (await json<{ rows: ChecklistRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/checklist`)).rows,
+
+    cloneTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/clone`, post({})),
+
+    exportTest: (workspaceId, testId, version) =>
+      json<TestDocument>(
+        `/workspaces/${workspaceId}/tests/${testId}/export${version === undefined ? "" : `?version=${version}`}`,
+      ),
+
+    async importTest(workspaceId, doc, opts = {}) {
+      try {
+        return await json<TestImportReport>(
+          `/workspaces/${workspaceId}/tests/import${opts.dryRun ? "?dryRun=1" : ""}`,
+          post(doc),
+        );
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 422) {
+          const details = (error.details ?? {}) as Partial<TestImportReport>;
+          return {
+            testId: null,
+            imported: false,
+            issues: details.issues ?? [],
+            rebound: details.rebound ?? [],
+          };
+        }
+        throw error;
+      }
+    },
 
     draft: (workspaceId, testId) => json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
 

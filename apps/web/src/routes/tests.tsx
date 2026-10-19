@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSummary } from "../lib/api";
+import { ImportDialog } from "../components/authoring/ImportDialog";
 import { CardHairline } from "../components/CardHairline";
 import { MonoCaption } from "../components/MonoCaption";
 import { OrganiserHeader } from "../components/OrganiserHeader";
@@ -84,6 +85,24 @@ function toApiFilter(filter: UrlFilter): TestFilter {
   };
 }
 
+/** A download is still a fetch (repo convention, `routes/bank.tsx`'s own
+ * note) — `client.exportTest` makes the network call; this only turns an
+ * already-fetched document into a saved file. Duplicated from `bank.tsx`
+ * rather than shared: six lines, two callers, and a `lib/download.ts` for
+ * them would be a module whose whole content is one DOM idiom. */
+function downloadJson(doc: unknown, filename: string): void {
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 const SLUG_HELP = "Letters, numbers and hyphens, starting with a letter or number.";
 const NAME_MAX = 200;
 
@@ -117,6 +136,11 @@ export function TestList({
   const [slugDrafts, setSlugDrafts] = useState<Record<string, string>>({});
   const [slugError, setSlugError] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  // Task 12 (#63, P5.10): clone, export and import.
+  const [importing, setImporting] = useState(false);
+  const [activity, setActivity] = useState("");
+  const [clonedId, setClonedId] = useState<string | null>(null);
+  const clonedRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(
     async (f: UrlFilter) => {
@@ -224,6 +248,15 @@ export function TestList({
     setCopiedId(test.id);
   }
 
+  // The clone lands as a new row; the organiser's next move is to rename
+  // it, so focus goes to that row's own field rather than leaving them to
+  // find it. Runs after the reload that put the row on the screen.
+  useEffect(() => {
+    if (clonedId === null) return;
+    clonedRef.current?.focus();
+    setClonedId(null);
+  }, [clonedId, tests]);
+
   // Clears on its own, so the confirmation is also feedback for a *second*
   // press of the same button: without this, pressing "Copy short link"
   // twice sets the same id both times, React sees no state change, and the
@@ -233,6 +266,38 @@ export function TestList({
     const timer = setTimeout(() => setCopiedId(null), 2000);
     return () => clearTimeout(timer);
   }, [copiedId]);
+
+  // AC-04. The announcement names all three new identifiers *and* what was
+  // deliberately left behind: a clone that silently dropped the review flag
+  // and the version history is a clone an organiser has to discover the
+  // shape of by poking at it.
+  async function onClone(test: TestSummary) {
+    setActivity(`Duplicating ${test.name}…`);
+    try {
+      const copy = await client.cloneTest(workspaceId, test.id);
+      await load(filter);
+      setClonedId(copy.id);
+      setActivity(
+        `Copied to “${copy.name}” (${copy.id}, ${copy.slug}). Version history and the review flag were not copied.`,
+      );
+    } catch (cause) {
+      setActivity("");
+      setError(cause instanceof ApiError ? cause.message : "The test could not be duplicated.");
+    }
+  }
+
+  async function onExport(test: TestSummary) {
+    setActivity(`Exporting ${test.name}…`);
+    try {
+      const doc = await client.exportTest(workspaceId, test.id);
+      const filename = `${test.slug}.json`;
+      downloadJson(doc, filename);
+      setActivity(`Saved ${filename}.`);
+    } catch (cause) {
+      setActivity("");
+      setError(cause instanceof ApiError ? cause.message : "The test could not be exported.");
+    }
+  }
 
   function sortHeaderProps(column: Sort): { "aria-sort"?: "ascending" } {
     return filter.sort === column ? { "aria-sort": "ascending" } : {};
@@ -269,6 +334,33 @@ export function TestList({
             </button>
           </form>
         </CardHairline>
+
+        <button
+          type="button"
+          className="button-secondary"
+          aria-expanded={importing}
+          onClick={() => setImporting((prev) => !prev)}
+        >
+          {importing ? "Cancel import" : "Import a test"}
+        </button>
+
+        {importing && (
+          <ImportDialog
+            workspaceId={workspaceId}
+            client={client}
+            kind="test"
+            onImported={() => {
+              setImporting(false);
+              void load(filter);
+            }}
+          />
+        )}
+
+        {/* Always present, text swapped in place — a live region inserted
+            already carrying its text does not reliably announce. */}
+        <p className="organiser__status" role="status">
+          {activity}
+        </p>
 
         <form
           className="testbuilder-filters"
@@ -360,6 +452,7 @@ export function TestList({
                   Last edited
                 </th>
                 <th scope="col">Slug</th>
+                <th scope="col">Actions</th>
                 <th scope="col">Short link</th>
               </tr>
             </thead>
@@ -398,6 +491,7 @@ export function TestList({
                           id={slugId}
                           value={slugDrafts[test.id] ?? test.slug}
                           readOnly={locked}
+                          ref={clonedId === test.id ? clonedRef : undefined}
                           onChange={(event) =>
                             setSlugDrafts((prev) => ({ ...prev, [test.id]: event.target.value }))
                           }
@@ -413,6 +507,14 @@ export function TestList({
                           )
                         )}
                       </div>
+                    </td>
+                    <td>
+                      <button type="button" className="button-secondary" onClick={() => void onClone(test)}>
+                        Duplicate
+                      </button>
+                      <button type="button" className="button-secondary" onClick={() => void onExport(test)}>
+                        Export
+                      </button>
                     </td>
                     <td>
                       <div className="testbuilder-shortlink">

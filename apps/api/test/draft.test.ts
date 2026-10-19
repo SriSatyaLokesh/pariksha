@@ -665,12 +665,14 @@ function issuesOf(body: Record<string, unknown>): { field: string; message: stri
 // `validateTest` (whose rule fires only *when* the mode is `link_code`),
 // and leaves the workspace inside an exported file.
 //
-// The plan asks for this proof on the *exported* document. `exportTest` is
-// Task 12's and does not exist yet, so the assertion is made one step
-// earlier, on the stored draft read back through `GET .../draft` — which
-// is the document export is a pure function of, and is not the thing the
-// plan warned against (reading back the PATCH *response*, which would pass
-// either way because it echoes what was sent).
+// The plan asks for this proof on the *exported* document. This one is
+// made one step earlier, on the stored draft read back through
+// `GET .../draft` — the document export is a pure function of, and not the
+// thing the plan warned against (reading back the PATCH *response*, which
+// would pass either way because it echoes what was sent). **The export
+// assertion itself now exists**, re-run against `exportTest` in
+// `apps/api/test/export/test-round-trip.test.ts` once Task 12 built it;
+// this one stays as the cheaper, narrower check of the same merge.
 it("switching access.mode away from link_code drops the access code from the stored document", async () => {
   await patchDraft(workspaceId, testId, authorCookie, {
     settings: { access: { mode: "link_code", access_code: "APTI-2026" } },

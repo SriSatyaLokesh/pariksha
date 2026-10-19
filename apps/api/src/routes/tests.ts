@@ -23,6 +23,7 @@ import {
   headVersionsByTest,
   listCandidates,
   replaceCandidateList,
+  cloneTest,
   countCandidates,
   existingRowIds,
   getDraftVersion,
@@ -52,6 +53,8 @@ import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 import { checkReachable } from "../net/reachable.js";
 import { blockingRows, buildChecklist, type ChecklistRow } from "../publish/checklist.js";
+import { exportTest } from "../export/test.js";
+import { importTestDocument, parseTestJson, TEST_IMPORT_MAX_BYTES } from "../import/test.js";
 import { readBodyWithLimit } from "./media.js";
 
 // The same shape `apps/api/src/routes/workspaces.ts` validates its own slug
@@ -899,6 +902,102 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
     return c.json({ versions: await listVersions(deps.db, workspaceId, testId) });
+  });
+
+  // --- Task 12 (#63, P5.10): clone, export and import -----------------
+
+  routes.post("/:id/tests/:testId/clone", requires("tests.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    const now = deps.now();
+
+    const original = await getTest(deps.db, workspaceId, testId);
+    if (!original) throw new ApiError(404, "not_found", "No such resource.");
+
+    const clone = await cloneTest(deps.db, workspaceId, testId, {
+      // `name` has a 200-character ceiling on every other write path, so
+      // cloning a 198-character name must not produce a row the PATCH
+      // route would then refuse to save.
+      name: `${original.name} (copy)`.slice(0, 200),
+      slug: `${original.slug}-copy`.slice(0, 63),
+      now,
+    });
+    if (!clone) throw new ApiError(404, "not_found", "No such resource.");
+
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "test.clone",
+      target: clone.id,
+      detail: { from: testId, slug: clone.slug },
+      now,
+    });
+
+    return c.json(toWire(clone, { draftVersion: 1, publishedTiming: undefined }, now), 201);
+  });
+
+  // AC-04's other half. `?version=` names a frozen version; the default is
+  // `current_version`, falling back to the draft head when nothing has been
+  // published yet.
+  routes.get("/:id/tests/:testId/export", requires("tests.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+
+    const raw = c.req.query("version");
+    const version = raw === undefined ? undefined : Number(raw);
+    if (version !== undefined && !Number.isInteger(version)) {
+      throw new ApiError(400, "invalid_request", "The request body is not valid.", {
+        issues: [{ path: "version", message: "must be a version number" }],
+      });
+    }
+
+    // `exportTest` refuses rather than returns a document this system's own
+    // `/import` would reject — the check lives there, where the questions
+    // it needs have already been read.
+    return c.json(await exportTest(deps, workspaceId, testId, version));
+  });
+
+  // Mounted on the collection, not on a test — an import creates one.
+  routes.post("/:id/tests/import", requires("tests.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const dryRun = c.req.query("dryRun") === "1";
+    const now = deps.now();
+
+    const bytes = await readBodyWithLimit(c.req.raw, TEST_IMPORT_MAX_BYTES, "A test import");
+    const body = parseTestJson(new TextDecoder().decode(bytes));
+
+    let report;
+    try {
+      report = await importTestDocument(deps, workspaceId, body, { dryRun, now });
+    } catch (err) {
+      // `T-05`: a slug already used in this workspace is a 409 naming the
+      // field, never a silent suffix — that is `cloneTest`'s answer, inside
+      // one workspace, and an import carries a slug the *file* named.
+      if (!isSlugCollision(err)) throw err;
+      throw new ApiError(409, "duplicate_slug", "A test with that address already exists in this workspace.", {
+        field: "slug",
+      });
+    }
+
+    if (report.issues.length > 0) {
+      throw new ApiError(422, "invalid_test", "This test was not imported.", {
+        issues: report.issues,
+        rebound: report.rebound,
+      });
+    }
+
+    if (report.imported) {
+      await appendAudit(deps.db, workspaceId, {
+        actor: actor.userId,
+        action: "test.import",
+        target: report.testId ?? "",
+        detail: { rebound: report.rebound.length },
+        now,
+      });
+    }
+
+    return c.json(report, report.imported ? 201 : 200);
   });
 
   // --- Task 9 (#60 / #56, P5.7b): the candidate list ------------------

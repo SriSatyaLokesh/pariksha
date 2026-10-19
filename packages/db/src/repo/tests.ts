@@ -98,7 +98,12 @@ export const createTest = scoped(
   async (
     db: DbClient,
     workspaceId: string,
-    input: { name: string; slug: string; now?: number },
+    /** `body` (Task 12, #63) seeds version 1 with a whole document instead
+     * of the empty one a hand-created test starts from — what whole-test
+     * import and clone both write, and the reason neither needed a second
+     * function: the row, its draft and the short-code retry are identical,
+     * only the two JSON columns differ. */
+    input: { name: string; slug: string; now?: number; body?: TestDocumentBody },
   ): Promise<TestRow> => {
     const id = newId("tst");
     const now = input.now ?? Date.now();
@@ -122,7 +127,15 @@ export const createTest = scoped(
           sql:
             "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, " +
             "published_at, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
-          params: [newId("ver"), workspaceId, id, 1, db.jsonParam({}), db.jsonParam([]), now],
+          params: [
+            newId("ver"),
+            workspaceId,
+            id,
+            1,
+            db.jsonParam(input.body?.settings ?? {}),
+            db.jsonParam(input.body?.sections ?? []),
+            now,
+          ],
         },
       ]);
     };
@@ -595,5 +608,63 @@ export const setTestStatus = scoped(
       [status, now, workspaceId, testId],
     );
     return changes > 0;
+  },
+);
+
+
+/**
+ * AC-04's clone. Copies the test's **editable head** — the open draft if
+ * there is one, else the latest published version — into a new Draft with
+ * a new `tst_` id, a new short code and a free slug. It does not copy:
+ * published versions (the clone starts at draft 1), `review_requested`
+ * (ADR 0007: a review was requested of *that* test, by a person, about a
+ * version that no longer exists here), or anything candidate-side.
+ *
+ * `cloneTest` suffixes the slug on a collision where whole-test import
+ * 409s instead (`T-05`). That asymmetry is deliberate: a clone is a
+ * gesture inside one workspace where the organiser has not named anything
+ * yet and `-copy-2` is the obvious answer, while an import carries a slug
+ * the *file* named and silently moving it would publish a candidate URL
+ * nobody asked for.
+ */
+export const cloneTest = scoped(
+  "cloneTest",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    testId: string,
+    input: { name: string; slug: string; now: number },
+  ): Promise<TestRow | null> => {
+    // The editable head, by the invariant Task 11 keeps: at most one
+    // unpublished version, and it is always the highest-numbered row.
+    const rows = await db.query<TestVersionRecord>(
+      `SELECT ${TEST_VERSION_COLUMNS} FROM test_version WHERE workspace_id = ? AND test_id = ? ` +
+        "ORDER BY version DESC",
+      [workspaceId, testId],
+    );
+    const head = rows[0];
+    if (!head) return null;
+
+    // One query for every slug already taken in the `<slug>-copy` family,
+    // rather than inserting and retrying on the unique constraint: a retry
+    // loop costs one subrequest per collision and a second clone of the
+    // same test always collides.
+    const taken = await db.query<{ slug: string }>(
+      "SELECT slug FROM test WHERE workspace_id = ? AND (slug = ? OR slug LIKE ?)",
+      // No `likeEscape` here, unlike `listTests` above: a slug is
+      // `^[a-z0-9][a-z0-9-]{1,62}$` on every write path, so it can never
+      // contain a `%` or `_` for `LIKE` to read as a wildcard.
+      [workspaceId, input.slug, `${input.slug}-%`],
+    );
+    const used = new Set(taken.map((row) => row.slug));
+    let slug = input.slug;
+    for (let n = 2; used.has(slug); n += 1) slug = `${input.slug}-${n}`;
+
+    return createTest(db, workspaceId, {
+      name: input.name,
+      slug,
+      now: input.now,
+      body: toTestVersionRow(db, head).body,
+    });
   },
 );

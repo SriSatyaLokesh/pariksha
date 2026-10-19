@@ -114,6 +114,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     archiveTest: async () => TEST_ROW,
     versions: async () => [],
     checklist: async () => ROWS,
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     checkUrl: async () => {
       throw new Error("not used");
     },
@@ -151,7 +158,13 @@ async function openChecklist(client: ApiClient): Promise<{ container: HTMLElemen
   const opener = screen.getByRole("button", { name: /^publish$/i });
   opener.focus();
   fireEvent.click(opener);
-  await screen.findByRole("dialog", { name: /publish checklist/i });
+  const dialog = await screen.findByRole("dialog", { name: /publish checklist/i });
+  // The dialog arrives from an async state update, so React's passive
+  // effects — including `useDialogKeys`' initial focus — have not
+  // necessarily run by the time the element is in the DOM. Waited for here
+  // once rather than in each test that then depends on focus having
+  // settled.
+  await waitFor(() => expect(document.activeElement).toBe(dialog));
   return { container, opener };
 }
 
@@ -188,7 +201,7 @@ describe("the publish checklist", () => {
 
     fireEvent.keyDown(dialog, { key: "Escape" });
     expect(screen.queryByRole("dialog", { name: /publish checklist/i })).toBeNull();
-    expect(document.activeElement).toBe(opener);
+    await waitFor(() => expect(document.activeElement).toBe(opener));
   });
 
   it("re-running the checks does not rebuild the list under the reader's cursor", async () => {

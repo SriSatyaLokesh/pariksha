@@ -263,6 +263,31 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // candidate count alike. The same five reads publish makes before it
   // decides, which is the point: one function, two callers.
   "/api/v1/workspaces/:id/tests/:testId/checklist": 6,
+  // Task 12 (#63, P5.10): clone, export and import. Measured
+  // (`apps/api/test/clone.test.ts` and `test/export/test-round-trip.test.ts`),
+  // not estimated. Clone costs 8: auth (2) + `getTest` (1, the 404 *and*
+  // the name and slug the copy is built from) + `cloneTest`'s own head
+  // read (1) and one query for every slug already taken in the
+  // `<slug>-copy` family (1) + `createTest`'s single `db.batch` (1) and
+  // its read-back (1) + `appendAudit` (1). The plan estimated 7, against a
+  // clone that did not yet have to find which `-copy-N` was free; the
+  // measurement wins.
+  "/api/v1/workspaces/:id/tests/:testId/clone": 8,
+  // Export costs 7: auth (2) + `getTest` (1) + `getPublishedVersion` (1) +
+  // `getDraftVersion` (1, only on a test with nothing published — the
+  // worst case, which is what is pinned) + `workspaceQuestions` (1) +
+  // `listBanks` (1). The refuse-what-we-would-not-take-back check runs
+  // inside `exportTest`, over the questions it has already read, rather
+  // than in the route over a second copy of them. **Flat in question
+  // count**: a test naming 200 questions costs the same as one naming
+  // three.
+  "/api/v1/workspaces/:id/tests/:testId/export": 7,
+  // Import costs 7: auth (2) + `workspaceQuestions` (1) + `listBanks` (1)
+  // + `createTest`'s batch (1) and read-back (1) + `appendAudit` (1) — and
+  // flat in section and question count, because the whole document is one
+  // batch. A dry run costs 4 (no write, no audit) and so does a refused
+  // import. The plan estimated 8.
+  "/api/v1/workspaces/:id/tests/import": 7,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -338,6 +363,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // needs to see what is still wrong (UX-11).
   "GET /api/v1/workspaces/:id/tests/:testId/versions": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/checklist": "tests.edit",
+  // Task 12 (#63, P5.10): clone, export and import are all `tests.edit` —
+  // an Author builds tests, and none of these publishes one.
+  "POST /api/v1/workspaces/:id/tests/:testId/clone": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/export": "tests.edit",
+  "POST /api/v1/workspaces/:id/tests/import": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
