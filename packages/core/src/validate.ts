@@ -112,10 +112,12 @@ function placeholdersIn(prompt: string): Set<string> {
  * fails `isRecord`) is reported and skipped rather than dereferenced.
  *
  * Also catches two options sharing the same `text` within one question.
- * Their `id`s are already required to be unique (JSON Schema can enforce
- * that; this layer does not re-check it), but CSV and GIFT have no `id`
- * column at all — an option's own text *is* its identity there
- * (apps/api/src/import/csv.ts's own header comment). A bank that passes
+ * `schemas/question-1.json` does not require option `id`s to be distinct
+ * either (no rule here does, and none is added by this change — a bank with
+ * two identical `id`s is a separate, pre-existing gap this task's brief did
+ * not raise), but CSV and GIFT have no `id` column at all — an option's own
+ * text *is* its identity there (apps/api/src/import/csv.ts's own header
+ * comment). A bank that passes
  * this check can always be re-expressed in either format with its answer
  * key intact; one that does not would round-trip through CSV/GIFT with the
  * key silently rebound to whichever option that text's first occurrence
