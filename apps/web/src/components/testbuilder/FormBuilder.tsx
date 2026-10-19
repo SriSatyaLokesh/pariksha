@@ -157,7 +157,17 @@ export function FormBuilder({
   }
 
   function updateField(id: string, updater: (field: FormField) => FormField): void {
-    setFields(spec.fields.map((f) => (f.id === id ? updater(f) : f)));
+    const fields = spec.fields.map((f) => (f.id === id ? updater(f) : f));
+    // A rename onto an id another field already holds is refused (task 5/6
+    // review, M2). This function keys on `field.id`, so two fields sharing
+    // one would be edited together from then on; `ReorderableList`'s
+    // `keyOf`, the preview's `key` and `values[field.id]` all assume the id
+    // is unique; and `validateTest` would not report it until publish, by
+    // which point the author has silently lost a field's configuration.
+    // The guard sits here rather than at the Column name box because this
+    // is the one funnel every field edit passes through.
+    if (new Set(fields.map((f) => f.id)).size !== fields.length) return;
+    setFields(fields);
   }
 
   function addField(): void {

@@ -103,6 +103,24 @@ describe("FormBuilder (T-16 - T-18)", () => {
     expect(names).toEqual(["email", "email_2"]);
   });
 
+  it("a column name cannot be renamed onto one another field already holds", () => {
+    // Two fields sharing an id makes every later edit hit both, because
+    // `updateField` keys on it (task 5/6 review, M2).
+    render(<Harness />);
+    addField("email");
+    addField("short_text");
+    const names = (): string[] =>
+      screen.getAllByLabelText(/column name/i).map((input) => (input as HTMLInputElement).value);
+
+    typeInto(screen.getAllByLabelText(/column name/i)[1] as HTMLElement, "email");
+    expect(names()).toEqual(["email", "short_text"]);
+
+    // A free name is still accepted — the guard is a collision check, not
+    // a frozen id.
+    typeInto(screen.getAllByLabelText(/column name/i)[1] as HTMLElement, "college");
+    expect(names()).toEqual(["email", "college"]);
+  });
+
   it("the preview is the candidate renderer, including its validation messages", () => {
     render(<Harness initial={ROLL_NUMBER} />);
 
