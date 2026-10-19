@@ -8,17 +8,26 @@
 
 import { Hono, type Context } from "hono";
 import { z } from "zod";
+import { matchesFilter, type Question, type QuestionSource } from "@pariksha/core";
 import {
   appendAudit,
   createTest,
   draftVersionsByTest,
+  existingRowIds,
+  getDraftVersion,
   getTest,
   listTests,
+  putDraftVersion,
   updateTest,
+  workspaceQuestionSummaries,
+  type QuestionSummary,
+  type StoredSection,
+  type TestDocumentBody,
   type TestFilter,
   type TestPatch,
   type TestRow,
   type TestStatus,
+  type TestVersionRow,
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
@@ -43,6 +52,149 @@ const testPatch = z
     reviewRequested: z.boolean().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
+
+// Task 3 (#55, P5.2): the draft itself. `settings`/`sections` are each
+// checked only as "a plain object" / "an array of plain objects" here —
+// Zod's job stops at JSON shape, the same line `questionDoc`
+// (apps/api/src/routes/questions.ts) draws with `.passthrough()`. What a
+// section's `source` may actually contain is `checkSection`'s job, below:
+// hand-written rather than run through `schemas/test-1.json` a second time,
+// because that schema's `minItems` on `sourceFixed.questions` and
+// `sourceSets.sets` would reject the UX-13 empty section this route must
+// accept in Draft — this checks the same "only these fields, for this kind"
+// shape `additionalProperties: false` enforces, and nothing it does not.
+const draftPatch = z
+  .object({
+    settings: z.record(z.string(), z.unknown()).optional(),
+    sections: z.array(z.record(z.string(), z.unknown())).optional(),
+  })
+  .refine((patch) => patch.settings !== undefined || patch.sections !== undefined, "names nothing to change");
+
+interface SectionIssue {
+  field: string;
+  message: string;
+}
+
+const SECTION_FIELDS = ["id", "title", "instructions", "time_limit_minutes", "shuffle_questions", "source"];
+// Mirrors schemas/test-1.json's `$defs/sourceFixed`/`sourcePool`/`sourceSets`
+// `properties` lists exactly, minus the `minItems`/`count` floors this
+// save-time check deliberately does not enforce (UX-13; those are
+// Task 11's publish checklist).
+const SOURCE_FIELDS: Record<string, readonly string[]> = {
+  fixed: ["kind", "questions"],
+  pool: ["kind", "bank", "count", "filter"],
+  sets: ["kind", "assignment", "sets"],
+};
+
+function unknownField(keys: readonly string[], allowed: readonly string[]): string | undefined {
+  return keys.find((key) => !allowed.includes(key));
+}
+
+/**
+ * Review Focus item 3's own words: "`$defs/sourcePool` and `$defs/sourceSets`
+ * carry `additionalProperties: false`, so a merged `sets` key inside a
+ * `pool` source fails the schema." This is that check, run at save time
+ * against the row-id-named stored shape rather than the document the real
+ * schema validates — a `pool` source that still carries a stale `sets` key
+ * from whatever source it replaced is exactly what `unknownField` below
+ * catches, one section's `source` object at a time.
+ */
+function checkSection(raw: unknown, index: number): SectionIssue[] {
+  const path = (field: string): string => `sections[${index}].${field}`;
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
+    return [{ field: path("source"), message: `entry at index ${index} is not a section object` }];
+  }
+  const section = raw as Record<string, unknown>;
+  const issues: SectionIssue[] = [];
+
+  const badField = unknownField(Object.keys(section), SECTION_FIELDS);
+  if (badField !== undefined) {
+    issues.push({ field: path(badField), message: `a section does not have a "${badField}" field` });
+  }
+
+  const source = section.source;
+  if (typeof source !== "object" || source === null || Array.isArray(source)) {
+    issues.push({ field: path("source"), message: "a section needs a source" });
+    return issues;
+  }
+  const kind = (source as Record<string, unknown>).kind;
+  if (kind !== "fixed" && kind !== "pool" && kind !== "sets") {
+    issues.push({ field: path("source.kind"), message: 'source.kind must be "fixed", "pool" or "sets"' });
+    return issues;
+  }
+  const allowed = SOURCE_FIELDS[kind]!;
+  const badSourceField = unknownField(Object.keys(source), allowed);
+  if (badSourceField !== undefined) {
+    issues.push({
+      field: path(`source.${badSourceField}`),
+      message: `a ${kind} source does not have a "${badSourceField}" field`,
+    });
+  }
+  return issues;
+}
+
+/** Every `qst_`/`bnk_` row id a section's source names, deduplicated — the
+ * save-time cross-workspace guard's input, one list regardless of how many
+ * sections or how many times a source repeats an id. */
+function collectReferencedIds(sections: readonly StoredSection[]): {
+  questionIds: string[];
+  bankIds: string[];
+} {
+  const questionIds = new Set<string>();
+  const bankIds = new Set<string>();
+  for (const section of sections) {
+    const source = section.source;
+    if (source.kind === "fixed") {
+      for (const id of source.questions) questionIds.add(id);
+    } else if (source.kind === "pool") {
+      if (source.bank !== undefined) bankIds.add(source.bank);
+    } else {
+      for (const set of source.sets) {
+        for (const id of set.questions) questionIds.add(id);
+      }
+    }
+  }
+  return { questionIds: [...questionIds], bankIds: [...bankIds] };
+}
+
+/**
+ * UX-15/UX-16: the numbers the builder cannot compute itself. `draw` is a
+ * pool section's live "N drawn from M matching" — `matchesFilter`
+ * (`@pariksha/core`) is the same arithmetic `layoutForAttempt` will later
+ * draw with, run here over every workspace question once rather than
+ * re-queried per section. `setPoints` is a `sets` section's own points
+ * balance, summed from the same one list.
+ */
+function draftDerived(
+  sections: readonly StoredSection[],
+  summaries: readonly QuestionSummary[],
+): {
+  draw: Record<string, { matching: number; wanted: number }>;
+  setPoints: Record<string, { set: string; points: number }[]>;
+} {
+  const pointsById = new Map(summaries.map((q) => [q.id, q.points]));
+  const draw: Record<string, { matching: number; wanted: number }> = {};
+  const setPoints: Record<string, { set: string; points: number }[]> = {};
+
+  for (const section of sections) {
+    const source: QuestionSource = section.source;
+    if (source.kind === "pool") {
+      const pool = source.bank === undefined ? summaries : summaries.filter((q) => q.bankId === source.bank);
+      const matching = pool.filter((q) => matchesFilter(q as unknown as Question, source.filter)).length;
+      draw[section.id] = { matching, wanted: source.count };
+    } else if (source.kind === "sets") {
+      setPoints[section.id] = source.sets.map((set) => ({
+        set: set.set,
+        points: set.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0),
+      }));
+    }
+  }
+  return { draw, setPoints };
+}
+
+function toDraftWire(version: TestVersionRow, summaries: readonly QuestionSummary[]) {
+  return { ...version, ...draftDerived(version.body.sections, summaries) };
+}
 
 const STATUSES: readonly TestStatus[] = ["draft", "published", "closed", "archived"];
 const SORTS = ["name", "updated", "created"] as const;
@@ -215,6 +367,89 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
 
     const drafts = await draftVersionsByTest(deps.db, workspaceId, testId);
     return c.json(toWire(updated, drafts.get(testId) ?? null));
+  });
+
+  // Task 3 (#55, P5.2): the one GET/PATCH pair Tasks 4 through 9 all write
+  // through — each widens this payload rather than adding a route of its
+  // own.
+  routes.get("/:id/tests/:testId/draft", requires("tests.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    // No separate `getTest` existence check: a test that does not exist in
+    // this workspace and a test that (not reachable before Task 11's
+    // lifecycle exists) currently has no draft both answer the identical
+    // 404 below, so there is nothing a second read would tell the caller.
+    const draft = await getDraftVersion(deps.db, workspaceId, testId);
+    if (!draft) throw new ApiError(404, "not_found", "No such resource.");
+
+    const summaries = await workspaceQuestionSummaries(deps.db, workspaceId);
+    return c.json(toDraftWire(draft, summaries));
+  });
+
+  routes.patch("/:id/tests/:testId/draft", requires("tests.edit"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    const patch = parse(draftPatch, await json(c.req.raw));
+    const existing = await getDraftVersion(deps.db, workspaceId, testId);
+    if (!existing) throw new ApiError(404, "not_found", "No such resource.");
+
+    let sections: StoredSection[] | undefined;
+    if (patch.sections !== undefined) {
+      const issues = patch.sections.flatMap((section, index) => checkSection(section, index));
+      if (issues.length > 0) {
+        throw new ApiError(422, "invalid_section", "A section is not shaped correctly.", { issues });
+      }
+      // Checked above: every entry names only fields its own source kind
+      // uses, so this is safe to treat as the stored shape from here on.
+      sections = patch.sections as unknown as StoredSection[];
+
+      const wanted = collectReferencedIds(sections);
+      const found = await existingRowIds(deps.db, workspaceId, wanted);
+      const missing = [
+        ...wanted.questionIds
+          .filter((id) => !found.questionIds.has(id))
+          .map((id) => ({ field: "source.questions", message: `question "${id}" is not in this workspace` })),
+        ...wanted.bankIds
+          .filter((id) => !found.bankIds.has(id))
+          .map((id) => ({ field: "source.bank", message: `bank "${id}" is not in this workspace` })),
+      ];
+      if (missing.length > 0) {
+        throw new ApiError(422, "unknown_reference", "A section names a question or bank not in this workspace.", {
+          issues: missing,
+        });
+      }
+    }
+
+    // Review Focus item 3: each named top-level block replaces whole and
+    // merges nothing below it — `settings` is one level of `Object.assign`
+    // (a key the patch names replaces that key's entire value; a key it
+    // does not name is untouched) and `sections`, when the patch names it
+    // at all, replaces the whole array. Never a merge keyed by section id or
+    // by a field inside `source`, which is exactly what would let a stale
+    // `access_code`, or a stale `sets`/`assignment` left over from a
+    // section's previous source kind, survive underneath a patch that meant
+    // to replace it.
+    const body: TestDocumentBody = {
+      settings: patch.settings !== undefined ? { ...existing.body.settings, ...patch.settings } : existing.body.settings,
+      sections: sections ?? existing.body.sections,
+    };
+    const now = deps.now();
+    const updated = await putDraftVersion(deps.db, workspaceId, testId, body, now);
+
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "test.draft.update",
+      target: testId,
+      detail: { fields: Object.keys(patch).sort() },
+      now,
+    });
+
+    // No `draw`/`setPoints` here (unlike GET, below): nothing reads them off
+    // a PATCH response, and computing them is `workspaceQuestionSummaries`'s
+    // own extra statement — a screen that wants fresh numbers right after a
+    // save already re-fetches `GET .../draft` for the rest of the payload.
+    return c.json(updated);
   });
 
   return routes;

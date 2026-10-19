@@ -179,6 +179,29 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // same rule Phase 4's banks routes already follow.
   "/api/v1/workspaces/:id/tests": 5,
   "/api/v1/workspaces/:id/tests/:testId": 6,
+  // Task 3 (#55, P5.2): the draft. Measured, not estimated
+  // (`draft.test.ts`'s own "measures the real subrequest cost" test). GET
+  // costs 4: auth (2) + `getDraftVersion` (1) + `workspaceQuestionSummaries`
+  // (1) — no separate `getTest` existence check; a test that does not exist
+  // and one that (not reachable before Task 11's lifecycle) currently has no
+  // draft both answer the same 404 `getDraftVersion` alone already gives.
+  // PATCH costs 6 when the patch names no `sections` (auth 2 +
+  // `getDraftVersion` 1, the merge base + `putDraftVersion`'s own
+  // read-then-write 2 + `appendAudit` 1 — no `existingRowIds` call at all: a
+  // settings-only patch names no row) and 7 once it does (one more
+  // statement, `existingRowIds`'s single `UNION ALL`, flat regardless of how
+  // many ids the patch names). The higher of the two methods sharing this
+  // path, same rule every other budget here follows.
+  //
+  // ponytail: `getDraftVersion` runs twice on a PATCH that touches
+  // `sections` or not — once in the route (the merge base) and once again
+  // inside `putDraftVersion` (to find the row to update) — because
+  // `putDraftVersion`'s contract takes a whole `TestDocumentBody`, not a
+  // patch, so it cannot reuse what the route already read. Two single-row
+  // reads of an indexed lookup, nowhere near the 50-subrequest ceiling;
+  // collapsing them would mean `putDraftVersion` trusting a caller-supplied
+  // row it never checked, which is the wrong end to save a query at.
+  "/api/v1/workspaces/:id/tests/:testId/draft": 7,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -237,6 +260,9 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId": "tests.edit",
   "PATCH /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  // Task 3 (#55, P5.2).
+  "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
+  "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
