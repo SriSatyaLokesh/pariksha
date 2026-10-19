@@ -2,9 +2,11 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { validateBank, validateTest } from "../src/validate.js";
+import { unsatisfiableValidation, validateBank, validateTest } from "../src/validate.js";
 import type {
   Bank,
+  FormField,
+  FormFieldType,
   Question,
   ScoringConfig,
   ScoringMode,
@@ -822,5 +824,124 @@ describe("validateTest", () => {
     const r = validateTest(exampleTest, (exampleBank as Bank).questions);
     if (!r.ok) throw new Error(JSON.stringify(r.issues, null, 2));
     expect(r.ok).toBe(true);
+  });
+
+  // --- Task 5 (#57, P5.4): the registration form ------------------------
+
+  function field(over: Partial<FormField> & { id: string; type: FormFieldType }): FormField {
+    return { label: over.label ?? "A field", ...over };
+  }
+
+  function withForm(fields: FormField[]): Test {
+    return doc({ registration_form: { fields } });
+  }
+
+  it("duplicate form field ids are reported with the field named", () => {
+    const r = validateTest(
+      withForm([
+        field({ id: "email", type: "email" }),
+        field({ id: "phone", type: "phone" }),
+        field({ id: "email", type: "short_text" }),
+      ]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form.fields",
+      index: -1,
+      message: expect.stringMatching(/"email".*more than once/),
+    });
+    // Reported once, however many times the id repeats — three `email`
+    // fields is one defect, not two.
+    expect(r.issues.filter((i) => /more than once/.test(i.message))).toHaveLength(1);
+  });
+
+  it("duplicate section ids are reported", () => {
+    const r = validateTest(
+      doc({ sections: [fixedSection("quant", []), fixedSection("quant", [])] }),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual({
+      questionId: null,
+      index: -1,
+      field: "sections",
+      message: 'section id "quant" is used more than once',
+    });
+  });
+
+  it("an options list on a short_text field is reported", () => {
+    const r = validateTest(
+      withForm([field({ id: "name", type: "short_text", options: ["a", "b"] })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form.fields",
+      message: expect.stringMatching(/"name".*short_text.*cannot carry an options list/),
+    });
+  });
+
+  it("a dropdown with fewer than two options is reported", () => {
+    // The other half of the rule above, and the publish-time replacement
+    // for the schema floor `draftSchema()` drops so a choice field can be
+    // saved while its options are still being typed.
+    const r = validateTest(withForm([field({ id: "degree", type: "dropdown", options: ["B.Tech"] })]), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form.fields",
+      message: expect.stringMatching(/"degree".*at least two options/),
+    });
+  });
+
+  it("min above max is reported, with the field id in the message", () => {
+    const r = validateTest(
+      withForm([field({ id: "cgpa", type: "number", validation: { min: 10, max: 5 } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form",
+      message: expect.stringMatching(/"cgpa".*minimum 10 is above maximum 5/),
+    });
+  });
+
+  it("max_length below min_length is reported", () => {
+    const r = validateTest(
+      withForm([field({ id: "name", type: "short_text", validation: { min_length: 10, max_length: 5 } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]?.message).toMatch(/minimum length 10 is above maximum length 5/);
+  });
+
+  it("a number min against a date-shaped max is not compared", () => {
+    // `min`/`max` are `number | string` in the schema; comparing 5 against
+    // "2010-12-31" would report a defect that is not one.
+    expect(
+      validateTest(withForm([field({ id: "x", type: "number", validation: { min: 5, max: "2010-12-31" } })]), []).ok,
+    ).toBe(true);
+  });
+
+  it("a date max below its min is reported, comparing the ISO strings", () => {
+    const r = validateTest(
+      withForm([field({ id: "dob", type: "date", validation: { min: "2010-01-01", max: "2000-01-01" } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("unsatisfiableValidation is the one copy of the rule the builder also shows", () => {
+    expect(unsatisfiableValidation({ id: "a", type: "number", label: "A", validation: { min: 10, max: 5 } })).toMatch(
+      /minimum 10 is above maximum 5 — lower the minimum/,
+    );
+    expect(unsatisfiableValidation({ id: "a", type: "number", label: "A", validation: { min: 1, max: 5 } })).toBeNull();
+    expect(unsatisfiableValidation({ id: "a", type: "number", label: "A" })).toBeNull();
   });
 });

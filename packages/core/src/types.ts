@@ -185,12 +185,13 @@ export interface Bank {
 }
 
 // Test-format types, mirroring schemas/test-1.json's `$defs/section`,
-// `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access` and
-// `release` exactly. Only what question selection and import validation
-// need: `timing`, `consent`, `registration_form`, `proctoring`,
-// `retention` and `branding` are required or optional in the schema but no
-// rule in this package reads them, so they are not modelled here yet. Add
-// each when a phase needs it.
+// `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access`,
+// `release`, `form`, `formField` and `validation` exactly. Only what
+// question selection and import validation need: `timing`, `consent`,
+// `proctoring`, `retention` and `branding` are required or optional in the
+// schema but no rule in this package reads them, so they are not modelled
+// here yet. Add each when a phase needs it. `registration_form` was the
+// first to be claimed, by Task 5 (#57, P5.4).
 
 export interface SourceFixed {
   kind: "fixed";
@@ -249,6 +250,81 @@ export interface TestScoring {
   set_points_tolerance?: number;
 }
 
+/**
+ * T-16 - T-18's registration form (Task 5, #57, P5.4). Mirrors
+ * `schemas/test-1.json`'s `$defs/form`, `$defs/formField` and
+ * `$defs/validation` exactly, with one correction to the plan's own
+ * `Interfaces` block: `link_text` and `link_target` are properties of the
+ * *field* in the schema (`$defs/formField`), not of `validation` — and
+ * `$defs/validation` carries `additionalProperties: false`, so modelling
+ * them there would have made every consent field a 422 on save.
+ */
+export const FORM_FIELD_TYPES = [
+  "short_text",
+  "long_text",
+  "email",
+  "phone",
+  "number",
+  "date",
+  "dropdown",
+  "radio",
+  "checkbox",
+  "url",
+  "consent",
+] as const;
+
+export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
+
+/** Only the keys that suit the field's type are used; the rest are ignored
+ * (the schema says the same, in its own `description`). */
+export interface FieldValidation {
+  min_length?: number;
+  max_length?: number;
+  /** RE2-safe regular expression, checked on the server. */
+  pattern?: string;
+  /** Shown when the pattern fails. Say what the right format looks like. */
+  pattern_message?: string;
+  /** A number for `number`, an ISO date string for `date`. */
+  min?: number | string;
+  max?: number | string;
+  integer?: boolean;
+  decimals?: number;
+  /** Glob patterns, for `email` and `url` fields. */
+  allowed_domains?: string[];
+  /** `phone` only: ISO 3166-1 alpha-2, e.g. IN. */
+  default_country?: string;
+  /** `url` only: flag the value if the link does not return HTTP 200
+   * (T-19). The check itself is Task 6; the candidate half is Phase 6. */
+  check_reachable?: boolean;
+}
+
+export interface FormField {
+  /** Column name in the results CSV (`^[a-z0-9_]{1,40}$`). */
+  id: string;
+  type: FormFieldType;
+  label: string;
+  help?: string;
+  required?: boolean;
+  /** A second registration with the same value is refused. */
+  unique?: boolean;
+  /** Required for `dropdown`, `radio` and `checkbox`. */
+  options?: string[];
+  /** `consent` only: the words that open the consent text. */
+  link_text?: string;
+  /** `consent` only: `"consent"` for the test's own consent text, or a URL. */
+  link_target?: string;
+  validation?: FieldValidation;
+}
+
+/** Named `...Spec`, not `...Form`, so this type and the React component of
+ * the same job (`apps/web/src/components/testbuilder/RegistrationForm.tsx`)
+ * do not share a name across two packages. */
+export interface RegistrationFormSpec {
+  title?: string;
+  description?: string;
+  fields: FormField[];
+}
+
 export type AccessMode = "link_code" | "invite_only" | "email_code" | "sso";
 
 export interface TestAccess {
@@ -279,6 +355,7 @@ export interface Test {
   banks?: string[];
   scoring?: TestScoring;
   access?: TestAccess;
+  registration_form?: RegistrationFormSpec;
   release?: TestRelease;
   sections: Section[];
 }

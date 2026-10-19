@@ -24,6 +24,7 @@
 import type {
   Bank,
   Blank,
+  FormField,
   PassageGroup,
   Question,
   QuestionOption,
@@ -429,6 +430,55 @@ type TestValidationResult =
   | { ok: true; test: Test }
   | { ok: false; issues: ImportIssue[] };
 
+/** The three field types an `options` list belongs to (schemas/test-1.json's
+ * `$defs/formField` says the same, in its own `if`/`then`). */
+const CHOICE_FIELD_TYPES: readonly string[] = ["dropdown", "radio", "checkbox"];
+
+/**
+ * Task 5 (#57, P5.4). The one rule in this file whose breach is **not** a
+ * half-built form: a `validation` block no value can ever satisfy silently
+ * refuses every candidate at registration, and nothing before Phase 6 would
+ * surface it. Exported so the builder
+ * (`apps/web/src/components/testbuilder/FormBuilder.tsx`) shows the author
+ * the same sentence the publish gate would, rather than carrying a second
+ * copy of the arithmetic — which is the defect this phase keeps finding.
+ *
+ * Returns the sentence, or `null` when the field is satisfiable. `min`/`max`
+ * are compared only when both are the same JSON type: the schema allows a
+ * number (a `number` field) or a string (a `date` field's ISO bound), and
+ * comparing one against the other says nothing.
+ */
+export function unsatisfiableValidation(field: FormField): string | null {
+  const v = field.validation;
+  if (v === undefined) return null;
+
+  const { min_length: minLength, max_length: maxLength, min, max } = v;
+  if (minLength !== undefined && maxLength !== undefined && minLength > maxLength) {
+    return `minimum length ${minLength} is above maximum length ${maxLength} — lower the minimum, or raise the maximum`;
+  }
+  if (min !== undefined && max !== undefined && typeof min === typeof max && min > max) {
+    return `minimum ${min} is above maximum ${max} — lower the minimum, or raise the maximum`;
+  }
+  return null;
+}
+
+/** The ids that appear more than once in `ids`, each reported once, in the
+ * order they first repeat. Both halves of docs/test-format.md's own
+ * "ids are unique within the test" line — section ids and form field ids —
+ * are this one function. */
+function duplicates(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const repeated: string[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) {
+      if (!repeated.includes(id)) repeated.push(id);
+      continue;
+    }
+    seen.add(id);
+  }
+  return repeated;
+}
+
 /**
  * Only `.points` of what `resolveScoring` returns is read below, and
  * `points` falls back to the engine's own per-question default rather than
@@ -516,6 +566,72 @@ export function validateTest(
       field: "release.at",
       message: 'release "on_date" requires an "at" timestamp',
     });
+  }
+
+  // Task 5 (#57, P5.4): docs/test-format.md's "ids are unique within the
+  // test" line, both halves. **Publish-time** — an organiser mid-build may
+  // legitimately have two fields called `email` for a second, which is why
+  // the save-time gate (`apps/api/src/routes/tests.ts`'s `draftSchema`)
+  // does not carry it and a schema could not express it anyway.
+  const sectionIds = (test.sections as unknown[])
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry) && typeof entry.id === "string")
+    .map((entry) => entry.id as string);
+  for (const id of duplicates(sectionIds)) {
+    issues.push({
+      questionId: null,
+      index: -1,
+      field: "sections",
+      message: `section id "${id}" is used more than once`,
+    });
+  }
+
+  const form = doc.registration_form;
+  if (form !== undefined && Array.isArray(form.fields)) {
+    for (const id of duplicates(form.fields.map((f) => f.id))) {
+      issues.push({
+        questionId: null,
+        index: -1,
+        field: "registration_form.fields",
+        message: `form field id "${id}" is used more than once`,
+      });
+    }
+
+    for (const field of form.fields) {
+      const isChoice = CHOICE_FIELD_TYPES.includes(field.type);
+      // Publish-time, both directions of the same rule. The schema states
+      // the forward half (`$defs/formField`'s `if`/`then`: a choice field
+      // requires `options`) and nothing states the reverse, so an `options`
+      // list on a `short_text` field imports clean today and is silently
+      // dropped by every renderer.
+      if (!isChoice && field.options !== undefined) {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form.fields",
+          message: `form field "${field.id}" is a ${field.type} field and cannot carry an options list`,
+        });
+      }
+      if (isChoice && (field.options?.length ?? 0) < 2) {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form.fields",
+          message: `form field "${field.id}" is a ${field.type} field and needs at least two options`,
+        });
+      }
+
+      // Save-time in class (see `unsatisfiableValidation`), reported here
+      // so the whole report still arrives at once.
+      const unsatisfiable = unsatisfiableValidation(field);
+      if (unsatisfiable !== null) {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form",
+          message: `form field "${field.id}": ${unsatisfiable}`,
+        });
+      }
+    }
   }
 
   (test.sections as unknown[]).forEach((raw: unknown, index) => {
