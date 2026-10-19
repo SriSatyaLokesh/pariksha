@@ -2,6 +2,9 @@ import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
 import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
 import type { CandidateQuestion } from "../../src/components/exam/Runner";
@@ -289,5 +292,55 @@ describe("reachability: the candidate app's own root, clicked to", () => {
     render(<ExamApp client={{ landing: () => Promise.resolve(landingPayload), start: () => Promise.resolve(examPaper) }} />);
     activate(await screen.findByRole("button", { name: /^start/i }));
     expect(await screen.findByText(/capital of France/i)).toBeVisible();
+  });
+});
+
+// ---- the non-colour carriers, read out of the stylesheet ------------------
+//
+// Every class-name assertion above (`is-selected`, a disabled row, the
+// drop target) is only worth something if the class actually draws
+// something a greyscale reader keeps. This package runs with `css: false`
+// so jsdom applies no cascade and `getComputedStyle` would report the
+// initial value whatever exam.css says — the same trap the pre-flight
+// scan recorded as B-6a. So the stylesheet itself is read.
+
+describe("every answer state carries a shape, not only a colour", () => {
+  const css = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/exam.css"),
+    "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "");
+
+  /** The declarations of the first rule whose selector list is exactly
+   * `selector`. Indexed rather than regexed: these selectors carry `.`,
+   * `:`, `(` and `)`, and an escaping bug in the helper would read as a
+   * missing rule. */
+  function body(selector: string): string {
+    const at = css.indexOf(`\n${selector} {`);
+    if (at === -1) throw new Error(`selector not found: ${selector}`);
+    const open = css.indexOf("{", at);
+    const close = css.indexOf("}", open);
+    return css.slice(open + 1, close);
+  }
+
+  it("a chosen option thickens its edge, on top of the filled control", () => {
+    expect(body(".exam-option-row.is-selected")).toMatch(/border-width:\s*2px/);
+  });
+
+  it("a locked or read-only option dashes its edge", () => {
+    expect(body(".exam-option-row:has(input:disabled)")).toMatch(/border-style:\s*dashed/);
+    expect(body(".exam-select:disabled,\n.exam-text-input:disabled,\n.exam-text-area:disabled")).toMatch(
+      /border-style:\s*dashed/,
+    );
+    expect(body(".exam-blank-input:disabled")).toMatch(/border-bottom-style:\s*dashed/);
+  });
+
+  it("the drag drop-target draws a bar, which is geometry and not a fill", () => {
+    expect(body(".reorderable-list__item.is-drop-target")).toMatch(
+      /border-inline-start:\s*4px solid/,
+    );
+  });
+
+  it("the option row is the hit target, at DESIGN.md's 48px floor", () => {
+    expect(body(".exam-option-row")).toMatch(/min-height:\s*48px/);
   });
 });

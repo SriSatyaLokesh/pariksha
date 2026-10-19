@@ -32,6 +32,17 @@ import type { LandingPayload, RunClient } from "../../src/lib/run";
 const NOW = 1_760_000_000_000;
 const EXAM_CSS = resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/exam.css");
 
+/** exam.css with its `@import`s inlined and its comments stripped — the
+ * stylesheet a candidate's browser really assembles. */
+function examStylesheet(seen: Set<string> = new Set(), path: string = EXAM_CSS): string {
+  if (seen.has(path)) return "";
+  seen.add(path);
+  const raw = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+  return raw.replace(/@import\s+["']\.\/([a-zA-Z0-9_-]+\.css)["'];?/g, (_whole, file: string) =>
+    examStylesheet(seen, resolve(dirname(EXAM_CSS), file)),
+  );
+}
+
 function question(n: number): CandidateQuestion {
   return { id: `q${String(n)}`, type: "single", prompt: `Question ${String(n)} stem`, points: 1 };
 }
@@ -407,10 +418,17 @@ describe("the runner shell (C-04)", () => {
     // the initial value whatever exam.css says (pre-flight scan, B-6a).
     // This is the one that actually guards "a candidate who thinks the
     // page reloaded thinks their answer was lost".
-    const css = readFileSync(EXAM_CSS, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    //
+    // Task 7 (#71): exam.css now @imports question.css, and a stylesheet
+    // the candidate loads is in scope whichever file it lives in — so the
+    // import chain is resolved rather than only the entry file read.
+    const css = examStylesheet();
     expect(css).not.toMatch(/[\s;{]transition(-[a-z]+)?\s*:/);
     expect(css).not.toMatch(/[\s;{]animation(-[a-z]+)?\s*:/);
     expect(css).not.toMatch(/@keyframes/);
+    // The positive control: the chain really did pull the imported file
+    // in, or this would be a scan over a file with nothing in it.
+    expect(css).toMatch(/\.reorderable-list__item\s*\{/);
   });
 
   it("the calculator appears only when the test allows it", () => {
