@@ -202,6 +202,38 @@ describe("AccessPanel", () => {
       expect(trigger).toHaveFocus();
     });
 
+    // #60's own acceptance row, task 7/8/10 review M5. A nag on blur, not
+    // a refusal: the write still goes through (the standing ruling), and
+    // validateTest carries the block at publish.
+    it("a code under four characters is nagged on blur, with an example of a correct one", () => {
+      const onChange = vi.fn();
+      render(<Harness onChange={onChange} />);
+
+      fireEvent.change(screen.getByLabelText(/access code/i), { target: { value: "AP" } });
+      expect(screen.queryByText(/at least four characters/i)).toBeNull();
+
+      fireEvent.blur(screen.getByLabelText(/access code/i));
+      const alert = screen.getByText(/at least four characters/i);
+      expect(alert).toBeVisible();
+      // The example is a code of the shape Rotate produces, not prose.
+      expect(alert).toHaveTextContent(/MATH-2847/);
+      // Nagged, not refused.
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ access_code: "AP" }));
+    });
+
+    it("the nag goes once the code is long enough, and never appears under another mode", () => {
+      render(<Harness />);
+      fireEvent.change(screen.getByLabelText(/access code/i), { target: { value: "AP" } });
+      fireEvent.blur(screen.getByLabelText(/access code/i));
+      expect(screen.getByText(/at least four characters/i)).toBeVisible();
+
+      fireEvent.change(screen.getByLabelText(/access code/i), { target: { value: "APTI" } });
+      expect(screen.queryByText(/at least four characters/i)).toBeNull();
+
+      fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+      expect(screen.queryByText(/at least four characters/i)).toBeNull();
+    });
+
     it("clearing the code removes the key rather than storing an empty string", () => {
       const onChange = vi.fn();
       render(<Harness onChange={onChange} />);

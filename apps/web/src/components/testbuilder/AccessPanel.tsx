@@ -52,6 +52,11 @@ export const ACCESS_CONSEQUENCE: Readonly<Record<AccessMode, { candidate: string
  * Four and four, because a code people retype is read in chunks. */
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 
+/** A code spelled out of `CODE_ALPHABET`, shown when one is too short —
+ * an example an organiser can copy the shape of, which is what #60 asks
+ * for and what every other refusal in this panel already offers. */
+const EXAMPLE_CODE = "MATH-2847";
+
 function freshCode(): string {
   const bytes = new Uint8Array(8);
   crypto.getRandomValues(bytes);
@@ -84,7 +89,18 @@ export function AccessPanel({
   // "10.0.0.0/2" on the way to "/24" must not be stored and must not be
   // reported as a mistake either.
   const [drafts, setDrafts] = useState<{ domains?: string; ranges?: string }>({});
-  const [touched, setTouched] = useState<{ domains?: true; ranges?: true }>({});
+  const [touched, setTouched] = useState<{ domains?: true; ranges?: true; code?: true }>({});
+
+  // #60: "a malformed … access code is caught on blur with an example of a
+  // correct one" (task 7/8/10 review, M5). A nag, never a refusal — the
+  // standing ruling keeps a half-typed code savable, and `validateTest`
+  // owns the block at publish. Without this the organiser types "AP",
+  // moves on, and meets the refusal at the end of the whole build.
+  const code = access.access_code ?? "";
+  const shortCode =
+    touched.code === true && access.mode === "link_code" && code.trim().length < 4
+      ? `An access code is at least four characters — for example ${EXAMPLE_CODE}. This one will not publish.`
+      : undefined;
 
   const dialog = useDialogKeys<HTMLDivElement>(rotating, () => setRotating(false));
 
@@ -183,14 +199,21 @@ export function AccessPanel({
             className="text-input"
             id={`${ids}-code`}
             type="text"
-            value={access.access_code ?? ""}
+            value={code}
             onChange={(event) => setCode(event.target.value)}
+            onBlur={() => setTouched((prev) => ({ ...prev, code: true }))}
           />
+          {shortCode !== undefined && (
+            <p className="access-panel__risk" role="alert">
+              <span aria-hidden="true">⚠ </span>
+              {shortCode}
+            </p>
+          )}
           <button
             type="button"
             className="button-secondary"
             onClick={() => {
-              void navigator.clipboard?.writeText(access.access_code ?? "").then(
+              void navigator.clipboard?.writeText(code).then(
                 () => setCopied(true),
                 () => setCopied(false),
               );
