@@ -22,6 +22,8 @@ import { workspaceRoutes } from "./routes/workspaces.js";
 import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
+import { testRoutes } from "./routes/tests.js";
+import { shortlinkRoute } from "./routes/shortlink.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -165,6 +167,23 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // named 1, which the authentication floor alone already rules out; 5 is
   // the measured ceiling.
   "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": 5,
+
+  // Phase 5 Task 2 (#54): test CRUD, short links and QR codes. Measured
+  // (apps/api/test/tests.test.ts's "measures the real subrequest cost of
+  // every route this task mounts"), not estimated, like every number above.
+  // GET costs 4 (auth 2 + `listTests`/`getTest` 1 + `draftVersionsByTest`
+  // 1); POST costs 5 (auth 2 + `createTest`'s one batch 1 + the read-back
+  // `getTest` does to hand the route a full row 1 + `appendAudit` 1); PATCH
+  // costs 6 (auth 2 + `updateTest`'s read-then-write 2 + `draftVersionsByTest`
+  // 1 + `appendAudit` 1). The higher of the two methods sharing each path,
+  // same rule Phase 4's banks routes already follow.
+  "/api/v1/workspaces/:id/tests": 5,
+  "/api/v1/workspaces/:id/tests/:testId": 6,
+  // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
+  // `resolveShortCode`, and no authentication cost at all — a request that
+  // carries no session cookie never reaches `readSession` in the first
+  // place (`apps/api/src/middleware/authenticate.ts`).
+  "/t/:code": 1,
 };
 
 /**
@@ -211,6 +230,15 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // Task 9.
   "GET /api/v1/workspaces/:id/banks/:bankId/export": "banks.edit",
   "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "banks.edit",
+
+  // Phase 5 Task 2. There is no `tests.view` either — reads are guarded the
+  // same way banks' reads are, by the one action there is.
+  "GET /api/v1/workspaces/:id/tests": "tests.edit",
+  "POST /api/v1/workspaces/:id/tests": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  "PATCH /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  // `GET /t/:code` carries no entry here at all: it is the one route this
+  // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -240,6 +268,12 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", bankRoutes(deps));
   app.route("/api/v1/workspaces", questionRoutes(deps));
   app.route("/api/v1/workspaces", mediaRoutes(deps));
+  app.route("/api/v1/workspaces", testRoutes(deps));
+  // The one route outside `/api/v1/workspaces/:id/...` this phase mounts —
+  // deliberately public and unguarded (Review Focus 5, ADR 0006's
+  // precedent). `apps/api/src/index.ts` has its own matching change so this
+  // path reaches the Worker instead of the asset router.
+  app.get("/t/:code", shortlinkRoute(deps));
 
   return app;
 }

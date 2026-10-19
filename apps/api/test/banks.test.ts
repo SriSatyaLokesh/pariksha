@@ -174,10 +174,10 @@ it("UX-05: refuses to delete a question a published test holds, with a 409 namin
   );
   const questionId = (await created.json()).id;
 
-  const testId = await createTest(deps.db, workspaceId, { slug: "midterm", name: "Midterm" });
+  const testId = (await createTest(deps.db, workspaceId, { slug: "midterm", name: "Midterm" })).id;
   await publishTestVersion(deps.db, workspaceId, {
     testId,
-    version: 1,
+    version: 2,
     settings: {},
     sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
     now: FIXED_NOW,

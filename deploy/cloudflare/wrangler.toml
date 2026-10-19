@@ -39,10 +39,15 @@ not_found_handling = "404-page"
 # The API has no files under `dist/`, so without this every `/api/*` request
 # would be answered by the asset router's 404 before the script ran. With it
 # the script runs first, and the entry point only defers back to `ASSETS` for
-# paths outside `/api/` — so an unknown API path returns Hono's JSON error
-# envelope rather than the 404 page. Widening this list is what would start
-# metering requests that are free today.
-run_worker_first = ["/api/*"]
+# paths outside `/api/` and `/t/` — so an unknown API path returns Hono's
+# JSON error envelope rather than the 404 page. Widening this list is what
+# would start metering requests that are free today.
+#
+# Phase 5 Task 2 (#54): `/t/*` added for T-02's public short link —
+# `GET /t/:code` has no file under `dist/` either, and without this entry the
+# asset router's own 404 would answer every short link before Hono ever saw
+# it, the same failure `/api/*`'s own comment describes.
+run_worker_first = ["/api/*", "/t/*"]
 
 [[d1_databases]]
 binding = "DB"

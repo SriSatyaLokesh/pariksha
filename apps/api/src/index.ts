@@ -47,7 +47,14 @@ export default {
     // through to Hono and a visitor to a mistyped URL gets the API's JSON
     // error envelope instead of a page — verified against Miniflare, not
     // assumed, in `test/worker.test.ts`.
-    if (!new URL(request.url).pathname.startsWith("/api/")) {
+    // Phase 5 Task 2 (#54): `/t/:code` is the one route outside `/api/` this
+    // application mounts — the public short link (Review Focus 5, ADR
+    // 0006's precedent). Without this it would never reach Hono at all:
+    // `run_worker_first` covers `/api/*` only, so `ASSETS.fetch` would
+    // answer every `/t/...` request with `404.html` before this route ever
+    // ran.
+    const path = new URL(request.url).pathname;
+    if (!path.startsWith("/api/") && !path.startsWith("/t/")) {
       // The cast is the seam between two declarations of the same runtime
       // type: `@cloudflare/workers-types` and @types/node each define
       // `Request` and `Response`, and this file is compiled with both.
