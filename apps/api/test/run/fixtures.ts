@@ -25,12 +25,16 @@ import { FIXED_NOW } from "../deps.js";
 export const DAY = 86_400_000;
 export const iso = (at: number): string => new Date(at).toISOString();
 
-/** The one workspace every candidate test below hangs off. */
-export async function seedWorkspace(deps: AppDeps, slug = "alpha"): Promise<string> {
+/** The workspace the candidate tests below hang off. */
+export async function seedWorkspace(
+  deps: AppDeps,
+  slug = "alpha",
+  name = "Alpha Corp",
+): Promise<string> {
   const workspaceId = newId("wsp");
   await createWorkspace(deps.db, workspaceId, {
     slug,
-    name: "Alpha Corp",
+    name,
     branding: {
       logo: "9f1c.png",
       logo_alt: "Alpha Corp",
@@ -194,6 +198,24 @@ export async function seedPublishedTest(deps: AppDeps): Promise<string> {
       sections: [{ id: "only", title: "Only", source: { kind: "pool", count: 5 } }],
     },
   });
+
+  // Two workspaces whose slug pair really would resolve, so the route's
+  // "the slug 'attempt' cannot shadow the attempt routes" assertion has
+  // something to refuse rather than passing on an absent fixture (review
+  // finding I-5 / M-1). `attempt/answer` is the exact pair Task 5's
+  // `PUT /api/v1/run/attempt/answer` will occupy; `not-attempt/answer` is
+  // the control that proves the refusal is about the slug and nothing else.
+  for (const slug of ["attempt", "not-attempt"]) {
+    const ws = await seedWorkspace(deps, slug, "Shadow Co");
+    await seedTest(deps, ws, {
+      name: "Answer",
+      slug: "answer",
+      body: {
+        settings: { timing: { duration_minutes: 10 } },
+        sections: [{ id: "only", title: "Only", source: { kind: "pool", count: 1 } }],
+      },
+    });
+  }
 
   return workspaceId;
 }

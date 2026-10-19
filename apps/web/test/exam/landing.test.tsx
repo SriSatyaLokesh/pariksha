@@ -127,10 +127,32 @@ it("the landing page has no axe violations", async () => {
 
 it("WCAG 2.5.3: every control's accessible name contains its visible label", async () => {
   await mount();
-  for (const button of screen.getAllByRole("button")) {
-    const accessible = (button.getAttribute("aria-label") ?? button.textContent ?? "").toLowerCase();
-    expect(accessible, button.textContent ?? "").toContain((button.textContent ?? "").trim().toLowerCase());
+  const buttons = screen.getAllByRole("button");
+  expect(buttons.length).toBeGreaterThan(0);
+
+  for (const button of buttons) {
+    const visible = (button.textContent ?? "").trim();
+    // Without this, the assertion below is satisfied by the empty string
+    // for any control whose visible label has gone missing.
+    expect(visible.length, "a control with no visible label at all").toBeGreaterThan(0);
+    // `toHaveAccessibleName` computes the name the way a screen reader does
+    // (aria-label, then aria-labelledby, then content), so the two sides of
+    // this comparison are no longer the same expression. The previous
+    // version read `aria-label ?? textContent` and compared it against
+    // `textContent` — an identity for every control with no aria-label,
+    // which was all of them.
+    expect(button).toHaveAccessibleName(
+      new RegExp(visible.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+    );
   }
+
+  // The positive control. With no control carrying an aria-label that
+  // differs from its text, the loop above would hold for a component that
+  // never set one — true, and proving nothing. Start is deliberately
+  // labelled "Start <test name>" over the visible "Start".
+  const start = screen.getByRole("button", { name: "Start Aptitude" });
+  expect(start.textContent?.trim()).toBe("Start");
+  expect(start.getAttribute("aria-label")).toBe("Start Aptitude");
 });
 
 it("every control is a focusable native button, in the order a candidate meets them", async () => {

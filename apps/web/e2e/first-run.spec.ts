@@ -64,8 +64,11 @@ test("the wizard cannot be re-opened once the instance has an owner", async ({
   // The plan calls this "visiting /setup after setup is complete redirects
   // to sign-in, not to the wizard". There is no `/setup` URL: the organiser
   // app routes on two API answers, not on the path (see routes/organiser.tsx),
-  // and the static host serves a 404 page rather than a SPA fallback, so
-  // `/setup` would never reach React. What the plan describes is that table
+  // and the static host serves a 404 page for a one-segment miss like this
+  // one, so `/setup` would never reach React. (Phase 6 Task 1 added one
+  // bounded rewrite in `public/_redirects` — a TWO-segment path goes to the
+  // candidate runtime's `exam.html` — which `/setup` does not match; the
+  // site is still not a SPA.) What the plan describes is that table
   // — which is what is asserted here, from both of its signed-out and
   // signed-in rows.
   await page.goto(ORGANISER);

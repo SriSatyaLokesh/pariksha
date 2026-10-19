@@ -137,8 +137,17 @@ it("the slug 'attempt' cannot shadow the attempt routes the later tasks mount", 
   // `/api/v1/run/attempt/answer` and `/api/v1/run/:workspaceSlug/:testSlug`
   // both match three segments. Hono prefers a static segment to a
   // parameter, which Task 5 pins once `/run/attempt/...` is really mounted;
-  // until then the belt is `resolvePublishedTest`'s own refusal, so a
-  // workspace that manages to take the slug still cannot answer here.
-  const res = await app.request("/api/v1/run/attempt/answer");
-  expect(res.status).toBe(404);
+  // until then the belt is `resolvePublishedTest`'s own refusal.
+  //
+  // The fixtures publish a REAL test at `attempt/answer`, so the only thing
+  // that can produce a 404 here is the refusal itself (review finding I-5).
+  // Asserting against a slug pair that resolved to nothing anyway is what
+  // made the first version of this test unable to fail.
+  expect((await app.request("/api/v1/run/attempt/answer")).status).toBe(404);
+
+  // The control: the identical test under any other workspace slug is
+  // served normally, so what refused above was the slug and not the paper.
+  const control = await app.request("/api/v1/run/not-attempt/answer");
+  expect(control.status).toBe(200);
+  expect(await control.json()).toMatchObject({ name: "Answer", durationMinutes: 10 });
 });

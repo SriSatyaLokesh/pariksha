@@ -199,7 +199,17 @@ export function ExamLanding({ test }: { test: LandingPayload }) {
           <button type="button" onClick={() => setReport(deviceReport())}>
             Check my device
           </button>
-          <button type="button" className="exam-start" disabled={test.state !== "open"}>
+          {/* WCAG 2.5.3: the accessible name is a SUPERSET of the visible
+              label, never a replacement for it. "Start" alone is what the
+              eye wants on the one button that matters; a screen-reader
+              user who arrives at it out of context — from a button list,
+              say — needs to hear what is starting. */}
+          <button
+            type="button"
+            className="exam-start"
+            aria-label={`Start ${test.name}`}
+            disabled={test.state !== "open"}
+          >
             Start
           </button>
         </div>

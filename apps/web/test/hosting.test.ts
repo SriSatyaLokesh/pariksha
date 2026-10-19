@@ -186,9 +186,24 @@ describe("deploy/cloudflare/wrangler.toml", () => {
   });
 
   // T11 / SEO-4: a bogus URL must 404, never serve the landing page with a
-  // soft-404 HTTP 200.
-  it("serves dist/404.html on a miss, never the single-page-application fallback", () => {
+  // soft-404 HTTP 200. `not_found_handling = "404-page"` is what keeps that
+  // true for every path the asset router does not match.
+  //
+  // Phase 6 Task 1 (#65) narrowed the claim, so this test's name narrowed
+  // with it. There IS now one rewrite, and exactly one: `_redirects` maps a
+  // TWO-SEGMENT path onto `exam.html` with a 200, because T-02's candidate
+  // URL `/<workspace-slug>/<test-slug>` has no file behind it. That is a
+  // deliberate, bounded exception — never a blanket
+  // `not_found_handling = "single-page-application"`, which would turn
+  // every miss at every depth into a page. One-segment and three-segment
+  // misses still get `dist/404.html`, which is what this line pins; the
+  // `_redirects` describe block above pins the exception's shape and
+  // ordering. Its accepted cost — a two-segment path naming no real test
+  // answers 200 with the exam shell, mitigated by `noindex` on both the
+  // meta tag and the header — is recorded in ADR 0008.
+  it("serves dist/404.html on a miss, and never turns the whole site into a SPA", () => {
     expect(scalar("not_found_handling")).toBe("404-page");
+    expect(toml).not.toContain("single-page-application");
   });
 
   // SEO-7: once a custom domain is added, the workers.dev and preview URLs

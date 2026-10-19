@@ -97,16 +97,70 @@ it("the actor set is a literal allowlist too — signed in, but naming no worksp
   ]);
 });
 
+/**
+ * A concrete URL for every endpoint whose path carries a parameter. There
+ * is no default: `probeOf` refuses a path that still contains a `:`, so a
+ * later task that adds a parameterised `public` or `actor` route has to
+ * supply a URL here rather than have its probe silently skip.
+ */
+const PROBE_URL: Readonly<Record<string, string>> = {
+  "GET /api/v1/run/:workspaceSlug/:testSlug": "/api/v1/run/alpha/aptitude",
+  "GET /api/v1/auth/:provider/start": "/api/v1/auth/google/start",
+  "GET /api/v1/auth/:provider/callback": "/api/v1/auth/google/callback",
+  "GET /t/:code": "/t/ABC123",
+};
+
+function probeOf(endpoint: string): { method: string; url: string } {
+  const [method = "GET", path = "/"] = endpoint.split(" ");
+  const url = PROBE_URL[endpoint] ?? path;
+  expect(url, `${endpoint} is parameterised and needs a PROBE_URL entry`).not.toContain(":");
+  return { method, url };
+}
+
+const anonymously = (endpoint: string): Promise<Response> => {
+  const { method, url } = probeOf(endpoint);
+  return app.request(url, {
+    method,
+    ...(method === "GET" ? {} : { headers: { "content-type": "application/json" }, body: "{}" }),
+  });
+};
+
+const endpointsWithAuthority = (wanted: string): string[] =>
+  Object.entries(ROUTE_AUTH)
+    .filter(([, authority]) => authority === wanted)
+    .map(([endpoint]) => endpoint);
+
 it("every endpoint the actor allowlist names really does refuse an anonymous caller", async () => {
-  for (const endpoint of Object.entries(ROUTE_AUTH)
-    .filter(([, authority]) => authority === "actor")
-    .map(([e]) => e)) {
-    const [method = "GET", path = "/"] = endpoint.split(" ");
-    const res = await app.request(path, {
-      method,
-      ...(method === "GET" ? {} : { headers: { "content-type": "application/json" }, body: "{}" }),
-    });
-    expect(res.status, endpoint).toBe(401);
+  const actors = endpointsWithAuthority("actor");
+  expect(actors.length).toBeGreaterThan(0);
+  for (const endpoint of actors) {
+    expect((await anonymously(endpoint)).status, endpoint).toBe(401);
+  }
+});
+
+/**
+ * The mirror of the assertion above, and the reason both exist.
+ *
+ * `public` and `actor` are the two authorities that carry no middleware for
+ * `routeAuthorities` to read back, so the literal is all that holds them —
+ * and a literal only catches a human reading one new line in a sorted list.
+ * Without this, a Phase 7 or Phase 8 route that calls `actorOr401` inside
+ * its handler but is declared `public` passes every other assertion in this
+ * file. Task 12's scrubber then enumerates it from `ROUTE_AUTH` as
+ * candidate-reachable and reports clean on a body it could never obtain.
+ *
+ * 401 **and** 403: both mean "you needed a credential you did not send",
+ * which is the one thing a `public` route may never answer. Any other
+ * status is fine — these probes send placeholder parameters and empty
+ * bodies, so a 400, a 404 or a redirect all say the route was reached.
+ */
+it("every endpoint the public allowlist names really is reachable without one", async () => {
+  const publics = endpointsWithAuthority("public");
+  expect(publics.length).toBeGreaterThan(0);
+  for (const endpoint of publics) {
+    const status = (await anonymously(endpoint)).status;
+    expect(status, `${endpoint} answered ${String(status)} to an anonymous caller`).not.toBe(401);
+    expect(status, `${endpoint} answered ${String(status)} to an anonymous caller`).not.toBe(403);
   }
 });
 
