@@ -139,10 +139,20 @@ export function countingDeps(deps: AppDeps): {
  * reverse would be a route that silently escapes the check.
  */
 export function mountedRoutes(app: Hono<AppBindings>): string[] {
-  const paths = app.routes
+  return [...new Set(mountedEndpoints(app).map((endpoint) => endpoint.slice(endpoint.indexOf(" ") + 1)))].sort();
+}
+
+/**
+ * The same table keyed the way `routeGuards` and `ROUTE_ACTIONS` key it —
+ * `"METHOD /path"` — because one path routinely carries two methods and two
+ * different permissions, and "is this route guarded at all?" has to be asked
+ * per method or a guarded `GET` vouches for an unguarded `DELETE`.
+ */
+export function mountedEndpoints(app: Hono<AppBindings>): string[] {
+  const endpoints = app.routes
     .filter((route) => !(route.method === "ALL" && route.path.includes("*")))
-    .map((route) => route.path);
-  return [...new Set(paths)].sort();
+    .map((route) => `${route.method} ${route.path}`);
+  return [...new Set(endpoints)].sort();
 }
 
 /**
