@@ -40,11 +40,24 @@
 //
 // ponytail: the refusals are on the URL as written, not on what it
 // resolves to — a DNS lookup is not available on Workers and is not
-// attempted, so a public hostname with an `A` record pointing at
-// `10.0.0.7` is out of scope and reaches the fetch. Upgrade path: resolve
-// the host and re-check the address at the Node entry (Phase 11), where
-// `dns.lookup` exists; the refusals below stay as the first gate either
-// way.
+// attempted. **Two classes are therefore out of scope and reach the
+// fetch**, and the second was missing from this note until the
+// whole-branch security review named it:
+//
+//   1. a *public* hostname with an `A` record pointing at `10.0.0.7`;
+//   2. a **multi-label private name** — `redis.prod`, `db.svc`,
+//      `host.lan`, `foo.corp`. Each has a dot, so the single-label rule
+//      does not catch it; none matches an `INTERNAL_SUFFIX`; none is an
+//      IP literal. All are fetched.
+//
+// On Workers both are moot: only the public resolver is reachable, which
+// is what makes the limit acceptable today. **On the Docker target this
+// file's own header calls out, where `http://10.0.0.7:5432/` is a
+// database, class 2 is live.** Upgrade path, and it is a condition on
+// Phase 11 rather than a nice-to-have: resolve the host and re-check the
+// address at the Node entry, where `dns.lookup` exists, *with* that
+// entry and not after it. The refusals below stay as the first gate
+// either way.
 
 export type ReachState = "reachable" | "unverified" | "timeout" | "refused";
 
@@ -70,6 +83,11 @@ export interface ReachResult {
   checkedAt: number;
 }
 
+/** Per *call*, not per check: a `HEAD` that answers 405 is retried once
+ * with `GET` and each carries its own `AbortSignal.timeout`, so the real
+ * worst case for one `POST .../check-url` is two subrequests and 10 s
+ * (whole-branch security review, L4 — the declared ceiling was a
+ * single-fetch number). `ROUTE_BUDGETS` is pinned to that path. */
 export const REACH_TIMEOUT_MS = 5000;
 
 /** The ports a web link is served on. A check of `:22`, `:5432` or `:6379`

@@ -9,9 +9,20 @@
 //
 // Two kinds of row share the table, told apart by `source`. A `"list"` row
 // came from an upload; a `"registration"` row came from a candidate
-// signing themselves up (`createCandidate`, repo/attempts.ts). That
-// discriminator is the whole reason a re-upload is safe: it replaces every
-// row it owns and touches nobody who has already registered.
+// signing themselves up (`createCandidate`, repo/attempts.ts).
+//
+// **A re-upload replaces every `"list"` row and touches no registration —
+// and that is not yet the same as being safe** (whole-branch security
+// review, L3). `replaceCandidateList` deletes `WHERE source = 'list'` and
+// then inserts, while the table carries `(test_id, external_id)` unique
+// (migration `0005`). A registration row correctly survives the delete,
+// so its `external_id` is still in the index when the insert for the same
+// candidate arrives: the batch violates the constraint, nothing is
+// written, and the route answers 500 rather than a positioned issue.
+// Inert in Phase 5, because nothing writes a `registration` row yet.
+// **Phase 6 must fix this before it adds registration** — either widen the
+// delete to `source = 'list' OR external_id IN (…)`, or upsert — so that
+// the property this comment claims is the property the SQL has.
 
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";

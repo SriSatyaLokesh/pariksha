@@ -57,7 +57,7 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 | `packages/db/src/repo/tests.ts` | Test and version reads and writes, the draft head, the lifecycle transitions |
 | `packages/db/src/repo/candidates.ts` | The candidate list: the rows Phase 6 mints invites against and matches registrations to |
 | `apps/api/src/import/candidates.ts` | Candidate-list CSV → rows, with each issue's source line |
-| `packages/db/src/repo/test-document.ts` | `toTestDocument` / `toTestRecord` — the one place a `pariksha/test@1` document becomes rows; pure-mapper sibling of `repo/question-document.ts` |
+| `packages/db/src/repo/test-document.ts` | **CORRECTED (whole-branch drift review, P-01): the shipped pair is `toTestDocument` / `toStoredBody`.** `toTestRecord` never existed; the corrected Interfaces block below names it right, and this table is the half nobody went back to. Also shipped and missing from this table: `apps/web/src/components/testbuilder/useDialogKeys.ts`, `packages/db/src/repo/shortlink.ts`, and `deriveState` (`repo/test-document.ts`). The one place a `pariksha/test@1` document becomes rows; pure-mapper sibling of `repo/question-document.ts` |
 | `packages/db/src/repo/banks.ts` | Modified: `published_at IS NOT NULL` on all three usage predicates |
 | `apps/api/src/routes/tests.ts` | `/tests`, `/tests/:testId`, `/tests/:testId/draft`, and the lifecycle, clone, export, import, checklist and check-url routes |
 | `apps/api/src/routes/shortlink.ts` | `GET /t/:code` — the one public unguarded route |

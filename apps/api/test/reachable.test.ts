@@ -322,7 +322,27 @@ it("measures the real subrequest cost of check-url, counting the outbound fetch"
   // `countingDeps` wrapped `deps.http`, the one call this route exists to
   // make was the one call the budget could not see, and `total` here read 3.
   expect(counting.counts()).toEqual({ db: 3, storage: 0, http: 1, total: 4 });
-  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/check-url"]).toBe(4);
+});
+
+// Whole-branch security review, L4: the declared 4 was a single-fetch
+// number, and `checkReachable` retries once with `GET` when `HEAD`
+// answers 405. The retry path was tested for behaviour (`:139`) and never
+// counted, so the budget and the timeout ceiling were both understated.
+// This is the path the pin is now set by.
+it("a HEAD rejected with 405 costs one subrequest more — the budget is that path", async () => {
+  const http = vi.fn(async (_url: unknown, init?: RequestInit) =>
+    responseWith(init?.method === "HEAD" ? 405 : 200).response,
+  ) as unknown as typeof globalThis.fetch;
+  const counting = countingDeps(withHttp(http));
+  const res = await createApp(counting.deps).request(
+    checkUrl(workspaceId, testId),
+    send("POST", authorCookie, { url: "https://example.com/cv.pdf" }),
+  );
+  expect(res.status).toBe(200);
+
+  expect(counting.counts()).toEqual({ db: 3, storage: 0, http: 2, total: 5 });
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/check-url"]);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/check-url"]).toBe(5);
 });
 
 it("a refused URL costs one subrequest less, because the refusal is before the fetch", async () => {

@@ -209,10 +209,14 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // Workers exactly as a D1 query is, which is why `countingDeps`
   // (apps/api/src/instrument.ts) wraps `deps.http` too — otherwise the one
   // call this route exists to make is the one call the budget cannot see.
-  // A URL `checkReachable` refuses costs 3, not 4: the refusal happens
-  // before the first fetch. The higher of the two, same rule every other
-  // budget here follows.
-  "/api/v1/workspaces/:id/tests/:testId/check-url": 4,
+  // A URL `checkReachable` refuses costs 3: the refusal happens before the
+  // first fetch. A server that rejects `HEAD` with 405 costs **5** — the
+  // one `GET` retry (`net/reachable.ts:131-133`) is a second subrequest,
+  // and the declared 4 counted only the single-fetch path (whole-branch
+  // security review, L4). The higher of the three, same rule every other
+  // budget here follows. The timeout ceiling is 10 s for the same reason:
+  // each call carries its own `AbortSignal.timeout(REACH_TIMEOUT_MS)`.
+  "/api/v1/workspaces/:id/tests/:testId/check-url": 5,
   // Task 9 (#60 / #56, P5.7b): the candidate list. Measured
   // (`apps/api/test/candidate-list.test.ts`'s own "measures the real
   // subrequest cost" test), not estimated. GET costs 3: auth (2) +
