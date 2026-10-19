@@ -9,7 +9,7 @@ import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
 import type { CandidateQuestion } from "../../src/lib/paper";
 import { ExamApp } from "../../src/routes/exam";
-import { examPaper, landingPayload, startFromRoot } from "./answer-fixtures";
+import { client, examPaper, startFromRoot } from "./answer-fixtures";
 
 // Task 7 (#71, P6.7), the choice family: single, multiple, select_k,
 // true_false and assertion_reason. `CandidateQuestion` carries no key of
@@ -297,7 +297,7 @@ describe("reachability: the candidate app's own root, clicked to", () => {
   });
 
   it("the paper's own prompt renders through the shared renderer", async () => {
-    render(<ExamApp client={{ landing: () => Promise.resolve(landingPayload), start: () => Promise.resolve(examPaper) }} />);
+    render(<ExamApp client={client()} />);
     activate(await screen.findByRole("button", { name: /^start/i }));
     expect(await screen.findByText(/capital of France/i)).toBeVisible();
   });
@@ -443,7 +443,7 @@ describe("reachability: the passage and the media, from the root", () => {
   });
 
   it("axe is clean on the whole runner with a passage and an image in it", async () => {
-    const view = render(<ExamApp client={{ landing: () => Promise.resolve(landingPayload), start: () => Promise.resolve(examPaper) }} />);
+    const view = render(<ExamApp client={client()} />);
     activate(await screen.findByRole("button", { name: /^start/i }));
     const passage = await screen.findByRole("region", { name: /passage/i });
     await waitFor(() => {

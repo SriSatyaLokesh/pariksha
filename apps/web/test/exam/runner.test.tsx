@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { readResolvedCss } from "../css-chain";
-import { ExamApp } from "../../src/routes/exam";
+import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import { Runner } from "../../src/components/exam/Runner";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
@@ -499,10 +499,27 @@ const landing: LandingPayload = {
   serverNow: NOW,
 };
 
-/** Task 5 widens `RunClient` with `start`. Stubbed here against the pinned
- * interface rather than added to `lib/run.ts`, which Task 5 owns. */
-function clientWithStart(): RunClient & { start: () => Promise<AttemptPaper> } {
-  return { landing: () => Promise.resolve(landing), start: () => Promise.resolve(paper) };
+/** A registered candidate's client: the token is in `sessionStorage`
+ * where the registration screen leaves it, and `start` refuses anything
+ * else — a `start(undefined)` is the one failure the merge had to make
+ * loud. */
+function clientWithStart(): RunClient {
+  sessionStorage.setItem(REGISTRATION_TOKEN_KEY, "reg_runner");
+  return {
+    landing: () => Promise.resolve(landing),
+    start: (registrationToken) =>
+      registrationToken === "reg_runner"
+        ? Promise.resolve(paper)
+        : Promise.reject(new Error(`start was given ${String(registrationToken)}`)),
+    // Task 5's own widening: the five calls this screen never makes
+    // reject rather than resolve, so a screen that starts making one
+    // fails here instead of passing quietly.
+    access: () => Promise.reject(new Error("the runner passes no gate")),
+    requestEmailCode: () => Promise.reject(new Error("the runner sends no code")),
+    form: () => Promise.reject(new Error("the runner reads no form")),
+    register: () => Promise.reject(new Error("the runner registers nobody")),
+    resume: () => Promise.reject(new Error("the runner resumes no attempt")),
+  };
 }
 
 /** The app root, started. The pre-submit checklist's first item: a screen

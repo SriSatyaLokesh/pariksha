@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { ExamApp } from "../../src/routes/exam";
+import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 
@@ -145,10 +145,25 @@ export const landingPayload: LandingPayload = {
   serverNow: NOW,
 };
 
-function client(): RunClient & { start: () => Promise<AttemptPaper> } {
+/** A candidate who has already registered: the registration token is
+ * where the registration screen puts it, which is what `ExamApp` spends
+ * on `start`. */
+export function client(): RunClient {
+  sessionStorage.setItem(REGISTRATION_TOKEN_KEY, "reg_fixture");
   return {
     landing: () => Promise.resolve(landingPayload),
-    start: () => Promise.resolve(examPaper),
+    start: (registrationToken) =>
+      registrationToken === "reg_fixture"
+        ? Promise.resolve(examPaper)
+        : Promise.reject(new Error(`start was given ${String(registrationToken)}`)),
+    // Task 5's own widening: the five calls this screen never makes
+    // reject rather than resolve, so a screen that starts making one
+    // fails here instead of passing quietly.
+    access: () => Promise.reject(new Error("the runner passes no gate")),
+    requestEmailCode: () => Promise.reject(new Error("the runner sends no code")),
+    form: () => Promise.reject(new Error("the runner reads no form")),
+    register: () => Promise.reject(new Error("the runner registers nobody")),
+    resume: () => Promise.reject(new Error("the runner resumes no attempt")),
   };
 }
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { ExamApp, deviceReport } from "../../src/routes/exam";
+import { ExamApp, REGISTRATION_TOKEN_KEY, deviceReport } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 
 // C-01, over the candidate app's own root. Nothing here renders
@@ -116,6 +116,22 @@ it("C-01: 'Check my device' reports before the window opens and does not block s
 it("the start button is enabled only while the test is open", async () => {
   await mount();
   expect(screen.getByRole("button", { name: /start/i })).toBeEnabled();
+});
+
+it("Start without a registration token says so rather than minting an attempt", async () => {
+  // The merge's one real hazard: the screens were built against a
+  // zero-argument `start()`, and `RunClient & Partial<PaperClient>` kept
+  // `client.start()` compiling while calling the real
+  // `start(undefined)` — a 4xx on the first live run, caught by nothing.
+  // The token now comes from `sessionStorage`, and there is none here.
+  sessionStorage.removeItem(REGISTRATION_TOKEN_KEY);
+  await mount();
+  fireEvent.click(screen.getByRole("button", { name: /start/i }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Register for this test before starting it.",
+  );
+  // `clientFor`'s `start` rejects with its own message, so a guard that
+  // let the call through would fail on the text above.
 });
 
 it("a closed test says so instead of offering a start button that refuses", async () => {

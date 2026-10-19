@@ -255,15 +255,26 @@ type View =
   | { kind: "attempt"; paper: AttemptPaper };
 
 /**
- * Task 5 widens `RunClient` in `lib/run.ts` with exactly these, answering
- * with the `AttemptPaper` Task 5 defines there. Declared here, structurally
- * and optional, so Task 6's shell is reachable from the app root — the
- * pre-submit checklist's first item — before the API half of the phase
- * lands. The merge deletes this interface and widens the prop to the real
- * `RunClient`.
+ * Where the registration step hands `/start` its single-use token.
+ *
+ * `POST .../register` answers `{ registrationToken }`; `POST .../start`
+ * spends it and mints the attempt. The registration screen that writes
+ * this key is the next candidate-side task, so today only the read half
+ * exists — and a Start pressed without one says so rather than calling
+ * `start(undefined)`, which is exactly the runtime hole the merge closed.
+ *
+ * `sessionStorage`, not memory alone: a reload between registering and
+ * pressing Start must not cost the candidate their place, and the token
+ * has no value after this tab closes.
  */
-export interface PaperClient {
-  start(): Promise<AttemptPaper>;
+export const REGISTRATION_TOKEN_KEY = "pariksha.registrationToken";
+
+export function readRegistrationToken(): string | null {
+  try {
+    return sessionStorage.getItem(REGISTRATION_TOKEN_KEY);
+  } catch {
+    return null;
+  }
 }
 
 function AttemptView({ paper }: { paper: AttemptPaper }) {
@@ -316,7 +327,7 @@ function AttemptView({ paper }: { paper: AttemptPaper }) {
   );
 }
 
-export function ExamApp({ client }: { client: RunClient & Partial<PaperClient> }) {
+export function ExamApp({ client }: { client: RunClient }) {
   const [view, setView] = useState<View>({ kind: "loading" });
 
   const boot = useCallback(async () => {
@@ -356,10 +367,14 @@ export function ExamApp({ client }: { client: RunClient & Partial<PaperClient> }
     <ExamLanding
       test={view.test}
       onStart={() => {
+        const registrationToken = readRegistrationToken();
+        if (registrationToken === null) {
+          setView({ kind: "error", message: "Register for this test before starting it." });
+          return;
+        }
         void (async () => {
           try {
-            const paper = await client.start?.();
-            if (paper) setView({ kind: "attempt", paper });
+            setView({ kind: "attempt", paper: await client.start(registrationToken) });
           } catch (error) {
             setView({
               kind: "error",
