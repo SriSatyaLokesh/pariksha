@@ -712,6 +712,23 @@ it("a refused allowlist stores nothing — the whole patch is rejected, not the 
   expect((body.body as { settings: { access: unknown } }).settings.access).toEqual({ mode: "sso" });
 });
 
+// task 7/8/10 review, m4: validated lower-cased, so stored lower-cased —
+// otherwise Phase 6's matcher has to remember the fold and an entry that
+// never matches looks exactly like one that does.
+it("an allowlist entry is stored folded to lower case, however it was typed", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "sso", allow_email_domains: ["Example.COM"], allow_ip_ranges: ["2001:DB8::/32"] } },
+  });
+  expect(status).toBe(200);
+
+  const { body } = await draft(workspaceId, testId, authorCookie);
+  expect((body.body as { settings: { access: unknown } }).settings.access).toEqual({
+    mode: "sso",
+    allow_email_domains: ["example.com"],
+    allow_ip_ranges: ["2001:db8::/32"],
+  });
+});
+
 it("a well-formed allowlist saves even when it can match nothing — that is publish-time", async () => {
   const { status } = await patchDraft(workspaceId, testId, authorCookie, {
     settings: { access: { mode: "sso", allow_email_domains: ["nobody.example"], allow_ip_ranges: ["203.0.113.0/32"] } },
