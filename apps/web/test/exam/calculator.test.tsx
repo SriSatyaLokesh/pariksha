@@ -139,6 +139,86 @@ describe("the calculator's keyboard and focus behaviour", () => {
     expect(display()).toBe("0");
   });
 
+  // ---- keys fired on the focused control, not on the dialog -------------
+  //
+  // Fix round 1, I1. Every keyboard assertion above goes through
+  // `press()`, which targets `document.activeElement` — and after
+  // `open()` that is the dialog, because the hook focuses it. So the
+  // whole block above exercises the type-on-the-dialog path and never the
+  // tab-to-a-key-then-Enter path, which is where the defect lived. These
+  // fire on the button that really has focus.
+
+  it("Enter on a focused key activates that key, it does not apply an equals", () => {
+    open();
+    const seven = keyFor("7");
+    seven.focus();
+    // `fireEvent` returns false when a handler called preventDefault() —
+    // which is what used to cancel the browser's own button activation.
+    const notCancelled = fireEvent.keyDown(seven, { key: "Enter" });
+    expect(notCancelled).toBe(true);
+    expect(display()).toBe("0");
+    // ...and the activation the browser then performs enters a 7.
+    fireEvent.click(seven);
+    expect(display()).toBe("7");
+  });
+
+  it("Enter on a focused operator key does not short-circuit to equals", () => {
+    open();
+    type("8");
+    const plus = keyFor("+");
+    plus.focus();
+    expect(fireEvent.keyDown(plus, { key: "Enter" })).toBe(true);
+    fireEvent.click(plus);
+    type("9=");
+    expect(display()).toBe("17");
+  });
+
+  it("Enter on Close calculator closes it", () => {
+    const { onClose } = open();
+    const close = screen.getByRole("button", { name: /close calculator/i });
+    close.focus();
+    expect(fireEvent.keyDown(close, { key: "Enter" })).toBe(true);
+    expect(onClose).not.toHaveBeenCalled();
+    fireEvent.click(close);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("Space on a focused key is left to the button too", () => {
+    open();
+    const three = keyFor("3");
+    three.focus();
+    expect(fireEvent.keyDown(three, { key: " " })).toBe(true);
+    expect(display()).toBe("0");
+  });
+
+  it("but typing carries on from a focused key, so a mouse user is not stranded", () => {
+    // The handler still answers every other key wherever it comes from:
+    // click "7" with the mouse (focus is now on that button) and type the
+    // rest.
+    open();
+    type("7");
+    expect(document.activeElement).toBe(keyFor("7"));
+    fireEvent.keyDown(keyFor("7"), { key: "*" });
+    fireEvent.keyDown(keyFor("7"), { key: "6" });
+    fireEvent.click(keyFor("="));
+    expect(display()).toBe("42");
+  });
+
+  it("Enter on the dialog itself still applies an equals", () => {
+    open();
+    press("5", "+", "5");
+    expect(document.activeElement).toBe(screen.getByRole("dialog", { name: /calculator/i }));
+    press("Enter");
+    expect(display()).toBe("10");
+  });
+
+  it("Escape still closes from a focused key, not only from the dialog", () => {
+    const { onClose } = open();
+    keyFor("4").focus();
+    fireEvent.keyDown(keyFor("4"), { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it("Backspace drops the last digit", () => {
     open();
     press("1", "2", "3", "Backspace");

@@ -109,6 +109,17 @@ export function Calculator({ onClose }: { onClose: () => void }) {
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
     onKeyDown(event);
     if (event.defaultPrevented || event.key === "Escape") return;
+    // Fix round 1, I1. This handler sits on the dialog and therefore sees
+    // every keydown bubbling out of the eighteen controls inside it.
+    // Enter and Space on a focused button are that button's own
+    // activation and belong to it: Enter on "7" must enter a 7, not an
+    // equals, and Enter on "Close calculator" must close the calculator.
+    // Rewriting Enter to "=" and calling preventDefault() cancelled both,
+    // silently, because Space still worked. Every other key is still
+    // handled from anywhere inside, so a candidate who clicked a key with
+    // the mouse can carry on typing without clicking the dialog first.
+    const onAKey = event.target !== dialogRef.current;
+    if (onAKey && (event.key === "Enter" || event.key === " ")) return;
     const key = event.key === "Enter" ? "=" : event.key;
     if (/^[\d.+\-*/=]$/.test(key) || key === "Backspace" || key === "c" || key === "C") {
       event.preventDefault();
