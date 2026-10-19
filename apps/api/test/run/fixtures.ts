@@ -15,6 +15,7 @@ import {
   publishDraftVersion,
   putDraftVersion,
   setTestStatus,
+  updateTest,
   type TestDocumentBody,
   type TestStatus,
 } from "@pariksha/db";
@@ -44,13 +45,27 @@ export async function seedWorkspace(deps: AppDeps, slug = "alpha"): Promise<stri
 export async function seedTest(
   deps: AppDeps,
   workspaceId: string,
-  input: { name: string; slug: string; body: TestDocumentBody; status?: TestStatus; publish?: boolean },
+  input: {
+    name: string;
+    slug: string;
+    description?: string;
+    body: TestDocumentBody;
+    status?: TestStatus;
+    publish?: boolean;
+  },
 ): Promise<string> {
   const test = await createTest(deps.db, workspaceId, {
     name: input.name,
     slug: input.slug,
     now: FIXED_NOW,
   });
+  // `description` lives on the `test` row, beside `name` and `slug` — the
+  // identity fields an organiser edits independently of a draft (T-01) —
+  // not in `settings_json`, even though `TestSettings` still carries a key
+  // by that name because `Omit<Test, …>` does not remove it.
+  if (input.description !== undefined) {
+    await updateTest(deps.db, workspaceId, test.id, { description: input.description }, FIXED_NOW);
+  }
   const draft = await getDraftVersion(deps.db, workspaceId, test.id);
   if (!draft) throw new Error("createTest did not seed a draft");
   await putDraftVersion(deps.db, workspaceId, draft, input.body, FIXED_NOW);
@@ -74,9 +89,12 @@ export async function seedPublishedTest(deps: AppDeps): Promise<string> {
   await seedTest(deps, workspaceId, {
     name: "Aptitude",
     slug: "aptitude",
+    description: "A 45-minute aptitude paper.",
     body: {
       settings: {
-        description: "A 45-minute aptitude paper.",
+        // A deliberately *different* value, so the route is proved to read
+        // the `test` row rather than this stale document copy.
+        description: "The settings blob's own stale copy.",
         timing: {
           duration_minutes: 45,
           timezone: "Asia/Kolkata",

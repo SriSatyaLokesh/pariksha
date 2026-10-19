@@ -177,8 +177,13 @@ export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
 /** An RFC 3339 timestamp as epoch milliseconds, or `null` when it is absent
  * or unparseable. An unparseable one is already its own blocking checklist
  * row (`timingIssues`, `@pariksha/core`); here it simply does not move the
- * state, which is the same answer as "no window was set". */
-function instant(raw: string | undefined): number | null {
+ * state, which is the same answer as "no window was set".
+ *
+ * Exported for Phase 6 Task 1 (#65): the candidate landing route reports
+ * the same window `deriveState` judges it against, and two parses of one
+ * timestamp are two chances for a page to say "opens tomorrow" about a
+ * test the server already considers open. */
+export function instant(raw: string | undefined): number | null {
   if (raw === undefined) return null;
   const parsed = Date.parse(raw);
   return Number.isNaN(parsed) ? null : parsed;

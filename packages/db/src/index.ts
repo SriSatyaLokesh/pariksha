@@ -17,3 +17,7 @@ export * from "./repo/test-document.js";
 // Deliberately outside repo/index.js too — see the header of shortlink.ts.
 // `/t/<code>` names no workspace, so there is nothing for `scoped()` to check.
 export * from "./repo/shortlink.js";
+// Deliberately outside repo/index.js too — see the header of
+// candidate-entry.ts. The candidate's pre-workspace read: the workspace ID
+// is what it produces, not an argument it can take (ADR 0006).
+export * from "./repo/candidate-entry.js";

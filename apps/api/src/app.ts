@@ -24,6 +24,7 @@ import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
+import { runRoutes } from "./routes/run.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -297,6 +298,18 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // carries no session cookie never reaches `readSession` in the first
   // place (`apps/api/src/middleware/authenticate.ts`).
   "/t/:code": 1,
+
+  // Phase 6 Task 1 (#65, P6.1): the candidate landing page. Measured
+  // (`test/run/landing.test.ts`'s own "measures the real subrequest cost"
+  // test), not estimated: one statement, `resolvePublishedTest`, joining
+  // the workspace, the test and the version it points at. **The
+  // authentication floor of 2 does not apply to a candidate route** —
+  // `authenticate` calls `readSession` only when a signed session cookie is
+  // present and a candidate carries none, so the floor here is 0 and the
+  // whole cost is the route's own read. Flat in section and question count:
+  // the counts come from `sections_json` and the bank is never touched,
+  // which is also what keeps a question's ID out of the payload (S-10).
+  "/api/v1/run/:workspaceSlug/:testSlug": 1,
 };
 
 /**
@@ -378,6 +391,128 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
 
+/**
+ * Which authority admits a caller to each mounted endpoint — the third
+ * registry beside `ROUTE_BUDGETS` and `ROUTE_ACTIONS`, and the one Phase 6
+ * exists to add (ADR 0008, Review Focus 1).
+ *
+ * `GUARDS` says *which action*, this says *which authority*, and
+ * `ROUTE_BUDGETS` says *what it may spend*. The gap this closes is that
+ * `routeGuards(app)` is built from the `GUARDS` WeakMap, so a route mounted
+ * with **no** guard at all contributes nothing to it and asserts nothing:
+ * before Phase 6 that was visible by reading `createApp`, and after Phase 6
+ * — which mounts a dozen deliberately unguarded candidate routes — it is
+ * not. Here a missing endpoint is a missing key, and a missing key fails
+ * `test/route-authority.test.ts`.
+ *
+ * The four values, each a real distinction in who is admitted:
+ *
+ * - **`workspace`** — `requires()` or `requireMember()`: a signed-in actor
+ *   with a membership in the workspace `:id` names. Exactly the key set of
+ *   `ROUTE_ACTIONS`, asserted as such.
+ * - **`attempt`** — the candidate's 256-bit attempt token (`S-06`). None
+ *   yet; Task 5 mounts the first and registers `attemptContext` so
+ *   `routeAuthorities` can read it back off the live table.
+ * - **`actor`** — a signed-in user and nothing more. These name no
+ *   workspace in the path, so there is no membership for `guard()` to read
+ *   (it throws when `:id` is absent); `actorOr401` is the whole gate.
+ * - **`public`** — no credential of any kind. Asserted **by literal value**
+ *   in the test, so widening the set is a diff a human reviewer sees rather
+ *   than a line that blends into a table of forty.
+ *
+ * Every task that mounts a route adds its line here in the same commit.
+ */
+export type RouteAuthority = "workspace" | "attempt" | "actor" | "public";
+
+export const ROUTE_AUTH: Record<string, RouteAuthority> = {
+  // --- public: no credential at all ------------------------------------
+  "GET /api/v1/health": "public",
+  // Sign-in's own front door. `magic-link` answers identically for a known
+  // and an unknown address by design (`authorization.test.ts`), and the two
+  // OIDC legs are redirects a provider drives.
+  "POST /api/v1/auth/magic-link": "public",
+  "GET /api/v1/auth/:provider/start": "public",
+  "GET /api/v1/auth/:provider/callback": "public",
+  // Signing out requires nothing: the handler clears the cookie and revokes
+  // whatever session the cookie named, and answers 204 to a caller who has
+  // none (`routes/auth.ts`, no `actorOr401`). Its sibling
+  // `signout-everywhere` *does* need an actor, which is why they differ
+  // here despite sharing a prefix — read the guard, not the path.
+  "POST /api/v1/auth/signout": "public",
+  // The first-run wizard asks this before any workspace or account exists.
+  "GET /api/v1/setup/status": "public",
+  // Phase 5 Task 2 (#54): T-02's short link. Refuses a draft, so the
+  // (workspace slug, test slug) pair of an unpublished test is not
+  // disclosed. Not in the plan's original six-entry literal because it was
+  // mounted after that literal was written.
+  "GET /t/:code": "public",
+  // Phase 6 Task 1 (#65, P6.1): the candidate landing page. The first
+  // deliberately public route of the candidate runtime; the access gate
+  // that follows it is Task 2's.
+  "GET /api/v1/run/:workspaceSlug/:testSlug": "public",
+
+  // --- actor: signed in, but naming no workspace ------------------------
+  "POST /api/v1/auth/signout-everywhere": "actor",
+  "GET /api/v1/me": "actor",
+  "POST /api/v1/setup/complete": "actor",
+  // The actor's own workspaces: a list scoped to the caller cannot name
+  // another tenant's, and a create has no workspace to belong to yet.
+  "GET /api/v1/workspaces": "actor",
+  "POST /api/v1/workspaces": "actor",
+
+  // --- workspace: membership in the workspace `:id` names ---------------
+  // Exactly `Object.keys(ROUTE_ACTIONS)`, which the suite asserts rather
+  // than trusting this comment. Kept as its own listing instead of being
+  // spread from that object, because a spread would make the two agree by
+  // construction and assert nothing.
+  "GET /api/v1/workspaces/:id": "workspace",
+  "PATCH /api/v1/workspaces/:id": "workspace",
+  "GET /api/v1/workspaces/:id/members": "workspace",
+  "POST /api/v1/workspaces/:id/members": "workspace",
+  "DELETE /api/v1/workspaces/:id/members": "workspace",
+  "GET /api/v1/workspaces/:id/banks": "workspace",
+  "POST /api/v1/workspaces/:id/banks": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId": "workspace",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId": "workspace",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId": "workspace",
+  "GET /api/v1/workspaces/:id/tags": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "workspace",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "workspace",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/media": "workspace",
+  // Standing decision 4: this keeps `banks.edit` and is **not** relaxed for
+  // a candidate. Task 7 mounts a separate attempt-authority media route
+  // whose authorisation is membership in the attempt's pinned
+  // `layout_json.media`, not the attempt's workspace.
+  "GET /api/v1/workspaces/:id/media/:key": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/groups": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/groups": "workspace",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "workspace",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/import": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/export": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "workspace",
+  "GET /api/v1/workspaces/:id/tests": "workspace",
+  "POST /api/v1/workspaces/:id/tests": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId": "workspace",
+  "PATCH /api/v1/workspaces/:id/tests/:testId": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/draft": "workspace",
+  "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/check-url": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/publish": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/close": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/archive": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/versions": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/checklist": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/clone": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export": "workspace",
+  "POST /api/v1/workspaces/:id/tests/import": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/candidates": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
+};
+
 export function createApp(deps: AppDeps): Hono<AppBindings> {
   const app = new Hono<AppBindings>();
 
@@ -411,6 +546,11 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // precedent). `apps/api/src/index.ts` has its own matching change so this
   // path reaches the Worker instead of the asset router.
   app.get("/t/:code", shortlinkRoute(deps));
+  // Phase 6: the candidate runtime, the third request authority. Mounted
+  // after every `/api/v1/workspaces` route and before nothing — its prefix
+  // cannot collide with theirs — and deliberately carrying no guard. What
+  // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
+  app.route("/api/v1/run", runRoutes(deps));
 
   return app;
 }

@@ -8,7 +8,7 @@ import type { Hono } from "hono";
 import type { DbClient } from "@pariksha/db";
 import type { StorageAdapter } from "@pariksha/storage";
 import type { Action } from "@pariksha/core";
-import type { AppBindings, AppDeps } from "./app.js";
+import type { AppBindings, AppDeps, RouteAuthority } from "./app.js";
 import { guardOf } from "./middleware/authorize.js";
 
 /** Cloudflare Workers, free plan. A paid plan raises it; the guard does not. */
@@ -173,6 +173,34 @@ export function routeGuards(
     if (guard) guards[`${route.method} ${route.path}`] = guard.action;
   }
   return guards;
+}
+
+/**
+ * The authority each mounted endpoint really enforces, read off the same
+ * live route table for the same reason `routeGuards` is — so `ROUTE_AUTH`
+ * is checked against the middleware actually mounted rather than against
+ * itself. Phase 6 Task 1 (#65, ADR 0008).
+ *
+ * Only the authorities that *are* a piece of middleware appear here:
+ * `workspace` (the `GUARDS` WeakMap, written by `guard()`) and, from Task
+ * 5, `attempt` (the attempt-token context, which will register itself the
+ * same way and add its branch here). `actor` and `public` carry no
+ * middleware to read — `actorOr401` is called inside a handler, and
+ * "public" is the absence of anything — so they are declaration-only, and
+ * `route-authority.test.ts` holds each to a literal allowlist instead.
+ * Declaring `workspace` over a route that mounts no guard therefore fails,
+ * and so does declaring `public` over one that does.
+ */
+export function routeAuthorities(
+  app: Hono<AppBindings>,
+): Record<string, RouteAuthority> {
+  const authorities: Record<string, RouteAuthority> = {};
+  for (const route of app.routes) {
+    if (guardOf(route.handler)) {
+      authorities[`${route.method} ${route.path}`] = "workspace";
+    }
+  }
+  return authorities;
 }
 
 export function guardedRoutes(app: Hono<AppBindings>): string[] {
