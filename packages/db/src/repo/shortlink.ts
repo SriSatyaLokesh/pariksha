@@ -17,9 +17,17 @@ export async function resolveShortCode(
   db: DbClient,
   code: string,
 ): Promise<{ workspaceSlug: string; testSlug: string } | null> {
+  // `status <> 'draft'` — whole-branch security review, M3. Without it an
+  // unauthenticated caller gets the (workspace slug, test slug) pair of a
+  // test nobody was ever given a link to, and slugs are author-chosen and
+  // routinely meaningful (`acme-grad-hiring-2027`). The 32^6 code space is
+  // ample against guessing *a particular* test and is not what protects a
+  // sweep — there is no rate limiter anywhere in the repo until Phase 6
+  // Task 4. The limiter fixes the sweep; this fixes the draft disclosure
+  // independently, and costs one predicate on an indexed read.
   const rows = await db.query<{ workspace_slug: string; test_slug: string }>(
     "SELECT w.slug AS workspace_slug, t.slug AS test_slug FROM test t " +
-      "JOIN workspace w ON w.id = t.workspace_id WHERE t.short_code = ?",
+      "JOIN workspace w ON w.id = t.workspace_id WHERE t.short_code = ? AND t.status <> 'draft'",
     [code],
   );
   const row = rows[0];

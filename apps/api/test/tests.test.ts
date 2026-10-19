@@ -239,9 +239,18 @@ it("AC-02: GET /t/<code> redirects to /<workspace-slug>/<test-slug> and nothing 
     `/api/v1/workspaces/${workspaceId}/tests`,
     post({ name: "Midterm", slug: "midterm" }, authorCookie),
   );
-  const shortCode = (await created.json()).shortCode;
+  const { id: testId, shortCode } = await created.json();
 
-  // No cookie: the short link is public.
+  // Whole-branch security review, M3: a draft resolves to nothing. Until
+  // this predicate landed, the pair (workspace slug, test slug) of a test
+  // nobody was ever given a link to was readable with no cookie — and with
+  // no rate limiter anywhere in the repo until Phase 6, a 32^6 sweep made
+  // it an enumeration oracle over author-chosen, meaningful names.
+  expect((await app.request(`/t/${shortCode}`)).status).toBe(404);
+
+  await publishDraftVersion(deps.db, workspaceId, testId, FIXED_NOW);
+
+  // No cookie: the short link is public once the test is published.
   const res = await app.request(`/t/${shortCode}`);
   expect(res.status).toBe(302);
   expect(res.headers.get("location")).toBe(`/${workspaceSlug}/midterm`);
@@ -313,8 +322,9 @@ it("measures the real subrequest cost of every route this task mounts", async ()
     `/api/v1/workspaces/${workspaceId}/tests`,
     post({ name: "Short", slug: "short-budget" }, authorCookie),
   );
-  const shortCode = (await created.json()).shortCode;
-  const shortRes = await createApp(counting.deps).request(`/t/${shortCode}`);
+  const short = await created.json();
+  await publishDraftVersion(deps.db, workspaceId, short.id, FIXED_NOW);
+  const shortRes = await createApp(counting.deps).request(`/t/${short.shortCode}`);
   expect(shortRes.status).toBe(302);
   expect(counting.counts().total, "GET /t/:code").toBe(1);
   expect(ROUTE_BUDGETS["/t/:code"]).toBe(1);

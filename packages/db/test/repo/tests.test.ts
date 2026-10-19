@@ -173,10 +173,17 @@ describe("updateTest", () => {
 });
 
 describe("resolveShortCode", () => {
-  it("answers the workspace and test slug, and null for an unknown code", async () => {
+  it("answers the workspace and test slug, and null for a draft or an unknown code", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "w8", name: "W8" });
     const created = await repo.createTest(db, ws, { name: "A", slug: "a8" });
+
+    // Whole-branch security review, M3: a draft is indistinguishable from
+    // an unknown code. The slug pair of a test nobody was given a link to
+    // is not something an unauthenticated caller may read, and a 32^6 code
+    // space is not a rate limiter.
+    expect(await resolveShortCode(db, created.shortCode)).toBeNull();
+    await repo.publishDraftVersion(db, ws, created.id, T);
 
     expect(await resolveShortCode(db, created.shortCode)).toEqual({
       workspaceSlug: "w8",
