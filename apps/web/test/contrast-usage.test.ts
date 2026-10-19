@@ -44,6 +44,11 @@ const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
 const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
+// Phase 6 Task 1 (#65): the candidate runtime is a third stylesheet entry
+// (exam.css, loaded only by src/exam-main.tsx) and every colour it declares
+// clears the same bar — in the phase where it matters most, because a
+// candidate under a clock cannot switch tools or come back tomorrow.
+const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
 
 // landing.css no longer carries any component's rules itself (besides the
 // five "reused unchanged" ones, §6) — it only @imports the files that do.
@@ -245,6 +250,31 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".bank-browser__tag-chip": "canvas",
   ".bank-browser__notice": "cream",
   ".bank-browser__empty": "cream",
+
+  // ---- exam.css: the candidate runtime (Phase 6 Task 1, #65) -------------
+  // DESIGN.md's two canvases. The landing hero is the full-bleed voltage
+  // field; everything below it is the cream-and-ink page `base.css` sets on
+  // `body`, because `.exam-landing-body` fills nothing of its own.
+  //
+  // Cream on voltage is 3.86:1 — it clears the 3:1 large-text bar at the
+  // hero's 56px and fails the 4.5:1 bar at any reading size, which is why
+  // the hero carries the headline and nothing else and why the `color` is
+  // declared on the <h1> (beside its own font-size) rather than on the
+  // container, where a later paragraph would inherit it silently. This
+  // entry is what stops that from being a comment nobody enforces.
+  ".exam-landing-hero h1": "voltage",
+  ".exam-facts dt": "cream",
+  ".exam-section-count, .exam-section-limit": "cream",
+  // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
+  // not voltage — a button label is body text and gets the 4.5:1 bar.
+  ".exam-landing-actions .exam-start": "voltage-deep",
+  // The disabled state fills itself with hairline.
+  ".exam-landing-actions button:disabled": "hairline",
+  // The device report sits on the page's own cream, like everything else
+  // in `.exam-landing-body`.
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': "cream",
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': "cream",
+  ".exam-landing-footer": "cream",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
@@ -348,6 +378,20 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // svg icons (no font-size of their own) — 16px is the smallest real icon
   // (the bullet ticks), the conservative case.
   ".signal-accent-word": { px: 16, weight: 400 },
+
+  // ---- exam.css (Phase 6, the candidate runtime) --------------------------
+  // The pill CTA and its disabled state are the same <button> as
+  // `.exam-landing-actions button`, whose `font: inherit` resolves to the
+  // body text base.css sets (type-body-md, 16px/400). `font: inherit` is a
+  // shorthand this parser cannot read, so the size is supplied here.
+  ".exam-landing-actions .exam-start": { px: 16, weight: 400 },
+  ".exam-landing-actions button:disabled": { px: 16, weight: 400 },
+  // The two device-report marks set colour only; size and weight both come
+  // from the shared `.exam-finding-mark` base rule (type-mono-sm, 12px,
+  // weight 700). 12px bold is still below the 18.66px large-text floor, so
+  // both are held to 4.5:1 — which is the point of auditing them.
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': { px: 12, weight: 700 },
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': { px: 12, weight: 700 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with
@@ -487,12 +531,13 @@ beforeAll(() => {
   // (admin.css, loaded only by src/admin-main.tsx) and every colour it
   // declares has to clear the same bar. One shared `seen` set so
   // primitives.css — imported by both entries — is read exactly once.
+  // P6.1 (#65): exam.css is a third entry, loaded only by
+  // src/exam-main.tsx, and joins the same sweep. It imports nothing, so the
+  // shared `seen` set is unaffected by it.
   const seen = new Set<string>();
   const css = `${readResolvedCss(LANDING_CSS_PATH, seen)}
-${readResolvedCss(
-    ADMIN_CSS_PATH,
-    seen,
-  )}`;
+${readResolvedCss(ADMIN_CSS_PATH, seen)}
+${readResolvedCss(EXAM_CSS_PATH, seen)}`;
   const rules = parseRuleBodies(css);
   // A selector can appear more than once (e.g. a base rule plus its
   // declarations re-opened inside a @media block for a reflow or reduced-
