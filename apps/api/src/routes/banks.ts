@@ -323,14 +323,16 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     // read apart on `blockedBy`, not on a second query for the same fact.
     const result = await deleteGroup(deps.db, workspaceId, bankId, groupId);
     if (result.blockedBy.length > 0) {
-      // Same shape as UX-05's question/bank refusals, named differently: a
-      // group is blocked by the questions that still reference it, not by a
-      // published test.
+      // Same shape as UX-05's question/bank refusals — fix round
+      // (whole-branch review, I4): including the wire key, which used to
+      // be the one "blocked by other rows" 409 naming its list
+      // `details.questions` instead of `details.blockedBy`, forcing the
+      // client to carry a second branch to cope.
       throw new ApiError(
         409,
         "group_in_use",
         `This group is used by: ${result.blockedBy.join(", ")}.`,
-        { questions: result.blockedBy },
+        { blockedBy: result.blockedBy },
       );
     }
     if (!result.deleted) throw new ApiError(404, "not_found", "No such resource.");

@@ -303,7 +303,7 @@ describe("BankBrowser", () => {
     const client = fakeClient({
       listGroups: async () => [group],
       deleteGroup: async () => {
-        throw new ApiError(409, "group_in_use", "blocked", { questions: ["DIN-001", "DIN-002"] });
+        throw new ApiError(409, "group_in_use", "blocked", { blockedBy: ["DIN-001", "DIN-002"] });
       },
     });
     render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);

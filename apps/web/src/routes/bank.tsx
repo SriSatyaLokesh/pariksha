@@ -61,6 +61,20 @@ function downloadJson(doc: unknown, filename: string): void {
   }
 }
 
+/**
+ * Fix round (whole-branch review, I4): `question_in_use` and `group_in_use`
+ * are the same "blocked by other rows" shape (UX-05's refusal), now both
+ * named `details.blockedBy` — one parsing branch for both delete handlers
+ * below, rather than one per error code.
+ */
+function blockedByMessage(cause: unknown, kind: "question" | "group"): string {
+  if (cause instanceof ApiError && (cause.code === "question_in_use" || cause.code === "group_in_use")) {
+    const blockedBy = (cause.details as { blockedBy?: string[] } | undefined)?.blockedBy ?? [];
+    return `This ${kind} is used by: ${blockedBy.join(", ")}.`;
+  }
+  return cause instanceof ApiError ? cause.message : `The ${kind} could not be deleted.`;
+}
+
 interface Filter {
   type?: Question["type"];
   difficulty?: "easy" | "medium" | "hard";
@@ -176,12 +190,7 @@ export function BankBrowser({
       });
       await load();
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === "question_in_use") {
-        const blockedBy = (cause.details as { blockedBy?: string[] } | undefined)?.blockedBy ?? [];
-        setNotice(`This question is used by: ${blockedBy.join(", ")}.`);
-      } else {
-        setNotice(cause instanceof ApiError ? cause.message : "The question could not be deleted.");
-      }
+      setNotice(blockedByMessage(cause, "question"));
     }
   }
 
@@ -214,12 +223,7 @@ export function BankBrowser({
       await client.deleteGroup(workspaceId, bankId, group.id);
       await load();
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === "group_in_use") {
-        const names = (cause.details as { questions?: string[] } | undefined)?.questions ?? [];
-        setNotice(`This group is used by: ${names.join(", ")}.`);
-      } else {
-        setNotice(cause instanceof ApiError ? cause.message : "The group could not be deleted.");
-      }
+      setNotice(blockedByMessage(cause, "group"));
     }
   }
 

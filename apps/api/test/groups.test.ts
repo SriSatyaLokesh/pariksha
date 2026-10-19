@@ -127,7 +127,7 @@ it("deleting a group that questions reference is refused and names them", async 
     del(authorCookie),
   );
   expect(res.status).toBe(409);
-  expect((await res.json()).error.details.questions).toEqual(["DIN-001", "DIN-002"]);
+  expect((await res.json()).error.details.blockedBy).toEqual(["DIN-001", "DIN-002"]);
 
   // Refused, not removed.
   const stillThere = await app.request(
