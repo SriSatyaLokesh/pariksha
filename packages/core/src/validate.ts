@@ -602,9 +602,16 @@ export function invalidDomainGlob(raw: string): string | null {
   }
   if (domain.length > 253) return `"${raw}" is longer than a domain name can be — ${example}`;
 
-  // `*.in` and `*.com` allow a whole country or generic top level, which
-  // reads on the screen as a restriction and is not one; `in` on its own
-  // is not a domain anybody has an address at.
+  // `*.in` and `*.com` allow a whole top level, which reads on the screen
+  // as a restriction and is not one; `in` on its own is not a domain
+  // anybody has an address at.
+  //
+  // ponytail: single-label suffixes only. `*.co.in`, `*.gov.in` and
+  // `*.co.uk` are just as broad and are accepted, because knowing they
+  // are suffixes rather than somebody's domain needs the public suffix
+  // list, which is a dependency and a quarterly update for a nag. Upgrade
+  // path when an organiser actually does it: fetch the PSL at build time
+  // and compare against it here.
   if (labels.length < 2) {
     return wildcard
       ? `"${raw}" would match every domain under one top level — name at least two labels, ${example}`
