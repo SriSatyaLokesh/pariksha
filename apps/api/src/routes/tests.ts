@@ -70,13 +70,28 @@ function filterFromQuery(c: Context<AppBindings>): TestFilter {
 }
 
 /**
- * `TestSummary` (`apps/web/src/lib/api.ts`), the wire shape every route
- * below answers with. `state` is `status` verbatim in this task — Scheduled
- * and Open do not exist until Task 11 adds `deriveState()`, once `timing`
- * gives it something to read — and the field is named `state` here already
- * so no later task renames what the screens read.
+ * Mirrors `TestSummary` (`apps/web/src/lib/api.ts`) — not imported, the same
+ * boundary every other route in this app keeps from the web package.
+ * `state` is `status` verbatim in this task — Scheduled and Open do not
+ * exist until Task 11 adds `deriveState()`, once `timing` gives it something
+ * to read — and the field is named `state` here already so no later task
+ * renames what the screens read.
  */
-function toWire(row: TestRow, draftVersion: number | null): unknown {
+interface TestWire {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  shortCode: string;
+  state: TestStatus;
+  currentVersion: number | null;
+  draftVersion: number | null;
+  reviewRequested: boolean;
+  tags: string[];
+  updatedAt: number;
+}
+
+function toWire(row: TestRow, draftVersion: number | null): TestWire {
   return {
     id: row.id,
     name: row.name,

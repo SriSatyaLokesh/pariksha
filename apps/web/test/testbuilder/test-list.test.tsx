@@ -122,6 +122,13 @@ describe("TestList", () => {
     expect(within(publishedRow as HTMLElement).getByText(/in review/i)).toBeVisible();
   });
 
+  it("a 'published' state (Important 5) renders its own label and glyph, not a blank cell", async () => {
+    renderList(fakeClient({ tests: async () => [{ ...PUBLISHED, state: "published" }] }));
+    const row = (await screen.findByText("Midterm")).closest("tr");
+    expect(within(row as HTMLElement).getByText("Published")).toBeVisible();
+    expect(row?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
+  });
+
   it("filters, tags and search live in the URL and survive the back button", async () => {
     const tests = vi.fn(async () => [PUBLISHED]);
     renderList(fakeClient({ tests }));

@@ -15,6 +15,10 @@ const STATE_LABEL: Record<TestState, string> = {
   draft: "Draft",
   scheduled: "Scheduled",
   open: "Open",
+  // Interim, same reason `lib/api.ts`'s `TestState` carries it: Task 11's
+  // `deriveState()` replaces "published" with "Scheduled" or "Open" once
+  // `timing` exists to tell them apart.
+  published: "Published",
   closed: "Closed",
   archived: "Archived",
 };
@@ -25,6 +29,7 @@ const STATE_GLYPH: Record<TestState, string> = {
   draft: "●",
   scheduled: "◐",
   open: "○",
+  published: "◎",
   closed: "■",
   archived: "▢",
 };

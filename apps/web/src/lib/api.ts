@@ -69,7 +69,14 @@ export interface ImportReport {
 // version number of the test's unpublished draft, or null once none exists.
 // The wire type is declared whole here so no later task renames a field the
 // screens already read.
-export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
+//
+// Task 2 fix round (Important 5): `"published"` is in this union, not mapped
+// to `"open"`, because `status` can already be `"published"` today (any test
+// `publishTestVersion` has touched) while nothing yet reads `timing` to say
+// whether it has actually opened — guessing "Open" would be false. Task 11's
+// `deriveState()` replaces this whole field with the derived five-state
+// value and removes `"published"` again.
+export type TestState = "draft" | "scheduled" | "open" | "published" | "closed" | "archived";
 
 export interface TestSummary {
   id: string;
