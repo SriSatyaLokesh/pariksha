@@ -843,4 +843,346 @@ Expected: PASS, with `budget.test.ts` green.
 git add apps
 git commit -s -m "feat(tests): server-side url reachability check for registration fields"
 ```
+
+---
+
+## Task 7: Timing, navigation and attempt policy (#59, P5.6)
+
+**Files:**
+- Create: `apps/web/src/components/testbuilder/TimingPanel.tsx`
+- Modify: `packages/core/src/types.ts`, `packages/core/src/validate.ts`, `packages/core/src/index.ts`, `apps/web/src/routes/test.tsx`, `apps/web/src/styles/testbuilder.css`
+- Test: `packages/core/test/validate-test.test.ts` (extend), `apps/web/test/testbuilder/timing.test.tsx`
+
+**Interfaces:**
+- Consumes: `validateTest`, `Test` (`@pariksha/core`); `DraftPatch` (Task 3); `StoredSection` (Task 3, for the per-section duration sum).
+- Produces:
+  ```ts
+  // packages/core/src/types.ts — mirrors schemas/test-1.json $defs/timing exactly
+  export type NavigationMode = "free" | "linear" | "per_section";
+  export type CountedAttempt = "highest" | "latest" | "average";
+  export interface TestTiming {
+    timezone?: string; opens_at?: string; closes_at?: string; latest_start_at?: string;
+    duration_minutes: number; navigation?: NavigationMode;
+    attempts_allowed?: number; cooldown_minutes?: number; counted_attempt?: CountedAttempt;
+    warn_at_minutes?: number[]; late_sync_grace_seconds?: number;
+  }
+  // added to Test (required, per schemas/test-1.json's root `required`): timing: TestTiming;
+  export const NAVIGATION_CONSEQUENCE: Readonly<Record<NavigationMode, string>>;
+
+  // apps/web/src/components/testbuilder/TimingPanel.tsx
+  export function TimingPanel(props: {
+    timing: TestTiming; sections: readonly StoredSection[];
+    published: boolean;
+    onChange: (next: TestTiming) => void;
+  }): JSX.Element;
+  ```
+
+**No new route** — `PATCH …/draft`'s `settings.timing` block. `timing` is the one block `schemas/test-1.json` makes required at the root, so `createTest` (Task 2) writes a default draft carrying `{ duration_minutes: 60 }` and nothing else; every other field has a documented default in `docs/test-format.md` § `timing` and is omitted until set.
+
+**Defaults, copied verbatim from `docs/test-format.md`:** `navigation` `free`, `attempts_allowed` `1`, `cooldown_minutes` `0`, `counted_attempt` `highest`, `warn_at_minutes` `[10, 2]`, `late_sync_grace_seconds` `30`, `latest_start_at` defaults to `closes_at`, `timezone` the instance default.
+
+`NAVIGATION_CONSEQUENCE` copy, fixed here because the issue asks for it by name: `free` → "A candidate can jump to any question at any time."; `linear` → "A candidate cannot go back to an earlier question."; `per_section` → "Free inside a section; a section is locked once the candidate leaves it."
+
+**Rules added to `validateTest`** — the remaining two from `docs/test-format.md` § "Rules checked on import", both **publish-time** (a half-set window is an ordinary draft), plus one the PRD implies through T-12:
+
+- `closes_at` is after `opens_at`
+- `latest_start_at` falls inside the window
+- the per-section durations sum to no more than `duration_minutes` (T-12's "overall duration, optional per-section durations"; a sum above the whole is unsatisfiable, and #59 asks for it "caught here, with cause and fix")
+
+"Opens in the past" is **not** a `validateTest` rule — `validateTest` is pure and takes no clock — and belongs to the checklist (Task 12), which has `now`.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// packages/core/test/validate-test.test.ts (extend)
+it("a window that ends before it opens is reported on closes_at", () => {
+  expect(validateTest({ ...t, timing: { ...timing, opens_at: "2026-11-14T13:00:00+05:30", closes_at: "2026-11-14T09:00:00+05:30" } }, bank).issues[0])
+    .toMatchObject({ field: "timing.closes_at", index: -1 });
+});
+it("a latest_start_at outside the window is reported", () => { /* field: "timing.latest_start_at" */ });
+it("per-section durations summing above the overall duration are reported with both numbers", () => {
+  expect(validateTest(testWith45MinOf60InSections(70), bank).issues[0])
+    .toMatchObject({ field: "timing.duration_minutes", message: expect.stringMatching(/sections total 70 minutes against an overall 60/) });
+});
+it("sections with no time limit do not count toward the sum", () => { expect(validateTest(testWithUntimedSections, bank).ok).toBe(true); });
+it("the worked example still validates clean", () => { expect(validateTest(exampleTest, exampleQuestions).ok).toBe(true); });
+```
+
+```tsx
+// apps/web/test/testbuilder/timing.test.tsx
+it("no time is rendered bare — every one states its zone", () => {
+  expect(screen.getByText(/14 Nov 2026, 09:00 Asia\/Kolkata/)).toBeVisible();
+  expect(screen.getByText(/03:30 your time/i)).toBeVisible();
+});
+it("the per-section sum is shown against the overall duration", () => {
+  expect(screen.getByText(/sections total 45 min of 60 min/i)).toBeVisible();
+});
+it("a sum above the overall duration is caught on blur with cause and fix", async () => {
+  await userEvent.clear(screen.getByLabelText(/overall duration/i));
+  await userEvent.type(screen.getByLabelText(/overall duration/i), "30");
+  await userEvent.tab();
+  expect(await screen.findByRole("alert")).toHaveTextContent(/sections total 45 min against an overall 30 min — raise the duration or shorten a section/i);
+});
+it("a window that ends before it opens is caught on blur", async () => { /* role=alert */ });
+it("latest start is echoed as the sentence it means", () => {
+  expect(screen.getByText(/a candidate arriving after 12:00 cannot begin/i)).toBeVisible();
+});
+it("each navigation mode carries its consequence as persistent helper text", () => {
+  for (const copy of Object.values(NAVIGATION_CONSEQUENCE)) expect(screen.getByText(copy)).toBeVisible();
+});
+it("times and durations use tabular figures", () => {
+  expect(getComputedStyle(screen.getByText(/60 min/)).fontVariantNumeric).toContain("tabular-nums");
+});
+it("UX-18: changing timing on a published test says what happens to attempts in progress, before it is applied", async () => {
+  render(<TimingPanel {...props} published />);
+  await userEvent.clear(screen.getByLabelText(/overall duration/i));
+  await userEvent.type(screen.getByLabelText(/overall duration/i), "90");
+  expect(screen.getByRole("dialog")).toHaveTextContent(/attempts in progress stay on version 1/i);
+  expect(props.onChange).not.toHaveBeenCalled();
+});
+it("the timing panel has no axe violations", async () => { expect(await axe(container)).toHaveNoViolations(); });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/core/test/validate-test.test.ts apps/web/test/testbuilder/timing.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement `TestTiming`, the three rules and the panel**
+
+The rules go inside `validateTest`'s existing body, pushing onto its `issues` array. Timestamps are compared with `Date.parse`, and a value that does not parse is reported as its own issue rather than compared as `NaN`. The panel formats with `Intl.DateTimeFormat` and the test's `timezone`, and renders the organiser's local echo with the browser's zone — no date library; tabular figures come from `{typography.timer-numeric}` through the tokens.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/core apps/web`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages apps
+git commit -s -m "feat(tests): timing, navigation and attempt policy"
+```
+
+---
+
+## Task 8: Access modes and allowlists (#60, P5.7)
+
+**Files:**
+- Create: `apps/web/src/components/testbuilder/AccessPanel.tsx`
+- Modify: `packages/core/src/validate.ts`, `apps/api/src/routes/tests.ts`, `apps/web/src/routes/test.tsx`, `apps/web/src/styles/testbuilder.css`
+- Test: `packages/core/test/validate-test.test.ts` (extend), `apps/api/test/draft.test.ts` (extend), `apps/web/test/testbuilder/access.test.tsx`
+
+**Interfaces:**
+- Consumes: `TestAccess`, `AccessMode`, `validateTest` (`@pariksha/core` — `TestAccess` already exists at `packages/core/src/types.ts:246`); `DraftPatch` (Task 3); `exportTest` (Task 11 — this task's Review Focus 3 proof calls it, so it runs after Task 11 or against Task 11's stub; see Step 1).
+- Produces:
+  ```ts
+  // apps/web/src/components/testbuilder/AccessPanel.tsx
+  export function AccessPanel(props: { access: TestAccess; onChange: (next: TestAccess) => void }): JSX.Element;
+  export const ACCESS_CONSEQUENCE: Readonly<Record<AccessMode, { candidate: string; organiser: string }>>;
+  /** Plain-words summary of the combined allowlists, for the panel and for the checklist row. */
+  export function describeAllowlists(access: TestAccess): string;
+  ```
+
+**No new route.** `settings.access` through `PATCH …/draft` — and this task owns **Review Focus 3's proof**: switching `access.mode` must drop the fields that belonged to the old mode, and the assertion is made on the *exported document*, because reading the patch back would pass either way.
+
+`ACCESS_CONSEQUENCE` copy, one line each for what the candidate does and what the organiser must send:
+
+| Mode | Candidate | Organiser sends |
+| --- | --- | --- |
+| `link_code` | "Opens the public link and types the code." | "The link and the access code." |
+| `invite_only` | "Opens their own single-use link." | "One personal link per candidate, from the uploaded list." |
+| `email_code` | "Types their email and then the 6-digit code it receives." | "The link only." |
+| `sso` | "Signs in with their own school or company account." | "The link only." |
+
+**Save-time versus publish-time.** Save-time: a malformed CIDR in `allow_ip_ranges` or a malformed glob in `allow_email_domains`, because a stored value nothing can parse becomes a candidate silently refused on test day and the organiser never sees the cause. Publish-time (checklist rows, Task 12): `access_code` missing under `link_code` — `validateTest` already carries this rule at `packages/core/src/validate.ts:542` — an allowlist that can match nothing, and a candidate list with no rows.
+
+Rotating the access code is a write to `settings.access.access_code` like any other; the panel states before the write that existing links keep working and the old code stops.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/draft.test.ts (extend) — Review Focus 3
+it("switching access.mode away from link_code drops the access code from the exported document", async () => {
+  await patchDraft({ settings: { access: { mode: "link_code", access_code: "APTI-2026" } } });
+  await patchDraft({ settings: { access: { mode: "sso", allow_email_domains: ["*.ac.in"] } } });
+  const text = await (await app.request(exportUrl, get(adminCookie))).text();
+  expect(text).not.toContain("APTI-2026");
+});
+it("a malformed CIDR is refused at save with the field named", async () => {
+  const res = await patch({ settings: { access: { mode: "sso", allow_ip_ranges: ["10.0.0.0/64"] } } });
+  expect(res.status).toBe(422);
+  expect((await res.json()).error.details.issues[0]).toMatchObject({ field: "access.allow_ip_ranges" });
+});
+it("a malformed email-domain glob is refused at save", async () => { /* 422, field: "access.allow_email_domains" */ });
+it("a well-formed allowlist saves even when it can match nothing", async () => { /* 200 — publish-time, not save-time */ });
+```
+
+```ts
+// packages/core/test/validate-test.test.ts (extend)
+it("describeAllowlists states the combined effect in plain words", () => {
+  expect(describeAllowlists({ mode: "sso", allow_email_domains: ["*.ac.in"], allow_ip_ranges: ["10.0.0.0/24"] }))
+    .toBe("Only addresses matching *.ac.in, and only from 10.0.0.0/24.");
+  expect(describeAllowlists({ mode: "link_code", access_code: "X" })).toBe("Anyone with the link and the code.");
+});
+```
+
+```tsx
+// apps/web/test/testbuilder/access.test.tsx
+it("only the chosen mode's own fields appear", async () => {
+  await userEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+  expect(screen.queryByLabelText(/access code/i)).toBeNull();
+});
+it("each mode states what the candidate does and what the organiser sends", () => {
+  for (const c of Object.values(ACCESS_CONSEQUENCE)) { expect(screen.getByText(c.candidate)).toBeVisible(); expect(screen.getByText(c.organiser)).toBeVisible(); }
+});
+it("a malformed CIDR is caught on blur with an example of a correct one", async () => {
+  await userEvent.type(screen.getByLabelText(/ip ranges/i), "10.0.0.0/64");
+  await userEvent.tab();
+  expect(await screen.findByRole("alert")).toHaveTextContent(/for example 10\.0\.0\.0\/24/i);
+});
+it("the combined allowlist effect is summarised in plain words", () => {
+  expect(screen.getByText("Only addresses matching *.ac.in, and only from 10.0.0.0/24.")).toBeVisible();
+});
+it("the access code has a copy control and is visible as text", async () => { /* both; role=status confirms the copy */ });
+it("rotating the code states that the old one stops working, before it rotates", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /rotate/i }));
+  expect(screen.getByRole("dialog")).toHaveTextContent(/the existing code stops working/i);
+  expect(props.onChange).not.toHaveBeenCalled();
+});
+it("the access panel has no axe violations", async () => { expect(await axe(container)).toHaveNoViolations(); });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/core apps/api/test/draft.test.ts apps/web/test/testbuilder/access.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement the save-time checks, `describeAllowlists` and the panel**
+
+CIDR and glob parsing is about fifteen lines in `packages/core/src/validate.ts` beside the rules that use it — no dependency, and a `ponytail:` comment naming the ceiling (IPv4 and IPv6 prefix-length bounds only, no range arithmetic) and its upgrade path. `describeAllowlists` lives in `validate.ts` and is exported from `packages/core/src/index.ts`, so the panel and the checklist row produce the same sentence rather than two.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/core apps/api apps/web`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages apps
+git commit -s -m "feat(tests): access modes and allowlists"
+```
+
+---
+
+## Task 9: Result release and branding (#61, P5.8)
+
+**Files:**
+- Create: `packages/core/src/contrast.ts`, `apps/web/src/components/testbuilder/ReleasePanel.tsx`, `apps/web/src/components/testbuilder/BrandingPanel.tsx`
+- Modify: `packages/core/src/index.ts`, `packages/core/src/types.ts`, `apps/api/src/routes/workspaces.ts`, `apps/web/test/contrast.test.ts`, `apps/web/test/contrast-usage.test.ts`, `apps/web/src/routes/test.tsx`, `apps/web/src/styles/testbuilder.css`
+- Test: `packages/core/test/contrast.test.ts`, `apps/api/test/branding.test.ts`, `apps/web/test/testbuilder/release-branding.test.tsx`
+
+**Interfaces:**
+- Consumes: `TestRelease` (`packages/core/src/types.ts:255`); `PATCH /api/v1/workspaces/:id` and `workspace.branding_json` (Phase 3, `apps/api/src/routes/workspaces.ts`, `packages/db/src/schema/columns.ts`); `POST …/banks/:bankId/media` and `GET …/media/:key` (Phase 4, `apps/api/src/routes/media.ts`); `tokens` (`apps/web/src/styles/tokens.ts`); `RegistrationForm` (Task 5, for the start-page preview).
+- Produces:
+  ```ts
+  // packages/core/src/contrast.ts — WCAG 2.1 relative luminance, no dependency
+  export function contrastRatio(foreground: string, background: string): number;   // "#rrggbb"
+  export function meetsAA(foreground: string, background: string): boolean;        // ratio >= 4.5
+  export const CREAM = "#fffbf5";
+  export const INK = "#231f1d";
+
+  // packages/core/src/types.ts
+  export interface TestBranding { logo?: string; primary_colour?: string; footer_text?: string; start_message?: string; finish_message?: string }
+  // added to Test: branding?: TestBranding;
+  export const RELEASE_CONSEQUENCE: Readonly<Record<"never" | "on_submit" | "on_date", string>>;
+  export const SHOW_CONSEQUENCE: Readonly<Record<"score_only" | "score_and_sections" | "full_review", string>>;
+
+  // apps/web/src/components/testbuilder/*
+  export function ReleasePanel(props: { release: TestRelease; onChange: (next: TestRelease) => void }): JSX.Element;
+  export function BrandingPanel(props: {
+    branding: TestBranding; workspaceBranding: TestBranding;
+    onChange: (next: TestBranding) => void;
+    onUploadLogo: (file: File, alt: string) => Promise<{ src: string }>;
+  }): JSX.Element;
+  ```
+
+**No new route.** T-23 splits across two existing ones: logo, primary colour and footer text are *per workspace* and go through Phase 3's `PATCH /api/v1/workspaces/:id` into `workspace.branding_json` under `workspace.settings`; the start and finish messages are *per test* and go through `PATCH …/draft`'s `settings.branding` under `tests.edit`. That split is the PRD's own sentence (T-23) and keeps an Author out of workspace branding. The logo uploads through Phase 4's existing `POST …/banks/:bankId/media`; serving it to a signed-out candidate is Phase 6's — see "Known deferrals".
+
+**`contrastRatio` moves into `@pariksha/core`.** It exists twice today, byte-identical, in `apps/web/test/contrast.test.ts:23` and `apps/web/test/contrast-usage.test.ts:56`; this task deletes both and has them import the one copy, which the picker and the publish check also use. The server re-checks at publish because `docs/test-format.md` says every rule is re-checked on the server and the browser's copy is a courtesy.
+
+**Save-time:** a `primary_colour` below 4.5:1 against both `CREAM` and `INK` is refused at the write, not at publish. It is not a half-built value — it is a stored setting that makes candidate-facing text unreadable the moment any page renders with it, including the preview on the screen that set it.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// packages/core/test/contrast.test.ts
+it.each([[ "#b3261e", CREAM, 6.34 ], [ "#0d7a51", CREAM, 5.2 ], [ "#0a6fd4", CREAM, 4.81 ]])(
+  "matches the ratio DESIGN.md states for %s", (fg, bg, stated) =>
+    expect(Math.round(contrastRatio(fg, bg) * 100) / 100).toBeCloseTo(stated, 2));
+it("meetsAA is the 4.5:1 boundary", () => { expect(meetsAA("#767676", "#ffffff")).toBe(true); expect(meetsAA("#777777", "#ffffff")).toBe(false); });
+```
+
+```ts
+// apps/api/test/branding.test.ts
+it("a brand colour below 4.5:1 against cream and ink is refused, with the measured ratio in the message", async () => {
+  const res = await app.request(wsUrl, patch({ branding: { primary_colour: "#f59a6e" } }, ownerCookie));
+  expect(res.status).toBe(422);
+  expect((await res.json()).error.message).toMatch(/1\.9:1 against cream.*at least 4\.5:1/i);
+});
+it("a brand colour that passes against ink is accepted", async () => { /* 200 */ });
+it("an Admin cannot set workspace branding — it is workspace.settings", async () => { /* 403 */ });
+it("an Author can set the per-test start and finish messages", async () => { /* 200 through PATCH …/draft */ });
+```
+
+```tsx
+// apps/web/test/testbuilder/release-branding.test.tsx
+it("each release option states what the candidate will see, where it is chosen", () => {
+  for (const copy of [...Object.values(RELEASE_CONSEQUENCE), ...Object.values(SHOW_CONSEQUENCE)]) expect(screen.getByText(copy)).toBeVisible();
+});
+it("never release states what the candidate gets instead", () => {
+  expect(screen.getByText(/candidates see a receipt with their attempt reference and no score/i)).toBeVisible();
+});
+it("on_date requires a date before it can be chosen", async () => { /* save disabled, role=alert names release.at */ });
+it("the colour picker reports its contrast and refuses below 4.5:1 with the measured ratio", async () => {
+  await userEvent.clear(screen.getByLabelText(/primary colour/i));
+  await userEvent.type(screen.getByLabelText(/primary colour/i), "#f59a6e");
+  expect(await screen.findByRole("alert")).toHaveTextContent(/1\.9:1 against cream/i);
+  expect(screen.getByRole("button", { name: /^save/i })).toBeDisabled();
+});
+it("the brand colour reaches CSS as a custom property, never a style attribute", () => {
+  expect(preview().style.getPropertyValue("--brand-primary")).toBe("#b63a10");
+});
+it("start, finish and the released result view are previewed with the branding applied", () => { /* three previews, each carrying --brand-primary */ });
+it("a logo upload requires alt text and states the render size", async () => {
+  await userEvent.upload(screen.getByLabelText(/logo file/i), pngFile);
+  expect(screen.getByRole("button", { name: /^upload$/i })).toBeDisabled();
+  expect(screen.getByText(/renders at 32 px tall/i)).toBeVisible();
+  await userEvent.type(screen.getByLabelText(/alt text/i), "Acme College crest");
+  expect(screen.getByRole("button", { name: /^upload$/i })).toBeEnabled();
+});
+it("the release and branding panels have no axe violations", async () => { /* both */ });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/core/test/contrast.test.ts apps/api/test/branding.test.ts apps/web/test/testbuilder/release-branding.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Move `contrastRatio` into core and implement both panels**
+
+Move the function from `apps/web/test/contrast.test.ts` into `packages/core/src/contrast.ts` unchanged, export it from `index.ts`, and change both web test files to import it — they must keep passing untouched otherwise, which is the proof the move was a move. `BrandingPanel` writes the colour with `ref.current.style.setProperty("--brand-primary", value)` in an effect, because `apps/web/test/no-hex-colors.test.ts` bans `style={}` in `.tsx` under `src`.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/core apps/api apps/web`
+Expected: PASS, with `contrast.test.ts` and `contrast-usage.test.ts` green against the imported function.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages apps
+git commit -s -m "feat(tests): result release and branding with a contrast gate"
+```
 </content>
