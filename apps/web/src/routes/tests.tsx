@@ -213,6 +213,16 @@ export function TestList({
     setCopiedId(test.id);
   }
 
+  // Clears on its own, so the confirmation is also feedback for a *second*
+  // press of the same button: without this, pressing "Copy short link"
+  // twice sets the same id both times, React sees no state change, and the
+  // second press produces no visible or announced response at all.
+  useEffect(() => {
+    if (copiedId === null) return;
+    const timer = setTimeout(() => setCopiedId(null), 2000);
+    return () => clearTimeout(timer);
+  }, [copiedId]);
+
   function sortHeaderProps(column: Sort): { "aria-sort"?: "ascending" } {
     return filter.sort === column ? { "aria-sort": "ascending" } : {};
   }
@@ -377,11 +387,14 @@ export function TestList({
                         <button type="button" className="button-secondary" onClick={() => void copyShortLink(test)}>
                           Copy short link
                         </button>
-                        {copiedId === test.id && (
-                          <p className="organiser__status" role="status">
-                            Copied.
-                          </p>
-                        )}
+                        {/* Rendered on every row, always — only the text
+                            content changes. A live region that is inserted
+                            already carrying its text does not reliably
+                            announce; one that is already present and has
+                            its text updated does. */}
+                        <p className="organiser__status" role="status">
+                          {copiedId === test.id ? "Copied." : ""}
+                        </p>
                       </div>
                     </td>
                   </tr>

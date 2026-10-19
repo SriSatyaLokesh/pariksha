@@ -219,6 +219,29 @@ describe("TestList", () => {
     expect(document.activeElement).toBe(button);
   });
 
+  it("the live region exists before any copy, so its text updates rather than being inserted (Important 8)", async () => {
+    renderList(fakeClient());
+    await screen.findByText("Midterm");
+
+    // Present and empty up front — an inserted-with-content live region is
+    // what screen readers commonly fail to announce.
+    expect(screen.getByRole("status")).toHaveTextContent("");
+  });
+
+  it("clears copiedId so a second copy announces again, instead of staying silent (Minor 15)", async () => {
+    renderList(fakeClient());
+    await screen.findByText("Midterm");
+
+    const button = screen.getByRole("button", { name: /copy short link/i });
+    fireEvent.click(button);
+    expect(await screen.findByRole("status")).toHaveTextContent(/copied/i);
+
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(""), { timeout: 3000 });
+
+    fireEvent.click(button);
+    expect(await screen.findByRole("status")).toHaveTextContent(/copied/i);
+  }, 10_000);
+
   it("an empty workspace and a filter with no results are different states with different actions", async () => {
     renderList(fakeClient({ tests: async () => [] }));
     expect(await screen.findByText(/no tests yet/i)).toBeVisible();
