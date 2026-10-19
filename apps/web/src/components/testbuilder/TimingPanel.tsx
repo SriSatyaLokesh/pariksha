@@ -294,6 +294,17 @@ export function TimingPanel({
     const iso = form[key];
     const fieldId = `${ids}-${key}`;
     const message = issueFor(`timing.${key}`);
+    // #59: "or opens in the past … caught on blur". `timingIssues` cannot
+    // carry this one — `packages/core` owns no clock and
+    // `packages/core/test/acceptance.test.ts` enforces that — but the
+    // panel runs in a browser that has one, and the alternative is an
+    // organiser learning at the publish checklist that the window they
+    // set at the start of the build has already gone by. A nag, not a
+    // refusal: a past window is legal, it just almost never is meant.
+    const past =
+      key === "opens_at" && touched && iso !== undefined && new Date(iso).getTime() < Date.now()
+        ? `This opens at ${inZone(iso, safeZone)}, which is already past — candidates can start the moment the test is published.`
+        : undefined;
     return (
       <div className="field">
         <label className="field-label" htmlFor={fieldId}>
@@ -318,12 +329,14 @@ export function TimingPanel({
           </p>
         )}
         {help !== undefined && <p className="timing-panel__fact">{help}</p>}
-        {message !== undefined && (
-          <p className="timing-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
-            {message}
-          </p>
-        )}
+        {[message, past]
+          .filter((why): why is string => why !== undefined)
+          .map((why) => (
+            <p className="timing-panel__risk" role="alert" key={why}>
+              <span aria-hidden="true">⚠ </span>
+              {why}
+            </p>
+          ))}
       </div>
     );
   }

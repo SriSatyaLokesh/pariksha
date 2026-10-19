@@ -195,6 +195,39 @@ describe("TimingPanel", () => {
     expect(onChange).toHaveBeenLastCalledWith({ duration_minutes: 90 });
   });
 
+  // #59's own acceptance row, task 7/8/10 review M4. `timingIssues` cannot
+  // carry it — packages/core owns no clock and acceptance.test.ts enforces
+  // that — so the panel does, in the browser that has one. A nag: the
+  // window still saves.
+  it("an opens_at already in the past is nagged on blur, with the date in the test's zone", () => {
+    const onChange = vi.fn();
+    render(
+      <Harness
+        initial={{ timezone: ZONE, duration_minutes: 60, opens_at: "2020-03-01T09:00:00+05:30" }}
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.queryByText(/already past/i)).toBeNull();
+    fireEvent.blur(screen.getByLabelText(/opens at/i));
+
+    const alert = screen.getByText(/already past/i);
+    expect(alert).toBeVisible();
+    expect(alert).toHaveTextContent(/01 Mar 2020, 09:00 Asia\/Kolkata/);
+    expect(alert).toHaveTextContent(/candidates can start the moment the test is published/i);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("a future opens_at is not nagged, and neither is a past closes_at on its own control", () => {
+    render(<Harness initial={{ timezone: ZONE, duration_minutes: 60, opens_at: "2099-03-01T09:00:00+05:30" }} />);
+    fireEvent.blur(screen.getByLabelText(/opens at/i));
+    expect(screen.queryByText(/already past/i)).toBeNull();
+
+    render(<Harness initial={{ timezone: ZONE, duration_minutes: 60, closes_at: "2020-03-01T09:00:00+05:30" }} />);
+    fireEvent.blur(screen.getAllByLabelText(/closes at/i)[0] as HTMLElement);
+    expect(screen.queryByText(/already past/i)).toBeNull();
+  });
+
   it("T-15: the warning marks and the late-sync grace carry their defaults and state what they do", () => {
     render(<Harness initial={{ duration_minutes: 60 }} />);
     expect(screen.getByLabelText(/warn at/i)).toHaveValue("10, 2");
