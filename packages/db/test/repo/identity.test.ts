@@ -25,6 +25,10 @@ const UNSCOPED_BY_DESIGN = [
   "anyWorkspaceExists",
   "insertAuthToken",
   "consumeAuthToken",
+  // Phase 6's `run_entry` token is minted by the access gate and spent by
+  // the registration write, so the reader between the two must not be a
+  // consumer. `auth_token` carries no workspace either way.
+  "readAuthToken",
   "insertSession",
   "readSessionActor",
   "touchSession",
