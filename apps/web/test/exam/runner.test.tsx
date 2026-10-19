@@ -58,6 +58,7 @@ const paper: AttemptPaper = {
     },
   ],
   responses: { q2: { kind: "option", option: "a" } },
+  clientSeq: 0,
   navigation: "linear",
   maxIndex: 10,
   remainingMs: 45 * 60_000,
@@ -518,7 +519,12 @@ function clientWithStart(): RunClient {
     requestEmailCode: () => Promise.reject(new Error("the runner sends no code")),
     form: () => Promise.reject(new Error("the runner reads no form")),
     register: () => Promise.reject(new Error("the runner registers nobody")),
-    resume: () => Promise.reject(new Error("the runner resumes no attempt")),
+    // Task 8: `ExamApp` now asks for a resume before the landing page,
+    // because `C-06` resumes a live attempt and `AC-14`'s queue only
+    // drains once something mounts it. No attempt in this browser is the
+    // ordinary first visit, and `null` is what the client answers with.
+    resume: () => Promise.resolve(null),
+    putAnswer: () => Promise.reject(new Error("the runner shell saves nothing")),
   };
 }
 

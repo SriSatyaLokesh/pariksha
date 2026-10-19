@@ -81,6 +81,17 @@ export interface AttemptPaper {
   /** Answers already saved, by question id, so a resume shows what was
    *  typed. Empty on a fresh attempt. */
   responses: Record<string, ResponseValue | null>;
+  /**
+   * The highest `client_seq` the server holds for this attempt, 0 on a
+   * fresh one — the **seed** for the browser's own save counter (Task 8).
+   *
+   * Without it a second tab, or a candidate whose site data was cleared,
+   * restarts that counter at 1; `upsertResponse` stores only a strictly
+   * higher sequence, so every save comes back `superseded`, the queue
+   * drops it as "the server holds newer", and the banner reads Saved over
+   * answers that were never written.
+   */
+  clientSeq: number;
   navigation: "free" | "linear" | "per_section";
   /** The furthest flat question index reached. `linear` refuses a target
    *  below it and `per_section` derives the current section from it. */

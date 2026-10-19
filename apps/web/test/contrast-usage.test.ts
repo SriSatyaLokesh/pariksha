@@ -289,6 +289,15 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".exam-button:disabled": "canvas",
   ".exam-clear": "canvas",
   ".exam-question-stem": "cream",
+  // The save banner (Task 8). Four state selectors, each setting its own
+  // colour next to its own size and weight, on the runner bar — which
+  // fills nothing, so the ground is the page's cream. The mono mark
+  // inside inherits each of these and renders at 12px/700, below the
+  // large-text floor, so it is held to the same 4.5:1 these are.
+  '.exam-save-banner[data-state="saving"]': "cream",
+  '.exam-save-banner[data-state="saved"]': "cream",
+  '.exam-save-banner[data-state="offline"]': "cream",
+  '.exam-save-banner[data-state="refused"]': "cream",
   ".exam-confirm": "canvas",
   ".exam-confirm-danger": "canvas",
   // DESIGN.md's `palette-square` family. Each variant fills itself from

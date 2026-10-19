@@ -111,7 +111,9 @@ function makeQueue(seed?: number, on: Storage = storage, send: PutAnswer = put):
   return made;
 }
 
-const advance = (ms: number): Promise<void> => vi.advanceTimersByTimeAsync(ms);
+const advance = async (ms: number): Promise<void> => {
+  await vi.advanceTimersByTimeAsync(ms);
+};
 
 /**
  * Drive the queue until it has nothing left to send.

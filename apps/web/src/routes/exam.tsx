@@ -12,10 +12,12 @@
 // bundle budget is 300 KB gzipped (PRD non-functional table) and an
 // exam-taker under a clock downloads only what they are about to use.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AttemptPaper, CandidateQuestion, LandingPayload, RunClient } from "../lib/run";
 import { Runner, readMarked, writeMarked } from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
+import { SaveBanner } from "../components/exam/SaveBanner";
+import { createSaveQueue, type SaveState } from "../lib/queue";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -277,21 +279,51 @@ export function readRegistrationToken(): string | null {
   }
 }
 
-function AttemptView({ paper }: { paper: AttemptPaper }) {
+function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient }) {
   const [index, setIndex] = useState(0);
   const [responses, setResponses] = useState(paper.responses);
   const [marked, setMarked] = useState<ReadonlySet<string>>(() => readMarked(paper.attemptId));
+  const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
-  /** Task 7's answer block, for all twelve types. Task 8 owns the save
-   * queue; until it lands a response is a local fact only, which is why
-   * `setResponses` is the whole of `onChange` here. */
+  /**
+   * One queue for this attempt (Task 8).
+   *
+   * **Seeded from `paper.clientSeq`**, the highest sequence the server
+   * holds. A second tab, or a candidate whose site data was cleared,
+   * would otherwise restart the counter at 1 — every save then comes
+   * back `superseded`, the queue drops it as "the server holds newer",
+   * and the banner reads Saved over answers nobody stored.
+   *
+   * Never closed from here. `close()` exists for the tests, which make
+   * dozens of queues; this one lives exactly as long as the attempt
+   * view, and calling it in an effect's cleanup would kill the queue on
+   * mount under `StrictMode`, which is how this page really runs.
+   */
+  const queue = useMemo(
+    () => createSaveQueue(paper.attemptId, (save) => client.putAnswer(save), undefined, paper.clientSeq),
+    [paper.attemptId, paper.clientSeq, client],
+  );
+  useEffect(() => queue.subscribe(setSaveState), [queue]);
+
+  /** The answer blocks for all twelve types (Task 7), each change both
+   * shown at once and queued for the server. The local state is not the
+   * record: the queue is, and what it holds survives a reload. */
+  const save = (questionId: string, next: AttemptPaper["responses"][string]): void => {
+    setResponses((previous) => ({ ...previous, [questionId]: next }));
+    queue.enqueue(questionId, next);
+  };
+
   const questionSlot = (question: CandidateQuestion) => (
     <AnswerInput
       question={question}
       value={responses[question.id] ?? null}
+      // Never disabled while a save is in flight. Taking the keyboard
+      // away from a candidate because a request is open loses the
+      // keystrokes they make in the meantime, which is the exact failure
+      // this task exists to prevent.
       disabled={false}
       onChange={(next) => {
-        setResponses((previous) => ({ ...previous, [question.id]: next }));
+        save(question.id, next);
       }}
     />
   );
@@ -312,17 +344,17 @@ function AttemptView({ paper }: { paper: AttemptPaper }) {
       onIndex={setIndex}
       marked={marked}
       onToggleMark={toggleMark}
-      // Task 8 owns the save queue; until it lands, clearing an answer is
-      // a local fact only, and saying so here is better than a button
-      // that visibly does nothing.
+      // A cleared answer is a **save of null**, not a local forget: the
+      // server holds the old value until something replaces it, and an
+      // absent row and a null row mean different things to Phase 8.
       onClear={(questionId) => {
-        setResponses((previous) => ({ ...previous, [questionId]: null }));
+        save(questionId, null);
       }}
       questionSlot={questionSlot}
-      // Task 9's clock and Task 8's banner. Empty rather than faked: a
-      // placeholder countdown is the one lie this screen must not tell.
+      // Task 9's clock. Empty rather than faked: a placeholder countdown
+      // is the one lie this screen must not tell.
       clockSlot={<></>}
-      bannerSlot={<></>}
+      bannerSlot={<SaveBanner state={saveState} />}
     />
   );
 }
@@ -332,6 +364,17 @@ export function ExamApp({ client }: { client: RunClient }) {
 
   const boot = useCallback(async () => {
     try {
+      // `C-06`: closing the browser and reopening it resumes the same
+      // attempt — and `AC-14` needs it, because the queue that survived
+      // the reload in `localStorage` only drains once something mounts
+      // it. `resume()` answers `null` on an ordinary first visit and
+      // costs the server nothing at all when the browser carries no
+      // attempt cookie (measured: 0 subrequests).
+      const resumed = await client.resume();
+      if (resumed) {
+        setView({ kind: "attempt", paper: resumed });
+        return;
+      }
       setView({ kind: "landing", test: await client.landing() });
     } catch (error) {
       setView({
@@ -361,7 +404,7 @@ export function ExamApp({ client }: { client: RunClient }) {
     );
   }
   if (view.kind === "attempt") {
-    return <AttemptView paper={view.paper} />;
+    return <AttemptView paper={view.paper} client={client} />;
   }
   return (
     <ExamLanding

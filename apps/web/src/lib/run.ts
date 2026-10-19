@@ -13,9 +13,11 @@
 
 import type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent } from "@pariksha/core";
 import type { AttemptPaper } from "./paper.js";
+import type { QueuedSave, SaveOutcome } from "./queue.js";
 
 export type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent };
 export type { AttemptPaper, CandidateQuestion, PaperSection } from "./paper.js";
+export type { QueuedSave, SaveOutcome, SaveState } from "./queue.js";
 
 /** The five states `deriveState` answers with — the stored column holds
  * only four of them and never `"open"`. */
@@ -132,7 +134,39 @@ export interface RunClient {
    * ordinary case on a first visit and not an error to show anyone.
    */
   resume(): Promise<AttemptPaper | null>;
+  /**
+   * One answer, saved (Task 8). The transport half of the offline queue:
+   * it turns the route's answer into an **outcome**, because the status
+   * code alone cannot be trusted to mean "stored".
+   *
+   *  * 200 `accepted` / `superseded` — the server's own word. The second
+   *    is not an error: a late retry of sequence 4 after 5 must not
+   *    regress the answer, and the queue is right to drop it.
+   *  * 404 → `dropped`. The question is not on this candidate's pinned
+   *    paper, so no retry will ever store it. The queue discards it and
+   *    says so; it carries no `message`, because the route's own body is
+   *    the deliberately uninformative `S-10` 404 and the candidate needs
+   *    a sentence they can act on instead.
+   *  * every other 4xx → `refused`, carrying the server's sentence. The
+   *    queue **keeps** the answer and the banner never reads Saved.
+   *  * 5xx and a transport failure **throw**, so the queue backs off and
+   *    tries again rather than treating a bad minute as a verdict.
+   *
+   * `remainingMs` is absent on a refusal and present on every answer the
+   * route actually produced — Task 9's countdown re-anchors from it, and
+   * re-anchoring to a number nobody sent would be worse than not
+   * re-anchoring at all.
+   */
+  putAnswer(save: QueuedSave): Promise<{
+    outcome: SaveOutcome;
+    message?: string;
+    remainingMs?: number;
+  }>;
 }
+
+/** The save path. The attempt cookie rides it on its own (`S-06`), so
+ *  the queue's replay needs no credential of its own. */
+const ANSWER_PATH = "/api/v1/run/attempt/answer";
 
 /**
  * `S-07`'s bot protection, candidate side (ADR 0009): find a counter
@@ -392,6 +426,31 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
          * 401 that ever came to mean something else is still thrown. */
         if (error instanceof RunError && error.code === "attempt_required") return null;
         throw error;
+      }
+    },
+    putAnswer: async (save) => {
+      try {
+        const body = await send<{ outcome: SaveOutcome; remainingMs: number }>(ANSWER_PATH, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            questionId: save.questionId,
+            value: save.value,
+            clientSeq: save.clientSeq,
+          }),
+        });
+        return {
+          outcome: body?.outcome ?? "accepted",
+          ...(body?.remainingMs === undefined ? {} : { remainingMs: body.remainingMs }),
+        };
+      } catch (error) {
+        // Anything that is not a refusal the server *chose* — a dropped
+        // connection, a 502 from the edge, a 500 — is a bad minute, not
+        // a verdict on the answer. Rethrown so the queue keeps it and
+        // backs off.
+        if (!(error instanceof RunError) || error.status < 400 || error.status >= 500) throw error;
+        if (error.status === 404) return { outcome: "dropped" };
+        return { outcome: "refused", message: error.message };
       }
     },
   };

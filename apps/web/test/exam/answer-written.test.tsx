@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { ResponseValue } from "@pariksha/core";
 import { renderMarkdown } from "../../src/render/markdown";
@@ -323,6 +323,10 @@ describe("reachability: the candidate app's own root, clicked to", () => {
   it("the long_answer question is reachable and counts down from the paper's own maximum", async () => {
     await startFromRoot();
     jumpTo(12);
-    expect(await screen.findByRole("status")).toHaveTextContent(/5000 characters left/i);
+    // Scoped to the question column: Task 8's save banner is a second
+    // `role="status"` on this screen, in the header. The product copy of
+    // neither is renamed to tell them apart (pre-submit checklist 5).
+    const column = await screen.findByRole("main", { name: /question 12/i });
+    expect(within(column).getByRole("status")).toHaveTextContent(/5000 characters left/i);
   });
 });

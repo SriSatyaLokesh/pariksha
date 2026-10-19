@@ -55,7 +55,11 @@ function clientFor(payload: LandingPayload | Error): RunClient {
     // mints no attempt and resumes none, so both reject rather than
     // resolve. A screen that starts calling either fails here.
     start: () => Promise.reject(new Error("the landing screen starts no attempt")),
-    resume: () => Promise.reject(new Error("the landing screen resumes no attempt")),
+    // Task 8: the root asks for a resume before the landing page, so this
+    // one must answer. `null` is "no attempt in this browser", which is
+    // exactly the state every test in this file is in.
+    resume: () => Promise.resolve(null),
+    putAnswer: () => Promise.reject(new Error("the landing screen saves nothing")),
   };
 }
 

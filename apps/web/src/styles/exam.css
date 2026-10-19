@@ -311,6 +311,65 @@
   gap: 8px;
 }
 
+/* The save banner (C-05, Task 8).
+
+   Four states, and each one carries a word AND a mono mark, so the
+   colour below is the third carrier rather than the only one
+   (DESIGN.md: "Colour is never the only carrier here"). The colour is
+   declared on the state selector together with the size and the weight
+   it renders at, so `contrast-usage.test.ts` audits the real pair and
+   the two facts cannot drift apart.
+
+   Nothing animates — no spinner on "Saving". A candidate who thinks the
+   page moved thinks their answer went with it. */
+.exam-save-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+}
+
+.exam-save-status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* The same mono mark the device report uses, and for the same reason:
+   it is read before the colour is. 12px bold still sits below the
+   18.66px large-text floor, so it is held to 4.5:1 on the colour its
+   state rule sets. */
+.exam-save-mark {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-save-banner[data-state="saving"] {
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-save-banner[data-state="saved"] {
+  color: var(--color-state-answered);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-save-banner[data-state="offline"] {
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-save-banner[data-state="refused"] {
+  color: var(--color-flag-risk);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
 .exam-view-controls {
   display: flex;
   flex-wrap: wrap;

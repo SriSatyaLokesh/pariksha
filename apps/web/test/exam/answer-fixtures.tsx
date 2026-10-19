@@ -116,6 +116,7 @@ export const examPaper: AttemptPaper = {
     },
   ],
   responses: {},
+  clientSeq: 0,
   navigation: "free",
   maxIndex: 11,
   remainingMs: 45 * 60_000,
@@ -163,7 +164,11 @@ export function client(): RunClient {
     requestEmailCode: () => Promise.reject(new Error("the runner sends no code")),
     form: () => Promise.reject(new Error("the runner reads no form")),
     register: () => Promise.reject(new Error("the runner registers nobody")),
-    resume: () => Promise.reject(new Error("the runner resumes no attempt")),
+    // Task 8: `ExamApp` asks for a resume before the landing page now.
+    // `null` is the ordinary first visit; `putAnswer` rejects, because
+    // these fixtures drive the answer blocks directly.
+    resume: () => Promise.resolve(null),
+    putAnswer: () => Promise.reject(new Error("the answer fixtures save nothing")),
   };
 }
 
