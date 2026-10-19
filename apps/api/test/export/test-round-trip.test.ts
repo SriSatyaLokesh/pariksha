@@ -325,6 +325,14 @@ it("measures the real subrequest cost of export and import, flat in question cou
   const out = await createApp(exportCounting.deps).request(exportUrl(testId), get(authorCookie));
   expect(out.status, await out.clone().text()).toBe(200);
   expect(exportCounting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/export"]);
+
+  // Whole-branch test-honesty review, §4. The measurement alone is one
+  // lock: it catches a regression that adds a query. The literal is the
+  // second: without it, a one-character edit to `app.ts` makes the
+  // measurement agree with itself again and both go green. Standing
+  // decision 5's "update the pin and the table together" needs both.
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/import"]).toBe(7);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/export"]).toBe(7);
 });
 
 async function testCount(): Promise<number> {

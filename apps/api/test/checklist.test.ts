@@ -383,4 +383,10 @@ it("measures the real subrequest cost of the checklist route, flat in candidates
   const second = countingDeps(deps);
   expect((await createApp(second.deps).request(checklistUrl(), get(authorCookie))).status).toBe(200);
   expect(second.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/checklist"]);
+  // Whole-branch test-honesty review, §4. The measurement alone is one
+  // lock: it catches a regression that adds a query. The literal is the
+  // second: without it, a one-character edit to `app.ts` makes the
+  // measurement agree with itself again and both go green. Standing
+  // decision 5's "update the pin and the table together" needs both.
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/checklist"]).toBe(6);
 });

@@ -358,6 +358,16 @@ it("measures the real subrequest cost of publish, close, archive and versions", 
     expect(counting.counts().total, path).toBe(ROUTE_BUDGETS[`/api/v1/workspaces/:id/tests/:testId/${path.split("/").pop()}`]!);
   };
 
+  // Whole-branch test-honesty review, §4. The measurement alone is one
+  // lock: it catches a regression that adds a query. The literal is the
+  // second: without it, a one-character edit to `app.ts` makes the
+  // measurement agree with itself again and both go green. Standing
+  // decision 5's "update the pin and the table together" needs both.
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/publish"]).toBe(9);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/close"]).toBe(6);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/archive"]).toBe(6);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/versions"]).toBe(3);
+
   await measure(publishUrl(), post({}, adminCookie), 200);
   await measure(`/api/v1/workspaces/${workspaceId}/tests/${testId}/close`, post({}, adminCookie), 200);
   await measure(`/api/v1/workspaces/${workspaceId}/tests/${testId}/archive`, post({}, adminCookie), 200);
@@ -376,4 +386,5 @@ it("the publish budget is flat in how many questions the workspace holds", async
   const res = await createApp(counting.deps).request(publishUrl(), post({}, adminCookie));
   expect(res.status).toBe(200);
   expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/publish"]);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/publish"]).toBe(9);
 });

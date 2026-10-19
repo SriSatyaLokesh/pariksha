@@ -182,5 +182,11 @@ it("measures the real subrequest cost of clone", async () => {
   const counting = countingDeps(deps);
   const res = await createApp(counting.deps).request(cloneUrl(), post({}, authorCookie));
   expect(res.status, await res.clone().text()).toBe(201);
+  // Whole-branch test-honesty review, §4. The measurement alone is one
+  // lock: it catches a regression that adds a query. The literal is the
+  // second: without it, a one-character edit to `app.ts` makes the
+  // measurement agree with itself again and both go green. Standing
+  // decision 5's "update the pin and the table together" needs both.
   expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/clone"]);
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/clone"]).toBe(8);
 });
