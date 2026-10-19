@@ -130,6 +130,32 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `exampleBank` fixture (12 questions, one passage group): 7, which is
   // the number here.
   "/api/v1/workspaces/:id/banks/:bankId/import": 7,
+  // Task 9 (#53, P4.9): export. Measured (apps/api/test/export/round-trip.
+  // test.ts's "measures the real subrequest cost..." tests) against
+  // examples/reasoning-aptitude/questions.json (17 questions, one passage
+  // group) — a realistic fixture, not the cheapest possible one. auth (2) +
+  // bankOr404 (1) + listGroups (2, this fixture has a group) +
+  // `allQuestions` (1, one page covers any bank at or under 200 questions)
+  // = 6, flat in both question count up to 200 and in `?ids=`'s selection
+  // size (filtered in memory after the same one fetch).
+  //
+  // The task brief that planned this route named a lower, illustrative
+  // number (3) — unreachable in this application: authentication alone
+  // already spends 2 subrequests on every authenticated route (the session
+  // join and the idle-window write, apps/api/src/auth/session.ts's
+  // `readSession`), so no authenticated route that reads anything at all can
+  // cost less than 3, and this one reuses three already-audited repository
+  // functions (`getBank`, `listGroups`, `listQuestions`) rather than a
+  // bespoke combined query that would shave a couple of subrequests at the
+  // cost of a second, parallel way to read a bank. 6 is measured, declared
+  // with `toBe` (not guessed, not merely bounded above), and nowhere near
+  // the 50-subrequest ceiling.
+  "/api/v1/workspaces/:id/banks/:bankId/export": 6,
+  // The single-question sibling: auth (2) + `getQuestion` (1, already one
+  // query with its own correlated "used in tests" subquery) = 3. The brief
+  // named 1, which the same authentication floor rules out; 3 is the
+  // measured number.
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": 3,
 };
 
 /**
@@ -172,6 +198,10 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
 
   // Task 7.
   "POST /api/v1/workspaces/:id/banks/:bankId/import": "banks.edit",
+
+  // Task 9.
+  "GET /api/v1/workspaces/:id/banks/:bankId/export": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "banks.edit",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {

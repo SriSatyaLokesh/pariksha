@@ -21,14 +21,18 @@ import {
   deleteBank,
   deleteGroup,
   getBank,
+  getQuestion,
   listBanks,
   listGroups,
+  listQuestions,
   listWorkspaceTags,
   updateBank,
   upsertGroup,
+  type QuestionRow,
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
+import { toBankDocument } from "../export/bank.js";
 import { importBankJson, importBankText } from "../import/json.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 
@@ -90,6 +94,30 @@ async function bankOr404(deps: AppDeps, workspaceId: string, bankId: string) {
   const bank = await getBank(deps.db, workspaceId, bankId);
   if (!bank) throw new ApiError(404, "not_found", "No such resource.");
   return bank;
+}
+
+/**
+ * Every question in a bank, for export — `listQuestions` caps a page at 200
+ * (right for the browser, which only ever shows one page at a time), so a
+ * bank at `IMPORT_MAX_QUESTIONS` (500, apps/api/src/import/json.ts) needs
+ * more than one call to come back whole. One call for any bank at or under
+ * 200 questions (every fixture this task measures a budget against), and one
+ * more per additional 200 beyond that — still a handful of subrequests
+ * against the 50-subrequest ceiling, never a loss of the tail of a large
+ * bank the way a single capped call would be.
+ */
+async function allQuestions(deps: AppDeps, workspaceId: string, bankId: string): Promise<QuestionRow[]> {
+  const out: QuestionRow[] = [];
+  let cursor: string | undefined;
+  for (;;) {
+    const page = await listQuestions(deps.db, workspaceId, bankId, {
+      limit: 200,
+      ...(cursor !== undefined && { cursor }),
+    });
+    out.push(...page.rows);
+    if (page.cursor === undefined) return out;
+    cursor = page.cursor;
+  }
 }
 
 export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
@@ -329,6 +357,44 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     }
 
     return c.json(report);
+  });
+
+  // Task 9 (#53, P4.9): export, the other half of AC-05's round trip.
+  // `toBankDocument` (apps/api/src/export/bank.ts) is a pure mapping; this
+  // route's own job is fetching what it maps, in as few subrequests as the
+  // existing repository functions allow — `?ids=` filters the already-
+  // fetched set in memory, so the cost never grows with how many ids are
+  // named.
+  routes.get("/:id/banks/:bankId/export", requires("banks.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    const bank = await bankOr404(deps, workspaceId, bankId);
+    const groups = await listGroups(deps.db, workspaceId, bankId);
+    const questions = await allQuestions(deps, workspaceId, bankId);
+
+    const idsParam = c.req.query("ids");
+    const selected =
+      idsParam === undefined
+        ? questions
+        : idsParam
+            .split(",")
+            .map((id) => questions.find((q) => q.document.id === id))
+            .filter((q): q is QuestionRow => q !== undefined);
+
+    return c.json(toBankDocument(bank, groups, selected));
+  });
+
+  // The single-question sibling: no `bankOr404` of its own — `getQuestion`
+  // is already scoped by workspace *and* bank, so a bank that does not exist
+  // and a question that does not exist in a bank that does both answer the
+  // same 404 either way, and checking twice would only spend a second
+  // subrequest proving what the first call's `null` already said.
+  routes.get("/:id/banks/:bankId/questions/:qid/export", requires("banks.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+    const question = await getQuestion(deps.db, workspaceId, bankId, c.req.param("qid"));
+    if (!question) throw new ApiError(404, "not_found", "No such resource.");
+    return c.json(question.document);
   });
 
   return routes;

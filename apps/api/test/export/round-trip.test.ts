@@ -164,6 +164,20 @@ function exportWithout(doc: Bank, id: string): Bank {
   return { ...doc, questions: doc.questions.filter((q) => q.id !== id) };
 }
 
+/** Sorted by `id` — `question.created_at` is identical for every row a
+ * single bulk import writes (`writeImportedBank`'s one `db.batch()`), so
+ * `listQuestions`' `ORDER BY created_at, id` tie-breaks on the row's own
+ * internal, randomly generated id (packages/db/src/ids.ts's `newId`) rather
+ * than the order a document's `questions` array held them in. There is no
+ * column recording that order (Phase 4 never modelled one — only an
+ * ordering-type *question*'s own item order is, via `ReorderableList`), so
+ * "round-trips with no loss" is checked here as set equality, field for
+ * field, not array-position equality — a pre-existing property of
+ * `listQuestions` this task's file scope does not touch. */
+function byId(doc: Bank): Bank {
+  return { ...doc, questions: [...doc.questions].sort((a, b) => a.id.localeCompare(b.id)) };
+}
+
 it("AC-04 / AC-05: the example bank round-trips byte-for-byte through import and export", async () => {
   const bank = exampleBank();
   await matchBankMetadata(bank);
@@ -171,7 +185,7 @@ it("AC-04 / AC-05: the example bank round-trips byte-for-byte through import and
   expect(importRes.status, await importRes.clone().text()).toBe(200);
 
   const out = await exportBank();
-  expect(out).toEqual({ ...bank, $schema: expect.any(String) });
+  expect(byId(out)).toEqual(byId({ ...bank, $schema: expect.any(String) }));
 });
 
 it("the exported document validates against bank-1.json and question-1.json", async () => {
