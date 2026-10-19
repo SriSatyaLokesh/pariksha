@@ -37,7 +37,7 @@ let clock = T;
 const { deps } = await testDeps({ now: () => clock });
 const app = createApp(deps);
 const workspaceId = await seedPublishedTest(deps);
-const q = await seedAttemptTests(deps, workspaceId);
+await seedAttemptTests(deps, workspaceId);
 
 // A second tenant with a paper of its own, so "a candidate's cookie
 // reaches only their own attempt's workspace" has somewhere else to be

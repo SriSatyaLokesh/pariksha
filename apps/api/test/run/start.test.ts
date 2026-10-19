@@ -186,6 +186,32 @@ it("a registration token minted for another test is refused here, and is not spe
   expect((await start("sets5", token)).status).toBe(201);
 });
 
+it("a row written under this test's salt but carrying another test's claim is refused", async () => {
+  // Belt and braces, and each half hides the other from an end-to-end
+  // probe: the salted digest means a token minted elsewhere matches no
+  // row at all, and the payload comparison means a row found some other
+  // way is still checked against the test that is answering. This forges
+  // the state the salt makes unreachable, so the comparison is pinned on
+  // its own (Task 3's M9/M10 lesson).
+  const here = await versionOf("paper");
+  const elsewhere = await versionOf("sets5");
+  const token = `forged-${newId("cnd")}`;
+  await insertAuthToken(deps.db, {
+    tokenHash: await registrationHash(here.testVersionId, token),
+    kind: REGISTRATION_KIND,
+    payload: {
+      workspaceId,
+      testVersionId: elsewhere.testVersionId,
+      candidateId: await candidateFor("sets5"),
+    },
+    now: clock,
+    expiresAt: clock + REGISTRATION_TTL_MS,
+  });
+
+  expect((await start("paper", token)).status).toBe(410);
+  expect(await attemptRows()).toHaveLength(0);
+});
+
 // --- pinning ----------------------------------------------------------
 
 it("AC-03: the attempt pins the version it started on; publishing v2 does not move it", async () => {
