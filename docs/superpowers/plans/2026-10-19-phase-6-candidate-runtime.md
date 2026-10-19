@@ -53,8 +53,8 @@ Phase 5 is being planned in parallel with this document and its output could not
 | 10 | Consent `{ version: string; text: string }`, shown before registration, with the version and the acceptance time stored per candidate | `schemas/test-1.json` `consent`; `docs/test-format.md:76-85`; `S-12`. `candidate.consent_version` already exists (`columns.ts:265`) | **Read as JSON Schema, assumed as TypeScript** |
 | 11 | Branding is split: logo, primary colour and footer text come from `workspace.branding_json`; `start_message` and `finish_message` come from the test version's `branding` block | `T-23` — "Branding per workspace (logo, primary colour, footer text) **and** an optional custom message on the start and finish pages". `workspace.branding_json` exists (`columns.ts:89`) and `schemas/test-1.json` `branding` carries all five | **Assumed.** Both places can hold all five, and that PRD sentence is the only thing splitting them. If Phase 5 puts all five on the version, Task 1 reads one object instead of two |
 | 12 | A published test is reached by `(workspace.slug, test.slug) → test.current_version → test_version`, and `test.status` is one of `draft \| scheduled \| open \| closed \| archived` | `T-02` (the candidate URL is `/<workspace-slug>/<test-slug>`), `T-04`; `packages/db/src/repo/tests.ts:95` already writes `current_version` and `status` on publish | **Assumed.** Phase 2's `publishTestVersion` hard-codes `status = "open"` and never writes `scheduled`; Phase 5 must fix that, and Task 1's availability-window check depends on it |
-| 13 | Invite links for `invite_only` are minted by Phase 5 (`POST /tests/{id}/invites`, PRD REST table) as single-use rows in the existing `auth_token` table with `kind = "run_invite"` and a payload naming the test version and the candidate-list row | `S-06`, `T-20`; `packages/db/src/repo/identity.ts`'s `insertAuthToken` / `consumeAuthToken`, whose `UPDATE … WHERE used_at IS NULL … RETURNING` already makes a replay find nothing | **Assumed.** Task 2 builds only the *consume* side, and its tests mint through `insertAuthToken` directly — so Task 2 is executable whether or not Phase 5's minting route exists |
-| 14 | The uploaded candidate list (`access.candidate_list`, `T-21`) is stored by Phase 5 with a lookup by identifier | `T-21`; `docs/test-format.md:68` | **Assumed, and deferred.** Issue [#66](https://github.com/SriSatyaLokesh/pariksha/issues/66) names only the four modes; Task 2 implements `allow_email_domains` and `allow_ip_ranges` (which `docs/test-format.md:72` makes optional for every mode) and leaves the candidate-list allowlist to whichever phase owns the list — see [Known deferrals](#known-deferrals-recorded-so-they-are-not-rediscovered-as-bugs) |
+| 13 | ~~Phase 5 mints the invite links~~ — **reconciled: this is a Phase 6 deliverable.** Task 2 mounts `POST /api/v1/workspaces/:id/tests/:testId/invites` under `requires("candidates.manage")` and writes single-use `auth_token` rows with `kind = "run_invite"`, payload `{ testVersionId, listEntryId, identifier }` | `S-06`, `T-20`, PRD REST table's Candidates row; `packages/db/src/repo/identity.ts`'s `insertAuthToken` / `consumeAuthToken`; `packages/core/src/permissions.ts:15` | **Not a Phase 5 dependency at all.** Both plans had assumed the other owned it; the split is recorded as a ruling in Task 2. Phase 6 owns mint *and* consume, tested as one round trip |
+| 14 | **Phase 5 ingests the candidate list** (`T-21`, `access.candidate_list`) as real, queryable rows uploaded under `candidates.manage`. Phase 6 reads them. The columns Task 2 needs, by name: **`id`** (the `listEntryId` an invite's payload carries), **`workspace_id`**, **`test_id`**, **`identifier`** (the value `T-21`'s "only listed IDs may register" matches on — roll number, employee ID, whatever the organiser uploaded), **`email`** (nullable; `email_code` and `sso` match on it, and invite delivery uses it), **`set_label`** (nullable; `T-09`'s `from_candidate_list` assignment reads it, consumed in Task 5), and **`created_at`**. Scoped reads: `listCandidateListEntries(db, ws, { testId })` and `findCandidateListEntry(db, ws, { testId, identifier })`, both through `scoped()` and in `REPO_FUNCTIONS` | `T-21`; `docs/test-format.md:68,170`; `T-09`'s `from_candidate_list` | **A real Phase 5 dependency — no longer deferred.** Task 2's candidate-list allowlist and invite minting both read these rows, and Task 5's `assignSet` reads `set_label` as its `listValue` |
 | 15 | The short link `/t/<6-char code>` and the QR code (`T-02`) | `T-02`; `docs/ROADMAP.md` Phase 5 "Delivers" | **Assumed, not consumed.** Phase 6 resolves only the long URL; a short link that redirects to it needs nothing from this phase |
 | 16 | Pre-publish warnings (`T-11`) have already run, so a published version's pools are satisfiable and its sets are balanced | `docs/test-format.md:172`; `T-11` | **Assumed.** Task 5 still catches `PoolTooSmallError` at `/start` and refuses the attempt with a message an organiser can act on — a published version goes stale the moment a drawn question is deleted |
 
@@ -2149,7 +2149,11 @@ git commit -s -m "feat(run): free, linear and per-section navigation refused ser
   ```ts
   // apps/api/src/run/submit.ts
   export type SubmitReason = "manual" | "timeout" | "limit";
-  export interface Receipt { attemptId: string; submittedAt: number; answered: number; unanswered: number; total: number }
+  export interface Receipt {
+    attemptId: string; submittedAt: number; answered: number; unanswered: number; total: number;
+    /** "Attempt 2 of 3". Both come from the attempt count and `timing.attempts_allowed`. */
+    attemptNo: number; attemptsAllowed: number;
+  }
   export function submitAttempt(deps: AppDeps, attempt: AttemptContextVar, reason: SubmitReason, now: number):
     Promise<{ receipt: Receipt; released: ReleasedResult | null }>;
 
@@ -2160,10 +2164,11 @@ git commit -s -m "feat(run): free, linear and per-section navigation refused ser
     sections?: { sectionId: string; title: string; points: number; max: number }[];
     review?: { questionId: string; yourAnswer: unknown; correct: unknown; explanation: string | null; points: number }[];
   }
-  /** null when the release setting says the candidate may not see it yet. */
+  /** null when the release setting says the candidate may not see it yet.
+   *  `attemptsRemaining > 0` downgrades `full_review` to `score_and_sections` — see the ruling. */
   export function releasedResult(
     release: TestRelease, score: AttemptScore, questions: readonly Question[],
-    responses: Record<string, ResponseValue | null>, now: number,
+    responses: Record<string, ResponseValue | null>, now: number, attemptsRemaining: number,
   ): ReleasedResult | null;
 
   // packages/db/src/repo/run.ts
@@ -2183,6 +2188,12 @@ git commit -s -m "feat(run): free, linear and per-section navigation refused ser
     verifyResultCode(attemptRef: string, email: string, code: string): Promise<ReleasedResult | null>;
   }
   ```
+
+### Ruling: `full_review` degrades while the candidate still has attempts, and the finish page shows *this* attempt's score
+
+**Ruling (a): when `release.show` is `full_review` and the candidate has attempts remaining, `releasedResult` returns `score_and_sections` instead, and opens fully once no attempt remains.** — Why: `T-22` permits `when: "on_submit"` with `show: "full_review"` and `T-14` permits `attempts_allowed > 1`; together they hand a candidate every correct answer and explanation before their retake. `docs/test-format.md:190` says `full_review` is for "after the test has closed for everyone", which is the intent but is advice to an organiser rather than a rule anything enforces, and `SECURITY.md`'s scope note makes "any way to read … [answer keys] from a candidate session" a vulnerability rather than a configuration choice. Degrading at runtime is the only option that serves the practice-test case (one attempt, full review immediately) and the retake case (several attempts, review after the last) without forbidding either at publish. — Cost if wrong: an organiser who deliberately wanted review between attempts cannot have it; the recovery is one boolean on `release` and three lines here.
+
+**Ruling (b): the finish page and the result view show *this* attempt's score, and the receipt names which attempt it is ("Attempt 2 of 3").** — Why: `T-14`'s `counted_attempt` (`highest`, `latest`, `average`) is a results concept and `docs/ROADMAP.md` gives results to Phase 8; `AC-16` is silent on which attempt, and `C-08`'s "finish page" plainly means the attempt just finished. Reading every prior attempt to compute a counted figure would add a subrequest to a route that needs none and would tell a candidate mid-series about earlier attempts. — Cost if wrong: **this disagrees with the organiser's results CSV whenever `counted_attempt` is `highest` or `average`**, and Phase 8 inherits that reconciliation: its results view and its CSV must either show the counted figure beside the per-attempt one or say which is which. Recorded here so Phase 8 does not rediscover it as a bug report.
 
 **The release gate is assembled on the server, not filtered in the browser.** `AC-16` — "Results show to candidates exactly as the release setting says, and never before it" — is a property of what the response *contains*: `score_only` carries no `sections` key at all, `score_and_sections` carries no `review` key, and `never` and a future `on_date` carry nothing but the receipt. A browser that renders less than it was given is a UI bug; a browser that was given more than it should have is the vulnerability `SECURITY.md` names ("Any way to read or change them from a candidate session **is** a vulnerability").
 
@@ -2207,11 +2218,17 @@ git commit -s -m "feat(run): free, linear and per-section navigation refused ser
 
 ```ts
 // apps/api/test/run/submit.test.ts
-it("C-08: the receipt carries the attempt reference and the time, and no score", async () => {
+it("C-08: the receipt carries the attempt reference, the time and which attempt it is, and no score", async () => {
   const { receipt, released } = await (await submit(cookie)).json();
   expect(receipt).toMatchObject({ attemptId: expect.stringMatching(/^att_/), submittedAt: expect.any(Number),
-    answered: 12, unanswered: 5, total: 17 });
+    answered: 12, unanswered: 5, total: 17, attemptNo: 2, attemptsAllowed: 3 });
   expect(released).toBeNull();                                  // release.when = "never" on this fixture
+});
+
+it("the score shown is this attempt's, not the counted one (Phase 8 owns that)", async () => {
+  await submitWithScore(80);                                    // attempt 1
+  const { released } = await (await submitWithScore(55)).json(); // attempt 2, counted_attempt = "highest"
+  expect(released.total).toBe(55);
 });
 
 it("submitting twice scores once and writes one audit row", async () => {
@@ -2251,8 +2268,25 @@ it.each([
   ["on_submit","score_and_sections", { sections: expect.any(Array), review: undefined }],
   ["on_submit","full_review",        { sections: expect.any(Array), review: expect.any(Array) }],
 ])("AC-16: when=%s show=%s returns %j and nothing more", async (when, show, expected) => {
-  const body = (await (await submitOn({ when, show })).json()).released;
+  const body = (await (await submitOn({ when, show, attemptsAllowed: 1 })).json()).released;
   expect(body).toEqual(expected === null ? null : expect.objectContaining(expected));
+});
+
+it("full_review degrades to score_and_sections while an attempt remains", async () => {
+  const r = (await (await submitOn({ when: "on_submit", show: "full_review", attemptsAllowed: 3 })).json()).released;
+  expect(r).toMatchObject({ show: "score_and_sections", sections: expect.any(Array) });
+  expect(r.review).toBeUndefined();
+});
+
+it("full_review opens on the last attempt, and only then", async () => {
+  await exhaustAttempts(2);                                   // of 3
+  const r = (await (await submitOn({ when: "on_submit", show: "full_review", attemptsAllowed: 3 })).json()).released;
+  expect(r).toMatchObject({ show: "full_review", review: expect.any(Array) });
+});
+
+it("the degraded payload carries no key or explanation at all, not a hidden one", async () => {
+  const text = JSON.stringify(await releasedFor("full_review", { attemptsAllowed: 3 }));
+  for (const leak of ["__KEY_LOG001__", "__EXPL_LOG001__"]) expect(text, leak).not.toContain(leak);
 });
 
 it("AC-16: on_date shows nothing before `at` and the result after it", async () => {
@@ -2320,9 +2354,10 @@ it("C-08: the confirmation names the unanswered and marked counts before submitt
   expect(onSubmit).not.toHaveBeenCalled();
 });
 
-it("C-08: the finish page shows the reference and the time, and no score when release says never", () => {
-  render(<Receipt receipt={receipt} released={null} />);
+it("C-08: the finish page shows the reference, the time and 'Attempt 2 of 3', and no score when release says never", () => {
+  render(<Receipt receipt={{ ...receipt, attemptNo: 2, attemptsAllowed: 3 }} released={null} />);
   expect(screen.getByText(receipt.attemptId)).toBeVisible();
+  expect(screen.getByText(/attempt 2 of 3/i)).toBeVisible();
   expect(screen.queryByText(/score|%|passed/i)).toBeNull();
 });
 
@@ -2344,7 +2379,7 @@ Run: `pnpm vitest run apps/api/test/run apps/web/test/exam/submit.test.tsx` — 
 
 - [ ] **Step 3: Implement `submitAttempt`, `releasedResult`, `finishAttempt`, the hardened `matchBounded`, and the three screens**
 
-`releasedResult` builds the payload by `show` level rather than deleting from a full one, for Review Focus 5's reason. `finishAttempt` is one `UPDATE … WHERE submitted_at IS NULL … RETURNING`, the same single-statement idempotence `consumeAuthToken` uses. `matchBounded` wraps the match in a `try` around `assertSafeRegex` plus the length cap; the per-question `catch` lives in `submitAttempt`, so one bad question costs one `pending` entry and one audit row.
+`releasedResult` builds the payload by `show` level rather than deleting from a full one, for Review Focus 5's reason, and the `attemptsRemaining > 0` downgrade happens **before** the build so a `review` array is never constructed and then dropped. `finishAttempt` is one `UPDATE … WHERE submitted_at IS NULL … RETURNING`, the same single-statement idempotence `consumeAuthToken` uses. `matchBounded` wraps the match in a `try` around `assertSafeRegex` plus the length cap; the per-question `catch` lives in `submitAttempt`, so one bad question costs one `pending` entry and one audit row.
 
 - [ ] **Step 4: Run the whole suite**
 
