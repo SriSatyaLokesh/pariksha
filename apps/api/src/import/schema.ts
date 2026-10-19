@@ -78,6 +78,15 @@ function fieldOf(err: OutputUnit, path: string[], container: string | null): str
   return path[0] ?? "document";
 }
 
+// Fix round 1, finding 6: built once, at module load, not once per request.
+// The schemas are static JSON modules, `Validator.validate()` does not
+// mutate `this` (it reads the `lookup` built in the constructor and
+// `addSchema`), and an isolate reuses this module across requests — so a
+// shared instance is safe and avoids re-dereferencing both schemas inside
+// every request's CPU budget.
+const validator = new Validator(bankSchema as never, "2020-12", false);
+validator.addSchema(questionSchema as never);
+
 /**
  * Checks `doc` against `schemas/bank-1.json` (which `$ref`s
  * `schemas/question-1.json` for each entry in `questions`). Never throws —
@@ -85,8 +94,6 @@ function fieldOf(err: OutputUnit, path: string[], container: string | null): str
  * empty) issue list, the same contract `validateBank` keeps.
  */
 export function validateBankDocumentStructure(doc: unknown): StructuralIssue[] {
-  const validator = new Validator(bankSchema as never, "2020-12", false);
-  validator.addSchema(questionSchema as never);
   const { errors } = validator.validate(doc);
 
   const issues: StructuralIssue[] = [];

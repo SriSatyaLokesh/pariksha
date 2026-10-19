@@ -119,17 +119,17 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // Task 7 (#51, P4.7): whole-bank import. Review Focus item 3's whole
   // point — authentication (2, every authenticated route) + bankOr404 (1) +
   // the one `listQuestionRefIds` duplicate-check query (1) +
-  // `upsertQuestions`'s one `batch()` (1) + appendAudit (1) is 6 regardless
-  // of question count; a realistic bank also declares a handful of passage
-  // groups, each an `upsertGroup` read-modify-write (2 per group) —
-  // measured against `apps/api/test/import/json.test.ts`'s `exampleBank`
-  // fixture (12 questions, one passage group), this is 8, not the flat 6 a
-  // question-only bank would cost (`bankOf(200)`'s own measured cost stays
-  // at 6, whatever the question count). It would grow with the *group*
-  // count, which this task leaves unbatched (see `importBankJson`'s own
-  // comment) because real banks carry a handful of groups at most, nothing
-  // like the hundreds of questions Review Focus item 3 is about.
-  "/api/v1/workspaces/:id/banks/:bankId/import": 8,
+  // `writeImportedBank`'s one `batch()` (1, groups and questions together)
+  // + appendAudit (1) is 6, flat in question count: `bankOf(200)` costs
+  // exactly this. A bank that declares any passage group (fix round 1,
+  // findings 1+2 — `writeImportedBank`'s own comment) adds exactly one more
+  // read, to merge the imported groups into the bank's existing
+  // `groups_json` before the same batch writes it — 7, flat in *group*
+  // count too: ten groups costs this one read, not ten. Measured (not
+  // estimated — finding 5) against `apps/api/test/import/json.test.ts`'s
+  // `exampleBank` fixture (12 questions, one passage group): 7, which is
+  // the number here.
+  "/api/v1/workspaces/:id/banks/:bankId/import": 7,
 };
 
 /**

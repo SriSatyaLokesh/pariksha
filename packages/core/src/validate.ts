@@ -35,6 +35,16 @@ import type { ScoringDefaults } from "./grade/result.js";
 import { APPLICABLE_MODES, resolveScoring, round2 } from "./grade/result.js";
 import { matchesFilter } from "./select.js";
 
+/**
+ * Every value `ImportIssue.code` can hold. A one-member union today, not
+ * `string` — fix round 1, finding 10: a plain string coupled the producer
+ * (this file) to the consumer (`apps/api/src/routes/questions.ts`'s
+ * `isSaveTimeIssue`) only by both sides typing the same literal correctly,
+ * with nothing to catch a typo on either end. Extend this union, not the
+ * type of `code` itself, when a second issue needs one.
+ */
+export type ImportIssueCode = "unsafe_regex";
+
 export interface ImportIssue {
   /** The question's `id`, or null for an issue not about one specific question. */
   questionId: string | null;
@@ -57,7 +67,7 @@ export interface ImportIssue {
    * not exist; it is added here, narrowly, rather than given to every issue
    * this file raises, which would be a speculative rename nothing asks for.
    */
-  code?: string;
+  code?: ImportIssueCode;
 }
 
 type ValidationResult =
@@ -181,7 +191,7 @@ export function validateBank(bank: unknown): ValidationResult {
     }
     const q = raw as unknown as Question;
 
-    const issue = (field: string, message: string, code?: string): void => {
+    const issue = (field: string, message: string, code?: ImportIssueCode): void => {
       issues.push({ questionId: q.id, index, field, message, ...(code !== undefined && { code }) });
     };
 

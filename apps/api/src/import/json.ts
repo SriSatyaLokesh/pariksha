@@ -14,21 +14,35 @@
 // already part of `ImportReport`'s issue type and simply unset here.
 
 import { validateBank, type Bank, type ImportIssue } from "@pariksha/core";
-import { listQuestionRefIds, upsertGroup, upsertQuestions } from "@pariksha/db";
+import { listQuestionRefIds, writeImportedBank } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { validateBankDocumentStructure } from "./schema.js";
 
+/**
+ * Fix round 1, finding 9: this is the *only* shape an import outcome ever
+ * takes, success or failure — a clean import or dry run returns it directly
+ * with `issues: []`; a validation failure throws `ApiError(422, …, report)`
+ * carrying this same shape as `details`, with `imported: 0` and `issues`
+ * populated, rather than a bare `{ issues }` of its own. One type, used
+ * uniformly on both paths, is what `apps/web/src/lib/api.ts`'s identically-
+ * named type (and Task 8's `line` translation, which reads `issues` off
+ * whichever of these two outcomes actually happened) needs to be able to
+ * rely on.
+ */
 export interface ImportReport {
   imported: number;
   issues: (ImportIssue & { line?: number })[];
 }
 
 /**
- * D1 caps bound parameters per statement, so a bank with no ceiling could
- * still overflow a single INSERT even with `batch()` keeping statement
- * *count* flat. 500 is comfortably under that per-statement limit for one
- * question's own columns and a generous size for a hand-authored bank.
+ * Not a D1 bound-parameter concern — each question is its own ~19-parameter
+ * INSERT, and `writeImportedBank`'s one `db.batch()` call keeps statement
+ * *count* flat regardless of how many questions there are, so no single
+ * statement grows with this number at all. The real reasons for a ceiling:
+ * parsing an unbounded body, the batch's own size, and the memory an
+ * in-flight Worker invocation can hold. 500 is a generous size for a
+ * hand-authored bank well under any of those.
  */
 export const IMPORT_MAX_QUESTIONS = 500;
 
@@ -89,7 +103,8 @@ export async function importBankJson(
     ...duplicates,
   ];
   if (issues.length > 0) {
-    throw new ApiError(422, "invalid_import", "The import could not be validated.", { issues });
+    const report: ImportReport = { imported: 0, issues };
+    throw new ApiError(422, "invalid_import", "The import could not be validated.", report);
   }
 
   // `issues` is empty, which `validateBank` only returns alongside `ok:
@@ -99,12 +114,13 @@ export async function importBankJson(
   const bank: Bank = crossField.bank;
 
   if (!opts.dryRun) {
-    // Groups before questions: a question's `group_ref` must never point at
-    // a group this import did not also write.
-    for (const group of bank.groups ?? []) {
-      await upsertGroup(deps.db, workspaceId, bankId, group, opts.now);
-    }
-    await upsertQuestions(deps.db, workspaceId, bankId, bank.questions, opts.now);
+    // One batch, groups and questions together (`writeImportedBank`'s own
+    // comment) — fix round 1, findings 1+2: a separate groups loop followed
+    // by a separate questions batch left every already-applied group
+    // committed if the questions batch failed afterward, which is exactly
+    // what a concurrent import racing `listQuestionRefIds`'s pre-check above
+    // could trigger.
+    await writeImportedBank(deps.db, workspaceId, bankId, bank, opts.now);
   }
 
   return { imported: bank.questions.length, issues: [] };

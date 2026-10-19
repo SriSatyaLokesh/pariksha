@@ -247,8 +247,12 @@ it("D-02: structural and cross-field issues arrive together, in one report", asy
 });
 
 // Review Focus 3's own point: an importer that issues one write per question
-// passes at ten and fails in production at sixty. `bankOf(200)` isolates the
-// question-count axis (no groups) so this test is about that axis alone.
+// (or, after fix round 1, one read-modify-write per group) passes at ten
+// and fails in production at sixty. `bankOf(200)` isolates the
+// question-count axis (no groups) so this test is about that axis alone —
+// pinned to the exact measured count (fix round 1, finding 5: a `<=`
+// assertion never catches a budget number that is too high, only `toBe`
+// does), not just bounded above.
 it("Review Focus 3: importing 200 questions stays within the route's budget", async () => {
   const counting = countingDeps(deps);
   const res = await createApp(counting.deps).request(
@@ -257,14 +261,20 @@ it("Review Focus 3: importing 200 questions stays within the route's budget", as
   );
 
   expect(res.status, await res.clone().text()).toBe(200);
-  expect(counting.counts().total).toBeLessThanOrEqual(ROUTE_BUDGETS[IMPORT_ROUTE_KEY]!);
+  // auth (2) + bankOr404 (1) + listQuestionRefIds (1) + batch (1) +
+  // appendAudit (1) = 6, unaffected by `bankOf`'s question count and by
+  // `writeImportedBank`'s groups read (skipped entirely — this fixture
+  // declares none).
+  expect(counting.counts().total).toBe(6);
   expect(counting.counts().total).toBeLessThan(10);
 });
 
 // The number in ROUTE_BUDGETS itself, measured rather than guessed — a
 // realistic fixture (one group, twelve questions), not `bankOf(200)`'s
 // group-free one. See app.ts's comment on this route's budget line for why
-// the two differ.
+// the two differ. Pinned with `toBe`, not `toBeLessThanOrEqual` (finding 5):
+// a budget that merely bounds the measurement from above would have let the
+// original, too-low estimate of 6 ship instead of being caught by this test.
 it("measures the real subrequest cost of importing the example bank against ROUTE_BUDGETS", async () => {
   const counting = countingDeps(deps);
   const res = await createApp(counting.deps).request(
@@ -273,10 +283,21 @@ it("measures the real subrequest cost of importing the example bank against ROUT
   );
 
   expect(res.status, await res.clone().text()).toBe(200);
-  expect(counting.counts().total).toBeLessThanOrEqual(ROUTE_BUDGETS[IMPORT_ROUTE_KEY]!);
+  // The one axis that does cost more than the group-free path: one extra
+  // read of the bank's current groups before merging. auth (2) + bankOr404
+  // (1) + listQuestionRefIds (1) + groups read (1) + batch (1) +
+  // appendAudit (1) = 7 — flat in question count and in group *count* (a
+  // bank with ten groups still costs this one read, not ten), though it
+  // does grow from 6 to 7 the moment a bank declares any group at all.
+  expect(counting.counts().total).toBe(7);
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS[IMPORT_ROUTE_KEY]);
 });
 
-it("an import over IMPORT_MAX_QUESTIONS is refused before anything is parsed", async () => {
+// Fix round 1, finding 8: the body is still JSON.parsed to count
+// `questions.length` — refused before the *expensive* stages (structural
+// and cross-field validation), not before parsing, which the old name
+// overclaimed.
+it("an import over IMPORT_MAX_QUESTIONS is refused before structural or cross-field validation runs", async () => {
   const res = await post(bankOf(501), authorCookie);
   expect(res.status).toBe(413);
   expect(await questionCount()).toBe(0);
