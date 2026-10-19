@@ -140,7 +140,16 @@ export function layoutForAttempt(input: {
     const optionOrder: Record<string, string[]> = {};
 
     for (const question of questions) {
-      if (!("options" in question)) continue;
+      // A value test, not `"options" in question` (Phase 6 Task 5, #69).
+      // The union's own members agree either way, but the bank a
+      // candidate's paper is drawn from comes through
+      // `toQuestionDocument`, which builds every document with the same
+      // literal and so gives a `short_answer` an `options` key whose
+      // value is `undefined`. Under the `in` test that question reached
+      // `shuffleOptions(undefined)` and threw — a 500 on `/start` for
+      // any test whose paper mixed a choice question with one that has
+      // no choices, which is most real papers.
+      if (!("options" in question) || question.options === undefined) continue;
       const ordered =
         question.shuffle_options === false
           ? question.options
