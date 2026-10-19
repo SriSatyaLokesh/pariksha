@@ -52,6 +52,7 @@ import { matchesFilter } from "./select.js";
  */
 export type ImportIssueCode =
   | "unsafe_regex"
+  | "duplicate_option_text"
   | "csv_unsupported_type"
   | "csv_column_count"
   | "csv_header_mismatch"
@@ -109,18 +110,42 @@ function placeholdersIn(prompt: string): Set<string> {
 /**
  * Usable option IDs from an `options` array: a non-object element (one that
  * fails `isRecord`) is reported and skipped rather than dereferenced.
+ *
+ * Also catches two options sharing the same `text` within one question.
+ * Their `id`s are already required to be unique (JSON Schema can enforce
+ * that; this layer does not re-check it), but CSV and GIFT have no `id`
+ * column at all — an option's own text *is* its identity there
+ * (apps/api/src/import/csv.ts's own header comment). A bank that passes
+ * this check can always be re-expressed in either format with its answer
+ * key intact; one that does not would round-trip through CSV/GIFT with the
+ * key silently rebound to whichever option that text's first occurrence
+ * lands on — a defect found in Task 8's review, fixed here rather than in a
+ * CSV/GIFT *export* mapper so it is caught at the one gate every import
+ * format (JSON included) already passes through, closing the hole for every
+ * current and future export path at once.
  */
 function optionIds(
   options: readonly QuestionOption[],
-  issue: (field: string, message: string) => void,
+  issue: (field: string, message: string, code?: ImportIssueCode) => void,
 ): Set<string> {
   const ids = new Set<string>();
+  const textOwners = new Map<string, string>();
   options.forEach((o, i) => {
     if (!isRecord(o)) {
       issue("options", `option at position ${i} is not an object`);
       return;
     }
     ids.add(o.id);
+    const owner = textOwners.get(o.text);
+    if (owner !== undefined) {
+      issue(
+        "options",
+        `options "${owner}" and "${o.id}" share the text "${o.text}" — CSV and GIFT use an option's text as its identity, so this would silently rebind the answer key on export`,
+        "duplicate_option_text",
+      );
+    } else {
+      textOwners.set(o.text, o.id);
+    }
   });
   return ids;
 }
