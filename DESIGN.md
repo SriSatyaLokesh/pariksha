@@ -24,6 +24,18 @@ colors:
   flag-review: "#8a5f00"
   flag-risk: "#b3261e"
   data-blue: "#0a6fd4"
+  signal-bg: "#070b09"
+  signal-bg-2: "#0b110e"
+  signal-surface: "#0f1713"
+  signal-surface-2: "#141e19"
+  signal-line: "#1c2922"
+  signal-line-2: "#2a3b32"
+  signal-text: "#eaf2ed"
+  signal-text-2: "#9db0a6"
+  signal-text-3: "#6b7d74"
+  signal-accent: "#19e68c"
+  signal-accent-deep: "#0fa968"
+  signal-accent-ink: "#04140c"
   scrim: "rgba(35, 31, 29, 0.55)"
   shadow: "#231f1d"
 
@@ -113,6 +125,24 @@ typography:
     fontWeight: 400
     lineHeight: 18px
     letterSpacing: "0.3px"
+  signal-display-xl:
+    fontFamily: '"Bricolage Grotesque", "Inter", sans-serif'
+    fontSize: "clamp(40px, 6.6vw, 82px)"
+    fontWeight: 800
+    lineHeight: "0.98"
+    letterSpacing: "-0.03em"
+  signal-display-lg:
+    fontFamily: '"Bricolage Grotesque", "Inter", sans-serif'
+    fontSize: "clamp(28px, 4vw, 52px)"
+    fontWeight: 700
+    lineHeight: "1.02"
+    letterSpacing: "-0.024em"
+  signal-body:
+    fontFamily: '"Inter", sans-serif'
+    fontSize: 17px
+    fontWeight: 400
+    lineHeight: "1.62"
+    letterSpacing: "0"
   wordmark-display:
     fontFamily: '"Kalam", cursive'
     fontSize: "clamp(44px, 6.2vw, 94px)"
