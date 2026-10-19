@@ -124,6 +124,21 @@ export const getCandidateByExternalId = scoped(
   },
 );
 
+/** The same row by its own id — what Phase 6's registration reads to tell
+ *  "this list row is free" from "someone has already registered on it"
+ *  before it writes anything (`consent_at`, exposed as `registeredAt`). */
+export const getCandidateById = scoped(
+  "getCandidateById",
+  async (db: DbClient, workspaceId: string, testId: string, candidateId: string): Promise<CandidateRow | null> => {
+    const rows = await db.query<CandidateRecord>(
+      `SELECT ${COLUMNS} FROM candidate WHERE workspace_id = ? AND test_id = ? AND id = ?`,
+      [workspaceId, testId, candidateId],
+    );
+    const row = rows[0];
+    return row === undefined ? null : toCandidateRow(db, row);
+  },
+);
+
 /**
  * The two numbers Task 13's `candidate_list_empty` and `candidate_no_set`
  * advisory rows are about, in one query — the checklist is computed

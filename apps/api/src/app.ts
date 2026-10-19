@@ -342,6 +342,24 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // list, insert the entry token — plus the same cold pair.
   "/api/v1/run/:workspaceSlug/:testSlug/sso/callback": 7,
 
+  // Phase 6 Task 3 (#67, P6.3): consent and registration. Measured in
+  // `test/run/registration.test.ts`, each on the path that pays the most.
+  //
+  // `/form`: resolve, read the entry token, read the list row the gate
+  // bound it to. A candidate already registered pays one more for the
+  // replacement registration token, which is the number declared.
+  "/api/v1/run/:workspaceSlug/:testSlug/form": 4,
+  // `/register`: resolve, read the entry token, the `test_register`
+  // limiter, the list-row read, and **one** batch carrying the entry
+  // token's consume, the candidate write, every unique claim and the
+  // registration token — flat in the number of unique fields, which is
+  // what the batch is for. Two paths pay a sixth and no path pays a
+  // seventh: a refusal reads `candidate_unique` once to name the field
+  // that was taken, and `T-14` re-entry reissues a registration token
+  // instead of reading it. The two never coincide, because re-entry on a
+  // listed test is answered at `/form` before the batch is built.
+  "/api/v1/run/:workspaceSlug/:testSlug/register": 6,
+
   // The one organiser route of this phase: authentication (2), the test
   // and its slugs (1), the candidate list (1), the already-invited set
   // (1), one `batch` however long the list is (1), and the audit row (1).
@@ -455,6 +473,15 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
  * - **`attempt`** — the candidate's 256-bit attempt token (`S-06`). None
  *   yet; Task 5 mounts the first and registers `attemptContext` so
  *   `routeAuthorities` can read it back off the live table.
+ * - **`entry`** — the single-use `run_entry` token the access gate mints,
+ *   presented as `Authorization: Bearer`. A fifth value rather than
+ *   `public`, because these routes answer **401** to a caller who sends
+ *   nothing and `public` is asserted by a probe that forbids exactly
+ *   that. Calling them public would have been the registry lying in the
+ *   one place it exists to tell the truth. Like `actor` it carries no
+ *   middleware to read back — the check is `entryClaim` inside the
+ *   handler — so it is held to a literal allowlist *and* a probe that
+ *   asserts the 401 is real.
  * - **`actor`** — a signed-in user and nothing more. These name no
  *   workspace in the path, so there is no membership for `guard()` to read
  *   (it throws when `:id` is absent); `actorOr401` is the whole gate.
@@ -464,7 +491,7 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
  *
  * Every task that mounts a route adds its line here in the same commit.
  */
-export type RouteAuthority = "workspace" | "attempt" | "actor" | "public";
+export type RouteAuthority = "workspace" | "attempt" | "entry" | "actor" | "public";
 
 export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // --- public: no credential at all ------------------------------------
@@ -501,6 +528,12 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/run/:workspaceSlug/:testSlug/email-code": "public",
   "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start": "public",
   "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback": "public",
+
+  // --- entry: the single-use run_entry token, as a Bearer header --------
+  // Phase 6 Task 3 (#67, P6.3). Not `public`: both answer 401 without a
+  // token, which is the one thing a `public` route may never do.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/form": "entry",
+  "POST /api/v1/run/:workspaceSlug/:testSlug/register": "entry",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

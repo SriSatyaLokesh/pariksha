@@ -25,6 +25,7 @@
 //     which is the same reason `invalidCidr`'s `isIpv6` refuses it.
 
 import type { Context } from "hono";
+import { domainMatches, normaliseEmail } from "@pariksha/core";
 import type { AppBindings } from "../app.js";
 
 interface Address {
@@ -38,8 +39,6 @@ const V6_GROUP = /^[0-9a-f]{1,4}$/;
 /** A prefix length: a plain number with no leading zero, the same spelling
  *  `invalidCidr` accepts. */
 const PREFIX = /^(0|[1-9]\d{0,2})$/;
-/** One domain label: letters, digits and inner hyphens. */
-const LABEL = /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/;
 
 function parseIpv4(raw: string): bigint | null {
   const octets = raw.split(".");
@@ -122,31 +121,30 @@ export function ipInRanges(ip: string, cidrs: readonly string[]): boolean {
 
 /**
  * Whether `email`'s domain matches any of `globs`. `*.ac.in` covers
- * `ac.in` and anything below it; anything without a leading `*.` is exact.
+ * `ac.in` and anything below it; anything without a leading `*.` is
+ * exact.
  *
- * An address with more than one `@` is refused outright. It has two
- * readings — `a@evil.test?x=@iit.ac.in` is `evil.test?x=` to a parser that
- * splits on the first and `iit.ac.in` to one that splits on the last — and
- * whichever this picked, the other would be the bypass. One `@` or no
- * answer.
+ * **The glob dialect itself is `@pariksha/core`'s `domainMatches`**, not a
+ * copy here (Phase 6 Task 3, #67). There were three implementations of
+ * one rule — this one, the web renderer's compile-to-`RegExp` copy, and
+ * whatever the registration validator would have written — and the web
+ * one read `*` as *exactly* one label, so `*.edu.in` refused `edu.in`
+ * while this function accepted it. A candidate let through the access
+ * gate's domain rule and refused by the form's is the drift
+ * `test-format.md:110` forbids.
+ *
+ * What stays here is the *address* half: an email with more than one `@`
+ * is refused outright, because `a@evil.test?x=@iit.ac.in` is
+ * `evil.test?x=` to a parser that splits on the first and `iit.ac.in` to
+ * one that splits on the last — and whichever this picked, the other
+ * would be the bypass.
  */
 export function emailInDomains(email: string, globs: readonly string[]): boolean {
-  const parts = email.trim().toLowerCase().split("@");
+  const parts = normaliseEmail(email).split("@");
   if (parts.length !== 2) return false;
   const [local, domain] = parts as [string, string];
-  if (local === "" || domain === "") return false;
-  // The domain has to be a domain, or a candidate who types `*.ac.in` as
-  // their address matches the glob `*.ac.in` by string equality.
-  if (!domain.split(".").every((label) => LABEL.test(label))) return false;
-
-  return globs.some((raw) => {
-    const glob = raw.trim().toLowerCase();
-    if (!glob.startsWith("*.")) return domain === glob;
-    const base = glob.slice(2);
-    // The suffix must break on a label boundary, or `notac.in` is inside
-    // `*.ac.in`.
-    return domain === base || domain.endsWith(`.${base}`);
-  });
+  if (local === "") return false;
+  return domainMatches(domain, globs);
 }
 
 /**

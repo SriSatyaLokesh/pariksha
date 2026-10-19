@@ -202,6 +202,7 @@ export async function seedPublishedTest(deps: AppDeps): Promise<string> {
   });
 
   await seedAccessModeTests(deps, workspaceId);
+  await seedRegistrationTests(deps, workspaceId);
 
   // Two workspaces whose slug pair really would resolve, so the route's
   // "the slug 'attempt' cannot shadow the attempt routes" assertion has
@@ -408,3 +409,82 @@ export async function seedAccessModeTests(deps: AppDeps, workspaceId: string): P
   });
   await replaceCandidateList(deps.db, workspaceId, gauntlet, LISTED_CANDIDATES, FIXED_NOW);
 }
+
+// --- Task 3 (#67, P6.3): consent and registration ----------------------
+
+/** `S-12`'s consent block. The Markdown list is deliberate: the candidate
+ *  screen renders it through the one shared renderer. */
+export const CONSENT = {
+  version: "2026-10-01",
+  text: "We store your answers and your registration details.\n\n- Kept for 180 days\n- Shared with Alpha Corp only",
+};
+
+/**
+ * The registration form both Task 3 fixtures use. `roll` is the first
+ * `unique: true` field, so it is the identity a candidate list is keyed
+ * on; `email` is a second unique field, which is what makes "a repeat of
+ * a unique field names the field" a real assertion rather than a repeat
+ * of the identity check.
+ */
+export const ROSTER_FORM = {
+  fields: [
+    {
+      id: "roll",
+      type: "short_text" as const,
+      label: "Roll number",
+      required: true,
+      unique: true,
+      validation: { pattern: "^\\d{2}[A-Z]{2}\\d{4}$", pattern_message: "Format: 21CS0147" },
+    },
+    {
+      id: "email",
+      type: "email" as const,
+      label: "College email address",
+      required: true,
+      unique: true,
+      validation: { allowed_domains: ["*.ac.in"] },
+    },
+    { id: "full_name", type: "short_text" as const, label: "Full name", required: true },
+    { id: "cgpa", type: "number" as const, label: "CGPA", validation: { min: 0, max: 10 } },
+  ],
+};
+
+/** `alpha/signup` (no candidate list, so every registration is its own
+ *  new row) and `alpha/roster` (listed, so a registration reconciles with
+ *  the row the organiser uploaded). */
+export async function seedRegistrationTests(deps: AppDeps, workspaceId: string): Promise<string> {
+  await seedTest(deps, workspaceId, {
+    name: "Signup",
+    slug: "signup",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "link_code", access_code: "OPENSESAME" },
+        consent: CONSENT,
+        registration_form: ROSTER_FORM,
+      },
+      sections: oneSection,
+    },
+  });
+
+  const roster = await seedTest(deps, workspaceId, {
+    name: "Roster",
+    slug: "roster",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "link_code", access_code: "OPENSESAME", candidate_list: "list.csv" },
+        consent: CONSENT,
+        registration_form: ROSTER_FORM,
+      },
+      sections: oneSection,
+    },
+  });
+  await replaceCandidateList(deps.db, workspaceId, roster, ROSTER_CANDIDATES, FIXED_NOW);
+  return roster;
+}
+
+export const ROSTER_CANDIDATES: NewCandidate[] = [
+  { externalId: "21CS0147", setLabel: "A", formValues: { full_name: "Ananya" } },
+  { externalId: "21CS0148", setLabel: "B", formValues: { full_name: "Bharat" } },
+];

@@ -25,7 +25,7 @@ import {
   INVITE_KIND,
   inviteTarget,
   listCandidates,
-  listInvitedEntryIds,
+  listInvitedExternalIds,
   type CandidateRow,
   type InvitePayload,
 } from "@pariksha/db";
@@ -122,7 +122,10 @@ export function inviteRoutes(deps: AppDeps): Hono<AppBindings> {
     const selected =
       wanted.length === 0 ? entries : wanted.map((identifier) => byIdentifier.get(identifier) as CandidateRow);
 
-    const alreadyInvited = new Set(await listInvitedEntryIds(deps.db, workspaceId, { testId, now }));
+    // Keyed by identity, not by row id: a list re-upload re-ids every
+    // unregistered row, and an invite that followed the id would be
+    // re-minted (a second live link) or orphaned.
+    const alreadyInvited = new Set(await listInvitedExternalIds(deps.db, workspaceId, { testId, now }));
 
     const base = (deps.env.appUrl ?? new URL(c.req.url).origin).replace(/\/$/, "");
     const writes: { sql: string; params: unknown[] }[] = [];
@@ -135,7 +138,7 @@ export function inviteRoutes(deps: AppDeps): Hono<AppBindings> {
         email: emailOf(entry, target.registrationForm),
       };
       invites.push(invite);
-      if (alreadyInvited.has(entry.id)) continue;
+      if (alreadyInvited.has(entry.externalId ?? "")) continue;
 
       const token = randomToken();
       const payload: InvitePayload = {

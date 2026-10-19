@@ -31,6 +31,7 @@ import {
 } from "@pariksha/db";
 import {
   NAVIGATION_CONSEQUENCE,
+  normaliseUniqueValue,
   type AccessMode,
   type Section,
   type TestAccess,
@@ -46,11 +47,15 @@ import {
   inviteHash,
   issueEmailCode,
   issueEntryToken,
+  openTest,
   refuse,
   sameSecret,
   type EntryClaim,
 } from "../run/entry.js";
+import { limitMisses } from "../run/limit.js";
+import { registrationRoutes } from "../run/registration.js";
 import { clientIp, emailInDomains, ipInRanges } from "../run/net.js";
+import { identityField } from "../import/candidates.js";
 
 /** The `proctoring` block is in `schemas/test-1.json` but not modelled in
  * `@pariksha/core` ("not modelled here yet. Add each when a phase needs
@@ -196,28 +201,6 @@ const emailCodeRequest = z.object({ email: z.string().min(3).max(320) });
 const incomplete = (message: string): ApiError => new ApiError(400, "invalid_request", message);
 
 /**
- * The published, currently open test the two slugs name.
- *
- * Draft, archived and absent are one 404 — the landing route's own
- * posture, for the same reason. Scheduled and closed are a refusal rather
- * than a 404, because the landing page already told the candidate the
- * window and the gate must agree with it.
- */
-async function openTest(deps: AppDeps, c: Context<AppBindings>): Promise<PublishedTest> {
-  const test = await resolvePublishedTest(
-    deps.db,
-    c.req.param("workspaceSlug") ?? "",
-    c.req.param("testSlug") ?? "",
-    deps.now(),
-  );
-  if (!test || test.state === "draft" || test.state === "archived") {
-    throw new ApiError(404, "not_found", "No such resource.");
-  }
-  if (test.state !== "open") throw refuse("window_closed");
-  return test;
-}
-
-/**
  * Checked first, and refused when the request carries no address at all.
  * Failing open on an allowlist is the whole of the bug: a deployment
  * behind a proxy that strips the header would otherwise admit everyone.
@@ -248,6 +231,13 @@ function checkDomain(access: TestAccess | undefined, email: string | undefined):
  * than refused.
  *
  * The refusal is `code_wrong`, byte for byte — see the header.
+ *
+ * The typed value passes through the same `normaliseUniqueValue` the CSV
+ * upload wrote `external_id` with, so the two compare exactly: an email
+ * identity listed as `Ravi@College.ac.in` matches `ravi@college.ac.in`
+ * typed at the door, and a roll number keeps the case the organiser
+ * chose. Four normalisations that drift is how `T-21` refuses a listed
+ * person on test day.
  */
 async function listEntry(
   deps: AppDeps,
@@ -255,13 +245,11 @@ async function listEntry(
   identifier: string | undefined,
 ): Promise<{ id: string } | null> {
   if (!test.settings.access?.candidate_list) return null;
-  if (identifier === undefined || identifier.trim() === "") throw refuse("code_wrong");
-  const entry = await getCandidateByExternalId(
-    deps.db,
-    test.workspaceId,
-    test.testId,
-    identifier.trim(),
-  );
+  const field = identityField(test.settings.registration_form);
+  const typed =
+    field === null ? (identifier ?? "").trim() : normaliseUniqueValue(field, identifier ?? "");
+  if (typed === "") throw refuse("code_wrong");
+  const entry = await getCandidateByExternalId(deps.db, test.workspaceId, test.testId, typed);
   if (!entry) throw refuse("code_wrong");
   return entry;
 }
@@ -342,6 +330,10 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     const input = parsed.data;
 
     const test = await openTest(deps, c);
+    // `S-07`: refusals are charged, successes are not — so 500 candidates
+    // opening the one link they were given pay nothing, and this route's
+    // measured budget is the same as it was before the limiter existed.
+    return limitMisses(deps, "test_access", test.testVersionId, async () => {
     const access = test.settings.access;
     const mode: AccessMode = access?.mode ?? "link_code";
 
@@ -368,7 +360,19 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
       case "invite_only": {
         if (input.invite === undefined) throw incomplete("Open the invite link your organiser sent you.");
         const payload = await consumeInvite(deps, test, input.invite);
-        claim.listRef = payload.candidateId;
+        // **By `external_id`, never by the `cnd_` id in the payload.** A
+        // list re-upload deletes and re-inserts every unregistered row,
+        // so each gets a fresh id while its `external_id` stays exactly
+        // what the organiser chose — an invite that keyed on the row id
+        // would be dead the moment an organiser fixed a typo and
+        // re-uploaded, and 500 emailed links with it.
+        const invited = await getCandidateByExternalId(
+          deps.db,
+          test.workspaceId,
+          test.testId,
+          payload.externalId,
+        );
+        if (invited) claim.listRef = invited.id;
         if (payload.email !== null) claim.email = payload.email;
         break;
       }
@@ -391,6 +395,7 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     }
 
     return c.json({ entryToken: await issueEntryToken(deps, claim) });
+    });
   });
 
   // The `email_code` mode's first leg. 202 whatever happens next, because
@@ -488,6 +493,10 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     // and carrying no cookie, which is the whole point.
     return c.redirect(`${candidatePath(c)}?entry=${token}`, 302);
   });
+
+  // Task 3 (#67, P6.3): consent and registration, behind the entry token
+  // the four modes above all end in.
+  routes.route("/", registrationRoutes(deps));
 
   return routes;
 }

@@ -14,11 +14,18 @@
 
 import { afterAll, beforeAll, beforeEach, expect, it } from "vitest";
 import { SignJWT, exportJWK, generateKeyPair, type CryptoKey } from "jose";
-import { addMembership, closeClient, createUser, listTests } from "@pariksha/db";
+import {
+  addMembership,
+  closeClient,
+  createUser,
+  listTests,
+  resolvePublishedTest,
+} from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { issueSession } from "../../src/auth/session.js";
 import { countingDeps } from "../../src/instrument.js";
 import { EMAIL_CODE_TTL_MS, ENTRY_TTL_MS, REFUSALS, readEntryToken } from "../../src/run/entry.js";
+import { LIMITS } from "../../src/run/limit.js";
 import type { MintedInvite } from "../../src/routes/invites.js";
 import type { EmailMessage } from "../../src/email/adapter.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "../deps.js";
@@ -139,23 +146,41 @@ const countAuthTokens = async (kind: string): Promise<number> => (await authToke
 const countUsers = async (): Promise<number> =>
   Number((await deps.db.query<{ n: number }>('SELECT COUNT(*) AS n FROM "user"', []))[0]?.n ?? 0);
 
+/**
+ * The test version a slug pair resolves to. An entry token's digest is
+ * salted with it (Task 2 review, T2-I-1), so reading one back needs the
+ * same value the route hashed with.
+ */
+const versionOf = async (slug: string): Promise<string> => {
+  const test = await resolvePublishedTest(deps.db, "alpha", slug, clock);
+  if (!test) throw new Error(`no published test at alpha/${slug}`);
+  return test.testVersionId;
+};
+
 // --- link_code ---------------------------------------------------------
 
 it("link_code: the right code yields a single-use entry token", async () => {
   const res = await post("/api/v1/run/alpha/aptitude/access", { code: "OPENSESAME" });
   expect(res.status).toBe(200);
   const { entryToken } = (await res.json()) as { entryToken: string };
-  expect(await readEntryToken(deps, entryToken)).toMatchObject({
+  const aptitude = await versionOf("aptitude");
+  expect(await readEntryToken(deps, aptitude, entryToken)).toMatchObject({
     testVersionId: expect.stringMatching(/^ver_/),
     workspaceId,
   });
 
+  // T2-I-1: the digest is salted with the test version, so the token a
+  // candidate earned at one test matches no row at another — and `asClaim`
+  // compares the claim's own `testVersionId` as well, so even a row found
+  // some other way is checked against the test that is answering.
+  expect(await readEntryToken(deps, await versionOf("pooled"), entryToken)).toBeNull();
+
   // `readEntryToken` reads without consuming — Task 3 consumes it in the
   // same batch as the registration write — so it is the expiry, not the
   // read, that ends it.
-  expect(await readEntryToken(deps, entryToken)).not.toBeNull();
+  expect(await readEntryToken(deps, aptitude, entryToken)).not.toBeNull();
   clock = T + ENTRY_TTL_MS + 1;
-  expect(await readEntryToken(deps, entryToken)).toBeNull();
+  expect(await readEntryToken(deps, aptitude, entryToken)).toBeNull();
 });
 
 it("link_code: a wrong code is refused with an actionable message and mints nothing", async () => {
@@ -281,7 +306,7 @@ it("invite_only: a link minted for one test is not even tried at another, let al
 it("invite_only: the entry token an invite yields carries the list row it was minted for", async () => {
   const url = await mintOne("21CS0150");
   const { entryToken } = (await (await redeem(url)).json()) as { entryToken: string };
-  expect(await readEntryToken(deps, entryToken)).toMatchObject({
+  expect(await readEntryToken(deps, await versionOf("invited"), entryToken)).toMatchObject({
     listRef: expect.stringMatching(/^cnd_/),
     email: "deepa@vce.ac.in",
   });
@@ -347,7 +372,9 @@ it("email_code: the right code inside the window yields an entry token carrying 
   const { entryToken } = (await res.json()) as { entryToken: string };
   // Lower-cased on both sides, so a code sent to `A@B.ac.in` is redeemable
   // at `a@b.ac.in` and the entry claim carries one spelling of it.
-  expect(await readEntryToken(deps, entryToken)).toMatchObject({ email: "a@b.ac.in" });
+  expect(await readEntryToken(deps, await versionOf("otp"), entryToken)).toMatchObject({
+    email: "a@b.ac.in",
+  });
 });
 
 it("email_code: a code is bound to its address, and spent when it is used", async () => {
@@ -424,9 +451,9 @@ it("sso: a verified address inside the domain rule gets an entry token, no user 
   // lands on the test it started from.
   const back = new URL(res.headers.get("location") ?? "", "https://pariksha.test");
   expect(back.pathname).toBe("/alpha/sso");
-  expect(await readEntryToken(deps, back.searchParams.get("entry") ?? "")).toMatchObject({
-    email: "s@college.ac.in",
-  });
+  expect(
+    await readEntryToken(deps, await versionOf("sso"), back.searchParams.get("entry") ?? ""),
+  ).toMatchObject({ email: "s@college.ac.in" });
 });
 
 it("sso: an address outside allow_email_domains is refused and the rule is named", async () => {
@@ -503,6 +530,21 @@ it("C-02: every refusal message tells the candidate what to do next", () => {
   }
 });
 
+/** The access gate with its refusal bucket already full — the row is
+ *  exactly what 300 wrong codes in a minute would have written. */
+async function exhaustedGate(): Promise<Response> {
+  const version = await versionOf("aptitude");
+  await deps.db.run("DELETE FROM rate_limit WHERE bucket = ?", [`test_access:${version}`]);
+  await deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    `test_access:${version}`,
+    clock,
+    LIMITS.test_access.limit,
+  ]);
+  const res = await post("/api/v1/run/alpha/aptitude/access", { code: "nope" });
+  await deps.db.run("DELETE FROM rate_limit WHERE bucket = ?", [`test_access:${version}`]);
+  return res;
+}
+
 it("C-02: the codes the gate really answers with are the catalogue's own", async () => {
   // A catalogue is only worth asserting on if the routes use it: each of
   // these is a real refusal one of the four modes produces.
@@ -514,6 +556,13 @@ it("C-02: the codes the gate really answers with are the catalogue's own", async
     await post("/api/v1/run/alpha/otp/email-code", { email: "a@gmail.com" }),
     await post("/api/v1/run/alpha/lab/access", { code: "OPENSESAME" }),
     await post("/api/v1/run/alpha/shut/access", { code: "OPENSESAME" }),
+    // Task 3's two: a `run_entry` token that is not live, and the
+    // refusal `S-07`'s bucket answers in place of whatever the caller
+    // was really refused for.
+    await app.request("/api/v1/run/alpha/aptitude/form", {
+      headers: { authorization: `Bearer ${"a".repeat(43)}` },
+    }),
+    await exhaustedGate(),
   ]) {
     seen.add(((await res.json()) as { error: { code: string } }).error.code);
   }

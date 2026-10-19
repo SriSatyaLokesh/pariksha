@@ -18,7 +18,7 @@ import {
   closeClient,
   createUser,
   getCandidateByExternalId,
-  listInvitedEntryIds,
+  listInvitedExternalIds,
   replaceCandidateList,
   type NewCandidate,
 } from "@pariksha/db";
@@ -117,11 +117,14 @@ const auditFor = (target: string): Promise<{ action: string; detail_json: unknow
     [workspaceId, target],
   );
 
-/** How many live, unspent invites this test holds for one list entry. */
+/** How many live, unspent invites this test holds for one list entry.
+ *  Keyed by identity, which is what survives a list re-upload. */
 async function liveInviteCount(target: string, identifier: string): Promise<number> {
-  const entry = await getCandidateByExternalId(deps.db, workspaceId, target, identifier);
-  const ids = await listInvitedEntryIds(deps.db, workspaceId, { testId: target, now: deps.now() });
-  return ids.filter((id) => id === entry?.id).length;
+  const ids = await listInvitedExternalIds(deps.db, workspaceId, {
+    testId: target,
+    now: deps.now(),
+  });
+  return ids.filter((id) => id === identifier).length;
 }
 
 /** Each test starts from an empty `auth_token` table, so "a second live

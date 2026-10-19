@@ -39,6 +39,13 @@ export interface InvitePayload {
  * invite — so minting twice for one entry does not issue a second link
  * that would both work.
  *
+ * **By `external_id`, not by the row id** (Phase 6 Task 3, #67). A list
+ * re-upload deletes and re-inserts every *unregistered* row, so a `cnd_`
+ * id is an artefact of the last upload while `external_id` is the
+ * identity the organiser chose — keying on the id meant an organiser who
+ * fixed one typo and re-uploaded re-minted a second live link for every
+ * candidate who already had one.
+ *
  * The `WHERE` prunes spent and expired rows in the statement; the tenancy
  * filter is in JavaScript because `auth_token` carries no `workspace_id`
  * and the payload is JSON, whose extraction syntax differs between D1 and
@@ -49,8 +56,8 @@ export interface InvitePayload {
  * request path — and the upgrade when it is not is a `test_id` column on
  * `auth_token`, which is a migration rather than a rewrite.
  */
-export const listInvitedEntryIds = scoped(
-  "listInvitedEntryIds",
+export const listInvitedExternalIds = scoped(
+  "listInvitedExternalIds",
   async (
     db: DbClient,
     workspaceId: string,
@@ -66,9 +73,9 @@ export const listInvitedEntryIds = scoped(
       if (
         payload.workspaceId === workspaceId &&
         payload.testId === input.testId &&
-        typeof payload.candidateId === "string"
+        typeof payload.externalId === "string"
       ) {
-        ids.push(payload.candidateId);
+        ids.push(payload.externalId);
       }
     }
     return ids;
@@ -133,6 +140,10 @@ export interface UniqueClaim {
 
 export interface RegisterCandidateInput {
   testId: string;
+  /** Minted by the caller, not here, so the `run_registration` token
+   *  written in the same batch can already name the candidate it belongs
+   *  to. Equal to `listRef` when there is one. */
+  candidateId: string;
   /** The `source = "list"` row the access gate already bound this entry
    *  to, or `null` for a candidate who matched no list row. When it is
    *  set the row is filled **in place**: `(test_id, external_id)` is
@@ -184,9 +195,13 @@ export type RegisterResult =
  * defence.
  *
  * Which `UNIQUE` fired is worked out by reading, not by parsing a driver's
- * error string — those differ across all three dialects. On failure the
- * claims are looked up, and the `(test_id, external_id)` backstop after
- * them, so neither constraint can surface as a 500.
+ * error string — those differ across all three dialects. Only
+ * `candidate_unique` is read, and that is enough for both constraints:
+ * `external_id` is the normalised value of the form's *first* unique
+ * field, so a row that collides on `(test_id, external_id)` collides on
+ * that field's claim as well, and the claim read finds it. A failure with
+ * no claim behind it is therefore not a duplicate at all, and is
+ * re-thrown rather than dressed up as one.
  *
  * **The accepted race.** `db.batch` cannot branch on an `UPDATE`'s row
  * count, so if the entry token was spent concurrently the consume matches
@@ -203,7 +218,7 @@ export const registerCandidate = scoped(
     workspaceId: string,
     input: RegisterCandidateInput,
   ): Promise<RegisterResult> => {
-    const candidateId = input.listRef ?? newId("cnd");
+    const { candidateId } = input;
     const claimRows = input.claims.map((claim) => ({
       sql:
         "INSERT INTO candidate_unique (id, workspace_id, test_id, candidate_id, field_id, value_hash, created_at) " +
@@ -297,22 +312,5 @@ async function takenClaims(
       `WHERE workspace_id = ? AND test_id = ? AND value_hash IN (${placeholders})`,
     [workspaceId, input.testId, ...input.claims.map((claim) => claim.valueHash)],
   );
-  if (rows.length > 0) {
-    return rows.map((row) => ({ fieldId: row.field_id, candidateId: row.candidate_id }));
-  }
-  // The `(test_id, external_id)` backstop. It fires when two registrations
-  // for one listed identity race and the loser's claims were rolled back
-  // with its own insert, so there is nothing in `candidate_unique` left to
-  // find — and a raw constraint error here would be the one refusal `C-02`
-  // cannot word.
-  if (input.externalId === null) return [];
-  const existing = await db.query<{ id: string }>(
-    "SELECT id FROM candidate WHERE workspace_id = ? AND test_id = ? AND external_id = ?",
-    [workspaceId, input.testId, input.externalId],
-  );
-  const row = existing[0];
-  const identity = input.claims[0];
-  return row === undefined || identity === undefined
-    ? []
-    : [{ fieldId: identity.fieldId, candidateId: row.id }];
+  return rows.map((row) => ({ fieldId: row.field_id, candidateId: row.candidate_id }));
 }

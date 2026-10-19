@@ -15,8 +15,16 @@
 //
 // Nothing here gives anyone a user row or a session cookie (ADR 0005).
 
-import { consumeAuthToken, insertAuthToken, readAuthToken } from "@pariksha/db";
-import type { AppDeps } from "../app.js";
+import type { Context } from "hono";
+import {
+  consumeAuthToken,
+  insertAuthToken,
+  readAuthToken,
+  resolvePublishedTest,
+  type PublishedTest,
+} from "@pariksha/db";
+import { normaliseEmail } from "@pariksha/core";
+import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { randomToken, sha256Hex } from "../auth/tokens.js";
 
@@ -26,8 +34,12 @@ export const ENTRY_TTL_MS = 30 * 60_000;
 /** `docs/test-format.md:69`. */
 export const EMAIL_CODE_TTL_MS = 10 * 60_000;
 
-const ENTRY_KIND = "run_entry";
+export const ENTRY_KIND = "run_entry";
 const OTP_KIND = "run_otp";
+/** The token `/register` hands back and `/start` spends (Task 5). */
+export const REGISTRATION_KIND = "run_registration";
+/** Long enough to read a consent screen and press Start. */
+export const REGISTRATION_TTL_MS = 30 * 60_000;
 
 /**
  * An invite row's key: the token **salted with the test it was minted
@@ -40,6 +52,30 @@ const OTP_KIND = "run_otp";
  */
 export const inviteHash = (testId: string, token: string): Promise<string> =>
   sha256Hex(`${testId}:${token}`);
+
+/**
+ * An entry row's key: the token **salted with the test version it was
+ * minted for**, exactly as `inviteHash` salts an invite with its test.
+ *
+ * Without it (Task 2 review, T2-I-1) a candidate who passed any open
+ * `link_code` test held a row that matched at every other test on the
+ * instance, and `asClaim` compared `testVersionId` to nothing — so the
+ * gate on an `invite_only` or `sso` test became decorative the moment
+ * anything consumed an entry token. Inert until this task; this task is
+ * the first consumer.
+ *
+ * Belt and braces, deliberately: the salt means a token minted elsewhere
+ * matches **no row at all** (so it is refused without being spent, and the
+ * candidate it belongs to still has a live link), and the comparison in
+ * `asClaim` means that even a row found some other way is checked against
+ * the test that is answering.
+ */
+export const entryHash = (testVersionId: string, token: string): Promise<string> =>
+  sha256Hex(`${testVersionId}:${token}`);
+
+/** The same shape for the registration token `/start` spends. */
+export const registrationHash = (testVersionId: string, token: string): Promise<string> =>
+  sha256Hex(`${testVersionId}:${token}`);
 
 export interface EntryClaim {
   testVersionId: string;
@@ -99,6 +135,23 @@ export const REFUSALS = {
     code: "window_closed",
     message: "This test is not open right now. Check the start time with your organiser.",
   },
+  /** `S-07`'s volume defence, answered in place of whatever the caller
+   *  was actually refused for once the bucket is empty — which is why the
+   *  sentence names the only thing that helps. */
+  too_many_attempts: {
+    status: 429,
+    code: "too_many_attempts",
+    message: "Too many attempts from this test just now. Wait a minute and try again.",
+  },
+  /** The `run_entry` token is single use and short-lived: a replayed
+   *  registration, a reloaded tab an hour later, a link out of a browser
+   *  history. All one answer, because none of them is distinguishable to
+   *  the person holding it. */
+  entry_expired: {
+    status: 410,
+    code: "entry_expired",
+    message: "This registration link is no longer valid. Go back to the test page and try again.",
+  },
 } as const satisfies Record<string, { status: number; code: string; message: string }>;
 
 export type RefusalCode = keyof typeof REFUSALS;
@@ -132,7 +185,7 @@ export async function issueEntryToken(deps: AppDeps, claim: EntryClaim): Promise
   const token = randomToken();
   const now = deps.now();
   await insertAuthToken(deps.db, {
-    tokenHash: await sha256Hex(token),
+    tokenHash: await entryHash(claim.testVersionId, token),
     kind: ENTRY_KIND,
     payload: claim,
     now,
@@ -143,12 +196,32 @@ export async function issueEntryToken(deps: AppDeps, claim: EntryClaim): Promise
 
 /** Reads without consuming. Task 3 consumes it in the same batch as the
  *  write, so a refreshed registration page does not burn the token. */
-export async function readEntryToken(deps: AppDeps, token: string): Promise<EntryClaim | null> {
-  return asClaim(await readAuthToken(deps.db, await sha256Hex(token), ENTRY_KIND, deps.now()));
+export async function readEntryToken(
+  deps: AppDeps,
+  testVersionId: string,
+  token: string,
+): Promise<EntryClaim | null> {
+  const raw = await readAuthToken(
+    deps.db,
+    await entryHash(testVersionId, token),
+    ENTRY_KIND,
+    deps.now(),
+  );
+  return asClaim(raw, testVersionId);
 }
 
-export async function consumeEntryToken(deps: AppDeps, token: string): Promise<EntryClaim | null> {
-  return asClaim(await consumeAuthToken(deps.db, await sha256Hex(token), ENTRY_KIND, deps.now()));
+export async function consumeEntryToken(
+  deps: AppDeps,
+  testVersionId: string,
+  token: string,
+): Promise<EntryClaim | null> {
+  const raw = await consumeAuthToken(
+    deps.db,
+    await entryHash(testVersionId, token),
+    ENTRY_KIND,
+    deps.now(),
+  );
+  return asClaim(raw, testVersionId);
 }
 
 /**
@@ -161,7 +234,15 @@ export async function consumeEntryToken(deps: AppDeps, token: string): Promise<E
  * for: a code minted elsewhere simply hashes to a row that is not there.
  */
 export function emailCodeHash(testVersionId: string, email: string, code: string): Promise<string> {
-  return sha256Hex(`${testVersionId}:${email.toLowerCase()}:${code}`);
+  // `normaliseEmail`, not `.toLowerCase()`, and this is the whole of Task
+  // 2's review finding T2-I-2: issuing hashed the address **as typed**
+  // while redeeming hashed it trimmed, so a candidate who pasted their
+  // address with a trailing space was refused forever by a code that was
+  // correct and no retry could fix it. The general form is that every
+  // address reaching a digest goes through the one function
+  // `normaliseUniqueValue` also delegates to — `.trim()` at one call site
+  // would have been the instance.
+  return sha256Hex(`${testVersionId}:${normaliseEmail(email)}:${code}`);
 }
 
 /** Six digits, uniformly, from the CSPRNG — not `Math.random()`, and not
@@ -213,10 +294,39 @@ export async function consumeEmailCode(
 
 /** The row was written by this module, so this is a shape check, not a
  *  parse — the same posture `oidc.ts`'s `asStatePayload` takes. */
-function asClaim(raw: unknown): EntryClaim | null {
+function asClaim(raw: unknown, testVersionId: string): EntryClaim | null {
   if (typeof raw !== "object" || raw === null) return null;
   const value = raw as Partial<EntryClaim>;
-  return typeof value.testVersionId === "string" && typeof value.workspaceId === "string"
+  return value.testVersionId === testVersionId && typeof value.workspaceId === "string"
     ? (value as EntryClaim)
     : null;
+}
+
+/**
+ * The published, currently open test the two slugs name — every candidate
+ * route's shared precondition, stated once because three route modules
+ * need exactly the same answer and a second copy would be a second
+ * posture.
+ *
+ * Draft, archived and absent are one 404 — the landing route's own
+ * posture, for the same reason: a candidate holds no credential that
+ * could distinguish them. Scheduled and closed are a refusal rather than
+ * a 404, because the landing page already told the candidate the window
+ * and the gate must agree with it.
+ */
+export async function openTest(
+  deps: AppDeps,
+  c: Context<AppBindings>,
+): Promise<PublishedTest> {
+  const test = await resolvePublishedTest(
+    deps.db,
+    c.req.param("workspaceSlug") ?? "",
+    c.req.param("testSlug") ?? "",
+    deps.now(),
+  );
+  if (!test || test.state === "draft" || test.state === "archived") {
+    throw new ApiError(404, "not_found", "No such resource.");
+  }
+  if (test.state !== "open") throw refuse("window_closed");
+  return test;
 }

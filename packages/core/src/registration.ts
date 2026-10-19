@@ -166,11 +166,20 @@ function hostOf(value: string, kind: "email" | "url"): string | null {
     // is the bypass (`net.ts` refuses it for the same reason).
     return parts.length === 2 && parts[0] !== "" ? (parts[1] ?? null) : null;
   }
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return null;
-  }
+  // Parsed by hand rather than with `URL`: `packages/core` is a pure leaf
+  // package with no DOM and no Node lib, and a four-line authority parse
+  // is cheaper than widening its `lib` for one call. The authority is
+  // everything after the scheme up to the first `/`, `?` or `#`; the part
+  // after the **last** `@` is the host, which is what a browser does and
+  // therefore what `https://github.com@evil.test` has to resolve to; the
+  // port is dropped. Anything that is not a host at all is refused by
+  // `domainMatches`, which only admits real labels.
+  const match = /^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i.exec(value.trim());
+  const authority = match?.[1];
+  if (authority === undefined || authority === "") return null;
+  const hostAndPort = authority.slice(authority.lastIndexOf("@") + 1);
+  const colon = hostAndPort.indexOf(":");
+  return colon === -1 ? hostAndPort : hostAndPort.slice(0, colon);
 }
 
 /**

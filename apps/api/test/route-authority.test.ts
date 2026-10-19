@@ -86,6 +86,18 @@ it("the public set is a literal allowlist, so widening it is a visible diff", ()
   ]); // every later task that adds one edits this literal
 });
 
+it("the entry set is a literal allowlist too — the run_entry token, as a Bearer header", () => {
+  expect(
+    Object.entries(ROUTE_AUTH)
+      .filter(([, authority]) => authority === "entry")
+      .map(([endpoint]) => endpoint)
+      .sort(),
+  ).toEqual([
+    "GET /api/v1/run/:workspaceSlug/:testSlug/form",
+    "POST /api/v1/run/:workspaceSlug/:testSlug/register",
+  ]);
+});
+
 it("the actor set is a literal allowlist too — signed in, but naming no workspace", () => {
   expect(
     Object.entries(ROUTE_AUTH)
@@ -119,6 +131,11 @@ const PROBE_URL: Readonly<Record<string, string>> = {
   // `unknown_provider` — reached, and not a credential refusal.
   "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start": "/api/v1/run/alpha/sso/sso/start",
   "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback": "/api/v1/run/alpha/sso/sso/callback",
+  // Phase 6 Task 3's two entry-token routes, probed with no Authorization
+  // header at all: both must answer 401, which is what makes them `entry`
+  // rather than `public`.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/form": "/api/v1/run/alpha/aptitude/form",
+  "POST /api/v1/run/:workspaceSlug/:testSlug/register": "/api/v1/run/alpha/aptitude/register",
   "GET /api/v1/auth/:provider/start": "/api/v1/auth/google/start",
   "GET /api/v1/auth/:provider/callback": "/api/v1/auth/google/callback",
   "GET /t/:code": "/t/ABC123",
@@ -148,6 +165,21 @@ it("every endpoint the actor allowlist names really does refuse an anonymous cal
   const actors = endpointsWithAuthority("actor");
   expect(actors.length).toBeGreaterThan(0);
   for (const endpoint of actors) {
+    expect((await anonymously(endpoint)).status, endpoint).toBe(401);
+  }
+});
+
+/**
+ * The same assertion for the fifth authority, and the reason it is a
+ * fifth one. An entry-token route presented with no token answers 401 —
+ * so declaring it `public` would have been caught by the probe below it,
+ * and declaring it `public` *and* weakening that probe is the change a
+ * reviewer has to be able to see. Here the 401 is the assertion.
+ */
+it("every endpoint the entry allowlist names really does refuse a caller with no token", async () => {
+  const entries = endpointsWithAuthority("entry");
+  expect(entries.length).toBeGreaterThan(0);
+  for (const endpoint of entries) {
     expect((await anonymously(endpoint)).status, endpoint).toBe(401);
   }
 });

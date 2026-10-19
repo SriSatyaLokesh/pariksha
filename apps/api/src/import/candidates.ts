@@ -21,6 +21,7 @@
 // the route's and only the route's: `replaceCandidateList` runs only when
 // `issues` is empty, and `rows` is partial whenever it is not.
 
+import { normaliseUniqueValue } from "@pariksha/core";
 import type { FormField, ImportIssue, RegistrationFormSpec } from "@pariksha/core";
 import type { NewCandidate } from "@pariksha/db";
 import { readDelimitedRows } from "./rows.js";
@@ -127,7 +128,12 @@ export function convertCandidateCsv(
     // rather than each inventing the same complaint.
     if (identityAt === -1) continue;
 
-    const externalId = (row.fields[identityAt] ?? "").trim();
+    // `normaliseUniqueValue`, not `.trim()`: the gate matches a typed
+    // identifier against this stored value with the same function, so an
+    // email identity uploaded as `Ravi@College.ac.in` still matches
+    // `ravi@college.ac.in` typed at the door (`T-21`). A roll number is
+    // trimmed and nothing else, because its case is the organiser's.
+    const externalId = normaliseUniqueValue(identity, row.fields[identityAt] ?? "");
     if (externalId === "") {
       issues.push(issue(row.line, identity.id, `is empty — every row needs its ${identity.label.toLowerCase()}`));
       continue;
