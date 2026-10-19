@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 
-import type { ApiClient, TestSummary } from "../../src/lib/api";
+import { ApiError, type ApiClient, type TestSummary } from "../../src/lib/api";
 import { TestList } from "../../src/routes/tests";
 import { QrCode } from "../../src/components/QrCode";
 
@@ -132,16 +132,21 @@ describe("TestList", () => {
     );
   });
 
-  it("state and In review are text plus glyph, never colour alone", async () => {
+  // Task 2 fix round (Minor 17): split from one test with two unreleased
+  // `render()` calls, where a later query risked matching whichever tree
+  // happened to contain a match first rather than the one it claimed to.
+  it("state is text plus glyph, never colour alone", async () => {
     renderList(fakeClient({ tests: async () => [DRAFT] }));
     const row = (await screen.findByText("Aptitude")).closest("tr");
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText(/draft/i)).toBeVisible();
     expect(row?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
+  });
 
+  it("the In review badge is text plus glyph, never colour alone", async () => {
     renderList(fakeClient({ tests: async () => [PUBLISHED] }));
-    const publishedRow = (await screen.findByText("Midterm")).closest("tr");
-    expect(within(publishedRow as HTMLElement).getByText(/in review/i)).toBeVisible();
+    const row = (await screen.findByText("Midterm")).closest("tr");
+    expect(within(row as HTMLElement).getByText(/in review/i)).toBeVisible();
   });
 
   it("a 'published' state (Important 5) renders its own label and glyph, not a blank cell", async () => {
@@ -264,15 +269,59 @@ describe("TestList", () => {
     expect(await screen.findByRole("status")).toHaveTextContent(/copied/i);
   }, 10_000);
 
-  it("an empty workspace and a filter with no results are different states with different actions", async () => {
+  // Task 2 fix round (Minor 17): split, same reason as the state-glyph test
+  // above.
+  it("an empty workspace shows a create action", async () => {
     renderList(fakeClient({ tests: async () => [] }));
     expect(await screen.findByText(/no tests yet/i)).toBeVisible();
     expect(screen.getByRole("button", { name: /create your first test/i })).toBeVisible();
+  });
 
+  it("a filter with no results shows a clear-filters action instead", async () => {
     window.history.pushState(null, "", "/?search=zzz");
     renderList(fakeClient({ tests: async () => [] }));
     expect(await screen.findByText(/no tests match your filters/i)).toBeVisible();
     expect(screen.getByRole("button", { name: /clear filters/i })).toBeVisible();
+  });
+
+  // Task 2 fix round (Minor 18): `createTest` was a throwing stub in every
+  // other test, so the create form — name/slug validation, the 409 path,
+  // the post-create reload — had no coverage at all. The create form's own
+  // "Slug" field shares its accessible name with a published row's, so it
+  // is found by id rather than `getByLabelText`, which would throw on two
+  // matches once a row is on screen.
+  it("the create form's happy path creates a test and reloads the list", async () => {
+    const tests = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([PUBLISHED]);
+    const createTest = vi.fn(async () => PUBLISHED);
+    const { container } = renderList(fakeClient({ tests, createTest }));
+    await screen.findByText(/no tests yet/i);
+
+    fireEvent.change(screen.getByLabelText(/test name/i), { target: { value: "Midterm" } });
+    fireEvent.change(container.querySelector("#test-slug") as HTMLInputElement, {
+      target: { value: "midterm" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^create test$/i }));
+
+    await waitFor(() =>
+      expect(createTest).toHaveBeenCalledWith("wsp_1", { name: "Midterm", slug: "midterm" }),
+    );
+    expect(await screen.findByText("Midterm")).toBeVisible();
+  });
+
+  it("the create form shows the 409 envelope's message on a taken slug", async () => {
+    const createTest = vi.fn(async () => {
+      throw new ApiError(409, "slug_taken", "A test with that address already exists in this workspace.");
+    });
+    const { container } = renderList(fakeClient({ createTest }));
+    await screen.findByText("Midterm");
+
+    fireEvent.change(screen.getByLabelText(/test name/i), { target: { value: "Another" } });
+    fireEvent.change(container.querySelector("#test-slug") as HTMLInputElement, {
+      target: { value: "midterm" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^create test$/i }));
+
+    expect(await screen.findByText(/already exists in this workspace/i)).toBeVisible();
   });
 
   it("the test list has no axe violations", async () => {
