@@ -124,7 +124,10 @@ export interface TestSummary {
 }
 
 export interface TestFilter {
-  tag?: string;
+  // Whole-branch drift review, M-01: no `tag`. `GET .../tests` supports
+  // one and the repo implements it, but nothing in the product writes
+  // `test.tags`, so the client half was a filter that could never match.
+  // Add it back alongside whatever first sets a tag.
   status?: string;
   search?: string;
   sort?: "name" | "updated" | "created";
@@ -701,7 +704,6 @@ export function createApiClient(): ApiClient {
 
     async tests(workspaceId, filter = {}) {
       const qs = query({
-        tag: filter.tag,
         status: filter.status,
         search: filter.search,
         sort: filter.sort,

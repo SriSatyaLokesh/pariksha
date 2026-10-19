@@ -44,8 +44,16 @@ export function TestStateBadge({ state }: { state: TestState }) {
 
 type Sort = "name" | "updated" | "created";
 
+// Whole-branch drift review, M-01. There used to be a `tag` here, a Tag
+// box beside Search, and a Tags column — all reads of `test.tags`, which
+// **nothing in the product writes**: not the builder, not whole-test
+// import, not the create form. `PATCH .../tests/:testId` accepts `tags`
+// and the repo filters on them, so the server half is real and stays; it
+// is this screen's half that was a filter which could never match and a
+// column that read "—" forever. Deleted rather than given an editor,
+// because test tags are nobody's requirement — the PRD's tags are the
+// question bank's. Restore all three together when something sets them.
 interface UrlFilter {
-  tag: string;
   status: string;
   search: string;
   sort: Sort;
@@ -59,7 +67,6 @@ function filterFromSearch(search: string): UrlFilter {
   const params = new URLSearchParams(search);
   const sort = params.get("sort");
   return {
-    tag: params.get("tag") ?? "",
     status: params.get("status") ?? "",
     search: params.get("search") ?? "",
     sort: isSort(sort) ? sort : "name",
@@ -68,7 +75,6 @@ function filterFromSearch(search: string): UrlFilter {
 
 function searchFromFilter(filter: UrlFilter): string {
   const params = new URLSearchParams();
-  if (filter.tag) params.set("tag", filter.tag);
   if (filter.status) params.set("status", filter.status);
   if (filter.search) params.set("search", filter.search);
   if (filter.sort !== "name") params.set("sort", filter.sort);
@@ -78,7 +84,6 @@ function searchFromFilter(filter: UrlFilter): string {
 
 function toApiFilter(filter: UrlFilter): TestFilter {
   return {
-    ...(filter.tag && { tag: filter.tag }),
     ...(filter.status && { status: filter.status }),
     ...(filter.search && { search: filter.search }),
     sort: filter.sort,
@@ -154,7 +159,7 @@ export function TestList({
     [client, workspaceId],
   );
 
-  // Debounced: `filter` changes on every keystroke in Search or Tag, and
+  // Debounced: `filter` changes on every keystroke in Search, and
   // without this a `GET .../tests` goes out per keystroke rather than once
   // typing settles. Each dependency change clears the previous effect's
   // timer (the cleanup below) before scheduling its own, so only the last
@@ -166,9 +171,9 @@ export function TestList({
   useEffect(() => {
     const timer = setTimeout(() => void load(filter), 250);
     return () => clearTimeout(timer);
-  }, [load, filter.tag, filter.status, filter.search, filter.sort]);
+  }, [load, filter.status, filter.search, filter.sort]);
 
-  // Filters, tags and search live in the URL and survive the back button: a
+  // Filters and search live in the URL and survive the back button: a
   // `popstate` (the browser's own Back/Forward, or a test dispatching one)
   // re-reads the query string rather than trusting the in-memory state a
   // forward navigation may have left stale.
@@ -188,10 +193,10 @@ export function TestList({
     window.history.replaceState(null, "", `${window.location.pathname}${searchFromFilter(next)}`);
   }
 
-  const hasFilter = filter.tag !== "" || filter.status !== "" || filter.search !== "";
+  const hasFilter = filter.status !== "" || filter.search !== "";
 
   function clearFilters() {
-    updateFilter({ tag: "", status: "", search: "" });
+    updateFilter({ status: "", search: "" });
   }
 
   async function onCreate(event: FormEvent) {
@@ -375,13 +380,6 @@ export function TestList({
             value={filter.search}
             onChange={(value) => updateFilter({ search: value })}
           />
-          <TextField
-            id="test-tag"
-            label="Tag"
-            help="Exact tag match."
-            value={filter.tag}
-            onChange={(value) => updateFilter({ tag: value })}
-          />
           <div className="field">
             <label className="field-label" htmlFor="test-status">
               Status
@@ -424,7 +422,7 @@ export function TestList({
           hasFilter ? (
             <CardHairline className="organiser-empty">
               <h2 className="organiser-empty__title">No tests match your filters</h2>
-              <p className="organiser-empty__body">Try a different search, tag or status.</p>
+              <p className="organiser-empty__body">Try a different search or status.</p>
               <button type="button" className="button-secondary" onClick={clearFilters}>
                 Clear filters
               </button>
@@ -447,7 +445,6 @@ export function TestList({
                   Name
                 </th>
                 <th scope="col">State</th>
-                <th scope="col">Tags</th>
                 <th scope="col" {...sortHeaderProps("updated")}>
                   Last edited
                 </th>
@@ -479,7 +476,6 @@ export function TestList({
                         </span>
                       )}
                     </td>
-                    <td>{test.tags.length > 0 ? test.tags.join(", ") : "—"}</td>
                     <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
                     <td>
                       <div className="field">
