@@ -164,12 +164,26 @@ describe("BrandingPanel", () => {
     expect(saveButton()).toBeEnabled();
   });
 
+  // #61 asks for both grounds reported; narrowing the *refusal* to cream
+  // was right and narrowed the reporting with it (task 7/8/10 review, m3).
+  it("both grounds are reported, and the screen says which one gates", () => {
+    render(<BrandingHarness />);
+    fireEvent.change(colourInput(), { target: { value: "#f59a6e" } });
+
+    // 7.57:1 on ink is why the plan's conjunction would have passed this
+    // colour, and 2.09:1 on cream is why it must not.
+    expect(screen.getByText("2.09:1")).toBeVisible();
+    expect(screen.getByText("7.57:1")).toBeVisible();
+    expect(screen.getByText(/only the cream figure gates/i)).toBeVisible();
+    expect(saveButton()).toBeDisabled();
+  });
+
   it("something that is not a colour is refused before any ratio is claimed for it", () => {
     render(<BrandingHarness />);
     fireEvent.change(colourInput(), { target: { value: "crimson" } });
 
     expect(screen.getByRole("alert")).toHaveTextContent(/is not a colour/i);
-    expect(screen.queryByText(/:1 against cream/)).toBeNull();
+    expect(screen.queryByText(/against cream/)).toBeNull();
     expect(saveButton()).toBeDisabled();
   });
 

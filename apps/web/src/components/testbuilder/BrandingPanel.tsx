@@ -3,6 +3,7 @@ import {
   CREAM,
   EXAMPLE_BRAND_COLOUR,
   HEX_COLOUR,
+  INK,
   contrastRatio,
   meetsAA,
   type TestBranding,
@@ -29,8 +30,8 @@ import {
 
 /** The ratio an unreadable colour is reported at, rounded the way the
  * server rounds it so the two messages cannot read differently. */
-function ratioAgainstCream(colour: string): number {
-  return Math.round(contrastRatio(colour, CREAM) * 100) / 100;
+function ratio(colour: string, ground: string): number {
+  return Math.round(contrastRatio(colour, ground) * 100) / 100;
 }
 
 /** Why this colour cannot be saved, or `null`. The server's own refusal,
@@ -39,7 +40,7 @@ function colourRefusal(colour: string): string | null {
   if (colour === "") return null;
   if (!HEX_COLOUR.test(colour)) return `"${colour}" is not a colour. Use a hex value like ${EXAMPLE_BRAND_COLOUR}.`;
   if (meetsAA(colour, CREAM)) return null;
-  return `${colour} reaches only ${ratioAgainstCream(colour)}:1 against cream, and candidate text in the brand colour needs at least 4.5:1. Choose a darker shade.`;
+  return `${colour} reaches only ${ratio(colour, CREAM)}:1 against cream, and candidate text in the brand colour needs at least 4.5:1. Choose a darker shade.`;
 }
 
 /** Paints `--brand-primary` on an element without a `style` attribute. */
@@ -186,9 +187,17 @@ export function BrandingPanel({
             disabled={!canEditWorkspace}
             onChange={(event) => setWorkspaceKey("primary_colour", event.target.value)}
           />
+          {/* #61 asks the picker to report against cream *and* ink. The
+              refusal was correctly narrowed to cream — `--brand-primary`
+              is accent text on the cream page, and the plan's own example
+              clears 4.5:1 on ink while being illegible where a candidate
+              reads it — but the reporting half was narrowed with it
+              (task 7/8/10 review, m3). Both numbers, one gate. */}
           {HEX_COLOUR.test(colour) && (
             <p className="branding-panel__fact">
-              <span className="branding-panel__figure">{ratioAgainstCream(colour)}:1</span> against cream.
+              <span className="branding-panel__figure">{ratio(colour, CREAM)}:1</span> against cream,{" "}
+              <span className="branding-panel__figure">{ratio(colour, INK)}:1</span> against ink. Only the cream figure
+              gates: it is the page a candidate reads.
             </p>
           )}
           {refusal !== null && (
