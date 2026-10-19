@@ -15,7 +15,7 @@ import type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent } from "
 import type { AttemptPaper } from "./paper.js";
 
 export type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent };
-export type { AttemptPaper, CandidateQuestion, PaperClient, PaperSection } from "./paper.js";
+export type { AttemptPaper, CandidateQuestion, PaperSection } from "./paper.js";
 
 /** The five states `deriveState` answers with — the stored column holds
  * only four of them and never `"open"`. */

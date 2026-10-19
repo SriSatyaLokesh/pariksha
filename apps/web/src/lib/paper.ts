@@ -21,15 +21,12 @@
  * **Task 5 has now shipped the server half, and these shapes are the
  * ones it really answers with** — `apps/api/src/run/attempt.ts` and
  * `apps/api/src/run/scrub.ts`, asserted end to end in
- * `apps/api/test/run/start.test.ts`. Where this file guessed, it is
- * corrected to what the wire carries; the screens branch takes the
- * corrections with the rest of the file.
+ * `apps/api/test/run/start.test.ts`.
  *
- * `start` takes the `registrationToken` `POST .../register` answers with
- * (Task 3), which is the one piece of arity the screens could not have
- * guessed: a zero-argument `start()` kept compiling against
- * `RunClient & Partial<PaperClient>` and would have called the real
- * `start(undefined)` on the first live run.
+ * **The two tracks are merged.** The local copies are gone and the
+ * screens import these; `RunClient` declares `start(registrationToken)`
+ * and `resume()` itself, so the `PaperClient` placeholder this file
+ * carried for the screens branch is gone with them.
  */
 
 import type { QuestionType, ResponseValue } from "@pariksha/core";
@@ -98,16 +95,4 @@ export interface AttemptPaper {
   allowCalculator: boolean;
   serverNow: number;
   submittedAt: number | null;
-}
-
-/** The half of the client that exists once a candidate has registered.
- *  Implemented on `RunClient`; until the screens branch merges, they
- *  hold it as its own interface. */
-export interface PaperClient {
-  /** Spends the single-use `registrationToken` from `POST .../register`
-   *  and mints the attempt. */
-  start(registrationToken: string): Promise<AttemptPaper>;
-  /** Resumes with the attempt cookie alone, or `null` when there is no
-   *  attempt to resume. */
-  resume(): Promise<AttemptPaper | null>;
 }
