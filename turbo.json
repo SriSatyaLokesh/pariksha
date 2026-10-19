@@ -24,6 +24,11 @@
       // goes green — which is how the dual-dialect gate can stop gating
       // without anyone noticing.
       "env": ["TEST_POSTGRES_URL", "CI"]
+      // The root `test` script passes `--concurrency=1` on purpose: every
+      // package's vitest sizes its own worker pool to the whole host, so
+      // running five of them at once oversubscribes it several times over.
+      // See the comment on `testTimeout` in apps/web/vite.config.ts for the
+      // measurements (#161).
     }
   }
 }
