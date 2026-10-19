@@ -335,9 +335,12 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // drives. The authentication floor of 2 does not apply here — a
   // candidate sends no session cookie, so `authenticate` never reads one.
   "/api/v1/run/:workspaceSlug/:testSlug/access": 4,
-  // Resolve and one insert. Sending the message is not a D1, R2 or
-  // `deps.http` call.
-  "/api/v1/run/:workspaceSlug/:testSlug/email-code": 2,
+  // Resolve, the two `S-07` rate tokens (per test version and per
+  // address digest) and one insert — **4** since Task 4's fix round
+  // (#68, C-1); it was 2 while the route was unlimited. Sending the
+  // message is still not a D1, R2 or `deps.http` call. A refusal costs
+  // 2 or 3, because the limiters are charged before the write.
+  "/api/v1/run/:workspaceSlug/:testSlug/email-code": 4,
   // Resolve and the state insert, plus discovery and JWKS on a cold
   // isolate (`oidc.ts` caches both for the isolate's lifetime, so a warm
   // one spends 2).

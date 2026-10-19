@@ -21,7 +21,9 @@ import {
   listTests,
   resolvePublishedTest,
 } from "@pariksha/db";
+import { normaliseEmail } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
+import { sha256Hex } from "../../src/auth/tokens.js";
 import { issueSession } from "../../src/auth/session.js";
 import { countingDeps } from "../../src/instrument.js";
 import { EMAIL_CODE_TTL_MS, ENTRY_TTL_MS, REFUSALS, readEntryToken } from "../../src/run/entry.js";
@@ -94,9 +96,14 @@ deps.email = {
 const app = createApp(deps);
 
 afterAll(() => closeClient(deps.db));
-beforeEach(() => {
+beforeEach(async () => {
   clock = T;
   sent = [];
+  // Task 4's fix round (C-1): `/email-code` now charges a bucket per
+  // address, and this suite asks for codes at the same two addresses
+  // under a frozen clock — so without this reset the file exhausts its
+  // own limit and later tests read a 429 as a bug in the route.
+  await deps.db.run("DELETE FROM rate_limit", []);
 });
 
 const workspaceId = await seedPublishedTest(deps);
@@ -606,6 +613,106 @@ it("C-02: the codes the gate really answers with are the catalogue's own", async
     seen.add(((await res.json()) as { error: { code: string } }).error.code);
   }
   expect([...seen].sort()).toEqual(Object.keys(REFUSALS).sort());
+});
+
+// --- Task 4 fix round, C-1: the emailed code's own buckets -------------
+//
+// `/email-code` was the one route in the candidate runtime with no limit
+// at all, and the most expensive one to abuse: every call writes an
+// `auth_token` row **and** sends a message to an address a stranger
+// typed. Within an allowed domain that is a mailbomb pointed at third
+// parties and an uncapped bill pointed at the operator, and `S-07`'s
+// rate-limit half cannot be called complete without it.
+//
+// Two buckets, because the two abuses are different shapes and one
+// ceiling cannot size both: thousands of addresses sprayed at one test,
+// and thousands of codes aimed at one inbox.
+
+const rateBuckets = async (): Promise<string[]> =>
+  (await deps.db.query<{ bucket: string }>("SELECT bucket FROM rate_limit", [])).map(
+    (row) => row.bucket,
+  );
+
+const codeOf = async (res: Response): Promise<string> =>
+  ((await res.json()) as { error: { code: string } }).error.code;
+
+/** Puts a bucket at its ceiling without making `limit` real requests. */
+async function fillBucket(kind: keyof typeof LIMITS, key: string): Promise<void> {
+  await deps.db.run("DELETE FROM rate_limit WHERE bucket = ?", [`${kind}:${key}`]);
+  await deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    `${kind}:${key}`,
+    clock,
+    LIMITS[kind].limit,
+  ]);
+}
+
+const addressKey = (email: string): Promise<string> => sha256Hex(normaliseEmail(email));
+
+it("S-07: the email-code bucket limits per address as well as per test", async () => {
+  // One address, up to its own ceiling. A candidate who loses the first
+  // message and asks again must not be refused, so the limit sits above
+  // any honest retry and far below a bombing run.
+  for (let i = 0; i < LIMITS.email_code_address.limit; i++) {
+    expect((await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" })).status).toBe(202);
+  }
+  const refused = await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" });
+  expect(refused.status).toBe(429);
+  expect(await codeOf(refused)).toBe("too_many_attempts");
+
+  // The other direction is untouched: a second address on the same test
+  // still gets its code, so one abused inbox cannot deny the hall.
+  expect((await post("/api/v1/run/alpha/otp/email-code", { email: "c@d.ac.in" })).status).toBe(202);
+});
+
+it("S-07: the per-test bucket refuses a spray across thousands of addresses, before any send", async () => {
+  await fillBucket("email_code", await versionOf("otp"));
+  const sentBefore = sent.length;
+  const refused = await post("/api/v1/run/alpha/otp/email-code", { email: "fresh@b.ac.in" });
+  expect(refused.status).toBe(429);
+  // Charged before `issueEmailCode`, so the refusal costs no row and no
+  // message. A limiter that fired after the send would have stopped
+  // nothing worth stopping.
+  expect(sent.length).toBe(sentBefore);
+});
+
+it("S-07: no email address reaches the rate_limit table in the clear", async () => {
+  await post("/api/v1/run/alpha/otp/email-code", { email: "ananya@vce.ac.in" });
+  const buckets = JSON.stringify(await rateBuckets());
+  expect(buckets).not.toContain("ananya");
+  expect(buckets).not.toContain("vce.ac.in");
+  // `S-15`'s shape, the same one `candidate_unique` has: a digest of a
+  // value the reader does not hold, never the value.
+  expect(buckets).toContain(`email_code_address:${await addressKey("ananya@vce.ac.in")}`);
+});
+
+it("S-07: the address bucket is the normalised address, so case and spacing are one identity", async () => {
+  await post("/api/v1/run/alpha/otp/email-code", { email: "Ananya@VCE.ac.in" });
+  await post("/api/v1/run/alpha/otp/email-code", { email: " ananya@vce.ac.in " });
+  const rows = await deps.db.query<{ count: number }>(
+    "SELECT count FROM rate_limit WHERE bucket = ?",
+    [`email_code_address:${await addressKey("ananya@vce.ac.in")}`],
+  );
+  // One counter at two, not two counters at one — otherwise retyping the
+  // address with a capital letter buys a fresh allowance. `normaliseEmail`
+  // is the same function `emailCodeHash` and `normaliseUniqueValue` use.
+  expect(rows[0]?.count).toBe(2);
+});
+
+it("S-07: neither email bucket is keyed on a client IP — a whole campus shares one", async () => {
+  await post(
+    "/api/v1/run/alpha/otp/email-code",
+    { email: "a@b.ac.in" },
+    { headers: { "CF-Connecting-IP": "198.51.100.77" } },
+  );
+  expect(JSON.stringify(await rateBuckets())).not.toContain("198.51.100.77");
+});
+
+it("the window rolls: an address refused this minute can ask again later", async () => {
+  await fillBucket("email_code_address", await addressKey("a@b.ac.in"));
+  expect((await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" })).status).toBe(429);
+  clock = T + LIMITS.email_code_address.windowMs + 1;
+  expect((await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" })).status).toBe(202);
+  clock = T;
 });
 
 // --- measured budgets ---------------------------------------------------

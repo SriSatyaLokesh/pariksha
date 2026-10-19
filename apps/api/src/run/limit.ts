@@ -20,6 +20,24 @@
 //     exposes, and every probe of it is a miss while every candidate
 //     reading the projector is a hit.
 //
+//     **It is the one bucket with no key at all, deliberately.** Keyed
+//     per code it would be a counter that never reaches 2 against the
+//     only attack it exists for: a sweep across the 32^6 space never
+//     repeats a code. Globally it puts a floor of years on a full
+//     sweep. The "never a bucket keyed on nothing" rule above is about
+//     buckets that count traffic a real candidate generates — this one
+//     counts misses, and a real candidate's code resolves, so no hall
+//     can be locked out of anything by it. The worst case is a stranger
+//     reading 429 instead of 404 on a link that was already dead, and
+//     429 gives the better advice of the two.
+//   * `email_code` and `email_code_address` count **every** request,
+//     because a request is the abuse: each one writes a row and sends a
+//     message to an address a stranger typed. Two buckets rather than
+//     one, because the two attacks are different shapes — thousands of
+//     addresses sprayed at one test, and thousands of codes aimed at one
+//     inbox — and a single ceiling that stopped the second would refuse
+//     the hall long before it stopped the first.
+//
 // **Never per IP** — a hall behind one NAT is one address, and a botnet is
 // a thousand. Every bucket is keyed by the thing being attacked (a test
 // version, a short code), which is also why `rate_limit` is untenanted:
@@ -32,14 +50,26 @@
 import { takeRateToken } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
-import { refuse } from "./entry.js";
+import { EMAIL_CODE_TTL_MS, refuse } from "./entry.js";
 
 export const LIMITS = {
   /** Refused access attempts, per test version, per minute. */
   test_access: { limit: 300, windowMs: 60_000 },
   /** Registrations, per test version, per five minutes. */
   test_register: { limit: 1_000, windowMs: 5 * 60_000 },
-  /** Short codes that resolved to nothing, per code, per minute. */
+  /** Emailed codes, per test version, per five minutes. Sized like
+   *  `test_register` and for the same reason: a 500-seat hall all
+   *  asking for a code in the same five minutes is the capacity row,
+   *  and twice that is the ceiling. */
+  email_code: { limit: 1_000, windowMs: 5 * 60_000 },
+  /** Emailed codes, per **address**, per ten minutes — the code's own
+   *  TTL, so the window is the lifetime of what it protects. Five,
+   *  because an honest candidate needs one and occasionally two, and
+   *  because this is the number that stands between a stranger and
+   *  someone else's inbox. */
+  email_code_address: { limit: 5, windowMs: EMAIL_CODE_TTL_MS },
+  /** Short codes that resolved to nothing — **instance-wide**, not per
+   *  code, per minute. See the header: a sweep never repeats a code. */
   short_link: { limit: 300, windowMs: 60_000 },
 } as const;
 
@@ -51,10 +81,15 @@ export type LimitKind = keyof typeof LIMITS;
  *
  * The bucket name carries the kind, so two limits over one id (a test
  * version's refusals and its registrations) never share a counter.
+ *
+ * `key` is omitted only by `short_link`, whose bucket is deliberately
+ * instance-wide — see the header for why that is safe there and nowhere
+ * else.
  */
-export async function limitOrThrow(deps: AppDeps, kind: LimitKind, key: string): Promise<void> {
+export async function limitOrThrow(deps: AppDeps, kind: LimitKind, key?: string): Promise<void> {
   const { limit, windowMs } = LIMITS[kind];
-  const count = await takeRateToken(deps.db, `${kind}:${key}`, windowMs, deps.now());
+  const bucket = key === undefined ? kind : `${kind}:${key}`;
+  const count = await takeRateToken(deps.db, bucket, windowMs, deps.now());
   if (count > limit) throw refuse("too_many_attempts");
 }
 

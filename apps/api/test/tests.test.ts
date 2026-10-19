@@ -271,12 +271,12 @@ it("GET /t/<unknown> is 404 and names no workspace", async () => {
 // the only thing on this instance a stranger can guess at, and until this
 // bucket existed a 32^6 sweep was free.
 
-/** Fills `short_link`'s bucket for one code, the way the route's own
- *  misses would have. */
-async function fillShortLinkBucket(code: string): Promise<void> {
-  await deps.db.run("DELETE FROM rate_limit WHERE bucket = ?", [`short_link:${code}`]);
-  await deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
-    `short_link:${code}`,
+/** Fills the instance-wide `short_link` bucket, the way 300 misses in a
+ *  minute would have. */
+async function fillShortLinkBucket(db = deps.db): Promise<void> {
+  await db.run("DELETE FROM rate_limit WHERE bucket = ?", ["short_link"]);
+  await db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    "short_link",
     FIXED_NOW,
     LIMITS.short_link.limit,
   ]);
@@ -288,13 +288,33 @@ const rateBuckets = async (): Promise<string[]> =>
   );
 
 it("S-07: a short code that resolves to nothing is counted, and the next one is 429", async () => {
+  await deps.db.run("DELETE FROM rate_limit", []);
   expect((await app.request("/t/qqqqqq")).status).toBe(404);
-  expect(await rateBuckets()).toContain("short_link:qqqqqq");
+  expect(await rateBuckets()).toEqual(["short_link"]);
 
-  await fillShortLinkBucket("qqqqqq");
+  await fillShortLinkBucket();
   const res = await app.request("/t/qqqqqq");
   expect(res.status).toBe(429);
   expect(((await res.json()) as { error: { code: string } }).error.code).toBe("too_many_attempts");
+});
+
+it("S-07: the bucket is instance-wide, so a sweep that never repeats a code still meets it", async () => {
+  // The whole reason this bucket exists. A per-code counter is, against
+  // an enumeration of 32^6, a counter that never reaches 2 — every probe
+  // is a fresh key. Six distinct codes here, one bucket, count six.
+  await deps.db.run("DELETE FROM rate_limit", []);
+  for (const code of ["aaaaaa", "bbbbbb", "cccccc", "dddddd", "ffffff", "gggggg"]) {
+    expect((await app.request(`/t/${code}`)).status).toBe(404);
+  }
+  const rows = await deps.db.query<{ bucket: string; count: number }>(
+    "SELECT bucket, count FROM rate_limit",
+    [],
+  );
+  expect(rows).toEqual([{ bucket: "short_link", count: 6 }]);
+
+  // And the sweep is actually stopped, not merely counted.
+  await fillShortLinkBucket();
+  expect((await app.request("/t/hhhhhh")).status).toBe(429);
 });
 
 it("S-07: a short code that resolves is never charged, so a projected link is not a bucket", async () => {
@@ -316,17 +336,14 @@ it("S-07: no bucket is keyed on a client IP — a whole campus shares one", asyn
   await deps.db.run("DELETE FROM rate_limit", []);
   await app.request("/t/wwwwww", { headers: { "CF-Connecting-IP": "198.51.100.77" } });
   expect(JSON.stringify(await rateBuckets())).not.toContain("198.51.100.77");
+  // Nor on the code: the bucket name is the kind and nothing else.
+  expect(await rateBuckets()).toEqual(["short_link"]);
 });
 
 it("the window rolls: the limit is spendable again once windowMs has passed", async () => {
+  // Its own database, because its clock is an hour ahead of this file's.
   const later = await testDeps({ now: () => FIXED_NOW + LIMITS.short_link.windowMs + 1 });
-  await fillShortLinkBucket("eeeeee");
-  // A fresh database, so seed the same exhausted bucket into it.
-  await later.deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
-    "short_link:eeeeee",
-    FIXED_NOW,
-    LIMITS.short_link.limit,
-  ]);
+  await fillShortLinkBucket(later.deps.db);
   // 404, not 429: the stale window is reset by the same statement that
   // counts, so the miss is charged against a fresh one.
   expect((await createApp(later.deps).request("/t/eeeeee")).status).toBe(404);

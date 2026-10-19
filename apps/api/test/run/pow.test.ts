@@ -259,9 +259,16 @@ it("POST /register's budget is unchanged by the proof of work — it is arithmet
     body: JSON.stringify({ values: VALID, solution }),
   });
   expect(res.status).toBe(201);
-  expect(counting.counts().total).toBeLessThanOrEqual(
-    ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/register"] as number,
-  );
+  // `toBe`, not `toBeLessThanOrEqual` (review M-1, and the plan's Global
+  // Constraints name the weaker idiom explicitly). A self-registration
+  // on `signup` spends two fewer than the pinned ceiling — resolve,
+  // entry read, the limiter and the one batch; no list row to read and
+  // no claims read, because nothing collided. Pinned to its own number
+  // and checked against the table's, rather than hidden behind an
+  // inequality that would survive the proof of work quietly costing a
+  // subrequest.
+  expect(counting.counts().total).toBe(4);
+  expect(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/register"]).toBe(6);
 });
 
 it("a listed candidate registers the same way — the control is on the route, not on the mode", async () => {

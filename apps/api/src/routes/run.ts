@@ -31,6 +31,7 @@ import {
 } from "@pariksha/db";
 import {
   NAVIGATION_CONSEQUENCE,
+  normaliseEmail,
   normaliseUniqueValue,
   type AccessMode,
   type Section,
@@ -52,7 +53,8 @@ import {
   sameSecret,
   type EntryClaim,
 } from "../run/entry.js";
-import { limitMisses } from "../run/limit.js";
+import { limitMisses, limitOrThrow } from "../run/limit.js";
+import { sha256Hex } from "../auth/tokens.js";
 import { registrationRoutes } from "../run/registration.js";
 import { clientIp, emailInDomains, ipInRanges } from "../run/net.js";
 import { identityField } from "../import/candidates.js";
@@ -425,6 +427,29 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     // Before anything is sent: an open relay to any address a stranger
     // types is what skipping this would be.
     checkDomain(access, parsed.data.email);
+
+    // `S-07`, and the most expensive route in the candidate runtime to
+    // leave open: every call past this point writes a row **and** sends
+    // a message to an address a stranger typed, so within an allowed
+    // domain an unlimited `/email-code` is a mailbomb aimed at third
+    // parties and an uncapped bill aimed at the operator.
+    //
+    // Charged **before** `issueEmailCode`, so a refusal costs neither.
+    // Charged on every request rather than on misses alone, because here
+    // the request *is* the cost — there is no "miss" to count, which is
+    // the same reason `test_register` is charged outright.
+    //
+    // Two keys, never an address in the clear: the test version bounds
+    // the spray, the digest of the normalised address bounds the bombing
+    // of one inbox, and `normaliseEmail` is the same function
+    // `emailCodeHash` uses, so a capital letter does not buy a second
+    // allowance.
+    await limitOrThrow(deps, "email_code", test.testVersionId);
+    await limitOrThrow(
+      deps,
+      "email_code_address",
+      await sha256Hex(normaliseEmail(parsed.data.email)),
+    );
 
     const code = await issueEmailCode(deps, {
       testVersionId: test.testVersionId,

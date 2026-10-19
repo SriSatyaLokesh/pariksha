@@ -27,9 +27,14 @@ export function shortlinkRoute(deps: AppDeps): Handler<AppBindings> {
     // charged. A code that resolved is not — a hall of candidates opening
     // the one link on the projector is the expected load, not an attack,
     // and charging it would turn the busiest minute of a live test into a
-    // lockout. Keyed on the code, never on an address: a campus shares one.
+    // lockout.
+    //
+    // **One instance-wide bucket, not one per code**, which is the whole
+    // point: the attack is a walk across the 32^6 space, and a walk never
+    // guesses the same code twice, so a per-code counter never reaches 2.
+    // Never keyed on an address either — a campus shares one.
     if (!resolved) {
-      await limitOrThrow(deps, "short_link", code);
+      await limitOrThrow(deps, "short_link");
       throw new ApiError(404, "not_found", "No such resource.");
     }
     return c.redirect(`/${resolved.workspaceSlug}/${resolved.testSlug}`, 302);
