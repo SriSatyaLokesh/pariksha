@@ -165,6 +165,9 @@ git commit -s -m "docs(adr): review comments on a draft test"
   }
   export interface TestFilter { tag?: string; status?: TestStatus; search?: string; sort?: "name" | "updated" | "created" }
   export interface TestPatch { name?: string; slug?: string; description?: string; tags?: string[]; reviewRequested?: boolean }
+  // packages/db/src/ids.ts (added beside newId, same alphabet and masking)
+  export function newShortCode(): string;   // 6 characters
+
   export const createTest: ScopedFn<[input: { name: string; slug: string; now?: number }], TestRow>;
   export const getTest: ScopedFn<[testId: string], TestRow | null>;
   export const listTests: ScopedFn<[filter: TestFilter], TestRow[]>;
@@ -177,6 +180,10 @@ git commit -s -m "docs(adr): review comments on a draft test"
   export function resolveShortCode(db: DbClient, code: string): Promise<{ workspaceSlug: string; testSlug: string } | null>;
 
   // apps/web/src/lib/api.ts
+  // `state` is `status` verbatim in this task — Scheduled and Open do not
+  // exist until Task 10 adds `deriveState`, which is where the route starts
+  // mapping them. The wire type is declared whole here so no later task
+  // renames a field the screens already read.
   export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
   export interface TestSummary {
     id: string; name: string; slug: string; description: string | null;
@@ -628,20 +635,22 @@ git commit -s -m "feat(tests): set assignment strategies and shuffle configurati
     id: string; type: FormFieldType; label: string; help?: string;
     required?: boolean; unique?: boolean; options?: string[]; validation?: FieldValidation;
   }
-  export interface RegistrationForm { title?: string; description?: string; fields: FormField[] }
-  // added to Test: registration_form?: RegistrationForm;
+  export interface RegistrationFormSpec { title?: string; description?: string; fields: FormField[] }
+  // added to Test: registration_form?: RegistrationFormSpec;
+  // Named ...Spec, not ...Form, so the core type and the React component of
+  // the same job do not share a name across two packages.
 
   // packages/core/src/validate.ts — new rules inside validateTest, not a new function
   // apps/web/src/components/testbuilder/RegistrationForm.tsx — the ONE renderer
   export function RegistrationForm(props: {
-    form: RegistrationFormType;
+    form: RegistrationFormSpec;
     values: Readonly<Record<string, unknown>>;
     errors: Readonly<Record<string, string>>;
     onChange: (id: string, value: unknown) => void;
     disabled?: boolean;
   }): JSX.Element;
   export const FIELD_INPUT: Readonly<Record<FormFieldType, { type: string; autocomplete: string; inputMode?: string }>>;
-  export const FORM_TEMPLATES: Readonly<Record<"campus_hiring" | "course_exam" | "open_contest", RegistrationFormType>>;
+  export const FORM_TEMPLATES: Readonly<Record<"campus_hiring" | "course_exam" | "open_contest", RegistrationFormSpec>>;
   ```
 
 `RegistrationForm.tsx` is **the one renderer**, the same structure [ADR 0004](../../adr/0004-client-side-rendering-with-lazy-loaded-katex.md) gave Markdown: the builder's preview imports it today and Phase 6's candidate registration imports it next, so the preview cannot drift from what a candidate sees. It takes `values`/`errors` from its caller and owns no submission.
@@ -929,6 +938,16 @@ it("latest start is echoed as the sentence it means", () => {
 });
 it("each navigation mode carries its consequence as persistent helper text", () => {
   for (const copy of Object.values(NAVIGATION_CONSEQUENCE)) expect(screen.getByText(copy)).toBeVisible();
+});
+it("T-14: attempts allowed, cooldown and which attempt counts are settable, with their documented defaults", () => {
+  expect(screen.getByLabelText(/attempts allowed/i)).toHaveValue(1);
+  expect(screen.getByLabelText(/cooldown between attempts/i)).toHaveValue(0);
+  expect(optionValues("Which attempt counts")).toEqual(["highest", "latest", "average"]);
+});
+it("T-15: the warning marks and the late-sync grace carry their defaults and state what they do", () => {
+  expect(screen.getByLabelText(/warn at/i)).toHaveValue("10, 2");
+  expect(screen.getByLabelText(/late sync grace \(seconds\)/i)).toHaveValue(30);
+  expect(screen.getByText(/answers arriving later than this after the deadline are rejected/i)).toBeVisible();
 });
 it("times and durations use tabular figures", () => {
   expect(getComputedStyle(screen.getByText(/60 min/)).fontVariantNumeric).toContain("tabular-nums");
