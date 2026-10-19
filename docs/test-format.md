@@ -206,7 +206,7 @@ The schema checks structure. The importer also checks:
 - every question ID in a `fixed` or `sets` source exists in one of the `banks`
 - `scoring.default_mode` applies to every question type a section can draw, for the questions that do not set their own `scoring.mode` — the modes and the types each applies to are in [question-format.md](question-format.md#scoring-modes). A test defaulting to `partial` over a section of `ordering` questions is an error, not a silent regrade: `ordering` takes `position`
 - a `pool` filter matches at least `count` questions
-- the sets of a `sets` source hold equal total points, within `scoring.set_points_tolerance` (default: 0, so any difference is reported). A caller may override the file with a stricter number of its own, never a looser one
+- the sets of a `sets` source hold equal total points, within `scoring.set_points_tolerance` (default: 0, so any difference is reported). A caller may override the file with a number of its own — `validateTest`'s `options.setPointsTolerance` takes precedence over `scoring.set_points_tolerance` in either direction, so a caller can loosen the gate as well as tighten it. Callers are expected to pass one only to be stricter; nothing enforces that, so a caller passing `0` discards a tolerance the file deliberately set
 - section IDs and form-field IDs are unique within the test
 - `access_code` is present when `mode` is `link_code`, and `at` is present when `when` is `on_date`
 - `closes_at` is after `opens_at`, and `latest_start_at` falls inside the window

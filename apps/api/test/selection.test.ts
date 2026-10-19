@@ -13,7 +13,13 @@
 // — the real composition, missing only the attempt row").
 
 import { afterAll, beforeAll, expect, it } from "vitest";
-import { assignSet, layoutForAttempt, type Question, type Section } from "@pariksha/core";
+import {
+  assignSet,
+  layoutForAttempt,
+  type Question,
+  type Section,
+  type SetAssignment,
+} from "@pariksha/core";
 import { closeClient, createUser, getTestVersion, listQuestions, publishTestVersion } from "@pariksha/db";
 import { createApp } from "../src/app.js";
 import { issueSession } from "../src/auth/session.js";
@@ -213,6 +219,18 @@ function setsOf(id: string): string[] {
   return source.sets.map((s) => s.set);
 }
 
+function assignmentOf(id: string): SetAssignment {
+  const source = sectionNamed(id).source;
+  if (source.kind !== "sets") throw new Error(`section ${id} is not a sets source`);
+  // Task 4 review (MAJ-1): read the strategy off the published version rather
+  // than restating it. `assignment` is the one field #56 exists for, and
+  // hardcoding it here would let a mapper drop it on the PATCH -> publish ->
+  // getTestVersion path while every test in this file still passed and every
+  // published test silently fell back to the schema default.
+  if (source.assignment === undefined) throw new Error(`section ${id} published no assignment`);
+  return source.assignment;
+}
+
 function countBy(values: readonly string[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const value of values) counts[value] = (counts[value] ?? 0) + 1;
@@ -237,8 +255,11 @@ it("AC-09: 5 sets, round robin, 50 registrations — 10 each, and no two consecu
   const sets = setsOf(SETS);
   expect(sets).toEqual(SET_LABELS);
 
+  const assignment = assignmentOf(SETS);
+  expect(assignment).toBe("round_robin");
+
   const got = Array.from({ length: 50 }, (_, i) =>
-    assignSet({ sets, assignment: "round_robin", registrationIndex: i, candidateId: `cnd_${i}` }),
+    assignSet({ sets, assignment, registrationIndex: i, candidateId: `cnd_${i}` }),
   );
 
   expect(countBy(got)).toEqual({ A: 10, B: 10, C: 10, D: 10, E: 10 });

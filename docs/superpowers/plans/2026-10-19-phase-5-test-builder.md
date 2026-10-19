@@ -1763,6 +1763,18 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 
 ## Task 13: Pre-publish warnings (#64, P5.11)
 
+> **Two traps, found reviewing Task 4.** (1) `scoring.set_points_tolerance` is schema-legal
+> and type-safe but has **no UI control** — Task 4 shipped it deliberately as schema, type and
+> `validateTest` only. So the `sets_unbalanced` row prints `tolerance 0` and nothing an
+> organiser can reach changes it: a legitimate one-point drift is a permanently red advisory
+> with no knob. Either give it a control here or say in the row's copy that it is file-only.
+> (2) Precedence in `validate.ts` is `options.setPointsTolerance ?? doc.scoring.set_points_tolerance ?? 0`,
+> which overrides in **either** direction. So a `buildChecklist` that passes the
+> apparently-harmless `{ setPointsTolerance: 0 }` silently discards a tolerance the file set.
+> **Pass no `setPointsTolerance` unless this gate is deliberately stricter than the file.**
+> Tasks 12 and 13 write the first production callers of `validateTest`, so this rule has no
+> prior art to copy — it starts here.
+
 **Files:**
 - Create: `apps/web/src/components/testbuilder/PublishChecklist.tsx`
 - Modify: `apps/api/src/publish/checklist.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/test.tsx`, `docs/ROADMAP.md`
