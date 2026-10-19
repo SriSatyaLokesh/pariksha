@@ -1,5 +1,7 @@
 // Sections and question sources (#55, P5.2) — UX-12, UX-14, UX-15, UX-16.
 
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
@@ -308,14 +310,22 @@ describe("SectionList", () => {
   });
 
   it("the collapsed row stays readable at 400 px", () => {
-    const { container } = render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
-    container.style.width = "400px";
+    // Fix round (task 3 review, I11): jsdom performs no layout, so
+    // `container.style.width = "400px"` changes nothing a query can see —
+    // the old assertion (`toHaveClass("section-row__summary")`) passed
+    // against the exact truncation (`white-space: nowrap; text-overflow:
+    // ellipsis`) the comment claimed to guard against. The honest pin
+    // reads the stylesheet itself and asserts the wrapping declaration on
+    // the class the collapsed row actually carries.
+    const css = readFileSync(
+      resolve(import.meta.dirname, "../../src/styles/testbuilder.css"),
+      "utf8",
+    );
+    const rule = /\.section-row__summary\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(rule).toMatch(/overflow-wrap:\s*anywhere/);
+
+    render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
     const button = screen.getByRole("button", { name: /^Quantitative aptitude ·/i });
-    expect(button).toBeVisible();
-    // UX-12: the collapsed sentence wraps (testbuilder.css's own
-    // `overflow-wrap: anywhere`) rather than truncating — this is the class
-    // that rule is scoped to, so a change that drops it is what this test
-    // catches.
     expect(button).toHaveClass("section-row__summary");
   });
 
@@ -385,6 +395,58 @@ describe("TestBuilder (the open section lives in the URL)", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: /^Quantitative aptitude ·/i }));
     expect(window.location.search).toBe("?section=quant");
+  });
+
+  it("fix round (task 3 review, I10): a reload with ?section= already in the URL opens that section", async () => {
+    // The test above only asserts the *write* — `sectionFromUrl()`'s own
+    // initial read (`useState(() => sectionFromUrl())`) was never driven.
+    // Changing that initializer to `useState<string | null>(null)` would
+    // leave the suite green without this mount: the URL already carries
+    // `?section=quant` before `TestBuilder` ever renders, simulating the
+    // reload #55's own acceptance box describes.
+    const section: Section = { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } };
+    window.history.replaceState(null, "", "/?section=quant");
+
+    render(
+      <TestBuilder
+        workspaceId="wsp_1"
+        testId="tst_1"
+        actorEmail="rao@example.edu"
+        onSignOut={noop}
+        onBack={noop}
+        client={fakeClient({
+          test: async () => ({
+            id: "tst_1",
+            name: "Midterm",
+            slug: "midterm",
+            description: null,
+            shortCode: "ab12cd",
+            state: "draft",
+            currentVersion: null,
+            draftVersion: 1,
+            reviewRequested: false,
+            tags: [],
+            updatedAt: 0,
+          }),
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [section] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    // Open only when the section was already expanded — the editor's own
+    // "Delete section" button only renders inside the open section.
+    expect(await screen.findByRole("button", { name: /delete section/i })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Quantitative aptitude ·/i })).toHaveAttribute("aria-expanded", "true");
   });
 });
 
