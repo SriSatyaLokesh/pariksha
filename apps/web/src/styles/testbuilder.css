@@ -1,0 +1,58 @@
+/* Phase 5's test builder screens. Every value comes from tokens.css — see
+   that file's own header for why: no hex literal and no style={} attribute
+   may appear anywhere under src (apps/web/test/no-hex-colors.test.ts). */
+
+.testbuilder-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-lg);
+  margin-block-end: var(--space-lg);
+}
+
+.testbuilder-list {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.testbuilder-list th,
+.testbuilder-list td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--color-hairline);
+  text-align: start;
+  vertical-align: top;
+}
+
+.testbuilder-list th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.test-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.test-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: var(--space-sm);
+  color: var(--color-ink-soft);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.testbuilder-shortlink {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.qr-code {
+  color: var(--color-ink);
+}

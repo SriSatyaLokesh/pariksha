@@ -1,15 +1,12 @@
-import { useState } from "react";
 import { CardHairline } from "../components/CardHairline";
 import { MonoCaption } from "../components/MonoCaption";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import type { Actor, Workspace } from "../lib/api";
 
-// Screen 3 of 3: the workspace dashboard. Test authoring (a `Test` entity,
-// sections, pools) is still Phase 5 — but Phase 4 built question banks, and
-// fix round (whole-branch review, C1) gave them a real entry point here:
-// "Create your first test" below still states a real gap (no `Test` can be
-// built yet), but no longer claims that gap closes "with the question
-// bank" — the question bank is what "Question banks" below actually opens.
+// Screen 3 of 3: the workspace dashboard. Phase 4 gave question banks a real
+// entry point here; Phase 5 Task 2 does the same for tests — "Create your
+// first test" now opens the real test list (apps/web/src/routes/tests.tsx),
+// not a placeholder notice.
 //
 // docs/design.md UX-11 ("the publish boundary is shown, not discovered")
 // is the one decision in that document that reaches this screen, and the
@@ -22,13 +19,14 @@ export function Dashboard({
   workspace,
   onSignOut,
   onOpenBanks,
+  onOpenTests,
 }: {
   actor: Actor;
   workspace: Workspace;
   onSignOut: () => void;
   onOpenBanks: () => void;
+  onOpenTests: () => void;
 }) {
-  const [noted, setNoted] = useState(false);
   const role = actor.memberships.find(
     (membership) => membership.workspaceId === workspace.id,
   )?.role;
@@ -61,29 +59,18 @@ export function Dashboard({
         </CardHairline>
 
         <CardHairline className="organiser-empty">
-          <h2 className="organiser-empty__title">No tests yet</h2>
+          <h2 className="organiser-empty__title">Tests</h2>
           <p className="organiser-empty__body">
-            Nothing has been authored in this workspace. A test begins as a
-            draft you can edit freely, and only becomes visible to candidates
-            when it is published.
+            A test begins as a draft you can edit freely, and only becomes
+            visible to candidates when it is published.
           </p>
-          {/* ponytail: the one next action, with nowhere to go until Phase
-              5's test authoring lands (docs/design.md's screen inventory).
-              Saying so is better than a disabled button or a link to a 404;
-              swap the handler for the real route when that screen exists. */}
           <button
             type="button"
             className="button-primary button-primary--surface"
-            onClick={() => setNoted(true)}
+            onClick={onOpenTests}
           >
             Create your first test
           </button>
-          {noted && (
-            <p className="organiser__status" role="status">
-              Test authoring is not built yet. This instance's question banks
-              are ready for it.
-            </p>
-          )}
         </CardHairline>
       </main>
     </>

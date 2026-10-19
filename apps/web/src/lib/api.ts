@@ -61,6 +61,45 @@ export interface ImportReport {
   issues: (ImportIssue & { line?: number })[];
 }
 
+// Phase 5 Task 2 (#54): tests. Mirrors `packages/db/src/repo/tests.ts`'s
+// `TestRow`, widened at the wire boundary the way `apps/api/src/routes/
+// tests.ts`'s own `toWire` builds it — `state` is `status` verbatim in this
+// task (Scheduled and Open do not exist until Task 11 adds `deriveState`,
+// once a `timing` setting exists for it to read), and `draftVersion` is the
+// version number of the test's unpublished draft, or null once none exists.
+// The wire type is declared whole here so no later task renames a field the
+// screens already read.
+export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
+
+export interface TestSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  shortCode: string;
+  state: TestState;
+  currentVersion: number | null;
+  draftVersion: number | null;
+  reviewRequested: boolean;
+  tags: string[];
+  updatedAt: number;
+}
+
+export interface TestFilter {
+  tag?: string;
+  status?: string;
+  search?: string;
+  sort?: "name" | "updated" | "created";
+}
+
+export interface TestPatch {
+  name?: string;
+  slug?: string;
+  description?: string;
+  tags?: string[];
+  reviewRequested?: boolean;
+}
+
 export interface QuestionListFilter {
   type?: QuestionType;
   tag?: string;
@@ -213,6 +252,14 @@ export interface ApiClient {
    * (`QuestionSummary.id`), the same id `deleteQuestion` already takes.
    */
   exportQuestion(workspaceId: string, bankId: string, questionId: string): Promise<Question>;
+
+  // Phase 5 Task 2 (#54): test CRUD. `tests` takes a filter rather than the
+  // raw query-string shape `apps/api/src/routes/tests.ts` reads — the
+  // screen builds a `TestFilter`, this is the one place that becomes `?`.
+  tests(workspaceId: string, filter?: TestFilter): Promise<TestSummary[]>;
+  createTest(workspaceId: string, input: { name: string; slug: string }): Promise<TestSummary>;
+  test(workspaceId: string, testId: string): Promise<TestSummary>;
+  updateTest(workspaceId: string, testId: string, patch: TestPatch): Promise<TestSummary>;
 }
 
 const API = "/api/v1";
@@ -446,6 +493,23 @@ export function createApiClient(): ApiClient {
 
     exportQuestion: (workspaceId, bankId, questionId) =>
       json<Question>(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/export`),
+
+    async tests(workspaceId, filter = {}) {
+      const qs = query({
+        tag: filter.tag,
+        status: filter.status,
+        search: filter.search,
+        sort: filter.sort,
+      });
+      return (await json<{ tests: TestSummary[] }>(`/workspaces/${workspaceId}/tests${qs}`)).tests;
+    },
+
+    createTest: (workspaceId, input) => json<TestSummary>(`/workspaces/${workspaceId}/tests`, post(input)),
+
+    test: (workspaceId, testId) => json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`),
+
+    updateTest: (workspaceId, testId, patch) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`, patchBody(patch)),
   };
 }
 

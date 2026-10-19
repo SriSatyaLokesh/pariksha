@@ -72,6 +72,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportQuestion: async () => {
       throw new Error("not used");
     },
+    tests: async () => [],
+    createTest: async () => {
+      throw new Error("not used");
+    },
+    test: async () => {
+      throw new Error("not used");
+    },
+    updateTest: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }
@@ -303,20 +313,22 @@ describe("Setup (the first-run wizard)", () => {
 });
 
 describe("Dashboard", () => {
-  it("names the workspace and states plainly that there are no tests yet", () => {
+  it("names the workspace and offers a way into tests and banks", () => {
     render(
       <Dashboard
         actor={ACTOR}
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/no tests yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /tests/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /question banks/i })).toBeInTheDocument();
   });
 
   it("offers exactly one next action out of the empty state", () => {
@@ -326,6 +338,7 @@ describe("Dashboard", () => {
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
 
@@ -347,6 +360,7 @@ describe("Dashboard", () => {
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
 
@@ -356,7 +370,7 @@ describe("Dashboard", () => {
   it("signs out through the client", async () => {
     const onSignOut = vi.fn();
     render(
-      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} />,
+      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} onOpenTests={() => undefined} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
@@ -370,6 +384,7 @@ describe("Dashboard", () => {
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
     expect(await axe(container)).toHaveNoViolations();

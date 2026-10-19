@@ -234,3 +234,19 @@ describe("the candidate and admin bundles are separate Vite entries", () => {
     }
   });
 });
+
+// Phase 5 Task 2 (#54): `qrcode-generator` renders T-02's short-link QR code
+// (apps/web/src/components/QrCode.tsx) — an organiser's own tool, reached
+// only from the test list (apps/web/src/routes/tests.tsx) through
+// organiser.tsx, never from the island. Candidate bundle budget is 300 KB
+// gzipped and Phase 5 adds nothing to it (Global Constraints) — a library an
+// exam-taker never needs is the easiest way to spend some of it by accident.
+describe("the QR generator is in the admin entry only (T-02)", () => {
+  it("the island cannot reach qrcode-generator by static import", () => {
+    expect(staticModules(twoEntryChunks, "island").join("\n")).not.toContain("qrcode-generator");
+  });
+
+  it("the admin entry does reach qrcode-generator", () => {
+    expect(staticModules(twoEntryChunks, "admin").join("\n")).toContain("qrcode-generator");
+  });
+});

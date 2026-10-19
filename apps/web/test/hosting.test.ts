@@ -107,10 +107,13 @@ describe("deploy/cloudflare/wrangler.toml", () => {
 
   // Replaces "declares no main script": there is a script now, and what keeps
   // every page, font and bundle request free is that it is invoked only on
-  // `/api/*`. Widening this list is what would start metering the site.
-  it("runs the Worker script on /api/* only, so asset requests stay free", () => {
+  // `/api/*` and, since Phase 5 Task 2's public short link, `/t/*` — both
+  // paths with no file under `dist/`, so without the entry the asset
+  // router's own 404 would answer before the script ran. Widening this list
+  // further than those two is what would start metering the site.
+  it("runs the Worker script on /api/* and /t/* only, so asset requests stay free", () => {
     expect(scalar("main")).toBeDefined();
-    expect(toml).toMatch(/^run_worker_first = \["\/api\/\*"\]$/m);
+    expect(toml).toMatch(/^run_worker_first = \["\/api\/\*", "\/t\/\*"\]$/m);
   });
 
   // T11 / SEO-4: a bogus URL must 404, never serve the landing page with a

@@ -53,6 +53,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportQuestion: async () => {
       throw new Error("not used");
     },
+    tests: async () => [],
+    createTest: async () => {
+      throw new Error("not used");
+    },
+    test: async () => {
+      throw new Error("not used");
+    },
+    updateTest: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }

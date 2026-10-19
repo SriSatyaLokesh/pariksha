@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import "./styles/base.css";
 import "./styles/admin.css";
+import "./styles/testbuilder.css";
 import { OrganiserApp } from "./routes/organiser";
 import { createApiClient } from "./lib/api";
 
