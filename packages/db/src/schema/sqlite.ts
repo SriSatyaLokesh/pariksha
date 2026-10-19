@@ -131,15 +131,20 @@ export const test = sqliteTable(
     workspaceId: text("workspace_id").notNull(),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
+    description: text("description"),
+    shortCode: text("short_code").notNull(),
     status: text("status").notNull(),
+    reviewRequested: integer("review_requested", { mode: "boolean" }).notNull(),
     currentVersion: integer("current_version"),
     tagsJson: text("tags_json", { mode: "json" }).notNull(),
     createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at"),
   },
   (t) => [
     index("test_workspace_idx").on(t.workspaceId),
     index("test_status_idx").on(t.status),
     uniqueIndex("test_workspace_slug_uq").on(t.workspaceId, t.slug),
+    uniqueIndex("test_short_code_uq").on(t.shortCode),
   ],
 );
 
@@ -153,6 +158,7 @@ export const testVersion = sqliteTable(
     settingsJson: text("settings_json", { mode: "json" }).notNull(),
     sectionsJson: text("sections_json", { mode: "json" }).notNull(),
     publishedAt: integer("published_at"),
+    createdAt: integer("created_at").notNull(),
   },
   (t) => [
     index("test_version_workspace_idx").on(t.workspaceId),

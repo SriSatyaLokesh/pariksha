@@ -59,6 +59,25 @@ export function newId(prefix: IdPrefix): string {
   return out;
 }
 
+const SHORT_CODE_LENGTH = 6;
+
+/**
+ * T-02's short link code: six characters from the same Crockford alphabet
+ * and the same masking `newId` uses, with no prefix and no separator — it is
+ * typed or read aloud by a candidate, not logged as a row reference. 30 bits
+ * of randomness is plenty for a code that is also checked unique at write
+ * time (`createTest` retries once on collision); it is not meant to be
+ * globally unguessable the way a session token is.
+ */
+export function newShortCode(): string {
+  const bytes = new Uint8Array(SHORT_CODE_LENGTH);
+  globalThis.crypto.getRandomValues(bytes);
+
+  let out = "";
+  for (const byte of bytes) out += ALPHABET[byte & 31];
+  return out;
+}
+
 /**
  * True when `value` is an ID of `prefix`, or of any known prefix when none is
  * given. Checks the whole shape, not just the start: a value that reaches a

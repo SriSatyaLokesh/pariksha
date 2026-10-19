@@ -28,12 +28,12 @@ const idIn = async (table: string): Promise<string> => {
 
 describe("every row is addressed by an ID that names its own table", () => {
   it("gives a test a tst_ ID and its published version a ver_ ID", async () => {
-    const testId = await repo.createTest(db, WORKSPACE, { slug: "s", name: "N" });
+    const testId = (await repo.createTest(db, WORKSPACE, { slug: "s", name: "N" })).id;
     expect(testId.startsWith("tst_")).toBe(true);
 
     const versionId = await repo.publishTestVersion(db, WORKSPACE, {
       testId,
-      version: 1,
+      version: 2,
       settings: {},
       sections: [],
     });
@@ -49,7 +49,7 @@ describe("every row is addressed by an ID that names its own table", () => {
   });
 
   it("gives a candidate a cnd_ ID and an attempt an att_ ID", async () => {
-    const testId = await repo.createTest(db, WORKSPACE, { slug: "s2", name: "N" });
+    const testId = (await repo.createTest(db, WORKSPACE, { slug: "s2", name: "N" })).id;
     const candidateId = await repo.createCandidate(db, WORKSPACE, {
       testId,
       formValues: {},

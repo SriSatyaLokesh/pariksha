@@ -24,14 +24,18 @@ beforeAll(async () => {
   await repo.createWorkspace(db, WORKSPACE_A, { slug: "alpha", name: "Alpha" });
   await repo.createWorkspace(db, WORKSPACE_B, { slug: "beta", name: "Beta" });
 
-  testInA = await repo.createTest(db, WORKSPACE_A, {
-    slug: "aptitude",
-    name: "Aptitude",
-  });
-  testInB = await repo.createTest(db, WORKSPACE_B, {
-    slug: "aptitude",
-    name: "Aptitude",
-  });
+  testInA = (
+    await repo.createTest(db, WORKSPACE_A, {
+      slug: "aptitude",
+      name: "Aptitude",
+    })
+  ).id;
+  testInB = (
+    await repo.createTest(db, WORKSPACE_B, {
+      slug: "aptitude",
+      name: "Aptitude",
+    })
+  ).id;
 });
 
 afterAll(() => closeClient(db));

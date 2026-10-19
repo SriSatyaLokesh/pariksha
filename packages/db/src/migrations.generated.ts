@@ -97,6 +97,18 @@ export const sqliteMigrations: Migration[] = [
     "ALTER TABLE `question_bank` ADD `groups_json` text;",
     "ALTER TABLE `question_bank` ADD `updated_at` integer;",
   ] },
+  { name: "0004_cold_blob.sql", statements: [
+    "-- Phase 5 Task 2 (#54): test gains description, short_code, review_requested\n-- and updated_at; test_version gains created_at, so a draft version (no\n-- published_at yet) has something to order by.\n--\n-- Hand-corrected after `drizzle-kit generate`, which emitted\n-- `ALTER TABLE test ADD short_code text NOT NULL` and the same for\n-- `review_requested` — SQLite only allows a NOT NULL column added by ALTER\n-- TABLE when the table is empty or the column carries a literal DEFAULT, and\n-- `short_code` has no single default that could ever be unique across more\n-- than one row. `test` is rebuilt instead, the same twelve-step shape 0003\n-- used for `question.ref_id`. No route writes a `test` row before this phase\n-- ships, so in practice the rebuild moves no data; the backfilled\n-- `short_code` (a slice of the row's own `id`, itself unique) and\n-- `review_requested = false` below exist only to keep the rebuilt table\n-- consistent with its own NOT NULL and UNIQUE constraints for that case.\n--\n-- `short_code` is unique **bare**, not composite with `workspace_id` like\n-- every other unique in this manifest — Review Focus 5: `/t/<code>` names no\n-- workspace, so two workspaces sharing one code would make the short link\n-- ambiguous.\nCREATE TABLE `__new_test` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`slug` text NOT NULL,\n\t`name` text NOT NULL,\n\t`description` text,\n\t`short_code` text NOT NULL,\n\t`status` text NOT NULL,\n\t`review_requested` integer NOT NULL,\n\t`current_version` integer,\n\t`tags_json` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer\n);",
+    "INSERT INTO `__new_test` (\"id\", \"workspace_id\", \"slug\", \"name\", \"short_code\", \"status\", \"review_requested\", \"current_version\", \"tags_json\", \"created_at\") SELECT \"id\", \"workspace_id\", \"slug\", \"name\", substr(\"id\", 5, 6), \"status\", 0, \"current_version\", \"tags_json\", \"created_at\" FROM `test`;",
+    "DROP TABLE `test`;",
+    "ALTER TABLE `__new_test` RENAME TO `test`;",
+    "CREATE INDEX `test_workspace_idx` ON `test` (`workspace_id`);",
+    "CREATE INDEX `test_status_idx` ON `test` (`status`);",
+    "CREATE UNIQUE INDEX `test_workspace_slug_uq` ON `test` (`workspace_id`,`slug`);",
+    "CREATE UNIQUE INDEX `test_short_code_uq` ON `test` (`short_code`);",
+    "ALTER TABLE `test_version` ADD `created_at` integer NOT NULL DEFAULT 0;",
+    "UPDATE `test_version` SET `created_at` = `published_at` WHERE `published_at` IS NOT NULL;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -176,5 +188,16 @@ export const pgMigrations: Migration[] = [
     "ALTER TABLE \"question_bank\" ADD COLUMN \"groups_json\" jsonb;",
     "ALTER TABLE \"question_bank\" ADD COLUMN \"updated_at\" bigint;",
     "CREATE UNIQUE INDEX \"question_bank_ref_uq\" ON \"question\" USING btree (\"bank_id\",\"ref_id\");",
+  ] },
+  { name: "0004_cheerful_hobgoblin.sql", statements: [
+    "-- Phase 5 Task 2 (#54): the sqlite.ts/0004_cold_blob.sql sibling. Postgres\n-- needs no table rebuild — unlike SQLite it allows a column added nullable,\n-- backfilled, then promoted to NOT NULL in separate statements, so\n-- `short_code` is corrected that way instead of drizzle-kit's own\n-- `ADD COLUMN short_code text NOT NULL` (which Postgres rejects on any row\n-- already present, same restriction SQLite has). `review_requested` and\n-- `test_version.created_at` only need a literal DEFAULT, which Postgres does\n-- accept straight through `ADD COLUMN`.\nALTER TABLE \"test\" ADD COLUMN \"description\" text;",
+    "ALTER TABLE \"test\" ADD COLUMN \"short_code\" text;",
+    "UPDATE \"test\" SET \"short_code\" = substr(\"id\", 5, 6) WHERE \"short_code\" IS NULL;",
+    "ALTER TABLE \"test\" ALTER COLUMN \"short_code\" SET NOT NULL;",
+    "ALTER TABLE \"test\" ADD COLUMN \"review_requested\" boolean NOT NULL DEFAULT false;",
+    "ALTER TABLE \"test\" ADD COLUMN \"updated_at\" bigint;",
+    "CREATE UNIQUE INDEX \"test_short_code_uq\" ON \"test\" USING btree (\"short_code\");",
+    "ALTER TABLE \"test_version\" ADD COLUMN \"created_at\" bigint NOT NULL DEFAULT 0;",
+    "UPDATE \"test_version\" SET \"created_at\" = \"published_at\" WHERE \"published_at\" IS NOT NULL;",
   ] },
 ];

@@ -11,3 +11,6 @@ export * from "./repo/identity.js";
 // question-document.ts. A pure document<->row mapping, not a workspace-scoped
 // repository function.
 export * from "./repo/question-document.js";
+// Deliberately outside repo/index.js too — see the header of shortlink.ts.
+// `/t/<code>` names no workspace, so there is nothing for `scoped()` to check.
+export * from "./repo/shortlink.js";

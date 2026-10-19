@@ -89,16 +89,25 @@ const BANK_SELECT =
   "FROM question_bank qb";
 
 /**
- * True when a published `test_version` row (correlated as `tv`) references
+ * True when a *published* `test_version` row (correlated as `tv`) references
  * the outer `question` row `q` — directly, by `q.id` (a `fixed`/`sets`
  * source), or indirectly, by `q.bank_id` (a `pool` source, which names only
  * a bank). Both arms are substring scans over the same `CAST(...AS TEXT)`
  * blob, so this is still the one correlated subquery `QUESTION_SELECT`'s
  * header describes, not a second round trip.
+ *
+ * Phase 5 Task 2, Review Focus 1: every Phase 4 fixture inserted only
+ * published rows, so `tv.published_at IS NOT NULL` was never exercised and
+ * its absence was invisible — Task 2 is the first to write a
+ * `published_at IS NULL` draft, and without this filter an Author who adds a
+ * question to a *draft* test could no longer delete it from its bank, the
+ * refusal would name a test nobody published, and the bank browser's
+ * "not used in any test" filter would hide it.
  */
 const TV_REFERENCES_Q_ROW =
+  "(tv.published_at IS NOT NULL AND " +
   "(CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%' " +
-  "OR CAST(tv.sections_json AS TEXT) LIKE '%' || q.bank_id || '%')";
+  "OR CAST(tv.sections_json AS TEXT) LIKE '%' || q.bank_id || '%'))";
 
 const QUESTION_SELECT =
   "SELECT q.id, q.bank_id, q.ref_id, q.group_ref, q.type, q.prompt_md, q.media_json, q.options_json, " +
@@ -160,8 +169,9 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
 /** The tests (by name) whose *published* version references `questionId` —
  * directly (a `fixed`/`sets` source naming it) or through `bankId` (a
  * `pool` source drawing from its bank, which names no question ID at all).
- * A draft test is freely editable (T-04), so only `test_version` is
- * consulted — never `test` itself. */
+ * A draft test is freely editable (T-04), so only a *published*
+ * `test_version` row ever blocks a delete — Review Focus 1, the same fix
+ * `TV_REFERENCES_Q_ROW`'s header above explains. */
 async function testsUsingQuestion(
   db: DbClient,
   workspaceId: string,
@@ -171,17 +181,18 @@ async function testsUsingQuestion(
   const rows = await db.query<{ name: string }>(
     "SELECT DISTINCT t.name AS name FROM test_version tv " +
       "JOIN test t ON t.id = tv.test_id AND t.workspace_id = tv.workspace_id " +
-      "WHERE tv.workspace_id = ? " +
+      "WHERE tv.workspace_id = ? AND tv.published_at IS NOT NULL " +
       "AND (CAST(tv.sections_json AS TEXT) LIKE ? OR CAST(tv.sections_json AS TEXT) LIKE ?)",
     [workspaceId, `%${questionId}%`, `%${bankId}%`],
   );
   return rows.map((row) => row.name);
 }
 
-/** The tests (by name) whose published version references `bankId` — either
- * a `pool` source naming the bank directly, or a `fixed`/`sets` source
- * naming one of its questions. One join plus one direct substring check,
- * never one `testsUsingQuestion` call per question. */
+/** The tests (by name) whose *published* version references `bankId` —
+ * either a `pool` source naming the bank directly, or a `fixed`/`sets`
+ * source naming one of its questions (Review Focus 1: a draft never
+ * blocks). One join plus one direct substring check, never one
+ * `testsUsingQuestion` call per question. */
 async function testsUsingBank(
   db: DbClient,
   workspaceId: string,
@@ -190,7 +201,7 @@ async function testsUsingBank(
   const rows = await db.query<{ name: string }>(
     "SELECT DISTINCT t.name AS name FROM test_version tv " +
       "JOIN test t ON t.id = tv.test_id AND t.workspace_id = tv.workspace_id " +
-      "WHERE tv.workspace_id = ? AND (" +
+      "WHERE tv.workspace_id = ? AND tv.published_at IS NOT NULL AND (" +
       "CAST(tv.sections_json AS TEXT) LIKE ? " +
       "OR EXISTS (SELECT 1 FROM question q WHERE q.workspace_id = tv.workspace_id AND q.bank_id = ? " +
       "AND CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%')" +

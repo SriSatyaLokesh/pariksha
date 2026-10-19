@@ -221,13 +221,25 @@ export const TABLE_MANIFEST: TableSpec[] = [
       ...tenantHead(),
       text("slug"),
       text("name"),
+      // Phase 5 Task 2 (#54): identity fields a `pariksha/test@1` document
+      // round-trips. `short_code` is six characters from `ids.ts`'s Crockford
+      // alphabet, unique **bare** — not composite with `workspace_id`, unlike
+      // every other tenant-table unique in this manifest — because `/t/<code>`
+      // (the public short link) names no workspace at all (Review Focus 5).
+      text("description", { null: true }),
+      text("short_code"),
       text("status"),
+      // UX-10's "In review" badge — the only half of review Phase 5 ships
+      // (ADR 0007).
+      bool("review_requested"),
       int("current_version", { null: true }),
       json("tags_json"),
       ts("created_at"),
+      // Null until the first edit, matching question_bank.updated_at.
+      ts("updated_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["status"]],
-    uniques: [["workspace_id", "slug"]],
+    uniques: [["workspace_id", "slug"], ["short_code"]],
   },
   {
     name: "test_version",
@@ -239,6 +251,9 @@ export const TABLE_MANIFEST: TableSpec[] = [
       json("settings_json"),
       json("sections_json"),
       ts("published_at", { null: true }),
+      // Phase 5 Task 2: a draft version has no published_at, so without this
+      // there is nothing to order versions by.
+      ts("created_at"),
     ],
     indexes: [["workspace_id"], ["test_id"]],
     uniques: [["test_id", "version"]],

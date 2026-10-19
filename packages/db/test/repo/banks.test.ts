@@ -89,10 +89,10 @@ describe("UX-05: deleting a question a published version references", () => {
     const bank = await repo.createBank(db, ws, { name: "Bank" });
     const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
 
-    const testId = await repo.createTest(db, ws, { slug: "midterm", name: "Midterm" });
+    const testId = (await repo.createTest(db, ws, { slug: "midterm", name: "Midterm" })).id;
     await repo.publishTestVersion(db, ws, {
       testId,
-      version: 1,
+      version: 2,
       settings: {},
       sections: [
         { id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } },
@@ -136,10 +136,10 @@ describe("pool-sourced usage (fixture-review finding 1)", () => {
     const beforePublish = await repo.listQuestions(db, ws, bank, { unused: true });
     expect(beforePublish.rows.map((r) => r.id)).toContain(questionId);
 
-    const testId = await repo.createTest(db, ws, { slug: "mock-exam", name: "Mock Exam" });
+    const testId = (await repo.createTest(db, ws, { slug: "mock-exam", name: "Mock Exam" })).id;
     await repo.publishTestVersion(db, ws, {
       testId,
-      version: 1,
+      version: 2,
       settings: {},
       sections: [{ id: "s1", title: "Pool section", source: { kind: "pool", bank, count: 1 } }],
       now: T,
@@ -169,10 +169,10 @@ describe("deleteBank (fixture-review finding 5)", () => {
     const bank = await repo.createBank(db, ws, { name: "Bank" });
     const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
 
-    const testId = await repo.createTest(db, ws, { slug: "final", name: "Final" });
+    const testId = (await repo.createTest(db, ws, { slug: "final", name: "Final" })).id;
     await repo.publishTestVersion(db, ws, {
       testId,
-      version: 1,
+      version: 2,
       settings: {},
       sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [questionId] } }],
       now: T,
