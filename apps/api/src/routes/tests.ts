@@ -98,6 +98,16 @@ function isSlugLockError(err: unknown): boolean {
   return err instanceof Error && /published/i.test(err.message);
 }
 
+/** True when `err` is the `(workspace_id, slug)` unique-constraint failure
+ * (AC-02) — SQLite names the columns (`test.workspace_id, test.slug`),
+ * Postgres names the index (`test_workspace_slug_uq`), both contain "slug".
+ * Anything else — a transient data-layer failure, a vanished workspace row,
+ * a short-code retry that collided twice — is not this, and must surface as
+ * a 500 rather than be reported to the operator as a duplicate address. */
+function isSlugCollision(err: unknown): boolean {
+  return err instanceof Error && /slug/i.test(err.message);
+}
+
 export function testRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
@@ -117,9 +127,12 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     let row: TestRow;
     try {
       row = await createTest(deps.db, workspaceId, { name: input.name, slug: input.slug, now });
-    } catch {
-      // `(workspace_id, slug)` is unique, and the only way this write fails
-      // in practice (AC-02).
+    } catch (err) {
+      // `(workspace_id, slug)` is unique, and the expected way this write
+      // fails (AC-02). Anything else — a transient data-layer failure, a
+      // short-code retry that collided twice — is not a duplicate address
+      // and must not be reported as one.
+      if (!isSlugCollision(err)) throw err;
       throw new ApiError(409, "slug_taken", "A test with that address already exists in this workspace.");
     }
 
@@ -172,6 +185,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
           "This test's address is locked because it has been published.",
         );
       }
+      if (!isSlugCollision(err)) throw err;
       throw new ApiError(409, "slug_taken", "A test with that address already exists in this workspace.");
     }
     if (!updated) throw new ApiError(404, "not_found", "No such resource.");

@@ -2,7 +2,7 @@
 // routes.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { addMembership, closeClient, createUser, publishTestVersion } from "@pariksha/db";
+import { addMembership, closeClient, createUser, publishTestVersion, type DbClient } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps, mountedRoutes } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -183,6 +183,47 @@ it("PATCH locks the slug once the test is published", async () => {
   );
   expect(res.status).toBe(409);
   expect((await res.json()).error.code).toBe("slug_locked");
+});
+
+// Task 2 fix round, Important 4: a data-layer failure that is not the
+// (workspace_id, slug) unique constraint must surface as a 500, not be
+// reported to the operator as a duplicate address.
+function dbThatFailsOn(db: DbClient, match: RegExp): DbClient {
+  return {
+    ...db,
+    run: async (sql, params) => {
+      if (match.test(sql)) throw new Error("ECONNRESET: connection reset");
+      return db.run(sql, params);
+    },
+    batch: async (statements) => {
+      if (statements.some((s) => match.test(s.sql))) throw new Error("ECONNRESET: connection reset");
+      return db.batch(statements);
+    },
+  };
+}
+
+it("a data-layer failure on create is a 500, not slug_taken", async () => {
+  const failing = createApp({ ...deps, db: dbThatFailsOn(deps.db, /INSERT INTO test/i) });
+  const res = await failing.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Midterm", slug: "midterm" }, authorCookie),
+  );
+  expect(res.status).toBe(500);
+});
+
+it("a data-layer failure on update is a 500, not slug_taken", async () => {
+  const created = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Midterm", slug: "midterm" }, authorCookie),
+  );
+  const testId = (await created.json()).id;
+
+  const failing = createApp({ ...deps, db: dbThatFailsOn(deps.db, /UPDATE test SET/i) });
+  const res = await failing.request(
+    `/api/v1/workspaces/${workspaceId}/tests/${testId}`,
+    patch({ slug: "renamed" }, authorCookie),
+  );
+  expect(res.status).toBe(500);
 });
 
 it("POST a taken slug is 409 slug_taken", async () => {
