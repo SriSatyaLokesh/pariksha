@@ -233,6 +233,19 @@ it("T-05: a slug already used in the workspace is 409 with the field named", asy
   expect(body.error.details.field).toBe("slug");
 });
 
+// task 7/8/10 review, M7 put the brand-colour rule in `validateTest`
+// specifically so import is not a third ungated path to a colour a
+// candidate cannot read. This is that path, exercised.
+it("an unreadable brand colour is refused at import, not only on the two PATCH routes", async () => {
+  const before = await testCount();
+  const res = await importTest(copyOfExample((doc) => (doc.branding = { primary_colour: "#ffff00" })));
+
+  expect(res.status).toBe(422);
+  expect(await testCount()).toBe(before);
+  const fields = (await res.json()).error.details.issues.map((i: { field: string }) => i.field);
+  expect(fields).toContain("branding.primary_colour");
+});
+
 it("a question resolving into a different bank imports and is reported in rebound", async () => {
   // LOG-001 lives in "questions.json"; a file that declares a different
   // bank name still imports, and says where the question actually came
