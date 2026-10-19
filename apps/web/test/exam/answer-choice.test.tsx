@@ -9,7 +9,7 @@ import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
 import type { CandidateQuestion } from "../../src/lib/paper";
 import { ExamApp } from "../../src/routes/exam";
-import { client, examPaper, startFromRoot } from "./answer-fixtures";
+import { client, startFromRoot } from "./answer-fixtures";
 
 // Task 7 (#71, P6.7), the choice family: single, multiple, select_k,
 // true_false and assertion_reason. `CandidateQuestion` carries no key of
