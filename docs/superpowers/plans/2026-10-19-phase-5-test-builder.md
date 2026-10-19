@@ -1460,6 +1460,17 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 
 ## Task 11: Lifecycle and numbered published versions (#62, P5.9)
 
+> **Correction, found while building Task 4.** `publishTestVersion` currently INSERTs a
+> new `test_version` row, and `(test_id, version)` is unique — but `createTest` already
+> seeded the draft as version 1. So publishing a brand-new test raises
+> `UNIQUE constraint failed: test_version.test_id, test_version.version`, and any fixture
+> that works around it by publishing as version 2 is hiding the bug rather than meeting it.
+> **The real transition must stamp `published_at` on the existing draft row and then open
+> N+1 as the new draft — not insert a row alongside it.** Otherwise the first published
+> version of every test in the product is numbered 2. Task 4's fixture publishes as
+> version 2 with a comment pointing here; fix the transition in this task and that fixture
+> becomes version 1.
+
 **Files:**
 - Create: `apps/api/src/publish/checklist.ts`, `apps/web/src/components/testbuilder/VersionBanner.tsx`
 - Modify: `packages/db/src/repo/tests.ts`, `packages/db/src/repo/test-document.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/tests.tsx`, `apps/web/src/routes/test.tsx`
