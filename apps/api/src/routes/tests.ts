@@ -165,21 +165,55 @@ function collectReferencedIds(sections: readonly StoredSection[]): {
  * re-queried per section. `setPoints` is a `sets` section's own points
  * balance, summed from the same one list.
  */
+/**
+ * UX-12's collapsed row wants a points figure for every section, not only
+ * `sets` ones — summed here, from the same one `summaries` list `draw` and
+ * `setPoints` already read, at zero extra query cost. `fixed` is exact (it
+ * names the questions outright); `sets` takes one set's total, since a
+ * balanced `sets` section is worth the same either way the sets strip
+ * already shows; `pool` is the one estimate — the actual draw is random per
+ * attempt (`layoutForAttempt`, `@pariksha/core`), so this sums whichever
+ * `count` matching questions sort first by id, a stand-in for "about how
+ * much this section is worth" rather than a promise of exactly these
+ * questions.
+ */
+function sectionPoints(
+  source: QuestionSource,
+  pointsById: ReadonlyMap<string, number>,
+  pool: readonly QuestionSummary[],
+): number {
+  if (source.kind === "fixed") {
+    return source.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+  }
+  if (source.kind === "sets") {
+    const first = source.sets[0];
+    return first === undefined ? 0 : first.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+  }
+  const matching = pool.filter((q) => matchesFilter(q as unknown as Question, source.filter));
+  return matching
+    .map((q) => q.id)
+    .sort()
+    .slice(0, source.count)
+    .reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+}
+
 function draftDerived(
   sections: readonly StoredSection[],
   summaries: readonly QuestionSummary[],
 ): {
   draw: Record<string, { matching: number; wanted: number }>;
   setPoints: Record<string, { set: string; points: number }[]>;
+  points: Record<string, number>;
 } {
   const pointsById = new Map(summaries.map((q) => [q.id, q.points]));
   const draw: Record<string, { matching: number; wanted: number }> = {};
   const setPoints: Record<string, { set: string; points: number }[]> = {};
+  const points: Record<string, number> = {};
 
   for (const section of sections) {
     const source: QuestionSource = section.source;
+    const pool = source.kind === "pool" && source.bank !== undefined ? summaries.filter((q) => q.bankId === source.bank) : summaries;
     if (source.kind === "pool") {
-      const pool = source.bank === undefined ? summaries : summaries.filter((q) => q.bankId === source.bank);
       const matching = pool.filter((q) => matchesFilter(q as unknown as Question, source.filter)).length;
       draw[section.id] = { matching, wanted: source.count };
     } else if (source.kind === "sets") {
@@ -188,8 +222,9 @@ function draftDerived(
         points: set.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0),
       }));
     }
+    points[section.id] = sectionPoints(source, pointsById, pool);
   }
-  return { draw, setPoints };
+  return { draw, setPoints, points };
 }
 
 function toDraftWire(version: TestVersionRow, summaries: readonly QuestionSummary[]) {

@@ -129,10 +129,10 @@ export interface TestDocumentBody {
   settings: TestSettings;
   sections: StoredSection[];
 }
-/** `GET`/`PATCH .../draft`'s wire shape. `draw`/`setPoints` are UX-15/
- * UX-16's live numbers — present on every `GET` and omitted by `PATCH`
- * (nothing reads them off a save response; a screen that wants fresh
- * numbers right after one re-fetches `draft()`). */
+/** `GET`/`PATCH .../draft`'s wire shape. `draw`/`setPoints`/`points` are
+ * UX-15/UX-16/UX-12's live numbers — present on every `GET` and omitted by
+ * `PATCH` (nothing reads them off a save response; a screen that wants
+ * fresh numbers right after one re-fetches `draft()`). */
 export interface TestVersionRow {
   id: string;
   testId: string;
@@ -142,6 +142,10 @@ export interface TestVersionRow {
   createdAt: number;
   draw?: Record<string, { matching: number; wanted: number }>;
   setPoints?: Record<string, { set: string; points: number }[]>;
+  /** UX-12's collapsed-row points figure, one per section, every source
+   * kind — exact for `fixed`, a representative set for `sets`, an estimate
+   * of a typical draw for `pool` (the real draw is random per attempt). */
+  points?: Record<string, number>;
 }
 /** `PATCH .../draft`'s body. Each named top-level block replaces whole —
  * `settings` one level deep, `sections` as a full array — never merges

@@ -317,6 +317,26 @@ it("UX-16: the draft reports each set's total points", async () => {
   });
 });
 
+it("UX-12: the draft reports each section's points, for all three source kinds", async () => {
+  const bankId = await createBank(workspaceId, authorCookie);
+  const f1 = await createQuestion(workspaceId, bankId, authorCookie, { id: "F1", points: 3 });
+  const f2 = await createQuestion(workspaceId, bankId, authorCookie, { id: "F2", points: 5 });
+  await createQuestion(workspaceId, bankId, authorCookie, { id: "P1", points: 2, tags: ["x"] });
+  await createQuestion(workspaceId, bankId, authorCookie, { id: "P2", points: 2, tags: ["x"] });
+
+  await patchDraft(workspaceId, testId, authorCookie, {
+    sections: [
+      { id: "fixed1", title: "Fixed", source: { kind: "fixed", questions: [f1, f2] } },
+      { id: "pool1", title: "Pool", source: { kind: "pool", bank: bankId, count: 2, filter: { tags: ["x"] } } },
+    ],
+  });
+
+  const { body } = await draft(workspaceId, testId, authorCookie);
+  // fixed: exact sum (3 + 5). pool: both matching questions are worth 2
+  // each, so any 2-of-2 draw is worth 4 regardless of which are picked.
+  expect(body.points).toMatchObject({ fixed1: 8, pool1: 4 });
+});
+
 it("the draw costs one query however many pool sections there are", async () => {
   const bankId = await createBank(workspaceId, authorCookie);
   await createQuestion(workspaceId, bankId, authorCookie, { id: "P1", tags: ["x"] });
