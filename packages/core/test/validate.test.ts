@@ -1109,6 +1109,10 @@ describe("validateTest", () => {
     "192.168.1.0/32",
     "10.0.0.1/24",
     "2001:db8::/32",
+    // Uppercase hex is the same address. The RFC's own documentation
+    // prefix is written this way, and so is most ISP allocation paperwork.
+    "2001:DB8::/32",
+    "FE80::/10",
     "::/128",
     "fd00:0:0:0:0:0:0:1/128",
   ])("accepts the CIDR range %s", (range) => {

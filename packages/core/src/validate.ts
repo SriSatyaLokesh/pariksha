@@ -535,7 +535,11 @@ export function invalidCidr(raw: string): string | null {
   const bits = Number(prefix);
 
   if (address.includes(":")) {
-    if (!isIpv6(address)) return `"${raw}" is not an IPv6 address — ${example}`;
+    // Lower-cased first, the way `invalidDomainGlob` lower-cases a domain
+    // and `HEX_COLOUR` accepts both cases: IPv6 hex is case-insensitive,
+    // so `2001:DB8::/32` — the RFC's own documentation prefix — must not
+    // be told it is not an IPv6 address.
+    if (!isIpv6(address.toLowerCase())) return `"${raw}" is not an IPv6 address — ${example}`;
     if (bits > 128) return `"${raw}" has a prefix length above 128 — an IPv6 range cannot, ${example}`;
   } else {
     const octets = address.split(".");
