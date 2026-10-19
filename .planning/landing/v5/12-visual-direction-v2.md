@@ -49,6 +49,24 @@ That rules out green, amber, gold, red and oxblood. Removing orange on top of th
 teal, violet and neutral. Violet-to-blue gradients are the single most over-used look in current AI
 and SaaS design, so that goes too.
 
+### 2.2a Revised, 19 October — two colours, not none
+
+The pure-monochrome version was built and reviewed, and read as too austere in a browser: the
+argument was legible but the page had no warmth and nothing to pull the eye. Revised to carry
+**two** chromatic colours, both doing a job:
+
+| Token | Value | Where it appears |
+| --- | --- | --- |
+| `accent` / `accent-deep` / `accent-on-ink` | `#0A8E59` / `#066B43` / `#28E291` | Primary button, eyebrow rules, links, sheet numerals, the cost figure, the Pariksha column head, the active status chip, focus rings |
+| `mark` | `#FFE88C` background, `#2A2306` text | Highlighter wash behind exactly three phrases on the page. **Background only, never a text colour**, so it cannot be confused with the amber review flag |
+
+`clean` and `accent` are now the same green, matching the decision taken for Signal in
+`13-signal-dark-direction.md` §2: for an exam product, the brand colour meaning *passed, correct,
+in order* is coherent rather than confusing. Amber and red still appear once, in the results sheet.
+
+The sections below describe the original monochrome reasoning and are kept because the restraint
+still governs everything the two colours do not touch.
+
 ### 2.2 The decision: no brand colour at all
 
 **The page is monochrome. The only chromatic colours anywhere are the three verdict flags, and they
