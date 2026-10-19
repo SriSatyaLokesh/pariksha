@@ -162,6 +162,39 @@ describe("TimingPanel", () => {
     expect(optionValues(/which attempt counts/i)).toEqual(["highest", "latest", "average"]);
   });
 
+  // task 7/8/10 review, M3. `Number("") === 0` and `Number.isFinite(0)`
+  // is true, so clearing a box used to commit `0` against the `minimum`
+  // `draftSchema()` deliberately keeps, and the next debounced save
+  // answered 422 with a banner naming no field. Third instance of the
+  // class this phase. Every other test in this file changes a box to a
+  // non-empty value, which is why none of them saw it.
+  it.each([
+    ["overall duration", /overall duration/i, 60],
+    ["attempts allowed", /attempts allowed/i, 1],
+    ["cooldown", /cooldown between attempts/i, 0],
+    ["late sync grace", /late sync grace \(seconds\)/i, 30],
+  ])("clearing the %s box writes nothing, and the stored value returns on blur", (_name, label, restored) => {
+    const onChange = vi.fn();
+    render(<Harness initial={{ duration_minutes: 60 }} onChange={onChange} />);
+
+    fireEvent.change(screen.getByLabelText(label), { target: { value: "" } });
+    expect(screen.getByLabelText(label)).toHaveValue(null);
+    expect(onChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(screen.getByLabelText(label));
+    expect(screen.getByLabelText(label)).toHaveValue(restored);
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it("a cleared box still takes the next number typed into it", () => {
+    const onChange = vi.fn();
+    render(<Harness initial={{ duration_minutes: 60 }} onChange={onChange} />);
+
+    fireEvent.change(duration(), { target: { value: "" } });
+    fireEvent.change(duration(), { target: { value: "90" } });
+    expect(onChange).toHaveBeenLastCalledWith({ duration_minutes: 90 });
+  });
+
   it("T-15: the warning marks and the late-sync grace carry their defaults and state what they do", () => {
     render(<Harness initial={{ duration_minutes: 60 }} />);
     expect(screen.getByLabelText(/warn at/i)).toHaveValue("10, 2");

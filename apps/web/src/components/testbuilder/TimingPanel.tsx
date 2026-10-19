@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import {
   NAVIGATION_CONSEQUENCE,
   timingIssues,
@@ -169,6 +169,78 @@ function withKey(
   return next as unknown as TestTiming;
 }
 
+/**
+ * A number box whose empty state means "not typed yet", never `0`.
+ *
+ * `Number("") === 0` and `Number.isFinite(0)` is true, so backspacing
+ * "60" out of "Overall duration" used to commit `duration_minutes: 0`
+ * against `$defs/timing`'s `minimum: 1` - a floor `draftSchema()`
+ * deliberately keeps - and the next debounced save answered
+ * `A settings block is not shaped correctly.`, a banner naming no field.
+ * Same for `attempts_allowed`, and the same shape as the two save-gate
+ * bugs before it ("Add section", the "Link and code" radio): a control
+ * bouncing off its own keystroke.
+ *
+ * So it is one control rather than four `onChange` handlers that each
+ * have to remember. The blank is held here and never sent; the stored
+ * value returns when the organiser leaves the box.
+ *
+ * Not shared any wider: `apps/web/src/components/authoring` already
+ * answers the same problem twice (`Written`'s early return, the
+ * draft-plus-blur in `ReorderableList`) against state shapes this one
+ * does not have, and a helper spanning three of them would be bigger
+ * than the three.
+ */
+function NumberField({
+  id,
+  label,
+  min,
+  value,
+  onCommit,
+  onBlur,
+  children,
+}: {
+  id: string;
+  label: string;
+  min: number;
+  value: number;
+  onCommit: (value: number) => void;
+  onBlur: () => void;
+  children?: ReactNode;
+}) {
+  // Empty is the only state the committed value cannot express - every
+  // other keystroke is written through and comes back as `value` - so
+  // that one bit is all this holds. A `string | null` draft would also
+  // have to be cleared by the published-test dialog's Cancel, which puts
+  // `value` back but cannot reach in here.
+  const [blank, setBlank] = useState(false);
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>
+        {label}
+      </label>
+      <input
+        className="text-input timing-panel__figure"
+        id={id}
+        type="number"
+        min={min}
+        value={blank ? "" : value}
+        onChange={(event) => {
+          const next = event.target.value;
+          setBlank(next === "");
+          const parsed = Number(next);
+          if (next !== "" && Number.isFinite(parsed)) onCommit(parsed);
+        }}
+        onBlur={() => {
+          setBlank(false);
+          onBlur();
+        }}
+      />
+      {children}
+    </div>
+  );
+}
+
 export function TimingPanel({
   timing,
   sections,
@@ -294,22 +366,14 @@ export function TimingPanel({
         )}
       </div>
 
-      <div className="field">
-        <label className="field-label" htmlFor={`${ids}-duration`}>
-          Overall duration (minutes)
-        </label>
-        <input
-          className="text-input timing-panel__figure"
-          id={`${ids}-duration`}
-          type="number"
-          min={1}
-          value={form.duration_minutes}
-          onChange={(event) => {
-            const minutes = Number(event.target.value);
-            commit({ ...form, duration_minutes: Number.isFinite(minutes) ? minutes : form.duration_minutes });
-          }}
-          onBlur={() => setTouched(true)}
-        />
+      <NumberField
+        id={`${ids}-duration`}
+        label="Overall duration (minutes)"
+        min={1}
+        value={form.duration_minutes}
+        onCommit={(minutes) => commit({ ...form, duration_minutes: minutes })}
+        onBlur={() => setTouched(true)}
+      >
         <p className="timing-panel__fact">
           <span className="timing-panel__figure">
             {`sections total ${sectionTotal} min of ${form.duration_minutes} min`}
@@ -321,7 +385,7 @@ export function TimingPanel({
             {issueFor("timing.duration_minutes")}
           </p>
         )}
-      </div>
+      </NumberField>
 
       {stamp("opens_at", "Opens at")}
       {stamp("closes_at", "Closes at")}
@@ -353,34 +417,25 @@ export function TimingPanel({
         ))}
       </fieldset>
 
-      <div className="field">
-        <label className="field-label" htmlFor={`${ids}-attempts`}>
-          Attempts allowed
-        </label>
-        <input
-          className="text-input timing-panel__figure"
-          id={`${ids}-attempts`}
-          type="number"
-          min={1}
-          value={form.attempts_allowed ?? DEFAULTS.attempts_allowed}
-          onChange={(event) => commit(withKey(form, "attempts_allowed", Number(event.target.value)))}
-        />
-      </div>
+      <NumberField
+        id={`${ids}-attempts`}
+        label="Attempts allowed"
+        min={1}
+        value={form.attempts_allowed ?? DEFAULTS.attempts_allowed}
+        onCommit={(attempts) => commit(withKey(form, "attempts_allowed", attempts))}
+        onBlur={() => setTouched(true)}
+      />
 
-      <div className="field">
-        <label className="field-label" htmlFor={`${ids}-cooldown`}>
-          Cooldown between attempts (minutes)
-        </label>
-        <input
-          className="text-input timing-panel__figure"
-          id={`${ids}-cooldown`}
-          type="number"
-          min={0}
-          value={form.cooldown_minutes ?? DEFAULTS.cooldown_minutes}
-          onChange={(event) => commit(withKey(form, "cooldown_minutes", Number(event.target.value)))}
-        />
+      <NumberField
+        id={`${ids}-cooldown`}
+        label="Cooldown between attempts (minutes)"
+        min={0}
+        value={form.cooldown_minutes ?? DEFAULTS.cooldown_minutes}
+        onCommit={(minutes) => commit(withKey(form, "cooldown_minutes", minutes))}
+        onBlur={() => setTouched(true)}
+      >
         <p className="timing-panel__fact">How long a candidate waits before starting the next attempt.</p>
-      </div>
+      </NumberField>
 
       <div className="field">
         <label className="field-label" htmlFor={`${ids}-counted`}>
@@ -428,23 +483,19 @@ export function TimingPanel({
         )}
       </div>
 
-      <div className="field">
-        <label className="field-label" htmlFor={`${ids}-grace`}>
-          Late sync grace (seconds)
-        </label>
-        <input
-          className="text-input timing-panel__figure"
-          id={`${ids}-grace`}
-          type="number"
-          min={0}
-          value={form.late_sync_grace_seconds ?? DEFAULTS.late_sync_grace_seconds}
-          onChange={(event) => commit(withKey(form, "late_sync_grace_seconds", Number(event.target.value)))}
-        />
+      <NumberField
+        id={`${ids}-grace`}
+        label="Late sync grace (seconds)"
+        min={0}
+        value={form.late_sync_grace_seconds ?? DEFAULTS.late_sync_grace_seconds}
+        onCommit={(seconds) => commit(withKey(form, "late_sync_grace_seconds", seconds))}
+        onBlur={() => setTouched(true)}
+      >
         <p className="timing-panel__fact">
           Answers arriving later than this after the deadline are rejected. The deadline is the server&rsquo;s; changing
           the candidate&rsquo;s clock does nothing.
         </p>
-      </div>
+      </NumberField>
 
       {pending !== null && (
         <div
