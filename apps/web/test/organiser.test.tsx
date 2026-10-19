@@ -829,4 +829,61 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     // not have reached the API at all.
     expect(checkUrl).toHaveBeenCalledWith("wsp_1", "tst_1", "https://drive.example/cv.pdf");
   });
+  // Task 7 (#59, P5.6), the same lesson a seventh time: timing.test.tsx
+  // renders `TimingPanel` directly and so cannot see whether anything in
+  // the running app mounts it. This walks Dashboard -> Tests -> the
+  // builder, changes the overall duration the only way an Author can, and
+  // checks the save went out through the one draft route Tasks 4-10 share.
+  it("reaches the timing panel from the app's own entry point and saves through the draft route", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: { timing: { timezone: "Asia/Kolkata", duration_minutes: 60 } }, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Timing and attempts" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/overall duration/i), { target: { value: "90" } });
+
+    // The shell debounces at 250 ms (apps/web/src/routes/test.tsx).
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual([
+      "wsp_1",
+      "tst_1",
+      { settings: { timing: { timezone: "Asia/Kolkata", duration_minutes: 90 } } },
+    ]);
+  });
 });

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { TestTiming } from "@pariksha/core";
 import { ApiError, type ApiClient, type DraftPatch, type StoredSection, type TestVersionRow } from "../lib/api";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
+import { TimingPanel } from "../components/testbuilder/TimingPanel";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -18,6 +20,12 @@ import { FormBuilder } from "../components/testbuilder/FormBuilder";
 function sectionFromUrl(): string | null {
   return new URLSearchParams(window.location.search).get("section");
 }
+
+/** What `createTest` seeds a draft with, and what the panel edits when the
+ * draft has no `timing` yet — `duration_minutes` is the one member
+ * schemas/test-1.json's `$defs/timing` requires, and every other field has
+ * a documented default it is omitted until the organiser overrides. */
+const DEFAULT_TIMING: TestTiming = { duration_minutes: 60 };
 
 export function TestBuilder({
   workspaceId,
@@ -35,6 +43,11 @@ export function TestBuilder({
   onBack: () => void;
 }) {
   const [name, setName] = useState<string | null>(null);
+  // UX-18 (Task 7): a test with a published version behind it is the case
+  // where a timing change has to say what happens to attempts already
+  // running, so the panel is told. `currentVersion` is what names one — the
+  // draft row itself is always unpublished.
+  const [published, setPublished] = useState(false);
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
@@ -54,6 +67,7 @@ export function TestBuilder({
     try {
       const [test, version] = await Promise.all([client.test(workspaceId, testId), client.draft(workspaceId, testId)]);
       setName(test.name);
+      setPublished(test.currentVersion !== null);
       setDraft(version);
       setError(undefined);
     } catch (cause) {
@@ -183,6 +197,15 @@ export function TestBuilder({
             onOpenSection={openSection}
             client={client}
             workspaceId={workspaceId}
+          />
+        )}
+
+        {draft !== null && (
+          <TimingPanel
+            timing={draft.body.settings.timing ?? DEFAULT_TIMING}
+            sections={draft.body.sections}
+            published={published}
+            onChange={(timing) => saveSettings({ timing })}
           />
         )}
 

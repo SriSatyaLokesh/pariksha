@@ -352,3 +352,38 @@
   align-items: flex-start;
   gap: var(--space-xs);
 }
+
+/* Task 7 (#59, P5.6): timing, navigation and attempt policy.
+   `timing-panel__figure` is every number and timestamp an organiser
+   compares against another one — durations against the section sum, an
+   open time against a close time — so the digits have to line up. */
+.timing-panel,
+.timing-panel__group,
+.timing-panel__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.timing-panel__group {
+  border: 1px solid var(--color-hairline);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+.timing-panel__figure {
+  font-variant-numeric: tabular-nums;
+}
+
+.timing-panel__fact {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.timing-panel__risk {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}
