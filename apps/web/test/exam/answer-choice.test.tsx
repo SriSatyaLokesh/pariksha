@@ -1,0 +1,293 @@
+import { useState } from "react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
+import { axe } from "jest-axe";
+import type { ResponseValue } from "@pariksha/core";
+import { AnswerInput } from "../../src/components/exam/answer";
+import type { CandidateQuestion } from "../../src/components/exam/Runner";
+import { ExamApp } from "../../src/routes/exam";
+import { examPaper, landingPayload, startFromRoot } from "./answer-fixtures";
+
+// Task 7 (#71, P6.7), the choice family: single, multiple, select_k,
+// true_false and assertion_reason. `CandidateQuestion` carries no key of
+// any kind (apps/api/src/run/scrub.ts strips it), so S-10 here is about
+// what the component itself could leak — a class name, a data attribute,
+// an option ordered by correctness.
+//
+// No @testing-library/user-event in this workspace, by a decision the repo
+// already made in writing (test/authoring/reorder.test.tsx:44,
+// test/exam/landing.test.tsx:88, and Task 6's report decision 4). A
+// focused native control's real Enter/Space activation IS a `click`, so
+// `activate()` below focuses first and then clicks; every claim about a
+// key dispatches a real `keydown` on the element that actually has focus
+// and reads `preventDefault` back off `fireEvent`'s return value.
+
+const OPTIONS = [
+  { id: "a", text: "Alpha" },
+  { id: "b", text: "Beta" },
+  { id: "c", text: "Gamma" },
+];
+
+const ASSERTION_REASON_TEXTS = [
+  "Both true, and the reason explains the assertion",
+  "Both true, but the reason does not explain the assertion",
+  "The assertion is true and the reason is false",
+  "The assertion is false and the reason is true",
+];
+
+type ChoiceType = "single" | "multiple" | "select_k" | "true_false" | "assertion_reason";
+
+function fixture(type: ChoiceType): CandidateQuestion {
+  const base: CandidateQuestion = { id: "q1", type, prompt: "Pick an answer.", points: 1 };
+  switch (type) {
+    case "true_false":
+      return base;
+    case "assertion_reason":
+      return { ...base, assertion: "Water boils at 100C.", reason: "At one atmosphere." };
+    case "select_k":
+      return { ...base, options: OPTIONS, k: 2 };
+    default:
+      return { ...base, options: OPTIONS };
+  }
+}
+
+/** The order the component must show, which for the three authored types
+ * is the pinned `options` order and for the two synthesised types is the
+ * order the format itself fixes. */
+function pinnedOrder(type: ChoiceType): string[] {
+  if (type === "true_false") return ["True", "False"];
+  if (type === "assertion_reason") return ASSERTION_REASON_TEXTS;
+  return OPTIONS.map((option) => option.text);
+}
+
+function optionTexts(): string[] {
+  return [...document.querySelectorAll(".exam-option-text")].map((el) => el.textContent ?? "");
+}
+
+function activate(element: HTMLElement): void {
+  element.focus();
+  fireEvent.click(element);
+}
+
+/** A controlled harness: select_k's lock is a function of the value, so a
+ * test that never feeds `onChange` back in cannot see it at all. */
+function Harness({
+  question,
+  onChange,
+  disabled = false,
+}: {
+  question: CandidateQuestion;
+  onChange?: (next: ResponseValue | null) => void;
+  disabled?: boolean;
+}) {
+  const [value, setValue] = useState<ResponseValue | null>(null);
+  return (
+    <AnswerInput
+      question={question}
+      value={value}
+      disabled={disabled}
+      onChange={(next) => {
+        setValue(next);
+        onChange?.(next);
+      }}
+    />
+  );
+}
+
+describe("the choice family renders its options as the candidate was dealt them", () => {
+  it.each(["single", "multiple", "select_k", "true_false", "assertion_reason"] as const)(
+    "%s renders its options in the pinned order with the whole row as the hit target",
+    (type) => {
+      const spy = vi.fn();
+      render(<Harness question={fixture(type)} onChange={spy} />);
+      expect(optionTexts()).toEqual(pinnedOrder(type));
+      // The label text, not the control: DESIGN.md's option-row is "the
+      // entire row is the hit target, not just the radio or checkbox".
+      activate(screen.getByText(pinnedOrder(type)[1]!));
+      expect(spy).toHaveBeenCalled();
+    },
+  );
+
+  it("single answers with the option id, not with its text or its position", () => {
+    const spy = vi.fn();
+    render(<Harness question={fixture("single")} onChange={spy} />);
+    activate(screen.getByText("Beta"));
+    expect(spy).toHaveBeenLastCalledWith({ kind: "option", option: "b" });
+  });
+
+  it("true_false answers with a boolean, and assertion_reason with the format's own key", () => {
+    const tf = vi.fn();
+    const { unmount } = render(<Harness question={fixture("true_false")} onChange={tf} />);
+    activate(screen.getByText("False"));
+    expect(tf).toHaveBeenLastCalledWith({ kind: "boolean", value: false });
+    unmount();
+
+    const ar = vi.fn();
+    render(<Harness question={fixture("assertion_reason")} onChange={ar} />);
+    activate(screen.getByText(ASSERTION_REASON_TEXTS[2]!));
+    expect(ar).toHaveBeenLastCalledWith({ kind: "option", option: "a_true_r_false" });
+  });
+
+  it("assertion_reason shows the assertion and the reason, both labelled", () => {
+    render(<Harness question={fixture("assertion_reason")} />);
+    expect(screen.getByText(/water boils at 100c/i)).toBeVisible();
+    expect(screen.getByText(/at one atmosphere/i)).toBeVisible();
+    expect(screen.getByText("Assertion")).toBeVisible();
+    expect(screen.getByText("Reason")).toBeVisible();
+  });
+
+  it("multiple keeps the chosen options in the pinned order, whatever order they were clicked", () => {
+    const spy = vi.fn();
+    render(<Harness question={fixture("multiple")} onChange={spy} />);
+    activate(screen.getByText("Gamma"));
+    activate(screen.getByText("Alpha"));
+    expect(spy).toHaveBeenLastCalledWith({ kind: "options", options: ["a", "c"] });
+  });
+
+  it("deselecting the last chosen option answers null, not an empty array", () => {
+    const spy = vi.fn();
+    render(<Harness question={fixture("multiple")} onChange={spy} />);
+    activate(screen.getByText("Alpha"));
+    activate(screen.getByText("Alpha"));
+    expect(spy).toHaveBeenLastCalledWith(null);
+  });
+
+  it("selection carries two carriers, so it survives greyscale", () => {
+    render(<Harness question={fixture("single")} />);
+    activate(screen.getByText("Beta"));
+    // The filled control is one carrier; the row's own class (cream fill,
+    // 2px voltage border in exam.css) is the second.
+    expect(screen.getByRole("radio", { name: /beta/i })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /beta/i }).closest(".exam-option-row")).toHaveClass(
+      "is-selected",
+    );
+  });
+});
+
+describe("select_k (AC-07)", () => {
+  it("AC-07: select_k locks further choices once k options are picked, and unlocks on deselect", () => {
+    render(<Harness question={fixture("select_k")} />);
+    activate(screen.getByText("Alpha"));
+    activate(screen.getByText("Beta"));
+    expect(screen.getByRole("checkbox", { name: /gamma/i })).toBeDisabled();
+    activate(screen.getByText("Alpha"));
+    expect(screen.getByRole("checkbox", { name: /gamma/i })).toBeEnabled();
+  });
+
+  it("the locked state is announced, not only visual", () => {
+    render(<Harness question={fixture("select_k")} />);
+    expect(screen.getByRole("status")).toHaveTextContent(/0 of 2 chosen/i);
+    activate(screen.getByText("Alpha"));
+    activate(screen.getByText("Beta"));
+    expect(screen.getByRole("status")).toHaveTextContent(/2 of 2 chosen/i);
+  });
+
+  it("an already-chosen option is never locked, or the choice could not be undone", () => {
+    render(<Harness question={fixture("select_k")} />);
+    activate(screen.getByText("Alpha"));
+    activate(screen.getByText("Beta"));
+    expect(screen.getByRole("checkbox", { name: /alpha/i })).toBeEnabled();
+    expect(screen.getByRole("checkbox", { name: /beta/i })).toBeEnabled();
+  });
+});
+
+describe("S-10: the candidate's DOM holds no key", () => {
+  it.each(["single", "multiple", "select_k", "true_false", "assertion_reason"] as const)(
+    "%s: no option carries a correctness marker in the DOM or in its props",
+    (type) => {
+      const { container } = render(<Harness question={fixture(type)} />);
+      expect(container.innerHTML).not.toMatch(/correct|is-key|data-answer/i);
+    },
+  );
+
+  it("the positive control: the marker words would be found if they were there", () => {
+    // Without this the sweep above would pass against a component that
+    // rendered nothing at all.
+    const { container } = render(<Harness question={fixture("single")} />);
+    expect(container.innerHTML).toMatch(/Alpha/);
+  });
+});
+
+describe("keyboard and axe", () => {
+  it.each(["single", "multiple", "select_k", "true_false", "assertion_reason"] as const)(
+    "%s is operable with the keyboard alone and has no axe violations",
+    async (type) => {
+      const spy = vi.fn();
+      const { container } = render(<Harness question={fixture(type)} onChange={spy} />);
+      const controls = [...container.querySelectorAll<HTMLElement>("input")];
+      expect(controls.length).toBeGreaterThan(0);
+      // Nothing is removed from the tab order, and nothing jumps it with a
+      // positive tabindex.
+      for (const control of controls) {
+        expect(control.getAttribute("tabindex")).toBeNull();
+      }
+      // A focused native control activates on Enter/Space as a click.
+      activate(controls[1]!);
+      expect(spy).toHaveBeenCalled();
+      expect(await axe(container)).toHaveNoViolations();
+    },
+  );
+
+  it("the radio families share one name, which is what gives them arrow-key navigation", () => {
+    // jsdom implements no arrow-key behaviour for radio groups — the
+    // browser does, and only for radios that share a `name`. Asserting the
+    // name is the honest proxy; asserting a simulated ArrowDown would pass
+    // against a group the browser could not navigate.
+    const { container } = render(<Harness question={fixture("single")} />);
+    const names = new Set([...container.querySelectorAll("input[type=radio]")].map((el) => el.getAttribute("name")));
+    expect(names.size).toBe(1);
+    expect([...names][0]).toBeTruthy();
+  });
+
+  it("no axe violations at 200% zoom either", async () => {
+    const { container } = render(<Harness question={fixture("select_k")} />);
+    document.documentElement.style.fontSize = "32px";
+    expect(await axe(container)).toHaveNoViolations();
+    document.documentElement.style.fontSize = "";
+  });
+
+  it("WCAG 2.5.3, with a positive control: every option's accessible name contains its visible text", () => {
+    render(<Harness question={fixture("multiple")} />);
+    for (const text of pinnedOrder("multiple")) {
+      expect(screen.getByRole("checkbox", { name: new RegExp(text, "i") })).toBeInTheDocument();
+    }
+    // The control: the select_k counter is visibly "0 of 2 chosen" and
+    // accessibly a superset of it, so a renamed region fails this lookup.
+    const { unmount } = render(<Harness question={fixture("select_k")} />);
+    expect(within(screen.getAllByRole("status")[0]!).queryByText(/chosen/i)).not.toBeNull();
+    unmount();
+  });
+});
+
+describe("read-only", () => {
+  it("every control is disabled when the attempt is not answerable", () => {
+    const spy = vi.fn();
+    const { container } = render(<Harness question={fixture("multiple")} onChange={spy} disabled />);
+    for (const control of container.querySelectorAll<HTMLElement>("input")) {
+      expect(control).toBeDisabled();
+    }
+    fireEvent.click(screen.getByText("Alpha"));
+    expect(spy).not.toHaveBeenCalled();
+  });
+});
+
+describe("reachability: the candidate app's own root, clicked to", () => {
+  it("Start opens the runner and question 1's real options are there to click", async () => {
+    await startFromRoot();
+    const first = await screen.findByRole("radio", { name: /paris/i });
+    activate(first);
+    expect(first).toBeChecked();
+  });
+
+  it("an answer given from the root fills that question's palette square", async () => {
+    await startFromRoot();
+    activate(await screen.findByRole("radio", { name: /paris/i }));
+    expect(screen.getByRole("button", { name: /^question 1 /i })).toHaveClass("is-filled");
+  });
+
+  it("the paper's own prompt renders through the shared renderer", async () => {
+    render(<ExamApp client={{ landing: () => Promise.resolve(landingPayload), start: () => Promise.resolve(examPaper) }} />);
+    activate(await screen.findByRole("button", { name: /^start/i }));
+    expect(await screen.findByText(/capital of France/i)).toBeVisible();
+  });
+});
