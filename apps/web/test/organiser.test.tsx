@@ -951,6 +951,67 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     expect(patchDraft.mock.calls[0]).toEqual(["wsp_1", "tst_1", { settings: { access: { mode: "sso" } } }]);
     expect(JSON.stringify(patchDraft.mock.calls[0])).not.toContain("APTI-2026");
   });
+  // task 7/8/10 review, M8. `setPending` replaced rather than merged, so
+  // two panels touched inside the 250 ms debounce dropped the first patch
+  // — silently, because the local `setDraft` had already applied it and
+  // the follow-up GET keeps `body: prev.body`. Tasks 7, 8 and 10 took
+  // this screen from two writers to six, so it is reachable by ordinary
+  // use: add a section, pick an access mode a moment later, reload, and
+  // the section is gone.
+  it("two panels edited inside the debounce window both reach the one patch", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await screen.findByRole("heading", { name: "Who can take this test" });
+
+    // Three writers, synchronously — well inside the shell's 250 ms.
+    fireEvent.click(screen.getByRole("button", { name: /add section/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /^linear$/i }));
+
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft).toHaveBeenCalledTimes(1);
+    const [, , patch] = patchDraft.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
+    expect(patch.sections).toHaveLength(1);
+    expect(patch.settings).toMatchObject({ access: { mode: "sso" }, timing: { navigation: "linear" } });
+  });
+
   // Task 10 (#61, P5.8), a ninth time. release-branding.test.tsx renders
   // both panels directly, so it cannot see whether the running app mounts
   // them, reads workspace branding at all, or knows which actor is

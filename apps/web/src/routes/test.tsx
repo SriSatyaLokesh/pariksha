@@ -165,6 +165,13 @@ export function TestBuilder({
           if (saveSeq.current !== seq) return;
           setDraft((prev) => (prev === null ? prev : { ...prev, body: updated.body }));
           setError(undefined);
+          // Landed, so it stops being pending — otherwise the merge above
+          // would carry every block already saved into every later patch
+          // for the life of the screen. Only when this is still the
+          // current save: a keystroke during the request has already
+          // bumped `saveSeq` and returned above, so its patch is never
+          // the one cleared.
+          setPending(null);
         } catch (cause) {
           if (saveSeq.current !== seq) return;
           setError(cause instanceof ApiError ? cause.message : "The draft could not be saved.");
@@ -222,16 +229,23 @@ export function TestBuilder({
     return client.uploadMedia(workspaceId, bank.id, file);
   }
 
+  // Merged, never replaced (task 7/8/10 review, M8). Both of these used
+  // to call `setPending({ … })` outright, so two panels touched inside
+  // the 250 ms debounce dropped the first patch — silently, because
+  // `setDraft` had already applied it locally and the follow-up GET keeps
+  // `body: prev.body`. Reorder a section, click a navigation radio within
+  // a quarter second, reload, and the reorder is gone. Pre-existing in
+  // shape, but Tasks 7, 8 and 10 took this screen from two writers to six.
   function saveSections(sections: StoredSection[]): void {
     setDraft((prev) => (prev === null ? prev : { ...prev, body: { ...prev.body, sections } }));
-    setPending({ sections });
+    setPending((prev) => ({ ...prev, sections }));
   }
 
   function saveSettings(settings: Partial<TestVersionRow["body"]["settings"]>): void {
     setDraft((prev) =>
       prev === null ? prev : { ...prev, body: { ...prev.body, settings: { ...prev.body.settings, ...settings } } },
     );
-    setPending({ settings });
+    setPending((prev) => ({ ...prev, settings: { ...prev?.settings, ...settings } }));
   }
 
   return (
