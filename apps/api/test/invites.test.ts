@@ -17,7 +17,6 @@ import {
   addMembership,
   closeClient,
   createUser,
-  getCandidateByExternalId,
   listInvitedExternalIds,
   replaceCandidateList,
   type NewCandidate,

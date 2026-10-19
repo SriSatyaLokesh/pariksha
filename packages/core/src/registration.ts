@@ -131,8 +131,28 @@ export function normaliseEmail(value: string): string {
  * function is the fix.
  */
 export function normaliseUniqueValue(field: FormField, value: unknown): string {
-  const text = value === undefined || value === null ? "" : String(value);
+  const text = asText(value);
   return field.type === "email" ? normaliseEmail(text) : text.trim();
+}
+
+/**
+ * A submitted value as text. A scalar becomes what the candidate typed; a
+ * structured value becomes the empty string rather than `[object
+ * Object]`, because a registration body is candidate-supplied and
+ * `[object Object]` in a `value_hash` or an `external_id` is a value two
+ * different objects would share.
+ */
+function asText(value: unknown): string {
+  switch (typeof value) {
+    case "string":
+      return value;
+    case "number":
+    case "bigint":
+    case "boolean":
+      return String(value);
+    default:
+      return "";
+  }
 }
 
 /** The `unique: true` fields, in the form's own order. The first of them is
@@ -317,14 +337,14 @@ export function normaliseValues(
         // Not a number is kept as typed: validation has already refused
         // it, and `NaN` is not JSON — it would reach storage as null and
         // lose what the candidate actually wrote.
-        kept[field.id] = Number.isNaN(n) ? String(raw) : n;
+        kept[field.id] = Number.isNaN(n) ? asText(raw) : n;
         break;
       }
       case "checkbox":
-        kept[field.id] = (Array.isArray(raw) ? raw : [raw]).map((one) => String(one));
+        kept[field.id] = (Array.isArray(raw) ? raw : [raw]).map(asText);
         break;
       default:
-        kept[field.id] = String(raw);
+        kept[field.id] = asText(raw);
     }
   }
   return kept;
