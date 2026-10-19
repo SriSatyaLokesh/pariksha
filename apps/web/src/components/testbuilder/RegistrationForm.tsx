@@ -27,11 +27,19 @@ import {
  * to claim, and `autocomplete="off"` on a control a browser was never going
  * to fill is noise. `type: "textarea"` / `"select"` / `"radio"` name the
  * element rather than an `<input type>`, which is what those three render.
+ *
+ * A token is set only where the *type* implies one — `email`, `tel`, `url`.
+ * `short_text` used to claim `name`, which was wrong for every `short_text`
+ * that is not a name: `campus_hiring` alone has `college` and
+ * `roll_number`, `open_contest` has `country`, and a browser offering a
+ * candidate their own name for their roll number is worse than no autofill
+ * at all (task 5/6 review, m3). The name case is recovered by label, the
+ * way the birth date already was — see `autocompleteFor`.
  */
 export const FIELD_INPUT: Readonly<
   Record<FormFieldType, { type: string; autocomplete: string; inputMode?: string }>
 > = {
-  short_text: { type: "text", autocomplete: "name" },
+  short_text: { type: "text", autocomplete: "" },
   long_text: { type: "textarea", autocomplete: "off" },
   email: { type: "email", autocomplete: "email" },
   phone: { type: "tel", autocomplete: "tel", inputMode: "tel" },
@@ -49,8 +57,19 @@ export const FIELD_INPUT: Readonly<
  * the only signal the document carries. */
 const BIRTH_DATE_LABEL = /\b(birth|birthday|dob|born)\b/i;
 
+/** A `short_text` field that *is* the person's name gets `name`. Narrow on
+ * purpose: "College name" and "Company name" are not the candidate's name,
+ * and a wrong token is worse than none, so anything this does not
+ * recognise — "Your name", "First name" — gets no token rather than a
+ * guess. Both the label and the column name are tried, because an
+ * organiser may have renamed either. */
+const PERSON_NAME = /^(full[ _-]?)?name$/i;
+
 export function autocompleteFor(field: FormField): string {
   if (field.type === "date" && BIRTH_DATE_LABEL.test(field.label)) return "bday";
+  if (field.type === "short_text" && (PERSON_NAME.test(field.label.trim()) || PERSON_NAME.test(field.id))) {
+    return "name";
+  }
   return FIELD_INPUT[field.type].autocomplete;
 }
 

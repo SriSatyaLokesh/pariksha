@@ -183,6 +183,21 @@ describe("FormBuilder (T-16 - T-18)", () => {
     expect(autocompleteFor({ id: "start", type: "date", label: "Available from" })).toBe("off");
   });
 
+  it("only a short_text field that is the candidate's name claims the name token", () => {
+    // Every `short_text` used to claim it (task 5/6 review, m3), so a
+    // browser offered the candidate their own name for their roll number.
+    expect(autocompleteFor({ id: "full_name", type: "short_text", label: "Full name" })).toBe("name");
+    expect(autocompleteFor({ id: "full_name", type: "short_text", label: "Candidate" })).toBe("name");
+    for (const field of FORM_TEMPLATES.campus_hiring.fields) {
+      if (field.type === "short_text" && field.id !== "full_name") {
+        expect(autocompleteFor(field), field.id).toBe("");
+      }
+    }
+    expect(autocompleteFor({ id: "country", type: "short_text", label: "Country" })).toBe("");
+    // "College name" is a name, and is not the candidate's.
+    expect(autocompleteFor({ id: "college", type: "short_text", label: "College name" })).toBe("");
+  });
+
   it("required is marked in the preview, not only in the editor", () => {
     render(<Harness />);
     addField("short_text");
