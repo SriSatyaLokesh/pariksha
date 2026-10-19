@@ -86,6 +86,35 @@ describe("admin.html", () => {
   });
 });
 
+// Phase 6 Task 1 (#65, P6.1): the candidate runtime's own entry. A test's
+// landing page carries an organiser's branding and a real candidate's
+// window; it is not marketing and must not be indexed, the same reason
+// admin.html is not.
+describe("exam.html", () => {
+  it("carries a noindex, nofollow robots meta tag", () => {
+    const exam = readFileSync(resolve(ROOT, "exam.html"), "utf8");
+    expect(exam).toMatch(/<meta\s+name="robots"\s+content="noindex,\s*nofollow"/);
+  });
+
+  it("is a Rollup input of its own, separate from the landing page's island", () => {
+    const input = viteConfig.build?.rollupOptions?.input as Record<string, string>;
+    expect(Object.keys(input).sort()).toEqual(["admin", "exam", "index", "island"]);
+    expect(input.exam).toMatch(/exam\.html$/);
+    // The island is the landing page's exam *demo*, not the candidate
+    // runtime — two different entries that read alike.
+    expect(input.island).not.toMatch(/exam\.html$/);
+  });
+
+  it("gets an X-Robots-Tag: noindex block in _headers, as admin.html does", () => {
+    const headers = readFileSync(resolve(ROOT, "public/_headers"), "utf8");
+    const blockStart = headers.indexOf("/exam.html");
+    expect(blockStart).toBeGreaterThan(-1);
+    const nextBlock = headers.indexOf("\n/", blockStart + 1);
+    const block = headers.slice(blockStart, nextBlock === -1 ? undefined : nextBlock);
+    expect(block).toMatch(/X-Robots-Tag:\s*noindex/);
+  });
+});
+
 // The site and the API ship as one Worker (see the header of the config
 // itself), so its configuration no longer lives in this package — but these
 // are still the web app's hosting guarantees, and they are still asserted

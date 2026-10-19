@@ -72,14 +72,17 @@ async function buildChunks(overrides: Parameters<typeof build>[0]): Promise<Buil
 }
 
 let prerenderChunks: BuildOutputChunk[];
-let twoEntryChunks: BuildOutputChunk[];
+// Phase 6 Task 1 (#65): renamed from `twoEntryChunks`, which had been stale
+// since the island landed and is now wrong by two — the real config carries
+// `index`, `admin`, `island` and, from this task, `exam`.
+let entryChunks: BuildOutputChunk[];
 let rendererChunks: BuildOutputChunk[];
 
 beforeAll(async () => {
   prerenderChunks = await buildChunks({
     build: { ssr: "src/entry-prerender.tsx", write: false },
   });
-  twoEntryChunks = await buildChunks({ build: { write: false } });
+  entryChunks = await buildChunks({ build: { write: false } });
   // The real entries plus the shared renderer as one of its own. Until a
   // screen imports it (Task 2) no production entry reaches the renderer at
   // all, and a guard that walks only admin and the island would be green
@@ -212,10 +215,21 @@ describe("the candidate and admin bundles are separate Vite entries", () => {
   // in index.html's source — §2.7), so this build emits a JS entry chunk
   // for admin and, once it exists, the island — never one named "index".
   it("emits an admin entry chunk and none for index.html (T4, SEO-2)", () => {
-    const entryChunks = twoEntryChunks.filter((chunk) => chunk.isEntry);
-    const adminChunk = entryChunks.find((chunk) => chunk.name === "admin");
-    expect(adminChunk).toBeDefined();
-    expect(entryChunks.find((chunk) => chunk.name === "index")).toBeUndefined();
+    const entries = entryChunks.filter((chunk) => chunk.isEntry);
+    expect(entries.find((chunk) => chunk.name === "admin")).toBeDefined();
+    expect(entries.find((chunk) => chunk.name === "index")).toBeUndefined();
+  });
+
+  // Phase 6 Task 1 (#65): exam.html is the FOURTH Rollup input, and `exam`
+  // is a different entry from `island` — which is the landing page's
+  // exam-*demo*, not the candidate runtime, despite the name.
+  it("emits an exam entry chunk, separate from the island's (P6.1)", () => {
+    const entries = entryChunks.filter((chunk) => chunk.isEntry);
+    const exam = entries.find((chunk) => chunk.name === "exam");
+    const island = entries.find((chunk) => chunk.name === "island");
+    expect(exam).toBeDefined();
+    expect(island).toBeDefined();
+    expect(exam?.fileName).not.toBe(island?.fileName);
   });
 
   // v3 §5, T4 extended. No island entry yet (vite.config.ts's third Rollup
@@ -223,7 +237,7 @@ describe("the candidate and admin bundles are separate Vite entries", () => {
   // intentionally unproven until it lands; once it does, this is the test
   // that would catch admin code reaching the public bundle through it.
   it("no module in the island's bundle matches src/(routes/)?admin, once an island entry exists", () => {
-    const islandChunk = twoEntryChunks.find(
+    const islandChunk = entryChunks.find(
       (chunk) => chunk.isEntry && chunk.name === "island",
     );
     expect(islandChunk).toBeDefined();
@@ -243,11 +257,11 @@ describe("the candidate and admin bundles are separate Vite entries", () => {
 // exam-taker never needs is the easiest way to spend some of it by accident.
 describe("the QR generator is in the admin entry only (T-02)", () => {
   it("the island cannot reach qrcode-generator by static import", () => {
-    expect(staticModules(twoEntryChunks, "island").join("\n")).not.toContain("qrcode-generator");
+    expect(staticModules(entryChunks, "island").join("\n")).not.toContain("qrcode-generator");
   });
 
   it("the admin entry does reach qrcode-generator", () => {
-    expect(staticModules(twoEntryChunks, "admin").join("\n")).toContain("qrcode-generator");
+    expect(staticModules(entryChunks, "admin").join("\n")).toContain("qrcode-generator");
   });
 });
 
@@ -259,10 +273,40 @@ describe("the QR generator is in the admin entry only (T-02)", () => {
 // same rule the QR generator check above enforces for its own dependency.
 describe("the test builder screens are in the admin entry only (#55, P5.2)", () => {
   it("the island cannot reach src/components/testbuilder by static import", () => {
-    expect(staticModules(twoEntryChunks, "island").join("\n")).not.toMatch(/src[\\/]components[\\/]testbuilder/);
+    expect(staticModules(entryChunks, "island").join("\n")).not.toMatch(/src[\\/]components[\\/]testbuilder/);
   });
 
   it("the admin entry does reach src/components/testbuilder", () => {
-    expect(staticModules(twoEntryChunks, "admin").join("\n")).toMatch(/src[\\/]components[\\/]testbuilder/);
+    expect(staticModules(entryChunks, "admin").join("\n")).toMatch(/src[\\/]components[\\/]testbuilder/);
+  });
+});
+
+// Phase 6 Task 1 (#65, P6.1): the candidate's own entry. The PRD's
+// non-functional table budgets a candidate at 300 KB gzipped and Phase 4
+// already spent 41 KB of it on markdown-it, so the structural guard is the
+// one that matters: no organiser code may be statically reachable from the
+// exam entry, and KaTeX stays behind its dynamic import (ADR 0004).
+describe("the candidate runtime's exam entry (#65, P6.1)", () => {
+  it("no organiser code is statically reachable from the exam entry", () => {
+    expect(staticModules(entryChunks, "exam").filter((m) => ADMIN_PATH_RE.test(m))).toEqual([]);
+  });
+
+  it("KaTeX is not in the exam entry's static graph either (ADR 0004)", () => {
+    const modules = staticModules(entryChunks, "exam").join("\n");
+    for (const lazy of ["katex", "@vscode/markdown-it-katex"]) {
+      expect(modules, lazy).not.toContain(lazy);
+    }
+  });
+
+  it("the exam entry cannot reach the test builder or the QR generator", () => {
+    const modules = staticModules(entryChunks, "exam").join("\n");
+    expect(modules).not.toContain("qrcode-generator");
+    expect(modules).not.toMatch(/src[\/]components[\/]testbuilder/);
+  });
+
+  // The positive control: without it the three assertions above would hold
+  // for an entry that reached nothing at all.
+  it("the exam entry does reach the candidate screens", () => {
+    expect(staticModules(entryChunks, "exam").join("\n")).toMatch(/src[\/]routes[\/]exam/);
   });
 });
