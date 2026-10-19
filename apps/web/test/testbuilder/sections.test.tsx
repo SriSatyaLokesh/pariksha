@@ -172,10 +172,21 @@ describe("SectionList", () => {
     expect(table.getAllByText("8")).toHaveLength(2);
   });
 
-  it("switching a section's source warns before discarding a configured pool", () => {
+  it("switching a section's source names what is actually being discarded (fixed)", () => {
+    const fixed: StoredSection = {
+      id: "written",
+      title: "Written",
+      source: { kind: "fixed", questions: ["qst_1", "qst_2"] },
+    };
+    render(<Harness initial={[fixed]} />);
+    fireEvent.change(screen.getByLabelText(/source/i), { target: { value: "pool" } });
+    expect(screen.getByRole("dialog")).toHaveTextContent(/hand-picked list of 2 questions/i);
+  });
+
+  it("switching a section's source names what is actually being discarded (pool)", () => {
     render(<Harness initial={[QUANT]} />);
     fireEvent.change(screen.getByLabelText(/source/i), { target: { value: "fixed" } });
-    expect(screen.getByRole("dialog")).toHaveTextContent(/pool.*count.*filter/is);
+    expect(screen.getByRole("dialog")).toHaveTextContent(/its bank, count and filter/i);
   });
 
   it("deleting a section confirms and offers undo", () => {

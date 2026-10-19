@@ -40,6 +40,21 @@ function isConfigured(source: QuestionSource): boolean {
   return source.sets.length > 0;
 }
 
+/** Fix round (task 3 review, C3): the source-switch dialog used to name
+ * "pool"'s own count and filter no matter which kind was actually being
+ * discarded. This says what the *current* source is — the one the switch
+ * is about to throw away — so an author with a hand-picked fixed list
+ * does not see a warning about a pool that was never configured. */
+function discardDescription(source: QuestionSource): string {
+  if (source.kind === "fixed") {
+    const n = source.questions.length;
+    return `its hand-picked list of ${n} question${n === 1 ? "" : "s"}`;
+  }
+  if (source.kind === "pool") return "its bank, count and filter";
+  const n = source.sets.length;
+  return `its ${n} set${n === 1 ? "" : "s"}`;
+}
+
 function timeLabel(section: StoredSection): string {
   return section.time_limit_minutes !== undefined ? `${section.time_limit_minutes} min` : "no time limit";
 }
@@ -120,7 +135,9 @@ export function SectionList({
   workspaceId: string;
 }) {
   const [banks, setBanks] = useState<Bank[] | null>(null);
-  const [pendingSwitch, setPendingSwitch] = useState<{ sectionId: string; kind: SourceKind } | null>(null);
+  const [pendingSwitch, setPendingSwitch] = useState<{ sectionId: string; kind: SourceKind; discard: string } | null>(
+    null,
+  );
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ section: StoredSection; index: number } | null>(null);
   const [picker, setPicker] = useState<{ sectionId: string; setIndex?: number } | null>(null);
@@ -140,7 +157,7 @@ export function SectionList({
 
   function changeSourceKind(section: StoredSection, kind: SourceKind): void {
     if (section.source.kind !== kind && isConfigured(section.source)) {
-      setPendingSwitch({ sectionId: section.id, kind });
+      setPendingSwitch({ sectionId: section.id, kind, discard: discardDescription(section.source) });
       return;
     }
     updateSection(section.id, (s) => ({ ...s, source: emptySource(kind) }));
@@ -301,8 +318,8 @@ export function SectionList({
       {pendingSwitch && (
         <div role="dialog" aria-label="Replace this section's source">
           <p>
-            Switching this section&apos;s source away from <strong>pool</strong> will discard its configured{" "}
-            <strong>count</strong> and <strong>filter</strong> — nothing is kept across a source change.
+            Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
+            kept across a source change.
           </p>
           <button type="button" className="button-secondary" onClick={() => setPendingSwitch(null)}>
             Cancel
