@@ -176,7 +176,7 @@ describe("S1 — Hero", () => {
   it("is free of axe violations", async () => {
     const { container } = render(<Hero />);
     expect(await axe(container)).toHaveNoViolations();
-  }, 20_000);
+  });
 });
 
 describe("S2 — What is Pariksha?", () => {
@@ -222,7 +222,7 @@ describe("S2 — What is Pariksha?", () => {
   it("is free of axe violations", async () => {
     const { container } = render(<WhatIsPariksha />);
     expect(await axe(container)).toHaveNoViolations();
-  }, 20_000);
+  });
 
   // v3-interactive.md §4.2: the verification strip replaces the slot a
   // product with no users cannot fill with three artefacts a reader can
@@ -408,5 +408,5 @@ describe("S3 — How running an exam works", () => {
   it("is free of axe violations", async () => {
     const { container } = render(<HowItWorks />);
     expect(await axe(container)).toHaveNoViolations();
-  }, 20_000);
+  });
 });
