@@ -97,6 +97,28 @@ export function TestBuilder({
         } catch (cause) {
           if (saveSeq.current !== seq) return;
           setError(cause instanceof ApiError ? cause.message : "The draft could not be saved.");
+          return;
+        }
+
+        // Task 3 re-review: PATCH deliberately answers without
+        // `draw`/`setPoints`/`points` (apps/api/src/routes/tests.ts), on
+        // the stated grounds that a screen wanting fresh numbers re-fetches
+        // the GET — which is what this is. The I4 fix removed that
+        // re-fetch and left UX-15's live draw and UX-12's points frozen
+        // from the first edit onward. One GET per *settled* burst, not one
+        // per keystroke, so I4's complaint stays answered. Only the derived
+        // figures are taken: `body` stays the local one, because a reply
+        // landing after the next keystroke would otherwise type over the
+        // author, and `saveSeq` drops it outright once a newer save has
+        // started.
+        try {
+          const fresh = await client.draft(workspaceId, testId);
+          if (saveSeq.current !== seq) return;
+          setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
+        } catch {
+          // The save itself landed; only the derived figures are a beat
+          // behind, and the next load corrects them. Reporting a failure
+          // over a save that succeeded would be the worse lie.
         }
       })();
     }, 250);

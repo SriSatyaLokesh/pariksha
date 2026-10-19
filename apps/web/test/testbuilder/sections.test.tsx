@@ -674,4 +674,39 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(screen.getByRole("button", { name: /move section S2 down/i })).toBeInTheDocument();
   });
+
+  // Task 3 re-review: the I4 debounce fix replaced the post-save
+  // `setDraft(await client.draft(...))` with a merge of the PATCH
+  // response's `body` alone — but PATCH deliberately returns no
+  // `draw`/`setPoints`/`points` (apps/api/src/routes/tests.ts), and `load`
+  // runs on mount only. From the first edit onward UX-15's live draw and
+  // UX-12's points figure were frozen for the rest of the session, which is
+  // exactly the defect I2 was raised for.
+  it("task 3 re-review: the derived numbers refresh after a save, not only on mount", async () => {
+    const section: StoredSection = {
+      id: "quant",
+      title: "Quantitative aptitude",
+      source: { kind: "pool", count: 10, filter: { tags: ["sql"] } },
+    };
+    let reads = 0;
+    const draftFn = vi.fn(async (): Promise<TestVersionRow> => {
+      reads += 1;
+      return { ...baseDraft([section]), draw: { quant: { matching: reads === 1 ? 14 : 11, wanted: 10 } } };
+    });
+    renderBuilder({
+      draft: draftFn,
+      patchDraft: async (_ws: string, _id: string, patch: { sections?: StoredSection[] }) =>
+        baseDraft(patch.sections ?? []),
+    });
+
+    expect(await screen.findByText(/10 drawn from 14 matching/i)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /add section/i }));
+
+    expect(await screen.findByText(/10 drawn from 11 matching/i)).toBeVisible();
+    // And the refresh must not undo the edit that triggered it: this
+    // fixture's GET always answers one section, so a refresh that replaced
+    // the whole local body would make the section just added disappear.
+    expect(screen.getByRole("button", { name: /move section Untitled section down/i })).toBeInTheDocument();
+  });
 });
