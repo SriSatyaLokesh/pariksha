@@ -314,3 +314,81 @@ async function takenClaims(
   );
   return rows.map((row) => ({ fieldId: row.field_id, candidateId: row.candidate_id }));
 }
+
+// --- Task 5 (#69, P6.5): what `attempts_allowed` and `cooldown_minutes`
+// are judged against --------------------------------------------------
+
+export interface CandidateAttempts {
+  /** Every row, submitted or not. An abandoned attempt **was** an attempt
+   *  (`T-14`); a candidate who closes the tab has not earned a fresh one. */
+  count: number;
+  /**
+   * When the most recent attempt *ended*: `COALESCE(submitted_at,
+   * deadline_at)`, which is where `cooldown_minutes` is measured from.
+   *
+   * Not `started_at`, and that is the whole point of the column choice: a
+   * 60-minute test with a 30-minute cooldown measured from the start
+   * reads "cooldown served" while the candidate is still sitting it.
+   */
+  lastEndedAt: number | null;
+  /**
+   * The deadline of an attempt that has not been submitted and whose
+   * deadline has not passed, or `null`. `/start` answers 409
+   * `attempt_in_progress` on this rather than minting a second row —
+   * rotating the token would kill the tab that is still working, and a
+   * second row would orphan the first one's answers.
+   */
+  liveDeadlineAt: number | null;
+}
+
+/**
+ * One statement for the three numbers the start gate needs.
+ *
+ * Keyed on the **candidate**, not the test version: a `candidate` row
+ * belongs to one test (`candidate.test_id`), so every attempt that row
+ * has ever made is this test's, including attempts on a version that has
+ * since been superseded. An organiser who republishes mid-window has not
+ * handed everyone a fresh allowance.
+ */
+export const countAttemptsForCandidate = scoped(
+  "countAttemptsForCandidate",
+  async (db: DbClient, workspaceId: string, candidateId: string, now: number): Promise<CandidateAttempts> => {
+    const rows = await db.query<{ n: number; last_ended: number | null; live_deadline: number | null }>(
+      "SELECT COUNT(*) AS n, MAX(COALESCE(submitted_at, deadline_at)) AS last_ended, " +
+        "MAX(CASE WHEN submitted_at IS NULL AND deadline_at > ? THEN deadline_at END) AS live_deadline " +
+        "FROM attempt WHERE workspace_id = ? AND candidate_id = ?",
+      [now, workspaceId, candidateId],
+    );
+    const row = rows[0];
+    return {
+      count: Number(row?.n ?? 0),
+      lastEndedAt: row?.last_ended == null ? null : Number(row.last_ended),
+      liveDeadlineAt: row?.live_deadline == null ? null : Number(row.live_deadline),
+    };
+  },
+);
+
+/**
+ * `assignSet`'s `registrationIndex` for the two assignments that need a
+ * running counter — `round_robin` and `random`.
+ *
+ * The count of attempts already minted on this version, so the nth
+ * candidate to press Start takes the nth set. Read only when a `sets`
+ * section actually needs it, so a test without sets never pays for it.
+ *
+ * ponytail: two candidates starting in the same millisecond can read the
+ * same count and land on the same set. `AC-09`'s "no two neighbours
+ * alike" is therefore a property of sequential starts, which is what a
+ * real cohort does; the upgrade if it ever matters is a counter column
+ * incremented in the insert, not a lock.
+ */
+export const countAttemptsForVersion = scoped(
+  "countAttemptsForVersion",
+  async (db: DbClient, workspaceId: string, testVersionId: string): Promise<number> => {
+    const rows = await db.query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM attempt WHERE workspace_id = ? AND test_version_id = ?",
+      [workspaceId, testVersionId],
+    );
+    return Number(rows[0]?.n ?? 0);
+  },
+);

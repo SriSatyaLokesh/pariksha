@@ -58,6 +58,13 @@ export const createAttempt = scoped(
     db: DbClient,
     workspaceId: string,
     input: {
+      /**
+       * Minted by the caller, not here (Phase 6 Task 5). `/start` seeds
+       * `layoutForAttempt` with this id, so the shuffle is reproducible
+       * from the row and nothing else has to store a seed — which it
+       * could not be if the id first existed inside this function.
+       */
+      id: string;
       candidateId: string;
       testVersionId: string;
       setNo: number;
@@ -67,12 +74,11 @@ export const createAttempt = scoped(
       tokenHash: string;
     },
   ): Promise<string> => {
-    const id = newId("att");
     await db.run(
-      "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, submit_reason, score_json, flag, token_hash) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, section_started_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
-        id,
+        input.id,
         workspaceId,
         input.candidateId,
         input.testVersionId,
@@ -88,9 +94,14 @@ export const createAttempt = scoped(
         null,
         "clean",
         input.tokenHash,
+        // The first question, and nothing entered yet: a per-section
+        // clock starts when the candidate reaches a timed section, not
+        // when the paper is minted.
+        0,
+        null,
       ],
     );
-    return id;
+    return input.id;
   },
 );
 

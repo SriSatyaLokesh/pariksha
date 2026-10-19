@@ -55,6 +55,7 @@ describe("every row is addressed by an ID that names its own table", () => {
     expect(candidateId.startsWith("cnd_")).toBe(true);
 
     const attemptId = await repo.createAttempt(db, WORKSPACE, {
+      id: newId("att"),
       candidateId,
       testVersionId: newId("ver"),
       setNo: 1,

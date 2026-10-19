@@ -37,6 +37,7 @@ async function seedAttempt(db: DbClient, workspaceId: string) {
     consentVersion: "1",
   });
   return repo.createAttempt(db, workspaceId, {
+    id: newId("att"),
     candidateId,
     testVersionId: newId("tst"),
     setNo: 1,

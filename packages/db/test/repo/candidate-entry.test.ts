@@ -27,7 +27,10 @@ import { REPO_FUNCTIONS } from "../../src/repo/guard.js";
 import * as repo from "../../src/repo/index.js";
 import { resolvePublishedTest } from "../../src/repo/candidate-entry.js";
 
-const UNSCOPED_BY_DESIGN = ["resolvePublishedTest"]; // Task 5 adds readAttemptByTokenHash
+// ADR 0006: a function belongs here only when the workspace ID is what it
+// *produces*. Both of these are handed a slug pair or a token hash and
+// nothing else, so there is no workspace for `scoped()` to check.
+const UNSCOPED_BY_DESIGN = ["resolvePublishedTest", "readAttemptByTokenHash"];
 
 function functionNames(module: Record<string, unknown>): string[] {
   return Object.entries(module)
