@@ -75,4 +75,18 @@ describe("the permission matrix", () => {
   it("every role and action pair resolves without throwing", () => {
     for (const role of ROLES) for (const action of ACTIONS) expect(typeof can({ role, action })).toBe("boolean");
   });
+
+  // A pin, not a red test: ADR 0007 decided the fourteenth action, `tests.comment`,
+  // is added by the task that builds commenting (Phase 5), not by this ADR. These
+  // two assertions already pass on the day they are written; they exist so the
+  // addition of `tests.comment` is a deliberate, reviewed edit to this test rather
+  // than a silent drift.
+  it("no permission action is about comments yet (ADR 0007)", () => {
+    expect(ACTIONS).toHaveLength(13);
+    expect(ACTIONS.filter((a) => a.includes("comment"))).toEqual([]);
+  });
+
+  it("ADR 0007: a Reviewer holds no tests.edit, which is why commenting needs its own action", () => {
+    expect(can({ role: "reviewer", action: "tests.edit" })).toBe(false);
+  });
 });

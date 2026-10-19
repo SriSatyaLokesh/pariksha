@@ -183,7 +183,7 @@ Phases 9 and 10 are off the critical path. Phase 9 needs only banks (Phase 4) an
 
 ## Decisions that extend the PRD
 
-Three items in this roadmap are not in the PRD. Each is recorded here as a decision, with what it costs. Each needs its own ADR before its phase starts.
+Four items in this roadmap are not in the PRD. Each is recorded here as a decision, with what it costs. Each needs its own ADR before its phase starts.
 
 ### Public demo instance (Phase 10)
 
@@ -200,6 +200,12 @@ Pariksha itself ships no model keys and makes no outbound AI request on its own 
 PRD v0.1 ships a pilot test with an access code and defers workspaces, roles and organiser sign-in to v0.2. This roadmap moves them into Phase 3, because the landing page, the demo and BYOK all need a workspace with an owner and a server-enforced permission check to exist first, and because retrofitting tenant scoping into a schema that was written without it is the expensive mistake this ordering avoids.
 
 Recorded as [ADR 0005](adr/0005-organiser-auth-before-the-candidate-runtime.md), written after Phase 3 had already shipped on it. [ADR 0006](adr/0006-identity-reads-sit-outside-the-workspace-guard.md) records the one structural consequence that surfaced while building it: a session is looked up before any workspace is known, so identity reads sit outside the workspace guard rather than inside an exemption list.
+
+### Review comments on a draft test (Phase 5)
+
+`docs/design.md`'s own `UX-10` adds reviewer comments on a draft test — the PRD's permission matrix and authoring data model say nothing about a person's words on a colleague's work. Comments never leave with the exported test (`pariksha/test@1` gains no `comments` key), each one is anchored to the test, a section or a question, and resolving a thread is a state on it, never a deletion. The cost: a fourteenth permission action, `tests.comment`, and its own `AC-23` matrix row — added only once the comment table and its routes exist to check it against, not by this decision — a new tenant-scoped table, and retention (`S-13`/`S-14`) and export (#63) obligations that a content row never carried, since a comment is organiser data about organiser work rather than candidate data or test content.
+
+Recorded as [ADR 0007](adr/0007-review-comments-on-a-draft-test.md). Phase 5 ships only the `review_requested` flag and the "In review" badge; the comment table, the reviewers panel and approvals are deferred.
 
 ### Smaller calls made while planning
 

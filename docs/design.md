@@ -330,10 +330,10 @@ marketing page — the full-bleed voltage block appears in none of these screens
 1. **UX-03, hierarchical tags.** A `/` in a tag carries a Module → Topic reading in the UI only;
    nothing in `pariksha/question@1` changes. If grouping ever needs permissions or ownership
    ("Examiner A owns `sdlc/*`"), that is a schema decision and needs its own ADR first.
-2. **UX-10, review comments.** Comments on a draft test are a new table and the first piece of
-   per-user writing in the authoring data model. It needs a decision on retention, on export (do
-   comments leave with the test JSON? proposed: no) and on whether a Reviewer can comment
-   without being assigned.
+2. **UX-10, review comments.** Settled in [ADR 0007](adr/0007-review-comments-on-a-draft-test.md):
+   comments never export with the test, a comment carries `anchor_kind`/`anchor_id`, commenting
+   gets its own permission action added by the task that builds it, and a resolved thread is a
+   state on the thread, never a deletion.
 
 ## What was rejected and why
 

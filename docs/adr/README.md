@@ -10,3 +10,4 @@ Short records of significant decisions: the context, what was decided, and the c
 | [0004](0004-client-side-rendering-with-lazy-loaded-katex.md) | Question content renders client-side, with KaTeX lazy-loaded | Accepted |
 | [0005](0005-organiser-auth-before-the-candidate-runtime.md) | Organiser auth, workspaces and roles before the candidate runtime | Accepted |
 | [0006](0006-identity-reads-sit-outside-the-workspace-guard.md) | Identity reads sit outside the workspace guard, not inside an exemption list | Accepted |
+| [0007](0007-review-comments-on-a-draft-test.md) | Review comments on a draft test | Accepted |
