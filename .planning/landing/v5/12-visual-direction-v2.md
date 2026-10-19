@@ -49,23 +49,31 @@ That rules out green, amber, gold, red and oxblood. Removing orange on top of th
 teal, violet and neutral. Violet-to-blue gradients are the single most over-used look in current AI
 and SaaS design, so that goes too.
 
-### 2.2a Revised, 19 October — two colours, not none
+### 2.2a Revised, 19 October — three colours, each with one job
 
-The pure-monochrome version was built and reviewed, and read as too austere in a browser: the
-argument was legible but the page had no warmth and nothing to pull the eye. Revised to carry
-**two** chromatic colours, both doing a job:
+Pure monochrome was built and read as too austere in a browser. Two revisions followed; this is
+where it landed.
 
-| Token | Value | Where it appears |
-| --- | --- | --- |
-| `accent` / `accent-deep` / `accent-on-ink` | `#0A8E59` / `#066B43` / `#28E291` | Primary button, eyebrow rules, links, sheet numerals, the cost figure, the Pariksha column head, the active status chip, focus rings |
-| `mark` | `#FFE88C` background, `#2A2306` text | Highlighter wash behind exactly three phrases on the page. **Background only, never a text colour**, so it cannot be confused with the amber review flag |
+| Token | Value | Job | Rule |
+| --- | --- | --- | --- |
+| `accent` / `accent-deep` / `accent-on-ink` | `#0A8E59` / `#066B43` / `#28E291` | **Emphasis and action.** The second half of every band heading, margin marks, figures, the Pariksha column, buttons, eyebrow rules, focus rings, links | Also the `clean` verdict — same call as Signal |
+| `blue` / `blue-deep` / `on-blue` | `#2235E0` / `#1627AE` / `#F2F4FF` | **Surface.** Whole bands and cards painted in it — the cost band is full-bleed cobalt, and the "what you can do today" card is a solid blue block | **Never text on paper, never a status.** Green never sits on blue; they take separate surfaces |
+| `review` / `risk` | `#8A5F00` / `#B3261E` | Verdicts only | Appear once, in the results sheet |
 
-`clean` and `accent` are now the same green, matching the decision taken for Signal in
-`13-signal-dark-direction.md` §2: for an exam product, the brand colour meaning *passed, correct,
-in order* is coherent rather than confusing. Amber and red still appear once, in the results sheet.
+**Why a surface and not a highlighter.** The first revision used a marker yellow behind three
+phrases. It was decorative — it drew the eye to a sentence without changing the page's structure,
+and yellow sat uneasily next to the amber review flag. Replacing it with a painted band does the
+job properly: the page now has **black → paper → black → paper → cobalt → paper → black**, so the
+contrast is architectural rather than applied, and the loudest surface on the page is the one
+telling you what it costs.
+
+**Why cobalt.** It has to hold its own against near-black, off-white and a saturated green without
+muddying any of them. Orange is out by instruction, amber and red are spoken for by the verdicts,
+and violet-to-blue gradients are the category's most over-used look. A flat, saturated cobalt is
+none of those, carries white text at about 8:1, and reads institutional rather than consumer.
 
 The sections below describe the original monochrome reasoning and are kept because the restraint
-still governs everything the two colours do not touch.
+still governs everything the three colours do not touch.
 
 ### 2.2 The decision: no brand colour at all
 

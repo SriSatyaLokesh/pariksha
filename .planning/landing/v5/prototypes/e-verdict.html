@@ -34,15 +34,18 @@
 
   /* Two chromatic colours. Green is the accent and doubles as the
      "clean" verdict — for an exam product, brand colour meaning passed
-     and in order is coherent. Marker yellow is a background wash only,
-     never a text colour, so it never competes with the amber review
-     flag. Everything else stays ink on paper. */
+     and in order is coherent. Cobalt is the third colour and it is a
+     SURFACE: whole bands and cards are painted in it, so the page has a
+     block of hard contrast rather than a decorated word. Green never sits
+     on blue — they take separate surfaces. */
   --accent: #0A8E59;          /* on paper */
   --accent-deep: #066B43;     /* links and small text on paper */
   --accent-on-ink: #28E291;   /* on the inverted sections */
   --accent-ink: #FFFFFF;      /* text on a filled accent button */
-  --mark: #FFE88C;            /* highlighter, background only */
-  --mark-ink: #2A2306;
+  --blue: #2235E0;            /* third colour — surfaces only, never text on paper */
+  --blue-deep: #1627AE;
+  --on-blue: #F2F4FF;
+  --blue-rule: rgba(255, 255, 255, 0.24);
 
   --clean: #0A8E59;
   --review: #8A5F00;
@@ -111,20 +114,33 @@ strong { color: inherit; font-weight: 600; }
   letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent-deep);
   margin: 0 0 18px;
 }
-.label::before { content: ""; width: 18px; height: 2px; background: var(--accent); }
+.label::before { content: ""; width: 26px; height: 3px; background: var(--accent); }
 .on-ink .label::before { background: var(--accent-on-ink); }
 
-/* highlighter — background wash, never a text colour */
-mark.hl {
-  background: var(--mark); color: var(--mark-ink);
-  padding: 0.08em 0.26em; margin: 0 -0.08em; border-radius: 2px;
-  box-decoration-break: clone; -webkit-box-decoration-break: clone;
-  font-weight: 500;
-}
-.on-ink mark.hl { background: var(--mark); color: var(--mark-ink); }
 .fine { font-size: 14px; color: var(--ink-3); max-width: 58ch; }
 code { font-family: var(--mono); font-size: 0.86em; }
 a { color: inherit; }
+
+
+/* ── accent carried through: headline emphasis, figures, panel marks ── */
+.g { color: var(--accent); }
+.on-ink .g { color: var(--accent-on-ink); }
+
+/* the margin mark, borrowed from the Question Paper direction */
+.mmark {
+  display: flex; align-items: baseline; gap: 12px; margin: 22px 0 0;
+  padding-top: 14px; border-top: 2px solid var(--accent);
+  max-width: 34ch;
+}
+.mmark b {
+  font-family: var(--mono); font-weight: 600; font-size: clamp(26px, 3vw, 38px);
+  line-height: 1; letter-spacing: -0.03em; color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+.mmark span {
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
 
 /* ── inverted sections ────────────────────────────────────────────── */
 .on-ink {
@@ -198,7 +214,7 @@ a:focus-visible, button:focus-visible {
 
 /* live draw */
 .draw {
-  border: 1px solid var(--invert-rule);
+  border: 1px solid var(--invert-rule); border-top: 3px solid var(--accent-on-ink);
   background: rgba(255, 255, 255, 0.028);
 }
 .draw-head {
@@ -234,8 +250,8 @@ a:focus-visible, button:focus-visible {
 
 /* ── 2 · fact line ────────────────────────────────────────────────── */
 .facts {
-  display: flex; flex-wrap: wrap; list-style: none; margin: 0; padding: 16px 0;
-  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+  display: flex; flex-wrap: wrap; list-style: none; margin: 0; padding: 18px 0;
+  border-top: 2px solid var(--accent); border-bottom: 1px solid var(--rule);
   gap: 10px 0;
 }
 .facts li {
@@ -244,7 +260,7 @@ a:focus-visible, button:focus-visible {
   padding-right: 22px; margin-right: 22px; border-right: 1px solid var(--rule);
 }
 .facts li:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
-.facts li b { color: var(--ink); font-weight: 600; }
+.facts li b { color: var(--accent-deep); font-weight: 600; }
 .facts li::before { content: ""; display: inline-block; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-right: 9px; vertical-align: 1px; }
 
 /* ── 3 · the argument (asymmetric scroll + sticky sheet) ──────────── */
@@ -259,6 +275,7 @@ a:focus-visible, button:focus-visible {
 @media (max-width: 1000px) { .sheet-wrap { position: static; } }
 .sheet {
   background: var(--surface); border: 1px solid var(--rule-strong);
+  border-top: 3px solid var(--accent);
 }
 .sheet-head {
   display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
@@ -273,7 +290,7 @@ a:focus-visible, button:focus-visible {
   opacity: 0.45; transition: opacity 320ms ease-out;
 }
 .sheet-row:last-child { border-bottom: 0; }
-.sheet-row[data-on="1"] { opacity: 1; }
+.sheet-row[data-on="1"] { opacity: 1; box-shadow: inset 3px 0 0 var(--accent); }
 .sheet-row i {
   font-style: normal; font-family: var(--mono); font-size: 11px;
   color: var(--accent); padding-top: 3px; font-variant-numeric: tabular-nums;
@@ -296,7 +313,7 @@ a:focus-visible, button:focus-visible {
 @media (max-width: 1000px) { .statement-grid { grid-template-columns: 1fr; gap: 32px; } }
 
 /* results sheet — the only colour on the page */
-.results { border: 1px solid var(--invert-rule); background: rgba(255,255,255,0.028); }
+.results { border: 1px solid var(--invert-rule); border-top: 3px solid var(--accent-on-ink); background: rgba(255,255,255,0.028); }
 .results-head {
   padding: 13px 18px; border-bottom: 1px solid var(--invert-rule);
   font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
@@ -334,7 +351,8 @@ a:focus-visible, button:focus-visible {
 .cmp th:last-child { color: var(--accent-deep); }
 .cmp td { padding: 15px 18px 15px 0; border-bottom: 1px solid var(--rule); color: var(--ink-3); vertical-align: top; }
 .cmp td:first-child { color: var(--ink-2); }
-.cmp td:last-child { color: var(--ink); font-weight: 500; }
+.cmp td:last-child { color: var(--ink); font-weight: 600; background: rgba(10, 142, 89, 0.055); box-shadow: inset 3px 0 0 var(--accent); padding-left: 16px; }
+.cmp th:last-child { background: rgba(10, 142, 89, 0.055); padding-left: 16px; }
 .cmp tr:last-child td { border-bottom: 2px solid var(--ink); }
 
 .arith { margin-top: clamp(52px, 7vw, 90px); }
@@ -343,9 +361,9 @@ a:focus-visible, button:focus-visible {
   font-family: var(--mono); font-weight: 600; color: var(--accent-deep);
   font-size: 1.35em; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
 }
-.arith-cols { display: grid; gap: 26px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 38px; padding-top: 26px; border-top: 1px solid var(--rule); }
+.arith-cols { display: grid; gap: 26px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 38px; padding-top: 26px; border-top: 2px solid var(--accent); }
 .arith-cols div p { margin: 0; font-size: 14px; }
-.arith-cols b { display: block; font-family: var(--mono); font-size: 13px; color: var(--ink); letter-spacing: 0.02em; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+.arith-cols b { display: block; font-family: var(--mono); font-weight: 600; font-size: clamp(22px, 2.4vw, 30px); line-height: 1; color: var(--accent); letter-spacing: -0.025em; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
 
 /* ── 6 · where it stands ──────────────────────────────────────────── */
 .stands { padding: clamp(64px, 9vw, 120px) 0; }
@@ -362,10 +380,37 @@ a:focus-visible, button:focus-visible {
 .list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
 .list li { padding: 13px 0; border-bottom: 1px solid var(--rule); font-size: 15.5px; color: var(--ink-2); }
 .list li b { color: var(--ink); font-weight: 600; }
-.today { background: var(--surface); border: 1px solid var(--rule-strong); border-top: 3px solid var(--accent); padding: 26px; }
 .today ol { margin: 0; padding-left: 20px; }
 .today li { margin-bottom: 13px; font-size: 15px; color: var(--ink-2); }
 .today li b { color: var(--ink); }
+
+
+/* ── the blue band: the page's block of hard contrast ──────────────── */
+.on-blue { background: var(--blue); color: var(--on-blue); }
+.on-blue p { color: rgba(242, 244, 255, 0.82); }
+.on-blue .fine { color: rgba(242, 244, 255, 0.68); }
+.on-blue .label { color: var(--on-blue); }
+.on-blue .label::before { background: var(--on-blue); }
+.on-blue h2, .on-blue strong { color: var(--on-blue); }
+.on-blue .arith-line { color: rgba(242, 244, 255, 0.88); }
+.on-blue .arith-line b, .on-blue .arith-cols b { color: var(--on-blue); }
+.on-blue .arith-cols { border-top-color: var(--blue-rule); }
+.on-blue code { color: var(--on-blue); }
+.on-blue .btn { background: var(--on-blue); color: var(--blue-deep); border-color: var(--on-blue); }
+.on-blue .btn:hover { box-shadow: 0 0 0 5px rgba(255,255,255,0.18); }
+.on-blue a:focus-visible, .on-blue button:focus-visible { outline-color: var(--on-blue); }
+
+/* the today card takes the blue too, so the page's one instruction block
+   is the thing that stands furthest out */
+.today {
+  background: var(--blue); border: 0; border-top: 0;
+  color: var(--on-blue); padding: 28px;
+}
+.today h3 { color: var(--on-blue); }
+.today li { color: rgba(242, 244, 255, 0.84); }
+.today li b, .today strong { color: var(--on-blue); }
+.today .fine { color: rgba(242, 244, 255, 0.7); }
+.today code { color: var(--on-blue); }
 
 /* ── 7 · close ────────────────────────────────────────────────────── */
 .close { padding: clamp(72px, 10vw, 140px) 0 clamp(48px, 6vw, 80px); }
@@ -401,11 +446,11 @@ a:focus-visible, button:focus-visible {
     <div class="hero-top">
       <div>
         <p class="status"><s></s>Pre-alpha · scoring engine and formats live · v0.1 in progress</p>
-        <h1>Run real exams on infrastructure you own.</h1>
+        <h1>Run real exams on infrastructure <span class="g">you own</span>.</h1>
       </div>
       <div>
         <p class="lede">For placement cells, training institutes and teams that have to test hundreds
-        of people. Twelve question types, <mark class="hl">a different paper for every candidate</mark>, proctoring that
+        of people. Twelve question types, <strong>a different paper for every candidate</strong>, proctoring that
         records no video, and a results CSV. Free, Apache-2.0, in your own account.</p>
         <div class="actions" style="margin-top:28px">
           <a class="btn" href="#">Start your question bank</a>
@@ -450,43 +495,47 @@ a:focus-visible, button:focus-visible {
     <div class="claims">
       <div class="claim" data-claim="0">
         <p class="label">The situation</p>
-        <h2>Three hundred candidates, one week, no budget.</h2>
+        <h2>Three hundred candidates, one week, <span class="g">no budget</span>.</h2>
         <p>A placement cell screening a graduating class. A training institute certifying a cohort. A
         sixty-person company that needs a shortlist by Friday. All three need the same four things: a
         different paper for every candidate, a clock nobody can edit, some idea of who was looking at
         another window, and a spreadsheet at the end.</p>
         <p>A form tool gives you none of them. An assessment platform gives you all four, charges by
         the candidate, and keeps the data on its servers.</p>
+        <p class="mmark"><b>4</b><span>things every exam needs<br>that a form cannot do</span></p>
       </div>
 
       <div class="claim" data-claim="1">
         <p class="label">What changes</p>
-        <h2>A form shows everyone the same paper.</h2>
+        <h2>A form shows everyone <span class="g">the same paper</span>.</h2>
         <p>Pariksha draws each candidate's paper from a pool you tag and filter, or hands out fixed
         sets A, B and C round-robin by registration order, so neighbours never sit the same questions.
         Options shuffle underneath, except the ones you pin.</p>
-        <p><mark class="hl">The answer key never leaves the server.</mark> The clock is the server's, so changing the
+        <p><strong>The answer key never leaves the server.</strong> The clock is the server's, so changing the
         computer's time does nothing, and an answer arriving thirty seconds late is refused. A field
         marked unique refuses a second registration with the same roll number.</p>
+        <p class="mmark"><b>30s</b><span>late-sync grace, then<br>the server refuses it</span></p>
       </div>
 
       <div class="claim" data-claim="2">
         <p class="label">What you ask</p>
-        <h2>Twelve types. Five ways to score them.</h2>
+        <h2><span class="g">Twelve types.</span> Five ways to score them.</h2>
         <p>Matching, multi-matching, ordering, numeric with tolerance, fill in the blank with regex —
         alongside the four every form tool has. Markdown, LaTeX, code blocks and images in each one.</p>
         <p>All-or-nothing, partial credit, negative marking, ordering by position, rubrics. Change a
         key after the exam and regrade every attempt, with one audit entry.</p>
+        <p class="mmark"><b>12 / 5</b><span>question types,<br>scoring modes</span></p>
       </div>
 
       <div class="claim" data-claim="3">
         <p class="label">What you get back</p>
-        <h2>One row per candidate, in a file you already know.</h2>
+        <h2>One row per candidate, in a file <span class="g">you already know</span>.</h2>
         <p>A column for every section and every registration field, with rank, percent, pass or fail
         against your pass mark, and the integrity flag. UTF-8 with a BOM, so non-Latin names open
         correctly in Excel.</p>
         <p class="fine">You never write JSON. The format exists so that you can — and so nothing you
         build is trapped.</p>
+        <p class="mmark"><b>29</b><span>columns in the results CSV<br>of the worked example</span></p>
       </div>
     </div>
 
@@ -506,7 +555,7 @@ a:focus-visible, button:focus-visible {
 <section class="on-ink statement">
   <div class="wrap">
     <p class="label">Integrity</p>
-    <h2>No video. No audio. No verdicts.</h2>
+    <h2>No video. No audio. <span class="g">No verdicts.</span></h2>
 
     <div class="statement-grid">
       <div>
@@ -526,7 +575,7 @@ a:focus-visible, button:focus-visible {
           <p class="results-head"><b>results_20261017-1540.csv</b><span>29 columns</span><span>3 of 48 rows</span></p>
           <div class="scroll-x">
             <table>
-              <caption class="fine" style="text-align:left;padding:12px 14px 0">The only colour on this page is the column the software refuses to decide.</caption>
+              <caption class="fine" style="text-align:left;padding:12px 14px 0">Amber and red appear here and nowhere else — the column the software refuses to decide.</caption>
               <thead><tr><th>Candidate</th><th>Score</th><th>Result</th><th>Integrity</th><th>Reviewer</th></tr></thead>
               <tbody>
                 <tr><td class="name">Fatima Sheikh</td><td class="n">24.00 / 27</td><td>Pass</td><td><span class="verdict v-clean">clean</span></td><td>—</td></tr>
@@ -537,7 +586,7 @@ a:focus-visible, button:focus-visible {
           </div>
         </div>
         <p class="fine" style="margin-top:14px">Five tab switches, three fullscreen exits, marked high
-        risk — <mark class="hl">and her result was not cancelled.</mark> A reviewer looked, wrote a note, and
+        risk — <strong>and her result was not cancelled.</strong> A reviewer looked, wrote a note, and
         invited her to a supervised re-test.</p>
       </div>
     </div>
@@ -548,7 +597,7 @@ a:focus-visible, button:focus-visible {
 <section class="ledger" id="ledger">
   <div class="wrap">
     <p class="label">Against the alternatives</p>
-    <h2>What you keep, and what you give up.</h2>
+    <h2>What you <span class="g">keep</span>, and what you give up.</h2>
 
     <div class="scroll-x">
       <table class="cmp">
@@ -570,7 +619,13 @@ a:focus-visible, button:focus-visible {
     <strong>Moodle</strong> is the nearest open-source comparison and is more capable today — Pariksha
     is lighter to run, and keeps the whole test in one portable file.</p>
 
-    <div class="arith">
+  </div>
+</section>
+
+<!-- ══════════ 6 · THE BLUE BAND — what it costs ══════════ -->
+<section class="on-blue" style="padding:clamp(64px,9vw,120px) 0">
+  <div class="wrap">
+
       <p class="label">What it costs</p>
       <p class="arith-line">Five hundred candidates in one hour, for <b>$0</b> — by arithmetic rather
       than by a bill.</p>
@@ -583,15 +638,14 @@ a:focus-visible, button:focus-visible {
       figure is a design target; the load test that would prove it (<code>AC-29</code>) is a Phase 12
       gate and has not been run. There is no Pariksha billing of any kind and no hosted service to
       bill for.</p>
-    </div>
-  </div>
+      </div>
 </section>
 
 <!-- ══════════ 6 · WHERE IT STANDS ══════════ -->
 <section class="stands" id="stands">
   <div class="wrap">
     <p class="label">Where it stands</p>
-    <h2>What exists today, and what lands with v0.1.</h2>
+    <h2>What exists <span class="g">today</span>, and what lands with v0.1.</h2>
 
     <div class="stands-grid">
       <div>
@@ -640,7 +694,7 @@ a:focus-visible, button:focus-visible {
 <!-- ══════════ 7 · CLOSE ══════════ -->
 <section class="on-ink close">
   <div class="wrap">
-    <h2 style="font-size:clamp(34px,7vw,94px);max-width:15ch">Start your question bank. It will import on day one.</h2>
+    <h2 style="font-size:clamp(34px,7vw,94px);max-width:15ch">Start your question bank. <span class="g">It will import on day one.</span></h2>
     <p class="lede" style="margin-top:24px">The format is published and stable. Questions you write
     this week load into Pariksha when v0.1 lands — and into anything else, because the schemas are
     open.</p>
