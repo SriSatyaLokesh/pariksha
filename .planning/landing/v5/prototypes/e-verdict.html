@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prototype E — Verdict — Pariksha landing</title>
+<!-- Prototype only. Production subsets and self-hosts these under default-src 'self'. -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Anek+Devanagari:wght@500&family=Anek+Telugu:wght@500&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+/* ══════════════════════════════════════════════════════════════════════
+   VERDICT — monochrome. The only chromatic colour on the page is the
+   three integrity flags, and they appear once: in the results sheet.
+   The single moment of colour is the moment the product refuses to judge.
+   ══════════════════════════════════════════════════════════════════════ */
+
+:root {
+  --ground: #F1F1EF;
+  --surface: #FFFFFF;
+  --ink: #0C0D0F;
+  --ink-2: #55585E;
+  --ink-3: #8A8D92;
+  --rule: #D9D9D5;
+  --rule-strong: #B9B9B4;
+
+  --invert-bg: #0C0D0F;
+  --invert-ink: #F2F3F0;
+  --invert-ink-2: #9DA1A6;
+  --invert-rule: #2A2D31;
+
+  --clean: #0D7A51;
+  --review: #8A5F00;
+  --risk: #B3261E;
+
+  /* Escape hatch. Uncomment to introduce one chromatic accent.
+     --signal: #3D5AFE; */
+
+  --sans: "Archivo", ui-sans-serif, system-ui, "Segoe UI", Helvetica, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --maxw: 1240px;
+  --gut: 22px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #0B0C0E;
+    --surface: #15171A;
+    --ink: #F2F3F0;
+    --ink-2: #9DA1A6;
+    --ink-3: #6E7278;
+    --rule: #262A2E;
+    --rule-strong: #3A3F45;
+    --invert-bg: #050607;
+    --invert-ink: #F2F3F0;
+    --invert-ink-2: #9DA1A6;
+    --invert-rule: #22262A;
+    --clean: #4CBF93;
+    --review: #D9A43A;
+    --risk: #F07A70;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #0B0C0E; --surface: #15171A; --ink: #F2F3F0; --ink-2: #9DA1A6;
+  --ink-3: #6E7278; --rule: #262A2E; --rule-strong: #3A3F45;
+  --invert-bg: #050607; --invert-ink: #F2F3F0; --invert-ink-2: #9DA1A6; --invert-rule: #22262A;
+  --clean: #4CBF93; --review: #D9A43A; --risk: #F07A70;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 17.5px;
+  line-height: 1.6;
+  font-synthesis-weight: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--gut); }
+
+/* ── type ─────────────────────────────────────────────────────────── */
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 {
+  font-size: clamp(44px, 9.4vw, 132px);
+  line-height: 0.88;
+  font-weight: 700;
+  font-stretch: 118%;
+  letter-spacing: -0.042em;
+  max-width: 14ch;
+}
+h2 {
+  font-size: clamp(30px, 4.6vw, 62px);
+  line-height: 0.96;
+  font-weight: 700;
+  font-stretch: 108%;
+  letter-spacing: -0.034em;
+  max-width: 17ch;
+}
+h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.012em; }
+p { margin: 0 0 16px; color: var(--ink-2); max-width: 60ch; }
+.lede { font-size: clamp(18px, 1.8vw, 22px); line-height: 1.45; max-width: 44ch; }
+strong { color: inherit; font-weight: 600; }
+.on-ink strong { color: var(--invert-ink); }
+.ground strong { color: var(--ink); }
+.label {
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ink-3);
+  margin: 0 0 18px;
+}
+.fine { font-size: 14px; color: var(--ink-3); max-width: 58ch; }
+code { font-family: var(--mono); font-size: 0.86em; }
+a { color: inherit; }
+
+/* ── inverted sections ────────────────────────────────────────────── */
+.on-ink {
+  background: var(--invert-bg);
+  color: var(--invert-ink);
+}
+.on-ink p { color: var(--invert-ink-2); }
+.on-ink .label { color: var(--invert-ink-2); }
+.on-ink .fine { color: var(--invert-ink-2); }
+
+/* ── actions ──────────────────────────────────────────────────────── */
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.btn {
+  display: inline-block; text-decoration: none;
+  font-size: 16.5px; font-weight: 600; letter-spacing: -0.008em;
+  padding: 14px 26px; border: 1.5px solid var(--ink);
+  background: var(--ink); color: var(--ground);
+  transition: opacity 180ms ease-out, transform 180ms ease-out;
+}
+.btn:hover { opacity: 0.86; transform: translateY(-1px); }
+.btn-2 { background: transparent; color: var(--ink); }
+.on-ink .btn { background: var(--invert-ink); color: var(--invert-bg); border-color: var(--invert-ink); }
+.on-ink .btn-2 { background: transparent; color: var(--invert-ink); }
+.link-mono {
+  font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; text-decoration: none; color: var(--ink-2);
+  border-bottom: 1px solid var(--rule-strong); padding-bottom: 3px;
+}
+.on-ink .link-mono { color: var(--invert-ink-2); border-bottom-color: var(--invert-rule); }
+.link-mono:hover { color: var(--ink); border-bottom-color: currentColor; }
+.on-ink .link-mono:hover { color: var(--invert-ink); }
+a:focus-visible, button:focus-visible {
+  outline: 2px solid currentColor; outline-offset: 3px;
+}
+
+/* ── masthead ─────────────────────────────────────────────────────── */
+.masthead {
+  display: flex; flex-wrap: wrap; gap: 14px 26px; align-items: baseline;
+  padding: 22px 0 20px;
+}
+.word { display: flex; align-items: baseline; gap: 11px; margin-right: auto; }
+.word b { font-size: 21px; font-weight: 700; font-stretch: 112%; letter-spacing: -0.02em; }
+.word i {
+  font-style: normal; font-size: 13px; opacity: 0.55;
+  font-family: "Anek Telugu", "Anek Devanagari", var(--sans);
+}
+.masthead nav { display: flex; flex-wrap: wrap; gap: 20px; }
+.masthead nav a {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; text-decoration: none; color: var(--invert-ink-2);
+}
+.masthead nav a:hover { color: var(--invert-ink); }
+
+/* ── 1 · hero ─────────────────────────────────────────────────────── */
+.hero { padding-bottom: clamp(44px, 6vw, 84px); }
+.hero-top { display: grid; gap: 30px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: end; padding: clamp(28px, 5vw, 64px) 0 clamp(32px, 4vw, 52px); }
+@media (max-width: 920px) { .hero-top { grid-template-columns: 1fr; align-items: start; } }
+.status {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--invert-ink-2); margin-bottom: 26px;
+}
+.status s { text-decoration: none; display: block; width: 24px; height: 1px; background: var(--invert-ink-2); }
+
+/* live draw */
+.draw {
+  border: 1px solid var(--invert-rule);
+  background: rgba(255, 255, 255, 0.028);
+}
+.draw-head {
+  display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center;
+  padding: 13px 18px; border-bottom: 1px solid var(--invert-rule);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--invert-ink-2);
+}
+.draw-head b { color: var(--invert-ink); font-weight: 600; margin-right: auto; letter-spacing: 0.08em; }
+.draw-body { padding: 6px 18px 16px; }
+.draw-row {
+  display: grid; grid-template-columns: minmax(92px, 132px) 1fr; gap: 14px;
+  align-items: baseline; padding: 12px 0; border-bottom: 1px solid var(--invert-rule);
+}
+.draw-row:last-child { border-bottom: 0; }
+.draw-row b { font-size: 15.5px; font-weight: 600; color: var(--invert-ink); }
+.draw-row span {
+  font-family: var(--mono); font-size: 13px; color: var(--invert-ink-2);
+  letter-spacing: 0.01em;
+}
+.draw-foot {
+  display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
+  padding: 0 18px 16px;
+}
+.redraw {
+  font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; cursor: pointer;
+  background: transparent; color: var(--invert-ink);
+  border: 1px solid var(--invert-rule); padding: 9px 15px;
+  transition: background 180ms ease-out;
+}
+.redraw:hover { background: rgba(255,255,255,0.07); }
+
+/* ── 2 · fact line ────────────────────────────────────────────────── */
+.facts {
+  display: flex; flex-wrap: wrap; list-style: none; margin: 0; padding: 16px 0;
+  border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule);
+  gap: 10px 0;
+}
+.facts li {
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2);
+  padding-right: 22px; margin-right: 22px; border-right: 1px solid var(--rule);
+}
+.facts li:last-child { border-right: 0; margin-right: 0; padding-right: 0; }
+.facts li b { color: var(--ink); font-weight: 600; }
+
+/* ── 3 · the argument (asymmetric scroll + sticky sheet) ──────────── */
+.argument {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.82fr);
+  gap: 56px; padding: clamp(64px, 9vw, 130px) 0;
+}
+@media (max-width: 1000px) { .argument { grid-template-columns: 1fr; gap: 36px; } }
+.claims > * + * { margin-top: clamp(48px, 7vw, 96px); }
+.claim p { margin-top: 16px; }
+.sheet-wrap { position: sticky; top: 32px; align-self: start; }
+@media (max-width: 1000px) { .sheet-wrap { position: static; } }
+.sheet {
+  background: var(--surface); border: 1px solid var(--rule-strong);
+}
+.sheet-head {
+  display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline;
+  padding: 14px 18px; border-bottom: 1px solid var(--rule);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.sheet-head b { color: var(--ink); font-weight: 600; margin-right: auto; }
+.sheet-row {
+  display: grid; grid-template-columns: 26px 1fr; gap: 14px;
+  padding: 15px 18px; border-bottom: 1px solid var(--rule);
+  opacity: 0.22; transition: opacity 320ms ease-out;
+}
+.sheet-row:last-child { border-bottom: 0; }
+.sheet-row[data-on="1"] { opacity: 1; }
+.sheet-row i {
+  font-style: normal; font-family: var(--mono); font-size: 11px;
+  color: var(--ink-3); padding-top: 3px; font-variant-numeric: tabular-nums;
+}
+.sheet-row h3 { font-size: 15.5px; margin-bottom: 3px; }
+.sheet-row p { font-size: 13.5px; margin: 0; color: var(--ink-3); }
+@media (prefers-reduced-motion: reduce) { .sheet-row { opacity: 1; } }
+
+/* ── 4 · the statement ────────────────────────────────────────────── */
+.statement { padding: clamp(72px, 11vw, 150px) 0; }
+.statement h2 {
+  font-size: clamp(38px, 8.6vw, 116px); line-height: 0.9;
+  font-stretch: 116%; letter-spacing: -0.042em; max-width: 13ch;
+}
+.statement-grid {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 48px; margin-top: clamp(36px, 5vw, 64px); align-items: start;
+}
+@media (max-width: 1000px) { .statement-grid { grid-template-columns: 1fr; gap: 32px; } }
+
+/* results sheet — the only colour on the page */
+.results { border: 1px solid var(--invert-rule); background: rgba(255,255,255,0.028); }
+.results-head {
+  padding: 13px 18px; border-bottom: 1px solid var(--invert-rule);
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--invert-ink-2);
+  display: flex; flex-wrap: wrap; gap: 6px 14px;
+}
+.results-head b { color: var(--invert-ink); font-weight: 600; margin-right: auto; }
+.results table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 420px; }
+.results th {
+  text-align: left; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--invert-ink-2);
+  padding: 13px 14px; border-bottom: 1px solid var(--invert-rule);
+}
+.results td {
+  padding: 14px; border-bottom: 1px solid var(--invert-rule);
+  color: var(--invert-ink-2); vertical-align: baseline;
+}
+.results tr:last-child td { border-bottom: 0; }
+.results td.name { color: var(--invert-ink); font-weight: 500; }
+.results td.n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--invert-ink); }
+.verdict { font-family: var(--mono); font-size: 12.5px; font-weight: 500; letter-spacing: 0.03em; }
+.v-clean { color: var(--clean); }
+.v-review { color: var(--review); }
+.v-risk { color: var(--risk); }
+.scroll-x { overflow-x: auto; }
+
+/* ── 5 · the ledger ───────────────────────────────────────────────── */
+.ledger { padding: clamp(64px, 9vw, 130px) 0; }
+.cmp { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 680px; margin-top: 34px; }
+.cmp th {
+  text-align: left; font-family: var(--mono); font-size: 10px; font-weight: 500;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3);
+  padding: 0 18px 12px 0; border-bottom: 2px solid var(--ink);
+}
+.cmp th:last-child { color: var(--ink); }
+.cmp td { padding: 15px 18px 15px 0; border-bottom: 1px solid var(--rule); color: var(--ink-3); vertical-align: top; }
+.cmp td:first-child { color: var(--ink-2); }
+.cmp td:last-child { color: var(--ink); font-weight: 500; }
+.cmp tr:last-child td { border-bottom: 2px solid var(--ink); }
+
+.arith { margin-top: clamp(52px, 7vw, 90px); }
+.arith-line { font-size: clamp(21px, 2.6vw, 32px); line-height: 1.45; max-width: 24ch; font-weight: 400; color: var(--ink-2); }
+.arith-line b {
+  font-family: var(--mono); font-weight: 600; color: var(--ink);
+  font-size: 1.35em; letter-spacing: -0.03em; font-variant-numeric: tabular-nums;
+}
+.arith-cols { display: grid; gap: 26px; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-top: 38px; padding-top: 26px; border-top: 1px solid var(--rule); }
+.arith-cols div p { margin: 0; font-size: 14px; }
+.arith-cols b { display: block; font-family: var(--mono); font-size: 13px; color: var(--ink); letter-spacing: 0.02em; margin-bottom: 5px; font-variant-numeric: tabular-nums; }
+
+/* ── 6 · where it stands ──────────────────────────────────────────── */
+.stands { padding: clamp(64px, 9vw, 120px) 0; }
+.stands-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr); gap: 52px; margin-top: 40px; align-items: start; }
+@media (max-width: 1000px) { .stands-grid { grid-template-columns: 1fr; gap: 34px; } }
+.seg { display: inline-flex; border: 1px solid var(--rule-strong); margin-bottom: 24px; }
+.seg button {
+  font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: 0.1em;
+  text-transform: uppercase; cursor: pointer; background: transparent; color: var(--ink-2);
+  border: 0; padding: 11px 17px;
+}
+.seg button + button { border-left: 1px solid var(--rule-strong); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+.list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--rule); }
+.list li { padding: 13px 0; border-bottom: 1px solid var(--rule); font-size: 15.5px; color: var(--ink-2); }
+.list li b { color: var(--ink); font-weight: 600; }
+.today { background: var(--surface); border: 1px solid var(--rule-strong); padding: 26px; }
+.today ol { margin: 0; padding-left: 20px; }
+.today li { margin-bottom: 13px; font-size: 15px; color: var(--ink-2); }
+.today li b { color: var(--ink); }
+
+/* ── 7 · close ────────────────────────────────────────────────────── */
+.close { padding: clamp(72px, 10vw, 140px) 0 clamp(48px, 6vw, 80px); }
+.colophon {
+  border-top: 1px solid var(--invert-rule); padding: 30px 0 60px;
+  display: grid; gap: 24px; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+.colophon h4 {
+  margin: 0 0 9px; font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--invert-ink-2);
+}
+.colophon p { font-size: 13.5px; margin: 0; }
+
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<!-- ══════════ 1 · HERO ══════════ -->
+<section class="on-ink hero">
+  <div class="wrap">
+    <header class="masthead">
+      <p class="word"><b>Pariksha</b><i lang="te">పరీక్ష</i><i lang="hi">परीक्षा</i></p>
+      <nav aria-label="Primary">
+        <a href="#argument">How it works</a>
+        <a href="#ledger">Compare</a>
+        <a href="#stands">Status</a>
+        <a href="#">Docs</a>
+        <a href="#">GitHub</a>
+      </nav>
+    </header>
+
+    <div class="hero-top">
+      <div>
+        <p class="status"><s></s>Pre-alpha · scoring engine and formats live · v0.1 in progress</p>
+        <h1>Run real exams on infrastructure you own.</h1>
+      </div>
+      <div>
+        <p class="lede">For placement cells, training institutes and teams that have to test hundreds
+        of people. Twelve question types, a different paper for every candidate, proctoring that
+        records no video, and a results CSV. Free, Apache-2.0, in your own account.</p>
+        <div class="actions" style="margin-top:28px">
+          <a class="btn" href="#">Start your question bank</a>
+          <a class="btn btn-2" href="#">See a real exam</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="draw">
+      <p class="draw-head">
+        <b>A different paper for every candidate</b>
+        <span>bank: reasoning-aptitude</span><span>draw 4 of 11</span><span>shuffle on</span>
+      </p>
+      <div class="draw-body" id="draw-body">
+        <div class="draw-row"><b>Ananya Rao</b><span>LOG-001 · LOG-004 · SER-002 · LOG-007</span></div>
+        <div class="draw-row"><b>Rahul Nair</b><span>LOG-003 · SER-001 · LOG-009 · QNT-002</span></div>
+        <div class="draw-row"><b>Fatima Sheikh</b><span>SER-002 · LOG-006 · LOG-002 · QNT-004</span></div>
+      </div>
+      <div class="draw-foot">
+        <button class="redraw" type="button" id="redraw">Draw again</button>
+        <span class="fine" style="margin:0">Seeded per attempt — a refresh returns the same paper.</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 2 · FACT LINE ══════════ -->
+<div class="wrap">
+  <ul class="facts">
+    <li><b>Apache-2.0</b></li>
+    <li><b>12</b> question types</li>
+    <li><b>5</b> scoring modes</li>
+    <li><b>97%</b> coverage</li>
+    <li>no telemetry</li>
+    <li><b>$0</b> per candidate</li>
+  </ul>
+</div>
+
+<!-- ══════════ 3 · THE ARGUMENT ══════════ -->
+<div class="wrap">
+  <div class="argument" id="argument">
+    <div class="claims">
+      <div class="claim" data-claim="0">
+        <p class="label">The situation</p>
+        <h2>Three hundred candidates, one week, no budget.</h2>
+        <p>A placement cell screening a graduating class. A training institute certifying a cohort. A
+        sixty-person company that needs a shortlist by Friday. All three need the same four things: a
+        different paper for every candidate, a clock nobody can edit, some idea of who was looking at
+        another window, and a spreadsheet at the end.</p>
+        <p>A form tool gives you none of them. An assessment platform gives you all four, charges by
+        the candidate, and keeps the data on its servers.</p>
+      </div>
+
+      <div class="claim" data-claim="1">
+        <p class="label">What changes</p>
+        <h2>A form shows everyone the same paper.</h2>
+        <p>Pariksha draws each candidate's paper from a pool you tag and filter, or hands out fixed
+        sets A, B and C round-robin by registration order, so neighbours never sit the same questions.
+        Options shuffle underneath, except the ones you pin.</p>
+        <p>The answer key never leaves the server. The clock is the server's, so changing the
+        computer's time does nothing, and an answer arriving thirty seconds late is refused. A field
+        marked unique refuses a second registration with the same roll number.</p>
+      </div>
+
+      <div class="claim" data-claim="2">
+        <p class="label">What you ask</p>
+        <h2>Twelve types. Five ways to score them.</h2>
+        <p>Matching, multi-matching, ordering, numeric with tolerance, fill in the blank with regex —
+        alongside the four every form tool has. Markdown, LaTeX, code blocks and images in each one.</p>
+        <p>All-or-nothing, partial credit, negative marking, ordering by position, rubrics. Change a
+        key after the exam and regrade every attempt, with one audit entry.</p>
+      </div>
+
+      <div class="claim" data-claim="3">
+        <p class="label">What you get back</p>
+        <h2>One row per candidate, in a file you already know.</h2>
+        <p>A column for every section and every registration field, with rank, percent, pass or fail
+        against your pass mark, and the integrity flag. UTF-8 with a BOM, so non-Latin names open
+        correctly in Excel.</p>
+        <p class="fine">You never write JSON. The format exists so that you can — and so nothing you
+        build is trapped.</p>
+      </div>
+    </div>
+
+    <div class="sheet-wrap">
+      <div class="sheet" id="sheet">
+        <p class="sheet-head"><b>What an exam needs</b><span>4 of 4</span></p>
+        <div class="sheet-row" data-row="0"><i>01</i><div><h3>A different paper each</h3><p>Pools filtered by tag and difficulty, or fixed sets A/B/C.</p></div></div>
+        <div class="sheet-row" data-row="1"><i>02</i><div><h3>A clock nobody can edit</h3><p>The deadline is the server's. Late answers refused after 30 seconds.</p></div></div>
+        <div class="sheet-row" data-row="2"><i>03</i><div><h3>A key that stays hidden</h3><p>Keys and explanations never reach a candidate's browser.</p></div></div>
+        <div class="sheet-row" data-row="3"><i>04</i><div><h3>A spreadsheet at the end</h3><p>One CSV row per candidate, with scores and integrity flags.</p></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ 4 · THE STATEMENT ══════════ -->
+<section class="on-ink statement">
+  <div class="wrap">
+    <p class="label">Integrity</p>
+    <h2>No video. No audio. No verdicts.</h2>
+
+    <div class="statement-grid">
+      <div>
+        <p>Strict proctoring takes a 320×240 snapshot about every sixty seconds, counts faces on the
+        device itself, and stores no biometric template. Nothing is streamed. Nothing is recorded.
+        Snapshots sit in your own private bucket behind links that expire in ten minutes.</p>
+        <p>Tab switches, fullscreen exits and copy attempts are logged, and the candidate sees a
+        counted warning rather than a silent mark against them. At the end Pariksha marks the attempt
+        <strong>clean</strong>, <strong>review</strong> or <strong>high risk</strong> — and stops.</p>
+        <p>Browser checks deter and record. They cannot prove: a second phone is invisible to every
+        one of them, and our own documentation says so. That is precisely why no machine here is
+        allowed to reach a verdict.</p>
+      </div>
+
+      <div>
+        <div class="results">
+          <p class="results-head"><b>results_20261017-1540.csv</b><span>29 columns</span><span>3 of 48 rows</span></p>
+          <div class="scroll-x">
+            <table>
+              <caption class="fine" style="text-align:left;padding:12px 14px 0">The only colour on this page is the column the software refuses to decide.</caption>
+              <thead><tr><th>Candidate</th><th>Score</th><th>Result</th><th>Integrity</th><th>Reviewer</th></tr></thead>
+              <tbody>
+                <tr><td class="name">Fatima Sheikh</td><td class="n">24.00 / 27</td><td>Pass</td><td><span class="verdict v-clean">clean</span></td><td>—</td></tr>
+                <tr><td class="name">Ananya Rao</td><td class="n">21.50 / 27</td><td>Pass</td><td><span class="verdict v-review">review</span></td><td>Clear</td></tr>
+                <tr><td class="name">Divya Menon</td><td class="n">9.50 / 27</td><td>Fail</td><td><span class="verdict v-risk">high risk</span></td><td>Suspicious</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <p class="fine" style="margin-top:14px">Five tab switches, three fullscreen exits, marked high
+        risk — <strong>and her result was not cancelled.</strong> A reviewer looked, wrote a note, and
+        invited her to a supervised re-test.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 5 · THE LEDGER ══════════ -->
+<section class="ledger" id="ledger">
+  <div class="wrap">
+    <p class="label">Against the alternatives</p>
+    <h2>What you keep, and what you give up.</h2>
+
+    <div class="scroll-x">
+      <table class="cmp">
+        <thead><tr><th>What you need</th><th>A form tool</th><th>A paid platform</th><th>Pariksha</th></tr></thead>
+        <tbody>
+          <tr><td>Price per candidate</td><td>None</td><td>Per candidate or per month, where published at all</td><td>None, and no Pariksha billing of any kind</td></tr>
+          <tr><td>Where candidate data lives</td><td>Their servers</td><td>Their servers</td><td>Your account — no Pariksha server in the path</td></tr>
+          <tr><td>A different paper per candidate</td><td>No</td><td>Yes</td><td>Pools, fixed sets, per-candidate shuffling</td></tr>
+          <tr><td>Answer key hidden from the browser</td><td>No</td><td>Yes</td><td>Yes, enforced on the server</td></tr>
+          <tr><td>The clock</td><td>The browser's</td><td>The server's</td><td>The server's — late answers refused after 30s</td></tr>
+          <tr><td>Video or audio recorded</td><td>—</td><td>Varies by vendor</td><td>Never. Snapshots only, faces counted on-device</td></tr>
+          <tr><td>Who decides a candidate cheated</td><td>—</td><td>Varies by vendor</td><td>A person. Pariksha flags; it never concludes</td></tr>
+          <tr><td>If you want to leave</td><td>Export a spreadsheet</td><td>Ask them</td><td>One JSON file. Open format, CC BY 4.0</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="fine" style="margin-top:16px">Nothing here is a benchmark. Every row is either what
+    Pariksha does, or what the other two categories publish about themselves, read in October 2026.
+    <strong>Moodle</strong> is the nearest open-source comparison and is more capable today — Pariksha
+    is lighter to run, and keeps the whole test in one portable file.</p>
+
+    <div class="arith">
+      <p class="label">What it costs</p>
+      <p class="arith-line">Five hundred candidates in one hour, for <b>$0</b> — by arithmetic rather
+      than by a bill.</p>
+      <div class="arith-cols">
+        <div><b>100,000 / day</b><p>Worker requests on the free plan. One test of 500 uses about 55,000.</p></div>
+        <div><b>100,000 / day</b><p>Database rows written. One test of 500 uses about 55,000.</p></div>
+        <div><b>10 GB / month</b><p>Object storage. One test of 500 uses about 0.75 GB of snapshots.</p></div>
+      </div>
+      <p class="fine" style="margin-top:22px">An estimate with published arithmetic. The 500-candidate
+      figure is a design target; the load test that would prove it (<code>AC-29</code>) is a Phase 12
+      gate and has not been run. There is no Pariksha billing of any kind and no hosted service to
+      bill for.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 6 · WHERE IT STANDS ══════════ -->
+<section class="stands" id="stands">
+  <div class="wrap">
+    <p class="label">Where it stands</p>
+    <h2>What exists today, and what lands with v0.1.</h2>
+
+    <div class="stands-grid">
+      <div>
+        <div class="seg" role="group" aria-label="Build status">
+          <button type="button" id="tab-live" aria-pressed="true">Live today</button>
+          <button type="button" id="tab-next" aria-pressed="false">Lands with v0.1</button>
+        </div>
+        <ul class="list" id="list-live">
+          <li><b>The question and test formats</b>, and their JSON Schemas</li>
+          <li><b>All 12 question types</b>, graded and unit-tested</li>
+          <li><b>All 5 scoring modes</b>, with applicable modes enforced per type</li>
+          <li><b>Pool draws, set assignment, seeded shuffling</b></li>
+          <li><b>Cross-field import validation</b> — one bad question imports nothing</li>
+          <li><b>A 17-question worked example</b> covering all 12 types</li>
+          <li><b>This website</b></li>
+        </ul>
+        <ul class="list" id="list-next" hidden>
+          <li><b>The authoring UI</b> and the test builder</li>
+          <li><b>The candidate runtime</b></li>
+          <li><b>Proctoring</b> — three profiles, Off, Standard and Strict</li>
+          <li><b>Results</b> — CSV, live monitor, grading queue, item analysis</li>
+          <li><b>The API</b> and signed webhooks</li>
+          <li><b>Organiser sign-in</b>, roles and workspaces</li>
+        </ul>
+        <p class="fine" style="margin-top:20px">A paid platform you can buy today will do more than
+        Pariksha does today, because the application is not built yet. What is built is the format,
+        the schemas and the scoring engine — and you can run those today.</p>
+      </div>
+
+      <div class="today">
+        <h3 style="margin-bottom:14px">What you can do today</h3>
+        <ol>
+          <li><b>Write your question bank.</b> The format is published and stable; questions written
+          today import on day one — or into anything else, since the schemas are CC BY 4.0.</li>
+          <li><b>Validate it in one command.</b> One <code>npx ajv</code> run. No install, no
+          account.</li>
+          <li><b>Read a whole exam.</b> Seventeen questions, three sections, the candidate's screen
+          and the results CSV it produces.</li>
+        </ol>
+        <p class="fine" style="margin:0"><strong>What you cannot do yet:</strong> run a test.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════════ 7 · CLOSE ══════════ -->
+<section class="on-ink close">
+  <div class="wrap">
+    <h2 style="font-size:clamp(34px,7vw,94px);max-width:15ch">Start your question bank. It will import on day one.</h2>
+    <p class="lede" style="margin-top:24px">The format is published and stable. Questions you write
+    this week load into Pariksha when v0.1 lands — and into anything else, because the schemas are
+    open.</p>
+    <div class="actions" style="margin-top:32px">
+      <a class="btn" href="#">Start your question bank</a>
+      <a class="btn btn-2" href="#">Watch the repo for v0.1</a>
+    </div>
+
+    <div class="colophon">
+      <div><h4>Documentation</h4><p>PRD · Question format · Test format · Schemas · Architecture decisions · Roadmap</p></div>
+      <div><h4>Project</h4><p>GitHub · Contributing · Code of conduct · Security policy</p></div>
+      <div><h4>Licence</h4><p>Apache-2.0 with an explicit patent grant. Docs, schemas and examples CC BY 4.0. No contributor licence agreement.</p></div>
+      <div><h4>Not for</h4><p>A test you must run this week · invigilated or legally contestable exams · candidates on phones · lockdown browsers · anyone wanting it hosted for them.</p></div>
+    </div>
+  </div>
+</section>
+
+<script>
+(function () {
+  /* 1 — Draw again: the product's central claim, demonstrated. */
+  var BANK = ["LOG-001","LOG-002","LOG-003","LOG-004","LOG-006","LOG-007","LOG-009",
+              "SER-001","SER-002","QNT-002","QNT-004"];
+  var NAMES = ["Ananya Rao", "Rahul Nair", "Fatima Sheikh"];
+  var body = document.getElementById("draw-body");
+  var btn = document.getElementById("redraw");
+
+  function draw(n) {
+    var pool = BANK.slice(), out = [];
+    for (var i = 0; i < n && pool.length; i++) {
+      out.push(pool.splice(Math.floor(Math.random() * pool.length), 1)[0]);
+    }
+    return out;
+  }
+  if (btn && body) {
+    btn.addEventListener("click", function () {
+      body.innerHTML = NAMES.map(function (name) {
+        return '<div class="draw-row"><b>' + name + '</b><span>' +
+               draw(4).join(" · ") + "</span></div>";
+      }).join("");
+      btn.setAttribute("aria-label", "Draw again — three new papers drawn");
+    });
+  }
+
+  /* 2 — The sheet assembles as each claim passes. */
+  var rows = Array.prototype.slice.call(document.querySelectorAll(".sheet-row"));
+  var claims = Array.prototype.slice.call(document.querySelectorAll(".claim"));
+  if ("IntersectionObserver" in window && rows.length) {
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        var i = claims.indexOf(e.target);
+        for (var j = 0; j <= i && j < rows.length; j++) rows[j].setAttribute("data-on", "1");
+      });
+    }, { rootMargin: "-25% 0px -45% 0px" });
+    claims.forEach(function (c) { io.observe(c); });
+    rows[0].setAttribute("data-on", "1");
+  } else {
+    rows.forEach(function (r) { r.setAttribute("data-on", "1"); });
+  }
+
+  /* 3 — Build-status toggle. Both lists render with JS off. */
+  var tLive = document.getElementById("tab-live");
+  var tNext = document.getElementById("tab-next");
+  var lLive = document.getElementById("list-live");
+  var lNext = document.getElementById("list-next");
+  function pick(live) {
+    tLive.setAttribute("aria-pressed", live ? "true" : "false");
+    tNext.setAttribute("aria-pressed", live ? "false" : "true");
+    lLive.hidden = !live;
+    lNext.hidden = live;
+  }
+  if (tLive && tNext) {
+    tLive.addEventListener("click", function () { pick(true); });
+    tNext.addEventListener("click", function () { pick(false); });
+  }
+})();
+</script>
+
+</body>
+</html>
