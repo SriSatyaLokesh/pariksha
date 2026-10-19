@@ -208,7 +208,13 @@
       "properties": {
         "default_mode": { "enum": ["all_or_nothing", "partial", "negative", "position", "rubric"] },
         "negative_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
-        "pass_mark_percent": { "type": "number", "minimum": 0, "maximum": 100 }
+        "pass_mark_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "set_points_tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "How far two sets of one sets source may differ in total points before import and the publish checklist report it (T-11). Default 0: any difference at all is reported."
+        }
       },
       "additionalProperties": false
     },

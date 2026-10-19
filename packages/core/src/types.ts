@@ -239,6 +239,14 @@ export interface TestScoring {
   default_mode?: ScoringMode;
   negative_fraction?: number;
   pass_mark_percent?: number;
+  /**
+   * Task 4 (#56, P5.3). How far two sets of one `sets` source may differ in
+   * total points before T-11 reports it, in points. Default 0 — any
+   * difference at all is reported. It lives in the document, not only in
+   * `validateTest`'s options, so an organiser who accepted some drift still
+   * has it accepted after the test is exported and imported elsewhere.
+   */
+  set_points_tolerance?: number;
 }
 
 export type AccessMode = "link_code" | "invite_only" | "email_code" | "sso";

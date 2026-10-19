@@ -697,6 +697,43 @@ describe("validateTest", () => {
     expect(validateTest(test, bank, { setPointsTolerance: 0.5 }).ok).toBe(false);
   });
 
+  // Task 4 (#56, P5.3): the tolerance has a home in the document itself
+  // (`scoring.set_points_tolerance`), so an organiser who accepted some
+  // drift still has it accepted when the file is exported and imported
+  // somewhere else. The caller's own option still wins where it is given —
+  // the publish gate may be stricter than the file asks for.
+  it("reads the tolerance from the document's own scoring.set_points_tolerance", () => {
+    const bank = [
+      trueFalse("TF-001", 2),
+      trueFalse("TF-002", 2),
+      trueFalse("TF-003", 1),
+      trueFalse("TF-004", 2),
+    ];
+    const sections = [
+      {
+        id: "s1",
+        title: "Sets",
+        source: {
+          kind: "sets" as const,
+          sets: [
+            { set: "A", questions: ["TF-001", "TF-002"] },
+            { set: "B", questions: ["TF-003", "TF-004"] },
+          ],
+        },
+      },
+    ];
+
+    // The document asks for a tolerance of 1, and the 1-point drift passes.
+    expect(validateTest(doc({ scoring: { set_points_tolerance: 1 }, sections }), bank).ok).toBe(true);
+    // The same document without the field keeps the strict default of 0.
+    expect(validateTest(doc({ sections }), bank).ok).toBe(false);
+    // An explicit option still overrides the document, in both directions.
+    expect(
+      validateTest(doc({ scoring: { set_points_tolerance: 1 }, sections }), bank, { setPointsTolerance: 0 }).ok,
+    ).toBe(false);
+    expect(validateTest(doc({ sections }), bank, { setPointsTolerance: 1 }).ok).toBe(true);
+  });
+
   it('reports release.when "on_date" with no at', () => {
     const r = validateTest(doc({ release: { when: "on_date" } }), []);
     expect(r.ok).toBe(false);

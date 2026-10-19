@@ -131,8 +131,10 @@ Browser checks deter and record; they cannot prove or prevent cheating — a sec
 ## `scoring`
 
 ```json
-"scoring": { "default_mode": "negative", "negative_fraction": 0.25, "pass_mark_percent": 50 }
+"scoring": { "default_mode": "negative", "negative_fraction": 0.25, "pass_mark_percent": 50, "set_points_tolerance": 1 }
 ```
+
+`set_points_tolerance` is how far two sets of one `sets` source may differ in total points before the difference is reported, in points. It defaults to `0`, so any difference at all is reported; raise it where an organiser accepts some drift. It travels with the file, so a test that accepted a point of drift here still does after export and import.
 
 `default_mode` applies to every question that does not set its own `scoring.mode`. The modes and their formulas are in [question-format.md](question-format.md#scoring-modes).
 
@@ -204,7 +206,7 @@ The schema checks structure. The importer also checks:
 - every question ID in a `fixed` or `sets` source exists in one of the `banks`
 - `scoring.default_mode` applies to every question type a section can draw, for the questions that do not set their own `scoring.mode` — the modes and the types each applies to are in [question-format.md](question-format.md#scoring-modes). A test defaulting to `partial` over a section of `ordering` questions is an error, not a silent regrade: `ordering` takes `position`
 - a `pool` filter matches at least `count` questions
-- the sets of a `sets` source hold equal total points, within a tolerance the caller may raise (default: 0, so any difference is reported)
+- the sets of a `sets` source hold equal total points, within `scoring.set_points_tolerance` (default: 0, so any difference is reported). A caller may override the file with a stricter number of its own, never a looser one
 - section IDs and form-field IDs are unique within the test
 - `access_code` is present when `mode` is `link_code`, and `at` is present when `when` is `on_date`
 - `closes_at` is after `opens_at`, and `latest_start_at` falls inside the window

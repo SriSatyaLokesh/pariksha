@@ -416,6 +416,11 @@ export interface TestValidationOptions {
    * sets differing "by more than a set amount" / drifting apart, and name
    * no amount — so the default is the strict reading, 0: any difference at
    * all is reported. Raise it where an organiser accepts some drift.
+   *
+   * Task 4 (#56, P5.3): the document now carries the same amount as
+   * `scoring.set_points_tolerance`, and this option overrides it where a
+   * caller gives one — a gate may be stricter than the file asks for, but a
+   * file alone cannot loosen a gate that named its own number.
    */
   setPointsTolerance?: number;
 }
@@ -491,7 +496,7 @@ export function validateTest(
 
   const doc = test as unknown as Test;
   const issues: ImportIssue[] = [];
-  const tolerance = options.setPointsTolerance ?? 0;
+  const tolerance = options.setPointsTolerance ?? doc.scoring?.set_points_tolerance ?? 0;
   const defaultMode = doc.scoring?.default_mode;
   const byId = new Map(bank.map((q) => [q.id, q]));
 
