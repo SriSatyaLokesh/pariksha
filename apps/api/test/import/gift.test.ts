@@ -12,6 +12,7 @@ import { validateBank } from "@pariksha/core";
 import { createApp } from "../../src/app.js";
 import { issueSession } from "../../src/auth/session.js";
 import { convertGift } from "../../src/import/gift.js";
+import { IMPORT_MAX_TEXT_LENGTH } from "../../src/import/json.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "../deps.js";
 
 const { deps } = await testDeps();
@@ -98,15 +99,99 @@ it.each([
 ])("an unsupported GIFT construct (%s) is a positioned error, never a silent skip", (_n, src, re) => {
   const { issues, bank } = convertGift(src);
   expect(bank.questions).toEqual([]);
-  expect(issues[0]).toMatchObject({ line: 1, message: expect.stringMatching(re) });
+  expect(issues[0]).toMatchObject({ line: 1, code: "gift_unsupported_construct", message: expect.stringMatching(re) });
 });
 
 it("GIFT comments, blank-line separation and escaped specials are handled", () => {
   expect(convertGift("// a comment\n\n::q:: 2 \\+ 2 is {#4}").bank.questions).toHaveLength(1);
 });
 
-it("a GIFT file with any error imports nothing", async () => {
-  await importGift("one-bad.gift");
+// Fix round 1, finding 6: every case above puts its defect on line 1 of a
+// single-line input, so an implementation that hard-coded `line: 1` would
+// also pass all four. Here the construct is three lines in, behind a
+// stripped comment and a real question — proving `stripComments` keeps each
+// surviving line's *original* number (not its position after comments are
+// removed) and that `splitBlocks` reports a block's own first line, not the
+// block's ordinal position.
+it("an unsupported construct's reported line survives a stripped comment and an earlier question", () => {
+  const src = ["// leading comment", "::q1:: The sky is blue. {T}", "", "::m:: Match {=a -> 1 =b -> 2}"].join("\n");
+  const { issues, bank } = convertGift(src);
+  expect(bank.questions).toHaveLength(1);
+  expect(issues[0]).toMatchObject({ line: 4, code: "gift_unsupported_construct" });
+});
+
+// Fix round 1, finding 7+6 together: this used to discard the response, so
+// a route that 500'd would also leave zero questions and still pass; and it
+// asserted nothing about *where* the import failed. `one-bad.gift`'s bad
+// block (a matching question, "->") is on line 3, not line 1.
+it("a GIFT file with any error imports nothing, and reports the real failure", async () => {
+  const res = await importGift("one-bad.gift");
+  expect(res.status, await res.clone().text()).toBe(422);
+  expect((await res.json()).error.details.issues[0]).toMatchObject({
+    line: 3,
+    code: "gift_unsupported_construct",
+    message: expect.stringMatching(/matching/i),
+  });
+  expect(await questionCount()).toBe(0);
+});
+
+// Fix round 1, finding 2 (critical): a block with only `~` entries and no
+// positively-weighted one used to fall back to `entries[0]`, silently
+// marking the first option correct — a clean "imported" report with a
+// fabricated answer key. Now reported, not guessed at.
+it("a GIFT answer block with no correct answer is a positioned error, not a fabricated one", () => {
+  const { issues, bank } = convertGift("::q:: Pick {~A ~B ~C}");
+  expect(bank.questions).toEqual([]);
+  expect(issues[0]).toMatchObject({ field: "key", code: "gift_no_correct_answer" });
+});
+
+// Fix round 1, finding 4: `splitBlocks`' brace-depth count used to be a raw
+// character scan with no escape awareness, unlike `findBraces`'s own. A
+// legal `\{` in a prompt left `depth` stuck above zero forever, so no later
+// blank line could ever separate blocks again — the entire rest of the file
+// silently collapsed into one question.
+it("an escaped brace in a prompt does not swallow the rest of the file", () => {
+  const src = ["::q1:: Use the \\{ symbol. {T}", "", "::q2:: The sky is blue. {T}"].join("\n");
+  const { bank, issues } = convertGift(src);
+  expect(issues).toEqual([]);
+  expect(bank.questions.map((q) => q.id)).toEqual(["q1", "q2"]);
+});
+
+// Fix round 1, finding 5: GIFT's per-answer feedback (`=Paris#Correct!`) was
+// glued onto the option's own id and text rather than stripped — one of the
+// most common things in a real Moodle export.
+it("per-answer feedback (#...) is stripped from option text, not glued onto it", () => {
+  const { bank } = convertGift("::q:: Pick the capital. {=Paris#Correct! ~Lyon#No}");
+  expect(bank.questions[0]).toMatchObject({ type: "single", key: "Paris", options: [{ text: "Paris" }, { text: "Lyon" }] });
+});
+
+// Fix round 1, finding 12: the weight regex only matched integers, so a
+// fractional weight (`%33.3%`) folded into the option's own text instead of
+// being parsed as a weight.
+it("a fractional answer weight is parsed, not folded into option text", () => {
+  const { bank } = convertGift("::q:: Pick {~%33.3%A ~%66.7%B}");
+  expect(bank.questions[0]).toMatchObject({ options: [{ text: "A" }, { text: "B" }] });
+});
+
+// Fix round 1, finding 13: a bare `.includes("->")` misreported a
+// legitimate option whose text merely contains "->" with no surrounding
+// whitespace as a matching question.
+it("an option containing '->' without surrounding spaces is not misreported as matching", () => {
+  const { bank, issues } = convertGift("::q:: Pick {=A->B ~C}");
+  expect(issues).toEqual([]);
+  expect(bank.questions[0]).toMatchObject({ type: "single", key: "A->B" });
+});
+
+// Fix round 1, finding 8: the same size gate csv.test.ts proves — refused
+// on raw text length before either converter (here, `convertGift`) ever
+// runs, since both share `importBankText`'s one check.
+it("an oversized GIFT body is refused before the converter runs at all", async () => {
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/banks/${bankId}/import?format=gift`, {
+    method: "POST",
+    headers: { cookie: authorCookie, "content-type": "text/plain" },
+    body: "x".repeat(IMPORT_MAX_TEXT_LENGTH + 1),
+  });
+  expect(res.status).toBe(413);
   expect(await questionCount()).toBe(0);
 });
 

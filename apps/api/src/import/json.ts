@@ -159,6 +159,19 @@ export async function importBankJson(
 export type ImportFormat = "csv" | "gift";
 
 /**
+ * Fix round 1, finding 8: the JSON path's size gate (`IMPORT_MAX_QUESTIONS`,
+ * above) runs immediately after one native `JSON.parse` call. CSV/GIFT have
+ * no equivalent free checkpoint — `readDelimited`'s per-character scan and
+ * `convertGift`'s per-line regex matching are both O(text length) and would
+ * otherwise run to completion, building a `Question` per row, *before*
+ * `importBankDocument` ever gets a question count to gate on. Refused here
+ * on the raw text length, before either converter sees it at all. 2 MB is
+ * generous against the ~500-question ceiling that gate already enforces — a
+ * hand-authored CSV/GIFT row is a few hundred bytes at most.
+ */
+export const IMPORT_MAX_TEXT_LENGTH = 2 * 1024 * 1024;
+
+/**
  * Task 8 (#52, P4.8): the CSV/GIFT half of import, on the same route and
  * the same budget as `importBankJson` — `convertCsv`/`convertGift` do no
  * I/O, so the DB calls below are the only ones this path ever makes, same
@@ -172,6 +185,13 @@ export async function importBankText(
   format: ImportFormat,
   opts: { dryRun: boolean; now: number },
 ): Promise<ImportReport> {
+  if (text.length > IMPORT_MAX_TEXT_LENGTH) {
+    throw new ApiError(
+      413,
+      "import_too_large",
+      `A CSV/GIFT import is limited to ${IMPORT_MAX_TEXT_LENGTH / (1024 * 1024)} MB; this file is ${text.length} characters.`,
+    );
+  }
   const { bank, lines, issues } = format === "csv" ? convertCsv(text) : convertGift(text);
   return importBankDocument(deps, workspaceId, bankId, bank, { ...opts, lines, extraIssues: issues });
 }
