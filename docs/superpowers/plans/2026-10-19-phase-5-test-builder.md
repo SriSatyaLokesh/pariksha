@@ -1773,6 +1773,14 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 
 ## Task 13: Pre-publish warnings (#64, P5.11)
 
+> **Third trap, found building Task 7: there is no publish-time rule for a missing `timing`.**
+> Task 7 deliberately did **not** make `timing` required — `TestSettings` is what a *draft*
+> stores, `createTest` seeds `{}`, and `draftSchema()` drops the root `required` precisely so
+> a new test is legal. Presence is therefore enforced in exactly two places: the schema's root
+> `required` on import, and this checklist. **No rule in `validateTest` covers it**, and every
+> fixture there legitimately omits `timing`, so adding one there would break them. This task
+> must add the row, or a test can be published with no duration at all.
+
 > **Two traps, found reviewing Task 4.** (1) `scoring.set_points_tolerance` is schema-legal
 > and type-safe but has **no UI control** — Task 4 shipped it deliberately as schema, type and
 > `validateTest` only. So the `sets_unbalanced` row prints `tolerance 0` and nothing an
