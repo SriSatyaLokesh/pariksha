@@ -280,3 +280,127 @@ export async function seedAttemptTests(deps: AppDeps, workspaceId: string): Prom
 
   return q;
 }
+
+/** One question of every type, with every answer-bearing field set, so
+ *  the scrubber's allowlist is proved through the route for all twelve
+ *  rather than for the three a realistic paper happens to use. */
+export const ALL_TYPES: Question[] = [
+  {
+    id: "T-single",
+    type: "single",
+    prompt: "Single",
+    options: [
+      { id: "a", text: "A" },
+      { id: "b", text: "B" },
+    ],
+    key: "a",
+    scoring: { points: 1 },
+    explanation: "SECRET",
+  },
+  {
+    id: "T-multiple",
+    type: "multiple",
+    prompt: "Multiple",
+    options: [
+      { id: "a", text: "A" },
+      { id: "b", text: "B" },
+    ],
+    key: ["a", "b"],
+    scoring: { points: 2 },
+  },
+  {
+    id: "T-selectk",
+    type: "select_k",
+    prompt: "Select two",
+    options: [
+      { id: "a", text: "A" },
+      { id: "b", text: "B" },
+      { id: "c", text: "C" },
+    ],
+    k: 2,
+    key: ["a", "b"],
+    scoring: { points: 2 },
+  },
+  { id: "T-truefalse", type: "true_false", prompt: "True or false", key: true, scoring: { points: 1 } },
+  {
+    id: "T-assertion",
+    type: "assertion_reason",
+    prompt: "Assertion and reason",
+    assertion: "The sky is blue.",
+    reason: "Rayleigh scattering.",
+    key: "both_true_explains",
+    scoring: { points: 2 },
+  },
+  {
+    id: "T-matching",
+    type: "matching",
+    prompt: "Match them",
+    left: ["L1", "L2"],
+    right: ["R1", "R2"],
+    key: { L1: "R1", L2: "R2" },
+    scoring: { points: 2 },
+  },
+  {
+    id: "T-multimatching",
+    type: "multi_matching",
+    prompt: "Match several",
+    left: ["L1"],
+    right: ["R1", "R2"],
+    key: { L1: ["R1", "R2"] },
+    scoring: { points: 2 },
+  },
+  { id: "T-ordering", type: "ordering", prompt: "Put these in order", items: ["one", "two"], scoring: { points: 2 } },
+  {
+    id: "T-fillblank",
+    type: "fill_blank",
+    prompt: "Fill ___ in",
+    blanks: [{ id: "b1", accepted: ["SECRET"] }],
+    scoring: { points: 1 },
+  },
+  {
+    id: "T-numeric",
+    type: "numeric",
+    prompt: "How many?",
+    unit: "kg",
+    key: { value: 42, tolerance: 0.5 },
+    scoring: { points: 1 },
+  },
+  {
+    id: "T-short",
+    type: "short_answer",
+    prompt: "In a sentence",
+    max_length: 200,
+    model_answer: "SECRET",
+    scoring: { points: 3 },
+  },
+  {
+    id: "T-long",
+    type: "long_answer",
+    prompt: "In an essay",
+    max_length: 2000,
+    rubric: [{ level: "full", points: 5, description: "SECRET" }],
+    scoring: { points: 5 },
+  },
+];
+
+/** `alpha/alltypes`: the twelve, in a fixed section whose order is not
+ *  shuffled, so a test can index them. */
+export async function seedAllTypes(deps: AppDeps, workspaceId: string): Promise<QuestionIds> {
+  const bankId = await createBank(deps.db, workspaceId, { name: "All types", now: FIXED_NOW });
+  const { ids } = await upsertQuestions(deps.db, workspaceId, bankId, ALL_TYPES, FIXED_NOW);
+  const byRef: Record<string, string> = {};
+  ALL_TYPES.forEach((doc, index) => {
+    byRef[doc.id] = ids[index] as string;
+  });
+  await seedTest(deps, workspaceId, {
+    name: "All types",
+    slug: "alltypes",
+    body: {
+      settings: { timing: paperTiming, access: gated, registration_form: PAPER_FORM },
+      sections: [
+        { id: "every", title: "Every type", shuffle_questions: false, source: { kind: "fixed", questions: ids } },
+      ],
+    },
+  });
+  return byRef;
+}

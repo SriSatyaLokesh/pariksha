@@ -28,7 +28,7 @@ import { REGISTRATION_KIND, REGISTRATION_TTL_MS, registrationHash } from "../../
 import type { AttemptPaper, PinnedLayout } from "../../src/run/attempt.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { DAY, iso, seedPublishedTest, seedTest } from "./fixtures.js";
-import { seedAttemptTests } from "./paper-fixtures.js";
+import { ALL_TYPES, seedAllTypes, seedAttemptTests } from "./paper-fixtures.js";
 
 const T = FIXED_NOW;
 let clock = T;
@@ -37,6 +37,7 @@ const { deps } = await testDeps({ now: () => clock });
 const app = createApp(deps);
 const workspaceId = await seedPublishedTest(deps);
 const q = await seedAttemptTests(deps, workspaceId);
+const types = await seedAllTypes(deps, workspaceId);
 
 afterAll(() => closeClient(deps.db));
 
@@ -414,6 +415,40 @@ it("a short_answer question carries its length cap and not its model answer", as
   const short = paper.sections.flatMap((s) => s.questions).find((one) => one.id === q["LOG-003"]);
   expect(short).toMatchObject({ type: "short_answer", maxLength: 400, points: 3 });
   expect(JSON.stringify(short)).not.toContain("circular");
+});
+
+it("every one of the twelve question types reaches the candidate in its own scrubbed shape", async () => {
+  const paper = await paperOf(await startFresh("alltypes"));
+  const by = new Map(paper.sections[0]?.questions.map((one) => [one.id, one]));
+  const shown = (ref: string) => by.get(types[ref] as string);
+
+  expect(by.size).toBe(12);
+  expect(shown("T-single")).toMatchObject({ type: "single", points: 1 });
+  expect(shown("T-single")?.options?.map((o) => o.id).sort()).toEqual(["a", "b"]);
+  expect(shown("T-multiple")?.options).toHaveLength(2);
+  expect(shown("T-selectk")).toMatchObject({ k: 2 });
+  // No options, no k, no key: a true/false question is its prompt.
+  expect(Object.keys(shown("T-truefalse") ?? {}).sort()).toEqual(["id", "points", "prompt", "type"]);
+  expect(shown("T-assertion")).toMatchObject({
+    assertion: "The sky is blue.",
+    reason: "Rayleigh scattering.",
+  });
+  expect(shown("T-matching")).toMatchObject({ left: ["L1", "L2"], right: ["R1", "R2"] });
+  expect(shown("T-multimatching")).toMatchObject({ left: ["L1"], right: ["R1", "R2"] });
+  expect(shown("T-ordering")).toMatchObject({ items: ["one", "two"] });
+  expect(shown("T-fillblank")).toMatchObject({ blanks: [{ id: "b1" }] });
+  // The unit is on the paper; the value and the tolerance are the key,
+  // and a tolerance is half the answer on a numeric question.
+  expect(shown("T-numeric")).toMatchObject({ unit: "kg" });
+  expect(JSON.stringify(shown("T-numeric"))).not.toContain("42");
+  expect(shown("T-short")).toMatchObject({ maxLength: 200 });
+  expect(shown("T-long")).toMatchObject({ maxLength: 2000 });
+
+  // Every stored document carries the word SECRET in a field only the
+  // marker may see, and the published paper carries it nowhere.
+  expect(JSON.stringify(ALL_TYPES)).toContain("SECRET");
+  expect(JSON.stringify(paper)).not.toContain("SECRET");
+  expect(JSON.stringify(paper)).not.toContain('"key"');
 });
 
 // --- timing -------------------------------------------------------------
