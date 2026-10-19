@@ -354,6 +354,7 @@ export function TestList({
             workspaceId={workspaceId}
             client={client}
             kind="test"
+            onClose={() => setImporting(false)}
             onImported={() => {
               setImporting(false);
               void load(filter);

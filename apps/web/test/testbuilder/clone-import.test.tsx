@@ -274,6 +274,26 @@ describe("import", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/choose a \.json file/i);
   });
 
+  it("the dialog takes Escape, starts focused, and gives focus back to the control that opened it", async () => {
+    // Task 7 declared `role="dialog"` here and handled none of the three.
+    // Driven through `OrganiserApp` and a real `keyDown`, not by rendering
+    // `ImportDialog` directly: what is under test is the wiring — that the
+    // route passes an `onClose` that actually unmounts the dialog — and a
+    // direct render would pass with either route still broken.
+    await openList(fakeClient());
+    const trigger = screen.getByRole("button", { name: /import a test/i });
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = await screen.findByRole("dialog", { name: /import a test/i });
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // The same element, whose label has flipped back from "Cancel import".
+    expect(trigger).toHaveFocus();
+  });
+
   it("the test list and its import dialog have no axe violations", async () => {
     const { container } = await openList(fakeClient());
     expect(await axe(container)).toHaveNoViolations();

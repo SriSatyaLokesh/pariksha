@@ -1,5 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { ApiError, type ApiClient, type ImportReport, type TestImportReport } from "../../lib/api";
+import { useDialogKeys } from "../testbuilder/useDialogKeys";
 
 /**
  * Phase 5 Task 12 (#63, P5.10): the dialog now imports a whole **test** as
@@ -70,6 +71,7 @@ export function ImportDialog({
   bankId,
   client,
   onImported,
+  onClose,
   kind = "bank",
 }: {
   workspaceId: string;
@@ -78,6 +80,12 @@ export function ImportDialog({
   bankId?: string;
   client: ApiClient;
   onImported: (report: DialogReport) => void;
+  /** What Escape does. Required, not optional: this dialog declared
+   * `role="dialog"` from Task 7 with no way to close it from the keyboard,
+   * and an optional prop is how the next call site forgets again. Both
+   * routes already own the open/closed state behind their Import toggle,
+   * so this is the `false` half of that toggle. */
+  onClose: () => void;
   kind?: "bank" | "test";
 }) {
   const [doc, setDoc] = useState<unknown>(undefined);
@@ -94,6 +102,11 @@ export function ImportDialog({
   // applies its result if nothing newer has started since.
   const generation = useRef(0);
   const copy = COPY[kind];
+  // Both routes mount this component only while their Import toggle is on,
+  // so `active` is `true` for its whole life and the effect's unmount
+  // cleanup is what returns focus to that toggle — the `QuestionPickerDrawer`
+  // case the hook's own header note describes, not `SectionList`'s.
+  const { dialogRef, onKeyDown } = useDialogKeys<HTMLDivElement>(true, onClose);
 
   /** The one call both the dry run and the real import make. A test import
    * answers `{ testId, imported: boolean, rebound }`; it is adapted to the
@@ -173,7 +186,7 @@ export function ImportDialog({
     // Not `aria-modal`: like `QuestionEditor`'s own type-change dialog,
     // nothing here traps focus, so claiming "modal" to assistive tech would
     // be a lie the keyboard does not back up.
-    <div role="dialog" aria-labelledby={headingId}>
+    <div role="dialog" aria-labelledby={headingId} ref={dialogRef} tabIndex={-1} onKeyDown={onKeyDown}>
       <h2 id={headingId}>{copy.title}</h2>
 
       <label className="field-label" htmlFor={fileId}>

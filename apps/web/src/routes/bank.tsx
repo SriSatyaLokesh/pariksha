@@ -410,6 +410,7 @@ export function BankBrowser({
             workspaceId={workspaceId}
             bankId={bankId}
             client={client}
+            onClose={() => setImporting(false)}
             onImported={() => {
               setImporting(false);
               void load();
