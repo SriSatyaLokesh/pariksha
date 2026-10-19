@@ -78,7 +78,13 @@ export const listCandidates = scoped(
     const where = filter.source === undefined ? "" : " AND source = ?";
     const params = filter.source === undefined ? [workspaceId, testId] : [workspaceId, testId, filter.source];
     const rows = await db.query<CandidateRecord>(
-      `SELECT ${COLUMNS} FROM candidate WHERE workspace_id = ? AND test_id = ?${where} ORDER BY created_at, id`,
+      // `external_id` before `id`: every row of one upload shares a
+      // `created_at`, so without it the order a list is read back in is
+      // the random `cnd_` ids and changes on every re-upload. Alphabetical
+      // within an upload is both stable and the order a person reading a
+      // candidate list expects.
+      `SELECT ${COLUMNS} FROM candidate WHERE workspace_id = ? AND test_id = ?${where} ` +
+        "ORDER BY created_at, external_id, id",
       params,
     );
     return rows.map((row) => toCandidateRow(db, row));

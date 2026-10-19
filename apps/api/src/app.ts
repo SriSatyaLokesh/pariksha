@@ -213,6 +213,20 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // before the first fetch. The higher of the two, same rule every other
   // budget here follows.
   "/api/v1/workspaces/:id/tests/:testId/check-url": 4,
+  // Task 9 (#60 / #56, P5.7b): the candidate list. Measured
+  // (`apps/api/test/candidate-list.test.ts`'s own "measures the real
+  // subrequest cost" test), not estimated. GET costs 3: auth (2) +
+  // `listCandidates` (1) — no separate existence check, the same call
+  // `GET .../draft` declines to make and for the same reason. POST costs
+  // 5: auth (2) + `getDraftVersion` (1, the registration form and the set
+  // labels, and the route's 404) + `replaceCandidateList`'s single
+  // `db.batch` (1) + `appendAudit` (1) — and **flat in row count**, which
+  // is the whole point of the batch: 500 rows costs the same 5 as three,
+  // pinned against exactly that. A dry run costs two less (no batch, no
+  // audit); the higher of the two, same rule every other budget here
+  // follows. The two paths differ, so they carry two lines.
+  "/api/v1/workspaces/:id/tests/:testId/candidates": 3,
+  "/api/v1/workspaces/:id/tests/:testId/candidates/import": 5,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -276,6 +290,10 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
   // Task 6 (#58, P5.5).
   "POST /api/v1/workspaces/:id/tests/:testId/check-url": "tests.edit",
+  // Task 9 (#60 / #56, P5.7b). The application's first `candidates.manage`
+  // routes: an Author holds `tests.edit` and is 403 on both of these.
+  "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
+  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };

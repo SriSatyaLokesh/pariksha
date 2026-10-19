@@ -10,12 +10,19 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
 import { allowlistIssues, brandColourIssue, matchesFilter, type QuestionSource } from "@pariksha/core";
+import {
+  CANDIDATE_IMPORT_MAX_BYTES,
+  convertCandidateCsv,
+  setLabelsOf,
+} from "../import/candidates.js";
 import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
 import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
   appendAudit,
   createTest,
   draftVersionsByTest,
+  listCandidates,
+  replaceCandidateList,
   existingRowIds,
   getDraftVersion,
   getTest,
@@ -36,6 +43,7 @@ import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 import { checkReachable } from "../net/reachable.js";
+import { readBodyWithLimit } from "./media.js";
 
 // The same shape `apps/api/src/routes/workspaces.ts` validates its own slug
 // with — lowercase, digits and hyphens, starting alphanumeric.
@@ -723,6 +731,69 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!test) throw new ApiError(404, "not_found", "No such resource.");
 
     return c.json(await checkReachable(deps.http ?? globalThis.fetch, input.url, deps.now));
+  });
+
+  // --- Task 9 (#60 / #56, P5.7b): the candidate list ------------------
+  //
+  // `candidates.manage` is the third guard in Phase 5 and the first route
+  // in the application to use it. An Author holds `tests.edit` but not
+  // this, so an Author who built the whole test cannot upload its list —
+  // the permission matrix's own "Manage candidate lists and invites" line.
+
+  routes.get("/:id/tests/:testId/candidates", requires("candidates.manage"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    // No separate existence check, the same call the draft GET makes and
+    // for the same reason: a test that does not exist in this workspace
+    // holds no candidates, and a second read would say nothing a caller
+    // holding `candidates.manage` in this workspace cannot already see.
+    return c.json({ candidates: await listCandidates(deps.db, workspaceId, testId) });
+  });
+
+  routes.post("/:id/tests/:testId/candidates/import", requires("candidates.manage"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    const dryRun = c.req.query("dryRun") === "1";
+    const now = deps.now();
+
+    // Streamed against the cap before the body is buffered, the same
+    // shape the bank import and the media upload already use.
+    const bodyBytes = await readBodyWithLimit(c.req.raw, CANDIDATE_IMPORT_MAX_BYTES, "A candidate list");
+
+    // The draft is where the registration form and the sets live, so it
+    // is also the existence check: a test with no draft row answers 404
+    // exactly as `GET .../draft` does.
+    const draft = await getDraftVersion(deps.db, workspaceId, testId);
+    if (!draft) throw new ApiError(404, "not_found", "No such resource.");
+
+    const { rows, issues } = convertCandidateCsv(
+      new TextDecoder().decode(bodyBytes),
+      draft.body.settings.registration_form,
+      setLabelsOf(draft.body.sections),
+    );
+
+    // All-or-nothing, the same shape as AC-05: nothing is written unless
+    // the whole file converts. The 422 carries the report so the panel
+    // renders one shape whether the upload landed or not.
+    if (issues.length > 0) {
+      throw new ApiError(422, "invalid_candidate_list", "This candidate list was not imported.", {
+        imported: 0,
+        issues,
+      });
+    }
+
+    if (dryRun) return c.json({ imported: rows.length, issues: [] });
+
+    const report = await replaceCandidateList(deps.db, workspaceId, testId, rows, now);
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "candidates.import",
+      target: testId,
+      detail: { imported: report.imported },
+      now,
+    });
+    return c.json({ imported: report.imported, issues: [] });
   });
 
   return routes;
