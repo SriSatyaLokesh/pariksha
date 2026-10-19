@@ -14,6 +14,8 @@ import { Dashboard } from "./dashboard";
 import { BankList } from "./banks";
 import { BankBrowser } from "./bank";
 import { QuestionScreen } from "./question";
+import { TestList } from "./tests";
+import { TestBuilder } from "./test";
 
 // Routing, without a router.
 //
@@ -51,6 +53,8 @@ type View =
   | { kind: "setup" }
   | { kind: "dashboard"; actor: Actor; workspace: Workspace }
   | { kind: "banks"; actor: Actor; workspace: Workspace }
+  | { kind: "tests"; actor: Actor; workspace: Workspace }
+  | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
   | { kind: "bank"; actor: Actor; workspace: Workspace; bankId: string }
   | {
       kind: "question";
@@ -149,6 +153,32 @@ export function OrganiserApp({
           workspace={view.workspace}
           onSignOut={signOut}
           onOpenBanks={() => setView({ kind: "banks", actor: view.actor, workspace: view.workspace })}
+          onOpenTests={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
+        />
+      );
+    case "tests":
+      return (
+        <TestList
+          workspaceId={view.workspace.id}
+          client={client}
+          actorEmail={view.actor.email}
+          onSignOut={signOut}
+          onBack={() => setView({ kind: "dashboard", actor: view.actor, workspace: view.workspace })}
+          onOpenTest={(testId) => setView({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
+        />
+      );
+    case "test":
+      return (
+        <TestBuilder
+          workspaceId={view.workspace.id}
+          testId={view.testId}
+          client={client}
+          // The whole actor, not just the address: T-23's workspace half
+          // is readable by every member and writable only by an owner, so
+          // the builder needs the membership to know which it is showing.
+          actor={view.actor}
+          onSignOut={signOut}
+          onBack={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
         />
       );
     case "banks":

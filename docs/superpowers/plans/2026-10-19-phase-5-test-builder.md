@@ -57,7 +57,7 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 | `packages/db/src/repo/tests.ts` | Test and version reads and writes, the draft head, the lifecycle transitions |
 | `packages/db/src/repo/candidates.ts` | The candidate list: the rows Phase 6 mints invites against and matches registrations to |
 | `apps/api/src/import/candidates.ts` | Candidate-list CSV → rows, with each issue's source line |
-| `packages/db/src/repo/test-document.ts` | `toTestDocument` / `toTestRecord` — the one place a `pariksha/test@1` document becomes rows; pure-mapper sibling of `repo/question-document.ts` |
+| `packages/db/src/repo/test-document.ts` | **CORRECTED (whole-branch drift review, P-01): the shipped pair is `toTestDocument` / `toStoredBody`.** `toTestRecord` never existed; the corrected Interfaces block below names it right, and this table is the half nobody went back to. Also shipped and missing from this table: `apps/web/src/components/testbuilder/useDialogKeys.ts`, `packages/db/src/repo/shortlink.ts`, and `deriveState` (`repo/test-document.ts`). The one place a `pariksha/test@1` document becomes rows; pure-mapper sibling of `repo/question-document.ts` |
 | `packages/db/src/repo/banks.ts` | Modified: `published_at IS NOT NULL` on all three usage predicates |
 | `apps/api/src/routes/tests.ts` | `/tests`, `/tests/:testId`, `/tests/:testId/draft`, and the lifecycle, clone, export, import, checklist and check-url routes |
 | `apps/api/src/routes/shortlink.ts` | `GET /t/:code` — the one public unguarded route |
@@ -356,14 +356,17 @@ git commit -s -m "feat(tests): test crud with slugs, short links and qr codes"
 - Test: `packages/db/test/repo/test-document.test.ts`, `apps/api/test/draft.test.ts`, `apps/web/test/testbuilder/sections.test.tsx`
 
 **Interfaces:**
-- Consumes: `getTest`, `createTest` (Task 2); `listQuestions`, `listBanks`, `QuestionRow`, `BankRow` (`packages/db/src/repo/banks.ts`); `validateTest`, `Section`, `QuestionSource`, `SourceFixed`, `SourcePool`, `SourceSets`, `Test` (`@pariksha/core`); `ReorderableList` (`apps/web/src/components/authoring/ReorderableList.tsx`); `RenderedHtml` (`apps/web/src/components/authoring/RenderedHtml.tsx`).
-- Produces:
+- Consumes: `getTest`, `createTest` (Task 2); `listQuestions`, `listBanks`, `QuestionRow`, `BankRow` (`packages/db/src/repo/banks.ts`); `validateTest`, `Section`, `QuestionSource`, `SourceFixed`, `SourcePool`, `SourceSets`, `Test` (`@pariksha/core`); `ReorderableList`, `RenderedHtml` (`apps/web/src/components/authoring/`).
+- Produces — **CORRECTED after Task 3 shipped and was reviewed.** The block originally
+  written here was wrong in ways Tasks 4–9 would each have hit: `workspaceId` was missing
+  from `ApiClient.draft`/`patchDraft` and from the two components' props (nothing can reach
+  the API without it, and every sibling method takes it first); `QuestionPickerDrawer` was
+  implied to live inside `SectionList.tsx`; and three things it never named at all are
+  listed below. Trust this block, not the original:
+
   ```ts
-  // packages/db/src/repo/test-document.ts — pure mappers, re-exported from
-  // packages/db/src/index.ts and NOT from repo/index.ts (they are not scoped
-  // repository functions; repo/question-document.ts is the same arrangement)
+  // packages/db/src/repo/test-document.ts — as planned, no change
   export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
-  /** A `Section` whose `source` names `qst_`/`bnk_` row IDs rather than the bank file's own. */
   export type StoredSection = Section;
   export interface TestDocumentBody { settings: TestSettings; sections: StoredSection[] }
   export interface IdRefs {
@@ -373,42 +376,93 @@ git commit -s -m "feat(tests): test crud with slugs, short links and qr codes"
   export function toTestDocument(test: TestRow, body: TestDocumentBody, refs: IdRefs): Test;
   export function toStoredBody(doc: Test, refs: IdRefs): TestDocumentBody;
 
-  // packages/db/src/repo/tests.ts (added)
-  export interface TestVersionRow { id: string; testId: string; version: number; body: TestDocumentBody; publishedAt: number | null; createdAt: number }
+  // packages/db/src/repo/tests.ts — as planned, no change
+  export interface TestVersionRow {
+    id: string; testId: string; version: number;
+    body: TestDocumentBody; publishedAt: number | null; createdAt: number;
+  }
   export const getDraftVersion: ScopedFn<[testId: string], TestVersionRow | null>;
   export const putDraftVersion: ScopedFn<[testId: string, body: TestDocumentBody, now: number], TestVersionRow>;
 
-  // apps/web/src/lib/api.ts
+  // packages/db/src/repo/banks.ts — NOT IN THE PLAN. Two new scoped reads the
+  // draft route builds every derived number from; Tasks 4, 8 and 13 will want
+  // both. Exported from @pariksha/db.
+  export interface QuestionSummary {
+    id: string; bankId: string; points: number;
+    difficulty: Difficulty | null; tags: string[]; type: QuestionType;
+  }
+  export const workspaceQuestionSummaries: ScopedFn<[], QuestionSummary[]>;
+  export const existingRowIds: ScopedFn<
+    [ids: { questionIds: readonly string[]; bankIds: readonly string[] }],
+    { questionIds: Set<string>; bankIds: Set<string> }
+  >;
+
+  // @pariksha/core — NOT IN THE PLAN. matchesFilter is now public.
+  export function matchesFilter(question: Question, filter: PoolFilter | undefined): boolean;
+  // After fix 5 below, this becomes:
+  // export function matchesFilter(q: Pick<Question, "tags" | "difficulty" | "type">, filter?: PoolFilter): boolean;
+
+  // apps/web/src/lib/api.ts — mirrors of the db types (this package never
+  // imports @pariksha/db), plus the wire shapes.
+  export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
+  export type StoredSection = Section;
+  export interface TestDocumentBody { settings: TestSettings; sections: StoredSection[] }
+  export interface TestVersionRow {
+    id: string; testId: string; version: number;
+    body: TestDocumentBody; publishedAt: number | null; createdAt: number;
+    // present on GET only; see Interfaces note 1 — split these out
+    draw?: Record<string, { matching: number; wanted: number }>;
+    setPoints?: Record<string, { set: string; points: number }[]>;
+    points?: Record<string, number>;
+  }
   export interface DraftPatch { settings?: Partial<TestSettings>; sections?: StoredSection[] }
-  // on ApiClient:  draft(testId): Promise<TestVersionRow>;  patchDraft(testId, patch: DraftPatch): Promise<TestVersionRow>
+
+  // on ApiClient — workspaceId FIRST, as every sibling method takes it:
+  draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
+  patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
 
   // apps/web/src/components/testbuilder/SectionList.tsx
   export function SectionList(props: {
     sections: readonly StoredSection[];
-    draw: Readonly<Record<string, { matching: number; wanted: number }>>;  // UX-15, from the server
-    setPoints: Readonly<Record<string, { set: string; points: number }[]>>; // UX-16
+    draw: Readonly<Record<string, { matching: number; wanted: number }>>;
+    setPoints: Readonly<Record<string, { set: string; points: number }[]>>;
+    points: Readonly<Record<string, number>>;          // additive — UX-12's collapsed-row figure
     onChange: (next: StoredSection[]) => void;
     openSectionId: string | null;
     onOpenSection: (id: string | null) => void;
+    client: ApiClient;                                  // additive — bank <select>
+    workspaceId: string;                                // additive
   }): JSX.Element;
+
+  // apps/web/src/components/testbuilder/QuestionPickerDrawer.tsx  ← its OWN module,
+  // not SectionList.tsx as the plan's Interfaces block implies
   export function QuestionPickerDrawer(props: {
     bankId: string | null; selected: readonly string[];
     onConfirm: (questionIds: string[]) => void; onCancel: () => void;
+    client: ApiClient; workspaceId: string;             // additive
   }): JSX.Element;
+
+  // apps/web/src/routes/test.tsx — NOT IN THE PLAN, and the shell Tasks 5, 7,
+  // 8, 10, 11 and 13 all mount their panel into.
+  export function TestBuilder(props: {
+    workspaceId: string; testId: string; client: ApiClient;
+    actorEmail: string; onSignOut: () => void; onBack: () => void;
+  }): JSX.Element;
+
+  // apps/web/src/routes/tests.tsx — TestList grew one prop
+  onOpenTest: (testId: string) => void;
   ```
 
-**Routes.** Two, and they are the only ones Tasks 4 through 9 need — each of those tasks widens this payload rather than adding a route of its own.
+  Routes, for the six tasks that add none of their own:
 
-| Method | Path | Guard | Budget (estimate — measure and pin) |
-| --- | --- | --- | --- |
-| GET | `/api/v1/workspaces/:id/tests/:testId/draft` | `tests.edit` | 5 |
-| PATCH | `/api/v1/workspaces/:id/tests/:testId/draft` | `tests.edit` | 7 |
-
-`GET …/draft` returns the draft body **and** the derived numbers the builder cannot compute — `draw` (UX-15's "10 drawn from 14 matching", one grouped query over `question`, never one per section) and `setPoints` (UX-16's balance strip). Computing them server-side is the same rule as Review Focus 4: the browser renders what it is given.
-
-**PATCH replaces each named top-level block whole and merges nothing below it** (Review Focus 3). A body `{ settings: { access: {...} } }` replaces `settings.access` entirely and leaves `settings.timing` untouched; `{ sections: [...] }` replaces the whole array.
-
-**Save-time versus publish-time, per rule.** Save-time, because the stored document would otherwise be unreadable or dangerous: the body must parse against `schemas/test-1.json` (`additionalProperties: false` is what catches a merged `sets` key inside a `pool` source), and every `fixed`/`sets` question ID and every `pool` bank ID must name a row in **this workspace** — a reference to another tenant's row is a cross-workspace read waiting to happen, not a half-built draft. Everything else is publish-time: an empty section (`UX-13`), a pool that matches fewer than `count` (`UX-15`), sets of unequal points (`UX-16`), a section with no title.
+  ```
+  GET   /api/v1/workspaces/:id/tests/:testId/draft    tests.edit   budget 7 (GET measures 4)
+  PATCH /api/v1/workspaces/:id/tests/:testId/draft    tests.edit   budget 7 (settings-only 6)
+  ```
+  `GET` returns `TestVersionRow` **plus** `draw`, `setPoints` and `points`;
+  `PATCH` returns `TestVersionRow` alone. `PATCH` replaces `settings`
+  one level deep (a named key's whole value is replaced; an unnamed key is
+  untouched) and replaces `sections` wholesale.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -616,6 +670,16 @@ git commit -s -m "feat(tests): set assignment strategies and shuffle configurati
 
 ## Task 5: Registration form builder (#57, P5.4)
 
+> **Correction, applied while building Task 5.** This task labels the unsatisfiable-validation
+> rule (`min > max`, and friends) *save-time*. That is wrong and the label is withdrawn: it is
+> a **publish-time** rule with a live author-facing message, which is what shipped.
+> The draft write path's gate is the derived JSON schema, which cannot express `min <= max`,
+> and the standing ruling for this phase is that the write path enforces only what must never
+> reach storage regardless of draft state. A half-typed numeric range is ordinary authoring —
+> the author sees `unsatisfiableValidation`'s sentence live in the builder, and the publish
+> checklist (Task 13) is where it blocks. Do **not** make the draft route call `validateTest`
+> to manufacture a 422.
+
 **Files:**
 - Create: `apps/web/src/components/testbuilder/FormBuilder.tsx`, `apps/web/src/components/testbuilder/RegistrationForm.tsx`
 - Modify: `packages/core/src/types.ts`, `packages/core/src/validate.ts`, `packages/core/src/index.ts`, `apps/web/src/routes/test.tsx`, `apps/web/src/styles/testbuilder.css`
@@ -659,7 +723,7 @@ git commit -s -m "feat(tests): set assignment strategies and shuffle configurati
 
 `RegistrationForm.tsx` is **the one renderer**, the same structure [ADR 0004](../../adr/0004-client-side-rendering-with-lazy-loaded-katex.md) gave Markdown: the builder's preview imports it today and Phase 6's candidate registration imports it next, so the preview cannot drift from what a candidate sees. It takes `values`/`errors` from its caller and owns no submission.
 
-`FIELD_INPUT` is the table #57 asks to be true per type, and the values are fixed here so the test can assert them: `short_text` → `text`/`name`; `long_text` → textarea/`off`; `email` → `email`/`email`; `phone` → `tel`/`tel`, `inputMode: "tel"`; `number` → `number`/`off`, `inputMode: "decimal"`; `date` → `date`/`bday` where the label matches a birth date, else `off`; `url` → `url`/`url`; `dropdown`/`radio`/`checkbox`/`consent` → no autocomplete token.
+`FIELD_INPUT` is the table #57 asks to be true per type, and the values are fixed here so the test can assert them. **Amended by the task 5/6 review (m3):** #57's table says `short_text` → `name`, and that is wrong for every `short_text` that is not a name — `campus_hiring` alone has `college` and `roll_number`, `open_contest` has `country`, and a browser offering a candidate their own name for their roll number is worse than no autofill at all. A token is set only where the type or the id genuinely implies one, and omitted otherwise; the name case is recovered from the label and column name the way `bday` already was. So: `short_text` → `text`/no token, or `name` where the field *is* the candidate's name; `long_text` → textarea/`off`; `email` → `email`/`email`; `phone` → `tel`/`tel`, `inputMode: "tel"`; `number` → `number`/`off`, `inputMode: "decimal"`; `date` → `date`/`bday` where the label matches a birth date, else `off`; `url` → `url`/`url`; `dropdown`/`radio`/`checkbox`/`consent` → no autocomplete token.
 
 `FORM_TEMPLATES` carries T-18's three templates verbatim: *Campus hiring* (name, email, phone, college, roll number, degree, graduation year, CGPA, resume link, LinkedIn, GitHub), *Course exam* (name, student ID, email), *Open contest* (name, email, country). `examples/reasoning-aptitude/test.json`'s `registration_form` is the worked reference for field shapes.
 
@@ -668,7 +732,7 @@ git commit -s -m "feat(tests): set assignment strategies and shuffle configurati
 - form field IDs are unique within the test (and so are section IDs — the same loop, the other half of the same rule line)
 - every `options` list belongs to a `dropdown`, `radio` or `checkbox` field
 
-**Save-time** is the one rule whose breach is not a half-built form: an unsatisfiable `validation` (`min` above `max`, `max_length` below `min_length`), because it silently refuses every candidate at registration and nothing before Phase 6 would surface it. It reports `field: "registration_form"` with the field's `id` in the message.
+**Publish-time, with a live author-facing message** (the correction at the head of this task) is the one rule whose breach is not a half-built form: an unsatisfiable `validation`, because it silently refuses every candidate at registration and nothing before Phase 6 would surface it. Three shapes, all through `unsatisfiableValidation`: `min` above `max`, `max_length` below `min_length`, and a `pattern` `assertSafeRegex` refuses — #57's acceptance row names that third one ("a regex matching nothing allowed is caught in the builder with cause and fix") and the task 5/6 review found it missing (M3). It reports `field: "registration_form"` with the field's `id` in the message.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -860,6 +924,14 @@ git commit -s -m "feat(tests): server-side url reachability check for registrati
 ---
 
 ## Task 7: Timing, navigation and attempt policy (#59, P5.6)
+
+> **Warning, added after Task 3 shipped.** Making `timing` required on `TestSettings`
+> breaks four places that assume it is optional, and all four must change in this task:
+> `toTestVersionRow` and `toTestDocument`'s spread (`packages/db/src/repo/test-document.ts`),
+> `apps/api/test/draft.test.ts:146`, and `createTest`'s `{}` settings seed
+> (`packages/db/src/repo/tests.ts`). Decide deliberately whether `timing` becomes required
+> at all — a draft legitimately has no timing yet, and the save path enforces only what must
+> never reach storage, so the publish checklist is the natural place for the requirement.
 
 **Files:**
 - Create: `apps/web/src/components/testbuilder/TimingPanel.tsx`
@@ -1100,6 +1172,15 @@ git commit -s -m "feat(tests): access modes and allowlists"
 ---
 
 ## Task 9: Candidate list ingest (#60 / #56, P5.7b)
+
+> **Correction, found building this task.** The text below says `roll_number` is the example
+> test's first `unique: true` field. It is not — `examples/reasoning-aptitude/test.json` puts
+> `email` first and `roll_number` fourth, so the stated rule ("the test's first `unique` field,
+> in form order") keys that example on **email**. The rule is correct and shipped; only this
+> sentence was wrong. The example's CSV header leading with `roll_number` is not evidence of
+> the key: columns match by name, not position, and the worked example imports whole either
+> way. Email is also the better key for Phase 6, which mints an invite link per candidate and
+> has to deliver it somewhere.
 
 **Files:**
 - Modify: `packages/db/src/schema/columns.ts`, `packages/db/src/schema/sqlite.ts`, `packages/db/src/schema/pg.ts`, `packages/db/src/repo/index.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/components/testbuilder/AccessPanel.tsx`
@@ -1398,6 +1479,35 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 
 ## Task 11: Lifecycle and numbered published versions (#62, P5.9)
 
+> **Two blocking rows this task owes, named by the `draftSchema()` pin test (`8d32cb0`).**
+> The pin now lists 18 stripped paths: 9 have publish-time twins, 4 are deliberately
+> unenforced and say so, and 5 are owed to this task. **Two of those five are real gaps that
+> must close here**: root `sections` `minItems` — a test can currently be published with no
+> sections at all — and `section.title` `minLength` — a section can be published with a blank
+> title. Both are save-legal on purpose, because a half-built draft is ordinary authoring;
+> neither should survive publish. The pin test fails if a future change strips another floor
+> without naming its twin, so add the rows rather than widening the pin's deliberate list.
+
+> **A blocking row this task owns, found building Task 7 and first misfiled against Task 13.**
+> There is no publish-time rule anywhere for a **missing `timing` block**. Task 7 deliberately
+> left `timing` optional — `TestSettings` is what a *draft* stores, `createTest` seeds `{}`, and
+> `draftSchema()` drops the root `required` precisely so a new test is legal — so presence is
+> enforced only by the schema's root `required` on import. Nothing catches it at publish.
+> It belongs **here**, as a blocking row, not in Task 13: Task 13's rows are all
+> `severity: advisory`, and a test published with no duration at all is not an advisory.
+> Without it a test can be published with no duration.
+
+> **Correction, found while building Task 4.** `publishTestVersion` currently INSERTs a
+> new `test_version` row, and `(test_id, version)` is unique — but `createTest` already
+> seeded the draft as version 1. So publishing a brand-new test raises
+> `UNIQUE constraint failed: test_version.test_id, test_version.version`, and any fixture
+> that works around it by publishing as version 2 is hiding the bug rather than meeting it.
+> **The real transition must stamp `published_at` on the existing draft row and then open
+> N+1 as the new draft — not insert a row alongside it.** Otherwise the first published
+> version of every test in the product is numbered 2. Task 4's fixture publishes as
+> version 2 with a comment pointing here; fix the transition in this task and that fixture
+> becomes version 1.
+
 **Files:**
 - Create: `apps/api/src/publish/checklist.ts`, `apps/web/src/components/testbuilder/VersionBanner.tsx`
 - Modify: `packages/db/src/repo/tests.ts`, `packages/db/src/repo/test-document.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/tests.tsx`, `apps/web/src/routes/test.tsx`
@@ -1690,6 +1800,18 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 
 ## Task 13: Pre-publish warnings (#64, P5.11)
 
+> **Two traps, found reviewing Task 4.** (1) `scoring.set_points_tolerance` is schema-legal
+> and type-safe but has **no UI control** — Task 4 shipped it deliberately as schema, type and
+> `validateTest` only. So the `sets_unbalanced` row prints `tolerance 0` and nothing an
+> organiser can reach changes it: a legitimate one-point drift is a permanently red advisory
+> with no knob. Either give it a control here or say in the row's copy that it is file-only.
+> (2) Precedence in `validate.ts` is `options.setPointsTolerance ?? doc.scoring.set_points_tolerance ?? 0`,
+> which overrides in **either** direction. So a `buildChecklist` that passes the
+> apparently-harmless `{ setPointsTolerance: 0 }` silently discards a tolerance the file set.
+> **Pass no `setPointsTolerance` unless this gate is deliberately stricter than the file.**
+> Tasks 12 and 13 write the first production callers of `validateTest`, so this rule has no
+> prior art to copy — it starts here.
+
 **Files:**
 - Create: `apps/web/src/components/testbuilder/PublishChecklist.tsx`
 - Modify: `apps/api/src/publish/checklist.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/test.tsx`, `docs/ROADMAP.md`
@@ -1882,6 +2004,7 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 ## Known deferrals, recorded so they are not rediscovered as bugs
 
 - **The review panel, the comment table and approvals are not built.** Phase 5 ships ADR 0007, the `test.review_requested` column, a "Request review" control and the "In review" badge (`UX-10`'s badge, `#54`). What is missing: the reviewers list, per-section and per-question comments, and the Approved / Changes-requested marks — `docs/design.md`'s screen inventory row 10. ADR 0007 fixes the data model, including the fourteenth action (`tests.comment`) that the task building it must add to the PRD matrix, `PERMISSIONS` and `ROUTE_ACTIONS` together. **Until it lands, `UX-10` is partly met** and the acceptance checklist should say so.
+- **The phone field's country `<select>` is deferred; the dialling code is not.** T-16's "phone (with country code)" ships as `validation.default_country` resolved to a dialling prefix the candidate sees and the stored number starts with (`DIAL_CODE`/`dialCodeFor`, `RegistrationForm.tsx`). What waits for Phase 6 is the picker — a `<select>` of every dialling code, and with it the full ISO 3166 list; `DIAL_CODE` carries a subset and an unknown code renders no prefix rather than a wrong one, which the builder says in words. Recorded because the task 5/6 review (M5) rightly refused the earlier shape, where the builder collected `default_country` and nothing read it, so the preview lied about the control a candidate meets.
 - **Pointer drag remains deferred, as it was in Phase 4.** `UX-12` and #55 say sections are "dragged to reorder"; this phase ships the keyboard half in full through `ReorderableList`, and no pointer drag. The seam is unchanged: `onReorder(from, to)` is what a later `draggable` row would call.
 - **`AC-11`'s "a refresh keeps each order" is not provable in Phase 5.** The order is stored in `attempt.layout_json`, and attempts are Phase 6. This phase proves the other two thirds — two candidates on one set get different orders, and pinned options do not move — through `layoutForAttempt` against the stored published version (Task 4).
 - **Invite links are not minted.** Phase 5 ingests the candidate list (Task 9); `POST /tests/{id}/invites`, the single-use signed token and its expiry are Phase 6's. See the candidate-list ruling.

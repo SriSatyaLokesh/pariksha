@@ -22,6 +22,8 @@ import { workspaceRoutes } from "./routes/workspaces.js";
 import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
+import { testRoutes } from "./routes/tests.js";
+import { shortlinkRoute } from "./routes/shortlink.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -165,6 +167,136 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // named 1, which the authentication floor alone already rules out; 5 is
   // the measured ceiling.
   "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": 5,
+
+  // Phase 5 Task 2 (#54): test CRUD, short links and QR codes. Measured
+  // (apps/api/test/tests.test.ts's "measures the real subrequest cost of
+  // every route this task mounts"), not estimated, like every number above.
+  // GET costs 4 (auth 2 + `listTests`/`getTest` 1 + `headVersionsByTest`
+  // 1); POST costs 5 (auth 2 + `createTest`'s one batch 1 + the read-back
+  // `getTest` does to hand the route a full row 1 + `appendAudit` 1); PATCH
+  // costs 6 (auth 2 + `updateTest`'s read-then-write 2 + `headVersionsByTest`
+  // 1 + `appendAudit` 1). The higher of the two methods sharing each path,
+  // same rule Phase 4's banks routes already follow.
+  "/api/v1/workspaces/:id/tests": 5,
+  "/api/v1/workspaces/:id/tests/:testId": 6,
+  // Task 3 (#55, P5.2): the draft. Measured, not estimated
+  // (`draft.test.ts`'s own "measures the real subrequest cost" test). GET
+  // costs 4: auth (2) + `getDraftVersion` (1) + `workspaceQuestionSummaries`
+  // (1) — no separate `getTest` existence check; a test that does not exist
+  // and one that (not reachable before Task 11's lifecycle) currently has no
+  // draft both answer the same 404 `getDraftVersion` alone already gives.
+  // PATCH costs 6 when the patch names no `sections` (auth 2 +
+  // `getDraftVersion` 1, the merge base + `putDraftVersion`'s own
+  // read-then-write 2 + `appendAudit` 1 — no `existingRowIds` call at all: a
+  // settings-only patch names no row) and 7 once it does (one more
+  // statement, `existingRowIds`'s single `UNION ALL`, flat regardless of how
+  // many ids the patch names). The higher of the two methods sharing this
+  // path, same rule every other budget here follows.
+  //
+  // ponytail: `getDraftVersion` runs twice on a PATCH that touches
+  // `sections` or not — once in the route (the merge base) and once again
+  // inside `putDraftVersion` (to find the row to update) — because
+  // `putDraftVersion`'s contract takes a whole `TestDocumentBody`, not a
+  // patch, so it cannot reuse what the route already read. Two single-row
+  // reads of an indexed lookup, nowhere near the 50-subrequest ceiling;
+  // collapsing them would mean `putDraftVersion` trusting a caller-supplied
+  // row it never checked, which is the wrong end to save a query at.
+  "/api/v1/workspaces/:id/tests/:testId/draft": 7,
+  // Task 6 (#58, P5.5): T-19's reachability check. Measured
+  // (`apps/api/test/reachable.test.ts`'s own "measures the real subrequest
+  // cost" test), not estimated: auth (2) + `getTest`'s existence check (1)
+  // + **one outbound `fetch`** (1). That last one is a subrequest on
+  // Workers exactly as a D1 query is, which is why `countingDeps`
+  // (apps/api/src/instrument.ts) wraps `deps.http` too — otherwise the one
+  // call this route exists to make is the one call the budget cannot see.
+  // A URL `checkReachable` refuses costs 3: the refusal happens before the
+  // first fetch. A server that rejects `HEAD` with 405 costs **5** — the
+  // one `GET` retry (`net/reachable.ts:131-133`) is a second subrequest,
+  // and the declared 4 counted only the single-fetch path (whole-branch
+  // security review, L4). The higher of the three, same rule every other
+  // budget here follows. The timeout ceiling is 10 s for the same reason:
+  // each call carries its own `AbortSignal.timeout(REACH_TIMEOUT_MS)`.
+  "/api/v1/workspaces/:id/tests/:testId/check-url": 5,
+  // Task 9 (#60 / #56, P5.7b): the candidate list. Measured
+  // (`apps/api/test/candidate-list.test.ts`'s own "measures the real
+  // subrequest cost" test), not estimated. GET costs 3: auth (2) +
+  // `listCandidates` (1) — no separate existence check, the same call
+  // `GET .../draft` declines to make and for the same reason. POST costs
+  // 5: auth (2) + `getDraftVersion` (1, the registration form and the set
+  // labels, and the route's 404) + `replaceCandidateList`'s single
+  // `db.batch` (1) + `appendAudit` (1) — and **flat in row count**, which
+  // is the whole point of the batch: 500 rows costs the same 5 as three,
+  // pinned against exactly that. A dry run costs two less (no batch, no
+  // audit); the higher of the two, same rule every other budget here
+  // follows. The two paths differ, so they carry two lines.
+  "/api/v1/workspaces/:id/tests/:testId/candidates": 3,
+  "/api/v1/workspaces/:id/tests/:testId/candidates/import": 5,
+  // Task 11 (#62, P5.9) and Task 13 (#64, P5.11): the lifecycle. Measured
+  // (`apps/api/test/lifecycle.test.ts`'s own "measures the real subrequest
+  // cost" test), not estimated. Publish costs 9: auth (2) + `getTest` (1)
+  // + `getDraftVersion` (1, the body the checklist judges and the route's
+  // 409) + the checklist's own two reads, `workspaceQuestions` (1, every
+  // question the sections can draw, one statement for the whole workspace)
+  // and `countCandidates` (1, one aggregate for both candidate rows) +
+  // `publishDraftVersion`'s own `getDraftVersion` (1) and its single
+  // `db.batch` (1) + `appendAudit` (1). A refused publish costs 6 — it
+  // stops at the checklist — and the higher of the two is what is pinned,
+  // the same rule every number above follows. The plan estimated 8,
+  // against a gate that had no candidate rows in it yet; the measurement
+  // wins. The response is built from what was just written rather than
+  // re-read, which is what keeps it off a tenth.
+  "/api/v1/workspaces/:id/tests/:testId/publish": 9,
+  // Close and archive are the same handler twice: auth (2) + `getTest` (1,
+  // the 404 *and* the legal-transition check) + `setTestStatus` (1) +
+  // `appendAudit` (1) + `headVersionsByTest` (1, so the response carries
+  // the same `TestWire` every other test route returns rather than a
+  // second, smaller shape for the screens to special-case). The plan
+  // estimated 5 against a response that did not exist yet; the
+  // measurement wins.
+  "/api/v1/workspaces/:id/tests/:testId/close": 6,
+  "/api/v1/workspaces/:id/tests/:testId/archive": 6,
+  // Auth (2) + `listVersions` (1, one correlated subquery for the attempt
+  // counts, never one query per version). No separate existence check —
+  // the same call `GET .../draft` and `GET .../candidates` both decline to
+  // make. The plan estimated 4.
+  "/api/v1/workspaces/:id/tests/:testId/versions": 3,
+  // Task 13 (#64, P5.11): the checklist, rendered. Auth (2) + `getTest`
+  // (1) + `getDraftVersion` (1) + `workspaceQuestions` (1) +
+  // `countCandidates` (1, one aggregate for both candidate rows — never
+  // one query per candidate) = 6, and flat in section, question and
+  // candidate count alike. The same five reads publish makes before it
+  // decides, which is the point: one function, two callers.
+  "/api/v1/workspaces/:id/tests/:testId/checklist": 6,
+  // Task 12 (#63, P5.10): clone, export and import. Measured
+  // (`apps/api/test/clone.test.ts` and `test/export/test-round-trip.test.ts`),
+  // not estimated. Clone costs 8: auth (2) + `getTest` (1, the 404 *and*
+  // the name and slug the copy is built from) + `cloneTest`'s own head
+  // read (1) and one query for every slug already taken in the
+  // `<slug>-copy` family (1) + `createTest`'s single `db.batch` (1) and
+  // its read-back (1) + `appendAudit` (1). The plan estimated 7, against a
+  // clone that did not yet have to find which `-copy-N` was free; the
+  // measurement wins.
+  "/api/v1/workspaces/:id/tests/:testId/clone": 8,
+  // Export costs 7: auth (2) + `getTest` (1) + `getPublishedVersion` (1) +
+  // `getDraftVersion` (1, only on a test with nothing published — the
+  // worst case, which is what is pinned) + `workspaceQuestions` (1) +
+  // `listBanks` (1). The refuse-what-we-would-not-take-back check runs
+  // inside `exportTest`, over the questions it has already read, rather
+  // than in the route over a second copy of them. **Flat in question
+  // count**: a test naming 200 questions costs the same as one naming
+  // three.
+  "/api/v1/workspaces/:id/tests/:testId/export": 7,
+  // Import costs 7: auth (2) + `workspaceQuestions` (1) + `listBanks` (1)
+  // + `createTest`'s batch (1) and read-back (1) + `appendAudit` (1) — and
+  // flat in section and question count, because the whole document is one
+  // batch. A dry run costs 4 (no write, no audit) and so does a refused
+  // import. The plan estimated 8.
+  "/api/v1/workspaces/:id/tests/import": 7,
+  // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
+  // `resolveShortCode`, and no authentication cost at all — a request that
+  // carries no session cookie never reaches `readSession` in the first
+  // place (`apps/api/src/middleware/authenticate.ts`).
+  "/t/:code": 1,
 };
 
 /**
@@ -211,6 +343,39 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // Task 9.
   "GET /api/v1/workspaces/:id/banks/:bankId/export": "banks.edit",
   "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "banks.edit",
+
+  // Phase 5 Task 2. There is no `tests.view` either — reads are guarded the
+  // same way banks' reads are, by the one action there is.
+  "GET /api/v1/workspaces/:id/tests": "tests.edit",
+  "POST /api/v1/workspaces/:id/tests": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  "PATCH /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  // Task 3 (#55, P5.2).
+  "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
+  "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
+  // Task 6 (#58, P5.5).
+  "POST /api/v1/workspaces/:id/tests/:testId/check-url": "tests.edit",
+  // Task 9 (#60 / #56, P5.7b). The application's first `candidates.manage`
+  // routes: an Author holds `tests.edit` and is 403 on both of these.
+  // Task 11 (#62, P5.9): `tests.publish` is the Admin half of UX-11's
+  // split — an Author holds `tests.edit` and is 403 on these three.
+  "POST /api/v1/workspaces/:id/tests/:testId/publish": "tests.publish",
+  "POST /api/v1/workspaces/:id/tests/:testId/close": "tests.publish",
+  "POST /api/v1/workspaces/:id/tests/:testId/archive": "tests.publish",
+  // Reading the version history is not publishing it (UX-18), and nor is
+  // reading the checklist — an Author who cannot publish is exactly who
+  // needs to see what is still wrong (UX-11).
+  "GET /api/v1/workspaces/:id/tests/:testId/versions": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/checklist": "tests.edit",
+  // Task 12 (#63, P5.10): clone, export and import are all `tests.edit` —
+  // an Author builds tests, and none of these publishes one.
+  "POST /api/v1/workspaces/:id/tests/:testId/clone": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/export": "tests.edit",
+  "POST /api/v1/workspaces/:id/tests/import": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
+  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
+  // `GET /t/:code` carries no entry here at all: it is the one route this
+  // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -240,6 +405,12 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", bankRoutes(deps));
   app.route("/api/v1/workspaces", questionRoutes(deps));
   app.route("/api/v1/workspaces", mediaRoutes(deps));
+  app.route("/api/v1/workspaces", testRoutes(deps));
+  // The one route outside `/api/v1/workspaces/:id/...` this phase mounts —
+  // deliberately public and unguarded (Review Focus 5, ADR 0006's
+  // precedent). `apps/api/src/index.ts` has its own matching change so this
+  // path reaches the Worker instead of the asset router.
+  app.get("/t/:code", shortlinkRoute(deps));
 
   return app;
 }

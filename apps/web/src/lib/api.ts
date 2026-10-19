@@ -17,6 +17,9 @@ import type {
   Question,
   QuestionType,
   Role,
+  Section,
+  Test,
+  TestBranding,
 } from "@pariksha/core";
 export type { Role };
 // Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
@@ -59,6 +62,153 @@ export type PassageGroupSummary = PassageGroup & { questionCount: number };
 export interface ImportReport {
   imported: number;
   issues: (ImportIssue & { line?: number })[];
+}
+
+// Phase 5 Task 2 (#54): tests. Mirrors `packages/db/src/repo/tests.ts`'s
+// `TestRow`, widened at the wire boundary the way `apps/api/src/routes/
+// tests.ts`'s own `toWire` builds it, and `draftVersion` is the version
+// number of the test's unpublished draft.
+//
+// Task 11 (#62, P5.9): `state` is now the **derived** five-state value
+// `deriveState` computes server-side, so `"published"` is gone from this
+// union — the stored status by that name is Scheduled or Open depending on
+// the published version's own window, and the browser is never the place
+// that decides which (Review Focus 2 and 4 both).
+export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
+
+/** Task 11 (#62, P5.9): one row of `GET .../versions` — mirrors
+ * `TestVersionSummary` (`packages/db/src/repo/tests.ts`). `publishedAt` is
+ * null for the one open draft, which the history shows rather than hides. */
+export interface TestVersionSummary {
+  version: number;
+  publishedAt: number | null;
+  attemptCount: number;
+}
+
+/** Task 11/13: one row of the publish checklist — mirrors `ChecklistRow`
+ * (`apps/api/src/publish/checklist.ts`). The screen renders this array and
+ * computes nothing (Review Focus 4). */
+/** One `pariksha/test@1` document, as `GET .../export` hands it out and
+ * `POST .../tests/import` takes it back. `Test` is `@pariksha/core`'s own
+ * type; the `$schema` key export always stamps is the only addition. */
+export type TestDocument = Test & { $schema?: string };
+
+/** Mirrors `TestImportReport` (`apps/api/src/import/test.ts`). */
+export interface TestImportReport {
+  testId: string | null;
+  imported: boolean;
+  issues: (ImportIssue & { line?: number })[];
+  rebound: { questionId: string; bankName: string }[];
+}
+
+export interface ChecklistRow {
+  id: string;
+  severity: "blocking" | "advisory";
+  message: string;
+  field: string;
+  sectionId?: string;
+}
+
+export interface TestSummary {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  shortCode: string;
+  state: TestState;
+  currentVersion: number | null;
+  draftVersion: number | null;
+  reviewRequested: boolean;
+  tags: string[];
+  updatedAt: number;
+}
+
+export interface TestFilter {
+  // Whole-branch drift review, M-01: no `tag`. `GET .../tests` supports
+  // one and the repo implements it, but nothing in the product writes
+  // `test.tags`, so the client half was a filter that could never match.
+  // Add it back alongside whatever first sets a tag.
+  status?: string;
+  search?: string;
+  sort?: "name" | "updated" | "created";
+}
+
+export interface TestPatch {
+  name?: string;
+  slug?: string;
+  description?: string;
+  tags?: string[];
+  reviewRequested?: boolean;
+}
+
+// Phase 5 Task 3 (#55, P5.2): the draft. Mirrors
+// `packages/db/src/repo/test-document.ts`'s own `TestSettings`/
+// `StoredSection`/`TestDocumentBody` — the same `Bank`/`BankRow`,
+// `TestSummary`/`TestWire` split every other wire type here keeps, so this
+// package never depends on `@pariksha/db`.
+/** Everything a `pariksha/test@1` document carries except `name`/`slug`
+ * (their own fields on `TestSummary`) and `sections` (its own array,
+ * below). A block Phase 5 builds no editor for — `consent`, `proctoring`,
+ * `retention` — rides along inside this type as an unlisted field exactly
+ * the way it rides through the server's own mapper: nothing here needs to
+ * name it for a `{ ...settings, access: {...} }` patch to leave it alone. */
+export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
+/** A `Section` naming `qst_`/`bnk_` row ids — what the builder works in
+ * throughout; only export (a later task) ever sees the bank file's own
+ * ids. */
+export type StoredSection = Section;
+export interface TestDocumentBody {
+  settings: TestSettings;
+  sections: StoredSection[];
+}
+/** `GET`/`PATCH .../draft`'s wire shape. `draw`/`setPoints`/`points` are
+ * UX-15/UX-16/UX-12's live numbers — present on every `GET` and omitted by
+ * `PATCH` (nothing reads them off a save response; a screen that wants
+ * fresh numbers right after one re-fetches `draft()`). */
+export interface TestVersionRow {
+  id: string;
+  testId: string;
+  version: number;
+  body: TestDocumentBody;
+  publishedAt: number | null;
+  createdAt: number;
+  draw?: Record<string, { matching: number; wanted: number }>;
+  setPoints?: Record<string, { set: string; points: number }[]>;
+  /** UX-12's collapsed-row points figure, one per section, every source
+   * kind — `{ min, max }`, `min === max` for `fixed` (exact) and `sets` (one
+   * set's own total). `pool` is a real range: the cheapest and the dearest
+   * `count` matching questions, since a real pool's questions usually
+   * differ in points and the real draw is random per attempt. Render
+   * "N points" when `min === max`, else "min–max points" (task 3 review,
+   * I3 — a single estimate stated a fact the engine does not honour). */
+  points?: Record<string, { min: number; max: number }>;
+}
+/** `PATCH .../draft`'s body. Each named top-level block replaces whole —
+ * `settings` one level deep, `sections` as a full array — never merges
+ * below it (Review Focus item 3). */
+export interface DraftPatch {
+  settings?: Partial<TestSettings>;
+  sections?: StoredSection[];
+}
+
+/** Task 6 (#58, P5.5): `POST .../check-url`'s answer. Mirrors
+ * `apps/api/src/net/reachable.ts`'s `ReachResult`, the same boundary every
+ * other wire type here keeps — this package never imports apps/api.
+ *
+ * Advisory in every state. `unverified` means "the link did not answer
+ * 200", never "the link is wrong"; `refused` means the check itself cannot
+ * be made (a network address, a non-web port, a scheme that is not http);
+ * `timeout` is its own state so the screen can offer a retry rather than
+ * report a link as unreachable on one slow response. `status` is null for
+ * every transport-level outcome, deliberately — the server does not tell
+ * the browser which one it was. */
+export type ReachState = "reachable" | "unverified" | "timeout" | "refused";
+
+export interface ReachResult {
+  state: ReachState;
+  status: number | null;
+  reason?: string;
+  checkedAt: number;
 }
 
 export interface QuestionListFilter {
@@ -213,6 +363,111 @@ export interface ApiClient {
    * (`QuestionSummary.id`), the same id `deleteQuestion` already takes.
    */
   exportQuestion(workspaceId: string, bankId: string, questionId: string): Promise<Question>;
+
+  // Phase 5 Task 2 (#54): test CRUD. `tests` takes a filter rather than the
+  // raw query-string shape `apps/api/src/routes/tests.ts` reads — the
+  // screen builds a `TestFilter`, this is the one place that becomes `?`.
+  tests(workspaceId: string, filter?: TestFilter): Promise<TestSummary[]>;
+  createTest(workspaceId: string, input: { name: string; slug: string }): Promise<TestSummary>;
+  test(workspaceId: string, testId: string): Promise<TestSummary>;
+  updateTest(workspaceId: string, testId: string, patch: TestPatch): Promise<TestSummary>;
+
+  // Task 3 (#55, P5.2): the draft itself — the one pair Tasks 4 through 9
+  // all write through.
+  draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
+  patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
+
+  // Task 11 (#62, P5.9): the lifecycle. Each answers with the same
+  // `TestSummary` every other test route returns, so the screen that
+  // called one has the new state without a second read.
+  publishTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  closeTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  archiveTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  versions(workspaceId: string, testId: string): Promise<TestVersionSummary[]>;
+  /** Task 13 (#64, P5.11): the same rows `publishTest` enforces, read
+   * rather than enforced — one function, two callers (Review Focus 4). */
+  checklist(workspaceId: string, testId: string): Promise<ChecklistRow[]>;
+
+  // Task 12 (#63, P5.10): AC-04's three.
+  /** A new Draft from this test's editable head, with a new id, short code
+   * and `-copy` slug. Version history and the review flag are not copied. */
+  cloneTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  /** One `pariksha/test@1` document. `version` names a frozen one; the
+   * default is the current published version, or the draft head when
+   * nothing is published. */
+  exportTest(workspaceId: string, testId: string, version?: number): Promise<TestDocument>;
+  /** Whole-test import. `dryRun: true` validates and reports without
+   * writing. A 422 comes back as a report rather than a thrown `ApiError`,
+   * the same normalisation `importBank` does and for the same reason —
+   * `ImportDialog` renders one shape either way. A **409** (`T-05`: a slug
+   * the file named is already taken) still throws: there is nothing
+   * positioned to render, and the organiser has to change the slug. */
+  importTest(workspaceId: string, doc: unknown, opts?: { dryRun?: boolean }): Promise<TestImportReport>;
+
+  // Task 6 (#58, P5.5). `workspaceId` first, like every sibling above — the
+  // plan's own sketch wrote `checkUrl(testId, url)`, which cannot reach the
+  // API at all (the path is workspace-scoped, and `requires()` reads the
+  // workspace out of its own `:id` segment).
+  checkUrl(workspaceId: string, testId: string, url: string): Promise<ReachResult>;
+
+  // T-23's workspace half (Task 10, #61, P5.8). Three methods rather than
+  // one, because the PRD splits branding across two owners: the logo, the
+  // colour and the footer are workspace settings behind
+  // `workspace.settings`, while the start and finish messages are the
+  // test's own and ride `patchDraft` with everything else.
+  /** The workspace's own branding, or `{}` when it has none yet. */
+  workspaceBranding(workspaceId: string): Promise<TestBranding>;
+  saveWorkspaceBranding(workspaceId: string, branding: TestBranding): Promise<TestBranding>;
+  /**
+   * The logo's bytes, through Phase 4's existing media route — the only
+   * one this product has. Answers the content-addressed key, which is
+   * what `branding.logo` stores.
+   */
+  uploadMedia(workspaceId: string, bankId: string, file: File): Promise<{ key: string }>;
+
+  // Task 9 (#60 / #56, P5.7b): the candidate list. `workspaceId` first,
+  // like every sibling — the plan's sketch wrote `candidates(testId)`,
+  // which cannot reach a workspace-scoped path at all, the same slip its
+  // `checkUrl(testId, url)` made.
+  candidates(workspaceId: string, testId: string): Promise<CandidateRow[]>;
+  /**
+   * Uploads a candidate list as CSV. `dryRun: true` converts and reports
+   * without writing. A refusal (422) comes back as a report rather than a
+   * thrown `ApiError`, the same normalisation `importBank` does and for
+   * the same reason: the panel renders one report shape either way, and a
+   * genuine transport failure (413, 404, 403) still throws.
+   */
+  importCandidates(
+    workspaceId: string,
+    testId: string,
+    csv: string,
+    opts?: { dryRun?: boolean },
+  ): Promise<CandidateImportReport>;
+}
+
+/** One row of the uploaded list. Mirrors `CandidateRow` in
+ * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */
+export interface CandidateRow {
+  id: string;
+  testId: string;
+  externalId: string | null;
+  setLabel: string | null;
+  formValues: Record<string, unknown>;
+  source: "list" | "registration";
+  consentVersion: string | null;
+  createdAt: number;
+}
+
+export interface CandidateIssue {
+  field: string;
+  message: string;
+  /** The physical line of the uploaded file this is about. */
+  line: number;
+}
+
+export interface CandidateImportReport {
+  imported: number;
+  issues: CandidateIssue[];
 }
 
 const API = "/api/v1";
@@ -446,7 +701,132 @@ export function createApiClient(): ApiClient {
 
     exportQuestion: (workspaceId, bankId, questionId) =>
       json<Question>(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/export`),
+
+    async tests(workspaceId, filter = {}) {
+      const qs = query({
+        status: filter.status,
+        search: filter.search,
+        sort: filter.sort,
+      });
+      return (await json<{ tests: TestSummary[] }>(`/workspaces/${workspaceId}/tests${qs}`)).tests;
+    },
+
+    createTest: (workspaceId, input) => json<TestSummary>(`/workspaces/${workspaceId}/tests`, post(input)),
+
+    test: (workspaceId, testId) => json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`),
+
+    updateTest: (workspaceId, testId, patch) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`, patchBody(patch)),
+
+    publishTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/publish`, post({})),
+    closeTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/close`, post({})),
+    archiveTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/archive`, post({})),
+    versions: async (workspaceId, testId) =>
+      (await json<{ versions: TestVersionSummary[] }>(`/workspaces/${workspaceId}/tests/${testId}/versions`)).versions,
+    checklist: async (workspaceId, testId) =>
+      (await json<{ rows: ChecklistRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/checklist`)).rows,
+
+    cloneTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/clone`, post({})),
+
+    exportTest: (workspaceId, testId, version) =>
+      json<TestDocument>(
+        `/workspaces/${workspaceId}/tests/${testId}/export${version === undefined ? "" : `?version=${version}`}`,
+      ),
+
+    async importTest(workspaceId, doc, opts = {}) {
+      try {
+        return await json<TestImportReport>(
+          `/workspaces/${workspaceId}/tests/import${opts.dryRun ? "?dryRun=1" : ""}`,
+          post(doc),
+        );
+      } catch (error) {
+        // Whole-branch drift review, M-03. This was a cast where its two
+        // siblings (`importBank`, `importCandidates`) use a guard, so a
+        // 422 whose `details` is *not* the route's report became a report
+        // with zero issues and `ImportDialog` rendered a dialog saying
+        // nothing happened and not why. Guarded now, and the fallbacks go
+        // with the cast: a report with no issues is not a thing this route
+        // produces, so inventing one hides whatever really went wrong.
+        if (error instanceof ApiError && error.status === 422 && isTestImportDetails(error.details)) {
+          return { testId: null, imported: false, issues: error.details.issues, rebound: error.details.rebound };
+        }
+        throw error;
+      }
+    },
+
+    draft: (workspaceId, testId) => json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
+
+    patchDraft: (workspaceId, testId, patch) =>
+      json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`, patchBody(patch)),
+
+    checkUrl: (workspaceId, testId, url) =>
+      json<ReachResult>(`/workspaces/${workspaceId}/tests/${testId}/check-url`, post({ url })),
+
+    workspaceBranding: async (workspaceId) =>
+      (await json<{ branding: TestBranding | null }>(`/workspaces/${workspaceId}`)).branding ?? {},
+
+    saveWorkspaceBranding: async (workspaceId, branding) =>
+      (await json<{ branding: TestBranding | null }>(`/workspaces/${workspaceId}`, patchBody({ branding })))
+        .branding ?? {},
+
+    uploadMedia: (workspaceId, bankId, file) =>
+      json<{ key: string }>(`/workspaces/${workspaceId}/banks/${bankId}/media`, {
+        method: "POST",
+        // The route reads the image type off `Content-Type` and the bytes
+        // off the body — no multipart wrapper to unpick on a Worker.
+        headers: { "Content-Type": file.type, Accept: "application/json" },
+        body: file,
+      }),
+
+    candidates: async (workspaceId, testId) =>
+      (await json<{ candidates: CandidateRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/candidates`)).candidates,
+
+    async importCandidates(workspaceId, testId, csv, opts = {}) {
+      const qs = opts.dryRun ? "?dryRun=1" : "";
+      try {
+        return await json<CandidateImportReport>(
+          `/workspaces/${workspaceId}/tests/${testId}/candidates/import${qs}`,
+          { method: "POST", headers: { "Content-Type": "text/csv", Accept: "application/json" }, body: csv },
+        );
+      } catch (error) {
+        // The 422's `details` *is* the report (`imported: 0`, `issues`
+        // populated), so the panel renders one shape whether the upload
+        // landed or not. Anything else — 403, 404, 413 — still throws.
+        if (error instanceof ApiError && error.status === 422 && isCandidateReport(error.details)) {
+          return error.details;
+        }
+        throw error;
+      }
+    },
   };
+}
+
+function isCandidateReport(value: unknown): value is CandidateImportReport {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { imported?: unknown }).imported === "number" &&
+    Array.isArray((value as { issues?: unknown }).issues)
+  );
+}
+
+/** The same kind of shape test its two siblings use, against what
+ * `POST .../tests/import` actually puts in a 422's `details` — the
+ * report's two lists, without the `testId`/`imported` the route already
+ * knows the answer to (`apps/api/src/routes/tests.ts`). */
+function isTestImportDetails(
+  value: unknown,
+): value is Pick<TestImportReport, "issues" | "rebound"> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { issues?: unknown }).issues) &&
+    Array.isArray((value as { rebound?: unknown }).rebound)
+  );
 }
 
 function isImportReport(value: unknown): value is ImportReport {

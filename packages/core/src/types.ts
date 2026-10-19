@@ -185,12 +185,13 @@ export interface Bank {
 }
 
 // Test-format types, mirroring schemas/test-1.json's `$defs/section`,
-// `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access` and
-// `release` exactly. Only what question selection and import validation
-// need: `timing`, `consent`, `registration_form`, `proctoring`,
-// `retention` and `branding` are required or optional in the schema but no
-// rule in this package reads them, so they are not modelled here yet. Add
-// each when a phase needs it.
+// `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access`,
+// `release`, `form`, `formField` and `validation` exactly. Only what
+// question selection and import validation need: `consent`, `proctoring`
+// and `retention` are in the schema but no rule in this package reads
+// them, so they are not modelled here yet. Add each when a phase needs it.
+// `registration_form` was the first to be claimed, by Task 5 (#57, P5.4);
+// `timing` by Task 7 (#59, P5.6) and `branding` by Task 10 (#61, P5.8).
 
 export interface SourceFixed {
   kind: "fixed";
@@ -239,7 +240,129 @@ export interface TestScoring {
   default_mode?: ScoringMode;
   negative_fraction?: number;
   pass_mark_percent?: number;
+  /**
+   * Task 4 (#56, P5.3). How far two sets of one `sets` source may differ in
+   * total points before T-11 reports it, in points. Default 0 — any
+   * difference at all is reported. It lives in the document, not only in
+   * `validateTest`'s options, so an organiser who accepted some drift still
+   * has it accepted after the test is exported and imported elsewhere.
+   */
+  set_points_tolerance?: number;
 }
+
+/**
+ * T-16 - T-18's registration form (Task 5, #57, P5.4). Mirrors
+ * `schemas/test-1.json`'s `$defs/form`, `$defs/formField` and
+ * `$defs/validation` exactly, with one correction to the plan's own
+ * `Interfaces` block: `link_text` and `link_target` are properties of the
+ * *field* in the schema (`$defs/formField`), not of `validation` — and
+ * `$defs/validation` carries `additionalProperties: false`, so modelling
+ * them there would have made every consent field a 422 on save.
+ */
+export const FORM_FIELD_TYPES = [
+  "short_text",
+  "long_text",
+  "email",
+  "phone",
+  "number",
+  "date",
+  "dropdown",
+  "radio",
+  "checkbox",
+  "url",
+  "consent",
+] as const;
+
+export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
+
+/** Only the keys that suit the field's type are used; the rest are ignored
+ * (the schema says the same, in its own `description`). */
+export interface FieldValidation {
+  min_length?: number;
+  max_length?: number;
+  /** RE2-safe regular expression, checked on the server. */
+  pattern?: string;
+  /** Shown when the pattern fails. Say what the right format looks like. */
+  pattern_message?: string;
+  /** A number for `number`, an ISO date string for `date`. */
+  min?: number | string;
+  max?: number | string;
+  integer?: boolean;
+  decimals?: number;
+  /** Glob patterns, for `email` and `url` fields. */
+  allowed_domains?: string[];
+  /** `phone` only: ISO 3166-1 alpha-2, e.g. IN. */
+  default_country?: string;
+  /** `url` only: flag the value if the link does not return HTTP 200
+   * (T-19). The check itself is Task 6; the candidate half is Phase 6. */
+  check_reachable?: boolean;
+}
+
+export interface FormField {
+  /** Column name in the results CSV (`^[a-z0-9_]{1,40}$`). */
+  id: string;
+  type: FormFieldType;
+  label: string;
+  help?: string;
+  required?: boolean;
+  /** A second registration with the same value is refused. */
+  unique?: boolean;
+  /** Required for `dropdown`, `radio` and `checkbox`. */
+  options?: string[];
+  /** `consent` only: the words that open the consent text. */
+  link_text?: string;
+  /** `consent` only: `"consent"` for the test's own consent text, or a URL. */
+  link_target?: string;
+  validation?: FieldValidation;
+}
+
+/** Named `...Spec`, not `...Form`, so this type and the React component of
+ * the same job (`apps/web/src/components/testbuilder/RegistrationForm.tsx`)
+ * do not share a name across two packages. */
+export interface RegistrationFormSpec {
+  title?: string;
+  description?: string;
+  fields: FormField[];
+}
+
+export type NavigationMode = "free" | "linear" | "per_section";
+export type CountedAttempt = "highest" | "latest" | "average";
+
+/**
+ * T-12 - T-15's `timing` block (Task 7, #59, P5.6). Mirrors
+ * `schemas/test-1.json`'s `$defs/timing` exactly: `duration_minutes` is the
+ * only member the schema requires, and every other field has a documented
+ * default in `docs/test-format.md` § `timing` and is omitted until set.
+ *
+ * Timestamps are RFC 3339 strings with an offset, as the schema's
+ * `format: date-time` says. `timezone` is the IANA zone every time shown to
+ * a *candidate* is rendered in; it is not redundant with the offsets,
+ * because an offset cannot say which zone it came from or what happens
+ * across a DST boundary.
+ */
+export interface TestTiming {
+  timezone?: string;
+  opens_at?: string;
+  closes_at?: string;
+  latest_start_at?: string;
+  duration_minutes: number;
+  navigation?: NavigationMode;
+  attempts_allowed?: number;
+  cooldown_minutes?: number;
+  counted_attempt?: CountedAttempt;
+  warn_at_minutes?: number[];
+  late_sync_grace_seconds?: number;
+}
+
+/** What each navigation mode means for the candidate, in one sentence
+ * (#59 asks for this copy by name). Lives here, not in the panel, because
+ * Task 13's publish checklist states the same consequence as the builder
+ * does rather than wording it a second way. */
+export const NAVIGATION_CONSEQUENCE: Readonly<Record<NavigationMode, string>> = {
+  free: "A candidate can jump to any question at any time.",
+  linear: "A candidate cannot go back to an earlier question.",
+  per_section: "Free inside a section; a section is locked once the candidate leaves it.",
+};
 
 export type AccessMode = "link_code" | "invite_only" | "email_code" | "sso";
 
@@ -252,12 +375,56 @@ export interface TestAccess {
   captcha?: boolean;
 }
 
+export type ReleaseWhen = "never" | "on_submit" | "on_date";
+export type ReleaseShow = "score_only" | "score_and_sections" | "full_review";
+
 export interface TestRelease {
-  when: "never" | "on_submit" | "on_date";
+  when: ReleaseWhen;
   /** Required when `when` is `on_date`. */
   at?: string;
-  show?: "score_only" | "score_and_sections" | "full_review";
+  show?: ReleaseShow;
 }
+
+/**
+ * T-23's `branding` (Task 10, #61, P5.8). Mirrors
+ * `schemas/test-1.json`'s root `branding` object exactly.
+ *
+ * One type, two homes, which is the PRD's own split (T-23) and is what
+ * keeps an Author out of workspace settings: `logo`, `primary_colour` and
+ * `footer_text` are **per workspace** and live in `workspace.branding_json`
+ * behind `workspace.settings`; `start_message` and `finish_message` are
+ * **per test** and live in the draft's `settings.branding` behind
+ * `tests.edit`.
+ */
+export interface TestBranding {
+  /** A media key from `POST .../banks/:bankId/media`, not a URL. */
+  logo?: string;
+  /** What a screen reader says in place of `logo`. Collected beside the
+   * file and stored with it: an unlabelled institution logo is how a
+   * candidate using a screen reader meets the test, and nothing later in
+   * the product asks for this again. */
+  logo_alt?: string;
+  /** `#rrggbb`. Refused at the write below 4.5:1 against `CREAM`. */
+  primary_colour?: string;
+  footer_text?: string;
+  start_message?: string;
+  finish_message?: string;
+}
+
+/** What each release timing means for the candidate, in one sentence.
+ * Beside `NAVIGATION_CONSEQUENCE` and for the same reason: the builder and
+ * Task 13's checklist state the consequence once, not twice. */
+export const RELEASE_CONSEQUENCE: Readonly<Record<ReleaseWhen, string>> = {
+  never: "Candidates never see a score.",
+  on_submit: "Candidates see their result on the finish page, as soon as they submit.",
+  on_date: "Candidates see nothing until the date you choose, then their result appears.",
+};
+
+export const SHOW_CONSEQUENCE: Readonly<Record<ReleaseShow, string>> = {
+  score_only: "The total and whether they passed.",
+  score_and_sections: "The total, whether they passed, and each section's score.",
+  full_review: "All of that, plus the correct answers and the explanations — use it only once the test has closed for everyone.",
+};
 
 export interface Test {
   "$schema"?: string;
@@ -269,10 +436,47 @@ export interface Test {
   license?: string;
   /** Bank files this test draws from, relative to the test file. */
   banks?: string[];
+  /**
+   * Task 7 (#59, P5.6) deliberately left this **optional**, against the
+   * plan's own `Interfaces` block and against `schemas/test-1.json`'s root
+   * `required`, which names it.
+   *
+   * A `Test` value is not only a finished document: `TestSettings`
+   * (`packages/db/src/repo/test-document.ts`) is `Omit<Test, …>` and is
+   * what a *draft* stores, and `createTest` seeds a draft with `{}`. The
+   * save-time gate (`draftSchema`, `apps/api/src/routes/tests.ts`) already
+   * drops the root `required` for exactly that reason, so a required
+   * `timing` here would be a type that storage can and does violate — and
+   * would have forced an invented duration into `toTestVersionRow`,
+   * `toTestDocument`'s spread, `createTest`'s seed and every fixture in
+   * `packages/core/test/validate.test.ts`.
+   *
+   * Presence is enforced where the document really is whole: the schema's
+   * root `required` on import, and the publish checklist (Task 13).
+   */
+  timing?: TestTiming;
   scoring?: TestScoring;
   access?: TestAccess;
+  registration_form?: RegistrationFormSpec;
   release?: TestRelease;
+  branding?: TestBranding;
+  consent?: TestConsent;
   sections: Section[];
+}
+
+/**
+ * S-12's consent screen. Phase 5 builds no editor for it and the block
+ * round-trips untouched, so it is modelled here only because the publish
+ * checklist now has a row for it: `draftSchema()` strips `text`'s
+ * `minLength: 1` with every other emptiness floor, and a published test
+ * with blank consent text records consent to nothing against a live
+ * `candidate.consent_version` column (whole-branch security review, L1).
+ */
+export interface TestConsent {
+  /** Stored per candidate, so a later edit is distinguishable. */
+  version: string;
+  /** Markdown shown before registration. */
+  text: string;
 }
 
 export type ResponseValue =

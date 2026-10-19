@@ -25,10 +25,12 @@ beforeEach(async () => {
 afterEach(() => closeClient(db));
 
 async function seedAttempt(db: DbClient, workspaceId: string) {
-  const testId = await repo.createTest(db, workspaceId, {
-    slug: "t",
-    name: "T",
-  });
+  const testId = (
+    await repo.createTest(db, workspaceId, {
+      slug: "t",
+      name: "T",
+    })
+  ).id;
   const candidateId = await repo.createCandidate(db, workspaceId, {
     testId,
     formValues: { email: "a@example.com" },

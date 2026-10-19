@@ -100,6 +100,56 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportQuestion: async () => {
       throw new Error("not used");
     },
+    tests: async () => [],
+    createTest: async () => {
+      throw new Error("not used");
+    },
+    test: async () => {
+      throw new Error("not used");
+    },
+    updateTest: async () => {
+      throw new Error("not used");
+    },
+    draft: async () => {
+      throw new Error("not used");
+    },
+    patchDraft: async () => {
+      throw new Error("not used");
+    },
+    publishTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    closeTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    archiveTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    versions: async () => [],
+    checklist: async () => [],
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
+    // Task 6 (#58, P5.5): present only to satisfy `ApiClient`'s shape --
+    // nothing in this file reaches T-19's link check.
+    checkUrl: async () => {
+      throw new Error("not used by this test file");
+    },
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: async () => {
+      throw new Error("not used by this test file");
+    },
+    uploadMedia: async () => {
+      throw new Error("not used by this test file");
+    },
+    candidates: async () => [],
+    importCandidates: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }
@@ -109,7 +159,7 @@ const noop = () => undefined;
 describe("ImportDialog", () => {
   it("the dialog shows the dry-run report before anything is written, with one row per issue", async () => {
     render(
-      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient()} onImported={noop} />,
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient()} onClose={noop} onImported={noop} />,
     );
 
     uploadFile(screen.getByLabelText(/file/i), jsonFile("bad.json", BAD_BANK));
@@ -121,7 +171,7 @@ describe("ImportDialog", () => {
 
   it("a clean dry run enables Import and shows how many questions would import", async () => {
     render(
-      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient()} onImported={noop} />,
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient()} onClose={noop} onImported={noop} />,
     );
 
     uploadFile(screen.getByLabelText(/file/i), jsonFile("good.json", GOOD_BANK));
@@ -140,7 +190,7 @@ describe("ImportDialog", () => {
       },
     });
     const onImported = vi.fn();
-    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={onImported} />);
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onClose={noop} onImported={onImported} />);
 
     uploadFile(screen.getByLabelText(/file/i), jsonFile("good.json", GOOD_BANK));
     await screen.findByRole("button", { name: /^import$/i, hidden: false });
@@ -159,7 +209,7 @@ describe("ImportDialog", () => {
         workspaceId="wsp_1"
         bankId="bnk_1"
         client={fakeClient({ importBank })}
-        onImported={noop}
+        onClose={noop} onImported={noop}
       />,
     );
 
@@ -175,7 +225,7 @@ describe("ImportDialog", () => {
         throw new ApiError(413, "import_too_large", "An import is limited to 500 questions.");
       },
     });
-    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onClose={noop} onImported={noop} />);
 
     uploadFile(screen.getByLabelText(/file/i), jsonFile("big.json", GOOD_BANK));
 
@@ -195,7 +245,7 @@ describe("ImportDialog", () => {
         return { imported: 1, issues: [] };
       },
     });
-    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onClose={noop} onImported={noop} />);
 
     uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
     await waitFor(() => expect(screen.getByRole("button", { name: /^import$/i })).toBeEnabled());
@@ -215,7 +265,7 @@ describe("ImportDialog", () => {
         issues: [{ questionId: null, index: -1, field: "key", message: `key "z" is not among the options`, line: 4 }],
       }),
     });
-    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onClose={noop} onImported={noop} />);
 
     uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
 
@@ -233,7 +283,7 @@ describe("ImportDialog", () => {
         issues: [{ questionId: null, index: -1, field: "key", message: "could not parse", line: 4 }],
       }),
     });
-    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onClose={noop} onImported={noop} />);
 
     uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
     await screen.findByText(/nothing was imported/i);
@@ -245,7 +295,7 @@ describe("ImportDialog", () => {
   it("a file with an extension this dialog does not recognise is reported without calling the API", async () => {
     const importBank = vi.fn(async () => ({ imported: 0, issues: [] }) as ImportReport);
     render(
-      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient({ importBank })} onImported={noop} />,
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient({ importBank })} onClose={noop} onImported={noop} />,
     );
 
     uploadFile(screen.getByLabelText(/file/i), textFile("bank.txt", "whatever"));
@@ -256,7 +306,7 @@ describe("ImportDialog", () => {
 
   it("the import dialog has no axe violations and the report is readable by a screen reader", async () => {
     const { container } = render(
-      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient()} onImported={noop} />,
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient()} onClose={noop} onImported={noop} />,
     );
 
     uploadFile(screen.getByLabelText(/file/i), jsonFile("bad.json", BAD_BANK));
@@ -279,7 +329,7 @@ describe("ImportDialog", () => {
       }),
     });
     const { container } = render(
-      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />,
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onClose={noop} onImported={noop} />,
     );
 
     uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));

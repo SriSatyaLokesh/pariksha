@@ -139,15 +139,20 @@ export const test = pgTable(
     workspaceId: text("workspace_id").notNull(),
     slug: text("slug").notNull(),
     name: text("name").notNull(),
+    description: text("description"),
+    shortCode: text("short_code").notNull(),
     status: text("status").notNull(),
+    reviewRequested: boolean("review_requested").notNull(),
     currentVersion: integer("current_version"),
     tagsJson: jsonb("tags_json").notNull(),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "number" }),
   },
   (t) => [
     index("test_workspace_idx").on(t.workspaceId),
     index("test_status_idx").on(t.status),
     uniqueIndex("test_workspace_slug_uq").on(t.workspaceId, t.slug),
+    uniqueIndex("test_short_code_uq").on(t.shortCode),
   ],
 );
 
@@ -161,6 +166,7 @@ export const testVersion = pgTable(
     settingsJson: jsonb("settings_json").notNull(),
     sectionsJson: jsonb("sections_json").notNull(),
     publishedAt: bigint("published_at", { mode: "number" }),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
     index("test_version_workspace_idx").on(t.workspaceId),
@@ -191,13 +197,17 @@ export const candidate = pgTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     testId: text("test_id").notNull(),
+    externalId: text("external_id"),
+    setLabel: text("set_label"),
+    source: text("source").notNull(),
     formValuesJson: jsonb("form_values_json").notNull(),
-    consentVersion: text("consent_version").notNull(),
+    consentVersion: text("consent_version"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
     index("candidate_workspace_idx").on(t.workspaceId),
     index("candidate_test_idx").on(t.testId),
+    uniqueIndex("candidate_test_external_uq").on(t.testId, t.externalId),
   ],
 );
 

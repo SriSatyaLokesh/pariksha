@@ -2,14 +2,30 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { validateBank, validateTest } from "../src/validate.js";
+import {
+  allowlistIssues,
+  brandColourIssue,
+  describeAllowlists,
+  formDomainIssues,
+  invalidCidr,
+  invalidDomainGlob,
+  timingIssues,
+  unsatisfiableValidation,
+  validateBank,
+  validateTest,
+} from "../src/validate.js";
+import { NAVIGATION_CONSEQUENCE } from "../src/types.js";
+import { EXAMPLE_BRAND_COLOUR } from "../src/contrast.js";
 import type {
   Bank,
+  FormField,
+  FormFieldType,
   Question,
   ScoringConfig,
   ScoringMode,
   Section,
   Test,
+  TestTiming,
 } from "../src/types.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -697,6 +713,43 @@ describe("validateTest", () => {
     expect(validateTest(test, bank, { setPointsTolerance: 0.5 }).ok).toBe(false);
   });
 
+  // Task 4 (#56, P5.3): the tolerance has a home in the document itself
+  // (`scoring.set_points_tolerance`), so an organiser who accepted some
+  // drift still has it accepted when the file is exported and imported
+  // somewhere else. The caller's own option still wins where it is given —
+  // the publish gate may be stricter than the file asks for.
+  it("reads the tolerance from the document's own scoring.set_points_tolerance", () => {
+    const bank = [
+      trueFalse("TF-001", 2),
+      trueFalse("TF-002", 2),
+      trueFalse("TF-003", 1),
+      trueFalse("TF-004", 2),
+    ];
+    const sections = [
+      {
+        id: "s1",
+        title: "Sets",
+        source: {
+          kind: "sets" as const,
+          sets: [
+            { set: "A", questions: ["TF-001", "TF-002"] },
+            { set: "B", questions: ["TF-003", "TF-004"] },
+          ],
+        },
+      },
+    ];
+
+    // The document asks for a tolerance of 1, and the 1-point drift passes.
+    expect(validateTest(doc({ scoring: { set_points_tolerance: 1 }, sections }), bank).ok).toBe(true);
+    // The same document without the field keeps the strict default of 0.
+    expect(validateTest(doc({ sections }), bank).ok).toBe(false);
+    // An explicit option still overrides the document, in both directions.
+    expect(
+      validateTest(doc({ scoring: { set_points_tolerance: 1 }, sections }), bank, { setPointsTolerance: 0 }).ok,
+    ).toBe(false);
+    expect(validateTest(doc({ sections }), bank, { setPointsTolerance: 1 }).ok).toBe(true);
+  });
+
   it('reports release.when "on_date" with no at', () => {
     const r = validateTest(doc({ release: { when: "on_date" } }), []);
     expect(r.ok).toBe(false);
@@ -785,5 +838,555 @@ describe("validateTest", () => {
     const r = validateTest(exampleTest, (exampleBank as Bank).questions);
     if (!r.ok) throw new Error(JSON.stringify(r.issues, null, 2));
     expect(r.ok).toBe(true);
+  });
+
+  // --- Task 5 (#57, P5.4): the registration form ------------------------
+
+  function field(over: Partial<FormField> & { id: string; type: FormFieldType }): FormField {
+    return { label: over.label ?? "A field", ...over };
+  }
+
+  function withForm(fields: FormField[]): Test {
+    return doc({ registration_form: { fields } });
+  }
+
+  it("duplicate form field ids are reported with the field named", () => {
+    const r = validateTest(
+      withForm([
+        field({ id: "email", type: "email" }),
+        field({ id: "phone", type: "phone" }),
+        field({ id: "email", type: "short_text" }),
+      ]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form.fields",
+      index: -1,
+      message: expect.stringMatching(/"email".*more than once/),
+    });
+    // Reported once, however many times the id repeats — three `email`
+    // fields is one defect, not two.
+    expect(r.issues.filter((i) => /more than once/.test(i.message))).toHaveLength(1);
+  });
+
+  it("duplicate section ids are reported", () => {
+    const r = validateTest(
+      doc({ sections: [fixedSection("quant", []), fixedSection("quant", [])] }),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual({
+      questionId: null,
+      index: -1,
+      field: "sections",
+      message: 'section id "quant" is used more than once',
+    });
+  });
+
+  it("an options list on a short_text field is reported", () => {
+    const r = validateTest(
+      withForm([field({ id: "name", type: "short_text", options: ["a", "b"] })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form.fields",
+      message: expect.stringMatching(/"name".*short_text.*cannot carry an options list/),
+    });
+  });
+
+  it("a dropdown with fewer than two options is reported", () => {
+    // The other half of the rule above, and the publish-time replacement
+    // for the schema floor `draftSchema()` drops so a choice field can be
+    // saved while its options are still being typed.
+    const r = validateTest(withForm([field({ id: "degree", type: "dropdown", options: ["B.Tech"] })]), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form.fields",
+      message: expect.stringMatching(/"degree".*at least two options/),
+    });
+  });
+
+  it("min above max is reported, with the field id in the message", () => {
+    const r = validateTest(
+      withForm([field({ id: "cgpa", type: "number", validation: { min: 10, max: 5 } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form",
+      message: expect.stringMatching(/"cgpa".*minimum 10 is above maximum 5/),
+    });
+  });
+
+  it("a pathological allowed_domains glob is refused at publish, not left to the candidate's browser", () => {
+    // Whole-branch security review, H1. Twenty characters, typeable in the
+    // panel's own box, compiling to eight abutting `[^.]+` in the
+    // *candidate's* browser — and Phase 6 runs the same matcher inside a
+    // 10 ms Worker budget. `invalidDomainGlob` permits `*` only as a
+    // leading `*.`, so the shape is unconstructible rather than slow.
+    const r = validateTest(
+      withForm([
+        field({ id: "email", type: "email", validation: { allowed_domains: ["*a*a*a*a*a*a*a*b.com"] } }),
+      ]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual({
+      questionId: null,
+      index: -1,
+      field: "registration_form.fields",
+      message: expect.stringMatching(/"email" allows a domain that cannot be matched.*other than the front/),
+    });
+  });
+
+  it.each([
+    ["*", /matches every domain/],
+    ["**.com", /other than the front/],
+    ["ac.", /letters, digits and inner hyphens/],
+    ["in", /single label, not a domain/],
+    [" ac.in", /is not a domain/],
+  ])("allowed_domains entry %s is refused", (glob, why) => {
+    const issues = formDomainIssues({
+      fields: [field({ id: "email", type: "email", validation: { allowed_domains: [glob] } })],
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.message).toMatch(why);
+  });
+
+  it("the two legal shapes of an allowed_domains entry pass, and no form is no issue", () => {
+    expect(
+      formDomainIssues({
+        fields: [
+          field({ id: "email", type: "email", validation: { allowed_domains: ["*.ac.in", "nitk.ac.in"] } }),
+          field({ id: "site", type: "url" }),
+        ],
+      }),
+    ).toEqual([]);
+    expect(formDomainIssues(undefined)).toEqual([]);
+  });
+
+  it("max_length below min_length is reported", () => {
+    const r = validateTest(
+      withForm([field({ id: "name", type: "short_text", validation: { min_length: 10, max_length: 5 } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]?.message).toMatch(/minimum length 10 is above maximum length 5/);
+  });
+
+  it("a number min against a date-shaped max is not compared", () => {
+    // `min`/`max` are `number | string` in the schema; comparing 5 against
+    // "2010-12-31" would report a defect that is not one.
+    expect(
+      validateTest(withForm([field({ id: "x", type: "number", validation: { min: 5, max: "2010-12-31" } })]), []).ok,
+    ).toBe(true);
+  });
+
+  it("a date max below its min is reported, comparing the ISO strings", () => {
+    const r = validateTest(
+      withForm([field({ id: "dob", type: "date", validation: { min: "2010-01-01", max: "2000-01-01" } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+  });
+
+  it("unsatisfiableValidation is the one copy of the rule the builder also shows", () => {
+    expect(unsatisfiableValidation({ id: "a", type: "number", label: "A", validation: { min: 10, max: 5 } })).toMatch(
+      /minimum 10 is above maximum 5 — lower the minimum/,
+    );
+    expect(unsatisfiableValidation({ id: "a", type: "number", label: "A", validation: { min: 1, max: 5 } })).toBeNull();
+    expect(unsatisfiableValidation({ id: "a", type: "number", label: "A" })).toBeNull();
+  });
+
+  // task 5/6 review, M3: #57's acceptance row names two unsatisfiable
+  // shapes — "min above max, a regex matching nothing allowed" — and only
+  // the first had shipped. `assertSafeRegex` was exported from this package
+  // for the second and nothing acted on what it threw.
+  it("an unsafe or unparseable pattern is unsatisfiable too, in the builder's own words", () => {
+    const pattern = (p: string): string | null =>
+      unsatisfiableValidation({ id: "roll", type: "short_text", label: "R", validation: { pattern: p } });
+
+    expect(pattern("([a-z]+)+$")).toMatch(
+      /^pattern "\(\[a-z\]\+\)\+\$" cannot be used — a group with an unbounded repeat/,
+    );
+    // The lesser variant: an unparseable pattern makes the field's format
+    // rule silently inert rather than slow.
+    expect(pattern("(unclosed")).toMatch(/is not a valid regular expression/);
+    // A pattern the renderer will actually run is not reported.
+    expect(pattern("^[0-9]{2}[A-Z]{2}[0-9]{4}$")).toBeNull();
+    // And the sentence never offers `accepted` — that is a grading list of
+    // whole answers, and a registration field has none to put it in.
+    expect(pattern("(a)\\1")).toMatch(/backreferences/);
+    expect(pattern("(a)\\1")).not.toMatch(/accepted/);
+  });
+
+  it("an unsafe pattern is refused at publish, with the field id in the message", () => {
+    const r = validateTest(
+      withForm([field({ id: "roll_number", type: "short_text", validation: { pattern: "([a-z]+)+$" } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form",
+      message: expect.stringMatching(/"roll_number": pattern .* cannot be used/),
+    });
+  });
+
+  // --- Task 7 (#59, P5.6): timing -------------------------------------
+
+  const WINDOW: TestTiming = {
+    timezone: "Asia/Kolkata",
+    opens_at: "2026-11-14T09:00:00+05:30",
+    closes_at: "2026-11-14T13:00:00+05:30",
+    duration_minutes: 60,
+  };
+
+  /** Sections carrying only `time_limit_minutes`, which is all the
+   * duration rule reads; an empty `fixed` source keeps every other rule
+   * silent so a failure here can only be the timing one. */
+  function timed(...minutes: (number | undefined)[]): Section[] {
+    return minutes.map((m, i) => ({
+      id: `s${i + 1}`,
+      title: `Section ${i + 1}`,
+      source: { kind: "fixed" as const, questions: [] },
+      ...(m === undefined ? {} : { time_limit_minutes: m }),
+    }));
+  }
+
+  it("a window that ends before it opens is reported on closes_at", () => {
+    const r = validateTest(
+      doc({ timing: { ...WINDOW, opens_at: "2026-11-14T13:00:00+05:30", closes_at: "2026-11-14T09:00:00+05:30" } }),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({ field: "timing.closes_at", index: -1, questionId: null });
+  });
+
+  it("a window that closes at the instant it opens is reported too — after, not at", () => {
+    const at = "2026-11-14T09:00:00+05:30";
+    expect(validateTest(doc({ timing: { ...WINDOW, opens_at: at, closes_at: at } }), []).ok).toBe(false);
+  });
+
+  it("a latest_start_at outside the window is reported, on either side", () => {
+    const early = validateTest(doc({ timing: { ...WINDOW, latest_start_at: "2026-11-14T08:00:00+05:30" } }), []);
+    expect(early.ok).toBe(false);
+    if (early.ok) throw new Error("expected failure");
+    expect(early.issues[0]).toMatchObject({ field: "timing.latest_start_at" });
+    expect(early.issues[0]?.message).toMatch(/before the window opens/);
+
+    const late = validateTest(doc({ timing: { ...WINDOW, latest_start_at: "2026-11-14T18:00:00+05:30" } }), []);
+    expect(late.ok).toBe(false);
+    if (late.ok) throw new Error("expected failure");
+    expect(late.issues[0]?.message).toMatch(/after the window closes/);
+  });
+
+  it("a latest_start_at inside the window is clean", () => {
+    expect(validateTest(doc({ timing: { ...WINDOW, latest_start_at: "2026-11-14T12:00:00+05:30" } }), []).ok).toBe(
+      true,
+    );
+  });
+
+  it("per-section durations summing above the overall duration are reported with both numbers", () => {
+    const r = validateTest(doc({ timing: { duration_minutes: 60 }, sections: timed(40, 30) }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "timing.duration_minutes",
+      message: expect.stringMatching(/sections total 70 minutes against an overall 60/),
+    });
+    expect(r.issues[0]?.message).toMatch(/raise the duration or shorten a section/);
+  });
+
+  it("sections with no time limit do not count toward the sum", () => {
+    expect(validateTest(doc({ timing: { duration_minutes: 60 }, sections: timed(45, undefined) }), []).ok).toBe(true);
+  });
+
+  it("a per-section sum equal to the overall duration is allowed", () => {
+    expect(validateTest(doc({ timing: { duration_minutes: 60 }, sections: timed(30, 30) }), []).ok).toBe(true);
+  });
+
+  it("an unparseable timestamp is its own issue, never compared as NaN", () => {
+    const r = validateTest(doc({ timing: { ...WINDOW, closes_at: "next Tuesday" } }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    // One issue, not two: the window comparison is withheld rather than
+    // silently passing, because every comparison against NaN is false.
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]).toMatchObject({ field: "timing.closes_at" });
+    expect(r.issues[0]?.message).toMatch(/is not a date and time/);
+  });
+
+  it("a half-set window is not an issue — publish-time means the draft stays savable", () => {
+    expect(validateTest(doc({ timing: { duration_minutes: 60, opens_at: "2026-11-14T09:00:00+05:30" } }), []).ok).toBe(
+      true,
+    );
+    expect(validateTest(doc({}), []).ok).toBe(true);
+  });
+
+  it("timingIssues is the one copy of the rules the builder also shows", () => {
+    expect(timingIssues(undefined, [])).toEqual([]);
+    expect(timingIssues({ duration_minutes: 30 }, timed(45))).toEqual([
+      {
+        field: "timing.duration_minutes",
+        message: "sections total 45 minutes against an overall 30 — raise the duration or shorten a section",
+      },
+    ]);
+  });
+
+  // The RFC 3339 parser `timingIssues` compares with. It is hand-written
+  // (no `Date.parse`: this package is pure, and `Date.parse` accepts
+  // "next Tuesday" on some engines and shifts a bare date into the host's
+  // zone on others), so the date arithmetic is the project's own and has
+  // to be tested as such. Every row below is one timestamp an organiser
+  // can type into `TimingPanel`'s box.
+  it.each([
+    ["2026-13-01T09:00:00Z", "a thirteenth month"],
+    ["2026-00-01T09:00:00Z", "a zeroth month"],
+    ["2026-01-00T09:00:00Z", "a zeroth day"],
+    ["2026-02-29T09:00:00Z", "the 29th of a February that has 28 days"],
+    ["2100-02-29T09:00:00Z", "the 29th of 2100, which is divisible by 100 and not a leap year"],
+    ["2026-04-31T09:00:00Z", "the 31st of a 30-day month"],
+    ["2026-01-32T09:00:00Z", "the 32nd of a 31-day month"],
+    ["2026-01-01T24:00:00Z", "24:00, which RFC 3339 allows and no organiser means"],
+    ["2026-01-01T09:60:00Z", "a sixtieth minute"],
+    ["2026-01-01T23:59:60Z", "a leap second"],
+    ["2026-01-01T09:00:00+24:00", "an offset of 24 hours"],
+    ["2026-01-01T09:00:00+00:60", "an offset with 60 minutes in it"],
+  ])("%s is refused — %s", (opens_at) => {
+    expect(timingIssues({ opens_at }, [])).toEqual([
+      {
+        field: "timing.opens_at",
+        message: `"${opens_at}" is not a date and time — use an RFC 3339 timestamp, for example 2026-11-14T09:00:00+05:30`,
+      },
+    ]);
+  });
+
+  it.each([
+    ["2024-02-29T09:00:00Z", "a leap day in a year divisible by 4"],
+    ["2000-02-29T09:00:00Z", "a leap day in a year divisible by 400"],
+    ["2026-01-31T09:00:00Z", "the 31st of January, which the month-to-day table reaches from its January branch"],
+    ["2026-06-30T09:00:00Z", "the 30th of June"],
+    ["2026-12-31T23:59:59Z", "the last second of a year"],
+    ["2026-11-14T09:00:00+05:30", "a positive offset"],
+    ["2026-11-14T09:00:00-05:00", "a negative offset"],
+    ["2026-11-14T09:00Z", "no seconds at all, which RFC 3339 allows"],
+  ])("%s is accepted — %s", (opens_at) => {
+    expect(timingIssues({ opens_at }, [])).toEqual([]);
+  });
+
+  // The offset is not merely parsed, it is applied: these two spellings
+  // are the same instant, so "closes after opens" must refuse them. A
+  // parser that read the offset and dropped it would see 09:00 against
+  // 03:30 and pass.
+  it("an offset shifts the instant it is compared at", () => {
+    expect(
+      timingIssues({ opens_at: "2026-11-14T09:00:00+05:30", closes_at: "2026-11-14T03:30:00Z" }, []),
+    ).toEqual([
+      {
+        field: "timing.closes_at",
+        message: expect.stringContaining("which is not after it opens at"),
+      },
+    ]);
+    expect(
+      timingIssues({ opens_at: "2026-11-14T09:00:00+05:30", closes_at: "2026-11-14T03:31:00Z" }, []),
+    ).toEqual([]);
+  });
+
+  // T-14: `latest_start_at` has to sit inside the window, and the sentence
+  // names which end it fell outside — the two halves are separate
+  // branches and a test that only tried one would leave the other's
+  // wording unexercised.
+  it.each([
+    ["2026-11-14T08:00:00Z", "before the window opens"],
+    ["2026-11-14T20:00:00Z", "after the window closes"],
+  ])("a latest start at %s is reported as falling %s", (latest_start_at, where) => {
+    const issues = timingIssues(
+      { opens_at: "2026-11-14T09:00:00Z", closes_at: "2026-11-14T12:00:00Z", latest_start_at },
+      [],
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.field).toBe("timing.latest_start_at");
+    expect(issues[0]?.message).toContain(`falls ${where}`);
+  });
+
+  it("NAVIGATION_CONSEQUENCE states a consequence for each of the three modes", () => {
+    expect(Object.keys(NAVIGATION_CONSEQUENCE)).toEqual(["free", "linear", "per_section"]);
+    expect(NAVIGATION_CONSEQUENCE.linear).toBe("A candidate cannot go back to an earlier question.");
+  });
+
+  it("the worked example still validates clean, timing and all", () => {
+    expect(validateTest(exampleTest, (exampleBank as Bank).questions).ok).toBe(true);
+  });
+  // --- Task 8 (#60, P5.7): access modes and allowlists ------------------
+
+  it.each([
+    "10.0.0.0/24",
+    "0.0.0.0/8",
+    "192.168.1.0/32",
+    "10.0.0.1/24",
+    "2001:db8::/32",
+    // Uppercase hex is the same address. The RFC's own documentation
+    // prefix is written this way, and so is most ISP allocation paperwork.
+    "2001:DB8::/32",
+    "FE80::/10",
+    "::/128",
+    "fd00:0:0:0:0:0:0:1/128",
+  ])("accepts the CIDR range %s", (range) => {
+    expect(invalidCidr(range)).toBeNull();
+  });
+
+  it.each([
+    ["10.0.0.0/64", /prefix length above 32/],
+    ["2001:db8::/129", /prefix length above 128/],
+    // `/0` is the CIDR spelling of `*`: a restriction on the screen that
+    // restricts nothing. The third is the one that actually happens — a
+    // typo for `/8`.
+    ["0.0.0.0/0", /matches every address, which is not an allowlist/],
+    ["::/0", /matches every address, which is not an allowlist/],
+    ["10.0.0.0/0", /matches every address, which is not an allowlist/],
+    ["10.0.0.0", /has no prefix length/],
+    ["10.0.0.0/24/8", /has no prefix length/],
+    ["10.0.0.0/", /not a plain number/],
+    ["10.0.0.0/+8", /not a plain number/],
+    ["10.0.0.0/0x8", /not a plain number/],
+    ["10.0.0.256/24", /not an IPv4 address/],
+    ["010.0.0.1/24", /no leading zeros/],
+    ["10.0.0/24", /not an IPv4 address/],
+    ["10.0.0.0.0/24", /not an IPv4 address/],
+    ["not-an-address/24", /not an IPv4 address/],
+    ["2001:db8:::1/32", /not an IPv6 address/],
+    // Two `::` runs: the address is ambiguous, and this one has exactly
+    // eight groups, so only the "at most one run" rule refuses it.
+    ["1:2::3:4::5:6:7:8/64", /not an IPv6 address/],
+    ["1:2:3:4:5:6:7/64", /not an IPv6 address/],
+    ["1:2:3:4:5:6:7:8:9/64", /not an IPv6 address/],
+    ["2001:dg8::/32", /not an IPv6 address/],
+    ["fe80::1%eth0/64", /not an IPv6 address/],
+    ["::ffff:10.0.0.1/96", /not an IPv6 address/],
+    [" 10.0.0.0/24", /not a network range/],
+    ["", /not a network range/],
+  ])("refuses the CIDR range %s, saying what a correct one looks like", (range, why) => {
+    const message = invalidCidr(range);
+    expect(message).toMatch(why);
+    expect(message).toMatch(/for example 10\.0\.0\.0\/24/);
+  });
+
+  it.each(["ac.in", "*.ac.in", "iitb.ac.in", "*.co.uk", "XN--P1AI.ru", "Example.COM"])(
+    "accepts the email domain %s",
+    (glob) => {
+      expect(invalidDomainGlob(glob)).toBeNull();
+    },
+  );
+
+  it.each([
+    ["*", /matches every domain, which is not an allowlist/],
+    ["*.*", /matches every domain, which is not an allowlist/],
+    ["*.in", /every domain under one top level/],
+    ["*.com", /every domain under one top level/],
+    ["in", /single label, not a domain/],
+    ["ac.*.in", /somewhere other than the front/],
+    ["*ac.in", /somewhere other than the front/],
+    [".ac.in", /is not a domain/],
+    ["ac.in.", /is not a domain/],
+    ["-ac.in", /is not a domain/],
+    ["ac-.in", /is not a domain/],
+    ["ac .in", /is not a domain/],
+    ["ac.भारत", /is not a domain/],
+    ["user@ac.in", /is not a domain/],
+    [" ac.in", /is not a domain/],
+    ["", /is not a domain/],
+  ])("refuses the email domain %s, saying what a correct one looks like", (glob, why) => {
+    const message = invalidDomainGlob(glob);
+    expect(message).toMatch(why);
+    expect(message).toMatch(/for example ac\.in or \*\.ac\.in/);
+  });
+
+  it("allowlistIssues names the field each bad entry sits in, and reports every one", () => {
+    expect(
+      allowlistIssues({ mode: "sso", allow_ip_ranges: ["10.0.0.0/64", "10.0.0.0/24"], allow_email_domains: ["*"] }),
+    ).toEqual([
+      { field: "access.allow_ip_ranges", message: expect.stringContaining("10.0.0.0/64") },
+      { field: "access.allow_email_domains", message: expect.stringContaining("every domain") },
+    ]);
+    expect(allowlistIssues(undefined)).toEqual([]);
+    expect(allowlistIssues({ mode: "sso" })).toEqual([]);
+  });
+
+  it("a malformed allowlist entry is an issue on the whole document", () => {
+    const r = validateTest(doc({ access: { mode: "sso", allow_ip_ranges: ["10.0.0.0/64"] } }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({ field: "access.allow_ip_ranges", index: -1, questionId: null });
+  });
+
+  // --- Task 10 (#61, P5.8), task 7/8/10 review M7 ----------------------
+
+  it("an unreadable brand colour is an issue on the whole document, not only on the two PATCH routes", () => {
+    const r = validateTest(doc({ branding: { primary_colour: "#f59a6e" } }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({ field: "branding.primary_colour", index: -1, questionId: null });
+    // The number the two routes report, so import and publish cannot word
+    // the same refusal differently.
+    expect(r.issues[0]?.message).toBe(
+      "#f59a6e reaches only 2.09:1 against cream, and candidate text in the brand colour needs at least 4.5:1.",
+    );
+  });
+
+  it("brandColourIssue refuses a non-colour with an example, and passes a readable one", () => {
+    expect(brandColourIssue({ primary_colour: "rebeccapurple" })).toEqual({
+      field: "branding.primary_colour",
+      message: "rebeccapurple is not a colour; use a hex value like #b63a10.",
+    });
+    expect(brandColourIssue({ primary_colour: EXAMPLE_BRAND_COLOUR })).toBeNull();
+    expect(brandColourIssue({ footer_text: "x" })).toBeNull();
+    expect(brandColourIssue(undefined)).toBeNull();
+  });
+
+  it("describeAllowlists states the combined effect in plain words", () => {
+    expect(
+      describeAllowlists({ mode: "sso", allow_email_domains: ["*.ac.in"], allow_ip_ranges: ["10.0.0.0/24"] }),
+    ).toBe("Only addresses matching *.ac.in, and only from 10.0.0.0/24.");
+    expect(describeAllowlists({ mode: "link_code", access_code: "X" })).toBe("Anyone with the link and the code.");
+    expect(describeAllowlists({ mode: "sso", allow_email_domains: ["*.ac.in", "*.edu.in"] })).toBe(
+      "Only addresses matching *.ac.in or *.edu.in.",
+    );
+    expect(describeAllowlists({ mode: "invite_only", allow_ip_ranges: ["10.0.0.0/24"] })).toBe(
+      "Only from 10.0.0.0/24.",
+    );
+  });
+
+  it("describeAllowlists never answers with a blank for an unrestricted mode", () => {
+    for (const mode of ["link_code", "invite_only", "email_code", "sso"] as const) {
+      expect(describeAllowlists({ mode })).toMatch(/^Anyone .+\.$/);
+    }
+  });
+
+  // Task 5/6 review, M4. `draftSchema()` strips every `minLength` by
+  // keyword, which took `$defs/access.access_code`'s `minLength: 4` — a
+  // floor that bounds a *value*, not emptiness-while-typing — and nothing
+  // replaced it, so a one-character code was publishable.
+  it("an access_code shorter than four characters is reported at publish, not only an absent one", () => {
+    const short = validateTest(doc({ access: { mode: "link_code", access_code: "X" } }), []);
+    expect(short.ok).toBe(false);
+    if (short.ok) throw new Error("expected failure");
+    expect(short.issues[0]).toMatchObject({ field: "access.access_code" });
+    expect(short.issues[0]?.message).toMatch(/at least 4 characters; "X" is 1/);
+
+    expect(validateTest(doc({ access: { mode: "link_code", access_code: "   " } }), []).ok).toBe(false);
+    expect(validateTest(doc({ access: { mode: "link_code", access_code: "APTI-2026" } }), []).ok).toBe(true);
+    // Only under link_code: the code means nothing under the other three.
+    expect(validateTest(doc({ access: { mode: "sso", access_code: "X" } }), []).ok).toBe(true);
   });
 });

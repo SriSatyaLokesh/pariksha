@@ -29,12 +29,20 @@ export const createCandidate = scoped(
     },
   ): Promise<string> => {
     const id = newId("cnd");
+    // Task 9 (#60 / #56, P5.7b): `source` says who wrote the row. This is
+    // the self-registration writer, so `"registration"` — the half
+    // `replaceCandidateList` (packages/db/src/repo/candidates.ts) must
+    // never delete. `external_id` and `set_label` stay null here: linking
+    // a registration to the list row it matched is Phase 6's, and a null
+    // `external_id` does not collide in the unique below it.
     await db.run(
-      "INSERT INTO candidate (id, workspace_id, test_id, form_values_json, consent_version, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT INTO candidate (id, workspace_id, test_id, source, form_values_json, consent_version, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
       [
         id,
         workspaceId,
         input.testId,
+        "registration",
         db.jsonParam(input.formValues),
         input.consentVersion,
         input.now ?? Date.now(),

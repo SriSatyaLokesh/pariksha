@@ -54,6 +54,56 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportQuestion: async () => {
       throw new Error("not used");
     },
+    tests: async () => [],
+    createTest: async () => {
+      throw new Error("not used");
+    },
+    test: async () => {
+      throw new Error("not used");
+    },
+    updateTest: async () => {
+      throw new Error("not used");
+    },
+    draft: async () => {
+      throw new Error("not used");
+    },
+    patchDraft: async () => {
+      throw new Error("not used");
+    },
+    publishTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    closeTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    archiveTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    versions: async () => [],
+    checklist: async () => [],
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
+    // Task 6 (#58, P5.5): present only to satisfy `ApiClient`'s shape --
+    // nothing in this file reaches T-19's link check.
+    checkUrl: async () => {
+      throw new Error("not used by this test file");
+    },
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: async () => {
+      throw new Error("not used by this test file");
+    },
+    uploadMedia: async () => {
+      throw new Error("not used by this test file");
+    },
+    candidates: async () => [],
+    importCandidates: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

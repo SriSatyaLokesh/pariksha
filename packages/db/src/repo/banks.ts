@@ -89,16 +89,25 @@ const BANK_SELECT =
   "FROM question_bank qb";
 
 /**
- * True when a published `test_version` row (correlated as `tv`) references
+ * True when a *published* `test_version` row (correlated as `tv`) references
  * the outer `question` row `q` — directly, by `q.id` (a `fixed`/`sets`
  * source), or indirectly, by `q.bank_id` (a `pool` source, which names only
  * a bank). Both arms are substring scans over the same `CAST(...AS TEXT)`
  * blob, so this is still the one correlated subquery `QUESTION_SELECT`'s
  * header describes, not a second round trip.
+ *
+ * Phase 5 Task 2, Review Focus 1: every Phase 4 fixture inserted only
+ * published rows, so `tv.published_at IS NOT NULL` was never exercised and
+ * its absence was invisible — Task 2 is the first to write a
+ * `published_at IS NULL` draft, and without this filter an Author who adds a
+ * question to a *draft* test could no longer delete it from its bank, the
+ * refusal would name a test nobody published, and the bank browser's
+ * "not used in any test" filter would hide it.
  */
 const TV_REFERENCES_Q_ROW =
+  "(tv.published_at IS NOT NULL AND " +
   "(CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%' " +
-  "OR CAST(tv.sections_json AS TEXT) LIKE '%' || q.bank_id || '%')";
+  "OR CAST(tv.sections_json AS TEXT) LIKE '%' || q.bank_id || '%'))";
 
 const QUESTION_SELECT =
   "SELECT q.id, q.bank_id, q.ref_id, q.group_ref, q.type, q.prompt_md, q.media_json, q.options_json, " +
@@ -121,7 +130,10 @@ function toBankRow(db: DbClient, row: BankRecord): BankRow {
   };
 }
 
-function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
+/** The decoded document half of a question row. Shared by
+ * `toQuestionRowView` and `workspaceQuestions` rather than written twice —
+ * the two differ only in what they wrap it in. */
+function toQuestionRecord(db: DbClient, row: QuestionRecord): QuestionRecord {
   // `tags_json` is NOT NULL, so a tagless question is stored as `'[]'`, not
   // SQL NULL — there is no way for the column itself to tell "no tags" apart
   // from "explicitly an empty array". Collapsing a decoded empty array back
@@ -131,7 +143,7 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
   // already returns on POST/PATCH — so a question reads the same way on a
   // GET as it did on the write that just created it.
   const decodedTags = row.tags_json == null ? null : db.jsonValue<string[]>(row.tags_json);
-  const record: QuestionRecord = {
+  return {
     ref_id: row.ref_id,
     group_ref: row.group_ref,
     type: row.type,
@@ -146,6 +158,10 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
     explanation_md: row.explanation_md,
     extra_json: row.extra_json == null ? null : db.jsonValue(row.extra_json),
   };
+}
+
+function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
+  const record = toQuestionRecord(db, row);
   return {
     id: row.id,
     bankId: row.bank_id,
@@ -160,8 +176,9 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
 /** The tests (by name) whose *published* version references `questionId` —
  * directly (a `fixed`/`sets` source naming it) or through `bankId` (a
  * `pool` source drawing from its bank, which names no question ID at all).
- * A draft test is freely editable (T-04), so only `test_version` is
- * consulted — never `test` itself. */
+ * A draft test is freely editable (T-04), so only a *published*
+ * `test_version` row ever blocks a delete — Review Focus 1, the same fix
+ * `TV_REFERENCES_Q_ROW`'s header above explains. */
 async function testsUsingQuestion(
   db: DbClient,
   workspaceId: string,
@@ -171,17 +188,18 @@ async function testsUsingQuestion(
   const rows = await db.query<{ name: string }>(
     "SELECT DISTINCT t.name AS name FROM test_version tv " +
       "JOIN test t ON t.id = tv.test_id AND t.workspace_id = tv.workspace_id " +
-      "WHERE tv.workspace_id = ? " +
+      "WHERE tv.workspace_id = ? AND tv.published_at IS NOT NULL " +
       "AND (CAST(tv.sections_json AS TEXT) LIKE ? OR CAST(tv.sections_json AS TEXT) LIKE ?)",
     [workspaceId, `%${questionId}%`, `%${bankId}%`],
   );
   return rows.map((row) => row.name);
 }
 
-/** The tests (by name) whose published version references `bankId` — either
- * a `pool` source naming the bank directly, or a `fixed`/`sets` source
- * naming one of its questions. One join plus one direct substring check,
- * never one `testsUsingQuestion` call per question. */
+/** The tests (by name) whose *published* version references `bankId` —
+ * either a `pool` source naming the bank directly, or a `fixed`/`sets`
+ * source naming one of its questions (Review Focus 1: a draft never
+ * blocks). One join plus one direct substring check, never one
+ * `testsUsingQuestion` call per question. */
 async function testsUsingBank(
   db: DbClient,
   workspaceId: string,
@@ -190,7 +208,7 @@ async function testsUsingBank(
   const rows = await db.query<{ name: string }>(
     "SELECT DISTINCT t.name AS name FROM test_version tv " +
       "JOIN test t ON t.id = tv.test_id AND t.workspace_id = tv.workspace_id " +
-      "WHERE tv.workspace_id = ? AND (" +
+      "WHERE tv.workspace_id = ? AND tv.published_at IS NOT NULL AND (" +
       "CAST(tv.sections_json AS TEXT) LIKE ? " +
       "OR EXISTS (SELECT 1 FROM question q WHERE q.workspace_id = tv.workspace_id AND q.bank_id = ? " +
       "AND CAST(tv.sections_json AS TEXT) LIKE '%' || q.id || '%')" +
@@ -800,5 +818,146 @@ export const deleteGroup = scoped(
       [db.jsonParam(next), now, workspaceId, bankId],
     );
     return { deleted: changes > 0, blockedBy: [] };
+  },
+);
+
+// Phase 5 Task 3 (#55, P5.2): the test builder's own two reads of this
+// table, neither shaped like `listQuestions` (which pages one bank at a
+// time) — both need every question *this workspace* holds, regardless of
+// bank, in one statement so the draft route's budget stays flat whether a
+// test's sections name one bank or ten.
+
+/** The columns a pool's live draw (UX-15) and a set's points balance
+ * (UX-16) need, and nothing else — never the full `QuestionRow` mapping
+ * (`toQuestionDocument`, Markdown and all), which this is deliberately
+ * cheaper than.
+ *
+ * Fix round (task 3 review, I6): `difficulty` is optional, matching
+ * `@pariksha/core`'s own `QuestionBase.difficulty?: Difficulty` exactly
+ * (not `| null`, and — `exactOptionalPropertyTypes` — not present with an
+ * explicit `undefined` either) so this shape satisfies `Pick<Question,
+ * "tags" | "difficulty" | "type">` with no cast at the one place
+ * `matchesFilter` (`@pariksha/core`) is called with a summary rather than a
+ * full document. */
+export interface QuestionSummary {
+  id: string;
+  bankId: string;
+  points: number;
+  difficulty?: Difficulty;
+  tags: string[];
+  type: QuestionType;
+}
+
+/**
+ * Every question row in the workspace, lightly shaped. The draft route
+ * builds `draw` (matching each pool section's filter with `matchesFilter`,
+ * `@pariksha/core`) and `setPoints` (summing a `sets` source's own named
+ * ids) from this one list in memory, so a test with ten pool sections still
+ * costs one statement, not ten.
+ */
+export const workspaceQuestionSummaries = scoped(
+  "workspaceQuestionSummaries",
+  async (db: DbClient, workspaceId: string): Promise<QuestionSummary[]> => {
+    const rows = await db.query<{
+      id: string;
+      bank_id: string;
+      points: number;
+      difficulty: string | null;
+      tags_json: unknown;
+      type: string;
+    }>("SELECT id, bank_id, points, difficulty, tags_json, type FROM question WHERE workspace_id = ?", [
+      workspaceId,
+    ]);
+    return rows.map((row) => ({
+      id: row.id,
+      bankId: row.bank_id,
+      points: Number(row.points),
+      ...(row.difficulty !== null && { difficulty: row.difficulty as Difficulty }),
+      tags: row.tags_json == null ? [] : db.jsonValue<string[]>(row.tags_json),
+      type: row.type as QuestionType,
+    }));
+  },
+);
+
+/**
+ * Phase 5 Tasks 11-13: every question in the workspace as the document it
+ * round-trips as, with the two ids that identify it on each side of the
+ * boundary — the `qst_` row id a *stored* section names, and the bank
+ * file's own `ref_id` an exported or imported *document* names.
+ *
+ * Why not `workspaceQuestionSummaries` (above): `validateTest`
+ * (`@pariksha/core`) sums `scoring.points` and reads `scoring.mode`, and a
+ * summary carries neither — a `sets` section would look balanced whatever
+ * its sets held. Why not `listQuestions`: that one is per bank, paginated,
+ * and pays `QUESTION_SELECT`'s correlated `used_in_tests` subquery per row,
+ * which none of the three callers here reads. One statement, whole
+ * workspace, no subquery.
+ */
+export interface WorkspaceQuestion {
+  id: string;
+  bankId: string;
+  refId: string;
+  document: Question;
+}
+
+export const workspaceQuestions = scoped(
+  "workspaceQuestions",
+  async (db: DbClient, workspaceId: string): Promise<WorkspaceQuestion[]> => {
+    const rows = await db.query<QuestionRecord & { id: string; bank_id: string }>(
+      "SELECT q.id, q.bank_id, q.ref_id, q.group_ref, q.type, q.prompt_md, q.media_json, q.options_json, " +
+        "q.key_json, q.scoring_json, q.points, q.difficulty, q.tags_json, q.explanation_md, q.extra_json " +
+        "FROM question q WHERE q.workspace_id = ? ORDER BY q.ref_id",
+      [workspaceId],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      bankId: row.bank_id,
+      refId: row.ref_id,
+      document: toQuestionDocument(toQuestionRecord(db, row)),
+    }));
+  },
+);
+
+/**
+ * Which of `questionIds`/`bankIds` actually name a row in this workspace —
+ * the draft route's save-time guard against a `fixed`/`sets` source naming
+ * another tenant's question, or a `pool` source naming another tenant's
+ * bank (the plan's own "Save-time versus publish-time" rule: a
+ * cross-workspace reference is a read waiting to happen, not a half-built
+ * draft). One statement regardless of how many ids either list holds —
+ * `UNION ALL` over the two tables, not one `IN (...)` query per table and
+ * never one per id. Both lists empty is the common PATCH (a settings-only
+ * patch names no row at all) and costs nothing.
+ */
+export const existingRowIds = scoped(
+  "existingRowIds",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    ids: { questionIds: readonly string[]; bankIds: readonly string[] },
+  ): Promise<{ questionIds: Set<string>; bankIds: Set<string> }> => {
+    if (ids.questionIds.length === 0 && ids.bankIds.length === 0) {
+      return { questionIds: new Set(), bankIds: new Set() };
+    }
+
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (ids.questionIds.length > 0) {
+      clauses.push(
+        `SELECT id, 'question' AS kind FROM question WHERE workspace_id = ? AND id IN (${ids.questionIds.map(() => "?").join(", ")})`,
+      );
+      params.push(workspaceId, ...ids.questionIds);
+    }
+    if (ids.bankIds.length > 0) {
+      clauses.push(
+        `SELECT id, 'bank' AS kind FROM question_bank WHERE workspace_id = ? AND id IN (${ids.bankIds.map(() => "?").join(", ")})`,
+      );
+      params.push(workspaceId, ...ids.bankIds);
+    }
+
+    const rows = await db.query<{ id: string; kind: "question" | "bank" }>(clauses.join(" UNION ALL "), params);
+    const questionIds = new Set(rows.filter((row) => row.kind === "question").map((row) => row.id));
+    const bankIds = new Set(rows.filter((row) => row.kind === "bank").map((row) => row.id));
+    return { questionIds, bankIds };
   },
 );

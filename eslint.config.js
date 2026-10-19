@@ -36,6 +36,14 @@ export default tseslint.config(
       // No `any` anywhere, which is a strict superset of "no `any` in
       // exported signatures" required by the project's TypeScript policy.
       "@typescript-eslint/no-explicit-any": "error",
+      // Phase 5 Task 3 (#55, P5.2): `ignoreRestSiblings` is the documented
+      // exception for `const { known, ...rest } = obj` — discarding `known`
+      // on purpose, to get everything *else*, is exactly what
+      // `toStoredBody` (packages/db/src/repo/test-document.ts) and a
+      // key-by-key source edit (SectionList.tsx) both do, and the plain
+      // destructure reads better than filtering `Object.entries` by a
+      // `KNOWN_FIELDS` set for a one-off omission.
+      "@typescript-eslint/no-unused-vars": ["error", { ignoreRestSiblings: true }],
     },
   },
 );

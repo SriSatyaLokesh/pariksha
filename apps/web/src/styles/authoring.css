@@ -622,3 +622,13 @@
   letter-spacing: var(--type-mono-sm-letter-spacing);
   text-transform: uppercase;
 }
+
+/* Phase 5 Task 12 (#63, P5.10): #63's "says plainly when questions
+   resolved to a different bank" list, inside the same import dialog.
+   Spacing only — it inherits the dialog's own text colour rather than
+   setting a second one, which is also one fewer selector for
+   contrast-usage.test.ts to have to be told the surface of. */
+.import-dialog__rebound {
+  margin: var(--space-sm) 0;
+  padding-inline-start: var(--space-lg);
+}

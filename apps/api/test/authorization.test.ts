@@ -15,7 +15,7 @@ import {
   newId,
 } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS } from "../src/app.js";
-import { guardedRoutes, routeGuards } from "../src/instrument.js";
+import { guardedRoutes, mountedEndpoints, routeGuards } from "../src/instrument.js";
 import { requires } from "../src/middleware/authorize.js";
 import { issueSession } from "../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
@@ -160,6 +160,56 @@ it("the table names the action each guard actually enforces", () => {
   // Keys alone would let the table claim `workspace.settings` over a route
   // that enforces something else; the values come off the live middleware.
   expect(routeGuards(app)).toEqual(ROUTE_ACTIONS);
+});
+
+/**
+ * Whole-branch security review, M2. The two assertions above are each
+ * self-consistent and neither can see the case that matters: a route
+ * mounted with no guard is in neither `guardedRoutes` nor `ROUTE_ACTIONS`,
+ * so it is absent from both sides and ships green. The only exhaustive
+ * check on the branch was filtered to `startsWith("/t")`, which no
+ * `/api/v1/...` path can ever trip.
+ *
+ * So: every mounted endpoint is either in `ROUTE_ACTIONS` or named here by
+ * hand, with the reason it has no workspace to guard on. Mounting a route
+ * and forgetting `requires()` now fails this test — the list is the
+ * decision, and it is two orders of magnitude shorter than the route table.
+ *
+ * Phase 6's plan adds a fuller `ROUTE_AUTH` registry that carries the actor
+ * requirement too; this is its precursor and should be folded into it
+ * rather than kept beside it.
+ */
+const PUBLIC_OR_ACTOR_ONLY: readonly string[] = [
+  // No workspace in the path, so there is no membership to guard on.
+  "GET /api/v1/health",
+  "POST /api/v1/auth/magic-link",
+  "GET /api/v1/auth/:provider/start",
+  "GET /api/v1/auth/:provider/callback",
+  "POST /api/v1/auth/signout",
+  "POST /api/v1/auth/signout-everywhere",
+  "GET /api/v1/me",
+  "GET /api/v1/setup/status",
+  "POST /api/v1/setup/complete",
+  // The actor's own workspaces: `actorOr401` is the whole gate, and a list
+  // scoped to the caller cannot name another tenant's.
+  "GET /api/v1/workspaces",
+  "POST /api/v1/workspaces",
+  // The one deliberately public route (standing decision 1, ADR 0006).
+  "GET /t/:code",
+];
+
+it("every mounted route is guarded, or is on the public list by name", () => {
+  const guarded = new Set(Object.keys(ROUTE_ACTIONS));
+  expect(
+    mountedEndpoints(app).filter(
+      (endpoint) => !guarded.has(endpoint) && !PUBLIC_OR_ACTOR_ONLY.includes(endpoint),
+    ),
+  ).toEqual([]);
+
+  // The list cannot rot the other way either: an entry for a route nobody
+  // mounts any more is a stale exemption waiting to cover a new one.
+  const mounted = new Set(mountedEndpoints(app));
+  expect(PUBLIC_OR_ACTOR_ONLY.filter((endpoint) => !mounted.has(endpoint))).toEqual([]);
 });
 
 it("the magic-link route answers identically for a known and an unknown address", async () => {

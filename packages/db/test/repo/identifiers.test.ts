@@ -28,16 +28,13 @@ const idIn = async (table: string): Promise<string> => {
 
 describe("every row is addressed by an ID that names its own table", () => {
   it("gives a test a tst_ ID and its published version a ver_ ID", async () => {
-    const testId = await repo.createTest(db, WORKSPACE, { slug: "s", name: "N" });
+    const testId = (await repo.createTest(db, WORKSPACE, { slug: "s", name: "N" })).id;
     expect(testId.startsWith("tst_")).toBe(true);
 
-    const versionId = await repo.publishTestVersion(db, WORKSPACE, {
-      testId,
-      version: 1,
-      settings: {},
-      sections: [],
-    });
-    expect(versionId.startsWith("ver_")).toBe(true);
+    await repo.publishDraftVersion(db, WORKSPACE, testId, Date.now());
+    const published = await repo.getPublishedVersion(db, WORKSPACE, testId);
+    expect(published?.version).toBe(1);
+    expect(published?.id.startsWith("ver_")).toBe(true);
   });
 
   it("gives a membership an mbr_ ID", async () => {
@@ -49,7 +46,7 @@ describe("every row is addressed by an ID that names its own table", () => {
   });
 
   it("gives a candidate a cnd_ ID and an attempt an att_ ID", async () => {
-    const testId = await repo.createTest(db, WORKSPACE, { slug: "s2", name: "N" });
+    const testId = (await repo.createTest(db, WORKSPACE, { slug: "s2", name: "N" })).id;
     const candidateId = await repo.createCandidate(db, WORKSPACE, {
       testId,
       formValues: {},

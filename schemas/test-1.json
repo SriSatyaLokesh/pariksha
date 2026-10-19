@@ -51,6 +51,7 @@
       "type": "object",
       "properties": {
         "logo": { "type": "string" },
+        "logo_alt": { "type": "string", "description": "What a screen reader says in place of the logo." },
         "primary_colour": { "type": "string" },
         "footer_text": { "type": "string" },
         "start_message": { "type": "string" },
@@ -169,7 +170,11 @@
         "max": { "type": ["number", "string"] },
         "integer": { "type": "boolean" },
         "decimals": { "type": "integer", "minimum": 0 },
-        "allowed_domains": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns for email and url fields." },
+        "allowed_domains": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 253, "pattern": "^\\*?[A-Za-z0-9.-]+$" },
+          "description": "Glob patterns for email and url fields: a domain, or one leading * for a whole subtree (*.ac.in) — the dialect access.allow_email_domains uses. The pattern bounds the * count because this value is compiled to a live regex in the candidate's browser; invalidDomainGlob is the full rule and runs at save and at publish."
+        },
         "check_reachable": { "type": "boolean", "description": "url only: flag the value if the link does not return HTTP 200." },
         "default_country": { "type": "string", "description": "phone only: ISO 3166-1 alpha-2, e.g. IN." }
       },
@@ -208,7 +213,13 @@
       "properties": {
         "default_mode": { "enum": ["all_or_nothing", "partial", "negative", "position", "rubric"] },
         "negative_fraction": { "type": "number", "minimum": 0, "maximum": 1 },
-        "pass_mark_percent": { "type": "number", "minimum": 0, "maximum": 100 }
+        "pass_mark_percent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "set_points_tolerance": {
+          "type": "number",
+          "minimum": 0,
+          "default": 0,
+          "description": "How far two sets of one sets source may differ in total points before import and the publish checklist report it (T-11). Default 0: any difference at all is reported."
+        }
       },
       "additionalProperties": false
     },

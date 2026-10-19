@@ -31,16 +31,28 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0001_last_vengeance.sql",
     "0002_dapper_wilson_fisk.sql",
     "0003_absent_hemingway.sql",
+    "0004_cold_blob.sql",
+    "0005_cold_list.sql",
   ]);
 
-  // The two table rebuilds are the statements D1 could reject, so the test
+  // The four table rebuilds are the statements D1 could reject, so the test
   // asserts their result rather than trusting the runner's own bookkeeping:
-  // `points real` only exists if 0002 ran, `ref_id` only if 0003 did.
+  // `points real` only exists if 0002 ran, `ref_id` only if 0003 did,
+  // `short_code` only if 0004's `test` rebuild did, and a nullable
+  // `consent_version` only if 0005's `candidate` rebuild did.
   expect(await sql("question")).toContain("`points` real");
   expect(await sql("question")).toContain("`ref_id` text");
   expect(await sql("question_bank")).toContain("`description` text");
   expect(await sql("auth_token")).toContain("`token_hash` text");
   expect(await sql("question_bank_ref_uq")).toContain("`bank_id`,`ref_id`");
+  expect(await sql("test")).toContain("`short_code` text");
+  expect(await sql("test_short_code_uq")).toContain("`short_code`");
+  // 0005: SQLite cannot drop a NOT NULL with ALTER TABLE, so this only
+  // reads back without one if the rebuild actually ran on D1.
+  expect(await sql("candidate")).toContain("`external_id` text");
+  expect(await sql("candidate")).toContain("`consent_version` text,");
+  expect(await sql("candidate")).not.toContain("`consent_version` text NOT NULL");
+  expect(await sql("candidate_test_external_uq")).toContain("`test_id`,`external_id`");
 });
 
 it("a second run applies nothing", async () => {
@@ -96,7 +108,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 4,
+    migrations: 6,
   });
 });
 
@@ -118,4 +130,18 @@ it("an unknown non-API path answers with the static 404 page", async () => {
 
   expect(res.status).toBe(404);
   expect(await res.text()).toContain("fixture-404");
+});
+
+// Phase 5 Task 2 (#54): `/t/:code` is outside `/api/` too, so it needs the
+// same `run_worker_first` entry — proved here against the deployed
+// `wrangler.toml`, the one place `errors.test.ts`-style direct-app tests
+// cannot reach, exactly as the two tests above already do for `/api/`.
+it("an unknown short code answers with the JSON error envelope, not the static 404 page", async () => {
+  await migrate(binding());
+
+  const res = await SELF.fetch("https://example.com/t/zzzzzz");
+
+  expect(res.status).toBe(404);
+  expect(res.headers.get("content-type")).toContain("application/json");
+  expect(await res.text()).not.toContain("fixture-404");
 });

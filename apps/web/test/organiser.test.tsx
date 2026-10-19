@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
+import type { TestBranding } from "@pariksha/core";
 
 import {
   safeReturnTo,
@@ -71,6 +72,54 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
     exportQuestion: async () => {
       throw new Error("not used");
+    },
+    tests: async () => [],
+    createTest: async () => {
+      throw new Error("not used");
+    },
+    test: async () => {
+      throw new Error("not used");
+    },
+    updateTest: async () => {
+      throw new Error("not used");
+    },
+    draft: async () => {
+      throw new Error("not used");
+    },
+    patchDraft: async () => {
+      throw new Error("not used");
+    },
+    publishTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    closeTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    archiveTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    versions: async () => [],
+    checklist: async () => [],
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
+    checkUrl: async () => {
+      throw new Error("not used");
+    },
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: async () => {
+      throw new Error("not used by this test file");
+    },
+    uploadMedia: async () => {
+      throw new Error("not used by this test file");
+    },
+    candidates: async () => [],
+    importCandidates: async () => {
+      throw new Error("not used by this test file");
     },
     ...overrides,
   };
@@ -303,20 +352,22 @@ describe("Setup (the first-run wizard)", () => {
 });
 
 describe("Dashboard", () => {
-  it("names the workspace and states plainly that there are no tests yet", () => {
+  it("names the workspace and offers a way into tests and banks", () => {
     render(
       <Dashboard
         actor={ACTOR}
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
 
     expect(
       screen.getByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
-    expect(screen.getByText(/no tests yet/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /tests/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /question banks/i })).toBeInTheDocument();
   });
 
   it("offers exactly one next action out of the empty state", () => {
@@ -326,6 +377,7 @@ describe("Dashboard", () => {
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
 
@@ -347,6 +399,7 @@ describe("Dashboard", () => {
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
 
@@ -356,7 +409,7 @@ describe("Dashboard", () => {
   it("signs out through the client", async () => {
     const onSignOut = vi.fn();
     render(
-      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} />,
+      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} onOpenTests={() => undefined} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
@@ -370,6 +423,7 @@ describe("Dashboard", () => {
         workspace={WORKSPACE}
         onSignOut={() => undefined}
         onOpenBanks={() => undefined}
+        onOpenTests={() => undefined}
       />,
     );
     expect(await axe(container)).toHaveNoViolations();
@@ -503,5 +557,797 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "New question" }),
     ).toBeInTheDocument();
+  });
+
+  // Task 2 fix round, Critical 1: the Phase 4 C1 finding verbatim, for the
+  // other screen the empty dashboard opens onto. A test that renders
+  // `TestList` directly (apps/web/test/testbuilder/test-list.test.tsx)
+  // cannot see that nothing in the running app ever mounts it.
+  it("reaches the test list from the app's own entry point", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeInTheDocument();
+  });
+
+  // Task 3 (#55, P5.2), same lesson applied a third time: a test that
+  // renders `SectionList`/`TestBuilder` directly (apps/web/test/testbuilder/
+  // sections.test.tsx) cannot see that nothing in the running app ever
+  // mounts them. This one walks Dashboard -> Tests -> the builder the only
+  // way an Author actually can.
+  it("reaches the test builder from the app's own entry point", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [
+            {
+              id: "tst_1",
+              name: "Midterm",
+              slug: "midterm",
+              description: null,
+              shortCode: "ab12cd",
+              state: "draft",
+              currentVersion: null,
+              draftVersion: 1,
+              reviewRequested: false,
+              tags: [],
+              updatedAt: 0,
+            },
+          ],
+          test: async () => ({
+            id: "tst_1",
+            name: "Midterm",
+            slug: "midterm",
+            description: null,
+            shortCode: "ab12cd",
+            state: "draft",
+            currentVersion: null,
+            draftVersion: 1,
+            reviewRequested: false,
+            tags: [],
+            updatedAt: 0,
+          }),
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Midterm" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sections" })).toBeInTheDocument();
+  });
+
+  // Task 4 (#56, P5.3), the same lesson a fourth time: sets.test.tsx
+  // renders `SetsPanel` directly and so cannot see whether anything in the
+  // running app mounts it. This walks Dashboard -> Tests -> the builder ->
+  // the section's own disclosure, which is the only route an Author has to
+  // T-09's assignment control and T-10's shuffle switch.
+  it("reaches the set assignment and shuffle controls from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: {
+              settings: {},
+              sections: [
+                {
+                  id: "reasoning",
+                  title: "Reasoning",
+                  source: {
+                    kind: "sets" as const,
+                    assignment: "round_robin" as const,
+                    sets: [
+                      { set: "A", questions: ["qst_a1"] },
+                      { set: "B", questions: ["qst_b1"] },
+                    ],
+                  },
+                },
+              ],
+            },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Reasoning ·/i }));
+
+    expect(await screen.findByRole("radio", { name: /round robin/i })).toBeChecked();
+    expect(screen.getByText(/candidates sitting next to each other get different sets/i)).toBeVisible();
+    expect(
+      within(screen.getByRole("group", { name: /shuffling/i })).getByRole("checkbox", {
+        name: /shuffle questions within this section/i,
+      }),
+    ).toBeChecked();
+  });
+
+  // Task 5 (#57, P5.4), the same lesson a fifth time: form-builder.test.tsx
+  // renders `FormBuilder` directly and so cannot see whether anything in the
+  // running app mounts it. This walks Dashboard -> Tests -> the builder, adds
+  // a field the only way an Author can, and checks the save went out through
+  // the one draft route Tasks 4-9 share — a settings patch, not a route of
+  // its own.
+  it("reaches the registration form builder from the app's own entry point and saves through the draft route", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Registration form" })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/field type/i), { target: { value: "email" } });
+    fireEvent.click(screen.getByRole("button", { name: /add field/i }));
+
+    // The preview is the candidate renderer, mounted by the running app.
+    // Named exactly: Task 10's branding panel mounts three more previews
+    // into this same shell, and /preview/i now matches all four.
+    expect(
+      within(screen.getByRole("region", { name: "Preview" })).getByLabelText(/^Email/),
+    ).toBeInTheDocument();
+
+    // The shell debounces at 250 ms (apps/web/src/routes/test.tsx).
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual([
+      "wsp_1",
+      "tst_1",
+      { settings: { registration_form: { fields: [{ id: "email", type: "email", label: "Email" }] } } },
+    ]);
+  });
+
+  // Task 6 (#58, P5.5). url-check.test.tsx drives `FormBuilder` with a
+  // `checkUrl` closure of its own and so cannot see whether the running app
+  // ever wires one to `ApiClient.checkUrl` — which is the whole wire this
+  // task adds on the browser side.
+  it("reaches T-19's link check from the app's own entry point, through ApiClient.checkUrl", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: {
+        settings: {
+          registration_form: {
+            fields: [
+              {
+                id: "resume_url",
+                type: "url" as const,
+                label: "Link to your resume",
+                validation: { check_reachable: true },
+              },
+            ],
+          },
+        },
+        sections: [],
+      },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const checkUrl = vi.fn(async () => ({
+      state: "unverified" as const,
+      status: 404,
+      checkedAt: 1_760_000_000_000,
+    }));
+
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft: async () => DRAFT,
+          checkUrl,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    fireEvent.change(await screen.findByLabelText(/try a link/i), {
+      target: { value: "https://drive.example/cv.pdf" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /^check$/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status", { name: /link check/i })).toHaveTextContent(/unverified/i),
+    );
+    // Workspace first, then the test, then the URL — the path is
+    // workspace-scoped and `requires()` reads the workspace out of its own
+    // `:id` segment, so the plan's own `checkUrl(testId, url)` sketch could
+    // not have reached the API at all.
+    expect(checkUrl).toHaveBeenCalledWith("wsp_1", "tst_1", "https://drive.example/cv.pdf");
+  });
+  // Task 7 (#59, P5.6), the same lesson a seventh time: timing.test.tsx
+  // renders `TimingPanel` directly and so cannot see whether anything in
+  // the running app mounts it. This walks Dashboard -> Tests -> the
+  // builder, changes the overall duration the only way an Author can, and
+  // checks the save went out through the one draft route Tasks 4-10 share.
+  it("reaches the timing panel from the app's own entry point and saves through the draft route", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: { timing: { timezone: "Asia/Kolkata", duration_minutes: 60 } }, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Timing and attempts" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText(/overall duration/i), { target: { value: "90" } });
+
+    // The shell debounces at 250 ms (apps/web/src/routes/test.tsx).
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual([
+      "wsp_1",
+      "tst_1",
+      { settings: { timing: { timezone: "Asia/Kolkata", duration_minutes: 90 } } },
+    ]);
+  });
+  // Task 8 (#60, P5.7), an eighth time: access.test.tsx renders
+  // `AccessPanel` directly. This walks the app to it and checks the save
+  // goes out through the one draft route — and, the point of Review Focus
+  // 3, that switching mode sends an `access` object with the old mode's
+  // code *gone* rather than merged over, because the server merges
+  // `settings` one level deep and would keep whatever arrives.
+  it("reaches the access panel from the app's own entry point and drops the old mode's code on the wire", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: { access: { mode: "link_code" as const, access_code: "APTI-2026" } }, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Who can take this test" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+
+    // The shell debounces at 250 ms (apps/web/src/routes/test.tsx).
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual(["wsp_1", "tst_1", { settings: { access: { mode: "sso" } } }]);
+    expect(JSON.stringify(patchDraft.mock.calls[0])).not.toContain("APTI-2026");
+  });
+  // task 7/8/10 review, M8. `setPending` replaced rather than merged, so
+  // two panels touched inside the 250 ms debounce dropped the first patch
+  // — silently, because the local `setDraft` had already applied it and
+  // the follow-up GET keeps `body: prev.body`. Tasks 7, 8 and 10 took
+  // this screen from two writers to six, so it is reachable by ordinary
+  // use: add a section, pick an access mode a moment later, reload, and
+  // the section is gone.
+  it("two panels edited inside the debounce window both reach the one patch", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await screen.findByRole("heading", { name: "Who can take this test" });
+
+    // Three writers, synchronously — well inside the shell's 250 ms.
+    fireEvent.click(screen.getByRole("button", { name: /add section/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+    fireEvent.click(screen.getByRole("radio", { name: /^linear$/i }));
+
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft).toHaveBeenCalledTimes(1);
+    const [, , patch] = patchDraft.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
+    expect(patch.sections).toHaveLength(1);
+    expect(patch.settings).toMatchObject({ access: { mode: "sso" }, timing: { navigation: "linear" } });
+  });
+
+  // Task 9 (#60 / #56, P5.7b), the candidate list.
+  // `candidate-list.test.tsx` renders the panel directly, so it cannot see
+  // whether the running app mounts it, reads the list through the real
+  // client method, knows which actor is looking, or re-reads storage after
+  // an upload instead of trusting the report it just rendered.
+  it("reaches the candidate list from the app's own entry point and uploads through the real client", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: {
+        settings: {
+          registration_form: {
+            fields: [
+              { id: "full_name", type: "short_text" as const, label: "Full name" },
+              { id: "email", type: "email" as const, label: "College email address", unique: true },
+            ],
+          },
+        },
+        sections: [],
+      },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+
+    const listed = {
+      id: "cnd_1",
+      testId: "tst_1",
+      externalId: "a@vce.edu.in",
+      setLabel: null,
+      formValues: {},
+      source: "list" as const,
+      consentVersion: null,
+      createdAt: 0,
+    };
+    // The second read is what the shell does after a real upload: the
+    // count on screen has to come from storage, not from the report.
+    const candidates = vi.fn().mockResolvedValueOnce([listed]).mockResolvedValue([listed, { ...listed, id: "cnd_2" }]);
+    const importCandidates = vi.fn(async () => ({ imported: 2, issues: [] }));
+
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft: async () => DRAFT,
+          candidates,
+          importCandidates,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
+    // Read through the real client method, not invented by the panel, and
+    // the expected columns name the form's own first unique field.
+    await waitFor(() => expect(candidates).toHaveBeenCalledWith("wsp_1", "tst_1"));
+    expect(screen.getByText(/1 candidate · 1 with no set/i)).toBeVisible();
+    expect(screen.getByText(/email \(required\), set \(optional\)/i)).toBeVisible();
+
+    const csv = "email,set\na@vce.edu.in,\nb@vce.edu.in,\n";
+    fireEvent.change(screen.getByLabelText("Candidate list"), {
+      target: { files: [new File([csv], "candidates.csv", { type: "text/csv" })] },
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: /replace the candidate list/i });
+    expect(importCandidates).toHaveBeenCalledWith("wsp_1", "tst_1", csv, { dryRun: true });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /replace the list/i }));
+    await waitFor(() => expect(importCandidates).toHaveBeenLastCalledWith("wsp_1", "tst_1", csv, { dryRun: false }));
+    // Re-read, not taken from the report.
+    await waitFor(() => expect(screen.getByText(/2 candidates · 2 with no set/i)).toBeVisible());
+    expect(candidates).toHaveBeenCalledTimes(2);
+  });
+
+  // The Author half of the same screen: the permission matrix's own
+  // "Manage candidate lists and invites" line, proved against the running
+  // app rather than against a prop.
+  it("an Author reaches the candidate list, cannot upload, and the app never asks for it", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const candidates = vi.fn(async () => []);
+
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+          patchDraft: async () => {
+            throw new Error("not used");
+          },
+          candidates,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Candidate list")).toBeDisabled();
+    expect(screen.getByText("Needs an Admin — candidate lists are managed by Admins and Owners")).toBeVisible();
+    // The route is `candidates.manage`, so asking would 403 and fail the
+    // whole load. The shell does not ask.
+    expect(candidates).not.toHaveBeenCalled();
+  });
+
+  // Task 10 (#61, P5.8), a ninth time. release-branding.test.tsx renders
+  // both panels directly, so it cannot see whether the running app mounts
+  // them, reads workspace branding at all, or knows which actor is
+  // looking — the last of which is what makes the workspace half
+  // read-only for an Author.
+  it("reaches the release and branding panels from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    const saveWorkspaceBranding = vi.fn(async (_ws: string, branding: TestBranding) => branding);
+    const uploadMedia = vi.fn(async () => ({ key: "media/wsp_1/abc.png" }));
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+          workspaceBranding: async () => ({ footer_text: "Alpha College" }),
+          saveWorkspaceBranding,
+          // The shell hangs the logo on the workspace's first bank — the
+          // only media route this product has.
+          listBanks: async () => [
+            {
+              id: "bnk_1",
+              name: "Bank",
+              description: null,
+              license: null,
+              tags: [],
+              questionCount: 0,
+              createdAt: 0,
+              updatedAt: 0,
+            },
+          ],
+          uploadMedia,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "When candidates see their result" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Branding" })).toBeInTheDocument();
+    // Read through the real client method, not invented by the panel.
+    expect(screen.getByLabelText(/footer text/i)).toHaveValue("Alpha College");
+
+    // The per-test half rides the one draft route, like every other panel.
+    fireEvent.change(screen.getByLabelText(/start message/i), { target: { value: "Good luck." } });
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual([
+      "wsp_1",
+      "tst_1",
+      { settings: { branding: { start_message: "Good luck." } } },
+    ]);
+
+    // task 7/8/10 review, M1: the logo upload is the one path none of the
+    // three reachability tests drove, and it is where the alt text was
+    // being dropped — the panel test asserted a stub's argument, and the
+    // shell's `uploadLogo` never had one. Driven here through the real
+    // call site, and asserted on what the workspace write carries.
+    fireEvent.change(screen.getByLabelText(/logo file/i), {
+      target: { files: [new File([new Uint8Array([137, 80, 78, 71])], "crest.png", { type: "image/png" })] },
+    });
+    fireEvent.change(screen.getByLabelText(/alt text/i), { target: { value: "Alpha College crest" } });
+    fireEvent.click(screen.getByRole("button", { name: /^upload$/i }));
+    await waitFor(() => expect(uploadMedia).toHaveBeenCalledWith("wsp_1", "bnk_1", expect.any(File)));
+
+    // The workspace half does not ride the draft route: it is
+    // `PATCH /workspaces/:id`.
+    fireEvent.change(screen.getByLabelText(/primary colour/i), { target: { value: "#b63a10" } });
+    fireEvent.click(screen.getByRole("button", { name: /save workspace branding/i }));
+    await waitFor(() => expect(saveWorkspaceBranding).toHaveBeenCalled());
+    expect(saveWorkspaceBranding).toHaveBeenCalledWith("wsp_1", {
+      footer_text: "Alpha College",
+      logo: "media/wsp_1/abc.png",
+      logo_alt: "Alpha College crest",
+      primary_colour: "#b63a10",
+    });
+  });
+
+  // ACTOR above is an owner. An Author reaching the same screen must see
+  // the workspace half and be unable to save it — the PRD's own split,
+  // proved against the running app rather than against a prop.
+  it("an Author reaches the branding panel but cannot change the workspace half", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+          patchDraft: async () => {
+            throw new Error("not used");
+          },
+          workspaceBranding: async () => ({ footer_text: "Alpha College" }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Branding" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/primary colour/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /save workspace branding/i })).toBeDisabled();
+    // Still readable: an Author needs to know what their candidates see.
+    expect(screen.getByLabelText(/footer text/i)).toHaveValue("Alpha College");
+    expect(screen.getByLabelText(/start message/i)).toBeEnabled();
   });
 });

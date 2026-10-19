@@ -11,3 +11,4 @@ export * from "./tests.js";
 export * from "./attempts.js";
 export * from "./audit.js";
 export * from "./banks.js";
+export * from "./candidates.js";

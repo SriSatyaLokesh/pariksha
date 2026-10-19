@@ -24,12 +24,19 @@
 import type {
   Bank,
   Blank,
+  FormField,
   PassageGroup,
   Question,
   QuestionOption,
+  AccessMode,
+  RegistrationFormSpec,
   Section,
   Test,
+  TestAccess,
+  TestBranding,
+  TestTiming,
 } from "./types.js";
+import { CREAM, EXAMPLE_BRAND_COLOUR, HEX_COLOUR, contrastRatio, meetsAA } from "./contrast.js";
 import { assertSafeRegex } from "./grade/text.js";
 import type { ScoringDefaults } from "./grade/result.js";
 import { APPLICABLE_MODES, resolveScoring, round2 } from "./grade/result.js";
@@ -416,6 +423,11 @@ export interface TestValidationOptions {
    * sets differing "by more than a set amount" / drifting apart, and name
    * no amount — so the default is the strict reading, 0: any difference at
    * all is reported. Raise it where an organiser accepts some drift.
+   *
+   * Task 4 (#56, P5.3): the document now carries the same amount as
+   * `scoring.set_points_tolerance`, and this option overrides it where a
+   * caller gives one — a gate may be stricter than the file asks for, but a
+   * file alone cannot loosen a gate that named its own number.
    */
   setPointsTolerance?: number;
 }
@@ -423,6 +435,460 @@ export interface TestValidationOptions {
 type TestValidationResult =
   | { ok: true; test: Test }
   | { ok: false; issues: ImportIssue[] };
+
+/** The three field types an `options` list belongs to (schemas/test-1.json's
+ * `$defs/formField` says the same, in its own `if`/`then`). */
+const CHOICE_FIELD_TYPES: readonly string[] = ["dropdown", "radio", "checkbox"];
+
+/**
+ * Task 5 (#57, P5.4). The one rule in this file whose breach is **not** a
+ * half-built form: a `validation` block no value can ever satisfy silently
+ * refuses every candidate at registration, and nothing before Phase 6 would
+ * surface it. Exported so the builder
+ * (`apps/web/src/components/testbuilder/FormBuilder.tsx`) shows the author
+ * the same sentence the publish gate would, rather than carrying a second
+ * copy of the arithmetic — which is the defect this phase keeps finding.
+ *
+ * Returns the sentence, or `null` when the field is satisfiable. `min`/`max`
+ * are compared only when both are the same JSON type: the schema allows a
+ * number (a `number` field) or a string (a `date` field's ISO bound), and
+ * comparing one against the other says nothing.
+ *
+ * `validation.pattern` is the third shape, and #57's acceptance row names
+ * it alongside the other two — "min above max, *a regex matching nothing
+ * allowed*" (task 5/6 review, M3). It is here rather than in its own
+ * function for the same reason the other two are: the builder renders one
+ * `role="alert"` row per field and `validateTest` pushes one issue per
+ * field, so a second function would be a second row, a second issue and a
+ * second thing to keep wired.
+ */
+export function unsatisfiableValidation(field: FormField): string | null {
+  const v = field.validation;
+  if (v === undefined) return null;
+
+  const { min_length: minLength, max_length: maxLength, min, max } = v;
+  if (minLength !== undefined && maxLength !== undefined && minLength > maxLength) {
+    return `minimum length ${minLength} is above maximum length ${maxLength} — lower the minimum, or raise the maximum`;
+  }
+  if (min !== undefined && max !== undefined && typeof min === typeof max && min > max) {
+    return `minimum ${min} is above maximum ${max} — lower the minimum, or raise the maximum`;
+  }
+  // The same check `matchBlank` runs on a question author's pattern, and
+  // the reason `assertSafeRegex` is exported from this package at all: the
+  // candidate-side renderer swallows the throw deliberately (an organiser's
+  // defect must not become the candidate's error), so without this the
+  // pattern was inert everywhere and an organiser's `([a-z]+)+$` saved,
+  // published, and met every candidate's registration on the server.
+  if (v.pattern !== undefined) {
+    try {
+      assertSafeRegex(v.pattern);
+    } catch (err) {
+      // `assertSafeRegex` speaks to a *question* author and offers
+      // `accepted`, a list of whole answers a registration field does not
+      // have. The cause is the half worth repeating; the offer is dropped
+      // rather than made to someone who cannot act on it.
+      const why = (err instanceof Error ? err.message : String(err))
+        .replace(/^unsafe regex: /, "")
+        .replace(/(, or|—) list the alternative forms in `accepted` instead/, "")
+        .trim();
+      return `pattern "${v.pattern}" cannot be used — ${why}`;
+    }
+  }
+  return null;
+}
+
+// --- T-20, T-21: access allowlists (Task 8, #60, P5.7) -----------------
+//
+// An allowlist that silently accepts something nothing can match is worse
+// than no allowlist at all: on test day the candidate is refused, the
+// organiser is told nothing, and the cause is a typo made weeks earlier.
+// So these two parsers are strict, they are the *only* copy (the panel and
+// the save path both call them), and every refusal says what a correct one
+// looks like.
+//
+// ponytail: syntax only — prefix-length and label-shape bounds, no range
+// arithmetic and no address normalisation. `10.0.0.1/24` is accepted with
+// its host bits set, because that is unambiguous shorthand and not a
+// mistake the organiser needs stopping. Upgrade path, when Phase 6
+// actually matches a candidate's address: parse to an integer pair and
+// compare, in a `net.ts` of its own, with these as the first gate.
+
+/** `0`-`255` with no leading zero — `010` is octal in some resolvers and
+ * decimal in others, so it is never a safe thing to store. */
+const IPV4_OCTET = /^(0|[1-9]\d{0,2})$/;
+
+/** One label of a hostname: letters, digits and inner hyphens, 1-63 long. */
+const DOMAIN_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/** Why this is not a CIDR range, or `null` when it is one. */
+export function invalidCidr(raw: string): string | null {
+  const example = "for example 10.0.0.0/24, or 2001:db8::/32";
+  if (raw !== raw.trim() || raw === "") return `"${raw}" is not a network range — ${example}`;
+
+  const slash = raw.indexOf("/");
+  if (slash === -1 || raw.indexOf("/", slash + 1) !== -1) {
+    return `"${raw}" has no prefix length — a range needs one, ${example}`;
+  }
+  const address = raw.slice(0, slash);
+  const prefix = raw.slice(slash + 1);
+
+  if (!/^(0|[1-9]\d{0,2})$/.test(prefix)) {
+    return `"${raw}" has a prefix length that is not a plain number — ${example}`;
+  }
+  const bits = Number(prefix);
+
+  if (address.includes(":")) {
+    // Lower-cased first, the way `invalidDomainGlob` lower-cases a domain
+    // and `HEX_COLOUR` accepts both cases: IPv6 hex is case-insensitive,
+    // so `2001:DB8::/32` — the RFC's own documentation prefix — must not
+    // be told it is not an IPv6 address.
+    if (!isIpv6(address.toLowerCase())) return `"${raw}" is not an IPv6 address — ${example}`;
+    if (bits > 128) return `"${raw}" has a prefix length above 128 — an IPv6 range cannot, ${example}`;
+  } else {
+    const octets = address.split(".");
+    if (octets.length !== 4 || octets.some((octet) => !IPV4_OCTET.test(octet) || Number(octet) > 255)) {
+      return `"${raw}" is not an IPv4 address — four numbers 0-255 with no leading zeros, ${example}`;
+    }
+    if (bits > 32) return `"${raw}" has a prefix length above 32 — an IPv4 range cannot, ${example}`;
+  }
+
+  // `/0` matches every address there is, however it is spelled — the same
+  // thing `invalidDomainGlob` refuses `*` for, and true of `0.0.0.0/0`,
+  // `::/0` and `10.0.0.0/0` alike. The case that matters is the typo:
+  // `10.0.0.0/0` written for `/8` renders as "Only from 10.0.0.0/0." and
+  // reads as a restriction, while admitting the whole internet on test day.
+  if (bits === 0) {
+    return `"${raw}" matches every address, which is not an allowlist — remove it, or narrow the range, ${example}`;
+  }
+  return null;
+}
+
+/** Plain IPv6 text, `::` compression included. No zone id (`%eth0`) and no
+ * embedded IPv4 (`::ffff:10.0.0.1`): both have two spellings for one
+ * address, which is a matcher bypass waiting to happen. */
+function isIpv6(address: string): boolean {
+  const halves = address.split("::");
+  if (halves.length > 2) return false;
+  const hextets = (part: string): string[] => (part === "" ? [] : part.split(":"));
+  const groups = halves.flatMap(hextets);
+  if (groups.some((group) => !/^[0-9a-f]{1,4}$/.test(group))) return false;
+  return halves.length === 2 ? groups.length <= 7 : groups.length === 8;
+}
+
+/**
+ * Why this is not an email-domain glob, or `null` when it is one.
+ *
+ * ASCII or punycode only: a label written in a non-Latin script is refused
+ * rather than accepted and compared bytewise against the punycode a mail
+ * server will actually present, which would never match.
+ */
+export function invalidDomainGlob(raw: string): string | null {
+  const example = "for example ac.in or *.ac.in";
+  if (raw !== raw.trim() || raw === "") return `"${raw}" is not a domain — ${example}`;
+
+  const lower = raw.toLowerCase();
+  // A wildcard that matches everything is not a restriction, however it is
+  // spelled — and an organiser who typed one believes they have set one.
+  if (lower === "*" || lower === "*.*") {
+    return `"${raw}" matches every domain, which is not an allowlist — remove it, or name a domain, ${example}`;
+  }
+
+  const wildcard = lower.startsWith("*.");
+  const domain = wildcard ? lower.slice(2) : lower;
+  if (domain.includes("*")) {
+    return `"${raw}" uses * somewhere other than the front — only a leading *. is a wildcard, ${example}`;
+  }
+
+  const labels = domain.split(".");
+  if (labels.some((label) => !DOMAIN_LABEL.test(label))) {
+    return `"${raw}" is not a domain — letters, digits and inner hyphens, ${example}`;
+  }
+  if (domain.length > 253) return `"${raw}" is longer than a domain name can be — ${example}`;
+
+  // `*.in` and `*.com` allow a whole top level, which reads on the screen
+  // as a restriction and is not one; `in` on its own is not a domain
+  // anybody has an address at.
+  //
+  // ponytail: single-label suffixes only. `*.co.in`, `*.gov.in` and
+  // `*.co.uk` are just as broad and are accepted, because knowing they
+  // are suffixes rather than somebody's domain needs the public suffix
+  // list, which is a dependency and a quarterly update for a nag. Upgrade
+  // path when an organiser actually does it: fetch the PSL at build time
+  // and compare against it here.
+  if (labels.length < 2) {
+    return wildcard
+      ? `"${raw}" would match every domain under one top level — name at least two labels, ${example}`
+      : `"${raw}" is a single label, not a domain — ${example}`;
+  }
+  return null;
+}
+
+/**
+ * The malformed entries in `access`'s two allowlists, as `{ field, message }`.
+ *
+ * **Save-time**, and the only save-time rule in this file. A half-typed
+ * access code or an unchosen release date is ordinary authoring and the
+ * write path lets it through; a stored range nothing can parse is not —
+ * it becomes a candidate silently refused on test day with the cause
+ * weeks behind them. `apps/api/src/routes/tests.ts` refuses the PATCH on
+ * these, and `validateTest` reports them too so one publish report still
+ * arrives whole.
+ */
+export function allowlistIssues(
+  access: TestAccess | undefined,
+): { field: string; message: string }[] {
+  if (access === undefined) return [];
+  const issues: { field: string; message: string }[] = [];
+  for (const range of access.allow_ip_ranges ?? []) {
+    const why = invalidCidr(range);
+    if (why !== null) issues.push({ field: "access.allow_ip_ranges", message: why });
+  }
+  for (const glob of access.allow_email_domains ?? []) {
+    const why = invalidDomainGlob(glob);
+    if (why !== null) issues.push({ field: "access.allow_email_domains", message: why });
+  }
+  return issues;
+}
+
+/**
+ * The malformed `validation.allowed_domains` entries on a registration
+ * form, as `{ field, message }`.
+ *
+ * **Save-time, the twin of `allowlistIssues`** — and for a sharper reason
+ * than a candidate silently refused. `allowed_domains` is the only
+ * author-written string in the product compiled to a live regex
+ * (`RegistrationForm.tsx`'s `domainAllowed`), and it was parsed by
+ * nothing: `*a*a*a*a*a*a*a*b.com` is twenty characters, types into the
+ * panel's own box, compiles to eight abutting `[^.]+`, and takes 32 ms on
+ * a 44-character host in the *candidate's* browser — with Phase 6 due to
+ * run the same function server-side inside a 10 ms Worker budget
+ * (whole-branch security review, H1).
+ *
+ * So the field gets the dialect `access.allow_email_domains` already has:
+ * `invalidDomainGlob`, which permits `*` only as a leading `*.` and makes
+ * the shape unconstructible rather than merely slow. One parser, two
+ * fields, no second glob dialect to keep in step.
+ */
+export function formDomainIssues(
+  form: RegistrationFormSpec | undefined,
+): { field: string; message: string }[] {
+  const issues: { field: string; message: string }[] = [];
+  for (const field of form?.fields ?? []) {
+    for (const glob of field.validation?.allowed_domains ?? []) {
+      const why = invalidDomainGlob(glob);
+      if (why !== null) {
+        issues.push({
+          field: "registration_form.fields",
+          message: `form field "${field.id}" allows a domain that cannot be matched: ${why}`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+/**
+ * Why `branding.primary_colour` cannot be stored, as `{ field, message }`,
+ * or `null` when it can.
+ *
+ * **Save-time, like `allowlistIssues`.** A colour is never half-built, and
+ * one below 4.5:1 against the candidate page's own ground makes every
+ * piece of text painted in it unreadable the moment anything renders.
+ * `PATCH /workspaces/:id` and `PATCH .../draft` both gate on this; it is
+ * stated once here, and run from `validateTest` as well, because publish
+ * and Task 12's whole-test import are a third and fourth way the same
+ * value reaches storage and "a rule enforced on one of the routes that
+ * can store a value is not a rule".
+ *
+ * The ground is `CREAM` alone, not "the worse of cream and ink":
+ * `--brand-primary` is accent text and link colour on the cream page, and
+ * `#f59a6e` reaches 7.57:1 on ink while being 2.09:1 where a candidate
+ * actually reads it.
+ */
+export function brandColourIssue(
+  branding: TestBranding | undefined,
+): { field: string; message: string } | null {
+  const colour = branding?.primary_colour;
+  if (colour === undefined) return null;
+  const hex = HEX_COLOUR.test(colour);
+  if (hex && meetsAA(colour, CREAM)) return null;
+  const detail = hex
+    ? `reaches only ${Math.round(contrastRatio(colour, CREAM) * 100) / 100}:1 against cream, and candidate text in the brand colour needs at least 4.5:1`
+    : `is not a colour; use a hex value like ${EXAMPLE_BRAND_COLOUR}`;
+  return { field: "branding.primary_colour", message: `${colour} ${detail}.` };
+}
+
+/** What the two allowlists, together, let through — in the words the panel
+ * shows an organiser and the words Task 13's checklist row uses, which is
+ * the point of it living here rather than in either. */
+export function describeAllowlists(access: TestAccess): string {
+  const domains = access.allow_email_domains ?? [];
+  const ranges = access.allow_ip_ranges ?? [];
+  const list = (values: readonly string[]): string =>
+    values.length === 1 ? (values[0] ?? "") : `${values.slice(0, -1).join(", ")} or ${values[values.length - 1] ?? ""}`;
+
+  if (domains.length > 0 && ranges.length > 0) {
+    return `Only addresses matching ${list(domains)}, and only from ${list(ranges)}.`;
+  }
+  if (domains.length > 0) return `Only addresses matching ${list(domains)}.`;
+  if (ranges.length > 0) return `Only from ${list(ranges)}.`;
+  return UNRESTRICTED[access.mode];
+}
+
+/** What "no allowlist" means, per mode — never the empty string, because a
+ * blank where a restriction should be is the one thing an organiser reads
+ * as "I have not finished" rather than "anyone". */
+const UNRESTRICTED: Readonly<Record<AccessMode, string>> = {
+  link_code: "Anyone with the link and the code.",
+  invite_only: "Anyone holding their own invite link.",
+  email_code: "Anyone who can receive mail at the address they enter.",
+  sso: "Anyone who can sign in with their own account.",
+};
+
+/** `YYYY-MM-DDThh:mm[:ss[.fff]]` followed by `Z` or `±hh:mm` — what
+ * `schemas/test-1.json`'s `format: date-time` means, and nothing looser. */
+const RFC3339 =
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?(?:([Zz])|([+-])(\d{2}):(\d{2}))$/;
+
+function daysInMonth(year: number, month: number): number {
+  if (month === 2) return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0 ? 29 : 28;
+  return month === 4 || month === 6 || month === 9 || month === 11 ? 30 : 31;
+}
+
+/**
+ * An RFC 3339 timestamp as minutes since the epoch, or `null` when it is
+ * not one. Only ever compared against another of these, never rendered.
+ *
+ * Hand-rolled rather than `Date.parse` because this package owns no clock
+ * and calls no `Date` — `packages/core/test/acceptance.test.ts` enforces
+ * that — and because `Date.parse` is engine-dependent outside the ISO
+ * grammar, so the same document could validate differently in two
+ * runtimes. The civil-days arithmetic is Howard Hinnant's, shifted so the
+ * era starts in March and February's length stops being a special case.
+ */
+function instantMinutes(raw: string): number | null {
+  const m = RFC3339.exec(raw);
+  if (!m) return null;
+  const [year, month, day, hour, minute] = [m[1], m[2], m[3], m[4], m[5]].map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  const second = Number(m[6] ?? "0");
+  if (month < 1 || month > 12) return null;
+  if (day < 1 || day > daysInMonth(year, month)) return null;
+  // 24:00 and the leap second 23:59:60 are both legal RFC 3339 and neither
+  // is a time any organiser means to type.
+  if (hour > 23 || minute > 59 || second > 59) return null;
+
+  const shifted = month <= 2 ? year - 1 : year;
+  const era = Math.floor(shifted / 400);
+  const yearOfEra = shifted - era * 400;
+  const dayOfYear = Math.floor((153 * (month + (month > 2 ? -3 : 9)) + 2) / 5) + day - 1;
+  const dayOfEra =
+    yearOfEra * 365 + Math.floor(yearOfEra / 4) - Math.floor(yearOfEra / 100) + dayOfYear;
+  const days = era * 146097 + dayOfEra - 719468;
+
+  let offset = 0;
+  if (m[7] === undefined) {
+    const offsetHours = Number(m[9]);
+    const offsetMinutes = Number(m[10]);
+    if (offsetHours > 23 || offsetMinutes > 59) return null;
+    offset = (m[8] === "-" ? -1 : 1) * (offsetHours * 60 + offsetMinutes);
+  }
+  return days * 1440 + hour * 60 + minute - offset;
+}
+
+/**
+ * T-12 - T-15's three cross-field timing rules (Task 7, #59, P5.6), as
+ * `{ field, message }` pairs so the builder's `TimingPanel` and
+ * `validateTest` state the same sentence rather than wording it twice.
+ *
+ * **Publish-time.** A half-set window is an ordinary draft: an organiser
+ * who has typed `opens_at` and not yet `closes_at` has not made a mistake,
+ * and `apps/api/src/routes/tests.ts` deliberately saves it. The panel runs
+ * these on blur as a nag; Task 13's checklist is where they block.
+ *
+ * "Opens in the past" is deliberately *not* here: this package is pure and
+ * takes no clock, so that rule belongs to the checklist, which has `now`.
+ */
+export function timingIssues(
+  timing: TestTiming | undefined,
+  sections: readonly Section[],
+): { field: string; message: string }[] {
+  if (timing === undefined) return [];
+  const issues: { field: string; message: string }[] = [];
+
+  /** An unparseable timestamp compared as a number would silently satisfy
+   * every rule below rather than fail one. Reported as its own issue
+   * instead, and withheld from the comparisons. */
+  const instant = (key: "opens_at" | "closes_at" | "latest_start_at"): number | null => {
+    const raw = timing[key];
+    if (raw === undefined) return null;
+    const parsed = instantMinutes(raw);
+    if (parsed === null) {
+      issues.push({
+        field: `timing.${key}`,
+        message: `"${raw}" is not a date and time — use an RFC 3339 timestamp, for example 2026-11-14T09:00:00+05:30`,
+      });
+      return null;
+    }
+    return parsed;
+  };
+
+  const opens = instant("opens_at");
+  const closes = instant("closes_at");
+  const latestStart = instant("latest_start_at");
+
+  if (opens !== null && closes !== null && closes <= opens) {
+    issues.push({
+      field: "timing.closes_at",
+      message: `the window closes at ${timing.closes_at ?? ""}, which is not after it opens at ${timing.opens_at ?? ""} — move the close later, or the open earlier`,
+    });
+  }
+
+  if (latestStart !== null) {
+    const beforeOpen = opens !== null && latestStart < opens;
+    const afterClose = closes !== null && latestStart > closes;
+    if (beforeOpen || afterClose) {
+      issues.push({
+        field: "timing.latest_start_at",
+        message: `the latest start ${timing.latest_start_at ?? ""} falls ${beforeOpen ? "before the window opens" : "after the window closes"} — it has to sit inside the window, and defaults to closes_at when unset`,
+      });
+    }
+  }
+
+  // T-12's "overall duration, optional per-section durations": a sum above
+  // the whole is unsatisfiable however the candidate spends the time.
+  const total = sections.reduce((sum, section) => sum + (section.time_limit_minutes ?? 0), 0);
+  if (total > timing.duration_minutes) {
+    issues.push({
+      field: "timing.duration_minutes",
+      message: `sections total ${total} minutes against an overall ${timing.duration_minutes} — raise the duration or shorten a section`,
+    });
+  }
+
+  return issues;
+}
+
+/** The ids that appear more than once in `ids`, each reported once, in the
+ * order they first repeat. Both halves of docs/test-format.md's own
+ * "ids are unique within the test" line — section ids and form field ids —
+ * are this one function. */
+function duplicates(ids: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const repeated: string[] = [];
+  for (const id of ids) {
+    if (seen.has(id)) {
+      if (!repeated.includes(id)) repeated.push(id);
+      continue;
+    }
+    seen.add(id);
+  }
+  return repeated;
+}
 
 /**
  * Only `.points` of what `resolveScoring` returns is read below, and
@@ -469,6 +935,14 @@ function totalPoints(questions: readonly Question[]): number {
  *   here so a document reaching this function by another route still gets
  *   the rule, and so the whole report arrives in one shape.
  * - every question ID a `fixed` or `sets` source names exists in `bank`.
+ * - `closes_at` is after `opens_at`, `latest_start_at` falls inside the
+ *   window, and the per-section durations sum to no more than
+ *   `duration_minutes` (Task 7, #59, P5.6).
+ * - every CIDR in `access.allow_ip_ranges` and every glob in
+ *   `access.allow_email_domains` parses (Task 8, #60, P5.7). Unlike the
+ *   rest of this function these are *save-time* in class — see
+ *   `allowlistIssues` — and are reported here so the whole report still
+ *   arrives at once.
  */
 export function validateTest(
   test: unknown,
@@ -491,16 +965,27 @@ export function validateTest(
 
   const doc = test as unknown as Test;
   const issues: ImportIssue[] = [];
-  const tolerance = options.setPointsTolerance ?? 0;
+  const tolerance = options.setPointsTolerance ?? doc.scoring?.set_points_tolerance ?? 0;
   const defaultMode = doc.scoring?.default_mode;
   const byId = new Map(bank.map((q) => [q.id, q]));
 
-  if (doc.access?.mode === "link_code" && doc.access.access_code === undefined) {
+  // Task 8 (#60, P5.7) widened this from "undefined" to "shorter than
+  // four characters" (task 5/6 review, M4). `schemas/test-1.json` puts
+  // `minLength: 4` on `access_code`, but `draftSchema()` strips every
+  // `minLength` by keyword, so empty and one-character codes save — and
+  // nothing replaced the floor at publish, which left a test publishable
+  // on `mode: "link_code"` with a one-character code. A half-typed code is
+  // ordinary authoring; a published one is the whole access control.
+  const code = doc.access?.mode === "link_code" ? (doc.access.access_code ?? "") : null;
+  if (code !== null && code.trim().length < 4) {
     issues.push({
       questionId: null,
       index: -1,
       field: "access.access_code",
-      message: 'access mode "link_code" requires an access_code',
+      message:
+        code === ""
+          ? 'access mode "link_code" requires an access_code'
+          : `access mode "link_code" requires an access_code of at least 4 characters; "${code}" is ${code.trim().length}`,
     });
   }
 
@@ -511,6 +996,131 @@ export function validateTest(
       field: "release.at",
       message: 'release "on_date" requires an "at" timestamp',
     });
+  }
+
+  // Task 7 (#59, P5.6). The sections are read off `doc` rather than the
+  // raw array because only `time_limit_minutes` matters here and a
+  // structurally broken entry is already reported, at its own index, by
+  // the per-section pass below.
+  for (const issue of timingIssues(doc.timing, Array.isArray(doc.sections) ? doc.sections : [])) {
+    issues.push({ questionId: null, index: -1, ...issue });
+  }
+
+  // Task 8 (#60, P5.7). Save-time in class (see `allowlistIssues`),
+  // reported here so the whole publish report still arrives at once.
+  for (const issue of allowlistIssues(doc.access)) {
+    issues.push({ questionId: null, index: -1, ...issue });
+  }
+
+  // Task 10 (#61, P5.8), task 7/8/10 review M7. Save-time in class, same
+  // as the allowlists — stated here so Task 12's import and publish run
+  // the rule the two PATCH routes already run, rather than being a third
+  // and fourth way an unreadable colour reaches a candidate's screen.
+  const colour = brandColourIssue(doc.branding);
+  if (colour !== null) issues.push({ questionId: null, index: -1, ...colour });
+
+  // Task 5 (#57, P5.4): docs/test-format.md's "ids are unique within the
+  // test" line, both halves. **Publish-time** — an organiser mid-build may
+  // legitimately have two fields called `email` for a second, which is why
+  // the save-time gate (`apps/api/src/routes/tests.ts`'s `draftSchema`)
+  // does not carry it and a schema could not express it anyway.
+  const sectionIds = (test.sections as unknown[])
+    .filter((entry): entry is Record<string, unknown> => isRecord(entry) && typeof entry.id === "string")
+    .map((entry) => entry.id as string);
+  for (const id of duplicates(sectionIds)) {
+    issues.push({
+      questionId: null,
+      index: -1,
+      field: "sections",
+      message: `section id "${id}" is used more than once`,
+    });
+  }
+
+  const form = doc.registration_form;
+  if (form !== undefined && Array.isArray(form.fields)) {
+    for (const id of duplicates(form.fields.map((f) => f.id))) {
+      issues.push({
+        questionId: null,
+        index: -1,
+        field: "registration_form.fields",
+        message: `form field id "${id}" is used more than once`,
+      });
+    }
+
+    for (const field of form.fields) {
+      const isChoice = CHOICE_FIELD_TYPES.includes(field.type);
+
+      // The publish-time twins for `$defs/formField.label`'s `minLength`
+      // and its `options.items`' (task 7/8/10 review, M9). Both are
+      // emptiness floors the draft gate strips by keyword and both had no
+      // twin anywhere, so a blank one published: a registration control
+      // whose only accessible name is the empty string, which a candidate
+      // using a screen reader meets as an unlabelled box. Blank in Draft
+      // is ordinary — it is the keystroke before the label — so this is
+      // publish-time, like everything else in this loop.
+      if (field.label.trim() === "") {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form.fields",
+          message: `form field "${field.id}" has no label, so a candidate using a screen reader meets an unnamed box`,
+        });
+      }
+      for (const [at, option] of (field.options ?? []).entries()) {
+        if (option.trim() === "") {
+          issues.push({
+            questionId: null,
+            index: -1,
+            field: "registration_form.fields",
+            message: `form field "${field.id}" has a blank option at position ${at + 1} — give it the words a candidate picks`,
+          });
+        }
+      }
+
+      // Publish-time, both directions of the same rule. The schema states
+      // the forward half (`$defs/formField`'s `if`/`then`: a choice field
+      // requires `options`) and nothing states the reverse, so an `options`
+      // list on a `short_text` field imports clean today and is silently
+      // dropped by every renderer.
+      if (!isChoice && field.options !== undefined) {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form.fields",
+          message: `form field "${field.id}" is a ${field.type} field and cannot carry an options list`,
+        });
+      }
+      if (isChoice && (field.options?.length ?? 0) < 2) {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form.fields",
+          message: `form field "${field.id}" is a ${field.type} field and needs at least two options`,
+        });
+      }
+
+      // Publish-time, with a live author-facing message in the builder —
+      // see `unsatisfiableValidation`. (It was labelled save-time here
+      // until the task 5/6 review, m4; `ecd526f` had already withdrawn
+      // that label from the plan.)
+      const unsatisfiable = unsatisfiableValidation(field);
+      if (unsatisfiable !== null) {
+        issues.push({
+          questionId: null,
+          index: -1,
+          field: "registration_form",
+          message: `form field "${field.id}": ${unsatisfiable}`,
+        });
+      }
+    }
+
+    // The publish-time twin of the save-time rule in `PATCH .../draft`,
+    // stated the way `allowlistIssues` is: the route refuses the write and
+    // this reports it too, so publish, import and export all run the one
+    // parser rather than trusting the route that happened to store it.
+    for (const issue of formDomainIssues(form)) {
+      issues.push({ questionId: null, index: -1, ...issue });
+    }
   }
 
   (test.sections as unknown[]).forEach((raw: unknown, index) => {

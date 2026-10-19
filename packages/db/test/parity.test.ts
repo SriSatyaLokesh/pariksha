@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { getTableConfig as sqliteConfig } from "drizzle-orm/sqlite-core";
 import { getTableConfig as pgConfig } from "drizzle-orm/pg-core";
 import type { SQLiteTable } from "drizzle-orm/sqlite-core";
@@ -11,6 +11,13 @@ import {
   tableSpec,
   timestampColumns,
 } from "../src/schema/columns.js";
+import { sqliteClient, closeClient, type DbClient } from "../src/client.js";
+import { migrate } from "../src/migrate.js";
+import { newId } from "../src/ids.js";
+import { createTest, createWorkspace, replaceCandidateList } from "../src/repo/index.js";
+
+/** One uploaded list row, reused by the two candidate tests below. */
+const LISTED = { externalId: "21CS0147", setLabel: "A", formValues: {} };
 
 // Drizzle's two `getTableConfig`s return the same shape for the parts this
 // test compares, but they are different functions over different table types,
@@ -195,6 +202,116 @@ describe("the Phase 4 authoring columns", () => {
       );
     });
   }
+});
+
+describe("the Phase 5 columns (Task 2, #54)", () => {
+  const EXPECTED: Record<string, string[]> = {
+    test: ["description", "short_code", "review_requested", "updated_at"],
+    test_version: ["created_at"],
+  };
+
+  for (const [table, columns] of Object.entries(EXPECTED)) {
+    it(`${table} has ${columns.join(", ")} in both dialects`, () => {
+      expect(sqliteByName.get(table)?.columns.map((c) => c.name)).toEqual(
+        expect.arrayContaining(columns),
+      );
+      expect(pgByName.get(table)?.columns.map((c) => c.name)).toEqual(
+        expect.arrayContaining(columns),
+      );
+    });
+  }
+
+  // Review Focus 5: every other tenant-table unique in the manifest is
+  // composite with `workspace_id` ("test" itself already has
+  // `[workspace_id, slug]`) — `short_code` is bare, because `/t/<code>`
+  // names no workspace at all.
+  it("short_code is unique bare, not composite with workspace_id", () => {
+    expect(tableSpec("test").uniques).toContainEqual(["short_code"]);
+    expect(sqliteByName.get("test")?.uniques).toContainEqual(["short_code"]);
+    expect(pgByName.get("test")?.uniques).toContainEqual(["short_code"]);
+  });
+
+  describe("enforced against real data, not just declared", () => {
+    let db: DbClient;
+
+    afterAll(() => closeClient(db));
+
+    it("short_code is unique across the whole instance, not per workspace", async () => {
+      db = sqliteClient(":memory:");
+      await migrate(db);
+
+      const wsA = newId("wsp");
+      const wsB = newId("wsp");
+      await createWorkspace(db, wsA, { slug: "short-code-a", name: "A" });
+      await createWorkspace(db, wsB, { slug: "short-code-b", name: "B" });
+      const { shortCode } = await createTest(db, wsA, { name: "A", slug: "a" });
+
+      // The code `createTest` just minted in workspace A, inserted again
+      // directly for workspace B — the unique index is what has to refuse
+      // this, not application code that happens to call `createTest` once
+      // per short code.
+      //
+      // Wrapped in an `async` function rather than awaited inline:
+      // better-sqlite3's `run()` throws synchronously on a constraint
+      // violation, which `expect(db.run(...)).rejects` cannot catch — the
+      // throw happens while the argument is still being evaluated, before
+      // there is a promise for `.rejects` to attach to.
+      const insertCollidingRow = async (): Promise<void> => {
+        await db.run(
+          "INSERT INTO test (id, workspace_id, slug, name, description, short_code, status, " +
+            "review_requested, current_version, tags_json, created_at, updated_at) " +
+            "VALUES (?, ?, ?, ?, NULL, ?, 'draft', 0, NULL, ?, 0, NULL)",
+          [newId("tst"), wsB, "b", "B", shortCode, db.jsonParam([])],
+        );
+      };
+      await expect(insertCollidingRow()).rejects.toThrow(/unique|constraint/i);
+    });
+
+    // Task 9 (#60 / #56, P5.7b): the candidate list's own columns.
+    it("the candidate list columns exist in both dialects and consent_version is nullable", () => {
+      for (const read of [sqliteByName, pgByName]) {
+        const columns = read.get("candidate")?.columns ?? [];
+        expect(columns.map((c) => c.name)).toEqual(
+          expect.arrayContaining(["external_id", "set_label", "source"]),
+        );
+        // A listed candidate has not consented yet, and null is exactly
+        // that — Phase 2 declared the column NOT NULL, which this task's
+        // migration drops in both dialects.
+        expect(columns.find((c) => c.name === "consent_version")?.notNull).toBe(false);
+        expect(columns.find((c) => c.name === "source")?.notNull).toBe(true);
+      }
+      expect(tableSpec("candidate").uniques).toContainEqual(["test_id", "external_id"]);
+    });
+
+    it("two list rows cannot share an external_id within one test, but two tests may", async () => {
+      const client = sqliteClient(":memory:");
+      try {
+        await migrate(client);
+        const ws = newId("wsp");
+        await createWorkspace(client, ws, { slug: "candidates", name: "C" });
+        const one = await createTest(client, ws, { name: "One", slug: "one" });
+        const two = await createTest(client, ws, { name: "Two", slug: "two" });
+
+        await replaceCandidateList(client, ws, one.id, [LISTED], 0);
+        // The same identity in a different test is an ordinary thing: a
+        // college runs two tests for one cohort.
+        await expect(replaceCandidateList(client, ws, two.id, [LISTED], 0)).resolves.toEqual({
+          imported: 1,
+        });
+
+        // Two rows with the same identity in *one* file. The unique index
+        // is what refuses this; the converter's duplicate check reports it
+        // with a line number before it ever gets here, and this is the
+        // floor under that.
+        const twice = async (): Promise<void> => {
+          await replaceCandidateList(client, ws, one.id, [LISTED, LISTED], 0);
+        };
+        await expect(twice()).rejects.toThrow(/unique|constraint/i);
+      } finally {
+        closeClient(client);
+      }
+    });
+  });
 });
 
 describe("the constraints the PRD names", () => {

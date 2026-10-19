@@ -1,0 +1,552 @@
+/* Phase 5's test builder screens. Every value comes from tokens.css — see
+   that file's own header for why: no hex literal and no style={} attribute
+   may appear anywhere under src (apps/web/test/no-hex-colors.test.ts). */
+
+.testbuilder-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-lg);
+  margin-block-end: var(--space-lg);
+}
+
+.testbuilder-list {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.testbuilder-list th,
+.testbuilder-list td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--color-hairline);
+  text-align: start;
+  vertical-align: top;
+}
+
+.testbuilder-list th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.test-id {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.test-state {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.test-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  margin-inline-start: var(--space-sm);
+  color: var(--color-ink-soft);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.testbuilder-shortlink {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.qr-code {
+  color: var(--color-ink);
+}
+
+/* A `<button>` that reads as the test's name, not as a button — the same
+   role `BankList`'s own row buttons play, styled flat here because
+   `button-secondary`'s pill chrome would read as a second, competing
+   action next to the row it opens. */
+.button-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-voltage);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Task 3 (#55, P5.2): sections (UX-12 – UX-16) and the question picker
+   drawer (UX-14). */
+
+.section-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.section-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+  border-block-end: 1px solid var(--color-hairline);
+}
+
+.section-row__summary {
+  display: block;
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: none;
+  padding: var(--space-xs) 0;
+  font: inherit;
+  color: var(--color-ink);
+  cursor: pointer;
+  /* UX-12: the collapsed sentence wraps rather than truncates, so it stays
+     readable at phone width instead of hiding words behind an ellipsis. */
+  overflow-wrap: anywhere;
+  white-space: normal;
+  /* Fix round (task 3 review, I12): the question count, points and time
+     figures in this sentence, same as `.test-id` above. */
+  font-variant-numeric: tabular-nums;
+}
+
+.section-row__draw {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.section-row__flag-risk {
+  color: var(--color-flag-risk);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.section-row__balance {
+  border-collapse: collapse;
+}
+
+.section-row__balance th,
+.section-row__balance td {
+  padding-inline-end: var(--space-md);
+  text-align: start;
+  /* Fix round (task 3 review, I12): a column of points meant to be
+     compared at a glance — the entire reason this table exists — does not
+     line up with proportional digits. */
+  font-variant-numeric: tabular-nums;
+}
+
+.section-row__undo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.section-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline);
+}
+
+.section-editor__source {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.section-editor__sets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0;
+  list-style: none;
+}
+
+.section-editor__preview {
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-sm);
+}
+
+.picker-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline-strong);
+}
+
+.picker-drawer__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.picker-drawer__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.picker-drawer__row {
+  display: flex;
+  align-items: start;
+  gap: var(--space-xs);
+}
+
+.picker-drawer__points {
+  color: var(--color-muted);
+  /* Fix round (task 3 review, I12). */
+  font-variant-numeric: tabular-nums;
+}
+
+.picker-drawer__footer {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.picker-drawer__actions {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+/* Task 4 (#56, P5.3): set assignment and shuffling. Both fieldsets drop the
+   browser's default border and inset padding so they read as sections of
+   the section editor rather than as boxes inside boxes; the legend still
+   names each group for a screen reader. */
+.sets-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.sets-panel__assignment,
+.shuffle-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.sets-panel__assignment > legend,
+.shuffle-group > legend {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.sets-panel__choice-control,
+.shuffle-group__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+/* The consequence sits under its own radio, indented to the label — a
+   statement about that strategy, not about the group. */
+.sets-panel__consequence,
+.shuffle-group__fact {
+  margin: 0;
+  padding-inline-start: var(--space-md);
+  color: var(--color-muted);
+}
+
+/* Task 5 (#57, P5.4): the registration form builder and the one renderer
+   its preview and Phase 6's candidate registration share. */
+
+.form-builder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-block-start: var(--space-xl);
+  padding-block-start: var(--space-lg);
+  border-block-start: 1px solid var(--color-hairline);
+}
+
+.form-builder__templates,
+.form-builder__add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-sm);
+}
+
+.form-builder__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-md);
+}
+
+.form-builder__field > legend {
+  padding-inline: var(--space-xs);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+.form-builder__flag,
+.registration-form__choice {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.form-builder__fact,
+.registration-form__help,
+.registration-form__legend {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.form-builder__risk,
+.registration-form__error {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}
+
+.form-builder__preview {
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-md);
+}
+
+.registration-form,
+.registration-form__field,
+.registration-form__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.registration-form__group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.registration-form__title {
+  margin: 0;
+}
+
+/* T-16's "phone (with country code)": the field's `default_country` shown
+   as the prefix the stored number starts with, rather than assumed
+   (task 5/6 review, M5). The full country picker is Phase 6's. */
+.registration-form__dialled {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.registration-form__dialled .text-input {
+  flex: 1;
+}
+
+/* Task 6 (#58, P5.5): the url field's reachability affordance sits inline
+   with its own control, like every other row in a field editor. */
+.form-builder__field .field {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+/* Task 7 (#59, P5.6): timing, navigation and attempt policy.
+   `timing-panel__figure` is every number and timestamp an organiser
+   compares against another one — durations against the section sum, an
+   open time against a close time — so the digits have to line up. */
+.timing-panel,
+.timing-panel__group,
+.timing-panel__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.timing-panel__group {
+  border: 1px solid var(--color-hairline);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+.timing-panel__figure {
+  font-variant-numeric: tabular-nums;
+}
+
+.timing-panel__fact {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.timing-panel__risk {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}
+
+/* Task 8 (#60, P5.7): access modes and allowlists. */
+.access-panel,
+.access-panel__group,
+.access-panel__choice,
+.access-panel__half {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.access-panel__group {
+  border: 1px solid var(--color-hairline);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+.access-panel__fact,
+.access-panel__summary {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.access-panel__legend {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.access-panel__risk {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}
+
+/* Task 9 (#60 / #56, P5.7b): the candidate list's dry-run report. One row
+   per issue, each naming the line of the uploaded file it is about. */
+.access-panel__issues {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.access-panel__issues caption {
+  text-align: left;
+  color: var(--color-muted);
+  padding-bottom: var(--space-xs);
+}
+
+.access-panel__issues th,
+.access-panel__issues td {
+  border-bottom: 1px solid var(--color-hairline);
+  padding: var(--space-xs);
+  text-align: left;
+  vertical-align: top;
+}
+
+/* Task 10 (#61, P5.8): result release and branding. */
+.release-panel,
+.release-panel__group,
+.release-panel__choice,
+.branding-panel,
+.branding-panel__half {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.release-panel__group {
+  border: 1px solid var(--color-hairline);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+.release-panel__fact,
+.branding-panel__fact,
+.branding-panel__footer {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.release-panel__legend,
+.branding-panel__figure {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  font-variant-numeric: tabular-nums;
+}
+
+.release-panel__risk,
+.branding-panel__risk {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}
+
+/* `--brand-primary` is set on this wrapper from an effect (no style={} is
+   allowed in .tsx under src) and cascades into all three previews, so the
+   colour is applied once rather than three times. The fallback keeps a
+   preview readable before any colour is chosen. */
+.branding-panel__previews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.branding-panel__preview {
+  flex: 1 1 14rem;
+  border: 1px solid var(--color-hairline);
+  border-block-start: 3px solid var(--brand-primary, var(--color-ink));
+  padding: var(--space-md);
+}
+
+.branding-panel__preview h4 {
+  margin: 0 0 var(--space-sm);
+  color: var(--brand-primary, var(--color-ink));
+}
+
+/* Task 11 (#62, P5.9): the lifecycle row and UX-18's banner. */
+.testbuilder-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block: var(--space-md);
+}
+
+.version-banner {
+  margin-block: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-inline-start: 2px solid var(--color-hairline);
+  color: var(--color-ink-soft);
+}
+
+/* Task 13 (#64, P5.11): the publish checklist. */
+.publish-checklist__rows {
+  margin: 0;
+  padding-inline-start: var(--space-lg);
+}
+
+.publish-checklist__severity {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  color: var(--color-ink-soft);
+}
