@@ -109,6 +109,15 @@ export const sqliteMigrations: Migration[] = [
     "ALTER TABLE `test_version` ADD `created_at` integer NOT NULL DEFAULT 0;",
     "UPDATE `test_version` SET `created_at` = `published_at` WHERE `published_at` IS NOT NULL;",
   ] },
+  { name: "0005_cold_list.sql", statements: [
+    "-- Phase 5 Task 9 (#60 / #56, P5.7b): the candidate list. `candidate` gains\n-- `external_id` (the value of the test's first `unique: true` registration\n-- field), `set_label` (T-09's set *name*, not `attempt.set_no`) and `source`\n-- (\"list\" or \"registration\", so a re-upload replaces only what it owns), and\n-- `consent_version` stops being NOT NULL — a listed candidate has not\n-- consented yet, and null is exactly that.\n--\n-- Hand-written rather than taken from `drizzle-kit generate` verbatim, for\n-- the reason 0004 records: SQLite cannot drop a NOT NULL constraint with\n-- ALTER TABLE at all, and cannot add a NOT NULL column (`source`) without a\n-- literal DEFAULT. The table is rebuilt instead, the same twelve-step shape\n-- 0003 used for `question.ref_id` and 0004 for `test`. Nothing writes a\n-- `candidate` row before this phase ships — Phase 6 registers candidates and\n-- this task uploads lists — so in practice the rebuild moves no rows; the\n-- backfilled `source = 'registration'` below exists only to keep the rebuilt\n-- table consistent with its own NOT NULL for the case where one exists.\n--\n-- `(test_id, external_id)` is unique, following `question`'s\n-- `(bank_id, ref_id)`: a duplicate identity in an uploaded file is a\n-- positioned error, and a re-upload is idempotent. Null external_ids do not\n-- collide in either dialect, which is what lets Phase 6's self-registrations\n-- sit in the same table unkeyed.\n--\n-- No PRAGMA foreign_keys here: D1 ignores it silently and\n-- `no-d1-hostile-sql.test.ts` refuses it.\nCREATE TABLE `__new_candidate` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`test_id` text NOT NULL,\n\t`external_id` text,\n\t`set_label` text,\n\t`source` text NOT NULL,\n\t`form_values_json` text NOT NULL,\n\t`consent_version` text,\n\t`created_at` integer NOT NULL\n);",
+    "INSERT INTO `__new_candidate` (\"id\", \"workspace_id\", \"test_id\", \"source\", \"form_values_json\", \"consent_version\", \"created_at\") SELECT \"id\", \"workspace_id\", \"test_id\", 'registration', \"form_values_json\", \"consent_version\", \"created_at\" FROM `candidate`;",
+    "DROP TABLE `candidate`;",
+    "ALTER TABLE `__new_candidate` RENAME TO `candidate`;",
+    "CREATE INDEX `candidate_workspace_idx` ON `candidate` (`workspace_id`);",
+    "CREATE INDEX `candidate_test_idx` ON `candidate` (`test_id`);",
+    "CREATE UNIQUE INDEX `candidate_test_external_uq` ON `candidate` (`test_id`,`external_id`);",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -199,5 +208,14 @@ export const pgMigrations: Migration[] = [
     "CREATE UNIQUE INDEX \"test_short_code_uq\" ON \"test\" USING btree (\"short_code\");",
     "ALTER TABLE \"test_version\" ADD COLUMN \"created_at\" bigint NOT NULL DEFAULT 0;",
     "UPDATE \"test_version\" SET \"created_at\" = \"published_at\" WHERE \"published_at\" IS NOT NULL;",
+  ] },
+  { name: "0005_listed_candidates.sql", statements: [
+    "-- Phase 5 Task 9 (#60 / #56, P5.7b): the sqlite/0005_cold_list.sql sibling.\n-- Postgres needs no table rebuild — it can drop a NOT NULL in place, and a\n-- NOT NULL column is added nullable, backfilled, then promoted, exactly the\n-- shape 0004 used for `test.short_code`. No DEFAULT is left behind, so the\n-- column matches `schema/pg.ts`, which declares none.\nALTER TABLE \"candidate\" ADD COLUMN \"external_id\" text;",
+    "ALTER TABLE \"candidate\" ADD COLUMN \"set_label\" text;",
+    "ALTER TABLE \"candidate\" ADD COLUMN \"source\" text;",
+    "UPDATE \"candidate\" SET \"source\" = 'registration' WHERE \"source\" IS NULL;",
+    "ALTER TABLE \"candidate\" ALTER COLUMN \"source\" SET NOT NULL;",
+    "ALTER TABLE \"candidate\" ALTER COLUMN \"consent_version\" DROP NOT NULL;",
+    "CREATE UNIQUE INDEX \"candidate_test_external_uq\" ON \"candidate\" USING btree (\"test_id\",\"external_id\");",
   ] },
 ];

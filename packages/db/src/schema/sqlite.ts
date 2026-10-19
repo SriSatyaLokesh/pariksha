@@ -189,13 +189,17 @@ export const candidate = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     testId: text("test_id").notNull(),
+    externalId: text("external_id"),
+    setLabel: text("set_label"),
+    source: text("source").notNull(),
     formValuesJson: text("form_values_json", { mode: "json" }).notNull(),
-    consentVersion: text("consent_version").notNull(),
+    consentVersion: text("consent_version"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [
     index("candidate_workspace_idx").on(t.workspaceId),
     index("candidate_test_idx").on(t.testId),
+    uniqueIndex("candidate_test_external_uq").on(t.testId, t.externalId),
   ],
 );
 

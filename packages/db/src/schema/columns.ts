@@ -270,18 +270,34 @@ export const TABLE_MANIFEST: TableSpec[] = [
     indexes: [["workspace_id"], ["test_version_id"]],
     uniques: [["test_version_id", "set_no"]],
   },
+  // Task 9 (#60 / #56, P5.7b): the candidate list. `external_id` is the
+  // value of the test's first `unique: true` registration field, which is
+  // what Phase 6 mints an invite against and matches a registration to;
+  // `set_label` is T-09's set *name* ("A"), never `attempt.set_no`, which
+  // is an integer; `source` says who wrote the row, so a re-upload can
+  // replace the list without touching anyone who has already registered.
+  // `consent_version` was `NOT NULL` from Phase 2 and is now nullable: a
+  // listed candidate has not consented yet, and null is exactly that.
+  //
+  // **No token column, deliberately.** `POST /tests/{id}/invites`, the
+  // single-use signed token, its hash and its expiry are Phase 6's — the
+  // token's hashing and lifetime belong to the runtime that consumes
+  // them (`S-06` is written about attempt tokens, not list rows).
   {
     name: "candidate",
     tenant: true,
     columns: [
       ...tenantHead(),
       text("test_id"),
+      text("external_id", { null: true }),
+      text("set_label", { null: true }),
+      text("source"),
       json("form_values_json"),
-      text("consent_version"),
+      text("consent_version", { null: true }),
       ts("created_at"),
     ],
     indexes: [["workspace_id"], ["test_id"]],
-    uniques: [],
+    uniques: [["test_id", "external_id"]],
   },
   {
     name: "attempt",

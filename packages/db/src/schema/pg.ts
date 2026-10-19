@@ -197,13 +197,17 @@ export const candidate = pgTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     testId: text("test_id").notNull(),
+    externalId: text("external_id"),
+    setLabel: text("set_label"),
+    source: text("source").notNull(),
     formValuesJson: jsonb("form_values_json").notNull(),
-    consentVersion: text("consent_version").notNull(),
+    consentVersion: text("consent_version"),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
     index("candidate_workspace_idx").on(t.workspaceId),
     index("candidate_test_idx").on(t.testId),
+    uniqueIndex("candidate_test_external_uq").on(t.testId, t.externalId),
   ],
 );
 
