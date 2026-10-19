@@ -57,6 +57,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
+    exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
     ...overrides,
   };
 }

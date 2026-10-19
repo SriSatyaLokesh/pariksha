@@ -38,6 +38,28 @@ function excerpt(prompt: string, max = 120): string {
   return prompt.length > max ? `${prompt.slice(0, max - 1)}…` : prompt;
 }
 
+/** A download is still a fetch (repo convention) — `client.exportBank`
+ * (apps/web/src/lib/api.ts) is what makes the network call; everything here
+ * only turns an already-fetched document into a saved file, with no
+ * `fetch(` of its own. */
+function exportFilename(bankName: string): string {
+  const slug = bankName.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  return `${slug || "bank"}.json`;
+}
+
+function downloadJson(doc: unknown, filename: string): void {
+  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 interface Filter {
   type?: Question["type"];
   difficulty?: "easy" | "medium" | "hard";
@@ -145,6 +167,22 @@ export function BankBrowser({
     }
   }
 
+  // Task 9 (#53, P4.9): the bulk bar's export control — the whole bank with
+  // nothing selected, or just the selected rows (named by `refId`, the
+  // document id `?ids=` matches on, never `question.id`, the row id a URL
+  // path segment uses) with something selected.
+  async function onExport() {
+    setNotice(undefined);
+    try {
+      const ids =
+        selected.size > 0 ? questions.filter((q) => selected.has(q.id)).map((q) => q.refId) : undefined;
+      const doc = await client.exportBank(workspaceId, bankId, ids);
+      downloadJson(doc, exportFilename(doc.name));
+    } catch (cause) {
+      setNotice(cause instanceof ApiError ? cause.message : "The bank could not be exported.");
+    }
+  }
+
   async function onDeleteGroup(group: PassageGroupSummary) {
     setNotice(undefined);
     try {
@@ -235,11 +273,26 @@ export function BankBrowser({
       </nav>
 
       <div className="bank-browser__main">
-        {selected.size > 0 && (
-          <div className="bank-browser__bulk-bar" role="status">
-            {selected.size} selected
-          </div>
-        )}
+        {/* Task 9 (#53, P4.9): the export control lives here whether or not
+            anything is selected — selecting nothing exports the whole bank,
+            the same way the filters above answer "no filter" with
+            everything. `role="status"` stays on the count text alone, not
+            the bar itself, so the live region announces only what changes. */}
+        <div className="bank-browser__bulk-bar">
+          <span role="status">{selected.size > 0 ? `${selected.size} selected` : ""}</span>
+          <button
+            type="button"
+            className="button-secondary"
+            aria-label={
+              selected.size > 0
+                ? `Export the ${selected.size} selected question${selected.size === 1 ? "" : "s"}`
+                : "Export the whole bank"
+            }
+            onClick={() => void onExport()}
+          >
+            {selected.size > 0 ? "Export selected" : "Export bank"}
+          </button>
+        </div>
 
         {notice !== undefined && (
           <p className="bank-browser__notice" role="alert">

@@ -103,6 +103,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       }
       return { imported: bank.questions.length, issues: [] };
     },
+    exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
     ...overrides,
   };
 }

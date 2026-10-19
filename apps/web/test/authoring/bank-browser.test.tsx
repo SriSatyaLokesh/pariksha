@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { Question } from "@pariksha/core";
 
@@ -87,6 +87,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
+    exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
     ...overrides,
   };
 }
@@ -186,6 +187,40 @@ describe("BankBrowser", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "New group" }));
     expect(screen.getByLabelText("Group ID")).toBeVisible();
+  });
+
+  // Task 9 (#53, P4.9).
+  it("exports the whole bank when nothing is selected, and only the selected refIds when something is", async () => {
+    const exportBank = vi.fn(async () => ({ format: "pariksha/bank@1" as const, name: "Exported", questions: [] }));
+    const client = fakeClient({
+      listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }),
+      exportBank,
+    });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    const exportButton = await screen.findByRole("button", { name: /export the whole bank/i });
+    fireEvent.click(exportButton);
+    await waitFor(() => expect(exportBank).toHaveBeenCalledWith("wsp_1", "bnk_1", undefined));
+
+    const checkboxes = await screen.findAllByRole("checkbox", { name: /select question/i });
+    fireEvent.click(checkboxes[0]!);
+    fireEvent.click(screen.getByRole("button", { name: /export the 1 selected question/i }));
+    await waitFor(() => expect(exportBank).toHaveBeenCalledWith("wsp_1", "bnk_1", ["Q1"]));
+  });
+
+  it("the export control is keyboard reachable and shows a notice when export fails", async () => {
+    const client = fakeClient({
+      exportBank: async () => {
+        throw new ApiError(500, "unexpected_response", "The bank could not be reached.");
+      },
+    });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    const exportButton = await screen.findByRole("button", { name: /export the whole bank/i });
+    exportButton.focus();
+    expect(exportButton).toHaveFocus();
+    fireEvent.click(exportButton);
+    expect(await screen.findByText("The bank could not be reached.")).toBeVisible();
   });
 
   it("a refused group delete names the questions holding it", async () => {

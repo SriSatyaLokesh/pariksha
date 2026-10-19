@@ -9,8 +9,21 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type { Difficulty, ImportIssue, PassageGroup, Question, QuestionType, Role } from "@pariksha/core";
+import type {
+  Bank as BankDocument,
+  Difficulty,
+  ImportIssue,
+  PassageGroup,
+  Question,
+  QuestionType,
+  Role,
+} from "@pariksha/core";
 export type { Role };
+// Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
+// shape every other bank route already answers with, not the
+// `pariksha/bank@1` document export produces — same name, two different
+// things, so the core type keeps its own.
+export type { BankDocument };
 
 // Phase 4 Task 2: banks and questions. Mirrors
 // `packages/db/src/repo/banks.ts`'s `BankRow`/`QuestionRow` — this is the
@@ -182,6 +195,16 @@ export interface ApiClient {
     doc: unknown,
     opts?: { dryRun?: boolean; format?: "csv" | "gift" },
   ): Promise<ImportReport>;
+
+  /**
+   * Task 9 (#53, P4.9): the whole bank, or just `ids`, as one
+   * `pariksha/bank@1` document (`GET /banks/:bankId/export`,
+   * apps/api/src/routes/banks.ts). `ids`, when given, names questions by
+   * their own document `id` (a `QuestionSummary.refId`, never `.id` — the
+   * row id a URL path segment uses), not by how many are selected: the
+   * route's cost is the same either way.
+   */
+  exportBank(workspaceId: string, bankId: string, ids?: string[]): Promise<BankDocument>;
 }
 
 const API = "/api/v1";
@@ -415,6 +438,11 @@ export function createApiClient(): ApiClient {
         }
         throw error;
       }
+    },
+
+    exportBank: (workspaceId, bankId, ids) => {
+      const qs = ids && ids.length > 0 ? `?ids=${ids.map(encodeURIComponent).join(",")}` : "";
+      return json<BankDocument>(`/workspaces/${workspaceId}/banks/${bankId}/export${qs}`);
     },
   };
 }
