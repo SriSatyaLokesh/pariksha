@@ -670,6 +670,16 @@ git commit -s -m "feat(tests): set assignment strategies and shuffle configurati
 
 ## Task 5: Registration form builder (#57, P5.4)
 
+> **Correction, applied while building Task 5.** This task labels the unsatisfiable-validation
+> rule (`min > max`, and friends) *save-time*. That is wrong and the label is withdrawn: it is
+> a **publish-time** rule with a live author-facing message, which is what shipped.
+> The draft write path's gate is the derived JSON schema, which cannot express `min <= max`,
+> and the standing ruling for this phase is that the write path enforces only what must never
+> reach storage regardless of draft state. A half-typed numeric range is ordinary authoring —
+> the author sees `unsatisfiableValidation`'s sentence live in the builder, and the publish
+> checklist (Task 13) is where it blocks. Do **not** make the draft route call `validateTest`
+> to manufacture a 422.
+
 **Files:**
 - Create: `apps/web/src/components/testbuilder/FormBuilder.tsx`, `apps/web/src/components/testbuilder/RegistrationForm.tsx`
 - Modify: `packages/core/src/types.ts`, `packages/core/src/validate.ts`, `packages/core/src/index.ts`, `apps/web/src/routes/test.tsx`, `apps/web/src/styles/testbuilder.css`
