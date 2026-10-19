@@ -14,13 +14,12 @@ const INDEX_HTML_PATH = resolve(__dirname, "../index.html");
 const ADMIN_HTML_PATH = resolve(__dirname, "../admin.html");
 
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
-const HERO_HEADING = "Pariksha — run real exams you host yourself.";
+const HERO_HEADING = "Run real exams on infrastructure you own.";
 
-// landing.css no longer carries any component's CSS inline (the rewrite for
-// docs/superpowers/specs/2026-10-17-landing-page-v2-design.md moved it into
-// components.css/blocks.css/sections-*.css, imported from the top of
-// landing.css) — so a test that wants "the effective stylesheet" has to
-// follow the @import chain itself rather than reading one file.
+// landing.css carries no rules of its own any more — the Signal rebuild
+// left it importing primitives.css and signal.css only — so a test that
+// wants "the effective stylesheet" has to follow the @import chain itself
+// rather than reading one file.
 function resolveStylesheet(entryPath: string, seen = new Set<string>()): string {
   if (seen.has(entryPath)) return "";
   seen.add(entryPath);
@@ -37,75 +36,54 @@ function resolveStylesheet(entryPath: string, seen = new Set<string>()): string 
 }
 
 describe("Landing", () => {
-  // docs/superpowers/specs/2026-10-17-landing-page-v2-design.md §3 S1, T19:
-  // the h1 is a 45-character budget, not only a fixed string, so both the
-  // exact copy and the length survive a later edit independently.
-  it("renders exactly one h1 with the verbatim, budget-compliant hero heading", () => {
+  // The h1 is the one verbatim string the Signal rebuild commits to.
+  it("renders exactly one h1 with the verbatim hero heading", () => {
     render(<Landing />);
     const headings = screen.getAllByRole("heading", { level: 1 });
     expect(headings).toHaveLength(1);
     expect(headings[0]?.textContent).toBe(HERO_HEADING);
-    expect(HERO_HEADING.length).toBeLessThanOrEqual(45);
     expect(screen.getAllByText("Pariksha").length).toBeGreaterThan(0);
   });
 
-  // T20, as amended by v3 §5. (a) the hero carries no ButtonPrimary at all
-  // — the primary CTA moved to B8 (§3.1) — and the page's only
-  // ButtonPrimary is in the closing band, with the worked example's
-  // accessible name and href. I-8 is what keeps this honest at runtime:
-  // the demo's Finish is a filled control but is not the ButtonPrimary
-  // component and must not carry its class, so the island cannot satisfy
-  // this selector either. (b) survives unchanged: every CTA-shaped link on
-  // the page points at a github.com/SriSatyaLokesh/pariksha URL, so
-  // nothing on a pre-alpha page links to a product that does not exist yet.
-  it("the hero carries no primary CTA, the page's one ButtonPrimary is the closing ask, and every CTA points at the real repo", () => {
+  // Every external CTA (an http(s) link) points at the real repo, never a
+  // product that does not exist yet; the nav's CTA is the one exception,
+  // an in-page anchor to #start rather than an external link.
+  it("every external CTA points at the real repo; the nav CTA is an in-page anchor", () => {
     const { container } = render(<Landing />);
-    const heroSection = container.querySelector(".hero-section");
-    expect(heroSection).not.toBeNull();
-    expect(heroSection!.querySelector(".button-primary")).toBeNull();
-
-    const primaries = container.querySelectorAll(".button-primary");
-    expect(primaries).toHaveLength(1);
-    const primary = primaries[0]!;
-    expect(primary).toHaveAccessibleName("Start with the worked example");
-    expect(primary).toHaveAttribute(
-      "href",
-      `${REPO}/tree/main/examples/reasoning-aptitude`,
-    );
-
-    const ctaLinks = container.querySelectorAll(
-      "a.button-primary, a.button-secondary",
-    );
+    const ctaLinks = container.querySelectorAll("a.signal-btn");
     expect(ctaLinks.length).toBeGreaterThan(0);
     for (const link of ctaLinks) {
-      expect(link.getAttribute("href")).toMatch(
-        /^https:\/\/github\.com\/SriSatyaLokesh\/pariksha/,
-      );
+      const href = link.getAttribute("href") ?? "";
+      if (href.startsWith("http")) {
+        expect(href.startsWith(REPO)).toBe(true);
+      } else {
+        expect(href).toBe("#start");
+      }
     }
   });
 
-  // T21 (unchanged and binding, #3): the hero carries the hero-section
-  // class from the design system.
-  it("the hero carries the hero-section class from the design system", () => {
+  // The page's root wrapper carries the signal class the design system is
+  // built on.
+  it("the page carries the signal class from the design system", () => {
     const { container } = render(<Landing />);
-    expect(container.querySelector(".hero-section")).not.toBeNull();
+    expect(container.querySelector(".signal")).not.toBeNull();
   });
 
-  // T21 (#4): tokens.css defines the voltage colour the hero is wired to.
-  it("tokens.css defines the voltage colour the hero is wired to", () => {
+  // tokens.css defines the signal-bg colour the page is wired to.
+  it("tokens.css defines the signal-bg colour the page is wired to", () => {
     const css = readFileSync(TOKENS_CSS_PATH, "utf8");
-    expect(css).toMatch(/--color-voltage:\s*#e24c18;/);
+    expect(css).toMatch(/--color-signal-bg:\s*#070b09;/);
   });
 
-  // T21 (#5) / the hard invariant (§7): the first .hero-section rule in the
+  // The hard invariant (§7, carried forward): the first .signal rule in the
   // effective stylesheet stays flat and keeps the literal declaration
-  // background: var(--color-voltage) — never behind @supports/@layer/
+  // background: var(--color-signal-bg) — never behind @supports/@layer/
   // @container, which would silently bypass the contrast guard.
-  it("the effective stylesheet's first .hero-section rule is flat and wires the voltage token", () => {
+  it("the effective stylesheet's first .signal rule is flat and wires the signal-bg token", () => {
     const css = resolveStylesheet(LANDING_CSS_PATH);
-    const heroRule = /\.hero-section\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
-    expect(heroRule).not.toBe("");
-    expect(heroRule).toMatch(/background:\s*var\(--color-voltage\)/);
+    const signalRule = /\.signal\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
+    expect(signalRule).not.toBe("");
+    expect(signalRule).toMatch(/background:\s*var\(--color-signal-bg\)/);
   });
 
   // T21 (#6): every font is self-hosted under /fonts/, never a third-party

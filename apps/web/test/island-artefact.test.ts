@@ -1,10 +1,12 @@
 // @vitest-environment node
 //
-// Artefact checks for the hero's exam-demo island: the size budget and the
-// network, storage, timer, inline-style and colour-literal bans (v3 spec
-// §2.4, I-2 to I-8). The island is bundled and minified in isolation with
-// esbuild's in-process API — nothing is written, and apps/web/dist, which
-// other tests read, is never touched.
+// Artefact checks for the landing page's one island, the Signal hero's pool
+// draw and build-status toggle: the size budget and the network, storage,
+// timer and colour-literal bans exam-demo.ts's own header comment commits
+// to ("No network call, no storage, no telemetry, ever. See the forbidden
+// list in apps/web/test/island-artefact.test.ts."). The island is bundled
+// and minified in isolation with esbuild's in-process API — nothing is
+// written, and apps/web/dist, which other tests read, is never touched.
 //
 // Node environment, not jsdom: esbuild's API asserts that
 // `new TextEncoder().encode("") instanceof Uint8Array`, which is false
@@ -36,18 +38,18 @@ describe("artefact: the island, bundled and minified in isolation", () => {
 
   beforeAll(() => {
     built = buildIslandMinified();
-    // I-2 / T35: printed whether this run passes or fails the budget.
-    console.log(`[island.test.ts] exam-demo.ts minified: ${Buffer.byteLength(built, "utf8")} bytes`);
+    // Printed whether this run passes or fails the budget — prerender.test.ts's
+    // T2 asserts the same 14 KB ceiling on the artefact that actually ships.
+    console.log(
+      `[island-artefact.test.ts] exam-demo.ts minified: ${Buffer.byteLength(built, "utf8")} bytes`,
+    );
   });
 
-  // v4: 10 KB -> 14 KB. The three-card hero grades three question types
-  // through two @pariksha/core graders instead of one; prerender.test.ts
-  // asserts the same ceiling on the artefact that actually ships.
-  it("stays at or under the 14 KB minified budget (I-2, informational proxy for T35)", () => {
+  it("stays at or under the 14 KB minified budget", () => {
     expect(Buffer.byteLength(built, "utf8")).toBeLessThanOrEqual(14 * 1024);
   });
 
-  it("contains no network, storage, cookie or telemetry identifier (I-3)", () => {
+  it("contains no network, storage, cookie or telemetry identifier", () => {
     const forbidden = [
       "fetch(",
       "XMLHttpRequest",
@@ -67,21 +69,17 @@ describe("artefact: the island, bundled and minified in isolation", () => {
     }
   });
 
-  it("contains no interval, animation-frame or delayed timer (I-4)", () => {
+  it("contains no interval, animation-frame or delayed timer", () => {
     expect(built).not.toContain("setInterval");
     expect(built).not.toContain("requestAnimationFrame");
     expect(built).not.toContain("setTimeout");
   });
 
-  it("sets no style attribute, no element.style, and no colour literal (I-7)", () => {
+  it("sets no style attribute, no element.style, and no colour literal", () => {
     expect(built).not.toContain(".style");
     expect(built).not.toMatch(/setAttribute\(["']style["']/);
     expect(built).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
     expect(built).not.toMatch(/\brgb\(/);
     expect(built).not.toMatch(/\bhsl\(/);
-  });
-
-  it("does not use ButtonPrimary's class on any control it creates (I-8)", () => {
-    expect(built).not.toContain("button-primary");
   });
 });

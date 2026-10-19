@@ -31,6 +31,20 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const WEB_ROOT = resolve(__dirname, "..");
 const SITE_URL = "https://pariksha.example";
 
+// `expect(promise).rejects.toThrow(pattern)` reports every rejection as ''
+// in this vitest version even though the promise rejects with the right
+// message (confirmed directly: a plain try/catch around the same call
+// sees the real Error) — a pre-existing matcher bug, unrelated to this
+// page's content. Work around it by reading the rejection message by hand.
+async function rejectionMessage(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+  throw new Error("expected the promise to reject, but it resolved");
+}
+
 // Wrapped in its own describe (rather than file-scoped hooks) so that a
 // throw in this beforeAll — currently expected, since the island entry and
 // vite.config.ts's third Rollup input it depends on (design contract §2.7)
@@ -59,7 +73,9 @@ afterAll(async () => {
 
 describe("the prerendered dist/index.html", () => {
   it("T1: contains the h1 text, the word Pariksha, and at least one <section>", () => {
-    expect(indexHtml).toMatch(/<h1[^>]*>[^<]+<\/h1>/);
+    // Signal's h1 wraps its last two words in a <span>, so the old
+    // "no nested tags" regex can no longer match it.
+    expect(indexHtml).toMatch(/<h1[^>]*>[\s\S]+?<\/h1>/);
     expect(indexHtml).toContain("Pariksha");
     expect(indexHtml).toMatch(/<section[\s>]/);
   });
@@ -296,51 +312,29 @@ describe("T17 — the literal string pre-alpha in the artefact", () => {
   });
 });
 
-describe("T32 — B2's definitional sentence, against the hero's byte ceiling (v3 §5: ratio -> absolute offset)", () => {
-  // v3 amends this from a ratio (byteIndex / totalBytes < 0.30) to an
-  // absolute offset: a ratio punishes every later deletion as the
-  // denominator shrinks, which is the opposite of what a shorter page is
-  // being asked to do. 13,500 is derived in §4.9 — head and nav measure
-  // 6,632 and do not change, leaving 6,868 bytes for all of B1 (the hero)
-  // against its own ~6,790-byte target. T32 is still the hero's byte
-  // ceiling; it is just stated as one now instead of as a fraction of a
-  // shrinking whole.
-  //
-  // v4 (§11): B1's own target no longer holds — three cards, a masthead and
-  // carousel CSS cost more bytes than the single-question v3 hero this
-  // ceiling was derived against. This test is left unchanged (the ceiling
-  // is not relaxed on guesswork, per the owner's standing instruction) —
-  // whoever lands the three-card Hero.tsx/CSS must run this file for real
-  // and either come in under 13,500 or report the measured byte index here
-  // and trim hero markup (bridge band H-3/H-4 prose first, then CB-1a's
-  // scoring line) rather than widen the number.
-  // v4, MEASURED rather than guessed, as the note above required.
-  //
-  // The three-card hero was trimmed first, per that instruction: the lead
-  // paragraph (a near-duplicate of this very sentence — two competing
-  // definitions also split the answer an engine would lift), the no-JS
-  // sentence and the matching placeholder came out, worth 224 bytes. The
-  // sentence still lands at 14,045, because what remains is irreducible:
-  // the matching card alone carries four <select>s x four rule strings,
-  // about 720 bytes of markup that cannot be shortened without changing
-  // LOG-003 itself, which the sourcing rule forbids.
-  //
-  // So the ceiling moves to 14,200 — 6,632 of unchanged head and nav plus a
-  // measured 7,413-byte hero — and the RATIO the absolute replaced is
-  // asserted alongside it, because that was always the real intent: the
-  // definitional sentence inside the first third of the document, where an
-  // answer engine reads. At 14,045 of 45,960 it sits at 0.306.
-  it("byte index of the sentence is under 14,200 bytes, and inside the first third of dist/index.html", () => {
-    const needle = "Pariksha is a free, open-source exam platform";
+describe("the hero's definitional sentence sits early, for an answer engine that reads front to back", () => {
+  // The Signal rebuild deleted B2's old sentence ("Pariksha is a free,
+  // open-source exam platform...") along with the whole band it lived in.
+  // Its job — put the one sentence an answer engine would lift near the
+  // top of the document — now falls to the hero's own lede, the first
+  // prose an engine reaches after the nav. Re-measured against the new,
+  // much shorter document (28,769 bytes against the old 45,960): the
+  // sentence lands at byte 7,101, a 0.247 ratio. The ceiling is set with
+  // headroom over that measurement (not guessed), so future hero copy can
+  // move a little without retuning this test on every edit, while still
+  // catching a regression that pushes the lede meaningfully later.
+  it("the hero lede starts before byte 10,000, and inside the first third of dist/index.html", () => {
+    const needle =
+      "Twelve question types, a different paper for every candidate";
     const index = indexHtml.indexOf(needle);
     expect(index).toBeGreaterThan(-1);
     const byteIndex = Buffer.byteLength(indexHtml.slice(0, index), "utf8");
     const totalBytes = Buffer.byteLength(indexHtml, "utf8");
     // Printed whether it passes or fails, so a PR that moves it shows it.
     console.log(
-      `[T32] definitional sentence at ${String(byteIndex)} of ${String(totalBytes)} bytes (ratio ${(byteIndex / totalBytes).toFixed(3)})`,
+      `[hero lede] starts at ${String(byteIndex)} of ${String(totalBytes)} bytes (ratio ${(byteIndex / totalBytes).toFixed(3)})`,
     );
-    expect(byteIndex).toBeLessThan(14_200);
+    expect(byteIndex).toBeLessThan(10_000);
     expect(byteIndex / totalBytes).toBeLessThan(1 / 3);
   });
 });
@@ -439,15 +433,15 @@ describe("buildIslandScriptTag — the manifest lookup, in isolation (design con
     await writeManifest({
       "index.html": { file: "assets/index-xyz.js", isEntry: true },
     });
-    await expect(buildIslandScriptTag(tmpOutDir)).rejects.toThrow(/island/i);
+    const message = await rejectionMessage(buildIslandScriptTag(tmpOutDir));
+    expect(message).toMatch(/island/i);
   });
 
   it("throws when the manifest is missing entirely", async () => {
     const emptyDir = await mkdtemp(join(tmpdir(), "pariksha-no-manifest-"));
     try {
-      await expect(buildIslandScriptTag(emptyDir)).rejects.toThrow(
-        /manifest/i,
-      );
+      const message = await rejectionMessage(buildIslandScriptTag(emptyDir));
+      expect(message).toMatch(/manifest/i);
     } finally {
       await rm(emptyDir, { recursive: true, force: true });
     }
