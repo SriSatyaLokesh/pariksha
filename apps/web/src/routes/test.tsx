@@ -24,7 +24,7 @@ import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
-import { useDialogKeys } from "../components/testbuilder/useDialogKeys";
+import { useDialogKeys } from "../components/useDialogKeys";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,

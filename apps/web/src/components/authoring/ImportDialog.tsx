@@ -1,6 +1,6 @@
 import { useId, useRef, useState } from "react";
 import { ApiError, type ApiClient, type ImportReport, type TestImportReport } from "../../lib/api";
-import { useDialogKeys } from "../testbuilder/useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 /**
  * Phase 5 Task 12 (#63, P5.10): the dialog now imports a whole **test** as

@@ -7,7 +7,7 @@ import {
   type TestTiming,
 } from "@pariksha/core";
 import type { StoredSection } from "../../lib/api";
-import { useDialogKeys } from "./useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 // T-12 - T-15 (Task 7, #59, P5.6): the timing, navigation and attempt
 // policy panel.

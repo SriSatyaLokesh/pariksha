@@ -10,7 +10,7 @@ import {
 import type { ReachResult } from "../../lib/api";
 import { ReorderableList } from "../authoring/ReorderableList";
 import { FORM_TEMPLATES, RegistrationForm, dialCodeFor, validateForm } from "./RegistrationForm";
-import { useDialogKeys } from "./useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 // T-16 - T-18 (Task 5, #57, P5.4): the registration form builder. The
 // preview beside it is `RegistrationForm` itself — the component Phase 6's

@@ -5,7 +5,7 @@ import { ReorderableList } from "../authoring/ReorderableList";
 import { RenderedHtml } from "../authoring/RenderedHtml";
 import { QuestionPickerDrawer } from "./QuestionPickerDrawer";
 import { SetsPanel, ShuffleFieldset } from "./SetsPanel";
-import { useDialogKeys } from "./useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 /** A fresh section id (`^[a-z0-9_-]{1,40}$` — schemas/test-1.json's
  * `$defs/section`). Same precedent as `QuestionEditor.tsx`'s own
