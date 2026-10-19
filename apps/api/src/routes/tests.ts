@@ -111,7 +111,7 @@ function draftSchema(): object {
   return schema;
 }
 
-const draftValidator = new Validator(draftSchema() as never, "2020-12", false);
+const draftValidator = new Validator(draftSchema(), "2020-12", false);
 
 /** The field a leaf schema error is about — `sections[0].source.questions`,
  * or a bare property name for a `required`/`additionalProperties` failure —
@@ -489,8 +489,12 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       }
       // Checked above: `merged` parses against schemas/test-1.json minus the
       // root `required` (settings carries no format/name/slug/sections), so
-      // this is safe to treat as `TestSettings` from here on.
-      settings = merged as typeof existing.body.settings;
+      // it is safe to treat as `TestSettings` from here on — which is also
+      // what it already infers as, hence no assertion (task 3 re-review:
+      // both assertions this file carried were flagged by
+      // `@typescript-eslint/no-unnecessary-type-assertion`, leaving
+      // `pnpm lint` red on the branch).
+      settings = merged;
     }
 
     let sections = existing.body.sections;
