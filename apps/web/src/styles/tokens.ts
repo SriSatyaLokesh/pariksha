@@ -28,7 +28,7 @@ export const tokens = {
     "signal-line-2": "#2a3b32",
     "signal-text": "#eaf2ed",
     "signal-text-2": "#9db0a6",
-    "signal-text-3": "#6b7d74",
+    "signal-text-3": "#76887f",
     "signal-accent": "#19e68c",
     "signal-accent-deep": "#0fa968",
     "signal-accent-ink": "#04140c",

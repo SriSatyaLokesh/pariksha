@@ -8,13 +8,19 @@ import {
   type TypographyName,
 } from "../src/styles/tokens";
 
-// Design contract §8 T27: the stylesheet was rewritten (landing.css now only
-// carries page rhythm and the five untouched "reused unchanged" components,
-// §6 — everything else lives in components.css, blocks.css and four
-// sections-*.css partials, pulled in by landing.css's own @import chain), so
-// the SURFACE map is rewritten wholesale rather than patched. Every key
-// names the background its selector really renders on, checked against the
-// TSX that places it — not assumed from the class name.
+// The Signal rebuild replaced landing.css's own rules with two imports —
+// primitives.css (shared with admin.css; five selectors still used by the
+// organiser screens, no longer by the landing page) and signal.css (the
+// landing page's entire own palette, a dark ground with one green accent)
+// — so the SURFACE map is rewritten wholesale rather than patched. Every
+// key names the background its selector really renders on, checked against
+// the rendered markup in src/sections/signal/ and verified against the
+// built page's own computed style (not assumed from the class name): where
+// a selector's declared colour is itself overridden on some of its
+// elements by a more specific, separately-keyed selector (.signal-chip vs.
+// .signal-chip[aria-pressed="true"]; .signal-btn vs. .signal-btn--ghost),
+// only the surface(s) where THIS selector's own colour actually wins the
+// cascade are listed here.
 //
 // IMPORTANT (carried over from round 2 of the original file): fg, font-size
 // and font-weight are parsed out of each selector's own declarations, never
@@ -22,9 +28,8 @@ import {
 // the one fact CSS cannot state without a cascade engine, which this file
 // doesn't implement — lives in a map, and SURFACE can name more than one
 // background for a selector that genuinely renders on different surfaces in
-// different places (the four syntax-colour roles, A3's explicit requirement;
-// `.code-block__pre` itself, same reason). Every surface listed for a
-// selector gets its own WCAG assertion.
+// different places. Every surface listed for a selector gets its own WCAG
+// assertion.
 //
 // Record for the gate's limits: axe-core under jsdom cannot evaluate
 // contrast at all (jsdom has no layout engine and no canvas backend), so
@@ -97,208 +102,120 @@ function readResolvedCss(path: string, seen: Set<string> = new Set()): string {
 // explicit requirement) — SURFACE may name one background or several, and
 // every one gets its own WCAG assertion below.
 const SURFACE: Record<string, ColorName | ColorName[]> = {
-  // ---- components.css: top nav -----------------------------------------
-  ".wordmark__name": "canvas",
-  ".wordmark__sub": "canvas",
-  ".nav-link": "canvas",
-  ".nav-link:hover, .nav-link:focus-visible": "cream",
+  // ---- signal.css: ambient type ------------------------------------------
+  // The whole page sits on --color-signal-bg; every surface panel, card or
+  // frame sets its own --color-signal-surface, and the cost section's four
+  // metric cells are the one place --color-signal-bg-2 shows.
+  ".signal": "signal-bg",
+  ":where(.signal) p": "signal-bg",
+  ":where(.signal) strong": ["signal-bg", "signal-surface"],
+  ":where(.signal) code": ["signal-bg", "signal-surface"],
+  ":where(.signal) a": "signal-bg",
 
-  // ---- components.css: hero ----------------------------------------------
-  // .hero-chip sets its own background (cream); .hero-heading/.hero-lead sit
-  // directly on the hero's voltage fill in both the S1 (display-xl) and S11
-  // (display-lg) instance — same ambient background either way.
-  ".hero-chip": "cream",
-  ".hero-heading": "voltage",
-  ".hero-lead": "voltage",
+  // ---- signal.css: fine print, eyebrows, the accent spans and icons ------
+  ".signal-fine": ["signal-bg", "signal-surface"],
+  ".signal-eyebrow": "signal-bg",
+  // The h1's accent word and the bullet ticks (not-a-form) sit on signal-bg;
+  // the type-rail cards' svg icons (same class, A3-style reuse) sit on each
+  // card's own signal-surface fill.
+  ".signal-accent-word": ["signal-bg", "signal-surface"],
 
-  // The hero's two secondary text links (v3 §3.1); the primary CTA left
-  // the hero for B8. Each sets its own cream plane — nothing at 14px can
-  // clear 4.5:1 on voltage in any colour (see components.css).
-  ".hero-text-link": "cream",
+  // ---- signal.css: actions -------------------------------------------------
+  // .signal-btn sets its own background (signal-accent); .signal-btn--ghost
+  // sets background: none, so the ghost CTA (hero, close) renders on the
+  // ambient signal-bg behind it.
+  ".signal-btn": "signal-accent",
+  ".signal-btn--ghost": "signal-bg",
 
-  // ---- components.css: the v4 three-card hero (A1) ----------------------
-  // The masthead is cream type straight on the hero's voltage fill — it is
-  // the wordmark at 44px and up, so the 24px+ rule DESIGN.md sets for
-  // cream-on-voltage is met with room to spare.
-  ".hero-masthead": "voltage",
+  // ---- signal.css: nav ----------------------------------------------------
+  ".signal-wordmark__sub": "signal-bg",
+  ".signal-nav__links a": "signal-bg",
+  ".signal-nav__links a:hover": "signal-bg",
 
-  // Each card is its own cream plane on the voltage field, so everything
-  // inside one renders on cream — except the option rows and the matching
-  // selects, which set their own canvas fill.
-  ".exam-card": "cream",
-  ".exam-card__bar": "cream",
-  ".exam-card__points": "cream",
-  ".exam-card__match-key": "cream",
-  ".exam-card__match-row select": "canvas",
+  // ---- signal.css: hero trust list and the frame (what stands in for a
+  // screenshot) --------------------------------------------------------------
+  ".signal-trust li": "signal-bg",
+  ".signal-trust li b": "signal-bg",
+  ".signal-frame__url": "signal-surface",
 
-  // The control bar sits on voltage. Its small type is cream, which cannot
-  // reach 4.5:1 there at mono-sm — so every value it carries is also
-  // announced through a live region and drawn by a control that repeats it
-  // (the pips, the button label). The pip's filled state inverts to a cream
-  // plane, which is where its own small type is legible.
-  ".exam-demo__bar": "cream",
-  ".exam-demo__pip": "cream",
-  ".exam-demo__pip[data-on=\"1\"]": "voltage-deep",
-  ".exam-demo__count, .exam-demo__score, .exam-demo__nojs": "cream",
-  ".exam-demo__nojs": "cream",
-  ".exam-demo__button": "voltage-deep",
-  ".exam-demo__button[disabled]": "canvas",
+  // ---- signal.css: chips. The hero's tag filter and the status toggle
+  // both reuse this class — one on signal-surface (inside .signal-frame),
+  // the other directly on the section's signal-bg. The pressed state sets
+  // its own background (signal-accent) regardless of which. ----------------
+  ".signal-chip": ["signal-bg", "signal-surface"],
+  ".signal-chip:hover": ["signal-bg", "signal-surface"],
+  '.signal-chip[aria-pressed="true"]': "signal-accent",
 
-  // ---- components.css: the hero demo and its bridge band (v3 §3) ---------
-  // The demo is a cream card on the voltage field, so everything in the
-  // panel — the prerendered half and everything the island builds into it
-  // — renders on cream. .runner-mock__title is shared with the bridge
-  // band's h3, which is cream too.
-  ".runner-mock__title": "cream",
-  ".runner-mock__fallback": "cream",
-  ".runner-mock__note": "cream",
-  // Created at runtime by src/island/exam-demo.ts. The island sets no
-  // colour of its own (I-7), so these rules are the whole of its palette.
-  ".runner-mock__control": "cream",
-  ".runner-mock__control--primary": "voltage-deep",
-  ".runner-mock__hint": "cream",
-  ".runner-mock__result-type": "cream",
-  ".runner-mock__result-points": "cream",
-  ".runner-mock__result-verdict": "cream",
-  ".runner-mock__result-summary, .runner-mock__result-explanation, .runner-mock__result-prose, .runner-mock__result-link":
-    "cream",
-  ".runner-mock__result-link a": "cream",
+  // ---- signal.css: the draw (hero frame and the not-a-form panel both
+  // reuse .signal-row — both are signal-surface) ---------------------------
+  ".signal-row b": "signal-surface",
+  ".signal-row span": "signal-surface",
+  ".signal-row em": "signal-surface",
+  ".signal-ghost-btn": "signal-surface",
+  ".signal-ghost-btn:hover": "signal-surface",
 
-  // ---- components.css: section heading -----------------------------------
-  // Used on both cream bands (S2, S3, S5, S6, S7, S8, S10) and canvas bands
-  // (S4, S6, S9) — cream is cream's own token, strictly the lower-luminance
-  // of the two (#fffbf5 vs #ffffff), so it's the binding case for any fixed
-  // dark foreground: a pass on cream is a pass on canvas too.
-  ".section-eyebrow": "cream",
-  ".section-heading": "cream",
+  // ---- signal.css: cards (the type rail and the FAQ grid) -----------------
+  ".signal-card p": "signal-surface",
 
-  // ---- components.css: button primary ------------------------------------
-  // Both set their own background; ambient section never matters.
+  // ---- signal.css: not-a-form's bullet list, ambient on signal-bg --------
+  ".signal-bullets li": "signal-bg",
+  ".signal-bullets b": "signal-bg",
+
+  // ---- signal.css: panels and data (the not-a-form panel and the
+  // integrity results table both sit in a .signal-panel, signal-surface) ---
+  ".signal-panel__head": "signal-surface",
+  ".signal-panel__head b": "signal-surface",
+  ".signal-table th": "signal-surface",
+  ".signal-table td": "signal-surface",
+  ".signal-table .signal-td-name": "signal-surface",
+  ".signal-table .signal-td-num": "signal-surface",
+  // flag-review/flag-risk are tuned for admin.css's light canvas and can't
+  // also clear 4.5:1 on this dark surface (no single hex clears both a
+  // near-white and a near-black background) — these two signal-native
+  // tokens complete the pattern .signal-pill--clean already set with
+  // signal-accent instead of flag-clean.
+  ".signal-pill--clean": "signal-surface",
+  ".signal-pill--review": "signal-surface",
+  ".signal-pill--risk": "signal-surface",
+
+  // ---- signal.css: cost section's metric cells (signal-bg-2) -------------
+  ".signal-metric b": "signal-bg-2",
+  ".signal-metric span": "signal-bg-2",
+
+  // ---- signal.css: the comparison table, directly on the section
+  // (signal-bg, no panel wraps it) ------------------------------------------
+  ".signal-cmp th": "signal-bg",
+  ".signal-cmp th:last-child": "signal-bg",
+  ".signal-cmp td": "signal-bg",
+  ".signal-cmp td:first-child": "signal-bg",
+  ".signal-cmp td:last-child": "signal-bg",
+
+  // ---- signal.css: status. The live/next lists sit in the left column,
+  // directly on signal-bg; "what you can do today" is its own
+  // signal-surface card. ----------------------------------------------------
+  ".signal-list li": "signal-bg",
+  // Never actually rendered in the current markup (no <b> inside either
+  // <ul class="signal-list">) — kept at the list's own surface so the rule
+  // has a real assertion if a future list item adds one.
+  ".signal-list b": "signal-bg",
+  ".signal-today li": "signal-surface",
+  ".signal-today li b": "signal-surface",
+
+  // ---- signal.css: footer, directly on signal-bg (no panel wraps it) -----
+  ".signal-footer__grid h2, .signal-footer__grid h3": "signal-bg",
+  ".signal-footer__grid p": "signal-bg",
+
+  // ---- primitives.css: shared by landing.css and admin.css (P3.9) --------
+  // No longer used by the landing page itself — confirmed absent from
+  // src/sections/signal/ and src/routes/landing.tsx — only the organiser
+  // screens still render these, via ButtonPrimary/ButtonSecondary (routes/
+  // dashboard.tsx, setup.tsx, signin.tsx), so they keep exactly their
+  // original classification.
+  ".mono-caption": "cream",
   ".button-primary": "cream",
   ".button-primary:hover, .button-primary:focus-visible": "voltage-deep",
   ".button-primary--surface": "voltage-deep",
-
-  // ---- blocks.css: CodeBlock ----------------------------------------------
-  // The caption and footer bars declare their own cream background always.
-  // .code-block__pre's background comes from its ancestor .code-block__scroll
-  // instead — canvas normally, cream on the voltage variant (A3) — so its
-  // colour (and the four syntax-colour spans inside it, which inherit the
-  // same ancestor) is checked on both.
-  ".code-block__caption": "cream",
-  ".code-block__pre": ["canvas", "cream"],
-  ".code-block__footer": "cream",
-  // The voltage variant's caption detaches above the cream plane and sits
-  // directly on the hero's voltage fill instead (U §3.3) — at hero-lead
-  // (24px), which is what makes cream-on-voltage legal here (A2).
-  ".code-block--voltage .code-block__caption": "voltage",
-  ".tok-key": ["canvas", "cream"],
-  ".tok-string": ["canvas", "cream"],
-  ".tok-number": ["canvas", "cream"],
-
-  // ---- blocks.css: StepRow (S3 only) --------------------------------------
-  ".step-row__ordinal": "cream",
-  ".step-row__title": "cream",
-  ".step-row__body": "cream",
-
-  // ---- blocks.css: ComparisonTable (S4, ambient #comparison = canvas) -----
-  ".comparison-table thead th": "canvas",
-  '.comparison-table tbody th[scope="row"]': "canvas",
-  ".comparison-table tbody td": "canvas",
-  // Sets its own cream background (the Pariksha column's typographic
-  // highlight, A11).
-  ".comparison-table__cell--highlight": "cream",
-  ".comparison-table__footnote": "canvas",
-
-  // ---- sections-s1-s3.css: S2 ---------------------------------------------
-  ".numeral-row__value": "cream",
-
-  // ---- sections-s1-s3.css: S3 (cream) -------------------------------------
-  ".step-row__caption": "cream",
-  ".results-table th, .results-table td": "canvas", // .results-table sets its own canvas bg
-  ".results-table thead th": "canvas",
-  ".integrity-badge-clean": "canvas",
-  ".integrity-badge-review": "canvas",
-  ".integrity-badge-risk": "canvas",
-
-  // ---- sections-s1-s3.css: runner mock (M-1, aria-hidden, S1) -------------
-  // .runner-mock itself sets background: cream (it's a card on the voltage
-  // hero); individual squares/options set their own canvas where noted.
-  ".runner-mock__section, .runner-mock__points, .runner-mock__saved, .runner-mock__candidate":
-    "cream",
-  ".runner-mock__timer": "cream",
-  ".runner-mock__question-of": "cream",
-  ".runner-mock__stem": "cream",
-  ".runner-mock__option": "canvas",
-  ".runner-mock__square": "canvas",
-  ".runner-mock__square--answered": "state-answered",
-  ".runner-mock__square--marked": "state-marked",
-  ".runner-mock__square--current": "canvas",
-
-  // ---- sections-s1-s3.css: B2 and B3 (both cream, v3 §4) ------------------
-  ".verification-strip": "cream",
-  ".absorbed-heading": "cream",
-  ".type-list": "cream",
-  ".capability-list": "cream",
-
-  // ---- sections-s4-s6.css: S4 (ambient #comparison = canvas) --------------
-  ".comparison-intro": "canvas",
-  ".comparison-conclusion p": "canvas",
-
-  // ---- sections-s4-s6.css: S5/S6, now absorbed into B3 as h3s (v3 §4.1).
-  // Both bands are gone; what survives of them renders on B3's cream.
-  ".feature-lead": "cream",
-  ".no-code-pull-quote": "cream",
-
-  // ---- sections-s7-s9.css: S7 (ambient #cost = cream) ---------------------
-  // The budget note/table and the two deploy card selectors sit inside a
-  // CardHairline, which sets its own canvas background; the architecture and
-  // risk paragraphs sit directly on the section (cream).
-  ".cost-budget-note": "canvas",
-  ".cost-budget-table th, .cost-budget-table td": "canvas",
-  '.cost-budget-table th[scope="col"]': "canvas",
-  ".cost-architecture, .cost-risk": "cream",
-
-  // ---- sections-s7-s9.css: S8 (ambient #not-for = cream) ------------------
-  ".not-for-list p": "cream",
-
-  // ---- sections-s7-s9.css: S9 (ambient #status = canvas) ------------------
-  ".status-group__heading": "canvas",
-  ".status-group__lead, .status-group__links, .status-byok-note": "canvas",
-  ".status-list": "canvas",
-
-  // ---- sections-s10-s12.css: S10 (ambient #faq = cream) -------------------
-  ".faq-item__question": "cream",
-  ".faq-item__answer": "cream",
-
-  // ---- sections-s10-s12.css: S11 (the hero's own cream mock plane) --------
-
-  // ---- sections-s10-s12.css: S12 (.site-footer sets its own canvas) ------
-  // ---- sections-s7-s9.css: B5's deploy lines and interop strip (cream),
-  //      B6's absorbed #status heading (canvas) -----------------------------
-  ".cost-deploy-line": "cream",
-  ".interop-strip": "cream",
-  ".status-heading": "canvas",
-
-  // ---- sections-s10-s12.css: B8, the ask — a voltage band (v3 §4.7).
-  //      Both elements set their own cream plane, for the same reason the
-  //      hero's links do. ---------------------------------------------------
-  ".closing-watch-link": "cream",
-  ".closing-honesty": "cream",
-
-  ".footer-col__heading": "canvas",
-  ".footer-col a": "canvas",
-  ".footer-col p": "canvas",
-
-  // ---- landing.css: page rhythm + reused-unchanged (§6) -------------------
-  // Used on cream (S2's numeral labels, the Apache-2.0 caption) and on
-  // canvas (the comparison footnote, roadmap rows, the footer closing line)
-  // — cream is the lower-luminance surface, the binding case.
-  ".mono-caption": "cream",
   ".button-secondary": "canvas",
-  ".feature-cell__label": "canvas",
-  ".feature-cell__title": "canvas",
-  ".feature-cell__body": "canvas",
-  ".card-voltage__heading": "voltage",
 
   // ---- admin.css: the organiser screens (P3.9) ---------------------------
   // The page is the body's cream; every panel is a CardHairline, which sets
@@ -340,32 +257,8 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
 // supply exactly this and nothing else — foreground and surface are still
 // resolved independently, from the selector's own declarations.
 const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
-  // ---- the v4 three-card hero (A1) --------------------------------------
-  // Wrappers that set a colour for their subtree but no size of their own.
-  // Each entry names the SMALLEST type that colour actually paints, which
-  // is the conservative case for the threshold this test applies.
-  //
-  // .hero-masthead: cream for the whole block. Its smallest text is the
-  // stats row (mono-sm, 12px) — which is why the stats are hidden below
-  // 860px, where the masthead keeps only the 34px+ wordmark.
-  ".hero-masthead": { px: 44, weight: 700 },
-  // .exam-card: ink on the card's own cream fill. Its smallest text is the
-  // card bar's mono-sm label.
-  ".exam-card": { px: 12, weight: 400 },
-  // Same element as .exam-card__bar; only the colour changes.
-  ".exam-card__points": { px: 12, weight: 400 },
-  // .exam-demo__bar: cream on voltage, wrapping the pips and the count.
-  ".exam-demo__bar": { px: 12, weight: 400 },
-  ".exam-demo__pip": { px: 12, weight: 400 },
-  // The pip's filled state inverts to a cream plane; the digit is mono-sm.
-  '.exam-demo__pip[data-on="1"]': { px: 12, weight: 400 },
-  // Same element as .exam-demo__button; the disabled state changes colour
-  // and background only.
-  ".exam-demo__button[disabled]": { px: 16, weight: 500 },
-  ".exam-demo__nojs": { px: 12, weight: 400 },
-  // Same element as .nav-link; only colour/background change on hover.
-  ".nav-link:hover, .nav-link:focus-visible": { px: 16, weight: 500 },
-  // Same element as .button-primary; only colour/background change.
+  // ---- primitives.css (unchanged by the Signal rework) --------------------
+  // Same element as .button-primary; only the colour/background changes.
   ".button-primary:hover, .button-primary:focus-visible": {
     px: 16,
     weight: 500,
@@ -373,50 +266,86 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // Same element as .button-primary (the surface variant adds a class, it
   // doesn't replace one).
   ".button-primary--surface": { px: 16, weight: 500 },
-  // Size lives on the co-applied `--display-xl`/`--display-lg` variant class,
-  // never on `.hero-heading` itself; the smaller of the two clamp floors
-  // (display-lg, 1.75rem) is the conservative case, still comfortably >=24px.
-  ".hero-heading": { px: 28, weight: 500 },
-  // Same story: size lives on the co-applied `--chapter`/`--band` variant.
-  // The smaller of the two (band, heading-md) is the conservative case.
-  ".section-heading": { px: 22, weight: 500 },
-  // The three surviving syntax-colour spans set colour only; size/weight
-  // come from their ancestor .code-block__pre (mono-md, 15px/400).
-  ".tok-key": { px: 15, weight: 400 },
-  ".tok-string": { px: 15, weight: 400 },
-  ".tok-number": { px: 15, weight: 400 },
-  // Each sets colour and border-colour only; size/weight come from the
-  // shared group rule (mono-sm, 12px/400).
-  ".integrity-badge-clean": { px: 12, weight: 400 },
-  ".integrity-badge-review": { px: 12, weight: 400 },
-  ".integrity-badge-risk": { px: 12, weight: 400 },
-  // Each sets colour (and background/border) only; size/weight come from
-  // the shared .runner-mock__square base rule (mono-sm, 12px/400).
-  ".runner-mock__square--answered": { px: 12, weight: 400 },
-  ".runner-mock__square--marked": { px: 12, weight: 400 },
-  ".runner-mock__square--current": { px: 12, weight: 400 },
-  // No ancestor in the bundle sets a font-size; these inherit the page's
-  // base body-md size (16px/400) from base.css.
-  ".comparison-intro": { px: 16, weight: 400 },
-  ".comparison-conclusion p": { px: 16, weight: 400 },
-  ".feature-lead": { px: 16, weight: 400 },
-  ".footer-col a": { px: 16, weight: 400 },
-  ".footer-col p": { px: 16, weight: 400 },
-  // Sets colour only; size and weight come from the shared
-  // .runner-mock__control base rule (button-md, 16px/500).
-  ".runner-mock__control--primary": { px: 16, weight: 500 },
-  // Sets colour only; size and weight come from the shared body-sm rule
-  // for the paragraph this anchor sits in (14px/400).
-  ".runner-mock__result-link a": { px: 14, weight: 400 },
+
+  // ---- signal.css ----------------------------------------------------------
+  // Ambient p: no font-size of its own, inherits .signal's own body size.
+  ":where(.signal) p": { px: 17, weight: 400 },
+  // No font-size of its own; the smallest context it renders in is a
+  // .signal-fine paragraph (13.5px). Weight resolves from its own
+  // declaration (600) regardless.
+  ":where(.signal) strong": { px: 13.5, weight: 600 },
+  // 0.86em of its own, which this parser cannot resolve (no fixed ancestor
+  // size): the smallest real ancestor is a FAQ card's .signal-card p
+  // (12.5px), so 0.86 * 12.5 = 10.75px is the conservative case.
+  ":where(.signal) code": { px: 10.75, weight: 400 },
+  // No font-size of its own; both real usages (the footer links, the
+  // status "Read the roadmap" link) sit in a 13.5px .signal-fine paragraph.
+  ":where(.signal) a": { px: 13.5, weight: 400 },
+  // The ghost variant adds a class to the same <a> as .signal-btn; it
+  // doesn't replace one, so the size/weight stay .signal-btn's own.
+  ".signal-btn--ghost": { px: 15.5, weight: 600 },
+  // Same element as .signal-nav__links a; only the colour changes.
+  ".signal-nav__links a:hover": { px: 14.5, weight: 400 },
+  // Size comes from .signal-trust li (11px); weight resolves from its own
+  // declaration (600) regardless.
+  ".signal-trust li b": { px: 11, weight: 600 },
+  // Same element as .signal-chip; only the colour changes.
+  ".signal-chip:hover": { px: 10.5, weight: 500 },
+  // Same element as .signal-chip (the attribute selector adds a state, it
+  // doesn't replace the base class).
+  '.signal-chip[aria-pressed="true"]': { px: 10.5, weight: 500 },
+  // <em> nested inside a .signal-row span; size/weight come from that span.
+  ".signal-row em": { px: 12.5, weight: 400 },
+  // Same element as .signal-ghost-btn; only the colour changes.
+  ".signal-ghost-btn:hover": { px: 11, weight: 500 },
+  // Size comes from .signal-bullets li (15.5px); weight resolves from its
+  // own declaration (600) regardless.
+  ".signal-bullets b": { px: 15.5, weight: 600 },
+  // Size comes from .signal-panel__head (10.5px); weight resolves from its
+  // own declaration (600) regardless.
+  ".signal-panel__head b": { px: 10.5, weight: 600 },
+  // No font-size of its own; inherits .signal-table's own 14px.
+  ".signal-table td": { px: 14, weight: 400 },
+  // Size comes from .signal-table (14px); weight resolves from its own
+  // declaration (500) regardless.
+  ".signal-table .signal-td-name": { px: 14, weight: 500 },
+  // Neither size nor weight of its own; both come from .signal-table (td)
+  // and the CSS initial weight.
+  ".signal-table .signal-td-num": { px: 14, weight: 400 },
+  // Each sets colour only; size/weight come from the shared .signal-pill
+  // base rule (11px/500).
+  ".signal-pill--clean": { px: 11, weight: 500 },
+  ".signal-pill--review": { px: 11, weight: 500 },
+  ".signal-pill--risk": { px: 11, weight: 500 },
+  // Neither size nor weight of its own; both come from .signal-cmp th
+  // (10px/500).
+  ".signal-cmp th:last-child": { px: 10, weight: 500 },
+  // No font-size of its own; inherits .signal-cmp's own 14.5px.
+  ".signal-cmp td": { px: 14.5, weight: 400 },
+  ".signal-cmp td:first-child": { px: 14.5, weight: 400 },
+  // Size comes from .signal-cmp (14.5px); weight resolves from its own
+  // declaration (500) regardless.
+  ".signal-cmp td:last-child": { px: 14.5, weight: 500 },
+  // Size comes from .signal-list li (15px); weight resolves from its own
+  // declaration (600) regardless. Never actually rendered today (no <b>
+  // inside either live/next list) — see the SURFACE comment.
+  ".signal-list b": { px: 15, weight: 600 },
+  // No font-weight of its own (real computed weight is UA-bold, 700, but
+  // at 14.5px that never changes the threshold either way); size comes
+  // from .signal-today li (14.5px).
+  ".signal-today li b": { px: 14.5, weight: 400 },
+  // Colour only; used on the h1's accent word and the not-a-form bullet
+  // ticks (big/inherited text, comfortably >=24px) and on the type rail's
+  // svg icons (no font-size of their own) — 16px is the smallest real icon
+  // (the bullet ticks), the conservative case.
+  ".signal-accent-word": { px: 16, weight: 400 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with
 // its own `color` declaration (already covered), so the wrapper's colour
 // never paints anything.
 const WRAPPER_SELECTORS_WITH_NO_OWN_TEXT = new Set([
-  ".feature-cell", // children: .feature-cell__label/__title/__body, each coloured
   ".card-hairline", // every usage wraps only child elements, never bare text
-  ".card-voltage", // its only child, .card-voltage__heading, sets its own color
 ]);
 
 function parseRuleBodies(
@@ -500,7 +429,10 @@ function typographyWeight(name: string): number | null {
 // Smallest size a `font-size` declaration ever renders at: for a plain
 // `var(--type-X-size)` that's the token's own size; for
 // `clamp(MIN, PREFERRED, var(--type-X-size))` it's MIN — the worst case for
-// a contrast threshold, per the review ruling.
+// a contrast threshold, per the review ruling. signal.css's own type isn't
+// drawn from the shared typography token set (only signal-display-xl/-lg/
+// -body are) — it's literal px, read directly once the token/clamp forms
+// don't match.
 function parseFontSizePx(body: string): number | null {
   const value = findDeclaration(body, "font-size");
   if (!value) return null;
@@ -509,14 +441,17 @@ function parseFontSizePx(body: string): number | null {
     return lengthToPx(clampMatch[1]);
   }
   const varMatch = TYPE_SIZE_VAR_RE.exec(value);
-  return varMatch?.[1] ? typographyPx(varMatch[1]) : null;
+  if (varMatch?.[1]) return typographyPx(varMatch[1]);
+  return lengthToPx(value);
 }
 
 function parseFontWeight(body: string): number | null {
   const value = findDeclaration(body, "font-weight");
   if (!value) return null;
   const varMatch = TYPE_WEIGHT_VAR_RE.exec(value);
-  return varMatch?.[1] ? typographyWeight(varMatch[1]) : null;
+  if (varMatch?.[1]) return typographyWeight(varMatch[1]);
+  // A literal numeric weight (signal.css's own, same reasoning as above).
+  return /^\d+$/.test(value) ? Number(value) : null;
 }
 
 interface Resolved {
