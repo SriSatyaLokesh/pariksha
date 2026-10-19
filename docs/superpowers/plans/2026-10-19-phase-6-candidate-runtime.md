@@ -1,4 +1,4 @@
-# Phase 6 — Candidate Runtime Implementation Plan
+# Phase 6: Candidate Runtime Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -108,78 +108,76 @@ Phase 5 is being planned in parallel with this document and its output could not
 **Files:**
 - Create: `packages/db/src/repo/candidate-entry.ts`, `packages/db/test/repo/candidate-entry.test.ts`
 - Create: `apps/api/src/routes/run.ts`, `apps/api/test/run/landing.test.ts`, `apps/api/test/route-authority.test.ts`
-- Create: `apps/web/exam.html`, `apps/web/src/exam-main.tsx`, `apps/web/src/routes/exam.tsx`, `apps/web/src/lib/run.ts`, `apps/web/src/styles/exam.css`
-- Create: `apps/web/test/exam/landing.test.tsx`
-- Create: `docs/adr/00NN-candidate-runtime-is-a-third-request-authority.md` (**the next free number at execution time** — `docs/adr/README.md` and `docs/adr/0000-template.md`; 0006 is the highest today)
-- Modify: `packages/db/src/index.ts` (export the new module deliberately outside `repo/index.js`, beside `identity.js` and `question-document.js`), `apps/api/src/app.ts`, `apps/api/src/instrument.ts`, `apps/web/vite.config.ts` (a third Rollup input), `apps/web/public/_headers` (`/exam.html` `X-Robots-Tag: noindex`, and the SPA fallback), `apps/web/test/bundle.test.ts`, `apps/web/test/hosting.test.ts`, `docs/adr/README.md`
+- Create: `apps/web/exam.html`, `apps/web/src/exam-main.tsx`, `apps/web/src/routes/exam.tsx`, `apps/web/src/lib/run.ts`, `apps/web/src/styles/exam.css`, `apps/web/test/exam/landing.test.tsx`
+- Create: `docs/adr/00NN-candidate-runtime-is-a-third-request-authority.md` (**the next free number at execution time**; `docs/adr/0000-template.md`, 0006 is the highest today)
+- Modify: `packages/db/src/index.ts` (export beside `identity.js` and `question-document.js`, deliberately outside `repo/index.js`), `apps/api/src/app.ts`, `apps/api/src/instrument.ts`, `apps/web/vite.config.ts` (a third Rollup input), `apps/web/public/_headers`, `apps/web/test/bundle.test.ts`, `apps/web/test/hosting.test.ts`, `docs/adr/README.md`
 
 **Interfaces:**
-- Consumes: `DbClient`, `ApiError`, `mountedRoutes`, `countingDeps`, `guardOf`, `RenderedHtml`, `renderMarkdown`, `tokens.css`.
+- Consumes: `DbClient`, `newId`, `isId` (`@pariksha/db`) · `ApiError` (`apps/api/src/errors.ts`) · `mountedRoutes(app): string[]`, `countingDeps(deps): { deps, counts }`, `guardOf(handler)` (`apps/api/src/instrument.ts`, `apps/api/src/middleware/authorize.ts`) · `RenderedHtml({ markdown, className? })` (Phase 4) · `tokens.css`. From **Phase 5**: `test_version` (interface row 1), `settings_json` (row 2), `sections_json` (row 3), `test.status` and `current_version` (row 12), workspace branding (row 11).
 - Produces:
   ```ts
-  // packages/db/src/repo/candidate-entry.ts — pre-workspace by nature.
-  // Exported from the package root, deliberately NOT from repo/index.ts.
+  // packages/db/src/repo/candidate-entry.ts — exported from the package root,
+  // deliberately NOT from repo/index.ts.
   export interface PublishedTest {
-    workspaceId: string; testId: string; testVersionId: string;
-    version: number; status: string; name: string;
-    settings: unknown; sections: unknown; branding: unknown;  // workspace.branding_json
+    workspaceId: string; testId: string; testVersionId: string; version: number;
+    status: string; name: string;
+    settings: unknown;          // interface row 2
+    sections: unknown;          // Section[] (row 3)
+    workspaceBranding: unknown; // workspace.branding_json (row 11)
   }
-  /** One join: workspace -> test -> test_version at test.current_version. */
   export function resolvePublishedTest(
     db: DbClient, workspaceSlug: string, testSlug: string,
   ): Promise<PublishedTest | null>;
 
-  // apps/api/src/instrument.ts
-  /** "METHOD /path" for every mounted handler, middleware excluded. */
-  export function mountedEndpoints(app: Hono<AppBindings>): string[];
-  /** Read off the live table the way routeGuards() is. */
-  export function routeAuthorities(app: Hono<AppBindings>): Record<string, RouteAuthority>;
-
   // apps/api/src/app.ts
   export type RouteAuthority = "workspace" | "attempt" | "public";
-  export const ROUTE_AUTH: Record<string, RouteAuthority>;
+  export const ROUTE_AUTH: Record<string, RouteAuthority>;   // keyed "METHOD /path"
+
+  // apps/api/src/instrument.ts
+  export function mountedEndpoints(app: Hono<AppBindings>): string[];               // "METHOD /path"
+  export function routeAuthorities(app: Hono<AppBindings>): Record<string, RouteAuthority>;
+
+  // apps/web/src/lib/run.ts — the candidate app's one door to the API.
+  export interface LandingPayload {
+    name: string; description: string | null; durationMinutes: number;
+    questionCount: number;
+    sections: { id: string; title: string; questionCount: number; timeLimitMinutes: number | null }[];
+    rules: string | null; proctoring: "off" | "standard" | "strict";
+    accessMode: AccessMode; opensAt: number | null; closesAt: number | null;
+    latestStartAt: number | null; timezone: string;
+    branding: { logo: string | null; primaryColour: string | null; footerText: string | null; startMessage: string | null };
+    serverNow: number;
+  }
+  export function createRunClient(workspaceSlug: string, testSlug: string): RunClient;
+  export interface RunClient { landing(): Promise<LandingPayload> }   // widened by Tasks 2, 3, 5, 8, 11
+
+  // apps/web/src/routes/exam.tsx
+  export function deviceReport(): { ok: boolean; findings: { label: string; ok: boolean; detail: string }[] };
   ```
 
 ### Ruling: candidate traffic is a third request authority, addressed under `/api/v1/run/…`
 
-This is the structural decision the rest of the phase rests on, so it is made here, in full, with its citations.
+The structural decision the rest of the phase rests on, so it is made here with its citations.
 
-**Candidate routes do not mount under `/api/v1/workspaces/:id/…` and carry no `requires()` guard.** [`docs/PRD.md`](../../PRD.md#rest-api-v1)'s REST API table names them literally — "Candidate runtime | `POST /run/{test}/register`, `/start`, `PUT /run/attempt/answer`, `POST /run/attempt/events`, `/snapshot`, `/submit` **(attempt token)**" — and `S-06` names the authority: "Each attempt gets a random 256-bit token; only its hash is stored. Every request is checked against the token, the attempt status and the server deadline." [ADR 0005](../../adr/0005-organiser-auth-before-the-candidate-runtime.md) closes the alternative: "Candidate access is not organiser auth. The four candidate access modes (`T-20`) are per-test configuration, not accounts … Nothing in this decision gives a candidate a user row." A candidate has no `user`, so no `session`, so no `membership`, so `guard()` has nothing to find; putting a workspace ID in the candidate's URL would also hand a stranger a workspace identifier for free, which is the opposite of the 404-not-403 posture `authorize.ts:8` was written for.
+**Candidate routes do not mount under `/api/v1/workspaces/:id/…` and carry no `requires()` guard.** [`docs/PRD.md`](../../PRD.md#rest-api-v1)'s REST API table names them literally — "Candidate runtime | `POST /run/{test}/register`, `/start`, `PUT /run/attempt/answer`, … **(attempt token)**" — and `S-06` names the authority: "Each attempt gets a random 256-bit token; only its hash is stored. Every request is checked against the token, the attempt status and the server deadline." [ADR 0005](../../adr/0005-organiser-auth-before-the-candidate-runtime.md) closes the alternative: "Candidate access is not organiser auth … Nothing in this decision gives a candidate a user row." No user means no session, no membership, and nothing for `guard()` (`apps/api/src/middleware/authorize.ts:100`) to find; a workspace ID in a candidate URL would also hand a stranger a workspace identifier, which is the opposite of the 404-not-403 posture that file was written for.
 
-**`{test}` is the slug pair.** `T-02` fixes the candidate URL at `/<workspace-slug>/<test-slug>`, so the only identifier a candidate holds is a pair of slugs: `GET /api/v1/run/:workspaceSlug/:testSlug`.
+**`{test}` is the slug pair.** `T-02` fixes the candidate URL at `/<workspace-slug>/<test-slug>`, so the only identifier a candidate holds is two slugs: `GET /api/v1/run/:workspaceSlug/:testSlug`.
 
-**What this means for `GUARDS` and `authorization.test.ts`: nothing changes, and that is the problem.** No candidate route calls `requires()` or `requireMember()`, so none enters the `GUARDS` WeakMap, so `guardedRoutes(app)` is unchanged and `authorization.test.ts:153`'s "every guarded route is covered by this table" and `:159`'s "the table names the action each guard actually enforces" both keep passing untouched. That is correct — and it is exactly Review Focus item 1: those two tests only ever saw guarded routes, and after this phase an unguarded route in `app.ts` no longer looks out of place. So Phase 6 adds the missing half:
+**What this means for `GUARDS` and `authorization.test.ts`: nothing changes, and that is the problem.** No candidate route calls `requires()` or `requireMember()`, so none enters the `GUARDS` WeakMap, so `guardedRoutes(app)` is unchanged and `authorization.test.ts:153` and `:159` keep passing untouched — correctly, and uselessly. Those two tests only ever saw guarded routes, and after this phase an unguarded line in `app.ts` no longer looks out of place (Review Focus 1). So Phase 6 adds the missing half: `ROUTE_AUTH`, keyed `"METHOD /path"` like `ROUTE_ACTIONS`, naming every mounted endpoint's authority, checked in four directions by `apps/api/test/route-authority.test.ts`. Three registries, complementary rather than duplicated: `GUARDS` says *which action*, `ROUTE_AUTH` says *which authority*, `ROUTE_BUDGETS` says *what it may spend*.
 
-```ts
-// apps/api/src/app.ts
-export type RouteAuthority = "workspace" | "attempt" | "public";
+**The data layer stays absolute.** `resolvePublishedTest` — and, in Task 5, `readAttemptByTokenHash` — cannot take a workspace ID, because the workspace ID is what they *produce*: exactly [ADR 0006](../../adr/0006-identity-reads-sit-outside-the-workspace-guard.md)'s admission test, "unable to know a workspace, not merely awkward to give one." They do **not** join `identity.ts`; that ADR's own "to watch" section says a function that is not about users or sessions should take a workspace ID instead, and these cannot. They get a third module with its own pinned set and its own both-directions test, copying `packages/db/test/repo/identity.test.ts`. Every read after the resolution is an ordinary `scoped()` function with the resolved `workspaceId`.
 
-/**
- * What authorises every mounted endpoint. `ROUTE_ACTIONS` says which action
- * a *guarded* route enforces; this says which routes are guarded at all, so
- * an organiser route mounted without `requires()` is a failing test rather
- * than an open endpoint. Keyed "METHOD /path", like ROUTE_ACTIONS.
- */
-export const ROUTE_AUTH: Record<string, RouteAuthority> = { /* … */ };
-```
-
-and `apps/api/test/route-authority.test.ts`, which checks it in four directions. Three middleware registries now exist and they are complementary, not duplicated: `GUARDS` says *which action*, `ROUTE_AUTH` says *which authority*, `ROUTE_BUDGETS` says *what it may spend*.
-
-**And the data layer stays absolute.** `resolvePublishedTest` and (in Task 5) `readAttemptByTokenHash` cannot take a workspace ID, because the workspace ID is what they *produce* — the exact admission test [ADR 0006](../../adr/0006-identity-reads-sit-outside-the-workspace-guard.md) sets: "a candidate function must be unable to know a workspace, not merely awkward to give one." They do **not** join `identity.ts`: that ADR's own "to watch" section says "If a function that is not about users or sessions is proposed for `identity.ts`, the right response is almost always that it *can* take a workspace ID and should", and a candidate entry read is not about users or sessions. They get a third module, `repo/candidate-entry.ts`, with its own pinned set and its own both-directions test, copying `packages/db/test/repo/identity.test.ts` exactly. Every read after the resolution — the branding, the questions, the responses, the audit row — goes through an ordinary `scoped()` function with the resolved `workspaceId`.
-
-**Path collision.** `/api/v1/run/attempt/answer` and `/api/v1/run/:workspaceSlug/:testSlug` can both match a three-segment path. Hono's routers prefer a static segment to a parameter, but this plan pins that rather than assuming it, and `resolvePublishedTest` additionally refuses `workspaceSlug === "attempt"` so a workspace slug cannot shadow the attempt routes even if the router order ever changes.
+**Path collision.** `/api/v1/run/attempt/answer` and `/api/v1/run/:workspaceSlug/:testSlug` can both match three segments. Hono prefers a static segment to a parameter; the test below pins that rather than assuming it, and `resolvePublishedTest` additionally refuses `workspaceSlug === "attempt"`.
 
 ### What the landing route returns
 
-`GET /api/v1/run/:workspaceSlug/:testSlug` answers `C-01` in one read and nothing more: workspace branding, test name and description, duration, total question count, the section list (title, question count, time limit), the proctoring profile name, the supported-device rule, the availability window and the timezone, the access mode (so the browser knows which gate to render), and `consent` is **not** included — it arrives after the gate, in Task 3. Question *counts* come from `sections_json` alone (a `fixed` or `sets` source counts its list, a `pool` source reports its `count`), so the route never touches the bank and never risks naming a question.
+`C-01` in one read: branding, name, description, duration, total question count, the section list, the proctoring profile, the supported-device rule, the window and timezone, and the access mode so the browser knows which gate to render. Consent is **not** included — it arrives after the gate, in Task 3. Question counts come from `sections_json` alone (`fixed` and `sets` count their lists, `pool` reports its `count`), so the route never touches the bank and cannot name a question.
 
-`C-01`'s "Check my device" button: Phase 6 ships the button and the report; Phase 7 makes it block. `docs/ROADMAP.md`'s Phase 7 "Delivers" owns "device and browser gating" and "the camera requirement" — the *gate* — while `C-01` puts the button on the landing page, which is this phase. So `deviceReport()` here is a pure function over `window.innerWidth`, `matchMedia("(pointer: fine)")` and the browser name and version against the PRD's supported-browser row, rendering what it found and what the test requires. It does not ask for the camera and it does not prevent starting.
-
-**Routes.** Every budget is `MEASURE`: an implementer sets it from `countingDeps` and pins it with `toBe`. The floor is zero, not two — no session cookie, no `readSession`.
+`C-01`'s "Check my device": Phase 6 ships the button and the report, Phase 7 makes it block. `docs/ROADMAP.md`'s Phase 7 owns "device and browser gating" and "the camera requirement" — the *gate* — while `C-01` puts the button on the landing page, which is this phase. `deviceReport()` is therefore a pure function over `window.innerWidth`, `matchMedia("(pointer: fine)")` and the browser name against the PRD's supported-browser row. It does not ask for the camera and it does not prevent starting.
 
 | Method | Path | Authority | `ROUTE_BUDGETS` |
 | --- | --- | --- | --- |
-| `GET` | `/api/v1/run/:workspaceSlug/:testSlug` | `public` | `MEASURE` (expected 1: one join) |
+| `GET` | `/api/v1/run/:workspaceSlug/:testSlug` | `public` | `MEASURE` (expected 1 — one join; the floor is 0, not 2: no cookie, no `readSession`) |
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -187,21 +185,20 @@ and `apps/api/test/route-authority.test.ts`, which checks it in four directions.
 // packages/db/test/repo/candidate-entry.test.ts — ADR 0006's pattern, third module
 const UNSCOPED_BY_DESIGN = ["resolvePublishedTest"];   // Task 5 adds readAttemptByTokenHash
 
-it("the unscoped set is exactly the one named here", () => {
-  expect(new Set(functionNames(candidateEntry))).toEqual(new Set(UNSCOPED_BY_DESIGN));
-});
+it("the unscoped set is exactly the one named here", () =>
+  expect(new Set(functionNames(candidateEntry))).toEqual(new Set(UNSCOPED_BY_DESIGN)));
 
 it("no unscoped function reaches the scoped barrel or its registry", () => {
-  for (const name of UNSCOPED_BY_DESIGN) {
-    expect(repo, name).not.toHaveProperty(name);
-    expect(REPO_FUNCTIONS, name).not.toHaveProperty(name);
+  for (const n of UNSCOPED_BY_DESIGN) {
+    expect(repo, n).not.toHaveProperty(n);
+    expect(REPO_FUNCTIONS, n).not.toHaveProperty(n);
   }
 });
 
 it("resolves a published test from the slug pair alone, in one statement", async () => {
   const counting = countingClient(db);
-  const found = await resolvePublishedTest(counting.db, "alpha", "aptitude");
-  expect(found).toMatchObject({ workspaceId: wspA, version: 1, status: "open" });
+  expect(await resolvePublishedTest(counting.db, "alpha", "aptitude"))
+    .toMatchObject({ workspaceId: wspA, version: 1, status: "open" });
   expect(counting.count()).toBe(1);
 });
 
@@ -210,9 +207,8 @@ it("two workspaces may hold the same test slug and resolve to different tests", 
     .not.toBe((await resolvePublishedTest(db, "beta", "aptitude"))!.testId);
 });
 
-it("an unpublished test (current_version null) resolves to null", async () => {
-  expect(await resolvePublishedTest(db, "alpha", "draft-only")).toBeNull();
-});
+it("a test with current_version null resolves to null", async () =>
+  expect(await resolvePublishedTest(db, "alpha", "draft-only")).toBeNull());
 
 it("the slug 'attempt' never resolves, so it cannot shadow the attempt routes", async () => {
   await createWorkspace(db, newId("wsp"), { slug: "attempt", name: "Attempt" });
@@ -221,42 +217,35 @@ it("the slug 'attempt' never resolves, so it cannot shadow the attempt routes", 
 ```
 
 ```ts
-// apps/api/test/route-authority.test.ts — Review Focus item 1. THE LOAD-BEARING FILE.
-it("every mounted endpoint declares an authority", () => {
-  expect(new Set(mountedEndpoints(app))).toEqual(new Set(Object.keys(ROUTE_AUTH)));
-});
+// apps/api/test/route-authority.test.ts — Review Focus 1. THE LOAD-BEARING FILE.
+it("every mounted endpoint declares an authority", () =>
+  expect(new Set(mountedEndpoints(app))).toEqual(new Set(Object.keys(ROUTE_AUTH))));
 
 it("the workspace-authority set is exactly the guarded set", () => {
-  // A route that loses its `requires()` in a later phase stops matching here
-  // even though `routeGuards(app) === ROUTE_ACTIONS` still holds on both sides.
-  const declared = Object.entries(ROUTE_AUTH)
-    .filter(([, a]) => a === "workspace").map(([e]) => e);
-  expect(new Set(declared)).toEqual(new Set(Object.keys(ROUTE_ACTIONS)));
+  // A route that loses its requires() in a later phase stops matching here even
+  // though routeGuards(app) === ROUTE_ACTIONS still holds on both sides.
+  expect(new Set(Object.entries(ROUTE_AUTH).filter(([, a]) => a === "workspace").map(([e]) => e)))
+    .toEqual(new Set(Object.keys(ROUTE_ACTIONS)));
 });
 
 it("every attempt-authority endpoint actually mounts attemptContext", () => {
-  // Read off the live table, not off the declaration — Task 5 fills this in.
-  for (const [endpoint, authority] of Object.entries(ROUTE_AUTH)) {
-    if (authority === "attempt") expect(routeAuthorities(app)[endpoint], endpoint).toBe("attempt");
+  for (const [endpoint, a] of Object.entries(ROUTE_AUTH)) {
+    if (a === "attempt") expect(routeAuthorities(app)[endpoint], endpoint).toBe("attempt");
   }
 });
 
 it("the public set is a literal allowlist, so widening it is a visible diff", () => {
   expect(Object.entries(ROUTE_AUTH).filter(([, a]) => a === "public").map(([e]) => e).sort())
     .toEqual([
-      "GET /api/v1/health",
-      "GET /api/v1/auth/:provider/callback",
-      "GET /api/v1/auth/:provider/start",
-      "GET /api/v1/run/:workspaceSlug/:testSlug",
-      "GET /api/v1/setup/status",
-      "POST /api/v1/auth/magic-link",
-      // …and nothing else. Every later task that adds one edits this literal.
-    ].sort());
+      "GET /api/v1/auth/:provider/callback", "GET /api/v1/auth/:provider/start",
+      "GET /api/v1/health", "GET /api/v1/run/:workspaceSlug/:testSlug",
+      "GET /api/v1/setup/status", "POST /api/v1/auth/magic-link",
+    ]);   // every later task that adds one edits this literal
 });
 
-it("a candidate route is reachable with no cookie at all and costs no session read", async () => {
+it("a candidate route is reachable with no cookie and spends no session read", async () => {
   const counting = countingDeps(deps);
-  const res = await createApp(counting.deps).request(`/api/v1/run/alpha/aptitude`);
+  const res = await createApp(counting.deps).request("/api/v1/run/alpha/aptitude");
   expect(res.status).toBe(200);
   expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug"]);
 });
@@ -264,50 +253,45 @@ it("a candidate route is reachable with no cookie at all and costs no session re
 
 ```ts
 // apps/api/test/run/landing.test.ts
-it("C-01: the landing payload carries everything the page shows and nothing else", async () => {
-  const body = await json(`/api/v1/run/alpha/aptitude`);
-  expect(body).toMatchObject({
+it("C-01: the landing payload carries everything the page shows", async () => {
+  expect(await json("/api/v1/run/alpha/aptitude")).toMatchObject({
     name: "Aptitude", durationMinutes: 45, questionCount: 17,
     sections: [{ title: "Logic", questionCount: 4 }],
-    proctoring: "standard", accessMode: "link_code",
-    opensAt: expect.any(Number), closesAt: expect.any(Number), timezone: "Asia/Kolkata",
-    branding: { logo: expect.any(String), footerText: expect.any(String) },
+    proctoring: "standard", accessMode: "link_code", timezone: "Asia/Kolkata",
+    opensAt: expect.any(Number), closesAt: expect.any(Number), serverNow: expect.any(Number),
   });
 });
 
-it("S-10: the landing payload names no question, key or explanation", async () => {
-  const text = await (await app.request(`/api/v1/run/alpha/aptitude`)).text();
-  for (const leak of ["LOG-001", "qst_", "wsp_", "tst_", "ver_", "access_code", "correct"]) {
+it("S-10: the landing payload names no question, key, code or internal id", async () => {
+  const text = await (await app.request("/api/v1/run/alpha/aptitude")).text();
+  for (const leak of ["LOG-001", "qst_", "wsp_", "tst_", "ver_", "OPENSESAME", "access_code"]) {
     expect(text, leak).not.toContain(leak);
   }
 });
 
 it("a pool section reports its requested count without reading the bank", async () => {
   const counting = countingDeps(deps);
-  const body = await (await createApp(counting.deps).request(`/api/v1/run/alpha/pooled`)).json();
+  const body = await (await createApp(counting.deps).request("/api/v1/run/alpha/pooled")).json();
   expect(body.sections[0].questionCount).toBe(10);
-  expect(counting.counts().total).toBe(1);        // the bank was never touched
+  expect(counting.counts().total).toBe(1);
 });
 
-it("an unpublished, archived or unknown test is the same 404, byte for byte", async () => {
-  const bodies = await Promise.all(
-    ["alpha/draft-only", "alpha/archived", "alpha/no-such-test", "no-such-ws/x"]
-      .map(async (p) => (await app.request(`/api/v1/run/${p}`)).text()));
+it("unpublished, archived and unknown are the same 404, byte for byte", async () => {
+  const bodies = await Promise.all(["alpha/draft-only", "alpha/archived", "alpha/nope", "nope/x"]
+    .map(async (p) => (await app.request(`/api/v1/run/${p}`)).text()));
   expect(new Set(bodies).size).toBe(1);
 });
 
-it("Hono reaches the attempt routes, not the slug-pair route, for /run/attempt/*", async () => {
-  // Pinned rather than assumed: static-over-parameter is router behaviour.
-  expect((await app.request("/api/v1/run/attempt/answer", { method: "PUT" })).status).toBe(401);
-});
+it("Hono reaches the attempt routes, not the slug-pair route, for /run/attempt/*", async () =>
+  expect((await app.request("/api/v1/run/attempt/answer", { method: "PUT" })).status).toBe(401));
 ```
 
 ```tsx
 // apps/web/test/exam/landing.test.tsx
-it("C-01: the landing page shows name, duration, question count, sections, rules, proctoring, devices and the window", () => {
+it("C-01: name, duration, question count, sections, rules, proctoring, devices and the window", () => {
   render(<ExamLanding test={landingFixture} />);
-  for (const text of [/45 minutes/, /17 questions/i, /Logic/, /Standard/i, /laptop or desktop/i, /opens/i]) {
-    expect(screen.getByText(text)).toBeVisible();
+  for (const t of [/45 minutes/, /17 questions/i, /Logic/, /Standard/i, /laptop or desktop/i, /opens/i]) {
+    expect(screen.getByText(t)).toBeVisible();
   }
 });
 
@@ -318,15 +302,13 @@ it("C-01: 'Check my device' reports before the window opens and does not block s
   expect(screen.getByRole("button", { name: /start/i })).toBeDisabled();   // the window, not the device
 });
 
-it("DESIGN.md: the landing page keeps the voltage canvas and the runner does not", () => {
-  expect(container.querySelector(".exam-landing-hero")).toHaveClass("canvas-voltage");
-});
+it("DESIGN.md: the landing page keeps the voltage canvas", () =>
+  expect(container.querySelector(".exam-landing-hero")).toHaveClass("canvas-voltage"));
 
-it("the landing and start pages have no axe violations", async () => {
-  expect(await axe(container)).toHaveNoViolations();
-});
+it("the landing and start pages have no axe violations", async () =>
+  expect(await axe(container)).toHaveNoViolations());
 
-it("every control's accessible name is a superset of its visible label (WCAG 2.5.3)", () => {
+it("WCAG 2.5.3: every control's accessible name contains its visible label", () => {
   for (const el of screen.getAllByRole("button")) {
     expect(accessibleName(el).toLowerCase()).toContain(visibleLabel(el).toLowerCase());
   }
@@ -335,9 +317,8 @@ it("every control's accessible name is a superset of its visible label (WCAG 2.5
 
 ```ts
 // apps/web/test/bundle.test.ts (extended) — the 300 KB budget's structural guard
-it("no organiser code is statically reachable from the exam entry", () => {
-  expect(staticModules(threeEntryChunks, "exam").filter((m) => ADMIN_PATH_RE.test(m))).toEqual([]);
-});
+it("no organiser code is statically reachable from the exam entry", () =>
+  expect(staticModules(threeEntryChunks, "exam").filter((m) => ADMIN_PATH_RE.test(m))).toEqual([]));
 
 it("KaTeX is not in the exam entry's static graph either (ADR 0004)", () => {
   const modules = staticModules(threeEntryChunks, "exam").join("\n");
@@ -350,18 +331,17 @@ it("KaTeX is not in the exam entry's static graph either (ADR 0004)", () => {
 Run: `pnpm vitest run packages/db/test/repo/candidate-entry.test.ts apps/api/test/route-authority.test.ts apps/api/test/run apps/web/test/exam apps/web/test/bundle.test.ts`
 Expected: FAIL — neither the module, the table nor the entry exists.
 
-- [ ] **Step 3: Implement the module, the authority table, the route and the two screens**
+- [ ] **Step 3: Implement `resolvePublishedTest`, `ROUTE_AUTH`, `mountedEndpoints`, `routeAuthorities`, the landing route and the two screens**
 
-`resolvePublishedTest` is one `SELECT` joining `workspace`, `test` and `test_version` on `test.current_version = test_version.version`, returning null when any link is missing — written the way `readSessionActor` is, as one statement rather than three reads. Add `ROUTE_AUTH` beside `ROUTE_BUDGETS` and `ROUTE_ACTIONS` in `app.ts`, with a line for **every** endpoint already mounted (this is the migration: the existing twenty-odd routes get classified once, here). `mountedEndpoints` is `mountedRoutes`'s sibling, keyed by method; `routeAuthorities` reads a `WeakMap` that `attemptContext` registers into, exactly as `guardOf` reads `GUARDS`. `exam.html` is a third Rollup input in `apps/web/vite.config.ts` next to `index` and `admin`, and `_headers` gains `/exam.html  X-Robots-Tag: noindex` beside `admin.html`'s and the SPA fallback that maps `/<ws>/<test>` onto it — ordered *after* every specific rule so it cannot swallow `/api`, `/assets` or `/admin.html`, which is what the extended `hosting.test.ts` asserts.
+`resolvePublishedTest` is one `SELECT` joining `workspace`, `test` and `test_version` on `test.current_version = test_version.version`, written as a single statement the way `readSessionActor` (`packages/db/src/repo/identity.ts`) is, returning null when any link is missing. `ROUTE_AUTH` goes beside `ROUTE_BUDGETS` and `ROUTE_ACTIONS` in `app.ts` with a line for **every** endpoint already mounted — classifying the existing twenty-odd routes once, here, is the migration. `routeAuthorities` reads a `WeakMap` that `attemptContext` registers into, exactly as `guardOf` reads `GUARDS`. `exam.html` is a third Rollup input beside `index` and `admin`; `_headers` gains `/exam.html  X-Robots-Tag: noindex` and the SPA fallback mapping `/<ws>/<test>` onto it, ordered **after** every specific rule so it cannot swallow `/api`, `/assets` or `/admin.html` — which is what the extended `hosting.test.ts` asserts.
 
 - [ ] **Step 4: Write the ADR**
 
-`docs/adr/00NN-candidate-runtime-is-a-third-request-authority.md`, using `docs/adr/0000-template.md` and taking **the next free number at execution time** (0006 is the highest today). Context: Phases 3–5 had two authorities and `authorization.test.ts` only enumerates one of them. Decision: the `/api/v1/run` prefix, the attempt token, `ROUTE_AUTH`, and `repo/candidate-entry.ts` as a third pre-workspace module rather than a growth of `identity.ts`. Consequences: `guard.ts` and `GUARDS` are untouched; "unguarded" becomes a declared state rather than an absence; the admission test for `candidate-entry.ts` is the same one ADR 0006 set. Add the row to `docs/adr/README.md`'s table.
+`docs/adr/00NN-candidate-runtime-is-a-third-request-authority.md` from `docs/adr/0000-template.md`, taking **the next free number at execution time**. Context: two authorities until now, and `authorization.test.ts` enumerates only one. Decision: the `/api/v1/run` prefix, the attempt token, `ROUTE_AUTH`, and `repo/candidate-entry.ts` as a third pre-workspace module rather than a growth of `identity.ts`. Consequences: `guard.ts` and `GUARDS` untouched; "unguarded" becomes declared rather than absent; the admission test is ADR 0006's. Add the row to `docs/adr/README.md`.
 
 - [ ] **Step 5: Run the tests and commit**
 
-Run: `pnpm vitest run packages/db apps/api apps/web`
-Expected: PASS, with `authorization.test.ts` unchanged and green.
+Run: `pnpm vitest run packages/db apps/api apps/web` — PASS, with `authorization.test.ts` unchanged and green.
 
 ```bash
 git add packages/db apps/api apps/web docs/adr
@@ -373,49 +353,55 @@ git commit -s -m "feat(run): candidate landing page and the third request author
 ## Task 2: Access gate for all four modes (#66, P6.2)
 
 **Files:**
-- Create: `apps/api/src/run/entry.ts`, `apps/api/src/run/net.ts` (CIDR matching), `apps/api/test/run/access.test.ts`, `apps/api/test/run/net.test.ts`
+- Create: `apps/api/src/run/entry.ts`, `apps/api/src/run/net.ts`, `apps/api/test/run/access.test.ts`, `apps/api/test/run/net.test.ts`
 - Create: `apps/web/src/components/exam/AccessGate.tsx`, `apps/web/test/exam/access.test.tsx`
-- Modify: `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`, `apps/api/src/auth/oidc.ts` (branch the callback), `apps/web/src/routes/exam.tsx`
+- Modify: `apps/api/src/routes/run.ts`, `apps/api/src/app.ts` (four `ROUTE_BUDGETS` and four `ROUTE_AUTH` lines), `apps/api/src/auth/oidc.ts` (branch the callback), `apps/web/src/routes/exam.tsx`
 
 **Interfaces:**
-- Consumes: `resolvePublishedTest`, `insertAuthToken`, `consumeAuthToken`, `randomToken`, `sha256Hex`, `EmailAdapter`, `ApiError`, `TestAccess`, `AccessMode`, `deps.http`.
+- Consumes: `resolvePublishedTest` (Task 1) · `insertAuthToken(db, { tokenHash, kind, payload, now, expiresAt })`, `consumeAuthToken(db, tokenHash, kind, now): Promise<unknown>` (`packages/db/src/repo/identity.ts`) · `randomToken(): string`, `sha256Hex(value): Promise<string>` (`apps/api/src/auth/tokens.ts`) · `EmailAdapter` (`apps/api/src/email/adapter.ts`) · `deps.http`, `deps.now` · `TestAccess`, `AccessMode` (`@pariksha/core`; **Phase 5** interface row 6).
 - Produces:
   ```ts
   // apps/api/src/run/entry.ts
-  export const ENTRY_TTL_MS = 30 * 60_000;      // long enough to read a consent text
-  export const EMAIL_CODE_TTL_MS = 10 * 60_000; // docs/test-format.md:69
-
+  export const ENTRY_TTL_MS = 30 * 60_000;
+  export const EMAIL_CODE_TTL_MS = 10 * 60_000;             // docs/test-format.md:69
   export interface EntryClaim { testVersionId: string; workspaceId: string; email?: string; listRef?: string }
-  /** Mints the single-use `run_entry` token the registration step consumes. */
   export function issueEntryToken(deps: AppDeps, claim: EntryClaim): Promise<string>;
+  /** Reads without consuming. Task 3 consumes it in the same batch as the write. */
   export function readEntryToken(deps: AppDeps, token: string): Promise<EntryClaim | null>;
+  export function consumeEntryToken(deps: AppDeps, token: string): Promise<EntryClaim | null>;
 
   // apps/api/src/run/net.ts — ~30 lines, no dependency
   export function ipInRanges(ip: string, cidrs: readonly string[]): boolean;   // v4 and v6
   export function emailInDomains(email: string, globs: readonly string[]): boolean;
+  export function clientIp(c: Context<AppBindings>): string | null;            // CF-Connecting-IP, then X-Forwarded-For
+
+  // apps/web/src/lib/run.ts (widened)
+  export interface RunClient {
+    access(input: { code?: string; invite?: string; email?: string; otp?: string; captchaToken?: string }):
+      Promise<{ entryToken: string }>;
+    requestEmailCode(email: string): Promise<void>;
+  }
   ```
 
-The four modes all end in the same place — a single-use `run_entry` token carrying the test version and, where the mode knows it, the candidate's verified email — so Task 3 has exactly one thing to check and the four gates do not each grow their own session concept. The token is an `auth_token` row: `packages/db/src/repo/identity.ts`'s `consumeAuthToken` is already a single `UPDATE … WHERE used_at IS NULL AND expires_at > ? RETURNING`, which is precisely the race-free single-use primitive all four need, and `kind` is in its `WHERE` clause so a `run_invite` cannot be redeemed as a `run_entry`.
+All four modes end in one place — a single-use `run_entry` token carrying the test version and, where the mode knows it, a verified email — so Task 3 has exactly one thing to check and the four gates do not each grow their own session concept. The token is an `auth_token` row: `consumeAuthToken` is already a single `UPDATE … WHERE used_at IS NULL AND expires_at > ? RETURNING`, the race-free single-use primitive all four need, with `kind` in the `WHERE` clause so a `run_invite` cannot be redeemed as a `run_entry`.
 
 | Mode | The gate | The attack it stops | The test that proves it |
 | --- | --- | --- | --- |
-| `link_code` | Constant-time compare against `access.access_code` | Brute-forcing a 4–8 character code over a public URL | The per-test attempt bucket (Task 4) refuses the 11th wrong code in a minute; a timing test asserts the compare does not short-circuit on the first differing byte |
-| `invite_only` | `consumeAuthToken(hash, "run_invite", now)` | Replaying one candidate's personal link for a second sitting, and two tabs racing it | Two concurrent redemptions of the same link: exactly one 200, one 410, and one candidate row |
-| `email_code` | A 6-digit code, 10-minute expiry, stored only as `sha256(testVersionId:email:code)` | Reading codes out of a database dump; guessing one of 10⁶ by volume | A dump of `auth_token` contains no 6-digit string; the sixth wrong code for one address is refused (Task 4's bucket) |
-| `sso` | The organiser OIDC flow's discovery, PKCE and ID-token verification, branched at the end | A candidate from outside `allow_email_domains`; an unverified `email` claim | An ID token whose `email_verified` is absent is refused unless the provider is configured `allowUnverifiedEmail`; an address outside the globs is refused with the domain rule named |
+| `link_code` | Constant-time compare against `access.access_code` | Brute-forcing a short code over a public URL | The `test_access` bucket (Task 4) refuses the 11th wrong code in a minute |
+| `invite_only` | `consumeAuthToken(hash, "run_invite", now)` | Replaying one candidate's personal link; two tabs racing it | Two concurrent redemptions: exactly one 200, one 410, one candidate row |
+| `email_code` | 6 digits, 10-minute expiry, stored only as `sha256(testVersionId:email:code)` | Reading codes out of a database dump; guessing by volume | No 6-digit string appears in an `auth_token` dump; the 6th wrong code for an address is refused |
+| `sso` | The organiser OIDC flow's discovery, PKCE and ID-token verification, branched at the end | A candidate outside `allow_email_domains`; an unverified `email` claim | A token with no `email_verified` is refused unless the provider is configured for it; an outside address is refused with the rule named |
 
-**`sso` creates no user row and issues no session cookie.** `apps/api/src/auth/oidc.ts` already performs discovery, PKCE S256, the token exchange and ID-token verification over the injectable `deps.http`; the candidate callback reuses all of it and branches where the organiser flow calls `createUser` and `issueSession`, minting a `run_entry` token with the verified email instead. [ADR 0005](../../adr/0005-organiser-auth-before-the-candidate-runtime.md): "Nothing in this decision gives a candidate a user row", and "any later request to let a candidate 'log in and see their history' is a new decision, not an extension of this one."
+**`sso` creates no user row and issues no session cookie.** `apps/api/src/auth/oidc.ts` already performs discovery, PKCE S256, the token exchange and ID-token verification over the injectable `deps.http`; the candidate callback reuses all of it and branches where the organiser flow calls `createUser` and `issueSession`, minting a `run_entry` token with the verified email instead ([ADR 0005](../../adr/0005-organiser-auth-before-the-candidate-runtime.md): "Nothing in this decision gives a candidate a user row").
 
-**`allow_email_domains` and `allow_ip_ranges` are optional for every mode** (`docs/test-format.md:72`, `T-21`) and are checked before the mode's own gate, so an off-network candidate never learns whether their code was right. `ipInRanges` reads `CF-Connecting-IP` first and the right-most `X-Forwarded-For` hop second; a request with neither, on a test that sets `allow_ip_ranges`, is refused rather than allowed — failing open on an allowlist is the whole of the bug.
+**The allowlists are checked before the mode's own gate** (`docs/test-format.md:72`, `T-21`), so an off-network candidate never learns whether their code was right. A request carrying no client-IP header at all, on a test that sets `allow_ip_ranges`, is refused rather than allowed — failing open on an allowlist is the whole of the bug.
 
-**`C-02`'s errors say what to do next.** Each refusal carries its own `code` and a message naming the action: `invite_used` → "This invite link was already used. Contact the organiser." (the PRD's own example), `code_wrong`, `code_expired`, `domain_not_allowed`, `ip_not_allowed`, `window_closed`, `too_many_attempts`. A test asserts every refusal message contains a verb.
-
-**Routes.**
+**`C-02`'s errors say what to do next.** Codes: `invite_used` ("This invite link was already used. Contact the organiser." — the PRD's own wording), `code_wrong`, `code_expired`, `domain_not_allowed`, `ip_not_allowed`, `window_closed`, `too_many_attempts`.
 
 | Method | Path | Authority | `ROUTE_BUDGETS` |
 | --- | --- | --- | --- |
-| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/access` | `public` | `MEASURE` (resolve + consume/insert + maybe one rate-limit upsert) |
-| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/email-code` | `public` | `MEASURE` (resolve + insert + the email send, which is not a subrequest on D1 or R2) |
+| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/access` | `public` | `MEASURE` |
+| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/email-code` | `public` | `MEASURE` (the email send is not a D1 or R2 call) |
 | `GET` | `/api/v1/run/:workspaceSlug/:testSlug/sso/start` | `public` | `MEASURE` |
 | `GET` | `/api/v1/run/:workspaceSlug/:testSlug/sso/callback` | `public` | `MEASURE` |
 
@@ -424,22 +410,20 @@ The four modes all end in the same place — a single-use `run_entry` token carr
 ```ts
 // apps/api/test/run/access.test.ts
 it("link_code: the right code yields a single-use entry token", async () => {
-  const res = await post(`/api/v1/run/alpha/aptitude/access`, { code: "OPENSESAME" });
-  expect(res.status).toBe(200);
-  const { entryToken } = await res.json();
+  const { entryToken } = await (await post("/api/v1/run/alpha/aptitude/access", { code: "OPENSESAME" })).json();
   expect(await readEntryToken(deps, entryToken)).toMatchObject({ testVersionId: ver });
 });
 
 it("link_code: a wrong code is refused with an actionable message and mints nothing", async () => {
-  const body = await (await post(`/api/v1/run/alpha/aptitude/access`, { code: "nope" })).json();
+  const body = await (await post("/api/v1/run/alpha/aptitude/access", { code: "nope" })).json();
   expect(body.error).toMatchObject({ code: "code_wrong", message: expect.stringMatching(/check|ask|organiser/i) });
   expect(await countAuthTokens("run_entry")).toBe(0);
 });
 
 it("invite_only: a link works once; the second redemption is 410 and names the next step", async () => {
   const link = await mintInvite(ver, "row-7");
-  expect((await post(`/api/v1/run/alpha/aptitude/access`, { invite: link })).status).toBe(200);
-  const again = await post(`/api/v1/run/alpha/aptitude/access`, { invite: link });
+  expect((await redeem(link)).status).toBe(200);
+  const again = await redeem(link);
   expect(again.status).toBe(410);
   expect((await again.json()).error.message).toMatch(/already used.*organiser/i);
 });
@@ -450,52 +434,42 @@ it("invite_only: two concurrent redemptions produce exactly one entry token", as
   expect([a.status, b.status].sort()).toEqual([200, 410]);
 });
 
-it("email_code: the code is emailed, expires in 10 minutes, and is never stored in the clear", async () => {
-  await post(`/api/v1/run/alpha/otp/email-code`, { email: "a@b.ac.in" });
+it("email_code: six digits, emailed, 10-minute expiry, never stored in the clear", async () => {
+  await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" });
   const code = sentCode(mailbox);
   expect(code).toMatch(/^\d{6}$/);
   expect(JSON.stringify(await allAuthTokenRows())).not.toContain(code);
   deps.now = () => T + EMAIL_CODE_TTL_MS + 1;
-  expect((await post(`/api/v1/run/alpha/otp/access`, { email: "a@b.ac.in", code })).status).toBe(401);
+  expect((await post("/api/v1/run/alpha/otp/access", { email: "a@b.ac.in", otp: code })).status).toBe(401);
 });
 
-it("sso: a verified address inside the domain rule gets an entry token and no user row and no cookie", async () => {
+it("sso: a verified address inside the domain rule gets an entry token, no user row and no cookie", async () => {
   const res = await ssoCallback({ email: "s@college.ac.in", email_verified: true });
   expect(res.headers.get("set-cookie") ?? "").not.toContain("pk_session");
   expect(await countUsers()).toBe(usersBefore);
 });
 
 it("sso: an address outside allow_email_domains is refused and the rule is named", async () => {
-  const body = await (await ssoCallback({ email: "s@gmail.com", email_verified: true })).json();
-  expect(body.error).toMatchObject({ code: "domain_not_allowed", message: expect.stringContaining("*.ac.in") });
+  expect((await (await ssoCallback({ email: "s@gmail.com", email_verified: true })).json()).error)
+    .toMatchObject({ code: "domain_not_allowed", message: expect.stringContaining("*.ac.in") });
 });
 
-it("sso: an ID token with no email_verified claim is refused unless the provider is configured for it", async () => {
-  expect((await ssoCallback({ email: "s@college.ac.in" })).status).toBe(401);
-});
+it("sso: no email_verified claim is refused unless the provider is configured for it", async () =>
+  expect((await ssoCallback({ email: "s@college.ac.in" })).status).toBe(401));
 
-it("T-21: the IP allowlist is checked before the mode, so an off-network candidate learns nothing about their code", async () => {
-  const wrongIp = { headers: { "CF-Connecting-IP": "203.0.113.9" } };
-  const right = await post(`/api/v1/run/alpha/lab/access`, { code: "OPENSESAME" }, wrongIp);
-  const wrong = await post(`/api/v1/run/alpha/lab/access`, { code: "nope" }, wrongIp);
+it("T-21: the IP allowlist is checked first, so an off-network candidate learns nothing about their code", async () => {
+  const off = { headers: { "CF-Connecting-IP": "203.0.113.9" } };
+  const right = await post("/api/v1/run/alpha/lab/access", { code: "OPENSESAME" }, off);
+  const wrong = await post("/api/v1/run/alpha/lab/access", { code: "nope" }, off);
   expect(await right.text()).toBe(await wrong.text());
   expect((await right.json()).error.code).toBe("ip_not_allowed");
 });
 
-it("a request with no client-IP header at all is refused when the test sets allow_ip_ranges", async () => {
-  expect((await post(`/api/v1/run/alpha/lab/access`, { code: "OPENSESAME" })).status).toBe(403);
-});
+it("a request with no client-IP header is refused when the test sets allow_ip_ranges", async () =>
+  expect((await post("/api/v1/run/alpha/lab/access", { code: "OPENSESAME" })).status).toBe(403));
 
-it("every refusal message tells the candidate what to do next (C-02)", async () => {
-  for (const refusal of await everyRefusal()) {
-    expect(refusal.message, refusal.code).toMatch(/\b(check|ask|contact|try|wait|use|sign)\b/i);
-  }
-});
-
-it("an entry token is single use and cannot be replayed at registration", async () => {
-  const { entryToken } = await passGate();
-  await register(entryToken, validValues);
-  expect((await register(entryToken, validValues)).status).toBe(410);
+it("C-02: every refusal message tells the candidate what to do next", async () => {
+  for (const r of await everyRefusal()) expect(r.message, r.code).toMatch(/\b(check|ask|contact|try|wait|use|sign)\b/i);
 });
 ```
 
@@ -506,12 +480,11 @@ it.each([
   ["192.168.1.1", ["192.168.1.0/24"], true], ["192.168.2.1", ["192.168.1.0/24"], false],
   ["2001:db8::1", ["2001:db8::/32"], true], ["2001:dba::1", ["2001:db8::/32"], false],
   ["10.0.0.5", [], false],                                  // an empty list allows nobody
-])("ipInRanges(%j, %j) is %s", (ip, cidrs, expected) => expect(ipInRanges(ip, cidrs)).toBe(expected));
+])("ipInRanges(%j, %j) is %s", (ip, cidrs, x) => expect(ipInRanges(ip, cidrs)).toBe(x));
 
 it.each([
   ["a@iit.ac.in", ["*.ac.in"], true], ["a@acme.in", ["*.ac.in"], false],
-  ["a@AC.IN", ["*.ac.in"], false],                          // the glob matches a subdomain, not the apex
-  ["a@evil.com?x=@iit.ac.in", ["*.ac.in"], false],          // the domain is what follows the LAST @
+  ["a@evil.test?x=@iit.ac.in", ["*.ac.in"], false],         // the domain follows the LAST @
 ])("emailInDomains(%j, %j) is %s", (e, g, x) => expect(emailInDomains(e, g)).toBe(x));
 ```
 
@@ -532,7 +505,7 @@ it("a refusal shows the server's message on the field, not a status code", async
   expect(screen.queryByText(/401|403/)).toBeNull();
 });
 
-it("the access gate has no axe violations and the error is associated with the field", async () => {
+it("no axe violations and the error is associated with the field", async () => {
   expect(await axe(container)).toHaveNoViolations();
   expect(screen.getByLabelText(/access code/i)).toHaveAccessibleDescription(/check the code/i);
 });
@@ -540,12 +513,11 @@ it("the access gate has no axe violations and the error is associated with the f
 
 - [ ] **Step 2: Run them to make sure they fail**
 
-Run: `pnpm vitest run apps/api/test/run apps/web/test/exam/access.test.tsx`
-Expected: FAIL.
+Run: `pnpm vitest run apps/api/test/run apps/web/test/exam/access.test.tsx` — FAIL.
 
 - [ ] **Step 3: Implement the four gates**
 
-One handler, one `switch` on `access.mode`, with the allowlists checked before the switch. `ipInRanges` parses v4 into a 32-bit integer and v6 into two `BigInt` halves and masks — about thirty lines, written here rather than taken from a dependency because the Worker bundle is size-constrained and the input is two well-defined notations. The email-code hash is `sha256Hex(`${testVersionId}:${email.toLowerCase()}:${code}`)` so the row is a lookup key and never a plaintext secret. The `sso` callback imports from `apps/api/src/auth/oidc.ts` and diverges only at the final step.
+One handler, one `switch` on `access.mode`, with the allowlists checked before the switch. `ipInRanges` parses v4 into a 32-bit integer and v6 into two `BigInt` halves and masks — written here rather than taken from a dependency because the Worker bundle is size-constrained and the input is two well-defined notations. The email-code row's key is `sha256Hex(`${testVersionId}:${email.toLowerCase()}:${code}`)`, so the row is a lookup key and never a plaintext secret. The `sso` callback imports from `apps/api/src/auth/oidc.ts` and diverges only at the final step.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -567,10 +539,10 @@ git commit -s -m "feat(run): access gate for link code, invite, email code and s
 - Create: `packages/core/src/registration.ts`, `packages/core/test/registration.test.ts`
 - Create: `apps/api/src/run/registration.ts`, `apps/api/test/run/registration.test.ts`
 - Create: `apps/web/src/components/exam/ConsentPanel.tsx`, `apps/web/src/components/exam/RegistrationForm.tsx`, `apps/web/test/exam/registration.test.tsx`
-- Modify: `packages/core/src/index.ts`, `packages/core/src/types.ts` (the `RegistrationForm`, `FormField`, `FieldValidation`, `Consent` and `Timing` types, **only if Phase 5 did not add them** — see interface rows 7, 8 and 10), `packages/db/src/schema/columns.ts` (`candidate_unique`, and `consent_at` on `candidate`), `packages/db/src/repo/run.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`
+- Modify: `packages/core/src/index.ts`, `packages/core/src/types.ts` (the `RegistrationForm`, `FormField`, `FieldValidation`, `Consent` and `Timing` types — **only if Phase 5 did not add them**; interface rows 7, 8, 10), `packages/db/src/schema/columns.ts` (`candidate_unique`; `consent_at` on `candidate`), `packages/db/src/repo/run.ts`, `packages/db/test/parity.test.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`
 
 **Interfaces:**
-- Consumes: `readEntryToken`, `createCandidate`, `appendAudit`, `matchBounded` (Task 11 hardens it; Task 3 writes the first version), `scoped`.
+- Consumes: `readEntryToken` / `consumeEntryToken` (Task 2) · `createCandidate(db, ws, { testId, formValues, consentVersion, now? }): Promise<string>`, `appendAudit`, `scoped`, `DbClient.batch(statements)` (`@pariksha/db`) · `limitOrThrow` (Task 4, after it lands) · `matchBounded` (Task 11 hardens it; this task writes the first version in `apps/api/src/run/bounded.ts`). From **Phase 5**: the registration form (row 7) and consent (row 10).
 - Produces:
   ```ts
   // packages/core/src/registration.ts — pure, no I/O, the ONE copy of T-17's rules
@@ -580,58 +552,63 @@ git commit -s -m "feat(run): access gate for link code, invite, email code and s
     values: Record<string, unknown>,
     opts?: { matcher?: (pattern: string, input: string) => boolean },
   ): FieldIssue[];
-  /** The fields a test blocks repeat registration on, in form order. */
+  /** Only the fields the form declares, coerced to their declared type. */
+  export function normaliseValues(form: RegistrationForm, values: Record<string, unknown>): Record<string, unknown>;
   export function uniqueFieldIds(form: RegistrationForm): string[];
 
-  // packages/db/src/repo/run.ts — every one scoped(), registered in REPO_FUNCTIONS
-  export const claimUniqueFields: ScopedFn<
-    [{ testId: string; candidateId: string; claims: { fieldId: string; valueHash: string }[] }],
-    { taken: string[] }>;
-  export const releaseUniqueFields: ScopedFn<[candidateId: string], void>;
+  // packages/db/src/repo/run.ts — scoped(), in REPO_FUNCTIONS
+  export const registerCandidate: ScopedFn<
+    [{ testId: string; formValues: unknown; consentVersion: string; consentAt: number;
+       claims: { fieldId: string; valueHash: string }[]; now: number }],
+    { candidateId: string } | { taken: string[] }>;
+
+  // apps/api/src/run/bounded.ts
+  export const MAX_MATCH_INPUT = 500;    // question-format.md's short_answer ceiling
+  export function matchBounded(pattern: string, input: string): boolean;
+
+  // apps/web/src/lib/run.ts (widened)
+  export interface RunClient {
+    form(entryToken: string): Promise<{ consent: { version: string; text: string }; form: RegistrationForm }>;
+    register(entryToken: string, values: Record<string, unknown>, captchaToken?: string):
+      Promise<{ registrationToken: string }>;
+  }
   ```
 
-**The validator is one function in `packages/core`, called twice.** `docs/test-format.md:110` is unambiguous — "Every rule is re-checked on the server. The browser's copy of it is a courtesy, not a control" — and the cheapest way to make the browser's copy *be* the server's rule is to have one implementation and two callers, which is also what makes the inline message a candidate sees identical to the one the 422 carries. `packages/core` is a pure leaf package with no runtime dependencies, which this respects: `validateRegistration` is data in, issues out, and it takes the regex matcher as an injected option precisely because a bounded matcher needs a host the pure package does not have (issue [#129](https://github.com/SriSatyaLokesh/pariksha/issues/129); the server passes `matchBounded`, the browser passes the platform's `RegExp.test`).
+**The validator is one function in `packages/core`, called twice.** `docs/test-format.md:110` — "Every rule is re-checked on the server. The browser's copy of it is a courtesy, not a control" — and the cheapest way to make the browser's copy *be* the server's rule is one implementation and two callers, which also makes the inline message a candidate sees identical to the 422's. `packages/core` stays pure: data in, issues out, with the regex matcher injected, because a bounded matcher needs a host a pure package does not have (issue [#129](https://github.com/SriSatyaLokesh/pariksha/issues/129) — the server passes `matchBounded`, the browser passes `RegExp.test`).
 
-**Unique fields need a table, not a JSON index.** `candidate.form_values_json` is a JSON column, and neither SQLite nor Postgres gives a portable unique index into one — so `T-17`'s "unique per test" becomes `candidate_unique(workspace_id, test_id, field_id, value_hash)` with `UNIQUE (test_id, field_id, value_hash)`. The value is stored as a SHA-256 of the normalised value and never in the clear, so the table that exists to block a repeat email does not become a second copy of every candidate's email next to the encryptable one (`S-15`). All of a registration's claims are written in **one** `db.batch` with the candidate insert, so a duplicate rolls the whole registration back and the response names the field — `AC-12`'s "a repeat of a unique field is refused" with no half-written candidate behind it.
+**Unique fields need a table, not a JSON index.** `candidate.form_values_json` is a JSON column and neither dialect gives a portable unique index into one, so `T-17` becomes `candidate_unique(workspace_id, test_id, field_id, value_hash)` with `UNIQUE (test_id, field_id, value_hash)`. The value is stored as a SHA-256 of the normalised value, so the table that blocks a repeat email does not become a second plaintext copy of every candidate's email beside the encryptable one (`S-15`). Every claim is written in **one** `db.batch` with the candidate insert, so a duplicate rolls the whole registration back — `AC-12`'s refusal with no half-written candidate behind it.
 
-**Consent (`S-12`).** `candidate.consent_version` already exists; this task adds `consent_at`. The consent text and version come from the version's `settings.consent`, the candidate must tick before the form enables, and both the version and the acceptance time are stored — so a later edit to the text stays distinguishable, which is the whole point of `docs/test-format.md:85`.
-
-**Routes.**
+**Consent (`S-12`).** `candidate.consent_version` already exists; this task adds `consent_at`. Both are stored so a later edit to the text stays distinguishable (`docs/test-format.md:85`).
 
 | Method | Path | Authority | `ROUTE_BUDGETS` |
 | --- | --- | --- | --- |
-| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/form` | `public` (entry token in the body-less `Authorization: Bearer`) | `MEASURE` (resolve + consume-free read of the entry token) |
-| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/register` | `public` (entry token) | `MEASURE` (resolve + consume + one batch + audit) |
+| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/form` | `public` (entry token, `Authorization: Bearer`) | `MEASURE` |
+| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/register` | `public` (entry token) | `MEASURE` |
 
 - [ ] **Step 1: Write the failing tests**
 
 ```ts
 // packages/core/test/registration.test.ts — the rules, once
 it.each([
-  ["required", { id: "name", type: "short_text", label: "Name", required: true }, {}, "required"],
-  ["min_length", { id: "n", type: "short_text", label: "N", validation: { min_length: 3 } }, { n: "ab" }, "too_short"],
-  ["pattern", { id: "roll", type: "short_text", label: "Roll", validation: { pattern: "^\\d{2}[A-Z]{2}\\d{4}$", pattern_message: "Format: 21CS0147" } }, { roll: "x" }, "pattern"],
-  ["email domain", { id: "e", type: "email", label: "E", validation: { allowed_domains: ["*.ac.in"] } }, { e: "a@gmail.com" }, "domain"],
-  ["number min", { id: "cgpa", type: "number", label: "C", validation: { min: 0, max: 10 } }, { cgpa: 11 }, "max"],
-  ["integer", { id: "yr", type: "number", label: "Y", validation: { integer: true } }, { yr: 2026.5 }, "integer"],
-  ["date max", { id: "d", type: "date", label: "D", validation: { max: "2026-01-01" } }, { d: "2027-01-01" }, "max"],
-  ["dropdown", { id: "deg", type: "dropdown", label: "D", options: ["BE", "ME"] }, { deg: "PhD" }, "not_an_option"],
-  ["checkbox", { id: "s", type: "checkbox", label: "S", options: ["a", "b"] }, { s: ["a", "z"] }, "not_an_option"],
-  ["url domain", { id: "u", type: "url", label: "U", validation: { allowed_domains: ["github.com"] } }, { u: "https://evil.test" }, "domain"],
-  ["consent", { id: "c", type: "consent", label: "C", required: true }, { c: false }, "required"],
-])("T-17: %s is an issue on the field itself", (_n, field, values, code) => {
-  const [issue] = validateRegistration({ fields: [field] }, values);
-  expect(issue).toMatchObject({ field: field.id, code });
-});
+  ["required",    { id: "name", type: "short_text", label: "Name", required: true }, {}, "required"],
+  ["min_length",  { id: "n", type: "short_text", label: "N", validation: { min_length: 3 } }, { n: "ab" }, "too_short"],
+  ["pattern",     { id: "roll", type: "short_text", label: "Roll", validation: { pattern: "^\\d{2}[A-Z]{2}\\d{4}$", pattern_message: "Format: 21CS0147" } }, { roll: "x" }, "pattern"],
+  ["email domain",{ id: "e", type: "email", label: "E", validation: { allowed_domains: ["*.ac.in"] } }, { e: "a@gmail.com" }, "domain"],
+  ["number max",  { id: "cgpa", type: "number", label: "C", validation: { min: 0, max: 10 } }, { cgpa: 11 }, "max"],
+  ["integer",     { id: "yr", type: "number", label: "Y", validation: { integer: true } }, { yr: 2026.5 }, "integer"],
+  ["date max",    { id: "d", type: "date", label: "D", validation: { max: "2026-01-01" } }, { d: "2027-01-01" }, "max"],
+  ["dropdown",    { id: "deg", type: "dropdown", label: "D", options: ["BE", "ME"] }, { deg: "PhD" }, "not_an_option"],
+  ["checkbox",    { id: "s", type: "checkbox", label: "S", options: ["a", "b"] }, { s: ["a", "z"] }, "not_an_option"],
+  ["url domain",  { id: "u", type: "url", label: "U", validation: { allowed_domains: ["github.com"] } }, { u: "https://evil.test" }, "domain"],
+  ["consent",     { id: "c", type: "consent", label: "C", required: true }, { c: false }, "required"],
+])("T-17: %s is an issue on the field itself", (_n, field, values, code) =>
+  expect(validateRegistration({ fields: [field] }, values)[0]).toMatchObject({ field: field.id, code }));
 
-it("AC-12: pattern_message is the message, verbatim — 'Invalid format' tells a nervous candidate nothing", () => {
-  const [issue] = validateRegistration(rollForm, { roll: "x" });
-  expect(issue.message).toBe("Format: 21CS0147");
-});
+it("AC-12: pattern_message is the message, verbatim", () =>
+  expect(validateRegistration(rollForm, { roll: "x" })[0]!.message).toBe("Format: 21CS0147"));
 
-it("a field the form does not declare is dropped, not stored (S-11: collect only what the form asks for)", () => {
-  expect(normalise(nameForm, { name: "A", secret: "x" })).toEqual({ name: "A" });
-});
+it("S-11: a field the form does not declare is dropped, not stored", () =>
+  expect(normaliseValues(nameForm, { name: "A", secret: "x" })).toEqual({ name: "A" }));
 
 it("every issue names a field that exists in the form", () => {
   for (const i of validateRegistration(campusHiringForm, {})) {
@@ -639,26 +616,24 @@ it("every issue names a field that exists in the form", () => {
   }
 });
 
-it("the injected matcher is what runs a pattern, so the server can bound it (#129)", () => {
-  const calls: string[] = [];
-  validateRegistration(rollForm, { roll: "x" }, { matcher: (p) => { calls.push(p); return false; } });
-  expect(calls).toEqual(["^\\d{2}[A-Z]{2}\\d{4}$"]);
+it("#129: the injected matcher is what runs a pattern, so the server can bound it", () => {
+  const seen: string[] = [];
+  validateRegistration(rollForm, { roll: "x" }, { matcher: (p) => { seen.push(p); return false; } });
+  expect(seen).toEqual(["^\\d{2}[A-Z]{2}\\d{4}$"]);
 });
 ```
 
 ```ts
 // apps/api/test/run/registration.test.ts
-it("AC-12: an invalid submission is 422, names every bad field, and writes no candidate", async () => {
+it("AC-12: an invalid submission is 422, names every bad field, writes no candidate", async () => {
   const res = await register(entryToken, { email: "nope", cgpa: 11 });
   expect(res.status).toBe(422);
   expect((await res.json()).error.details.issues.map((i) => i.field).sort()).toEqual(["cgpa", "email"]);
   expect(await countCandidates(testId)).toBe(0);
 });
 
-it("AC-12: the server refuses a rule the browser was patched to skip", async () => {
-  // Driven through the route with a body no honest client could produce.
-  expect((await register(entryToken, { email: "a@b.ac.in", roll: "not-a-roll" })).status).toBe(422);
-});
+it("AC-12: the server refuses a rule the browser was patched to skip", async () =>
+  expect((await register(entryToken, { email: "a@b.ac.in", roll: "not-a-roll" })).status).toBe(422));
 
 it("AC-12: a repeat of a unique field is refused and the field is named", async () => {
   await register(await gate(), { email: "a@b.ac.in", roll: "21CS0147" });
@@ -667,7 +642,7 @@ it("AC-12: a repeat of a unique field is refused and the field is named", async 
   expect((await res.json()).error.details).toMatchObject({ fields: ["email"] });
 });
 
-it("a refused duplicate leaves no candidate row and no partial unique claim", async () => {
+it("a refused duplicate leaves no candidate row and no partial claim", async () => {
   expect(await countCandidates(testId)).toBe(1);
   expect(await countUniqueClaims(testId, "roll")).toBe(1);
 });
@@ -678,21 +653,21 @@ it("two registrations racing on the same unique value: exactly one wins", async 
   expect(await countCandidates(testId)).toBe(1);
 });
 
-it("the unique table stores a hash, never the value", async () => {
-  expect(JSON.stringify(await allUniqueRows())).not.toContain("a@b.ac.in");
-});
+it("the unique table stores a hash, never the value", async () =>
+  expect(JSON.stringify(await allUniqueRows())).not.toContain("a@b.ac.in"));
 
-it("S-12: the consent version and the acceptance time are stored per candidate", async () => {
-  const row = await candidateRow(testId);
-  expect(row).toMatchObject({ consent_version: "2026-10-01", consent_at: expect.any(Number) });
-});
+it("S-12: the consent version and the acceptance time are stored per candidate", async () =>
+  expect(await candidateRow(testId)).toMatchObject({ consent_version: "2026-10-01", consent_at: expect.any(Number) }));
 
-it("S-12: registering without accepting the consent is refused on the consent field", async () => {
-  expect((await register(entryToken, { ...valid, consent: false })).status).toBe(422);
-});
+it("S-12: registering without accepting the consent is refused on the consent field", async () =>
+  expect((await register(entryToken, { ...valid, consent: false })).status).toBe(422));
 
-it("the form route answers only behind a live entry token", async () => {
-  expect((await app.request(`/api/v1/run/alpha/aptitude/form`)).status).toBe(401);
+it("the form route answers only behind a live entry token", async () =>
+  expect((await app.request("/api/v1/run/alpha/aptitude/form")).status).toBe(401));
+
+it("the entry token is single use and cannot be replayed at registration", async () => {
+  await register(entryToken, validValues);
+  expect((await register(entryToken, validValues)).status).toBe(410);
 });
 
 it("S-10: the form route carries no access code and no question", async () => {
@@ -710,14 +685,13 @@ it("S-12: the form is disabled until the consent row is ticked", async () => {
   expect(screen.getByRole("button", { name: /continue/i })).toBeEnabled();
 });
 
-it("the consent text renders through the one shared renderer, not a second one", async () => {
-  expect(await screen.findByRole("list")).toBeVisible();     // the consent text's Markdown bullets
-});
+it("the consent text renders through the one shared renderer, not a second one", async () =>
+  expect(await screen.findByRole("list")).toBeVisible());   // the consent text's Markdown bullets
 
 it("AC-12: the browser's message for a failed rule is byte-identical to the server's", async () => {
-  const clientIssue = validateRegistration(form, { roll: "x" })[0];
-  const serverIssue = (await (await register(token, { roll: "x" })).json()).error.details.issues[0];
-  expect(clientIssue.message).toBe(serverIssue.message);
+  const client = validateRegistration(form, { roll: "x" })[0]!;
+  const server = (await (await register(token, { roll: "x" })).json()).error.details.issues[0];
+  expect(client.message).toBe(server.message);
 });
 
 it("an error is on the field, announced, and the first bad field takes focus", async () => {
@@ -736,12 +710,11 @@ it("all 11 field types render with a label and no axe violations", async () => {
 
 - [ ] **Step 2: Run them to make sure they fail**
 
-Run: `pnpm vitest run packages/core/test/registration.test.ts apps/api/test/run/registration.test.ts apps/web/test/exam/registration.test.tsx`
-Expected: FAIL.
+Run: `pnpm vitest run packages/core/test/registration.test.ts apps/api/test/run/registration.test.ts apps/web/test/exam/registration.test.tsx` — FAIL.
 
-- [ ] **Step 3: Implement the validator, the table and the route**
+- [ ] **Step 3: Implement `validateRegistration`, `normaliseValues`, `registerCandidate`, `matchBounded` and the two routes**
 
-`validateRegistration` is one `switch` on `field.type` with the shared `required` check in front of it; it collects rather than throwing at the first, which is what lets the route return every bad field at once. The route's order is: read the entry token (not consume — consumption happens with the write), validate, hash the unique values, then one `db.batch([insert candidate, …insert claims])` so a `UNIQUE` violation rolls the whole thing back; the 409 names the fields by re-reading which hashes already exist, in one query, only on the failure path.
+`validateRegistration` is one `switch` on `field.type` behind a shared `required` check, collecting rather than throwing at the first, which is what lets the route return every bad field at once. The route's order is: read the entry token, validate, hash the unique values, then **one** `db.batch([consume entry token, insert candidate, …insert claims])` so a `UNIQUE` violation rolls the whole thing back; on the failure path only, one query re-reads which hashes already exist so the 409 can name the fields.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -761,45 +734,44 @@ git commit -s -m "feat(run): consent capture and server-side registration with u
 
 **Files:**
 - Create: `apps/api/src/run/ratelimit.ts`, `apps/api/src/run/captcha.ts`, `apps/api/test/run/ratelimit.test.ts`, `apps/api/test/run/captcha.test.ts`
-- Create: `docs/adr/00NN-bot-protection-narrows-the-no-third-party-script-rule.md` (**the next free number at execution time**) — *only if the escalation below is resolved in favour of a hosted captcha*
-- Modify: `packages/db/src/schema/columns.ts` (`rate_limit`), `packages/db/src/repo/run.ts`, `apps/api/src/env.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/middleware/security.ts` and `apps/web/public/_headers` (**together, or not at all**), `apps/web/test/hosting.test.ts`, `docs/adr/README.md`
+- Create: `docs/adr/00NN-bot-protection-narrows-the-no-third-party-script-rule.md` (**the next free number at execution time**) — **only if** the escalation below is resolved in favour of a hosted captcha
+- Modify: `packages/db/src/schema/columns.ts` (`rate_limit`), `packages/db/src/repo/run.ts`, `apps/api/src/env.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/middleware/security.ts` **and** `apps/web/public/_headers` (together, or not at all), `apps/web/test/hosting.test.ts`, `docs/adr/README.md`
 
 **Interfaces:**
-- Consumes: `scoped`, `deps.http`, `deps.now`, `ApiError`, `AppEnv`.
+- Consumes: `scoped`, `DbClient.run` · `deps.http`, `deps.now`, `AppEnv` (`apps/api/src/env.ts`) · `ApiError` · `TestAccess` (**Phase 5** interface row 6, `captcha` defaulting to `true`).
 - Produces:
   ```ts
-  // packages/db/src/repo/run.ts
-  /** One statement: insert-or-increment inside the window, returning the new count. */
+  // packages/db/src/repo/run.ts — one statement: insert-or-increment inside the window
   export const takeRateToken: ScopedFn<
     [{ bucket: string; limit: number; windowMs: number; now: number }],
     { allowed: boolean; count: number; retryAfterMs: number }>;
 
   // apps/api/src/run/ratelimit.ts
+  export type RateBucket =
+    | "test_access" | "test_register" | "email_code" | "attempt_start" | "attempt_submit" | "result_code";
   export const LIMITS: Readonly<Record<RateBucket, { limit: number; windowMs: number }>>;
-  export type RateBucket = "test_access" | "test_register" | "email_code" | "attempt_start" | "attempt_submit" | "result_code";
+  /** Throws ApiError(429) with Retry-After. `key` is a test version, candidate or email hash — never an IP. */
   export function limitOrThrow(deps: AppDeps, workspaceId: string, bucket: RateBucket, key: string): Promise<void>;
 
   // apps/api/src/run/captcha.ts
-  /** Resolves true when unconfigured — an instance with no provider is not broken. */
-  export function verifyCaptcha(deps: AppDeps, token: string | undefined): Promise<boolean>;
   export function captchaRequired(deps: AppDeps, access: TestAccess): boolean;
+  /** Resolves true when unconfigured — an instance with no provider is not broken (AC-01). */
+  export function verifyCaptcha(deps: AppDeps, token: string | undefined): Promise<boolean>;
   ```
-
-**The attack, and the control that stops it, one row each.**
 
 | Attack | Control | The test |
 | --- | --- | --- |
-| A script registers ten thousand fake candidates on a public `link_code` test, exhausting the free tier's 100,000 daily D1 writes and burying the real results | `test_register` bucket, keyed by test version | 101 registrations inside the window: the 101st is 429 with `Retry-After`, and the write count stops rising |
-| A script brute-forces a short `access_code` over a public URL | `test_access` bucket, keyed by test version | The 11th wrong code in a minute is 429; the 11th is refused before the code is compared |
-| A script requests ten thousand 6-digit codes to one address, or sprays one code across ten thousand addresses | `email_code` bucket, keyed by test version **and** separately by `sha256(email)` | Both directions refused; the email adapter records no send past the limit |
-| A script with one valid registration opens a thousand attempts | `attempt_start` bucket, keyed by candidate, under `attempts_allowed` (Task 5) | The second attempt on a one-attempt test is 409 before any layout is computed |
-| A headless browser farm registers at human speed, under every rate limit | A captcha on registration (`S-07`) — **escalated**, see below | `verifyCaptcha` is called with the submitted token and a failed verification is 403 |
+| A script registers ten thousand fake candidates on a public `link_code` test, exhausting the free tier's 100,000 daily D1 writes and burying the real results | `test_register` bucket, keyed by test version | The 101st registration in the window is 429 with `Retry-After`, and the write count stops rising |
+| A script brute-forces a short `access_code` over a public URL | `test_access` bucket, keyed by test version | The 11th wrong code in a minute is refused before the code is compared |
+| A script requests ten thousand codes to one address, or sprays one code across ten thousand addresses | `email_code` bucket, keyed by test version **and** separately by `sha256(email)` | Both directions refused; the email adapter records no send past the limit |
+| One valid registration opens a thousand attempts | `attempt_start` bucket, keyed by candidate, under `attempts_allowed` (Task 5) | The second attempt on a one-attempt test is 409 before any layout is computed |
+| A headless browser farm registers at human speed, under every limit | A captcha on registration (`S-07`) — **escalated** | `verifyCaptcha` is called with the submitted token and a failed verification is 403 |
 
-**Limits are per attempt and per test, never per IP** — `S-07` and `docs/test-format.md:74` give the reason: "a whole campus often shares one". A test asserts no bucket key is ever derived from a client-IP header, by passing a distinctive IP and grepping every `rate_limit` row for it.
+**Limits are per attempt and per test, never per IP** — `S-07` and `docs/test-format.md:74`: "a whole campus often shares one."
 
-**The bucket store is a D1 table, not KV and not a Durable Object.** One `INSERT … ON CONFLICT DO UPDATE SET count = count + 1 WHERE window_start > ?` is a single statement, one subrequest, portable to SQLite and Postgres, and testable in memory — and the alternatives are Cloudflare-only, which ADR 0002's adapter rule rules out for the reference path. Buckets are applied to the *expensive and abusable* routes (access, email-code, register, start, submit, result-code) and **not** to the answer-save path: a save is already bounded by a live attempt token and a server deadline, and adding a counter write to it would double the hottest path's cost against the PRD's "one D1 write" line for no attack it stops. `ponytail:` a `DELETE FROM rate_limit WHERE window_start < ?` sweep belongs to Phase 8's retention job; until then the table grows at one row per bucket per window, which is small.
+**The bucket store is a D1 table, not KV and not a Durable Object.** One `INSERT … ON CONFLICT DO UPDATE` is a single statement, one subrequest, portable to SQLite and Postgres, and testable in memory; the alternatives are Cloudflare-only, which ADR 0002's adapter rule rules out for the reference path. Buckets apply to the expensive, abusable routes (access, email-code, register, start, submit, result-code) and **not** to the answer save: a save is already bounded by a live attempt token and a server deadline, and a counter write would double the hottest path against the PRD's "one D1 write" line for no attack it stops. `ponytail:` a `DELETE FROM rate_limit WHERE window_start < ?` sweep belongs beside Phase 8's retention job; until then the table grows one row per bucket per window.
 
-**Bot protection is escalated, not decided.** `S-07` names Cloudflare Turnstile or hCaptcha; `S-11` says "No analytics, telemetry or third-party scripts; fonts and the face model are served from the app itself"; the CSP in `apps/api/src/middleware/security.ts:17` is `script-src 'self'` and `apps/web/test/hosting.test.ts:25` asserts `_headers` contains no `https?://` whatsoever. Two PRD clauses of equal precedence contradict each other and a committed test enforces one of them. See [Escalated](#escalated--needs-a-human-decision). **What this task builds either way** is the seam: `captchaRequired()` reads `access.captcha` (schema default `true`), `verifyCaptcha()` posts to a configured `CAPTCHA_VERIFY_URL` with `CAPTCHA_SECRET` over the injectable `deps.http`, and **returns true when nothing is configured** — because `AC-01` promises a working deployment in thirty minutes "using no paid service", and an instance that cannot run a test until its operator holds a Cloudflare account would fail it. The browser half and the CSP change land only once the escalation is answered; the rate limits above ship regardless and are the control that is actually enforceable today.
+**Bot protection is escalated, not decided.** `S-07` names Turnstile or hCaptcha; `S-11` forbids third-party scripts; `apps/api/src/middleware/security.ts:17` is `script-src 'self'`; `apps/web/test/hosting.test.ts:25` asserts `_headers` contains no `https?://` at all. Two PRD clauses of equal precedence contradict each other and a committed test enforces one of them — see [Escalated](#escalated--needs-a-human-decision). **What this task builds either way** is the seam: `captchaRequired()` reads `access.captcha`, `verifyCaptcha()` posts to a configured `CAPTCHA_VERIFY_URL` with `CAPTCHA_SECRET` over `deps.http`, and **returns true when nothing is configured**, because `AC-01` promises a working deployment in thirty minutes "using no paid service". The browser half and the CSP change land only once the escalation is answered; the rate limits ship regardless and are the control that is enforceable today.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -813,22 +785,23 @@ it("S-07: the 101st registration in the window is 429 and carries Retry-After", 
 });
 
 it("S-07: no bucket key is derived from a client IP — a campus shares one", async () => {
-  await post(`/api/v1/run/alpha/aptitude/access`, { code: "nope" }, { headers: { "CF-Connecting-IP": "198.51.100.77" } });
+  await post("/api/v1/run/alpha/aptitude/access", { code: "nope" },
+    { headers: { "CF-Connecting-IP": "198.51.100.77" } });
   expect(JSON.stringify(await allRateRows())).not.toContain("198.51.100.77");
 });
 
 it("two tests on one instance do not share a bucket", async () => {
   await exhaust("alpha/aptitude");
-  expect((await post(`/api/v1/run/alpha/other/access`, { code: "OPENSESAME" })).status).toBe(200);
+  expect((await post("/api/v1/run/alpha/other/access", { code: "OPENSESAME" })).status).toBe(200);
 });
 
 it("the window rolls: the limit is spendable again once windowMs has passed", async () => {
   await exhaust("alpha/aptitude");
   deps.now = () => T + LIMITS.test_access.windowMs + 1;
-  expect((await post(`/api/v1/run/alpha/aptitude/access`, { code: "OPENSESAME" })).status).toBe(200);
+  expect((await post("/api/v1/run/alpha/aptitude/access", { code: "OPENSESAME" })).status).toBe(200);
 });
 
-it("taking a token is one statement, so the limiter never doubles a route's budget by more than 1", async () => {
+it("taking a token is one statement, so a limiter adds at most 1 to a route's budget", async () => {
   const counting = countingClient(db);
   await takeRateToken(counting.db, ws, { bucket: "test_access:ver_1", limit: 10, windowMs: 60_000, now: T });
   expect(counting.count()).toBe(1);
@@ -850,9 +823,8 @@ it("the email-code bucket limits per address as well as per test", async () => {
 
 ```ts
 // apps/api/test/run/captcha.test.ts
-it("an instance with no captcha configured registers normally (AC-01: no paid service)", async () => {
-  expect((await register(await gate(), valid)).status).toBe(201);
-});
+it("AC-01: an instance with no captcha configured registers normally", async () =>
+  expect((await register(await gate(), valid)).status).toBe(201));
 
 it("with a secret configured, a missing or failed token is 403 and writes no candidate", async () => {
   const d = { ...deps, env: withCaptcha(deps.env), http: alwaysFails };
@@ -867,31 +839,38 @@ it("the verification goes through deps.http and sends the secret, never the site
   expect(String(sent[0]!.body)).not.toContain(SITE_KEY);
 });
 
-it("access.captcha=false turns it off for that test even when configured", async () => {
-  expect(captchaRequired(withCaptchaDeps, { mode: "link_code", access_code: "x", captcha: false })).toBe(false);
-});
+it("access.captcha=false turns it off for that test even when configured", () =>
+  expect(captchaRequired(withCaptchaDeps, { mode: "link_code", access_code: "x", captcha: false })).toBe(false));
 ```
 
 ```ts
 // apps/web/test/hosting.test.ts (extended) — S-11's guard, kept honest
-it("S-11: the CSP names no third-party origin unless the bot-protection ADR says which one", () => {
-  const thirdParty = headers.match(/https?:\/\/[^\s;]+/g) ?? [];
-  expect(thirdParty, "see docs/adr/00NN-bot-protection…").toEqual(ALLOWED_THIRD_PARTY_ORIGINS);
-});
+const ALLOWED_THIRD_PARTY_ORIGINS: string[] = [];   // widened only by the bot-protection ADR
 
-it("the API's headers and _headers still agree byte for byte", () => {
-  expect(cspOf(headers)).toBe(SECURITY_HEADERS["Content-Security-Policy"]);
-});
+it("S-11: the CSP names no third-party origin unless an ADR says which one", () =>
+  expect(headers.match(/https?:\/\/[^\s;]+/g) ?? []).toEqual(ALLOWED_THIRD_PARTY_ORIGINS));
+
+it("the API's headers and _headers still agree byte for byte", () =>
+  expect(cspOf(headers)).toBe(SECURITY_HEADERS["Content-Security-Policy"]));
 ```
 
 - [ ] **Step 2: Run them to make sure they fail**
 
-Run: `pnpm vitest run apps/api/test/run/ratelimit.test.ts apps/api/test/run/captcha.test.ts apps/web/test/hosting.test.ts`
-Expected: FAIL.
+Run: `pnpm vitest run apps/api/test/run/ratelimit.test.ts apps/api/test/run/captcha.test.ts apps/web/test/hosting.test.ts` — FAIL.
 
-- [ ] **Step 3: Implement the bucket table, the limiter and the captcha seam**
+- [ ] **Step 3: Implement `rate_limit`, `takeRateToken`, `limitOrThrow` and the captcha seam**
 
-`rate_limit(workspace_id, bucket, window_start, count)` with `UNIQUE (workspace_id, bucket)`; `takeRateToken` is one `INSERT … ON CONFLICT DO UPDATE SET count = CASE WHEN window_start <= ? THEN 1 ELSE count + 1 END, window_start = CASE WHEN window_start <= ? THEN ? ELSE window_start END RETURNING count, window_start`, so the window roll and the increment are the same statement and two concurrent requests cannot both read a stale count. `verifyCaptcha` is twenty lines over `deps.http`. **Do not touch the CSP in this step** — the two header files change together, in whichever direction the escalation is answered, and `hosting.test.ts`'s `ALLOWED_THIRD_PARTY_ORIGINS` starts as `[]`.
+`rate_limit(workspace_id, bucket, window_start, count)` with `UNIQUE (workspace_id, bucket)`. `takeRateToken` must roll the window and increment in the *same* statement, or two concurrent requests both read a stale count:
+
+```sql
+INSERT INTO rate_limit (id, workspace_id, bucket, window_start, count) VALUES (?, ?, ?, ?, 1)
+ON CONFLICT (workspace_id, bucket) DO UPDATE SET
+  count        = CASE WHEN rate_limit.window_start <= ? THEN 1 ELSE rate_limit.count + 1 END,
+  window_start = CASE WHEN rate_limit.window_start <= ? THEN ? ELSE rate_limit.window_start END
+RETURNING count, window_start
+```
+
+**Do not touch the CSP in this step** — the two header files change together, in whichever direction the escalation is answered.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
