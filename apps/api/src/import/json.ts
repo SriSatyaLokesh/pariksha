@@ -17,6 +17,8 @@ import { validateBank, type Bank, type ImportIssue } from "@pariksha/core";
 import { listQuestionRefIds, writeImportedBank } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
+import { convertCsv } from "./csv.js";
+import { convertGift } from "./gift.js";
 import { validateBankDocumentStructure } from "./schema.js";
 
 /**
@@ -55,13 +57,28 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * every other route in banks.ts/questions.ts) — checked once there, not a
  * second time here, which is what keeps this route's budget at "one bank
  * read" rather than two.
+ *
+ * Shared by every import source. `body` is always a `pariksha/bank@1`
+ * document by the time it gets here — for JSON that is the request body
+ * itself; for CSV/GIFT (Task 8, `importBankText` below) it is what
+ * `convertCsv`/`convertGift` built. `opts.lines`, when given, is that
+ * converter's `Converted.lines`: `bank.questions[i]` came from source line
+ * `lines[i]`, so every issue `validateBankDocumentStructure`/`validateBank`
+ * raises against `bank.questions[index]` is translated through it before
+ * the report leaves this function — Review Focus item 4's second half, a
+ * CSV/GIFT import reporting the line an author can find, not an index into
+ * a document that does not exist on disk. `opts.extraIssues` are errors a
+ * converter already found while it was still deciding whether a row/block
+ * could become a question at all (an unsupported `type`, a `$CATEGORY`
+ * line) — already positioned with their own line, so they pass through
+ * untranslated and are merged into the same report JSON issues arrive in.
  */
-export async function importBankJson(
+async function importBankDocument(
   deps: AppDeps,
   workspaceId: string,
   bankId: string,
   body: unknown,
-  opts: { dryRun: boolean; now: number },
+  opts: { dryRun: boolean; now: number; lines?: number[]; extraIssues?: (ImportIssue & { line: number })[] },
 ): Promise<ImportReport> {
   const rawQuestions = isRecord(body) && Array.isArray(body.questions) ? body.questions : [];
 
@@ -97,11 +114,12 @@ export async function importBankJson(
     }
   });
 
-  const issues: (ImportIssue & { line?: number })[] = [
-    ...structural,
-    ...(crossField.ok ? [] : crossField.issues),
-    ...duplicates,
-  ];
+  const lines = opts.lines;
+  const positioned: (ImportIssue & { line?: number })[] = [...structural, ...(crossField.ok ? [] : crossField.issues), ...duplicates].map(
+    (issue) => (lines !== undefined && issue.index >= 0 && lines[issue.index] !== undefined ? { ...issue, line: lines[issue.index] } : issue),
+  );
+  const issues: (ImportIssue & { line?: number })[] = [...(opts.extraIssues ?? []), ...positioned];
+
   if (issues.length > 0) {
     const report: ImportReport = { imported: 0, issues };
     throw new ApiError(422, "invalid_import", "The import could not be validated.", report);
@@ -124,4 +142,34 @@ export async function importBankJson(
   }
 
   return { imported: bank.questions.length, issues: [] };
+}
+
+export async function importBankJson(
+  deps: AppDeps,
+  workspaceId: string,
+  bankId: string,
+  body: unknown,
+  opts: { dryRun: boolean; now: number },
+): Promise<ImportReport> {
+  return importBankDocument(deps, workspaceId, bankId, body, opts);
+}
+
+export type ImportFormat = "csv" | "gift";
+
+/**
+ * Task 8 (#52, P4.8): the CSV/GIFT half of import, on the same route and
+ * the same budget as `importBankJson` — `convertCsv`/`convertGift` do no
+ * I/O, so the DB calls below are the only ones this path ever makes, same
+ * as the JSON path.
+ */
+export async function importBankText(
+  deps: AppDeps,
+  workspaceId: string,
+  bankId: string,
+  text: string,
+  format: ImportFormat,
+  opts: { dryRun: boolean; now: number },
+): Promise<ImportReport> {
+  const { bank, lines, issues } = format === "csv" ? convertCsv(text) : convertGift(text);
+  return importBankDocument(deps, workspaceId, bankId, bank, { ...opts, lines, extraIssues: issues });
 }

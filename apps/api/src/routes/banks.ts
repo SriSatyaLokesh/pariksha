@@ -29,7 +29,7 @@ import {
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
-import { importBankJson } from "../import/json.js";
+import { importBankJson, importBankText } from "../import/json.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 
 const newBank = z.object({ name: z.string().min(1).max(200) });
@@ -300,7 +300,10 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
 
   // Task 7 (#51, P4.7): whole-bank import, all-or-nothing. `?dryRun=1`
   // validates and reports without writing — the one call the web dialog
-  // makes first, before an author ever clicks "Import".
+  // makes first, before an author ever clicks "Import". Task 8 (#52, P4.8):
+  // `?format=csv|gift` reads the same body as text instead of JSON and
+  // hands it to the matching converter first — same handler, same budget
+  // (apps/api/src/import/json.ts's `importBankText`).
   routes.post("/:id/banks/:bankId/import", requires("banks.edit"), async (c) => {
     const actor = actorOr401(c);
     const workspaceId = c.req.param("id");
@@ -308,9 +311,12 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     await bankOr404(deps, workspaceId, bankId);
 
     const dryRun = c.req.query("dryRun") === "1";
-    const body = await json(c.req.raw);
+    const format = c.req.query("format");
     const now = deps.now();
-    const report = await importBankJson(deps, workspaceId, bankId, body, { dryRun, now });
+    const report =
+      format === "csv" || format === "gift"
+        ? await importBankText(deps, workspaceId, bankId, await c.req.raw.text(), format, { dryRun, now })
+        : await importBankJson(deps, workspaceId, bankId, await json(c.req.raw), { dryRun, now });
 
     if (!dryRun) {
       await appendAudit(deps.db, workspaceId, {
