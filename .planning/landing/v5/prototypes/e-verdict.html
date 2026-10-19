@@ -7,7 +7,7 @@
 <!-- Prototype only. Production subsets and self-hosts these under default-src 'self'. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Anek+Devanagari:wght@500&family=Anek+Telugu:wght@500&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..800&family=Inter:wght@400;500;600&family=Anek+Devanagari:wght@500&family=Anek+Telugu:wght@500&family=JetBrains+Mono:wght@400;500;600&display=swap">
 <style>
 /* ══════════════════════════════════════════════════════════════════════
    VERDICT — ink on paper, with two chromatic colours doing real work:
@@ -34,18 +34,13 @@
 
   /* Two chromatic colours. Green is the accent and doubles as the
      "clean" verdict — for an exam product, brand colour meaning passed
-     and in order is coherent. Cobalt is the third colour and it is a
-     SURFACE: whole bands and cards are painted in it, so the page has a
-     block of hard contrast rather than a decorated word. Green never sits
-     on blue — they take separate surfaces. */
+     and in order is coherent. Three colours only: ink, paper, green.
+     Contrast comes from painted bands — ink, paper, ink — not from a
+     fourth hue. Amber and red appear once, as verdicts. */
   --accent: #0A8E59;          /* on paper */
   --accent-deep: #066B43;     /* links and small text on paper */
   --accent-on-ink: #28E291;   /* on the inverted sections */
   --accent-ink: #FFFFFF;      /* text on a filled accent button */
-  --blue: #2235E0;            /* third colour — surfaces only, never text on paper */
-  --blue-deep: #1627AE;
-  --on-blue: #F2F4FF;
-  --blue-rule: rgba(255, 255, 255, 0.24);
 
   --clean: #0A8E59;
   --review: #8A5F00;
@@ -54,7 +49,8 @@
   /* Escape hatch. Uncomment to introduce one chromatic accent.
      --signal: #3D5AFE; */
 
-  --sans: "Archivo", ui-sans-serif, system-ui, "Segoe UI", Helvetica, sans-serif;
+  --display: "Bricolage Grotesque", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --sans: "Inter", ui-sans-serif, system-ui, "Segoe UI", Helvetica, sans-serif;
   --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
   --maxw: 1240px;
   --gut: 22px;
@@ -82,27 +78,24 @@ body {
 .wrap { max-width: var(--maxw); margin: 0 auto; padding-inline: var(--gut); }
 
 /* ── type ─────────────────────────────────────────────────────────── */
-h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1, h2, h3 { margin: 0; font-family: var(--display); text-wrap: balance; }
 h1 {
-  font-size: clamp(36px, 5.4vw, 76px);
-  line-height: 0.95;
-  font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.034em;
-  max-width: 14ch;
-  /* no break-word here: splitting "infrastructure" mid-word looked worse
-     than any overflow it was preventing. The column is sized to hold the
-     longest word instead. */
+  font-size: clamp(38px, 6.2vw, 88px);
+  line-height: 0.98;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  font-variation-settings: "opsz" 96;
+  max-width: 20ch;
 }
 h2 {
-  font-size: clamp(30px, 4.6vw, 62px);
-  line-height: 0.96;
+  font-size: clamp(29px, 4.1vw, 56px);
+  line-height: 1.0;
   font-weight: 700;
-  font-stretch: 108%;
-  letter-spacing: -0.034em;
-  max-width: 17ch;
+  letter-spacing: -0.024em;
+  font-variation-settings: "opsz" 64;
+  max-width: 18ch;
 }
-h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.012em; }
+h3 { font-size: 19px; font-weight: 600; letter-spacing: -0.01em; }
 p { margin: 0 0 16px; color: var(--ink-2); max-width: 60ch; }
 .lede { font-size: clamp(18px, 1.8vw, 22px); line-height: 1.45; max-width: 44ch; }
 strong { color: inherit; font-weight: 600; }
@@ -149,6 +142,10 @@ a { color: inherit; }
 }
 .on-ink p { color: var(--invert-ink-2); }
 .on-ink .label { color: var(--accent-on-ink); }
+.on-ink .arith-line { color: var(--invert-ink-2); }
+.on-ink .arith-line b, .on-ink .arith-cols b { color: var(--accent-on-ink); }
+.on-ink .arith-cols { border-top-color: var(--accent-on-ink); }
+.on-ink h2, .on-ink h3 { color: var(--invert-ink); }
 .on-ink .fine { color: var(--invert-ink-2); }
 a { color: var(--accent-deep); }
 .on-ink a { color: var(--accent-on-ink); }
@@ -188,7 +185,7 @@ a:focus-visible, button:focus-visible {
   padding: 22px 0 20px;
 }
 .word { display: flex; align-items: baseline; gap: 11px; margin-right: auto; }
-.word b { font-size: 21px; font-weight: 700; font-stretch: 112%; letter-spacing: -0.02em; }
+.word b { font-family: var(--display); font-size: 21px; font-weight: 700; letter-spacing: -0.02em; font-variation-settings: "opsz" 24; }
 .word i {
   font-style: normal; font-size: 13px; opacity: 0.55;
   font-family: "Anek Telugu", "Anek Devanagari", var(--sans);
@@ -202,8 +199,14 @@ a:focus-visible, button:focus-visible {
 
 /* ── 1 · hero ─────────────────────────────────────────────────────── */
 .hero { padding-bottom: clamp(44px, 6vw, 84px); }
-.hero-top { display: grid; gap: 40px 48px; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: end; padding: clamp(28px, 5vw, 64px) 0 clamp(32px, 4vw, 52px); }
-@media (max-width: 1060px) { .hero-top { grid-template-columns: 1fr; align-items: start; gap: 28px; } }
+.hero-head { padding: clamp(34px, 6vw, 76px) 0 clamp(26px, 3.4vw, 40px); }
+.hero-sub {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 26px 56px;
+  align-items: end; padding-bottom: clamp(30px, 4vw, 46px);
+  border-bottom: 1px solid var(--invert-rule); margin-bottom: clamp(26px, 3.4vw, 40px);
+}
+.hero-sub .lede { margin: 0; max-width: 52ch; }
+@media (max-width: 860px) { .hero-sub { grid-template-columns: 1fr; align-items: start; } }
 .status {
   display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 10.5px; font-weight: 500;
@@ -302,8 +305,7 @@ a:focus-visible, button:focus-visible {
 /* ── 4 · the statement ────────────────────────────────────────────── */
 .statement { padding: clamp(72px, 11vw, 150px) 0; }
 .statement h2 {
-  font-size: clamp(34px, 6.6vw, 96px); line-height: 0.94;
-  font-stretch: 110%; letter-spacing: -0.038em; max-width: 13ch;
+  font-size: clamp(34px, 6.6vw, 96px); line-height: 0.94; letter-spacing: -0.038em; max-width: 13ch;
   overflow-wrap: break-word;
 }
 .statement-grid {
@@ -385,32 +387,11 @@ a:focus-visible, button:focus-visible {
 .today li b { color: var(--ink); }
 
 
-/* ── the blue band: the page's block of hard contrast ──────────────── */
-.on-blue { background: var(--blue); color: var(--on-blue); }
-.on-blue p { color: rgba(242, 244, 255, 0.82); }
-.on-blue .fine { color: rgba(242, 244, 255, 0.68); }
-.on-blue .label { color: var(--on-blue); }
-.on-blue .label::before { background: var(--on-blue); }
-.on-blue h2, .on-blue strong { color: var(--on-blue); }
-.on-blue .arith-line { color: rgba(242, 244, 255, 0.88); }
-.on-blue .arith-line b, .on-blue .arith-cols b { color: var(--on-blue); }
-.on-blue .arith-cols { border-top-color: var(--blue-rule); }
-.on-blue code { color: var(--on-blue); }
-.on-blue .btn { background: var(--on-blue); color: var(--blue-deep); border-color: var(--on-blue); }
-.on-blue .btn:hover { box-shadow: 0 0 0 5px rgba(255,255,255,0.18); }
-.on-blue a:focus-visible, .on-blue button:focus-visible { outline-color: var(--on-blue); }
-
-/* the today card takes the blue too, so the page's one instruction block
-   is the thing that stands furthest out */
+/* the instruction card: paper, lifted, green edge */
 .today {
-  background: var(--blue); border: 0; border-top: 0;
-  color: var(--on-blue); padding: 28px;
+  background: var(--surface); border: 1px solid var(--rule-strong);
+  border-top: 4px solid var(--accent); padding: 28px;
 }
-.today h3 { color: var(--on-blue); }
-.today li { color: rgba(242, 244, 255, 0.84); }
-.today li b, .today strong { color: var(--on-blue); }
-.today .fine { color: rgba(242, 244, 255, 0.7); }
-.today code { color: var(--on-blue); }
 
 /* ── 7 · close ────────────────────────────────────────────────────── */
 .close { padding: clamp(72px, 10vw, 140px) 0 clamp(48px, 6vw, 80px); }
@@ -443,19 +424,17 @@ a:focus-visible, button:focus-visible {
       </nav>
     </header>
 
-    <div class="hero-top">
-      <div>
-        <p class="status"><s></s>Pre-alpha · scoring engine and formats live · v0.1 in progress</p>
-        <h1>Run real exams on infrastructure <span class="g">you own</span>.</h1>
-      </div>
-      <div>
-        <p class="lede">For placement cells, training institutes and teams that have to test hundreds
-        of people. Twelve question types, <strong>a different paper for every candidate</strong>, proctoring that
-        records no video, and a results CSV. Free, Apache-2.0, in your own account.</p>
-        <div class="actions" style="margin-top:28px">
-          <a class="btn" href="#">Start your question bank</a>
-          <a class="btn btn-2" href="#">See a real exam</a>
-        </div>
+    <div class="hero-head">
+      <p class="status"><s></s>Pre-alpha · scoring engine and formats live · v0.1 in progress</p>
+      <h1>Run real exams<br>on infrastructure <span class="g">you own</span>.</h1>
+    </div>
+    <div class="hero-sub">
+      <p class="lede">For placement cells, training institutes and teams that have to test hundreds
+      of people. Twelve question types, <strong>a different paper for every candidate</strong>,
+      proctoring that records no video, and a results CSV — free, Apache-2.0, in your own account.</p>
+      <div class="actions">
+        <a class="btn" href="#">Start your question bank</a>
+        <a class="btn btn-2" href="#">See a real exam</a>
       </div>
     </div>
 
@@ -622,8 +601,8 @@ a:focus-visible, button:focus-visible {
   </div>
 </section>
 
-<!-- ══════════ 6 · THE BLUE BAND — what it costs ══════════ -->
-<section class="on-blue" style="padding:clamp(64px,9vw,120px) 0">
+<!-- ══════════ 6 · THE INK BAND — what it costs ══════════ -->
+<section class="on-ink" style="padding:clamp(64px,9vw,120px) 0">
   <div class="wrap">
 
       <p class="label">What it costs</p>

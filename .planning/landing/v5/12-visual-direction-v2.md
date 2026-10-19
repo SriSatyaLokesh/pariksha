@@ -49,31 +49,25 @@ That rules out green, amber, gold, red and oxblood. Removing orange on top of th
 teal, violet and neutral. Violet-to-blue gradients are the single most over-used look in current AI
 and SaaS design, so that goes too.
 
-### 2.2a Revised, 19 October — three colours, each with one job
+### 2.2a Revised, 19 October — three colours, and no fourth
 
-Pure monochrome was built and read as too austere in a browser. Two revisions followed; this is
-where it landed.
+Pure monochrome read as too austere in a browser. Three revisions followed; this is where it landed.
 
-| Token | Value | Job | Rule |
-| --- | --- | --- | --- |
-| `accent` / `accent-deep` / `accent-on-ink` | `#0A8E59` / `#066B43` / `#28E291` | **Emphasis and action.** The second half of every band heading, margin marks, figures, the Pariksha column, buttons, eyebrow rules, focus rings, links | Also the `clean` verdict — same call as Signal |
-| `blue` / `blue-deep` / `on-blue` | `#2235E0` / `#1627AE` / `#F2F4FF` | **Surface.** Whole bands and cards painted in it — the cost band is full-bleed cobalt, and the "what you can do today" card is a solid blue block | **Never text on paper, never a status.** Green never sits on blue; they take separate surfaces |
-| `review` / `risk` | `#8A5F00` / `#B3261E` | Verdicts only | Appear once, in the results sheet |
+**Ink, paper, green. That is the whole palette.** A cobalt band was tried as a fourth colour and
+cut — a painted blue surface competed with the green rather than supporting it, and the page did not
+need a second loud hue to create contrast. Contrast now comes from **painted bands alternating ink
+and paper**, with green doing the emphasis in both.
 
-**Why a surface and not a highlighter.** The first revision used a marker yellow behind three
-phrases. It was decorative — it drew the eye to a sentence without changing the page's structure,
-and yellow sat uneasily next to the amber review flag. Replacing it with a painted band does the
-job properly: the page now has **black → paper → black → paper → cobalt → paper → black**, so the
-contrast is architectural rather than applied, and the loudest surface on the page is the one
-telling you what it costs.
+| Token | Value | Job |
+| --- | --- | --- |
+| `accent` / `accent-deep` / `accent-on-ink` | `#0A8E59` / `#066B43` / `#28E291` | The second half of every band heading, margin marks, figures, the Pariksha column, buttons, eyebrow rules, focus rings, links. Also the `clean` verdict |
+| `review` / `risk` | `#8A5F00` / `#B3261E` | Verdicts only — they appear once, in the results sheet |
 
-**Why cobalt.** It has to hold its own against near-black, off-white and a saturated green without
-muddying any of them. Orange is out by instruction, amber and red are spoken for by the verdicts,
-and violet-to-blue gradients are the category's most over-used look. A flat, saturated cobalt is
-none of those, carries white text at about 8:1, and reads institutional rather than consumer.
+A marker yellow was also tried and cut: it was decorative, it drew the eye to a sentence without
+changing the page's structure, and it sat badly beside the amber review flag.
 
 The sections below describe the original monochrome reasoning and are kept because the restraint
-still governs everything the three colours do not touch.
+still governs everything green does not touch.
 
 ### 2.2 The decision: no brand colour at all
 
@@ -121,20 +115,23 @@ Free of `DESIGN.md`. One Latin family doing three jobs, one mono, one 1.7 KB wor
 
 | Role | Face | Setting |
 | --- | --- | --- |
-| Display | **Archivo** (variable: `wdth 62–125`, `wght 100–900`) | 700–800 weight, expanded width on the hero, `-0.04em`, line-height 0.9 |
-| Body | **Archivo** | 400/500, 17–19 px, line-height 1.6 |
+| Display | **Bricolage Grotesque** (variable: `opsz 12–96`, `wght 200–800`) | 800 weight, `opsz 96` on the hero, `-0.03em`, line-height 0.98. **No width axis is touched** |
+| Body | **Inter** | 400/500/600, 17.5 px, line-height 1.6 |
 | Data, labels, code | **JetBrains Mono** | 500, `tabular-nums`, `0.1em` tracking uppercase for labels |
 | Wordmark Indic | **Anek Telugu / Devanagari** | Kept exactly as subsetted today — 1.7 KB total |
 
-**Why Archivo.** It is a grotesque with institutional bones — it reads as a standards body or a
-transit system rather than a startup — and its **width axis** is the reason to pick it over Inter or
-Public Sans: the hero can run genuinely expanded while body copy stays normal width, which gives the
-page a display register it currently has no way to reach. One variable file covers every weight and
-width, so the payload is one subset, not four.
+**Why Bricolage Grotesque, and why no stretching.** The first build used Archivo's width axis to
+reach a display register. Reviewed in a browser, horizontally expanded type reads as distorted
+rather than confident — the letterforms are the same shapes pulled wider, so the counters go slack
+and the rhythm flattens.
 
-**Alternative if more character is wanted:** Bricolage Grotesque 800 for display only, keeping
-Archivo for body. Noted, not recommended — Archivo Expanded is already distinctive and one family is
-cheaper and calmer.
+Bricolage Grotesque solves it properly with an **optical size axis**: at `opsz 96` it serves
+genuinely display-cut letterforms — tighter apertures, shorter extenders, proportions drawn for
+large sizes — instead of a stretched text face. It also has real character (a slightly irregular,
+non-neutral grotesque) without tipping into novelty. Inter carries the body, which is the one job
+Bricolage should not do at length.
+
+**Rule now enforced in the CSS:** no `font-stretch` and no `wdth` setting anywhere on the page.
 
 Both are OFL and self-hostable, which the CSP requires. The prototype loads them from Google Fonts;
 production subsets and self-hosts them exactly as it does today.
