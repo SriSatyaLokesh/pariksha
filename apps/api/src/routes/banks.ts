@@ -33,8 +33,9 @@ import {
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { exportIssues, toBankDocument, toSingleQuestionDocument } from "../export/bank.js";
-import { importBankJson, importBankText } from "../import/json.js";
+import { importBankJson, importBankText, IMPORT_MAX_TEXT_LENGTH } from "../import/json.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
+import { readBodyWithLimit } from "./media.js";
 
 const newBank = z.object({ name: z.string().min(1).max(200) });
 
@@ -359,10 +360,18 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     const dryRun = c.req.query("dryRun") === "1";
     const format = c.req.query("format");
     const now = deps.now();
+    // Fix round (whole-branch review, I2): `c.req.raw.text()` and
+    // `json(c.req.raw)` (below) used to buffer the whole body before either
+    // `IMPORT_MAX_QUESTIONS` (json.ts:88, after `JSON.parse`) or
+    // `IMPORT_MAX_TEXT_LENGTH` (json.ts:188, after `.text()`) got a chance to
+    // refuse it — the same streaming cap `media.ts`'s upload route already
+    // applies, reused here rather than re-implemented.
+    const bodyBytes = await readBodyWithLimit(c.req.raw, IMPORT_MAX_TEXT_LENGTH, "A bank import");
+    const bodyText = new TextDecoder().decode(bodyBytes);
     const report =
       format === "csv" || format === "gift"
-        ? await importBankText(deps, workspaceId, bankId, await c.req.raw.text(), format, { dryRun, now })
-        : await importBankJson(deps, workspaceId, bankId, await json(c.req.raw), { dryRun, now });
+        ? await importBankText(deps, workspaceId, bankId, bodyText, format, { dryRun, now })
+        : await importBankJson(deps, workspaceId, bankId, parseJson(bodyText), { dryRun, now });
 
     if (!dryRun) {
       await appendAudit(deps.db, workspaceId, {
@@ -453,6 +462,20 @@ function parse<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
 async function json(request: Request): Promise<unknown> {
   try {
     return await request.json();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * `json()`'s own parse-failure contract (`null`, not a thrown error), for a
+ * body already read as text by `readBodyWithLimit` — the import route's own
+ * `request.json()` would otherwise try to read the body stream a second
+ * time, which a capped read above already consumed.
+ */
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text) as unknown;
   } catch {
     return null;
   }

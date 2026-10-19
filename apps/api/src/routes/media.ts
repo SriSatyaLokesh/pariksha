@@ -62,10 +62,21 @@ async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
  * simply lies) does not get a free pass: the stream itself is cut off the
  * moment the running total crosses `maxBytes`, so the worst case is
  * buffering one chunk past the cap, never the whole body.
+ *
+ * Fix round (whole-branch review, I2): exported so `routes/banks.ts`'s
+ * import route can cap its own body the same way — `await c.req.raw.text()`
+ * and `await json(c.req.raw)` there used to buffer a request whole before
+ * `IMPORT_MAX_QUESTIONS`/`IMPORT_MAX_TEXT_LENGTH` ever got a chance to
+ * refuse it, the exact bug this function exists to not have. `what` names
+ * the body in the 413 message (an image here, a bank import there).
  */
-async function readBodyWithLimit(request: Request, maxBytes: number): Promise<ArrayBuffer> {
+export async function readBodyWithLimit(
+  request: Request,
+  maxBytes: number,
+  what = "The request body",
+): Promise<ArrayBuffer> {
   const tooLarge = () =>
-    new ApiError(413, "payload_too_large", `An image must be under ${maxBytes / (1024 * 1024)} MB.`);
+    new ApiError(413, "payload_too_large", `${what} must be under ${maxBytes / (1024 * 1024)} MB.`);
 
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) throw tooLarge();
@@ -112,7 +123,7 @@ export function mediaRoutes(deps: AppDeps): Hono<AppBindings> {
       throw new ApiError(400, "invalid_request", "Only PNG, JPEG, GIF or WebP images are accepted.");
     }
 
-    const bytes = await readBodyWithLimit(c.req.raw, MAX_UPLOAD_BYTES);
+    const bytes = await readBodyWithLimit(c.req.raw, MAX_UPLOAD_BYTES, "An image");
     const key = `${await sha256Hex(bytes)}.${ext}`;
     await deps.storage.put(`media/${workspaceId}/${key}`, bytes, { contentType });
 

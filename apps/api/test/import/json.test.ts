@@ -303,6 +303,21 @@ it("an import over IMPORT_MAX_QUESTIONS is refused before structural or cross-fi
   expect(await questionCount()).toBe(0);
 });
 
+// Fix round (whole-branch review, I2): `IMPORT_MAX_QUESTIONS` only fires
+// after one `JSON.parse` of the whole body — `await json(c.req.raw)` used
+// to buffer it in full first. An oversized raw body (not just an oversized
+// `questions` array) is now refused while the body is still being read,
+// the same streaming cap `media.ts`'s upload route already applies.
+it("an oversized JSON body is refused while the body is still being read, before JSON.parse", async () => {
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/banks/${bankId}/import`, {
+    method: "POST",
+    headers: { cookie: authorCookie, "content-type": "application/json" },
+    body: `{"format":"pariksha/bank@1","name":"x","questions":[],"pad":"${"x".repeat(2 * 1024 * 1024 + 1)}"}`,
+  });
+  expect(res.status).toBe(413);
+  expect(await questionCount()).toBe(0);
+});
+
 it("an import stores the Markdown source verbatim and derives nothing from it", async () => {
   const bank = exampleBank();
   await post(bank, authorCookie);
