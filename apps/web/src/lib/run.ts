@@ -12,8 +12,10 @@
 // Worker to be believed.
 
 import type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent } from "@pariksha/core";
+import type { AttemptPaper } from "./paper.js";
 
 export type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent };
+export type { AttemptPaper, CandidateQuestion, PaperClient, PaperSection } from "./paper.js";
 
 /** The five states `deriveState` answers with — the stored column holds
  * only four of them and never `"open"`. */
@@ -112,6 +114,24 @@ export interface RunClient {
     values: Record<string, unknown>,
     captchaToken?: string,
   ): Promise<{ registrationToken: string }>;
+  /**
+   * Spends the single-use `registrationToken` and mints the attempt
+   * (Task 5). The 256-bit attempt token comes back as an `HttpOnly`
+   * cookie the browser stores and this module never sees — which is why
+   * nothing is returned but the paper, and why `resume` takes nothing.
+   *
+   * 409 (`RunError`) when the candidate already has this test open, has
+   * used every attempt, is inside a cooldown, or the published version
+   * has gone stale; 410 once the registration token has been spent.
+   */
+  start(registrationToken: string): Promise<AttemptPaper>;
+  /**
+   * The same paper again, from the attempt cookie alone — `C-06`'s
+   * "closing the browser and reopening it resumes the same attempt".
+   * `null` when this browser holds no live attempt, which is the
+   * ordinary case on a first visit and not an error to show anyone.
+   */
+  resume(): Promise<AttemptPaper | null>;
 }
 
 /**
@@ -234,9 +254,15 @@ export class RegistrationInvalid extends RunError {
 }
 
 async function send<T>(path: string, init: RequestInit = {}): Promise<T | null> {
-  // Same origin, no credentials to send: a candidate carries no cookie and
-  // the attempt token (Task 5) is its own header, not an ambient one.
+  // Same origin, and the cookie goes with it. Before an attempt is
+  // minted a candidate carries none; from `/start` onward they carry
+  // exactly one, `pk_attempt`, scoped to `/api/v1/run` and `HttpOnly`,
+  // so no script here can read it and every request under that prefix
+  // carries it without a line of code — including the offline queue's
+  // replay (Task 8). `same-origin` is already the default; it is named
+  // because the attempt depends on it.
   const res = await fetch(path, {
+    credentials: "same-origin",
     ...init,
     headers: { accept: "application/json", ...(init.headers ?? {}) },
   });
@@ -353,6 +379,20 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
       // can correct and resubmit against the same entry token.
       void attempt.catch(() => undefined).finally(() => registering.delete(entryToken));
       return attempt;
+    },
+    start: async (registrationToken) =>
+      (await post<AttemptPaper>(`${base}/start`, undefined, bearer(registrationToken))) as AttemptPaper,
+    resume: async () => {
+      try {
+        return await get<AttemptPaper>("/api/v1/run/attempt");
+      } catch (error) {
+        /* No attempt in this browser is the ordinary first visit, not a
+         * failure: the screen shows the landing page rather than an
+         * error. Narrowed to the one code the context answers with, so a
+         * 401 that ever came to mean something else is still thrown. */
+        if (error instanceof RunError && error.code === "attempt_required") return null;
+        throw error;
+      }
     },
   };
 }

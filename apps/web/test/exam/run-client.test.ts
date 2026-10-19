@@ -84,13 +84,17 @@ describe("createRunClient", () => {
     expect(calls[0]?.url).not.toContain("/admin");
   });
 
-  it("sends no credentials and asks for JSON", async () => {
+  it("asks for JSON and sends same-origin credentials, which is what carries the attempt", async () => {
     const calls = stubFetch(ok({}));
     await createRunClient("alpha", "aptitude").landing();
     expect(calls[0]?.init?.headers).toMatchObject({ accept: "application/json" });
-    // A candidate carries no cookie; the attempt token (Task 5) will be its
-    // own header rather than an ambient credential.
-    expect(calls[0]?.init?.credentials).toBeUndefined();
+    // Written as "no credentials" until Task 5 landed, on the assumption
+    // that the attempt token would be a header. It is an `HttpOnly`
+    // cookie instead (`C-06` needs it to outlive the tab, and the runner
+    // renders author-written Markdown), so the cookie is the credential
+    // and this is the option that sends it. Named rather than left to
+    // the default, because every request after `/start` depends on it.
+    expect(calls[0]?.init?.credentials).toBe("same-origin");
   });
 });
 
@@ -431,6 +435,58 @@ describe("the access gate (Task 2)", () => {
     expect(failure).toBeInstanceOf(RunError);
     expect((failure as RegistrationInvalid).issues).toEqual(issues);
     expect((failure as RegistrationInvalid).status).toBe(422);
+  });
+
+  it("start spends the registration token as a Bearer header and sends no body", async () => {
+    const paper = { attemptId: "att_1", sections: [], responses: {}, navigation: "free" };
+    const calls = stubFetch(ok(paper));
+
+    expect(await createRunClient("alpha", "paper").start("reg-token")).toEqual(paper);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("/api/v1/run/alpha/paper/start");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect((calls[0]?.init?.headers as Record<string, string>).authorization).toBe("Bearer reg-token");
+    // The candidate is whoever the token names. A body here would be a
+    // second identity claim the server would have to choose between.
+    expect(calls[0]?.init?.body).toBe(undefined);
+    // And the cookie the attempt comes back in has to be sent on the
+    // requests that follow, which is a property of this option.
+    expect(calls[0]?.init?.credentials).toBe("same-origin");
+  });
+
+  it("resume carries the cookie alone — no slug pair, no token, no body", async () => {
+    const paper = { attemptId: "att_1", sections: [], responses: {}, navigation: "free" };
+    const calls = stubFetch(ok(paper));
+
+    expect(await createRunClient("alpha", "paper").resume()).toEqual(paper);
+
+    // Not under the slug pair: one attempt cookie names one attempt.
+    expect(calls[0]?.url).toBe("/api/v1/run/attempt");
+    expect(calls[0]?.init?.method).toBe(undefined);
+    expect(calls[0]?.init?.credentials).toBe("same-origin");
+    expect((calls[0]?.init?.headers as Record<string, string>).authorization).toBe(undefined);
+  });
+
+  it("resume answers null when this browser holds no attempt, and throws for anything else", async () => {
+    const refusal = (code: string, status: number) =>
+      new Response(JSON.stringify({ error: { code, message: "no" } }), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+
+    stubFetch(() => refusal("attempt_required", 401));
+    expect(await createRunClient("alpha", "paper").resume()).toBeNull();
+
+    // A 401 that ever came to mean something else is still an error: the
+    // screen must not silently show a landing page over a real failure.
+    vi.unstubAllGlobals();
+    stubFetch(() => refusal("something_else", 401));
+    await expect(createRunClient("alpha", "paper").resume()).rejects.toBeInstanceOf(RunError);
+
+    vi.unstubAllGlobals();
+    stubFetch(() => refusal("attempt_in_progress", 409));
+    await expect(createRunClient("alpha", "paper").resume()).rejects.toMatchObject({ status: 409 });
   });
 
   it("a spent entry token is an ordinary RunError, not a validation failure", async () => {

@@ -51,6 +51,11 @@ function clientFor(payload: LandingPayload | Error): RunClient {
     // form should fail here rather than pass quietly.
     form: () => Promise.reject(new Error("the landing screen reads no form")),
     register: () => Promise.reject(new Error("the landing screen registers nobody")),
+    // Task 5, and the same posture a third time: the landing screen
+    // mints no attempt and resumes none, so both reject rather than
+    // resolve. A screen that starts calling either fails here.
+    start: () => Promise.reject(new Error("the landing screen starts no attempt")),
+    resume: () => Promise.reject(new Error("the landing screen resumes no attempt")),
   };
 }
 
