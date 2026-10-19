@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
 
 import {
@@ -610,5 +610,74 @@ describe("OrganiserApp routes on state, not on a URL", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Midterm" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Sections" })).toBeInTheDocument();
+  });
+
+  // Task 4 (#56, P5.3), the same lesson a fourth time: sets.test.tsx
+  // renders `SetsPanel` directly and so cannot see whether anything in the
+  // running app mounts it. This walks Dashboard -> Tests -> the builder ->
+  // the section's own disclosure, which is the only route an Author has to
+  // T-09's assignment control and T-10's shuffle switch.
+  it("reaches the set assignment and shuffle controls from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: {
+              settings: {},
+              sections: [
+                {
+                  id: "reasoning",
+                  title: "Reasoning",
+                  source: {
+                    kind: "sets" as const,
+                    assignment: "round_robin" as const,
+                    sets: [
+                      { set: "A", questions: ["qst_a1"] },
+                      { set: "B", questions: ["qst_b1"] },
+                    ],
+                  },
+                },
+              ],
+            },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Reasoning ·/i }));
+
+    expect(await screen.findByRole("radio", { name: /round robin/i })).toBeChecked();
+    expect(screen.getByText(/candidates sitting next to each other get different sets/i)).toBeVisible();
+    expect(
+      within(screen.getByRole("group", { name: /shuffling/i })).getByRole("checkbox", {
+        name: /shuffle questions within this section/i,
+      }),
+    ).toBeChecked();
   });
 });

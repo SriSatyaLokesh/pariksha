@@ -1,9 +1,10 @@
 import { useEffect, useId, useState } from "react";
-import { QUESTION_TYPES, type Difficulty, type PoolFilter, type QuestionSource, type QuestionType, type SetAssignment, type SetDefinition, type SourcePool } from "@pariksha/core";
+import { QUESTION_TYPES, type Difficulty, type PoolFilter, type QuestionSource, type QuestionType, type SetDefinition, type SourcePool, type SourceSets } from "@pariksha/core";
 import type { ApiClient, Bank, StoredSection } from "../../lib/api";
 import { ReorderableList } from "../authoring/ReorderableList";
 import { RenderedHtml } from "../authoring/RenderedHtml";
 import { QuestionPickerDrawer } from "./QuestionPickerDrawer";
+import { SetsPanel, ShuffleFieldset } from "./SetsPanel";
 import { useDialogKeys } from "./useDialogKeys";
 
 /** A fresh section id (`^[a-z0-9_-]{1,40}$` — schemas/test-1.json's
@@ -332,6 +333,21 @@ export function SectionList({
                   }
                   onChangeKind={(kind) => changeSourceKind(section, kind)}
                   onChangeSource={(source) => updateSection(section.id, (s) => ({ ...s, source }))}
+                  // Task 4 (#56, P5.3): `SetsPanel` reports both halves at
+                  // once, and they are applied in one update — two separate
+                  // callbacks fired from the same handler would each
+                  // rebuild this section from the same stale `sections`
+                  // prop, and the second would undo the first.
+                  onChangeSets={(next) =>
+                    updateSection(section.id, (s) => ({
+                      ...s,
+                      source: next.source,
+                      shuffle_questions: next.shuffleQuestions,
+                    }))
+                  }
+                  onChangeShuffle={(shuffle_questions) =>
+                    updateSection(section.id, (s) => ({ ...s, shuffle_questions }))
+                  }
                   onPickFixed={() => setPicker({ sectionId: section.id })}
                   onPickSet={(setIndex) => setPicker({ sectionId: section.id, setIndex })}
                   onDelete={() => requestDelete(section.id)}
@@ -420,6 +436,8 @@ function SectionEditor({
   onChangeTimeLimit,
   onChangeKind,
   onChangeSource,
+  onChangeSets,
+  onChangeShuffle,
   onPickFixed,
   onPickSet,
   onDelete,
@@ -431,6 +449,8 @@ function SectionEditor({
   onChangeTimeLimit: (minutes: number | undefined) => void;
   onChangeKind: (kind: SourceKind) => void;
   onChangeSource: (source: QuestionSource) => void;
+  onChangeSets: (next: { source: SourceSets; shuffleQuestions: boolean }) => void;
+  onChangeShuffle: (shuffleQuestions: boolean) => void;
   onPickFixed: () => void;
   onPickSet: (setIndex: number) => void;
   onDelete: () => void;
@@ -624,24 +644,16 @@ function SectionEditor({
 
       {source.kind === "sets" && (
         <div className="section-editor__source">
-          <div className="field">
-            <label className="field-label" htmlFor={`${sourceId}-assignment`}>
-              Assignment
-            </label>
-            <select
-              id={`${sourceId}-assignment`}
-              className="text-input"
-              value={source.assignment ?? "round_robin"}
-              onChange={(event) =>
-                onChangeSource({ ...source, assignment: event.target.value as SetAssignment })
-              }
-            >
-              <option value="round_robin">Round robin</option>
-              <option value="random">Random</option>
-              <option value="hash">Hash (stable per candidate)</option>
-              <option value="from_candidate_list">From candidate list</option>
-            </select>
-          </div>
+          {/* Task 4 (#56, P5.3): T-09's four strategies as radios, each
+              carrying its consequence as persistent helper text, plus
+              T-10's shuffle group — the `<select>` that used to sit here
+              named the strategies and said nothing about what any of them
+              does to a candidate. */}
+          <SetsPanel
+            source={source}
+            shuffleQuestions={section.shuffle_questions ?? true}
+            onChange={onChangeSets}
+          />
           <ul className="section-editor__sets">
             {source.sets.map((set, index) => (
               <li key={set.set}>
@@ -659,6 +671,14 @@ function SectionEditor({
             Add set
           </button>
         </div>
+      )}
+
+      {/* Task 4 (#56, P5.3): `shuffle_questions` is a field of every
+          section, not only a `sets` one — `SetsPanel` composes the same
+          fieldset for `sets` sources, where it has to travel with the
+          assignment in a single update. */}
+      {source.kind !== "sets" && (
+        <ShuffleFieldset shuffleQuestions={section.shuffle_questions ?? true} onChange={onChangeShuffle} />
       )}
 
       <button type="button" className="button-secondary" onClick={onDelete}>

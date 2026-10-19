@@ -205,6 +205,64 @@ describe("SectionList", () => {
     expect(table.getAllByText("8")).toHaveLength(2);
   });
 
+  // Task 4 (#56, P5.3): `SetsPanel`/`ShuffleFieldset` are unit-tested in
+  // sets.test.tsx; these three prove the open section actually mounts them
+  // and writes what they report back onto the section.
+  it("task 4: a sets section's assignment is the radio group, not a select", () => {
+    const reasoning: StoredSection = {
+      id: "reasoning",
+      title: "Reasoning",
+      source: {
+        kind: "sets",
+        assignment: "hash",
+        sets: [
+          { set: "A", questions: ["qst_a1"] },
+          { set: "B", questions: ["qst_b1"] },
+        ],
+      },
+    };
+    render(<Harness initial={[reasoning]} />);
+    expect(screen.getByRole("radio", { name: /hash/i })).toBeChecked();
+    expect(screen.getByRole("group", { name: /set assignment/i })).toBeVisible();
+  });
+
+  it("task 4: T-10 belongs to every section, not only a sets one", () => {
+    render(<Harness initial={[QUANT]} />);
+    const group = screen.getByRole("group", { name: /shuffling/i });
+    expect(within(group).getByRole("checkbox", { name: /shuffle questions within this section/i })).toBeChecked();
+  });
+
+  it("task 4: the two controls both reach the section, and neither undoes the other", () => {
+    const reasoning: StoredSection = {
+      id: "reasoning",
+      title: "Reasoning",
+      source: {
+        kind: "sets",
+        assignment: "hash",
+        sets: [
+          { set: "A", questions: ["qst_a1"] },
+          { set: "B", questions: ["qst_b1"] },
+        ],
+      },
+    };
+    render(<Harness initial={[reasoning]} />);
+
+    // Each write goes through `onChange` and comes back as a new
+    // `sections` prop, so a wiring that fired two separate updates from one
+    // handler — each rebuilt from the same stale section — would show the
+    // second silently undoing the first here.
+    fireEvent.click(screen.getByRole("checkbox", { name: /shuffle questions within this section/i }));
+    expect(screen.getByRole("checkbox", { name: /shuffle questions within this section/i })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: /hash/i })).toBeChecked();
+
+    fireEvent.click(screen.getByRole("radio", { name: /round robin/i }));
+    expect(screen.getByRole("radio", { name: /round robin/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /shuffle questions within this section/i })).not.toBeChecked();
+    // And the sets themselves survive both writes — one "Add questions"
+    // button per set, still two.
+    expect(screen.getAllByRole("button", { name: /add questions/i })).toHaveLength(2);
+  });
+
   it("switching a section's source names what is actually being discarded (fixed)", () => {
     const fixed: StoredSection = {
       id: "written",
@@ -350,7 +408,10 @@ describe("SectionList", () => {
       createdAt: 0,
       updatedAt: 0,
     };
-    const page1 = Array.from({ length: 2 }, (_, i) => ({
+    // Annotated, not inferred: without it `document.type` widens to
+    // `string`, the fixture stops being a `Question`, and `pnpm typecheck`
+    // fails on a file the suite still runs green (task 3 re-review).
+    const page1: QuestionSummary[] = Array.from({ length: 2 }, (_, i) => ({
       id: `qst_a${i}`,
       bankId: "bnk_1",
       refId: `A${i}`,
@@ -359,7 +420,7 @@ describe("SectionList", () => {
       usedInTests: 0,
       updatedAt: 0,
     }));
-    const page2 = [
+    const page2: QuestionSummary[] = [
       {
         id: "qst_b0",
         bankId: "bnk_1",
