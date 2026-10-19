@@ -247,6 +247,25 @@ a:focus-visible, button:focus-visible {
 .redraw:hover { background: rgba(255,255,255,0.07); }
 
 
+
+/* D's hero marker, kept for the hero only — the one place the page
+   still draws a seam, because the opening band earns the orientation. */
+.hero-grid { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 0 36px; }
+.hero-grid > .hero-body { grid-column: 2; }
+.marker {
+  grid-column: 1;
+  font-family: var(--mono); font-size: 10.5px; font-weight: 500;
+  letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent-on-ink);
+  margin: clamp(34px, 6vw, 72px) 0 0;
+  border-top: 2px solid var(--accent-on-ink); padding-top: 10px;
+}
+@media (max-width: 900px) {
+  .hero-grid { grid-template-columns: 1fr; }
+  .hero-grid > .hero-body, .marker { grid-column: 1; }
+  .marker { margin-bottom: 18px; }
+  .hero-head { padding-top: 0; }
+}
+
 /* ── hero demo: one real question, scored, plus the per-candidate draw ── */
 .demo {
   display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
@@ -478,6 +497,9 @@ a:focus-visible, button:focus-visible {
       </nav>
     </header>
 
+    <div class="hero-grid">
+      <p class="marker">SEC 01 / 11</p>
+      <div class="hero-body">
     <div class="hero-head">
       <p class="status"><s></s>Pre-alpha · scoring engine and formats live</p>
       <h1>Run real exams on the internet, for free, on infrastructure <span class="g">you own</span>.</h1>
@@ -529,6 +551,8 @@ a:focus-visible, button:focus-visible {
       <div class="draw-foot">
         <button class="redraw" type="button" id="redraw">Draw again</button>
         <span class="fine" style="margin:0">Seeded per attempt — a refresh returns the same paper.</span>
+      </div>
+    </div>
       </div>
     </div>
   </div>
