@@ -24,7 +24,7 @@ import {
 } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_AUTH, ROUTE_BUDGETS } from "../src/app.js";
 import { issueSession } from "../src/auth/session.js";
-import { sha256Hex } from "../src/auth/tokens.js";
+import { inviteHash } from "../src/run/entry.js";
 import { countingDeps } from "../src/instrument.js";
 import type { MintedInvite } from "../src/routes/invites.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
@@ -179,9 +179,10 @@ it("only the hash is stored — the minted URL's token appears in no row", async
   const token = tokenIn(m?.url ?? "");
   expect(token).not.toBe("");
   expect(JSON.stringify(await allAuthTokenRows())).not.toContain(token);
-  // And the row that *is* there is that token's digest, so the link is
-  // redeemable and the column is not the secret.
-  expect((await allAuthTokenRows())[0]).toMatchObject({ token_hash: await sha256Hex(token) });
+  // And the row that *is* there is that token's digest — salted with the
+  // test, so a link minted here cannot even be *tried* at another test,
+  // let alone spent there.
+  expect((await allAuthTokenRows())[0]).toMatchObject({ token_hash: await inviteHash(testId, token) });
 });
 
 it("minting 200 invites is one batch, flat in the list's size", async () => {

@@ -345,6 +345,34 @@ export async function seedAccessModeTests(deps: AppDeps, workspaceId: string): P
     },
   });
 
+  // `sso` behind a candidate list. The candidate types nothing at this
+  // gate, so the verified address is the identity T-21 is checked
+  // against — which is why this form's first unique field is the email.
+  const ssoListed = await seedTest(deps, workspaceId, {
+    name: "Sso listed",
+    slug: "sso-listed",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "sso", allow_email_domains: ["*.ac.in"], candidate_list: "list.csv" },
+        registration_form: {
+          fields: [
+            { id: "email", type: "email" as const, label: "College email address", unique: true },
+            { id: "full_name", type: "short_text" as const, label: "Full name" },
+          ],
+        },
+      },
+      sections: oneSection,
+    },
+  });
+  await replaceCandidateList(
+    deps.db,
+    workspaceId,
+    ssoListed,
+    [{ externalId: "s@college.ac.in", setLabel: "A", formValues: { full_name: "Sita" } }],
+    FIXED_NOW,
+  );
+
   // Every gate at once — a domain rule, a candidate list and a mode whose
   // own gate consumes a token. It is the only combination that spends the
   // declared `/access` budget, so it is what the budget is measured on.

@@ -15,14 +15,42 @@
 // `/<workspace-slug>/<test-slug>` and two slugs are the only identifier a
 // candidate ever holds.
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
+import { z } from "zod";
 // `instant` rather than a second `Date.parse` here: the window this route
 // reports and the window `deriveState` judged it against must be the same
 // reading of the same string (reconciliation row 12).
-import { instant, resolvePublishedTest, type PublishedTest } from "@pariksha/db";
-import { NAVIGATION_CONSEQUENCE, type AccessMode, type Section, type TestTiming } from "@pariksha/core";
+import {
+  consumeAuthToken,
+  getCandidateByExternalId,
+  instant,
+  INVITE_KIND,
+  resolvePublishedTest,
+  type InvitePayload,
+  type PublishedTest,
+} from "@pariksha/db";
+import {
+  NAVIGATION_CONSEQUENCE,
+  type AccessMode,
+  type Section,
+  type TestAccess,
+  type TestTiming,
+} from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
+import { authorizationUrl, verifiedCallback } from "../auth/oidc.js";
+import { emailSender } from "../email/adapter.js";
+import {
+  consumeEmailCode,
+  EMAIL_CODE_TTL_MS,
+  inviteHash,
+  issueEmailCode,
+  issueEntryToken,
+  refuse,
+  sameSecret,
+  type EntryClaim,
+} from "../run/entry.js";
+import { clientIp, emailInDomains, ipInRanges } from "../run/net.js";
 
 /** The `proctoring` block is in `schemas/test-1.json` but not modelled in
  * `@pariksha/core` ("not modelled here yet. Add each when a phase needs
@@ -131,6 +159,156 @@ function landingPayload(test: PublishedTest, now: number): LandingPayload {
   };
 }
 
+
+// --- Task 2 (#66, P6.2): the access gate -------------------------------
+//
+// One handler, one `switch` on `access.mode`, with the three allowlists —
+// network, email domain and candidate list — checked *before* the switch
+// (`docs/test-format.md:72`, `T-21`), so an off-network candidate never
+// learns whether their code was right.
+//
+// `S-10` is the shape of the whole block: a wrong code and an identifier
+// that is not on the list answer with the same bytes, because a gate that
+// told them apart would be an enumeration oracle over an organiser's roll
+// numbers. The network refusal is its own code deliberately — a candidate
+// who is on the wrong network has to be told *that* or they will keep
+// retyping a code that was always right — and it is answered identically
+// whether the code was right or wrong, which is the property that matters.
+
+const accessRequest = z.object({
+  code: z.string().max(200).optional(),
+  invite: z.string().max(500).optional(),
+  email: z.string().max(320).optional(),
+  otp: z.string().max(20).optional(),
+  /** The test's first `unique: true` registration field, typed at the gate
+   *  on a candidate-listed test — the gate runs before the form is shown,
+   *  so this one value arrives ahead of the rest of the registration. */
+  identifier: z.string().max(200).optional(),
+  /** Task 4's proof of work. Accepted and ignored here so the browser's
+   *  request shape does not change when it lands. */
+  captchaToken: z.string().max(4000).optional(),
+});
+
+const emailCodeRequest = z.object({ email: z.string().min(3).max(320) });
+
+/** A malformed or incomplete request, which is not a refusal: "you sent
+ *  nothing" says nothing about the secret, so it may be said plainly. */
+const incomplete = (message: string): ApiError => new ApiError(400, "invalid_request", message);
+
+/**
+ * The published, currently open test the two slugs name.
+ *
+ * Draft, archived and absent are one 404 — the landing route's own
+ * posture, for the same reason. Scheduled and closed are a refusal rather
+ * than a 404, because the landing page already told the candidate the
+ * window and the gate must agree with it.
+ */
+async function openTest(deps: AppDeps, c: Context<AppBindings>): Promise<PublishedTest> {
+  const test = await resolvePublishedTest(
+    deps.db,
+    c.req.param("workspaceSlug") ?? "",
+    c.req.param("testSlug") ?? "",
+    deps.now(),
+  );
+  if (!test || test.state === "draft" || test.state === "archived") {
+    throw new ApiError(404, "not_found", "No such resource.");
+  }
+  if (test.state !== "open") throw refuse("window_closed");
+  return test;
+}
+
+/**
+ * Checked first, and refused when the request carries no address at all.
+ * Failing open on an allowlist is the whole of the bug: a deployment
+ * behind a proxy that strips the header would otherwise admit everyone.
+ */
+function checkNetwork(c: Context<AppBindings>, access: TestAccess | undefined): void {
+  const ranges = access?.allow_ip_ranges ?? [];
+  if (ranges.length === 0) return;
+  const ip = clientIp(c);
+  if (ip === null || !ipInRanges(ip, ranges)) throw refuse("ip_not_allowed");
+}
+
+/**
+ * The domain rule, named in the refusal. Naming it is not a leak: the
+ * candidate supplied the address it refused, and an organiser's whole
+ * intent is that a candidate who used the wrong one is told which to use.
+ */
+function checkDomain(access: TestAccess | undefined, email: string | undefined): void {
+  const globs = access?.allow_email_domains ?? [];
+  if (globs.length === 0 || email === undefined) return;
+  if (!emailInDomains(email, globs)) {
+    throw refuse("domain_not_allowed", ` Allowed: ${globs.join(", ")}.`);
+  }
+}
+
+/**
+ * `T-21`: only listed identities may get in. `null` when the test sets no
+ * list, in which case an identifier it never asked for is ignored rather
+ * than refused.
+ *
+ * The refusal is `code_wrong`, byte for byte — see the header.
+ */
+async function listEntry(
+  deps: AppDeps,
+  test: PublishedTest,
+  identifier: string | undefined,
+): Promise<{ id: string } | null> {
+  if (!test.settings.access?.candidate_list) return null;
+  if (identifier === undefined || identifier.trim() === "") throw refuse("code_wrong");
+  const entry = await getCandidateByExternalId(
+    deps.db,
+    test.workspaceId,
+    test.testId,
+    identifier.trim(),
+  );
+  if (!entry) throw refuse("code_wrong");
+  return entry;
+}
+
+async function consumeInvite(deps: AppDeps, test: PublishedTest, token: string): Promise<InvitePayload> {
+  const raw = (await consumeAuthToken(
+    deps.db,
+    await inviteHash(test.testId, token),
+    INVITE_KIND,
+    deps.now(),
+  )) as Partial<InvitePayload> | null;
+  // Unknown, expired, already spent and minted for another workspace are
+  // one answer, and it is the PRD's own wording.
+  if (!raw || raw.workspaceId !== test.workspaceId || typeof raw.candidateId !== "string") {
+    throw refuse("invite_used");
+  }
+  return raw as InvitePayload;
+}
+
+/** The absolute origin links and callbacks are built from. `APP_URL` when
+ *  it is configured, and the request's own origin when it is not — a
+ *  self-hoster who has not set it still gets working links. */
+const originOf = (deps: AppDeps, c: Context<AppBindings>): string =>
+  (deps.env.appUrl ?? new URL(c.req.url).origin).replace(/\/$/, "");
+
+const candidatePath = (c: Context<AppBindings>): string =>
+  `/${encodeURIComponent(c.req.param("workspaceSlug") ?? "")}/${encodeURIComponent(c.req.param("testSlug") ?? "")}`;
+
+/**
+ * Which provider the candidate leg uses.
+ *
+ * ponytail: the instance's first configured provider, overridable with
+ * `?provider=`. `TestAccess` has no provider field, so there is nothing on
+ * the test to read, and every instance this ships to has one. The upgrade
+ * when one has two is a field in `access`, not a change here.
+ */
+const providerFor = (deps: AppDeps, c: Context<AppBindings>): string =>
+  c.req.query("provider") ?? deps.env.oidcProviders?.[0]?.id ?? "";
+
+function ssoTest(test: PublishedTest): TestAccess {
+  const access = test.settings.access;
+  if ((access?.mode ?? "link_code") !== "sso") {
+    throw incomplete("This test does not use single sign-on. Use the access form on the test page.");
+  }
+  return access as TestAccess;
+}
+
 export function runRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
@@ -155,6 +333,160 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
       throw new ApiError(404, "not_found", "No such resource.");
     }
     return c.json(landingPayload(test, now));
+  });
+
+  // The one place all four modes end: a single-use `run_entry` token.
+  routes.post("/:workspaceSlug/:testSlug/access", async (c) => {
+    const parsed = accessRequest.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) throw incomplete("That request could not be read. Try again.");
+    const input = parsed.data;
+
+    const test = await openTest(deps, c);
+    const access = test.settings.access;
+    const mode: AccessMode = access?.mode ?? "link_code";
+
+    // The three allowlists, before the mode's own gate.
+    checkNetwork(c, access);
+    checkDomain(access, input.email);
+    // `invite_only` is the exception: an invite is only ever minted for a
+    // list row, so the token already proves what the identifier would.
+    const entry = mode === "invite_only" ? null : await listEntry(deps, test, input.identifier);
+
+    const claim: EntryClaim = { testVersionId: test.testVersionId, workspaceId: test.workspaceId };
+    if (entry) claim.listRef = entry.id;
+
+    switch (mode) {
+      case "link_code": {
+        const expected = access?.access_code ?? "";
+        if (input.code === undefined) throw incomplete("Enter the access code from your invitation.");
+        // Trimmed on the candidate's side only: a code pasted out of an
+        // email arrives with a space more often than not, and that is not
+        // a wrong code. The comparison itself is exact and constant-time.
+        if (expected === "" || !(await sameSecret(input.code.trim(), expected))) throw refuse("code_wrong");
+        break;
+      }
+      case "invite_only": {
+        if (input.invite === undefined) throw incomplete("Open the invite link your organiser sent you.");
+        const payload = await consumeInvite(deps, test, input.invite);
+        claim.listRef = payload.candidateId;
+        if (payload.email !== null) claim.email = payload.email;
+        break;
+      }
+      case "email_code": {
+        if (input.email === undefined || input.otp === undefined) {
+          throw incomplete("Enter your email address and the code we sent you.");
+        }
+        const email = input.email.trim().toLowerCase();
+        const spent = await consumeEmailCode(deps, {
+          testVersionId: test.testVersionId,
+          email,
+          code: input.otp.trim(),
+        });
+        if (!spent) throw refuse("code_expired");
+        claim.email = email;
+        break;
+      }
+      case "sso":
+        throw incomplete("This test uses single sign-on. Use the sign-in button to continue.");
+    }
+
+    return c.json({ entryToken: await issueEntryToken(deps, claim) });
+  });
+
+  // The `email_code` mode's first leg. 202 whatever happens next, because
+  // the code goes to an inbox and the browser learns nothing from this.
+  routes.post("/:workspaceSlug/:testSlug/email-code", async (c) => {
+    const parsed = emailCodeRequest.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) throw incomplete("Enter your email address.");
+
+    const test = await openTest(deps, c);
+    const access = test.settings.access;
+    checkNetwork(c, access);
+    if ((access?.mode ?? "link_code") !== "email_code") {
+      throw incomplete("This test does not use an emailed code. Use the access form on the test page.");
+    }
+    // Before anything is sent: an open relay to any address a stranger
+    // types is what skipping this would be.
+    checkDomain(access, parsed.data.email);
+
+    const code = await issueEmailCode(deps, {
+      testVersionId: test.testVersionId,
+      workspaceId: test.workspaceId,
+      email: parsed.data.email,
+    });
+    await (deps.email ?? emailSender(deps.env)).send({
+      to: parsed.data.email.trim(),
+      subject: `Your access code for ${test.name}`,
+      text:
+        `Your access code for ${test.name} is ${code}\n\n` +
+        `The code works once and expires in ${String(EMAIL_CODE_TTL_MS / 60_000)} minutes. ` +
+        "If you did not ask for it, nothing has happened and you can ignore this message.",
+    });
+    return c.json({ status: "sent" }, 202);
+  });
+
+  // The `sso` mode, which is the organiser OIDC flow's discovery, PKCE and
+  // ID-token verification with the last step replaced: no user row, no
+  // session cookie, a `run_entry` token instead (ADR 0005).
+  routes.get("/:workspaceSlug/:testSlug/sso/start", async (c) => {
+    const test = await openTest(deps, c);
+    const access = ssoTest(test);
+    checkNetwork(c, access);
+    const { url } = await authorizationUrl(
+      deps,
+      providerFor(deps, c),
+      candidatePath(c),
+      deps.http,
+      // The candidate's own callback, not the organiser's. It is stored
+      // with the state, so the token exchange repeats the same value.
+      `${originOf(deps, c)}/api/v1/run${candidatePath(c)}/sso/callback`,
+    );
+    return c.redirect(url, 302);
+  });
+
+  routes.get("/:workspaceSlug/:testSlug/sso/callback", async (c) => {
+    const test = await openTest(deps, c);
+    const access = ssoTest(test);
+    checkNetwork(c, access);
+
+    let email: string;
+    try {
+      ({ email } = await verifiedCallback(
+        deps,
+        providerFor(deps, c),
+        { code: c.req.query("code") ?? "", state: c.req.query("state") ?? "" },
+        deps.http,
+      ));
+    } catch (error) {
+      // The one refusal a candidate can act on, restated for them: the
+      // organiser flow's 400 is written for someone who can change the
+      // provider configuration, and a candidate cannot.
+      if (error instanceof ApiError && error.code === "email_not_verified") {
+        throw new ApiError(
+          401,
+          "email_not_verified",
+          "Your provider did not confirm this address is yours. Sign in with a verified address, or ask your organiser.",
+        );
+      }
+      throw error;
+    }
+
+    checkDomain(access, email);
+    // `T-21` for the one mode where the candidate types nothing: the
+    // verified address is the identity, so it is what the list is checked
+    // against.
+    const entry = await listEntry(deps, test, email);
+
+    const claim: EntryClaim = {
+      testVersionId: test.testVersionId,
+      workspaceId: test.workspaceId,
+      email,
+    };
+    if (entry) claim.listRef = entry.id;
+    const token = await issueEntryToken(deps, claim);
+    // Back to the test the candidate started from, carrying the token —
+    // and carrying no cookie, which is the whole point.
+    return c.redirect(`${candidatePath(c)}?entry=${token}`, 302);
   });
 
   return routes;

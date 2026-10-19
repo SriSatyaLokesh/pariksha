@@ -25,6 +25,8 @@ import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
+import { inviteRoutes } from "./routes/invites.js";
+import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -42,6 +44,14 @@ export interface AppDeps {
    * both targets.
    */
   http?: typeof globalThis.fetch;
+  /**
+   * Injected only so a test can read what was sent. Left unset everywhere
+   * else, where `emailSender(env)` is the right answer — the same shape
+   * `http` has, and for the same reason: the access gate's six-digit code
+   * exists nowhere but in the message, so a route test that could not see
+   * the message could not assert on it.
+   */
+  email?: EmailSender;
 }
 
 export type AppBindings = {
@@ -310,6 +320,33 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // the counts come from `sections_json` and the bank is never touched,
   // which is also what keeps a question's ID out of the payload (S-10).
   "/api/v1/run/:workspaceSlug/:testSlug": 1,
+
+  // Phase 6 Task 2 (#66, P6.2): the access gate. Measured
+  // (`test/run/access.test.ts`'s own budget tests), not estimated, and
+  // each is the most expensive path through its route.
+  //
+  // `/access`: `resolvePublishedTest`, the candidate-list read, the mode's
+  // own single-use consume, and the entry-token insert. Only `email_code`
+  // behind a candidate list pays all four, which is what the measurement
+  // drives. The authentication floor of 2 does not apply here — a
+  // candidate sends no session cookie, so `authenticate` never reads one.
+  "/api/v1/run/:workspaceSlug/:testSlug/access": 4,
+  // Resolve and one insert. Sending the message is not a D1, R2 or
+  // `deps.http` call.
+  "/api/v1/run/:workspaceSlug/:testSlug/email-code": 2,
+  // Resolve and the state insert, plus discovery and JWKS on a cold
+  // isolate (`oidc.ts` caches both for the isolate's lifetime, so a warm
+  // one spends 2).
+  "/api/v1/run/:workspaceSlug/:testSlug/sso/start": 4,
+  // Resolve, consume the state, exchange the code, read the candidate
+  // list, insert the entry token — plus the same cold pair.
+  "/api/v1/run/:workspaceSlug/:testSlug/sso/callback": 7,
+
+  // The one organiser route of this phase: authentication (2), the test
+  // and its slugs (1), the candidate list (1), the already-invited set
+  // (1), one `batch` however long the list is (1), and the audit row (1).
+  // Flat in the list's size, which `test/invites.test.ts` measures at 200.
+  "/api/v1/workspaces/:id/tests/:testId/invites": 7,
 };
 
 /**
@@ -387,6 +424,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/import": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
+
+  // Phase 6 Task 2 (#66, P6.2). The invite is a credential for a row on
+  // the candidate list, so it is the same permission that uploaded the
+  // list — an Author who built the test holds `tests.edit` and not this.
+  "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
@@ -450,6 +492,15 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // deliberately public route of the candidate runtime; the access gate
   // that follows it is Task 2's.
   "GET /api/v1/run/:workspaceSlug/:testSlug": "public",
+  // Phase 6 Task 2 (#66, P6.2): the access gate. Public by necessity —
+  // passing it is how a candidate obtains their first credential, so
+  // requiring one would be circular. What stands in for a guard is the
+  // gate itself: the four modes, the three allowlists checked ahead of
+  // them, and Task 3's rate limiter.
+  "POST /api/v1/run/:workspaceSlug/:testSlug/access": "public",
+  "POST /api/v1/run/:workspaceSlug/:testSlug/email-code": "public",
+  "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start": "public",
+  "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback": "public",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",
@@ -511,6 +562,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/import": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
+  // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
+  "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -550,6 +603,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // after every `/api/v1/workspaces` route and before nothing — its prefix
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
+  app.route("/api/v1/workspaces", inviteRoutes(deps));
   app.route("/api/v1/run", runRoutes(deps));
 
   return app;

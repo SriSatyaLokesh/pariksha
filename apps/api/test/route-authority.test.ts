@@ -75,10 +75,14 @@ it("the public set is a literal allowlist, so widening it is a visible diff", ()
     "GET /api/v1/auth/:provider/start",
     "GET /api/v1/health",
     "GET /api/v1/run/:workspaceSlug/:testSlug",
+    "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback",
+    "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start",
     "GET /api/v1/setup/status",
     "GET /t/:code",
     "POST /api/v1/auth/magic-link",
     "POST /api/v1/auth/signout",
+    "POST /api/v1/run/:workspaceSlug/:testSlug/access",
+    "POST /api/v1/run/:workspaceSlug/:testSlug/email-code",
   ]); // every later task that adds one edits this literal
 });
 
@@ -105,6 +109,16 @@ it("the actor set is a literal allowlist too — signed in, but naming no worksp
  */
 const PROBE_URL: Readonly<Record<string, string>> = {
   "GET /api/v1/run/:workspaceSlug/:testSlug": "/api/v1/run/alpha/aptitude",
+  // Phase 6 Task 2's gate. Each probe is a real, open test with an empty
+  // body, so the route is reached and answers 400 for "you sent nothing"
+  // — which is the point: a `public` route may answer anything but 401 or
+  // 403 to a caller who sent no credential.
+  "POST /api/v1/run/:workspaceSlug/:testSlug/access": "/api/v1/run/alpha/aptitude/access",
+  "POST /api/v1/run/:workspaceSlug/:testSlug/email-code": "/api/v1/run/alpha/otp/email-code",
+  // No OIDC provider is configured in this suite, so both legs answer 404
+  // `unknown_provider` — reached, and not a credential refusal.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start": "/api/v1/run/alpha/sso/sso/start",
+  "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback": "/api/v1/run/alpha/sso/sso/callback",
   "GET /api/v1/auth/:provider/start": "/api/v1/auth/google/start",
   "GET /api/v1/auth/:provider/callback": "/api/v1/auth/google/callback",
   "GET /t/:code": "/t/ABC123",

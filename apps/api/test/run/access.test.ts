@@ -438,6 +438,18 @@ it("sso: the state is single-use, so a captured callback cannot be replayed", as
   expect((await app.request(url)).status).toBe(400);
 });
 
+it("T-21: an sso candidate off the test's list is refused, verified address and all", async () => {
+  // The candidate types nothing at this gate, so the verified address is
+  // the identity the list is checked against — without this, an sso test
+  // with a candidate list admits anyone at the right domain.
+  const onList = await ssoCallback({ email: "s@college.ac.in", email_verified: true }, "sso-listed");
+  expect(onList.status).toBe(302);
+
+  const offList = await ssoCallback({ email: "nobody@college.ac.in", email_verified: true }, "sso-listed");
+  expect(offList.status).toBe(403);
+  expect(((await offList.json()) as { error: { code: string } }).error.code).toBe("code_wrong");
+});
+
 it("sso: a test that is not an sso test has no sso leg", async () => {
   expect((await app.request("/api/v1/run/alpha/aptitude/sso/start")).status).toBe(400);
   expect((await app.request("/api/v1/run/alpha/aptitude/sso/callback?code=c&state=s")).status).toBe(400);
@@ -544,11 +556,13 @@ it("measures the real subrequest cost of both sso legs", async () => {
     ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/sso/start"],
   );
 
-  const authorize = await ssoStart();
+  // On `sso-listed`, so the measurement includes the candidate-list read
+  // the declared budget has to cover.
+  const authorize = await ssoStart("sso-listed");
   await signFor(authorize, { email: "s@college.ac.in", email_verified: true });
   const state = authorize.searchParams.get("state") ?? "";
   const warmCallback = await measure(() => ({
-    url: `/api/v1/run/alpha/sso/sso/callback?code=auth-code&state=${state}`,
+    url: `/api/v1/run/alpha/sso-listed/sso/callback?code=auth-code&state=${state}`,
   }));
   // Resolve, consume the state, exchange the code (one `http`), insert the
   // entry token — plus the same cold pair.
