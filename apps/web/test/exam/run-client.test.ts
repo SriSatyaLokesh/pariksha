@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createRunClient, RunError, slugPairFromPath } from "../../src/lib/run";
+import {
+  createRunClient,
+  RegistrationInvalid,
+  RunError,
+  slugPairFromPath,
+} from "../../src/lib/run";
 
 // Review finding I-2. `landing.test.tsx` satisfies `RunClient` with an
 // object literal, which is the right way to test the screens and the wrong
@@ -214,5 +219,89 @@ describe("the access gate (Task 2)", () => {
     await expect(
       createRunClient("alpha", "otp").requestEmailCode("a@gmail.com"),
     ).rejects.toMatchObject({ code: "domain_not_allowed" });
+  });
+
+  // --- Task 3 (#67): consent and registration -------------------------
+
+  const header = (init: RequestInit | undefined): string =>
+    String((init?.headers as Record<string, string> | undefined)?.authorization ?? "");
+
+  it("reads the form behind the entry token, as a Bearer header", async () => {
+    const calls = stubFetch(
+      () =>
+        new Response(JSON.stringify({ consent: { version: "1", text: "x" }, form: { fields: [] } }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const payload = await createRunClient("alpha", "signup").form("tok");
+    expect(calls[0]?.url).toBe("/api/v1/run/alpha/signup/form");
+    // The token is a header, never a query parameter: a URL reaches a
+    // proxy log and the browser's own history, and this one is a
+    // credential.
+    expect(header(calls[0]?.init)).toBe("Bearer tok");
+    expect(payload.consent).toEqual({ version: "1", text: "x" });
+  });
+
+  it("posts the registration with its token and resolves the token /start spends", async () => {
+    const calls = stubFetch(
+      () =>
+        new Response(JSON.stringify({ registrationToken: "reg" }), {
+          status: 201,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    await expect(
+      createRunClient("alpha", "signup").register("tok", { email: "a@b.ac.in", consent: true }, "pow"),
+    ).resolves.toEqual({ registrationToken: "reg" });
+    expect(calls[0]?.url).toBe("/api/v1/run/alpha/signup/register");
+    expect(header(calls[0]?.init)).toBe("Bearer tok");
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      values: { email: "a@b.ac.in", consent: true },
+      captchaToken: "pow",
+    });
+  });
+
+  it("a 422 arrives as RegistrationInvalid carrying every positioned issue", async () => {
+    // AC-12: the screen puts each sentence back beside its own input, so
+    // a client that flattened these to one message would lose the
+    // positioning the server went to the trouble of sending.
+    const issues = [
+      { field: "email", code: "domain", message: "Use an address at *.ac.in." },
+      { field: "roll", code: "pattern", message: "Format: 21CS0147" },
+    ];
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({
+            error: { code: "invalid_registration", message: "Some answers need another look.", details: { issues } },
+          }),
+          { status: 422, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const failure = await createRunClient("alpha", "signup")
+      .register("tok", {})
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(RegistrationInvalid);
+    expect(failure).toBeInstanceOf(RunError);
+    expect((failure as RegistrationInvalid).issues).toEqual(issues);
+    expect((failure as RegistrationInvalid).status).toBe(422);
+  });
+
+  it("a spent entry token is an ordinary RunError, not a validation failure", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({ error: { code: "entry_expired", message: "Go back to the test page and try again." } }),
+          { status: 410, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const failure = await createRunClient("alpha", "signup")
+      .form("spent")
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(RunError);
+    expect(failure).not.toBeInstanceOf(RegistrationInvalid);
+    expect(failure).toMatchObject({ status: 410, code: "entry_expired" });
   });
 });
