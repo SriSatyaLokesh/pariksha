@@ -15,11 +15,23 @@ import type { Handler } from "hono";
 import { resolveShortCode } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
+import { limitOrThrow } from "../run/limit.js";
 
 export function shortlinkRoute(deps: AppDeps): Handler<AppBindings> {
   return async (c) => {
-    const resolved = await resolveShortCode(deps.db, c.req.param("code") ?? "");
-    if (!resolved) throw new ApiError(404, "not_found", "No such resource.");
+    const code = c.req.param("code") ?? "";
+    const resolved = await resolveShortCode(deps.db, code);
+    // `S-07`, carried here from Phase 5's handoff by way of the Phase 6
+    // reconciliation: six characters is the one thing on this instance a
+    // stranger can guess at, so a code that resolved to **nothing** is
+    // charged. A code that resolved is not — a hall of candidates opening
+    // the one link on the projector is the expected load, not an attack,
+    // and charging it would turn the busiest minute of a live test into a
+    // lockout. Keyed on the code, never on an address: a campus shares one.
+    if (!resolved) {
+      await limitOrThrow(deps, "short_link", code);
+      throw new ApiError(404, "not_found", "No such resource.");
+    }
     return c.redirect(`/${resolved.workspaceSlug}/${resolved.testSlug}`, 302);
   };
 }

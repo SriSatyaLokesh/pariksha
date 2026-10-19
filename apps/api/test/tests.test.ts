@@ -4,6 +4,7 @@
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { addMembership, closeClient, createUser, publishDraftVersion, type DbClient } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
+import { LIMITS } from "../src/run/limit.js";
 import { countingDeps, mountedRoutes } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
@@ -263,6 +264,75 @@ it("GET /t/<unknown> is 404 and names no workspace", async () => {
   expect(body).not.toMatch(/wsp_/);
 });
 
+// --- Phase 6 Task 4 (#68, P6.4): the one enumerable surface -----------
+//
+// Phase 5 shipped `/t/:code` with no limiter and said so in its handoff;
+// the reconciliation carried it into this phase. A six-character code is
+// the only thing on this instance a stranger can guess at, and until this
+// bucket existed a 32^6 sweep was free.
+
+/** Fills `short_link`'s bucket for one code, the way the route's own
+ *  misses would have. */
+async function fillShortLinkBucket(code: string): Promise<void> {
+  await deps.db.run("DELETE FROM rate_limit WHERE bucket = ?", [`short_link:${code}`]);
+  await deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    `short_link:${code}`,
+    FIXED_NOW,
+    LIMITS.short_link.limit,
+  ]);
+}
+
+const rateBuckets = async (): Promise<string[]> =>
+  (await deps.db.query<{ bucket: string }>("SELECT bucket FROM rate_limit", [])).map(
+    (row) => row.bucket,
+  );
+
+it("S-07: a short code that resolves to nothing is counted, and the next one is 429", async () => {
+  expect((await app.request("/t/qqqqqq")).status).toBe(404);
+  expect(await rateBuckets()).toContain("short_link:qqqqqq");
+
+  await fillShortLinkBucket("qqqqqq");
+  const res = await app.request("/t/qqqqqq");
+  expect(res.status).toBe(429);
+  expect(((await res.json()) as { error: { code: string } }).error.code).toBe("too_many_attempts");
+});
+
+it("S-07: a short code that resolves is never charged, so a projected link is not a bucket", async () => {
+  const created = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Projected", slug: "projected" }, authorCookie),
+  );
+  const { id, shortCode } = (await created.json()) as { id: string; shortCode: string };
+  await publishDraftVersion(deps.db, workspaceId, id, FIXED_NOW);
+
+  await deps.db.run("DELETE FROM rate_limit", []);
+  // Far past the limit, and every one of them a hit: 500 candidates
+  // reading the same projector in the same minute is the expected load.
+  for (let i = 0; i < 3; i++) expect((await app.request(`/t/${shortCode}`)).status).toBe(302);
+  expect(await rateBuckets()).toEqual([]);
+});
+
+it("S-07: no bucket is keyed on a client IP — a whole campus shares one", async () => {
+  await deps.db.run("DELETE FROM rate_limit", []);
+  await app.request("/t/wwwwww", { headers: { "CF-Connecting-IP": "198.51.100.77" } });
+  expect(JSON.stringify(await rateBuckets())).not.toContain("198.51.100.77");
+});
+
+it("the window rolls: the limit is spendable again once windowMs has passed", async () => {
+  const later = await testDeps({ now: () => FIXED_NOW + LIMITS.short_link.windowMs + 1 });
+  await fillShortLinkBucket("eeeeee");
+  // A fresh database, so seed the same exhausted bucket into it.
+  await later.deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    "short_link:eeeeee",
+    FIXED_NOW,
+    LIMITS.short_link.limit,
+  ]);
+  // 404, not 429: the stale window is reset by the same statement that
+  // counts, so the miss is charged against a fresh one.
+  expect((await createApp(later.deps).request("/t/eeeeee")).status).toBe(404);
+  closeClient(later.deps.db);
+});
+
 it("the short-link route is the only route with no guard", () => {
   expect(mountedRoutes(app).filter((r) => !(r in ROUTE_ACTIONS) && r.startsWith("/t"))).toEqual([
     "/t/:code",
@@ -327,5 +397,15 @@ it("measures the real subrequest cost of every route this task mounts", async ()
   const shortRes = await createApp(counting.deps).request(`/t/${short.shortCode}`);
   expect(shortRes.status).toBe(302);
   expect(counting.counts().total, "GET /t/:code").toBe(1);
-  expect(ROUTE_BUDGETS["/t/:code"]).toBe(1);
+
+  // The miss is the expensive path, and it is what the table carries:
+  // `resolveShortCode` (1) plus the one `takeRateToken` statement (1).
+  // A hit stays at 1 above — the limiter counts misses only, which is why
+  // 500 candidates opening the projected link cost exactly what they did
+  // before this bucket existed.
+  const missing = countingDeps(deps);
+  const missRes = await createApp(missing.deps).request("/t/nnnnnn");
+  expect(missRes.status).toBe(404);
+  expect(missing.counts().total, "GET /t/:code (miss)").toBe(2);
+  expect(ROUTE_BUDGETS["/t/:code"]).toBe(2);
 });

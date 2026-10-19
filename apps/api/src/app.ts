@@ -307,7 +307,11 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
   // place (`apps/api/src/middleware/authenticate.ts`).
-  "/t/:code": 1,
+  // Phase 6 Task 4 (#68, P6.4): **2 on the expensive path**, which is a
+  // miss — `resolveShortCode` (1) plus the one `takeRateToken` statement
+  // the `short_link` bucket costs (1). A code that resolves still spends
+  // exactly 1, because the limiter counts misses only.
+  "/t/:code": 2,
 
   // Phase 6 Task 1 (#65, P6.1): the candidate landing page. Measured
   // (`test/run/landing.test.ts`'s own "measures the real subrequest cost"
