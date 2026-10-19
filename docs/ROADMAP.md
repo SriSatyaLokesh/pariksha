@@ -250,4 +250,4 @@ Phase 2 is the first phase that cannot finish without live credentials.
 | A domain or a `workers.dev` subdomain | Candidate and admin URLs | 2 |
 | An OIDC client ID and secret (Google, Microsoft or GitHub) | Organiser sign-in | 3 |
 | A transactional email sender, free tier | Magic links, invites, one-time codes | 3 |
-| A Turnstile site key and secret | Registration bot protection | 6 |
+| *(optional)* A Turnstile or hCaptcha site key and secret | Registration bot protection. **Not needed**: the default is a same-origin proof of work, and turning a hosted captcha on costs three CSP directives and the `S-11` promise — [ADR 0009](adr/0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md) | 6 |

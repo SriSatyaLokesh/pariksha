@@ -383,7 +383,7 @@ Each test picks a proctoring profile — Off, Standard or Strict — and can the
 | SSO with domain rule | Sign in with the candidate's school or company account | Universities, internal certifications |
 
 - **S-06** Each attempt gets a random 256-bit token; only its hash is stored. Every request is checked against the token, the attempt status and the server deadline.
-- **S-07** Registration is protected by Cloudflare Turnstile or hCaptcha (both free) and by rate limits per attempt and per test. Limits are not per IP, because a whole campus often shares one IP.
+- **S-07** *(partly met — see [ADR 0009](adr/0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md))* Registration is protected by bot protection **and** by rate limits per attempt and per test. Limits are not per IP, because a whole campus often shares one IP. The rate limits ship in full. The bot protection shipped is a **same-origin proof of work**, not a hosted captcha: a Turnstile or hCaptcha widget needs third-party `script-src`, `frame-src` and `connect-src` entries in a CSP that `S-11` keeps at `'self'`, so it is a per-instance opt-in (`CAPTCHA_SECRET`, `CAPTCHA_VERIFY_URL`, and `access.captcha` per test) rather than the default. An instance that turns it on no longer satisfies `S-11`.
 
 ### Authorization
 
@@ -434,7 +434,7 @@ flowchart LR
 
     subgraph TARGETS["Same code, two deployment targets"]
         direction LR
-        CF["<b>Reference: Cloudflare free plan</b><br/>Pages, Workers, D1, R2, Turnstile"]
+        CF["<b>Reference: Cloudflare free plan</b><br/>Pages, Workers, D1, R2"]
         DK["<b>Self-host: Docker</b><br/>Node, SQLite or Postgres, MinIO or disk"]
     end
 
@@ -453,7 +453,7 @@ The API and scoring logic are plain TypeScript written against three adapter int
 | Database | D1 (SQLite) | SQLite for small installs, Postgres 16 for large |
 | Snapshots and files | R2, private bucket, signed URLs | MinIO / any S3, or local disk |
 | Organiser sign-in | OIDC; magic link via a free email tier; optional Cloudflare Access in front of admin routes | OIDC, magic link (SMTP), or password with Argon2id + TOTP |
-| Bot protection | Turnstile | hCaptcha or Turnstile |
+| Bot protection | Same-origin proof of work (default; see [ADR 0009](adr/0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md)). Turnstile or hCaptcha is a per-instance opt-in that also needs three CSP directives added locally | Same-origin proof of work (default); hCaptcha or Turnstile as an opt-in, same terms |
 | Scheduled jobs (retention, webhook retries) | Cron Triggers | Built-in scheduler |
 | HTTPS | Automatic | Caddy reverse proxy with automatic certificates |
 
