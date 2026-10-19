@@ -4,6 +4,16 @@ import { axe } from "jest-axe";
 
 import type { ApiClient, TestSummary } from "../../src/lib/api";
 import { TestList } from "../../src/routes/tests";
+import { QrCode } from "../../src/components/QrCode";
+
+// Task 2 fix round, Critical 2: the same comparison `qr-code.test.tsx` uses,
+// applied to what the list actually renders — proves the row passes the
+// short link itself into `QrCode`, not the test's slug or its id.
+function darkCells(container: HTMLElement): string {
+  return Array.from(container.querySelectorAll('rect[fill="currentColor"]'))
+    .map((rect) => `${rect.getAttribute("x")},${rect.getAttribute("y")}`)
+    .join("|");
+}
 
 const PUBLISHED: TestSummary = {
   id: "tst_1",
@@ -144,6 +154,25 @@ describe("TestList", () => {
 
     expect(screen.getByRole("img", { name: /qr code for the short link/i })).toBeVisible();
     expect(screen.getByRole("link", { name: /\/t\// })).toBeVisible();
+  });
+
+  it("the QR code encodes the short link, not the slug or the id", async () => {
+    const { container } = renderList(fakeClient());
+    await screen.findByText("Midterm");
+
+    const reference = render(
+      <QrCode
+        value={`${window.location.origin}/t/${PUBLISHED.shortCode}`}
+        label="QR code for the short link"
+        size={64}
+      />,
+    );
+    expect(darkCells(container)).toEqual(darkCells(reference.container));
+
+    const wrongSlug = render(
+      <QrCode value={`${window.location.origin}/t/${PUBLISHED.slug}`} label="QR code for the short link" size={64} />,
+    );
+    expect(darkCells(container)).not.toEqual(darkCells(wrongSlug.container));
   });
 
   it("copying the short link confirms in a live region without moving focus", async () => {
