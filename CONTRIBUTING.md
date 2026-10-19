@@ -45,13 +45,9 @@ npx -y -p ajv-cli@5.0.0 -p ajv-formats@2.1.1 ajv validate --spec=draft2020 --str
 
 ## Development setup
 
-The code base arrives with v0.1. It will be:
+Node.js 22 and pnpm 10. `pnpm install`, then [Running Pariksha locally](README.md#running-pariksha-locally) for the two processes and the environment they need. `pnpm lint` and `pnpm typecheck` run across the workspace. `pnpm build` requires `SITE_URL` — the landing-page prerender refuses to invent an origin. The browser suite is `pnpm --filter @pariksha/web e2e`; `pnpm test` deliberately does not reach it.
 
-- Node.js 22 and pnpm 9
-- `pnpm install`, then `pnpm dev` to run the web app and API locally against SQLite
-- `pnpm test` (unit), `pnpm test:e2e` (Playwright), `pnpm lint`, `pnpm typecheck`
-
-Until then, the validation commands above are the whole toolchain.
+**Which tests to run.** Three tiers, cheapest first. While you are iterating, `pnpm test:changed` runs only the test files your uncommitted changes affect — well under a second, against about a minute for the whole suite — and `pnpm vitest related <file>` does the same when you would rather name the file yourself. Once the change looks finished, run its package: `pnpm test:pkg @pariksha/web`, which rebuilds the packages it depends on first and is cached when nothing moved. Before you commit, run `pnpm test`: the full suite, exactly what CI runs. Treat the first two tiers as a fast signal and not a verdict — Vitest follows imports, and the packages import each other through their built `dist/`, so editing `packages/core` reports no affected tests in `apps/api`, and a change nothing imports reports none at all and still exits 0. Only `pnpm test` sees across packages.
 
 ## Pull requests
 
