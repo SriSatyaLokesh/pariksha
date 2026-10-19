@@ -9,7 +9,13 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import { allowlistIssues, brandColourIssue, matchesFilter, type QuestionSource } from "@pariksha/core";
+import {
+  allowlistIssues,
+  brandColourIssue,
+  matchesFilter,
+  type Question,
+  type QuestionSource,
+} from "@pariksha/core";
 import {
   CANDIDATE_IMPORT_MAX_BYTES,
   convertCandidateCsv,
@@ -20,29 +26,38 @@ import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
   appendAudit,
   createTest,
-  draftVersionsByTest,
+  headVersionsByTest,
   listCandidates,
   replaceCandidateList,
   existingRowIds,
   getDraftVersion,
+  getPublishedVersion,
   getTest,
   listTests,
+  listVersions,
+  publishDraftVersion,
   putDraftVersion,
+  setTestStatus,
   updateTest,
   workspaceQuestionSummaries,
+  workspaceQuestions,
+  deriveState,
   type QuestionSummary,
   type StoredSection,
   type TestDocumentBody,
   type TestFilter,
   type TestPatch,
   type TestRow,
+  type TestState,
   type TestStatus,
+  type TestVersionHead,
   type TestVersionRow,
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 import { checkReachable } from "../net/reachable.js";
+import { blockingRows, buildChecklist, type ChecklistRow } from "../publish/checklist.js";
 import { readBodyWithLimit } from "./media.js";
 
 // The same shape `apps/api/src/routes/workspaces.ts` validates its own slug
@@ -394,10 +409,10 @@ function filterFromQuery(c: Context<AppBindings>): TestFilter {
 /**
  * Mirrors `TestSummary` (`apps/web/src/lib/api.ts`) — not imported, the same
  * boundary every other route in this app keeps from the web package.
- * `state` is `status` verbatim in this task — Scheduled and Open do not
- * exist until Task 11 adds `deriveState()`, once `timing` gives it something
- * to read — and the field is named `state` here already so no later task
- * renames what the screens read.
+ * `state` is Task 11's **derived** state (`deriveState`, `@pariksha/db`):
+ * the stored `published` becomes Scheduled or Open against the published
+ * version's own window and the clock, so no screen has to do that
+ * arithmetic and no column can be stale (Review Focus 2).
  */
 interface TestWire {
   id: string;
@@ -405,7 +420,7 @@ interface TestWire {
   slug: string;
   description: string | null;
   shortCode: string;
-  state: TestStatus;
+  state: TestState;
   currentVersion: number | null;
   draftVersion: number | null;
   reviewRequested: boolean;
@@ -413,14 +428,17 @@ interface TestWire {
   updatedAt: number;
 }
 
-function toWire(row: TestRow, draftVersion: number | null): TestWire {
+const NO_HEAD: TestVersionHead = { draftVersion: null, publishedTiming: undefined };
+
+function toWire(row: TestRow, head: TestVersionHead | undefined, now: number): TestWire {
+  const { draftVersion, publishedTiming } = head ?? NO_HEAD;
   return {
     id: row.id,
     name: row.name,
     slug: row.slug,
     description: row.description,
     shortCode: row.shortCode,
-    state: row.status,
+    state: deriveState(row.status, publishedTiming, now),
     currentVersion: row.currentVersion,
     draftVersion,
     reviewRequested: row.reviewRequested,
@@ -451,8 +469,9 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
   routes.get("/:id/tests", requires("tests.edit"), async (c) => {
     const workspaceId = c.req.param("id");
     const rows = await listTests(deps.db, workspaceId, filterFromQuery(c));
-    const drafts = await draftVersionsByTest(deps.db, workspaceId);
-    return c.json({ tests: rows.map((row) => toWire(row, drafts.get(row.id) ?? null)) });
+    const heads = await headVersionsByTest(deps.db, workspaceId);
+    const now = deps.now();
+    return c.json({ tests: rows.map((row) => toWire(row, heads.get(row.id), now)) });
   });
 
   routes.post("/:id/tests", requires("tests.edit"), async (c) => {
@@ -482,8 +501,9 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     });
 
     // `createTest` always mints the row and its draft version 1 together, so
-    // there is nothing to re-read: this row's draft is always version 1.
-    return c.json(toWire(row, 1), 201);
+    // there is nothing to re-read: this row's draft is always version 1, and
+    // a brand-new test is always Draft whatever the clock says.
+    return c.json(toWire(row, { draftVersion: 1, publishedTiming: undefined }, now), 201);
   });
 
   routes.get("/:id/tests/:testId", requires("tests.edit"), async (c) => {
@@ -492,8 +512,8 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     const row = await getTest(deps.db, workspaceId, testId);
     if (!row) throw new ApiError(404, "not_found", "No such resource.");
 
-    const drafts = await draftVersionsByTest(deps.db, workspaceId, testId);
-    return c.json(toWire(row, drafts.get(testId) ?? null));
+    const heads = await headVersionsByTest(deps.db, workspaceId, testId);
+    return c.json(toWire(row, heads.get(testId), deps.now()));
   });
 
   routes.patch("/:id/tests/:testId", requires("tests.edit"), async (c) => {
@@ -535,8 +555,8 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       now,
     });
 
-    const drafts = await draftVersionsByTest(deps.db, workspaceId, testId);
-    return c.json(toWire(updated, drafts.get(testId) ?? null));
+    const heads = await headVersionsByTest(deps.db, workspaceId, testId);
+    return c.json(toWire(updated, heads.get(testId), now));
   });
 
   // Task 3 (#55, P5.2): the one GET/PATCH pair Tasks 4 through 9 all write
@@ -731,6 +751,140 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!test) throw new ApiError(404, "not_found", "No such resource.");
 
     return c.json(await checkReachable(deps.http ?? globalThis.fetch, input.url, deps.now));
+  });
+
+  // --- Task 11 (#62, P5.9): the lifecycle -----------------------------
+  //
+  // `tests.publish` is the fourth guard this phase uses and an Author does
+  // not hold it (`packages/core/src/permissions.ts`): an Author builds the
+  // whole test and an Admin publishes it, which is `UX-11`'s own split and
+  // why the builder shows Publish in place, disabled, with the reason
+  // beside it rather than hiding the button.
+
+  /** The one gate, for the one caller that enforces it and (Task 13) the
+   * one that renders it. `buildChecklist` resolves a stored section's
+   * `qst_` row ids, so the documents handed in are keyed by row id —
+   * `workspaceQuestions` returns both halves. */
+  async function checklistFor(
+    workspaceId: string,
+    test: TestRow,
+    body: TestDocumentBody,
+    now: number,
+  ): Promise<ChecklistRow[]> {
+    const questions = await workspaceQuestions(deps.db, workspaceId);
+    return buildChecklist({
+      test,
+      body,
+      now,
+      questions: questions.map((q) => ({ ...q.document, id: q.id }) as Question),
+    });
+  }
+
+  routes.post("/:id/tests/:testId/publish", requires("tests.publish"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    const now = deps.now();
+
+    const test = await getTest(deps.db, workspaceId, testId);
+    if (!test) throw new ApiError(404, "not_found", "No such resource.");
+    const draft = await getDraftVersion(deps.db, workspaceId, testId);
+    if (!draft) {
+      throw new ApiError(409, "nothing_to_publish", "This test has no open draft to publish.");
+    }
+
+    // Review Focus 4: the same function `GET .../checklist` renders. A row
+    // that is red on the screen refuses here, and one that is not, does
+    // not — there is no second computation to disagree with.
+    const blocking = blockingRows(await checklistFor(workspaceId, test, draft.body, now));
+    if (blocking.length > 0) {
+      throw new ApiError(422, "checklist_blocked", "This test is not ready to publish.", {
+        rows: blocking,
+      });
+    }
+
+    const { version } = await publishDraftVersion(deps.db, workspaceId, testId, now);
+
+    await appendAudit(deps.db, workspaceId, {
+      actor: actor.userId,
+      action: "test.publish",
+      target: testId,
+      detail: { version },
+      now,
+    });
+
+    // Built from what was just written rather than re-read — `updateTest`'s
+    // own precedent, and what keeps this route's budget off a ninth
+    // subrequest. `publishDraftVersion` stamps version N and opens N+1
+    // carrying the same body, so both numbers and the window are known here.
+    return c.json(
+      toWire(
+        { ...test, status: "published", currentVersion: version, updatedAt: now },
+        { draftVersion: version + 1, publishedTiming: draft.body.settings.timing },
+        now,
+      ),
+    );
+  });
+
+  /** Close and Archive are the same handler twice: read, refuse the
+   * transition the lifecycle does not allow, write, audit. T-04's order is
+   * Draft -> Scheduled -> Open -> Closed -> Archived, so Archived follows
+   * Closed and nothing follows Archived (the ruling: a test is never
+   * deleted). */
+  const transition = (
+    to: Extract<TestStatus, "closed" | "archived">,
+    from: TestStatus,
+    refusal: string,
+  ) =>
+    async (c: Context<AppBindings, "/:id/tests/:testId/close">) => {
+      const actor = actorOr401(c);
+      const workspaceId = c.req.param("id");
+      const testId = c.req.param("testId");
+      const now = deps.now();
+
+      const test = await getTest(deps.db, workspaceId, testId);
+      if (!test) throw new ApiError(404, "not_found", "No such resource.");
+      if (test.status === to) {
+        throw new ApiError(409, `already_${to}`, `This test is already ${to}.`);
+      }
+      if (test.status !== from) throw new ApiError(409, `cannot_${to}`, refusal);
+
+      await setTestStatus(deps.db, workspaceId, testId, to, now);
+      await appendAudit(deps.db, workspaceId, {
+        actor: actor.userId,
+        action: `test.${to === "closed" ? "close" : "archive"}`,
+        target: testId,
+        detail: { from: test.status },
+        now,
+      });
+
+      const heads = await headVersionsByTest(deps.db, workspaceId, testId);
+      return c.json(toWire({ ...test, status: to, updatedAt: now }, heads.get(testId), now));
+    };
+
+  routes.post(
+    "/:id/tests/:testId/close",
+    requires("tests.publish"),
+    transition("closed", "published", "Only a published test can be closed."),
+  );
+
+  routes.post(
+    "/:id/tests/:testId/archive",
+    requires("tests.publish"),
+    transition("archived", "closed", "Archived follows Closed — close this test first."),
+  );
+
+  // `tests.edit`, not `tests.publish`: an Author who cannot publish still
+  // has to see which version a candidate is on before editing (`UX-18`).
+  // No separate existence check, the same call `GET .../draft` and
+  // `GET .../candidates` both decline to make and for the same reason: a
+  // test that does not exist in this workspace has no versions, and a
+  // second read would say nothing a holder of `tests.edit` here cannot
+  // already see.
+  routes.get("/:id/tests/:testId/versions", requires("tests.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    return c.json({ versions: await listVersions(deps.db, workspaceId, testId) });
   });
 
   // --- Task 9 (#60 / #56, P5.7b): the candidate list ------------------

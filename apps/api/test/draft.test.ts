@@ -794,10 +794,13 @@ function removedPaths(full: unknown, draft: unknown, path = "#"): string[] {
 }
 
 const DRAFT_FLOOR_TWINS: Readonly<Record<string, string>> = {
-  // Not a floor: the root `required` goes for its own reason, which is
-  // that `settings` is not a whole document.
+  // Not an *emptiness* floor: the root `required` goes for its own reason,
+  // which is that `settings` is not a whole document. Three of its five
+  // entries live on the test row or are never stored (`format`, `name`,
+  // `slug`); the other two are presence floors that do need twins, and
+  // Task 11 (#62) added both as blocking checklist rows.
   "#.required":
-    "not a floor — `settings` carries no format/name/slug/sections; they live on the test row, and import validates the unstripped schema",
+    "format/name/slug live on the test row; `timing` is buildChecklist's `timing_missing` blocking row and `sections` its `no_sections` — both also enforced on import, which validates the unstripped schema",
 
   // --- twinned ---------------------------------------------------------
   "#.$defs.access.allOf[0].then.required":
@@ -827,23 +830,23 @@ const DRAFT_FLOOR_TWINS: Readonly<Record<string, string>> = {
   "#.properties.consent.properties.text.minLength":
     "UNTWINNED, unreachable: no editor writes `consent` in Phase 5 and import runs the unstripped schema, so only a hand-written PATCH can blank it",
 
-  // --- UNTWINNED: UX-13's own words, owed to the publish checklist -----
-  // "a section may be empty in Draft … the publish checklist is where
-  // emptiness becomes an error rather than a nag". These four are that
-  // sentence; the rule they are owed is a blocking checklist row, and
-  // `buildChecklist` is Task 11's (#62) and does not exist yet.
+  // --- twinned by Task 11's publish checklist --------------------------
+  // UX-13's own words: "a section may be empty in Draft … the publish
+  // checklist is where emptiness becomes an error rather than a nag".
+  // These are that sentence, and `buildChecklist`
+  // (apps/api/src/publish/checklist.ts) is where they land — a blocking
+  // row, not a `validateTest` rule, because import runs the *unstripped*
+  // schema and so already refuses every one of them.
   "#.$defs.sourceFixed.properties.questions.minItems":
-    "UNTWINNED: UX-13 emptiness — owed Task 11's `section_empty` blocking row",
+    "buildChecklist: `section \"<title>\" has no questions` (section_empty, blocking)",
   "#.$defs.sourceSets.properties.sets.minItems":
-    "UNTWINNED: UX-13 emptiness — owed Task 11's `section_empty` blocking row",
+    "buildChecklist: the same `section_empty` row — a sets source with no sets draws nothing",
   "#.$defs.sourceSets.properties.sets.items.properties.questions.minItems":
-    "UNTWINNED: UX-13 emptiness — owed Task 11's `section_empty` blocking row",
+    "buildChecklist: the same `section_empty` row — a set with no questions draws nothing",
   "#.properties.sections.minItems":
-    "UNTWINNED: a test with no sections at all — owed a blocking row Task 11's table does not yet have",
-
-  // --- UNTWINNED: still a gap, named so it stops being a surprise ------
+    "buildChecklist: `this test has no sections, so there is nothing for a candidate to answer` (no_sections, blocking)",
   "#.$defs.section.properties.title.minLength":
-    "UNTWINNED: a published section with a blank title has no name on the candidate's screen — owed a blocking row Task 11's table does not yet have",
+    "buildChecklist: `section \"<id>\" has no title, so it has no name on the candidate's screen` (section_untitled, blocking)",
 };
 
 it("every floor draftSchema() removes is listed, with its publish-time twin or the reason it has none", () => {

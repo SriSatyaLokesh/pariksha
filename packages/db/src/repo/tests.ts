@@ -1,9 +1,10 @@
 // Tests, their published versions and sets.
 
 import type { DbClient } from "../client.js";
+import type { TestTiming } from "@pariksha/core";
 import { newId, newShortCode } from "../ids.js";
 import { scoped } from "./guard.js";
-import type { TestDocumentBody } from "./test-document.js";
+import type { TestDocumentBody, TestSettings } from "./test-document.js";
 
 export type TestStatus = "draft" | "published" | "closed" | "archived";
 
@@ -249,28 +250,57 @@ export const updateTest = scoped(
 );
 
 /**
- * Every test in `workspaceId` that currently carries an unpublished draft,
- * and its version number — one query regardless of how many tests the
- * workspace holds, the same "one query, not one per row" rule
- * `packages/db/src/repo/banks.ts`'s `listGroups` already follows. Feeds
- * `TestSummary.draftVersion` (`apps/web/src/lib/api.ts`); narrowed to one
- * test with `testId` for the single-test routes, so a `GET
- * .../tests/:testId` costs the same one extra statement a list does.
+ * The two version rows that matter per test in `workspaceId`: the open
+ * draft (its number feeds `TestSummary.draftVersion`,
+ * `apps/web/src/lib/api.ts`) and the current published one (its
+ * `timing` feeds `deriveState`, repo/test-document.ts — a published test
+ * is **Scheduled** or **Open** depending on its own window, and the
+ * screens cannot tell which without it).
+ *
+ * One query regardless of how many tests the workspace holds, and at most
+ * two rows per test: the join to `test.current_version` is what keeps a
+ * test with twenty frozen versions from returning twenty rows. Narrowed to
+ * one test with `testId`, so a `GET .../tests/:testId` costs the same one
+ * extra statement a list does.
  */
-export const draftVersionsByTest = scoped(
-  "draftVersionsByTest",
-  async (db: DbClient, workspaceId: string, testId?: string): Promise<Map<string, number>> => {
-    const clauses = ["workspace_id = ?", "published_at IS NULL"];
+export interface TestVersionHead {
+  draftVersion: number | null;
+  publishedTiming: TestTiming | undefined;
+}
+
+export const headVersionsByTest = scoped(
+  "headVersionsByTest",
+  async (db: DbClient, workspaceId: string, testId?: string): Promise<Map<string, TestVersionHead>> => {
+    const clauses = ["tv.workspace_id = ?", "(tv.published_at IS NULL OR tv.version = t.current_version)"];
     const params: unknown[] = [workspaceId];
     if (testId !== undefined) {
-      clauses.push("test_id = ?");
+      clauses.push("tv.test_id = ?");
       params.push(testId);
     }
-    const rows = await db.query<{ test_id: string; version: number }>(
-      `SELECT test_id, version FROM test_version WHERE ${clauses.join(" AND ")}`,
+    const rows = await db.query<{
+      test_id: string;
+      version: number;
+      published_at: number | null;
+      settings_json: unknown;
+    }>(
+      "SELECT tv.test_id, tv.version, tv.published_at, tv.settings_json FROM test_version tv " +
+        "JOIN test t ON t.workspace_id = tv.workspace_id AND t.id = tv.test_id " +
+        `WHERE ${clauses.join(" AND ")}`,
       params,
     );
-    return new Map(rows.map((row) => [row.test_id, Number(row.version)]));
+
+    const heads = new Map<string, TestVersionHead>();
+    for (const row of rows) {
+      const head = heads.get(row.test_id) ?? { draftVersion: null, publishedTiming: undefined };
+      if (row.published_at === null) {
+        head.draftVersion = Number(row.version);
+      } else {
+        const settings = row.settings_json == null ? {} : db.jsonValue<TestSettings>(row.settings_json);
+        head.publishedTiming = settings.timing;
+      }
+      heads.set(row.test_id, head);
+    }
+    return heads;
   },
 );
 

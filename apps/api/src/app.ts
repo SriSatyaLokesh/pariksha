@@ -171,10 +171,10 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // Phase 5 Task 2 (#54): test CRUD, short links and QR codes. Measured
   // (apps/api/test/tests.test.ts's "measures the real subrequest cost of
   // every route this task mounts"), not estimated, like every number above.
-  // GET costs 4 (auth 2 + `listTests`/`getTest` 1 + `draftVersionsByTest`
+  // GET costs 4 (auth 2 + `listTests`/`getTest` 1 + `headVersionsByTest`
   // 1); POST costs 5 (auth 2 + `createTest`'s one batch 1 + the read-back
   // `getTest` does to hand the route a full row 1 + `appendAudit` 1); PATCH
-  // costs 6 (auth 2 + `updateTest`'s read-then-write 2 + `draftVersionsByTest`
+  // costs 6 (auth 2 + `updateTest`'s read-then-write 2 + `headVersionsByTest`
   // 1 + `appendAudit` 1). The higher of the two methods sharing each path,
   // same rule Phase 4's banks routes already follow.
   "/api/v1/workspaces/:id/tests": 5,
@@ -227,6 +227,32 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // follows. The two paths differ, so they carry two lines.
   "/api/v1/workspaces/:id/tests/:testId/candidates": 3,
   "/api/v1/workspaces/:id/tests/:testId/candidates/import": 5,
+  // Task 11 (#62, P5.9): the lifecycle. Measured
+  // (`apps/api/test/lifecycle.test.ts`'s own "measures the real subrequest
+  // cost" test), not estimated. Publish costs 8: auth (2) + `getTest` (1)
+  // + `getDraftVersion` (1, the body the checklist judges and the route's
+  // 409) + `workspaceQuestions` (1, every question the sections can draw,
+  // one statement for the whole workspace) + `publishDraftVersion`'s own
+  // `getDraftVersion` (1) and its single `db.batch` (1) + `appendAudit`
+  // (1). A refused publish costs 5 — it stops at the checklist — and the
+  // higher of the two is what is pinned, the same rule every number above
+  // follows. The response is built from what was just written rather than
+  // re-read, which is what keeps it off a ninth.
+  "/api/v1/workspaces/:id/tests/:testId/publish": 8,
+  // Close and archive are the same handler twice: auth (2) + `getTest` (1,
+  // the 404 *and* the legal-transition check) + `setTestStatus` (1) +
+  // `appendAudit` (1) + `headVersionsByTest` (1, so the response carries
+  // the same `TestWire` every other test route returns rather than a
+  // second, smaller shape for the screens to special-case). The plan
+  // estimated 5 against a response that did not exist yet; the
+  // measurement wins.
+  "/api/v1/workspaces/:id/tests/:testId/close": 6,
+  "/api/v1/workspaces/:id/tests/:testId/archive": 6,
+  // Auth (2) + `listVersions` (1, one correlated subquery for the attempt
+  // counts, never one query per version). No separate existence check —
+  // the same call `GET .../draft` and `GET .../candidates` both decline to
+  // make. The plan estimated 4.
+  "/api/v1/workspaces/:id/tests/:testId/versions": 3,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -292,6 +318,13 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/:testId/check-url": "tests.edit",
   // Task 9 (#60 / #56, P5.7b). The application's first `candidates.manage`
   // routes: an Author holds `tests.edit` and is 403 on both of these.
+  // Task 11 (#62, P5.9): `tests.publish` is the Admin half of UX-11's
+  // split — an Author holds `tests.edit` and is 403 on these three.
+  "POST /api/v1/workspaces/:id/tests/:testId/publish": "tests.publish",
+  "POST /api/v1/workspaces/:id/tests/:testId/close": "tests.publish",
+  "POST /api/v1/workspaces/:id/tests/:testId/archive": "tests.publish",
+  // Reading the version history is not publishing it (UX-18).
+  "GET /api/v1/workspaces/:id/tests/:testId/versions": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this

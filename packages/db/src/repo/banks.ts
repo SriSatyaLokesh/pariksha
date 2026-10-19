@@ -130,7 +130,10 @@ function toBankRow(db: DbClient, row: BankRecord): BankRow {
   };
 }
 
-function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
+/** The decoded document half of a question row. Shared by
+ * `toQuestionRowView` and `workspaceQuestions` rather than written twice —
+ * the two differ only in what they wrap it in. */
+function toQuestionRecord(db: DbClient, row: QuestionRecord): QuestionRecord {
   // `tags_json` is NOT NULL, so a tagless question is stored as `'[]'`, not
   // SQL NULL — there is no way for the column itself to tell "no tags" apart
   // from "explicitly an empty array". Collapsing a decoded empty array back
@@ -140,7 +143,7 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
   // already returns on POST/PATCH — so a question reads the same way on a
   // GET as it did on the write that just created it.
   const decodedTags = row.tags_json == null ? null : db.jsonValue<string[]>(row.tags_json);
-  const record: QuestionRecord = {
+  return {
     ref_id: row.ref_id,
     group_ref: row.group_ref,
     type: row.type,
@@ -155,6 +158,10 @@ function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
     explanation_md: row.explanation_md,
     extra_json: row.extra_json == null ? null : db.jsonValue(row.extra_json),
   };
+}
+
+function toQuestionRowView(db: DbClient, row: QuestionFullRecord): QuestionRow {
+  const record = toQuestionRecord(db, row);
   return {
     id: row.id,
     bankId: row.bank_id,
@@ -868,6 +875,45 @@ export const workspaceQuestionSummaries = scoped(
       ...(row.difficulty !== null && { difficulty: row.difficulty as Difficulty }),
       tags: row.tags_json == null ? [] : db.jsonValue<string[]>(row.tags_json),
       type: row.type as QuestionType,
+    }));
+  },
+);
+
+/**
+ * Phase 5 Tasks 11-13: every question in the workspace as the document it
+ * round-trips as, with the two ids that identify it on each side of the
+ * boundary — the `qst_` row id a *stored* section names, and the bank
+ * file's own `ref_id` an exported or imported *document* names.
+ *
+ * Why not `workspaceQuestionSummaries` (above): `validateTest`
+ * (`@pariksha/core`) sums `scoring.points` and reads `scoring.mode`, and a
+ * summary carries neither — a `sets` section would look balanced whatever
+ * its sets held. Why not `listQuestions`: that one is per bank, paginated,
+ * and pays `QUESTION_SELECT`'s correlated `used_in_tests` subquery per row,
+ * which none of the three callers here reads. One statement, whole
+ * workspace, no subquery.
+ */
+export interface WorkspaceQuestion {
+  id: string;
+  bankId: string;
+  refId: string;
+  document: Question;
+}
+
+export const workspaceQuestions = scoped(
+  "workspaceQuestions",
+  async (db: DbClient, workspaceId: string): Promise<WorkspaceQuestion[]> => {
+    const rows = await db.query<QuestionRecord & { id: string; bank_id: string }>(
+      "SELECT q.id, q.bank_id, q.ref_id, q.group_ref, q.type, q.prompt_md, q.media_json, q.options_json, " +
+        "q.key_json, q.scoring_json, q.points, q.difficulty, q.tags_json, q.explanation_md, q.extra_json " +
+        "FROM question q WHERE q.workspace_id = ? ORDER BY q.ref_id",
+      [workspaceId],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      bankId: row.bank_id,
+      refId: row.ref_id,
+      document: toQuestionDocument(toQuestionRecord(db, row)),
     }));
   },
 );
