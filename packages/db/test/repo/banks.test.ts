@@ -358,6 +358,45 @@ describe("listQuestions filters (fixture-review finding 5)", () => {
   });
 });
 
+describe("listQuestions filter wildcards are escaped (whole-branch review, M7)", () => {
+  it("a tag containing a literal % does not also match an unrelated tag through an unescaped wildcard", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "m7-tag-ws", name: "M7 Tag WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    const exact = (
+      await repo.upsertQuestion(db, ws, bank, { ...singleFixture, id: "M7-A", tags: ["50%"] }, T)
+    ).id;
+    // Unescaped, the pattern built from "50%" is `%"50%"%` — its middle `%`
+    // is a wildcard, not a literal character, so it also matches `"501"`
+    // (`"50` + any one char + `"`), a tag that shares no percent sign at all.
+    await repo.upsertQuestion(db, ws, bank, { ...singleFixture, id: "M7-B", tags: ["501"] }, T + 1);
+
+    const { rows } = await repo.listQuestions(db, ws, bank, { tag: "50%" });
+    expect(rows.map((r) => r.id)).toEqual([exact]);
+  });
+
+  it("a search term containing a literal _ does not match any single character in its place", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "m7-search-ws", name: "M7 Search WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    const exact = (
+      await repo.upsertQuestion(db, ws, bank, { ...singleFixture, id: "M7-C", prompt: "a_b is the literal string" }, T)
+    ).id;
+    // `_` is a single-character wildcard to `LIKE` — unescaped, searching
+    // for "a_b" would also match "aXb" for any character X.
+    await repo.upsertQuestion(
+      db,
+      ws,
+      bank,
+      { ...singleFixture, id: "M7-D", prompt: "aXb is a different string" },
+      T + 1,
+    );
+
+    const { rows } = await repo.listQuestions(db, ws, bank, { search: "a_b" });
+    expect(rows.map((r) => r.id)).toEqual([exact]);
+  });
+});
+
 describe("listWorkspaceTags", () => {
   it("unions question tags and bank tags, deduplicated and sorted", async () => {
     const ws = newId("wsp");

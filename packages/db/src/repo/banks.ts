@@ -209,6 +209,21 @@ function decodeCursor(cursor: string): [number, string] {
   return [Number(cursor.slice(0, separator)), cursor.slice(separator + 1)];
 }
 
+/**
+ * Fix round (whole-branch review, M7): `filter.tag` and `filter.search`
+ * (below) interpolate user text straight into a `LIKE` pattern — still
+ * parameterised, so not injection, but `%`/`_` are wildcards to `LIKE`
+ * itself. A tag literally named `50%` or a search for `a_b` would otherwise
+ * match far more than the author typed and silently return the unfiltered
+ * list. Escapes both characters (and the escape character itself) and pairs
+ * with `ESCAPE '\'` at each call site — standard SQL, portable across
+ * SQLite/D1 and Postgres, the same "one query, no dialect branch" rule
+ * `BANK_SELECT`'s own comment already follows for JSON.
+ */
+function likeEscape(value: string): string {
+  return value.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+}
+
 export const createBank = scoped(
   "createBank",
   async (db: DbClient, workspaceId: string, input: { name: string; now?: number }): Promise<string> => {
@@ -314,12 +329,12 @@ export const listQuestions = scoped(
       params.push(filter.difficulty);
     }
     if (filter.tag) {
-      clauses.push("CAST(q.tags_json AS TEXT) LIKE ?");
-      params.push(`%"${filter.tag}"%`);
+      clauses.push("CAST(q.tags_json AS TEXT) LIKE ? ESCAPE '\\'");
+      params.push(`%"${likeEscape(filter.tag)}"%`);
     }
     if (filter.search) {
-      clauses.push("q.prompt_md LIKE ?");
-      params.push(`%${filter.search}%`);
+      clauses.push("q.prompt_md LIKE ? ESCAPE '\\'");
+      params.push(`%${likeEscape(filter.search)}%`);
     }
     if (filter.unused) {
       clauses.push(
