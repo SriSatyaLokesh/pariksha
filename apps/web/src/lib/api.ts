@@ -19,6 +19,7 @@ import type {
   Role,
   Section,
   Test,
+  TestBranding,
 } from "@pariksha/core";
 export type { Role };
 // Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
@@ -350,6 +351,21 @@ export interface ApiClient {
   // API at all (the path is workspace-scoped, and `requires()` reads the
   // workspace out of its own `:id` segment).
   checkUrl(workspaceId: string, testId: string, url: string): Promise<ReachResult>;
+
+  // T-23's workspace half (Task 10, #61, P5.8). Three methods rather than
+  // one, because the PRD splits branding across two owners: the logo, the
+  // colour and the footer are workspace settings behind
+  // `workspace.settings`, while the start and finish messages are the
+  // test's own and ride `patchDraft` with everything else.
+  /** The workspace's own branding, or `{}` when it has none yet. */
+  workspaceBranding(workspaceId: string): Promise<TestBranding>;
+  saveWorkspaceBranding(workspaceId: string, branding: TestBranding): Promise<TestBranding>;
+  /**
+   * The logo's bytes, through Phase 4's existing media route — the only
+   * one this product has. Answers the content-addressed key, which is
+   * what `branding.logo` stores.
+   */
+  uploadMedia(workspaceId: string, bankId: string, file: File): Promise<{ key: string }>;
 }
 
 const API = "/api/v1";
@@ -608,6 +624,22 @@ export function createApiClient(): ApiClient {
 
     checkUrl: (workspaceId, testId, url) =>
       json<ReachResult>(`/workspaces/${workspaceId}/tests/${testId}/check-url`, post({ url })),
+
+    workspaceBranding: async (workspaceId) =>
+      (await json<{ branding: TestBranding | null }>(`/workspaces/${workspaceId}`)).branding ?? {},
+
+    saveWorkspaceBranding: async (workspaceId, branding) =>
+      (await json<{ branding: TestBranding | null }>(`/workspaces/${workspaceId}`, patchBody({ branding })))
+        .branding ?? {},
+
+    uploadMedia: (workspaceId, bankId, file) =>
+      json<{ key: string }>(`/workspaces/${workspaceId}/banks/${bankId}/media`, {
+        method: "POST",
+        // The route reads the image type off `Content-Type` and the bytes
+        // off the body — no multipart wrapper to unpick on a Worker.
+        headers: { "Content-Type": file.type, Accept: "application/json" },
+        body: file,
+      }),
   };
 }
 

@@ -16,6 +16,15 @@ function noop(): void {
   /* no-op */
 }
 
+/** Task 10: `TestBuilder` takes the whole actor now, because T-23's
+ * workspace branding is readable by every member and writable only by an
+ * owner. An owner here, so the branding half renders enabled. */
+const ACTOR = {
+  userId: "usr_1",
+  email: "rao@example.edu",
+  memberships: [{ workspaceId: "wsp_1", role: "owner" as const, grants: [] }],
+};
+
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     setupStatus: async () => ({ needed: false, providers: [] }),
@@ -66,6 +75,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     // Task 6 (#58, P5.5): present only to satisfy `ApiClient`'s shape --
     // nothing in this file reaches T-19's link check.
     checkUrl: async () => {
+      throw new Error("not used by this test file");
+    },
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: async () => {
+      throw new Error("not used by this test file");
+    },
+    uploadMedia: async () => {
       throw new Error("not used by this test file");
     },
     ...overrides,
@@ -540,7 +556,7 @@ describe("TestBuilder (the open section lives in the URL)", () => {
       <TestBuilder
         workspaceId="wsp_1"
         testId="tst_1"
-        actorEmail="rao@example.edu"
+        actor={ACTOR}
         onSignOut={noop}
         onBack={noop}
         client={fakeClient({
@@ -590,7 +606,7 @@ describe("TestBuilder (the open section lives in the URL)", () => {
       <TestBuilder
         workspaceId="wsp_1"
         testId="tst_1"
-        actorEmail="rao@example.edu"
+        actor={ACTOR}
         onSignOut={noop}
         onBack={noop}
         client={fakeClient({
@@ -663,7 +679,7 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
       <TestBuilder
         workspaceId="wsp_1"
         testId="tst_1"
-        actorEmail="rao@example.edu"
+        actor={ACTOR}
         onSignOut={noop}
         onBack={noop}
         client={fakeClient({ test: async () => BASE_TEST, ...client })}

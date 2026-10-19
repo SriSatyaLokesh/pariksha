@@ -173,7 +173,10 @@ export function OrganiserApp({
           workspaceId={view.workspace.id}
           testId={view.testId}
           client={client}
-          actorEmail={view.actor.email}
+          // The whole actor, not just the address: T-23's workspace half
+          // is readable by every member and writable only by an owner, so
+          // the builder needs the membership to know which it is showing.
+          actor={view.actor}
           onSignOut={signOut}
           onBack={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
         />

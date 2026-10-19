@@ -51,6 +51,15 @@ export function meetsAA(foreground: string, background: string): boolean {
   return contrastRatio(foreground, background) >= 4.5;
 }
 
+/**
+ * The colour shown as the example wherever one is refused. Exported, not
+ * typed out at each call site, because `apps/web/test/no-hex-colors.test.ts`
+ * bans a hex literal anywhere under `apps/web/src` — strings included —
+ * and because the browser's refusal and the server's must not drift into
+ * suggesting two different colours.
+ */
+export const EXAMPLE_BRAND_COLOUR = "#b63a10";
+
 /** `#rrggbb`, lower or upper case. The one spelling stored, so a value and
  * its contrast can never disagree about which colour they mean. */
 export const HEX_COLOUR = /^#[0-9a-fA-F]{6}$/;

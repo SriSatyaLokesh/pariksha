@@ -27,7 +27,7 @@ import {
   setMembershipRole,
   updateWorkspace,
 } from "@pariksha/db";
-import { CREAM, HEX_COLOUR, ROLES, contrastRatio, meetsAA } from "@pariksha/core";
+import { CREAM, EXAMPLE_BRAND_COLOUR, HEX_COLOUR, ROLES, contrastRatio, meetsAA } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { revokeAllSessions } from "../auth/session.js";
 import { ApiError } from "../errors.js";
@@ -81,7 +81,7 @@ function refuseUnreadableBrandColour(branding: z.infer<typeof brandingPatch> | u
   const colour = branding?.primary_colour;
   if (colour === undefined) return;
   if (!HEX_COLOUR.test(colour)) {
-    throw new ApiError(422, "invalid_colour", `"${colour}" is not a colour. Use a hex value like #b63a10.`);
+    throw new ApiError(422, "invalid_colour", `"${colour}" is not a colour. Use a hex value like ${EXAMPLE_BRAND_COLOUR}.`);
   }
   if (meetsAA(colour, CREAM)) return;
   const ratio = Math.round(contrastRatio(colour, CREAM) * 100) / 100;

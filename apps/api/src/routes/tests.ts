@@ -9,7 +9,16 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import { CREAM, HEX_COLOUR, allowlistIssues, contrastRatio, matchesFilter, meetsAA, type QuestionSource } from "@pariksha/core";
+import {
+  CREAM,
+  EXAMPLE_BRAND_COLOUR,
+  HEX_COLOUR,
+  allowlistIssues,
+  contrastRatio,
+  matchesFilter,
+  meetsAA,
+  type QuestionSource,
+} from "@pariksha/core";
 import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
 import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
@@ -613,7 +622,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       if (colour !== undefined && !(HEX_COLOUR.test(colour) && meetsAA(colour, CREAM))) {
         const detail = HEX_COLOUR.test(colour)
           ? `reaches only ${Math.round(contrastRatio(colour, CREAM) * 100) / 100}:1 against cream, and candidate text in the brand colour needs at least 4.5:1`
-          : "is not a colour; use a hex value like #b63a10";
+          : `is not a colour; use a hex value like ${EXAMPLE_BRAND_COLOUR}`;
         throw new ApiError(422, "unreadable_colour", `${colour} ${detail}.`, {
           issues: [{ field: "branding.primary_colour", message: `${colour} ${detail}.` }],
         });

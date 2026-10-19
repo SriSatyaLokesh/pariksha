@@ -1,12 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TestAccess, TestTiming } from "@pariksha/core";
-import { ApiError, type ApiClient, type DraftPatch, type StoredSection, type TestVersionRow } from "../lib/api";
+import { can } from "@pariksha/core";
+import type { TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
+import {
+  ApiError,
+  type Actor,
+  type ApiClient,
+  type DraftPatch,
+  type StoredSection,
+  type TestVersionRow,
+} from "../lib/api";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
 import { TimingPanel } from "../components/testbuilder/TimingPanel";
 import { AccessPanel } from "../components/testbuilder/AccessPanel";
+import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
+import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -35,27 +45,44 @@ const DEFAULT_TIMING: TestTiming = { duration_minutes: 60 };
  * apps/api/src/routes/tests.ts). */
 const DEFAULT_ACCESS: TestAccess = { mode: "link_code" };
 
+/** `when` is the one member `$defs/release` requires. `on_submit` is the
+ * least surprising of the three and the only one that needs nothing else
+ * chosen. */
+const DEFAULT_RELEASE: TestRelease = { when: "on_submit" };
+
+const NO_BRANDING: TestBranding = {};
+
 export function TestBuilder({
   workspaceId,
   testId,
   client,
-  actorEmail,
+  actor,
   onSignOut,
   onBack,
 }: {
   workspaceId: string;
   testId: string;
   client: ApiClient;
-  actorEmail: string;
+  actor: Actor;
   onSignOut: () => void;
   onBack: () => void;
 }) {
+  // T-23: only an owner holds `workspace.settings`, and the workspace half
+  // of the branding panel is read-only without it. The server refuses
+  // either way — this is so an Author is told rather than 403'd after
+  // filling the form in.
+  const role = actor.memberships.find((m) => m.workspaceId === workspaceId)?.role;
+  const canEditWorkspace = role !== undefined && can({ role, action: "workspace.settings" });
   const [name, setName] = useState<string | null>(null);
   // UX-18 (Task 7): a test with a published version behind it is the case
   // where a timing change has to say what happens to attempts already
   // running, so the panel is told. `currentVersion` is what names one — the
   // draft row itself is always unpublished.
   const [published, setPublished] = useState(false);
+  // T-23's workspace half (Task 10). Loaded beside the draft rather than
+  // inside `BrandingPanel`, so the panel stays a controlled component like
+  // every other one in this shell and the shell keeps owning every call.
+  const [workspaceBranding, setWorkspaceBranding] = useState<TestBranding>(NO_BRANDING);
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
@@ -73,9 +100,17 @@ export function TestBuilder({
 
   const load = useCallback(async () => {
     try {
-      const [test, version] = await Promise.all([client.test(workspaceId, testId), client.draft(workspaceId, testId)]);
+      const [test, version, branding] = await Promise.all([
+        client.test(workspaceId, testId),
+        client.draft(workspaceId, testId),
+        // An Author cannot write workspace branding but can read it — the
+        // route is `requireMember`, not `workspace.settings` — and has to,
+        // because the preview below is what their candidates will see.
+        client.workspaceBranding(workspaceId),
+      ]);
       setName(test.name);
       setPublished(test.currentVersion !== null);
+      setWorkspaceBranding(branding);
       setDraft(version);
       setError(undefined);
     } catch (cause) {
@@ -161,6 +196,32 @@ export function TestBuilder({
     return () => clearTimeout(timer);
   }, [pending, client, workspaceId, testId]);
 
+  /**
+   * T-23's logo, through Phase 4's `POST .../banks/:bankId/media` — the
+   * only media route this product has, and the one the plan names.
+   *
+   * ponytail: the logo therefore lives in a *bank*'s media store, and this
+   * picks the workspace's first bank to hang it on. The bank id is only an
+   * existence and permission anchor there (the key itself is
+   * `media/<workspaceId>/<sha256>.<ext>`, workspace-scoped already), and
+   * every actor who holds `workspace.settings` is an owner and so holds
+   * `banks.edit` too. The lookup is lazy — one `listBanks` when Upload is
+   * pressed, never on render. Upgrade path: Phase 6 needs a public
+   * branding read anyway and should give the logo its own key space.
+   */
+  async function uploadLogo(file: File): Promise<{ key: string }> {
+    const banks = await client.listBanks(workspaceId);
+    const bank = banks[0];
+    if (bank === undefined) {
+      throw new ApiError(
+        409,
+        "no_bank",
+        "A logo is stored with this workspace's media. Create a question bank first, then upload it.",
+      );
+    }
+    return client.uploadMedia(workspaceId, bank.id, file);
+  }
+
   function saveSections(sections: StoredSection[]): void {
     setDraft((prev) => (prev === null ? prev : { ...prev, body: { ...prev.body, sections } }));
     setPending({ sections });
@@ -178,7 +239,7 @@ export function TestBuilder({
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <OrganiserHeader email={actorEmail} onSignOut={onSignOut} onBack={onBack} backLabel="Back to tests" />
+      <OrganiserHeader email={actor.email} onSignOut={onSignOut} onBack={onBack} backLabel="Back to tests" />
 
       <main id="main-content" className="organiser organiser--wide">
         <MonoCaption>Test builder</MonoCaption>
@@ -221,6 +282,26 @@ export function TestBuilder({
           <AccessPanel
             access={draft.body.settings.access ?? DEFAULT_ACCESS}
             onChange={(access) => saveSettings({ access })}
+          />
+        )}
+
+        {draft !== null && (
+          <ReleasePanel
+            release={draft.body.settings.release ?? DEFAULT_RELEASE}
+            onChange={(release) => saveSettings({ release })}
+          />
+        )}
+
+        {draft !== null && (
+          <BrandingPanel
+            branding={draft.body.settings.branding ?? NO_BRANDING}
+            workspaceBranding={workspaceBranding}
+            canEditWorkspace={canEditWorkspace}
+            onChange={(branding) => saveSettings({ branding })}
+            onSaveWorkspace={async (next) => {
+              setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
+            }}
+            onUploadLogo={uploadLogo}
           />
         )}
 

@@ -121,6 +121,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     checkUrl: async () => {
       throw new Error("not used by this test file");
     },
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: async () => {
+      throw new Error("not used by this test file");
+    },
+    uploadMedia: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

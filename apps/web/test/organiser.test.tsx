@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
+import type { TestBranding } from "@pariksha/core";
 
 import {
   safeReturnTo,
@@ -90,6 +91,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     checkUrl: async () => {
       throw new Error("not used");
+    },
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: async () => {
+      throw new Error("not used by this test file");
+    },
+    uploadMedia: async () => {
+      throw new Error("not used by this test file");
     },
     ...overrides,
   };
@@ -737,8 +745,10 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(screen.getByRole("button", { name: /add field/i }));
 
     // The preview is the candidate renderer, mounted by the running app.
+    // Named exactly: Task 10's branding panel mounts three more previews
+    // into this same shell, and /preview/i now matches all four.
     expect(
-      within(screen.getByRole("region", { name: /preview/i })).getByLabelText(/^Email/),
+      within(screen.getByRole("region", { name: "Preview" })).getByLabelText(/^Email/),
     ).toBeInTheDocument();
 
     // The shell debounces at 250 ms (apps/web/src/routes/test.tsx).
@@ -940,5 +950,135 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
     expect(patchDraft.mock.calls[0]).toEqual(["wsp_1", "tst_1", { settings: { access: { mode: "sso" } } }]);
     expect(JSON.stringify(patchDraft.mock.calls[0])).not.toContain("APTI-2026");
+  });
+  // Task 10 (#61, P5.8), a ninth time. release-branding.test.tsx renders
+  // both panels directly, so it cannot see whether the running app mounts
+  // them, reads workspace branding at all, or knows which actor is
+  // looking — the last of which is what makes the workspace half
+  // read-only for an Author.
+  it("reaches the release and branding panels from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    const saveWorkspaceBranding = vi.fn(async (_ws: string, branding: TestBranding) => branding);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+          workspaceBranding: async () => ({ footer_text: "Alpha College" }),
+          saveWorkspaceBranding,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "When candidates see their result" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Branding" })).toBeInTheDocument();
+    // Read through the real client method, not invented by the panel.
+    expect(screen.getByLabelText(/footer text/i)).toHaveValue("Alpha College");
+
+    // The per-test half rides the one draft route, like every other panel.
+    fireEvent.change(screen.getByLabelText(/start message/i), { target: { value: "Good luck." } });
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual([
+      "wsp_1",
+      "tst_1",
+      { settings: { branding: { start_message: "Good luck." } } },
+    ]);
+
+    // The workspace half does not: it is `PATCH /workspaces/:id`.
+    fireEvent.change(screen.getByLabelText(/primary colour/i), { target: { value: "#b63a10" } });
+    fireEvent.click(screen.getByRole("button", { name: /save workspace branding/i }));
+    await waitFor(() => expect(saveWorkspaceBranding).toHaveBeenCalled());
+    expect(saveWorkspaceBranding).toHaveBeenCalledWith("wsp_1", {
+      footer_text: "Alpha College",
+      primary_colour: "#b63a10",
+    });
+  });
+
+  // ACTOR above is an owner. An Author reaching the same screen must see
+  // the workspace half and be unable to save it — the PRD's own split,
+  // proved against the running app rather than against a prop.
+  it("an Author reaches the branding panel but cannot change the workspace half", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+          patchDraft: async () => {
+            throw new Error("not used");
+          },
+          workspaceBranding: async () => ({ footer_text: "Alpha College" }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Branding" })).toBeInTheDocument();
+    expect(screen.getByLabelText(/primary colour/i)).toBeDisabled();
+    expect(screen.getByRole("button", { name: /save workspace branding/i })).toBeDisabled();
+    // Still readable: an Author needs to know what their candidates see.
+    expect(screen.getByLabelText(/footer text/i)).toHaveValue("Alpha College");
+    expect(screen.getByLabelText(/start message/i)).toBeEnabled();
   });
 });
