@@ -165,13 +165,33 @@ it("REVIEW FOCUS 2: a key in the same workspace but outside this attempt's layou
   expect((await fetchMedia(OUTSIDE, mine.cookie)).status).toBe(404);
 });
 
-it("REVIEW FOCUS 2: a key from another workspace is the same 404, byte for byte", async () => {
-  const [outside, elsewhere] = await Promise.all([
-    fetchMedia(OUTSIDE, mine.cookie),
-    fetchMedia(OTHER_WS, mine.cookie),
+it("S-10: every refusal is one 404 with one body, byte for byte", async () => {
+  // In the layout and in no bucket, so the fourth refusal below is the
+  // storage miss and not the membership check.
+  const phantom = "pinned-but-never-uploaded.png";
+  const layout = await layoutOf(mine.paper.attemptId);
+  layout.media.push(phantom);
+  await deps.db.run("UPDATE attempt SET layout_json = ? WHERE id = ?", [
+    JSON.stringify(layout),
+    mine.paper.attemptId,
   ]);
-  expect(outside.status).toBe(elsewhere.status);
-  expect(await outside.text()).toBe(await elsewhere.text());
+
+  const answers = await Promise.all(
+    [
+      OUTSIDE, // exists, same workspace, outside this paper
+      OTHER_WS, // another tenant entirely
+      "notanimage.pdf", // an extension this route will not serve
+      phantom, // in this very paper, and no object behind it
+    ].map(async (key) => {
+      const res = await fetchMedia(key, mine.cookie);
+      return `${String(res.status)} ${await res.text()}`;
+    }),
+  );
+
+  expect(new Set(answers).size).toBe(1);
+  expect(answers[0]).toContain("404");
+  // And it says nothing about which of the four it was.
+  expect(answers[0]).not.toMatch(/paper|layout|workspace|attempt|svg|pdf/i);
 });
 
 it("S-10: the same key under two tenants serves each candidate only their own copy", async () => {
