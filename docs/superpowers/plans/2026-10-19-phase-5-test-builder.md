@@ -35,10 +35,10 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 
 ## Review Focus
 
-1. **The UX-05 usage predicate going blind the moment a draft lives in `test_version`.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:185`) scan `test_version.sections_json` and **none filters on `published_at`**, because on Phase 4's branch every row is published — `publishTestVersion` is the only writer and always stamps it. Task 2 starts writing `published_at IS NULL` rows, and all three go wrong at once: an Author who adds a question to a *draft* test can no longer delete it from its bank, the refusal names a test nobody published, and the browser's "not used in any test" filter hides it. Phase 4's suite cannot catch it — `packages/db/test/repo/banks.test.ts` only ever inserts published versions. — Task 2, re-run by Task 10.
-2. **`publishTestVersion` setting `status = "open"` unconditionally** (`packages/db/src/repo/tests.ts`). Wrong the moment `timing.opens_at` is in the future: `T-04`'s **Scheduled** state would never exist and a Phase 6 candidate reading `status` is told a test is open hours early. Invisible today because nothing reads `status`. — Task 10.
+1. **The UX-05 usage predicate going blind the moment a draft lives in `test_version`.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:185`) scan `test_version.sections_json` and **none filters on `published_at`**, because on Phase 4's branch every row is published — `publishTestVersion` is the only writer and always stamps it. Task 2 starts writing `published_at IS NULL` rows, and all three go wrong at once: an Author who adds a question to a *draft* test can no longer delete it from its bank, the refusal names a test nobody published, and the browser's "not used in any test" filter hides it. Phase 4's suite cannot catch it — `packages/db/test/repo/banks.test.ts` only ever inserts published versions. — Task 2, re-run by Task 11.
+2. **`publishTestVersion` setting `status = "open"` unconditionally** (`packages/db/src/repo/tests.ts`). Wrong the moment `timing.opens_at` is in the future: `T-04`'s **Scheduled** state would never exist and a Phase 6 candidate reading `status` is told a test is open hours early. Invisible today because nothing reads `status`. — Task 11.
 3. **A settings patch that merges where it must replace.** Switching `access.mode` from `link_code` to `sso` must drop `access_code`. The sibling case is caught for free — `$defs/sourcePool` and `$defs/sourceSets` carry `additionalProperties: false`, so a merged `sets` key inside a `pool` source fails the schema. **`access` is not**: `access_code` is a legal property of `access` under every mode, so a stale code survives, passes the schema, passes `validateTest` (whose rule fires only *when* the mode is `link_code`), publishes, and leaves the workspace inside an exported file. The proof is an **export** assertion, not a read-back of the patch. — Task 3 builds the merge; Task 8 owns the proof.
-4. **A publish checklist computed twice.** The screen has every number it needs, so computing rows in the browser is the obvious move; then the server computes them again, slightly differently, and either an all-green checklist 422s on publish or a red row is not enforced — the second being worse, because it teaches organisers to ignore the list. Tasks 4–9 each *name* their publish-time rules; Task 10 creates `checklist.ts` carrying the blocking rows and makes `POST …/publish` refuse on them; Task 12 adds the advisory rows, the `GET …/checklist` route and the screen. — Tasks 10 and 12.
+4. **A publish checklist computed twice.** The screen has every number it needs, so computing rows in the browser is the obvious move; then the server computes them again, slightly differently, and either an all-green checklist 422s on publish or a red row is not enforced — the second being worse, because it teaches organisers to ignore the list. Tasks 4–10 each *name* their publish-time rules; Task 11 creates `checklist.ts` carrying the blocking rows and makes `POST …/publish` refuse on them; Task 13 adds the advisory rows, the `GET …/checklist` route and the screen. — Tasks 11 and 13.
 5. **The short code scoped to a workspace.** Every tenant-table unique in `TABLE_MANIFEST` is composite with `workspace_id` (`test` already has `[["workspace_id","slug"]]`), so copying that shape is the natural move and is wrong: `/t/<code>` carries no workspace, two workspaces can hold one code, and `AC-02` fails silently on any instance with more than one workspace. — Task 2.
 6. **The #58 reachability check as an SSRF pivot and an unbudgeted subrequest.** An outbound `fetch` is one subrequest against the same 50 the database shares; and on Docker (Phase 11) the same code runs inside someone's network, where `http://169.254.169.254/` is reachable and a redirect can walk to it from a URL that looked fine. — Task 6.
 
@@ -55,6 +55,8 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 | `packages/db/src/schema/columns.ts` | Modified: `test.description`, `test.short_code`, `test.review_requested`, `test.updated_at`; `test_version.created_at`; the bare `short_code` unique |
 | `packages/db/migrations/{sqlite,pg}/0004_*.sql` | The Phase 5 delta, generated for both dialects |
 | `packages/db/src/repo/tests.ts` | Test and version reads and writes, the draft head, the lifecycle transitions |
+| `packages/db/src/repo/candidates.ts` | The candidate list: the rows Phase 6 mints invites against and matches registrations to |
+| `apps/api/src/import/candidates.ts` | Candidate-list CSV → rows, with each issue's source line |
 | `packages/db/src/repo/test-document.ts` | `toTestDocument` / `toTestRecord` — the one place a `pariksha/test@1` document becomes rows; pure-mapper sibling of `repo/question-document.ts` |
 | `packages/db/src/repo/banks.ts` | Modified: `published_at IS NOT NULL` on all three usage predicates |
 | `apps/api/src/routes/tests.ts` | `/tests`, `/tests/:testId`, `/tests/:testId/draft`, and the lifecycle, clone, export, import, checklist and check-url routes |
@@ -92,7 +94,7 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 
 **Interfaces:**
 - Consumes: `ACTIONS`, `PERMISSIONS`, `can()` (`packages/core/src/permissions.ts`).
-- Produces: no code. The four decisions below are consumed by Task 2 (the `review_requested` column and badge) and Task 11 (export carries no comments).
+- Produces: no code. The four decisions below are consumed by Task 2 (the `review_requested` column and badge) and Task 12 (export carries no comments).
 
 This is the one task in the phase with no red step: the deliverable is a decision, and the test it leaves behind is a **pin** that passes on the day it is written. Say so in the test's own comment rather than manufacturing a failure.
 
@@ -181,7 +183,7 @@ git commit -s -m "docs(adr): review comments on a draft test"
 
   // apps/web/src/lib/api.ts
   // `state` is `status` verbatim in this task — Scheduled and Open do not
-  // exist until Task 10 adds `deriveState`, which is where the route starts
+  // exist until Task 11 adds `deriveState`, which is where the route starts
   // mapping them. The wire type is declared whole here so no later task
   // renames a field the screens already read.
   export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
@@ -252,7 +254,7 @@ it("AC-02: a duplicate slug in the same workspace is rejected", async () => {
 it("the same slug in another workspace is accepted", async () => { /* resolves */ });
 it("T-01: the slug is editable while current_version is null and refused once it is set", async () => {
   expect(await updateTest(db, ws, id, { slug: "renamed" }, T)).toMatchObject({ slug: "renamed" });
-  await publishDraftVersion(db, ws, id, T);                        // Task 10's function; stub the row in this task's fixture
+  await publishDraftVersion(db, ws, id, T);                        // Task 11's function; stub the row in this task's fixture
   await expect(updateTest(db, ws, id, { slug: "again" }, T)).rejects.toThrow(/published/i);
 });
 it("S-09: a test in another workspace is not found", async () => { expect(await getTest(db, wsA, testInB)).toBeNull(); });
@@ -512,7 +514,7 @@ git commit -s -m "feat(tests): sections with fixed, pool and set sources"
 - Test: `packages/core/test/select.test.ts` (extend), `apps/api/test/selection.test.ts`, `apps/web/test/testbuilder/sets.test.tsx`
 
 **Interfaces:**
-- Consumes: `assignSet`, `layoutForAttempt`, `SetAssignment`, `SourceSets`, `Section` (`packages/core/src/select.ts`, `types.ts`); `getPublishedVersion` (Task 10 — in this task's fixtures, read the draft through `getDraftVersion` and publish it with the Task 10 stub); `SectionList` (Task 3); `DraftPatch` (Task 3).
+- Consumes: `assignSet`, `layoutForAttempt`, `SetAssignment`, `SourceSets`, `Section` (`packages/core/src/select.ts`, `types.ts`); `getPublishedVersion` (Task 11 — in this task's fixtures, read the draft through `getDraftVersion` and publish it with the Task 11 stub); `SectionList` (Task 3); `DraftPatch` (Task 3).
 - Produces:
   ```ts
   // packages/core/src/types.ts (added to TestScoring)
@@ -898,7 +900,7 @@ git commit -s -m "feat(tests): server-side url reachability check for registrati
 - `latest_start_at` falls inside the window
 - the per-section durations sum to no more than `duration_minutes` (T-12's "overall duration, optional per-section durations"; a sum above the whole is unsatisfiable, and #59 asks for it "caught here, with cause and fix")
 
-"Opens in the past" is **not** a `validateTest` rule — `validateTest` is pure and takes no clock — and belongs to the checklist (Task 12), which has `now`.
+"Opens in the past" is **not** a `validateTest` rule — `validateTest` is pure and takes no clock — and belongs to the checklist (Task 13), which has `now`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -993,7 +995,7 @@ git commit -s -m "feat(tests): timing, navigation and attempt policy"
 - Test: `packages/core/test/validate-test.test.ts` (extend), `apps/api/test/draft.test.ts` (extend), `apps/web/test/testbuilder/access.test.tsx`
 
 **Interfaces:**
-- Consumes: `TestAccess`, `AccessMode`, `validateTest` (`@pariksha/core` — `TestAccess` already exists at `packages/core/src/types.ts:246`); `DraftPatch` (Task 3); `exportTest` (Task 11 — this task's Review Focus 3 proof calls it, so it runs after Task 11 or against Task 11's stub; see Step 1).
+- Consumes: `TestAccess`, `AccessMode`, `validateTest` (`@pariksha/core` — `TestAccess` already exists at `packages/core/src/types.ts:246`); `DraftPatch` (Task 3); `exportTest` (Task 12 — this task's Review Focus 3 proof calls it, so it runs after Task 12 or against Task 12's stub; see Step 1).
 - Produces:
   ```ts
   // apps/web/src/components/testbuilder/AccessPanel.tsx
@@ -1014,7 +1016,7 @@ git commit -s -m "feat(tests): timing, navigation and attempt policy"
 | `email_code` | "Types their email and then the 6-digit code it receives." | "The link only." |
 | `sso` | "Signs in with their own school or company account." | "The link only." |
 
-**Save-time versus publish-time.** Save-time: a malformed CIDR in `allow_ip_ranges` or a malformed glob in `allow_email_domains`, because a stored value nothing can parse becomes a candidate silently refused on test day and the organiser never sees the cause. Publish-time (checklist rows, Task 12): `access_code` missing under `link_code` — `validateTest` already carries this rule at `packages/core/src/validate.ts:480` — an allowlist that can match nothing, and a candidate list with no rows.
+**Save-time versus publish-time.** Save-time: a malformed CIDR in `allow_ip_ranges` or a malformed glob in `allow_email_domains`, because a stored value nothing can parse becomes a candidate silently refused on test day and the organiser never sees the cause. Publish-time (checklist rows, Task 13): `access_code` missing under `link_code` — `validateTest` already carries this rule at `packages/core/src/validate.ts:480` — an allowlist that can match nothing, and a candidate list with no rows.
 
 Rotating the access code is a write to `settings.access.access_code` like any other; the panel states before the write that existing links keep working and the old code stops.
 
@@ -1095,7 +1097,185 @@ git commit -s -m "feat(tests): access modes and allowlists"
 
 ---
 
-## Task 9: Result release and branding (#61, P5.8)
+## Task 9: Candidate list ingest (#60 / #56, P5.7b)
+
+**Files:**
+- Modify: `packages/db/src/schema/columns.ts`, `packages/db/src/schema/sqlite.ts`, `packages/db/src/schema/pg.ts`, `packages/db/src/repo/index.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/components/testbuilder/AccessPanel.tsx`
+- Create: `packages/db/src/repo/candidates.ts`, `apps/api/src/import/candidates.ts`
+- Test: `packages/db/test/parity.test.ts` (extend), `packages/db/test/repo/candidates.test.ts`, `apps/api/test/candidate-list.test.ts`, `apps/web/test/testbuilder/candidate-list.test.tsx`
+- Generated: `packages/db/migrations/{sqlite,pg}/0005_*.sql`
+
+**Interfaces:**
+- Consumes: `readDelimitedRows`, `DelimitedRow` (`apps/api/src/import/rows.ts:21,34`, Phase 4 Task 8 — each row already carries its source line, which is what gives this import #51's positioned errors for free); `getTest` (Task 2); `getDraftVersion`, `TestDocumentBody` (Task 3); `RegistrationFormSpec`, `FormField` (Task 5); `ImportIssue` (`@pariksha/core`); `requires("candidates.manage")`, `appendAudit`.
+- Produces:
+  ```ts
+  // packages/db/src/repo/candidates.ts — every function scoped(), workspaceId first
+  export interface CandidateRow {
+    id: string;              // cnd_…
+    testId: string;
+    /** The value of the test's first `unique: true` registration field for this
+     *  row — the key an invite is minted against and a registration matched to. */
+    externalId: string | null;
+    /** The CSV's `set` column: a set *label* ("A"), not `attempt.set_no`. */
+    setLabel: string | null;
+    /** Prefill, keyed by registration field id. */
+    formValues: Record<string, unknown>;
+    source: "list" | "registration";
+    consentVersion: string | null;
+    createdAt: number;
+  }
+  export interface NewCandidate { externalId: string; setLabel: string | null; formValues: Record<string, unknown> }
+  export const listCandidates: ScopedFn<[testId: string, filter?: { source?: "list" | "registration" }], CandidateRow[]>;
+  export const getCandidateByExternalId: ScopedFn<[testId: string, externalId: string], CandidateRow | null>;
+  export const countCandidates: ScopedFn<[testId: string], { total: number; withoutSet: number }>;
+  /** Replaces the whole list for this test in one batch: every `source: "list"`
+   *  row is deleted and the new ones inserted. A row that already carries a
+   *  registration (`source: "registration"`) is never touched. */
+  export const replaceCandidateList: ScopedFn<[testId: string, rows: readonly NewCandidate[], now: number], { imported: number }>;
+
+  // apps/api/src/import/candidates.ts
+  export interface CandidateImportReport { imported: number; issues: (ImportIssue & { line: number })[] }
+  export function convertCandidateCsv(text: string, form: RegistrationFormSpec, setLabels: readonly string[]): { rows: NewCandidate[]; issues: (ImportIssue & { line: number })[] };
+
+  // apps/web/src/lib/api.ts — on ApiClient
+  //   candidates(testId: string): Promise<CandidateRow[]>
+  //   importCandidates(testId: string, csv: string, dryRun?: boolean): Promise<CandidateImportReport>
+  ```
+
+**Produced for Phase 6, stated here because a Phase 6 implementer will build against it.** The `candidate` rows above are the whole of Phase 5's contract, and **Phase 5 mints no invite links**: `POST /tests/{id}/invites`, the single-use signed token, its hash column and its expiry are Phase 6's, and Phase 5 deliberately adds no token column — the token's hashing and lifetime belong to the runtime that consumes them (`S-06` is written about attempt tokens, not list rows). Phase 6 mints against `CandidateRow.externalId` and `CandidateRow.id`; Phase 6's `invite_only` gate reads `getCandidateByExternalId`; Phase 6's `from_candidate_list` assignment reads `CandidateRow.setLabel` and passes it as `assignSet`'s `listValue` (`packages/core/src/select.ts`).
+
+**The CSV's columns are registration field IDs, plus one reserved `set`.** `examples/reasoning-aptitude/candidates.csv` is the worked reference — its header is `roll_number,full_name,email,set`, and `roll_number` is that test's first `unique: true` field. So the list needs no vocabulary of its own: the identity column is the test's first `unique` field, `set` is reserved, every other column is a field ID whose value becomes prefill, and a column that is neither is a positioned error. It is also what gives `UX-17`'s "the registration form has at least one unique field" row teeth — without one, a list cannot be keyed at all.
+
+**Columns this task adds**, plus one Phase 2 correction riding along in the same migration (the precedent is Phase 4 Task 1 widening `question.points` to a real):
+
+| Table | Column | Class | Why |
+| --- | --- | --- | --- |
+| `candidate` | `external_id` | text, null | The list's identity value. Null for a self-registration that matched no list row |
+| `candidate` | `set_label` | text, null | T-09's `set` column. Named `set_label`, not `set_no`, because `attempt.set_no` is an integer and these are the format's set names |
+| `candidate` | `source` | text | `"list"` or `"registration"`, so a re-upload replaces only what it owns |
+| `candidate` | `consent_version` | **made nullable** | Phase 2 declares it `NOT NULL`; a listed candidate has not consented yet. Null means "listed, not yet registered" |
+
+Unique: `[["test_id", "external_id"]]`, following `question`'s `[["bank_id", "ref_id"]]` — a duplicate identity in the uploaded file is a positioned error, and a re-upload is idempotent.
+
+| Method | Path | Guard | Budget (estimate — measure and pin) |
+| --- | --- | --- | --- |
+| POST | `/api/v1/workspaces/:id/tests/:testId/candidates/import` | `candidates.manage` | 7 |
+| GET | `/api/v1/workspaces/:id/tests/:testId/candidates` | `candidates.manage` | 4 |
+
+`candidates.manage` is the **third guard in Phase 5** and the first route in the application to use it, so `apps/api/test/authorization.test.ts`'s enumeration gains a new action. An Author holds `tests.edit` but not `candidates.manage` (`packages/core/src/permissions.ts`), so an Author who built the whole test cannot upload its candidate list — which is the matrix's own "Manage candidate lists and invites" line, surfaced in the panel the way `UX-11` surfaces the publish boundary rather than discovered as a 403.
+
+**All-or-nothing with positioned errors**, the same shape as `AC-05`: the upload parses, converts and validates whole, and `replaceCandidateList`'s single `db.batch` runs only if there are no issues. `?dryRun=1` reports without writing. The budget is flat in row count.
+
+**Save-time versus publish-time.** Save-time: an unknown column, a missing identity column, a duplicate identity, and a `set` value naming no set in any `sets` section — all four make the row unusable rather than half-built, and all four are fixed in the file before uploading again. Publish-time (Task 13's rows): the list being empty, and rows with no set.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// packages/db/test/parity.test.ts (extend)
+it("the candidate list columns exist in both dialects and consent_version is nullable", () => { /* external_id, set_label, source; consent_version notNull false */ });
+it("two list rows cannot share an external_id within one test", async () => { /* rejects /unique|constraint/i */ });
+it("the same external_id in two different tests is accepted", async () => { /* resolves */ });
+```
+
+```ts
+// packages/db/test/repo/candidates.test.ts
+it("replaceCandidateList replaces only the rows it owns", async () => {
+  await replaceCandidateList(db, ws, testId, [a, b], T);
+  await registerCandidate(db, ws, testId, { externalId: "21CS0147" });   // source "registration"
+  await replaceCandidateList(db, ws, testId, [c], T);
+  expect((await listCandidates(db, ws, testId)).map((r) => [r.externalId, r.source]))
+    .toEqual([["21CS0147", "registration"], ["21EC0211", "list"]]);
+});
+it("countCandidates reports the total and how many have no set, in one query", async () => {
+  expect(await countCandidates(db, ws, testId)).toEqual({ total: 3, withoutSet: 1 });
+});
+it("getCandidateByExternalId is the lookup Phase 6's invite_only gate uses", async () => { /* found, and null for an unknown id */ });
+it("S-09: a candidate list in another workspace is not found", async () => { expect(await listCandidates(db, wsA, testInB)).toEqual([]); });
+```
+
+```ts
+// apps/api/test/candidate-list.test.ts — fixture: examples/reasoning-aptitude/candidates.csv
+it("the worked example's list imports whole, keyed on the test's unique field", async () => {
+  expect(await json(importUrl, postCsv(candidatesCsv, adminCookie))).toMatchObject({ imported: 3, issues: [] });
+  expect((await listCandidates(db, ws, testId))[0]).toMatchObject({
+    externalId: "21CS0147", setLabel: "A",
+    formValues: { full_name: "Ananya Rao", email: "ananya.rao@vce.edu.in" },
+  });
+});
+it("a column that is neither `set` nor a registration field id is a positioned error on the header", async () => {
+  expect((await (await importCsv("unknown-column.csv")).json()).error.details.issues[0])
+    .toMatchObject({ line: 1, field: "header", message: expect.stringMatching(/"cgpa_v2" is not a field of this test's registration form/) });
+});
+it("a test with no unique registration field refuses the upload and says what is missing", async () => {
+  expect((await (await importCsv(candidatesCsv)).json()).error.details.issues[0])
+    .toMatchObject({ line: 1, field: "header", message: expect.stringMatching(/needs a registration field marked unique/) });
+});
+it("a duplicate identity in the file reports its line and imports nothing", async () => {
+  expect((await (await importCsv("duplicate-roll.csv")).json()).error.details.issues[0]).toMatchObject({ line: 4, field: "roll_number" });
+  expect(await candidateCount(testId)).toBe(0);
+});
+it("a set value naming no set in any sets section reports its line", async () => {
+  expect((await (await importCsv("set-z.csv")).json()).error.details.issues[0])
+    .toMatchObject({ line: 2, field: "set", message: expect.stringMatching(/no section defines a set "Z"/) });
+});
+it("dryRun reports exactly what a real import would and writes nothing", async () => { /* same report, count 0 */ });
+it("an Author cannot upload a candidate list — it is candidates.manage", async () => { /* 403 */ });
+it("an Admin can, and the upload writes one audit entry", async () => { /* 200, appendAudit action "candidates.import" */ });
+it("importing 500 rows stays at the route's budget", async () => {
+  expect((await withCountingDeps(() => importRows(500))).counts().total)
+    .toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/candidates/import"]);
+});
+it("measures the real subrequest cost of both routes", async () => { /* toBe, per method */ });
+```
+
+```tsx
+// apps/web/test/testbuilder/candidate-list.test.tsx
+it("the panel reports the list's size and how many rows have no set", () => {
+  expect(screen.getByText(/3 candidates · 1 with no set/i)).toBeVisible();
+});
+it("an upload shows the dry-run report before anything is written, one row per issue", async () => {
+  await userEvent.upload(screen.getByLabelText(/candidate list/i), badCsv);
+  expect(await screen.findByText(/nothing was imported/i)).toBeVisible();
+  expect(screen.getAllByRole("row", { name: /line 4/ })).toHaveLength(1);
+});
+it("replacing an existing list confirms first and names what is replaced and what is kept", async () => {
+  expect(screen.getByRole("dialog")).toHaveTextContent(/replace the 3 listed candidates/i);
+  expect(screen.getByText(/candidates who have already registered are kept/i)).toBeVisible();
+});
+it("an Author sees the control in place and disabled, with the reason in text beside it", () => {
+  expect(screen.getByLabelText(/candidate list/i)).toBeDisabled();
+  expect(screen.getByText("Needs an Admin — candidate lists are managed by Admins and Owners")).toBeVisible();
+});
+it("the expected columns are stated before an upload, naming this test's unique field", () => {
+  expect(screen.getByText(/roll_number \(required\), set \(optional\), and any other registration field/i)).toBeVisible();
+});
+it("the candidate list panel has no axe violations", async () => { expect(await axe(container)).toHaveNoViolations(); });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/db apps/api/test/candidate-list.test.ts apps/web/test/testbuilder/candidate-list.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement the columns, the repository, the converter and the panel**
+
+Add the three columns and the `consent_version` nullability change to `TABLE_MANIFEST` and both dialect files, generate each migration with `drizzle-kit`, then `pnpm --filter @pariksha/db migrations`. `convertCandidateCsv` reads with `readDelimitedRows` so every issue already carries its source line, resolves the header against the form's field IDs once, and reports rather than throws — the same shape `convertCsv` has in `apps/api/src/import/csv.ts`. `replaceCandidateList` is one `db.batch`: one `DELETE … WHERE test_id = ? AND source = 'list'` plus the inserts, so it is one subrequest on D1 and a half-replaced list cannot exist.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/db apps/api apps/web`, and `pnpm --filter @pariksha/db test` with `TEST_POSTGRES_URL` set.
+Expected: PASS on both dialects, with `authorization.test.ts` green against the application's first `candidates.manage` route.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages apps
+git commit -s -m "feat(tests): candidate list ingest with positioned errors"
+```
+
+---
+
+## Task 10: Result release and branding (#61, P5.8)
 
 **Files:**
 - Create: `packages/core/src/contrast.ts`, `apps/web/src/components/testbuilder/ReleasePanel.tsx`, `apps/web/src/components/testbuilder/BrandingPanel.tsx`
@@ -1207,7 +1387,7 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 
 ---
 
-## Task 10: Lifecycle and numbered published versions (#62, P5.9)
+## Task 11: Lifecycle and numbered published versions (#62, P5.9)
 
 **Files:**
 - Create: `apps/api/src/publish/checklist.ts`, `apps/web/src/components/testbuilder/VersionBanner.tsx`
@@ -1253,7 +1433,7 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 
 **UX-18's shape.** Publishing stamps `published_at` on the draft head; it opens no new draft. The *next* edit does: `PATCH …/draft` on a test whose head is published inserts version N+1 with `published_at IS NULL`, copying the published body, and returns it. So a test has at most one unpublished version, `test.current_version` always names the highest published one, and the banner is `draftVersion > publishedVersion`.
 
-**`buildChecklist` is created here with the blocking rows only** (Task 12 adds the advisory ones and the surface). It is pure: it takes the body, the drawable questions and `now`, and calls `validateTest` for everything already in it rather than re-deriving any rule.
+**`buildChecklist` is created here with the blocking rows only** (Task 13 adds the advisory ones and the surface). It is pure: it takes the body, the drawable questions and `now`, and calls `validateTest` for everything already in it rather than re-deriving any rule.
 
 | Row `id` | Severity | Message shape | Source |
 | --- | --- | --- | --- |
@@ -1368,7 +1548,7 @@ git commit -s -m "feat(tests): lifecycle with numbered published versions"
 
 ---
 
-## Task 11: Clone, whole-test export and import (#63, P5.10)
+## Task 12: Clone, whole-test export and import (#63, P5.10)
 
 **Files:**
 - Create: `apps/api/src/export/test.ts`, `apps/api/src/import/test.ts`
@@ -1376,7 +1556,7 @@ git commit -s -m "feat(tests): lifecycle with numbered published versions"
 - Test: `apps/api/test/export/test-round-trip.test.ts`, `apps/api/test/clone.test.ts`, `apps/web/test/testbuilder/clone-import.test.tsx`
 
 **Interfaces:**
-- Consumes: `toTestDocument`, `toStoredBody`, `IdRefs` (Task 3); `getPublishedVersion`, `getDraftVersion` (Tasks 3, 10); `validateTest`; `validateBankDocumentStructure` and the `@cfworker/json-schema` compilation in `apps/api/src/import/schema.ts` (Phase 4 Task 7); `listQuestions`, `listBanks`; `createTest`, `putDraftVersion`; `newShortCode` (Task 2).
+- Consumes: `toTestDocument`, `toStoredBody`, `IdRefs` (Task 3); `getPublishedVersion`, `getDraftVersion` (Tasks 3, 11); `validateTest`; `validateBankDocumentStructure` and the `@cfworker/json-schema` compilation in `apps/api/src/import/schema.ts` (Phase 4 Task 7); `listQuestions`, `listBanks`; `createTest`, `putDraftVersion`; `newShortCode` (Task 2).
 - Produces:
   ```ts
   // packages/db/src/repo/tests.ts
@@ -1499,7 +1679,7 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 
 ---
 
-## Task 12: Pre-publish warnings (#64, P5.11)
+## Task 13: Pre-publish warnings (#64, P5.11)
 
 **Files:**
 - Create: `apps/web/src/components/testbuilder/PublishChecklist.tsx`
@@ -1507,7 +1687,7 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 - Test: `apps/api/test/checklist.test.ts`, `apps/web/test/testbuilder/checklist.test.tsx`
 
 **Interfaces:**
-- Consumes: `buildChecklist`, `ChecklistRow`, `ChecklistSeverity` (Task 10); `validateTest`, `matchesFilter`, `describeAllowlists`; `getDraftVersion`, `listQuestions`.
+- Consumes: `buildChecklist`, `ChecklistRow`, `ChecklistSeverity` (Task 11); `validateTest`, `matchesFilter`, `describeAllowlists`; `getDraftVersion`, `listQuestions`; `countCandidates` (Task 9).
 - Produces:
   ```ts
   // apps/web/src/lib/api.ts — on ApiClient
@@ -1534,7 +1714,8 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 | `sets_unbalanced` | advisory | `set A is 8 points, set B is 6 — 2 apart, tolerance 0` | `T-11`, `UX-16` |
 | `no_unique_field` | advisory | `no registration field is unique, so a candidate can register twice` | `UX-17` |
 | `allowlist_empty` | advisory | `<describeAllowlists output>, which matches nobody` | #60's acceptance |
-| `candidate_list_empty` | advisory | `the candidate list has no rows` | #60's acceptance — **deferred, see Escalated** |
+| `candidate_list_empty` | blocking | `the candidate list has no rows, so nobody can enter` | #60's acceptance. Blocking **only** when something depends on it — `access.mode` is `invite_only`, or a section assigns `from_candidate_list`; otherwise the row does not appear |
+| `candidate_no_set` | blocking | `4 of 50 candidates have no set, and cannot start` | #56's acceptance. Blocking because the consequence is a candidate who cannot begin an exam, and the fix is in the uploaded file — cheap before publish, impossible after |
 
 Every row states the **measured fact**, never a category: the message carries the two numbers. `buildChecklist` gets these from `validateTest`'s existing issues wherever it already raises them (the pool and set rules are `packages/core/src/validate.ts:551` and `:571`), so the numbers in the checklist and the numbers an import would report are the same numbers.
 
@@ -1559,6 +1740,20 @@ it("the checklist and publish compute the same rows — one function, two caller
   const fromGet = (await json(checklistUrl)).filter((r) => r.severity === "blocking");
   const fromPublish = (await (await app.request(publishUrl, post({}, adminCookie))).json()).error.details.rows;
   expect(fromPublish).toEqual(fromGet);
+});
+it("an empty candidate list blocks publish for invite_only and does not appear otherwise", async () => {
+  await setAccessMode("invite_only");
+  expect(rowIds(await json(checklistUrl))).toContain("candidate_list_empty");
+  await setAccessMode("link_code");
+  expect(rowIds(await json(checklistUrl))).not.toContain("candidate_list_empty");
+});
+it("candidates with no set block publish when a section assigns from_candidate_list, and state the count", async () => {
+  expect((await json(checklistUrl)).find((r) => r.id === "candidate_no_set"))
+    .toMatchObject({ severity: "blocking", message: "4 of 50 candidates have no set, and cannot start" });
+});
+it("both candidate rows cost one query, not one per candidate", async () => {
+  expect((await withCountingDeps(() => json(checklistUrl))).counts().total)
+    .toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/checklist"]);
 });
 it("an all-green test returns an empty row list", async () => { expect(await json(checklistUrl)).toEqual([]); });
 it("every row names a field a screen can navigate to", async () => { for (const r of rows) expect(r.field).not.toBe(""); });
@@ -1631,7 +1826,7 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 
 **Ruling: `test_version.sections_json` names questions by their `qst_` row ID and banks by their `bnk_` row ID; export translates both back to the bank file's own IDs.** — Why: `packages/db/src/repo/banks.ts:99-101` already matches `q.id` and `q.bank_id` against `sections_json` and Phase 4 shipped `UX-05`'s delete refusal on it; and a `ref_id` is unique only per bank (`columns.ts`, `question.uniques: [["bank_id","ref_id"]]`), so a `fixed` list of ref IDs is ambiguous across the several banks `test.banks` explicitly allows. — Cost if wrong: `apps/api/src/export/test.ts` loses its mapping step and `sections_json` is rewritten once, over a table nothing has published to.
 
-**Ruling: a pool section naming no bank is forbidden at publish, not at save, and neither `SourcePool.bank` nor `schemas/test-1.json` is tightened.** — Why: making an optional field required is a breaking change for every existing document, which `docs/test-format.md` § Versioning puts behind `@2`; and the UX-05 hole closes without it, because all three usage predicates consult only published versions (after Review Focus 1's fix) and `pool_no_bank` is a blocking checklist row, so a bankless pool can never reach a published version. The builder's pool editor is a `<select>` over the workspace's banks with no empty option. Proved in Task 10 (`pool_no_bank` blocks publish) and Task 2 (a published pool's questions are undeletable). — Cost if wrong: one checklist row is replaced by a `required` entry and a `@2` migration — which is exactly why it is not done speculatively.
+**Ruling: a pool section naming no bank is forbidden at publish, not at save, and neither `SourcePool.bank` nor `schemas/test-1.json` is tightened.** — Why: making an optional field required is a breaking change for every existing document, which `docs/test-format.md` § Versioning puts behind `@2`; and the UX-05 hole closes without it, because all three usage predicates consult only published versions (after Review Focus 1's fix) and `pool_no_bank` is a blocking checklist row, so a bankless pool can never reach a published version. The builder's pool editor is a `<select>` over the workspace's banks with no empty option. Proved in Task 11 (`pool_no_bank` blocks publish) and Task 2 (a published pool's questions are undeletable). — Cost if wrong: one checklist row is replaced by a `required` entry and a `@2` migration — which is exactly why it is not done speculatively.
 
 **Ruling: Phase 4's `GET …/media/:key` needs nothing from Phase 5.** — Why: it is guarded by `banks.edit`, and in `packages/core/src/permissions.ts` every role holding `tests.edit` also holds `banks.edit` (owner holds all of `ACTIONS`; admin and author list both; proctor, reviewer and viewer hold neither), so any organiser who can open a test preview can already fetch its question images and the workspace logo. The gate only bites a caller with no membership — the candidate — and that, with the public branding read, is Phase 6's. Task 2 pins it with a matrix assertion, so splitting the two actions later breaks a test rather than an image. — Cost if wrong: one route's guard changes; no data moves.
 
@@ -1649,7 +1844,9 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 
 **Ruling: `contrastRatio` moves into `@pariksha/core`.** — Why: it exists twice today, byte-identical, at `apps/web/test/contrast.test.ts:23` and `apps/web/test/contrast-usage.test.ts:56`, and T-23's gate needs a third copy in `src` and a fourth on the server. `packages/core` is the pure-leaf home with no runtime dependencies, and `docs/test-format.md`'s "every rule is re-checked on the server" is why the server needs it at all. — Cost if wrong: the module moves to `apps/web/src/lib/` and the server check goes.
 
-**Ruling: two shuffle controls, not the three #56 names.** — Why: `T-10` names two shuffles; `schemas/test-1.json` `$defs/section` carries only `shuffle_questions`, and option order is `shuffle_options` per question (`schemas/question-1.json`, read by `layoutForAttempt` in `packages/core/src/select.ts`), which the Phase 4 editor already owns. No document names a third. The group keeps its legend and three rows — one switch and two statements of fact, including `UX-08`'s. Also raised in "Escalated", because the issue asserts three. — Cost if wrong: a test-level `shuffle` block added to the format (additive within `@1`) and one switch.
+**Ruling: the candidate list splits across two phases — Phase 5 ingests the list, Phase 6 mints the invite links.** — Why: the two halves answer to different owners. The list is an input to the builder's own gate — `UX-17`'s checklist has to count its rows, #60's acceptance asks for an empty list to be caught before publish, and #56's `from_candidate_list` reads a `set` column off it — so it has to exist while the test is still a draft. The single-use signed token is an input to the runtime that redeems it (`S-06`, `C-02`), and its hashing, expiry and replay behaviour are decisions the consuming phase owns. Planning both phases in parallel left a hole between them: Phase 6's "Assumed Phase 5 interface" table expected Phase 5 to mint at `POST /tests/{id}/invites` and built only the consume side, while this plan expected Phase 6 to ingest — so neither built the surface. The split closes it, and Task 9's `Produces` block states the row shape explicitly so Phase 6 builds the mint side against real columns. Phase 5 adds **no** token column. — Cost if wrong: if minting should have been Phase 5's, Phase 6 writes one route and one column against rows that already exist; if ingestion should have been Phase 6's, Task 9's migration and repository move forward a phase intact.
+
+**Ruling: two shuffle controls, not the three #56 names.** — Why: `T-10` names two shuffles; `schemas/test-1.json` `$defs/section` carries only `shuffle_questions`, and option order is `shuffle_options` per question (`schemas/question-1.json`, read by `layoutForAttempt` in `packages/core/src/select.ts`), which the Phase 4 editor already owns. No document names a third. #56's "three switches" is satisfied as three rows in one legend — one switch and two statements of fact, including `UX-08`'s. The one variant worth revisiting is a test-level `shuffle: { questions, options }` block (additive within `@1`), and only if organisers ask to override option shuffling per test; it would put a second decider on option order and make `layoutForAttempt` carry a precedence rule between the test setting and the question's own, which is why it is not done now. — Cost if wrong: that block plus one switch — one schema property, one field, one precedence line.
 
 **Ruling: pool shortfall and set imbalance are advisory at publish and blocking at import.** — Why: `T-11` says the builder "warns"; `docs/test-format.md` § "Rules checked on import" says "Import is stricter: it refuses the file for either, because an imported file is one an author can still edit." `design.md`'s `UX-17` "all green" is lower precedence and reads as every row acknowledged, which the confirmation step delivers. — Cost if wrong: two rows change severity; one line each.
 
@@ -1674,24 +1871,14 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 - **The review panel, the comment table and approvals are not built.** Phase 5 ships ADR 0007, the `test.review_requested` column, a "Request review" control and the "In review" badge (`UX-10`'s badge, `#54`). What is missing: the reviewers list, per-section and per-question comments, and the Approved / Changes-requested marks — `docs/design.md`'s screen inventory row 10. ADR 0007 fixes the data model, including the fourteenth action (`tests.comment`) that the task building it must add to the PRD matrix, `PERMISSIONS` and `ROUTE_ACTIONS` together. **Until it lands, `UX-10` is partly met** and the acceptance checklist should say so.
 - **Pointer drag remains deferred, as it was in Phase 4.** `UX-12` and #55 say sections are "dragged to reorder"; this phase ships the keyboard half in full through `ReorderableList`, and no pointer drag. The seam is unchanged: `onReorder(from, to)` is what a later `draggable` row would call.
 - **`AC-11`'s "a refresh keeps each order" is not provable in Phase 5.** The order is stored in `attempt.layout_json`, and attempts are Phase 6. This phase proves the other two thirds — two candidates on one set get different orders, and pinned options do not move — through `layoutForAttempt` against the stored published version (Task 4).
-- **The candidate list is configured but not ingested.** See "Escalated".
-- **`consent`, `proctoring` and `retention` have no editor.** They belong to Phases 6, 7 and 8. Phase 5 carries them through import, clone and export untouched and asserts exactly that (Task 11), so a document that arrives whole leaves whole.
+- **Invite links are not minted.** Phase 5 ingests the candidate list (Task 9); `POST /tests/{id}/invites`, the single-use signed token and its expiry are Phase 6's. See the candidate-list ruling.
+- **`consent`, `proctoring` and `retention` have no editor.** They belong to Phases 6, 7 and 8. Phase 5 carries them through import, clone and export untouched and asserts exactly that (Task 12), so a document that arrives whole leaves whole.
 - **The public reads the candidate needs do not exist yet.** `GET /t/:code` redirects to `/<workspace-slug>/<test-slug>`, which nothing serves until Phase 6; and the workspace logo is readable only through `GET …/media/:key` behind `banks.edit`, so a signed-out candidate cannot fetch it. Phase 6 owns the candidate landing page and the public branding read. Both are expected 404s today, not regressions.
 - **Phase 6 inherits one interface decision from Task 3.** The questions `layoutForAttempt` is handed come from `test_version.sections_json`, which names `qst_` row IDs — so the `Question` objects passed to it must carry the row ID in `Question.id`, and `response.question_id` stores that. Deciding otherwise means rewriting the three usage predicates in `packages/db/src/repo/banks.ts`.
 
 ## Escalated — needs a human decision
 
-**1. Which phase ingests the candidate list.** #60's acceptance says "a candidate list with no rows [is] caught here and again at the publish checklist", and #56's `from_candidate_list` strategy reads a `set` column from it — both of which need rows to exist. But `docs/ROADMAP.md`'s Phase 5 "Delivers" does not mention candidate lists, the PRD puts `POST /tests/{id}/candidates/import` under *Candidates* rather than *Tests*, and "Manage candidate lists and invites" is `candidates.manage`, an action no Phase 5 route uses.
-   - **(a) Phase 5 ingests it** — a CSV upload route, a `candidate` row per line or a stored CSV object, and `candidates.manage` on a third guard. Cost: a surface no issue scopes, roughly a task's worth, and it duplicates whatever Phase 6 needs for invites.
-   - **(b) Phase 5 stores only the configuration** (`access.candidate_list`, the file name the format defines) and defers the `candidate_list_empty` checklist row and the `from_candidate_list` "no set" warning with it. Cost: two of #60's and #56's acceptance bullets go unmet in Phase 5 and are recorded as partial.
-   - **(c) Phase 6 ingests it and back-fills both rows.** Same as (b) for Phase 5, with the follow-up scheduled.
-   - **Recommendation: (c).** It keeps Phase 5's scope to what its issues and the roadmap agree on, and the two deferred rows are one `buildChecklist` entry each once rows exist. The plan above is written for (c): Task 12's table marks `candidate_list_empty` deferred.
-
-**2. Whether there is a third shuffle switch.** #56 says "the three shuffle switches" and its acceptance asks for them "grouped with a legend". `T-10` names two (questions within a section, answer options), `schemas/test-1.json` `$defs/section` carries only `shuffle_questions`, option order is per question, and no document names a third.
-   - **(a) Two controls** — one switch plus the two statements of fact `UX-08` and the question format already fix. Cost: #56's "three switches" is read as three rows rather than three controls.
-   - **(b) Add a test-level `shuffle: { questions, options }` block** to `pariksha/test@1` (additive within `@1`), overriding the per-question `shuffle_options` for the whole test. Cost: a second place that decides option order, and `layoutForAttempt` grows a precedence rule between the test setting and the question's own.
-   - **(c) Add a third, `shuffle_sections`.** Cost: contradicts `UX-12`'s ordered spine, and nothing in the engine reads it.
-   - **Recommendation: (a).** The plan above is written for it. (b) is the only one worth revisiting, and only if organisers ask to override option shuffling per test.
+**Empty.** Both questions this plan raised — which phase ingests the candidate list, and whether there is a third shuffle switch — were put to a human and decided. They are recorded above as rulings (the candidate-list split and the two shuffle controls); this heading is kept rather than deleted so a reader can see the section was checked and came back empty, not skipped.
 
 ## Done when
 
@@ -1700,9 +1887,9 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 - `AC-04` passes: `examples/reasoning-aptitude/test.json` round-trips through import and export byte-for-byte including `consent`, `proctoring` and `retention`, carries no `tst_`, `qst_`, `bnk_`, `ver_` or `workspace_id`, and a clone reproduces the same settings and sections under a new ID, slug and short code.
 - `AC-09`, `AC-10` and `AC-11` pass against the *published version read back through `getTestVersion`*: round robin over 5 sets splits 50 registrations 10 each with no two consecutive alike; a pool draws `count` distinct matching questions per candidate; two candidates on one set get different question and option orders and pinned options do not move. `AC-11`'s refresh case is Phase 6's.
 - The UX-05 guarantee still holds and is now exact: a question referenced only by an unpublished draft can be deleted, the same reference in a published version refuses the delete and names the test, and a published pool's questions are undeletable because a bankless pool cannot be published.
+- The candidate list is real, queryable data: `examples/reasoning-aptitude/candidates.csv` imports whole keyed on the test's `unique` field, a bad line imports nothing and reports its position, an Author is 403, and the publish gate blocks on an empty list under `invite_only` and on rows with no set under `from_candidate_list`. Invite minting is Phase 6's and no token column exists.
 - One publish gate: `GET …/checklist` and `POST …/publish` return the same blocking rows from the same function, every row states its measured numbers, publish succeeds over advisory rows and refuses over blocking ones, and import refuses what publish only warns about.
 - `ROUTE_BUDGETS` covers every route this phase mounts, every entry is pinned with `toBe` against a measurement, no entry reaches 50, and the draft read and the export stay flat in section and question count.
 - `GET /t/:code` is the only route in the application with no guard, and `apps/api/test/authorization.test.ts` says so.
 - Every builder screen passes `jest-axe`, every reorder is reachable without a pointer and keeps focus, every state is text plus glyph, and `apps/web/test/no-hex-colors.test.ts` still finds nothing — including no `style={}` in the branding panel.
 - `pnpm lint typecheck build test` passes with SQLite and Postgres both migrating in CI.
-</content>
