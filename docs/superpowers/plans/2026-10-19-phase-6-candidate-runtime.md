@@ -2212,7 +2212,7 @@ git commit -s -m "feat(run): submit, receipt, release gate and a bounded regex a
 
 **`AC-22` asks for a scan, not a suite.** "No candidate API response contains keys, explanations or other candidates' data. This is checked by an automated test that scans every response." The scan is a fixture in which every secret is a unique sentinel string — `__KEY_LOG001__`, `__EXPL_LOG001__`, `__RUBRIC_WRI001__`, `__MODELANS_WRI001__`, `__ACCEPT_BLK001__`, `__TOL_QNT003__`, `__OTHER_CANDIDATE__`, `__ACCESS_CODE__` — replayed through **every** endpoint `ROUTE_AUTH` marks `attempt` or candidate-`public`, with the route list derived from `ROUTE_AUTH` rather than written by hand. A Phase 7 snapshot route is then either scanned or a failing enumeration, which is the only form of this test that survives the next phase (Review Focus 5).
 
-Two further leak classes ride the same scan, following `apps/api/test/export/round-trip.test.ts:1152`'s precedent: **internal identifiers** (`wsp_`, `bnk_`, `qst_`, `ver_`, `usr_`, and any `cnd_`/`att_` that is not this candidate's own) and **other candidates' data**, seeded by a second registered candidate whose every form value is a sentinel.
+Two further leak classes ride the same scan, following `apps/api/test/export/round-trip.test.ts:249`'s precedent: **internal identifiers** (`wsp_`, `bnk_`, `qst_`, `ver_`, `usr_`, and any `cnd_`/`att_` that is not this candidate's own) and **other candidates' data**, seeded by a second registered candidate whose every form value is a sentinel.
 
 The one deliberate exception is `full_review`, where the key and the explanation are exactly what `T-22` promises; the scan asserts the sentinels appear there and **only** there, and only once the release gate has opened.
 
