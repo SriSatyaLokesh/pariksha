@@ -154,13 +154,19 @@ export function SignalFaq() {
       aria-labelledby="faq-heading"
     >
       <p className="signal-eyebrow">Questions and answers</p>
-      <h2 id="faq-heading">The nine things people ask first.</h2>
-      <div className="signal-cards signal-cards--spaced">
+      <h2 id="faq-heading">FAQs</h2>
+      {/* Native <details name="faq"> is an exclusive accordion: opening one
+          closes the rest, with no JavaScript and no ARIA of our own. A
+          browser without exclusive-accordion support simply lets more than
+          one stay open, which is a smaller failure than a scripted one. */}
+      <div className="signal-faq">
         {FAQ_ITEMS.map((item) => (
-          <div className="signal-card" key={item.question}>
-            <h3>{item.question}</h3>
-            <p>{item.answer}</p>
-          </div>
+          <details className="signal-faq__item" name="faq" key={item.question}>
+            <summary className="signal-faq__q">
+              <h3>{item.question}</h3>
+            </summary>
+            <p className="signal-faq__a">{item.answer}</p>
+          </details>
         ))}
       </div>
     </section>

@@ -154,8 +154,16 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".signal-ghost-btn": "signal-surface",
   ".signal-ghost-btn:hover": "signal-surface",
 
-  // ---- signal.css: cards (the type rail and the FAQ grid) -----------------
+  // ---- signal.css: cards (the type rail) ---------------------------------
   ".signal-card p": "signal-surface",
+
+  // ---- signal.css: the FAQ accordion, ambient on signal-bg ---------------
+  // <details name="faq"> items sit directly on the page ground; nothing
+  // between them and .signal paints a surface of its own.
+  ".signal-faq__q h3": "signal-bg",
+  '.signal-faq__q:hover h3, .signal-faq__item[open] > .signal-faq__q h3':
+    "signal-bg",
+  ".signal-faq__a": "signal-bg",
 
   // ---- signal.css: not-a-form's bullet list, ambient on signal-bg --------
   ".signal-bullets li": "signal-bg",
@@ -286,6 +294,15 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".signal-btn--ghost": { px: 15.5, weight: 600 },
   // Same element as .signal-nav__links a; only the colour changes.
   ".signal-nav__links a:hover": { px: 14.5, weight: 400 },
+  // Same <h3> as .signal-faq__q h3; the open/hover rules change only the
+  // colour, so size and weight stay that selector's own.
+  '.signal-faq__q:hover h3, .signal-faq__item[open] > .signal-faq__q h3': {
+    px: 17,
+    weight: 600,
+  },
+  // The FAQ answer declares no size of its own; it inherits .signal's body
+  // size, like every other ambient paragraph on the page.
+  ".signal-faq__a": { px: 17, weight: 400 },
   // Size comes from .signal-trust li (11px); weight resolves from its own
   // declaration (600) regardless.
   ".signal-trust li b": { px: 11, weight: 600 },

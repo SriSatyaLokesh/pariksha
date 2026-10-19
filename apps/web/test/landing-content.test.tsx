@@ -36,7 +36,7 @@ const SECTIONS: { id: string; level: 2 | 3; heading: string }[] = [
     level: 2,
     heading: "What exists today, and what lands with v0.1.",
   },
-  { id: "faq", level: 2, heading: "The nine things people ask first." },
+  { id: "faq", level: 2, heading: "FAQs" },
   { id: "start", level: 3, heading: "What you can do today" },
   { id: "docs", level: 2, heading: "Footer" },
 ];

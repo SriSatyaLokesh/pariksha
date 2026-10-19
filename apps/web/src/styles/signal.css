@@ -928,3 +928,78 @@
 .signal-fine--flush {
   margin: 0;
 }
+
+/* ---- FAQ ------------------------------------------------------------
+   An exclusive accordion built on native <details name="faq">: one answer
+   open at a time, keyboard-operable, and complete with JavaScript off. */
+
+.signal-faq {
+  margin-top: var(--space-2xl);
+  border-top: 1px solid var(--color-signal-line);
+  max-width: 78ch;
+}
+
+.signal-faq__item {
+  border-bottom: 1px solid var(--color-signal-line);
+}
+
+.signal-faq__q {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  padding: var(--space-lg) 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.signal-faq__q::-webkit-details-marker {
+  display: none;
+}
+
+/* The marker is drawn rather than borrowed, so it can rotate and take the
+   accent on open without depending on a glyph the font may not carry. */
+.signal-faq__q::after {
+  content: "";
+  flex: none;
+  margin-inline-start: auto;
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--color-signal-text-3);
+  border-bottom: 2px solid var(--color-signal-text-3);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition:
+    transform 180ms ease-out,
+    border-color 180ms ease-out;
+}
+
+.signal-faq__item[open] > .signal-faq__q::after {
+  transform: rotate(225deg) translate(-3px, -3px);
+  border-right-color: var(--color-signal-accent);
+  border-bottom-color: var(--color-signal-accent);
+}
+
+.signal-faq__q h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--color-signal-text-2);
+  transition: color 180ms ease-out;
+}
+
+.signal-faq__q:hover h3,
+.signal-faq__item[open] > .signal-faq__q h3 {
+  color: var(--color-signal-text);
+}
+
+.signal-faq__q:focus-visible {
+  outline: 2px solid var(--color-signal-accent);
+  outline-offset: 3px;
+  border-radius: var(--rounded-sm);
+}
+
+.signal-faq__a {
+  margin: 0;
+  padding: 0 var(--space-2xl) var(--space-xl) 0;
+  color: var(--color-signal-text-2);
+  max-width: 68ch;
+}
