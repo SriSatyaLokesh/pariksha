@@ -154,3 +154,65 @@ describe("slugPairFromPath", () => {
     expect(slugPairFromPath(pathname)).toBeNull();
   });
 });
+
+describe("the access gate (Task 2)", () => {
+  it("posts the whole access request as JSON to the gate's own path", async () => {
+    const calls = stubFetch(ok({ entryToken: "tok" }));
+    const result = await createRunClient("alpha", "aptitude").access({
+      code: "OPENSESAME",
+      identifier: "21CS0147",
+    });
+
+    expect(calls[0]?.url).toBe("/api/v1/run/alpha/aptitude/access");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      code: "OPENSESAME",
+      identifier: "21CS0147",
+    });
+    expect(result).toEqual({ entryToken: "tok" });
+  });
+
+  it("turns the server's refusal into a RunError carrying its code and its sentence", async () => {
+    // The screen shows the server's message and never a status code
+    // (C-02), so losing either here is losing the whole of C-02.
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({ error: { code: "code_wrong", message: "Check the code with your organiser." } }),
+          { status: 403, headers: { "content-type": "application/json" } },
+        ),
+    );
+    const failure = await createRunClient("alpha", "aptitude")
+      .access({ code: "nope" })
+      .catch((error: unknown) => error);
+
+    expect(failure).toBeInstanceOf(RunError);
+    expect(failure).toMatchObject({
+      status: 403,
+      code: "code_wrong",
+      message: "Check the code with your organiser.",
+    });
+  });
+
+  it("posts the address to the email-code leg and resolves on a bodyless 202", async () => {
+    // The route answers 202 with a body, but a deployment behind a proxy
+    // that strips it must not turn "sent" into a parse error.
+    const calls = stubFetch(() => new Response(null, { status: 202 }));
+    await expect(createRunClient("alpha", "otp").requestEmailCode("a@b.ac.in")).resolves.toBeUndefined();
+    expect(calls[0]?.url).toBe("/api/v1/run/alpha/otp/email-code");
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ email: "a@b.ac.in" });
+  });
+
+  it("the email-code leg still raises the server's refusal", async () => {
+    stubFetch(
+      () =>
+        new Response(
+          JSON.stringify({ error: { code: "domain_not_allowed", message: "Allowed: *.ac.in." } }),
+          { status: 403, headers: { "content-type": "application/json" } },
+        ),
+    );
+    await expect(
+      createRunClient("alpha", "otp").requestEmailCode("a@gmail.com"),
+    ).rejects.toMatchObject({ code: "domain_not_allowed" });
+  });
+});

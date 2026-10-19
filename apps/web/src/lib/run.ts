@@ -50,9 +50,35 @@ export interface LandingPayload {
   serverNow: number;
 }
 
+/**
+ * What the access gate takes. Every field is optional because the four
+ * modes need different ones, and which they need is the server's
+ * decision: the browser sends what the candidate filled in and the
+ * server says whether that was enough (Review Focus: the server decides,
+ * the browser displays).
+ */
+export interface AccessRequest {
+  code?: string;
+  invite?: string;
+  email?: string;
+  otp?: string;
+  /** The test's first unique registration field, on a candidate-listed
+   *  test — the gate runs before the form is shown. */
+  identifier?: string;
+  /** Task 4's proof of work. Accepted and ignored by the server until it
+   *  lands, so the request shape does not change when it does. */
+  captchaToken?: string;
+}
+
 /** Widened by Tasks 2, 3, 5, 8 and 11. */
 export interface RunClient {
   landing(): Promise<LandingPayload>;
+  /** All four modes end here: a single-use entry token the registration
+   *  step (Task 3) spends. */
+  access(input: AccessRequest): Promise<{ entryToken: string }>;
+  /** The `email_code` mode's first leg. Resolves on 202 and tells the
+   *  caller nothing else — the code goes to an inbox. */
+  requestEmailCode(email: string): Promise<void>;
 }
 
 /** The error envelope every route answers with: `{ error: { code, message } }`. */
@@ -68,10 +94,13 @@ export class RunError extends Error {
   }
 }
 
-async function get<T>(path: string): Promise<T> {
+async function send<T>(path: string, init: RequestInit = {}): Promise<T | null> {
   // Same origin, no credentials to send: a candidate carries no cookie and
   // the attempt token (Task 5) is its own header, not an ambient one.
-  const res = await fetch(path, { headers: { accept: "application/json" } });
+  const res = await fetch(path, {
+    ...init,
+    headers: { accept: "application/json", ...(init.headers ?? {}) },
+  });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
       | { error?: { code?: string; message?: string } }
@@ -82,7 +111,22 @@ async function get<T>(path: string): Promise<T> {
       body?.error?.message ?? "This test is not available.",
     );
   }
-  return (await res.json()) as T;
+  // 202 and 204 carry no body. Returning `null` rather than throwing on
+  // the parse keeps "it worked and said nothing" distinct from "it
+  // answered something unreadable".
+  return (await res.json().catch(() => null)) as T | null;
+}
+
+async function get<T>(path: string): Promise<T> {
+  return (await send<T>(path)) as T;
+}
+
+async function post<T>(path: string, body: unknown): Promise<T | null> {
+  return send<T>(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
 }
 
 /**
@@ -94,6 +138,11 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
   const base = `/api/v1/run/${encodeURIComponent(workspaceSlug)}/${encodeURIComponent(testSlug)}`;
   return {
     landing: () => get<LandingPayload>(base),
+    access: async (input) =>
+      (await post<{ entryToken: string }>(`${base}/access`, input)) ?? { entryToken: "" },
+    requestEmailCode: async (email) => {
+      await post(`${base}/email-code`, { email });
+    },
   };
 }
 

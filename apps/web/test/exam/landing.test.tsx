@@ -42,6 +42,10 @@ const landingFixture: LandingPayload = {
 function clientFor(payload: LandingPayload | Error): RunClient {
   return {
     landing: () => (payload instanceof Error ? Promise.reject(payload) : Promise.resolve(payload)),
+    // Task 2 widened `RunClient`; the landing screen calls neither, and a
+    // stub that resolved would hide a screen that started to.
+    access: () => Promise.reject(new Error("the landing screen does not pass the gate")),
+    requestEmailCode: () => Promise.reject(new Error("the landing screen sends no code")),
   };
 }
 
