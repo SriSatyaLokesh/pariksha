@@ -158,7 +158,13 @@ describe("ordering (UX-08, AC-07)", () => {
     // that focus follows the item to its new position.
     fireEvent.click(down);
     expect(itemTexts()[2]).toBe("A");
-    expect(document.activeElement).toHaveAccessibleName(/move item A down/i);
+    // Phase 4's focus rule holds: focus stays on the moved item's own
+    // controls. This particular move lands A last, which disables the
+    // down button it was pressed on, so it is the up button on the same
+    // row that takes focus — see reorder.test.tsx, where that fallback
+    // is pinned exactly.
+    expect(document.activeElement).toHaveAccessibleName(/move item A/i);
+    expect(document.activeElement).not.toBe(document.body);
 
     fireEvent.dragStart(rowFor("A"));
     fireEvent.dragOver(rowFor("C"));

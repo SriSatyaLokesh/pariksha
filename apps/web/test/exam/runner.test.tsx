@@ -511,7 +511,10 @@ describe("the runner is reached from the candidate app's own root", () => {
   it("Start on the landing page opens the runner, palette and all", async () => {
     await startFromRoot();
     expect(screen.getAllByRole("button", { name: /question \d+/i })).toHaveLength(17);
-    expect(screen.getByText("Question 1 stem")).toBeVisible();
+    // Task 7 (#71): the stem now renders through the shared Markdown
+    // renderer, which awaits a possible KaTeX import, so it lands a tick
+    // after the palette does.
+    expect(await screen.findByText("Question 1 stem")).toBeVisible();
   });
 
   it("marking a question from the root survives a reload, keyed by attempt id", async () => {

@@ -285,7 +285,7 @@ function NumericAnswer({
  * invented here. Neither is exported as a runtime constant from
  * @pariksha/core (only the schema states them), so this is the one place in
  * the UI that names them. */
-const MAX_LENGTH_CEILING = { short_answer: 500, long_answer: 5000 } as const;
+export const MAX_LENGTH_CEILING = { short_answer: 500, long_answer: 5000 } as const;
 
 function RubricEditor({
   rubric,

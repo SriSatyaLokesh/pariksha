@@ -59,6 +59,30 @@ describe("ReorderableList (Review Focus 5)", () => {
     expect(document.activeElement).toHaveAccessibleName(/move option a down/i);
   });
 
+  // Phase 6 Task 7 (#71) found this one: the move that lands an item at
+  // an end disables the button that moved it, and a disabled button
+  // cannot take focus — `focus()` did nothing and focus fell to
+  // document.body, dropping a keyboard user out of the list entirely.
+  it("moving an item to the last position keeps focus on that item's own controls", () => {
+    render(<Options initial={["A", "B", "C"]} />);
+    const down = screen.getByRole("button", { name: /move option b down/i });
+    down.focus();
+    fireEvent.click(down);
+    expect(visibleOrder()).toEqual(["A", "C", "B"]);
+    expect(screen.getByRole("button", { name: /move option b down/i })).toBeDisabled();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toHaveAccessibleName("Move Option B up");
+  });
+
+  it("moving an item to the first position keeps focus on that item's own controls", () => {
+    render(<Options initial={["A", "B", "C"]} />);
+    const up = screen.getByRole("button", { name: /move option b up/i });
+    up.focus();
+    fireEvent.click(up);
+    expect(visibleOrder()).toEqual(["B", "A", "C"]);
+    expect(document.activeElement).toHaveAccessibleName("Move Option B down");
+  });
+
   it("announces the new position in a live region", () => {
     render(<Options initial={["A", "B", "C"]} />);
     fireEvent.click(screen.getByRole("button", { name: /move option a down/i }));

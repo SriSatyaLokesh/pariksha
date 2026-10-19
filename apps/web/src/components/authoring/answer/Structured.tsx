@@ -15,7 +15,9 @@ export function isStructuredQuestion(question: { type: string }): question is St
   return (STRUCTURED_TYPES as readonly string[]).includes(question.type);
 }
 
-function reordered<T>(items: readonly T[], from: number, to: number): T[] {
+/** Exported for the candidate's `ordering` input, which needs the same
+ * move and must not hand-roll a second splice. */
+export function reordered<T>(items: readonly T[], from: number, to: number): T[] {
   const next = [...items];
   const [moved] = next.splice(from, 1);
   next.splice(to, 0, moved!);

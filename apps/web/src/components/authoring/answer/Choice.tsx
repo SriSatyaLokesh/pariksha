@@ -288,7 +288,12 @@ function TrueFalseAnswer({
   );
 }
 
-const ASSERTION_REASON_OPTIONS: { value: AssertionReasonKey; label: string }[] = [
+/** The four conclusions `assertion_reason` allows, which ARE its
+ * `AssertionReasonKey` union. Exported because the candidate's own input
+ * (`components/exam/answer/Choice.tsx`) must offer exactly these, with
+ * exactly these ids — a second copy of the labels is a second thing to
+ * keep in step with the key. */
+export const ASSERTION_REASON_OPTIONS: { value: AssertionReasonKey; label: string }[] = [
   { value: "both_true_explains", label: "Both true, and the reason explains the assertion" },
   { value: "both_true_not_explains", label: "Both true, but the reason does not explain the assertion" },
   { value: "a_true_r_false", label: "The assertion is true and the reason is false" },

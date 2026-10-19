@@ -21,6 +21,7 @@ import {
   type AttemptPaper,
   type CandidateQuestion,
 } from "../components/exam/Runner";
+import { AnswerInput } from "../components/exam/answer";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -271,16 +272,24 @@ export interface PaperClient {
   start(): Promise<AttemptPaper>;
 }
 
-/** Task 7 renders the real answer blocks into this slot; until then the
- * runner shows the stem it was given and nothing it cannot honour. */
-function questionSlot(question: CandidateQuestion) {
-  return <p className="exam-question-stem">{question.prompt}</p>;
-}
-
 function AttemptView({ paper }: { paper: AttemptPaper }) {
   const [index, setIndex] = useState(0);
   const [responses, setResponses] = useState(paper.responses);
   const [marked, setMarked] = useState<ReadonlySet<string>>(() => readMarked(paper.attemptId));
+
+  /** Task 7's answer block, for all twelve types. Task 8 owns the save
+   * queue; until it lands a response is a local fact only, which is why
+   * `setResponses` is the whole of `onChange` here. */
+  const questionSlot = (question: CandidateQuestion) => (
+    <AnswerInput
+      question={question}
+      value={responses[question.id] ?? null}
+      disabled={false}
+      onChange={(next) => {
+        setResponses((previous) => ({ ...previous, [question.id]: next }));
+      }}
+    />
+  );
 
   const toggleMark = (questionId: string) => {
     setMarked((previous) => {

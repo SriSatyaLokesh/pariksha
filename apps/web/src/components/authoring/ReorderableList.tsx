@@ -135,7 +135,17 @@ export function ReorderableList<T>({
     if (!pending) return;
     pendingFocus.current = null;
     const entry = buttons.current.get(pending.key);
-    const button = pending.dir === "up" ? entry?.up : entry?.down;
+    const wanted = pending.dir === "up" ? entry?.up : entry?.down;
+    // Phase 6 Task 7 (#71): the move that lands an item at an end
+    // DISABLES the very button that moved it (move-down is disabled on
+    // the last row, move-up on the first), and a disabled button cannot
+    // take focus — `focus()` silently did nothing and focus fell to
+    // document.body, so a keyboard user who moved an item to the end was
+    // dropped out of the list and had to Tab in again from the top.
+    // Falling back to the same row's other button keeps focus on the
+    // item that moved, which is the rule this effect exists to keep.
+    const other = pending.dir === "up" ? entry?.down : entry?.up;
+    const button = wanted?.disabled === false ? wanted : other;
     button?.focus();
   }, [items]);
 
