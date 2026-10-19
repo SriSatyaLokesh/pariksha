@@ -49,7 +49,7 @@ binding = "DB"
 database_name = "pariksha"
 # Written by setup.mjs. A named placeholder rather than an empty string, so a
 # deploy that skipped setup fails saying which script to run.
-database_id = "run-setup.mjs-to-fill-this-in"
+database_id = "8aa03031-885b-40bf-a03e-2471c419f3ee"
 
 [[r2_buckets]]
 binding = "FILES"
