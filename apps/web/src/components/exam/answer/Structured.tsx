@@ -27,23 +27,24 @@ export function isStructuredQuestion(question: CandidateQuestion): boolean {
   return (STRUCTURED_TYPES as readonly string[]).includes(question.type);
 }
 
-/** The pairs this response holds, for whichever of the two map kinds the
- * question expects. A response of the wrong kind is no answer at all. */
-function pairsOf<K extends "map" | "multimap">(
-  value: ResponseValue | null,
-  kind: K,
-): Extract<ResponseValue, { kind: K }>["pairs"] {
-  if (value !== null && value.kind === kind) {
-    return (value as Extract<ResponseValue, { kind: K }>).pairs;
-  }
-  return {};
+/** The pairs this response holds — empty for a response of the wrong
+ * kind, which is no answer to this question, the same rule
+ * `gradeStructured` applies. Two plain functions rather than one generic
+ * over the kind: the generic version needed a cast to compile, and a cast
+ * is how a narrowing bug gets in. */
+function mapPairs(value: ResponseValue | null): Record<string, string> {
+  return value !== null && value.kind === "map" ? value.pairs : {};
+}
+
+function multimapPairs(value: ResponseValue | null): Record<string, string[]> {
+  return value !== null && value.kind === "multimap" ? value.pairs : {};
 }
 
 function Matching({ question, value, onChange, disabled }: AnswerProps) {
   const uid = useId();
   const left = question.left ?? [];
   const right = question.right ?? [];
-  const pairs = pairsOf(value, "map");
+  const pairs = mapPairs(value);
 
   function choose(item: string, chosen: string): void {
     const next = { ...pairs };
@@ -96,7 +97,7 @@ function Matching({ question, value, onChange, disabled }: AnswerProps) {
 function MultiMatching({ question, value, onChange, disabled }: AnswerProps) {
   const left = question.left ?? [];
   const right = question.right ?? [];
-  const pairs = pairsOf(value, "multimap");
+  const pairs = multimapPairs(value);
 
   function toggle(item: string, candidate: string, checked: boolean): void {
     const current = new Set(pairs[item] ?? []);

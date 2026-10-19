@@ -145,12 +145,14 @@ function activate(element: HTMLElement): void {
   fireEvent.click(element);
 }
 
-/** Render `ExamApp`, press Start, and wait for the runner. */
-export async function startFromRoot() {
-  const view = render(<ExamApp client={client()} />);
+/** Render `ExamApp`, press Start, and wait for the runner. Returns
+ * nothing on purpose: `RenderResult` cannot be named across files without
+ * a path into @testing-library/dom's internals (TS2883), and every caller
+ * queries through `screen` anyway. */
+export async function startFromRoot(): Promise<void> {
+  render(<ExamApp client={client()} />);
   activate(await screen.findByRole("button", { name: /^start/i }));
   await screen.findByRole("navigation", { name: /question palette/i });
-  return view;
 }
 
 /** Jump the palette to the question with this 1-based number. */
