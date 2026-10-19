@@ -203,6 +203,44 @@ function hostOf(value: string, kind: "email" | "url"): string | null {
 }
 
 /**
+ * The JSON shape a declared type requires, as a predicate.
+ *
+ * **`AC-12` turns on this.** Every string rule — `min_length`,
+ * `max_length`, `pattern`, `allowed_domains` — can only be applied to a
+ * string, and the route's body schema is `z.unknown()` per value, so
+ * before this existed a patched browser skipped all four by sending
+ * `{ roll: 12345 }` instead of `{ roll: "21CS0147" }`: zero issues, a
+ * 201, and `"12345"` stored and hashed into `candidate_unique`. "The
+ * server refuses a rule the browser was patched to skip" was true only
+ * of a browser patched to send the *right type* of wrong answer.
+ *
+ * Nothing is coerced on the way in. The field's declared type already
+ * says what shape its answer takes, and a value of another shape is
+ * itself the issue — coercing silently would mean the rule a candidate
+ * was judged against depended on how their client encoded the value.
+ * (`normaliseValues` still coerces on the way *out*, where it can only
+ * ever see a shape validation already accepted.)
+ */
+function wrongShape(field: FormField, value: unknown): boolean {
+  switch (field.type) {
+    // Ticked or not. A string here is a patched client, and
+    // `normaliseValues` would read `"no"` as `false` and store a
+    // registration whose consent says it was never given.
+    case "consent":
+      return typeof value !== "boolean";
+    // A number, or the string an HTML `<input type="number">` posts.
+    // `Number([])` is 0 and `Number([5])` is 5, so an array must be
+    // refused here rather than left to `Number`.
+    case "number":
+      return typeof value !== "number" && typeof value !== "string";
+    case "checkbox":
+      return !(Array.isArray(value) ? value : [value]).every((one) => typeof one === "string");
+    default:
+      return typeof value !== "string";
+  }
+}
+
+/**
  * One field's issue, or `undefined`. A `switch` on the type behind a shared
  * `required` check, collecting rather than throwing, which is what lets the
  * route name every bad field at once.
@@ -216,15 +254,24 @@ export function validateField(
     return field.required === true ? issue(field, "required", "This answer is required.") : undefined;
   }
 
+  // Before every rule below, because every rule below assumes it.
+  if (wrongShape(field, value)) {
+    return issue(
+      field,
+      "wrong_type",
+      "This answer could not be read. Fill the form in on the page and try again.",
+    );
+  }
+
   const options = field.options ?? [];
   if (field.type === "dropdown" || field.type === "radio") {
-    if (!options.includes(String(value))) {
+    if (!options.includes(value as string)) {
       return issue(field, "not_an_option", "Choose from the options listed.");
     }
   }
   if (field.type === "checkbox") {
-    const chosen = Array.isArray(value) ? value : [value];
-    if (!chosen.every((one) => options.includes(String(one)))) {
+    const chosen = (Array.isArray(value) ? value : [value]) as string[];
+    if (!chosen.every((one) => options.includes(one))) {
       return issue(field, "not_an_option", "Choose from the options listed.");
     }
   }

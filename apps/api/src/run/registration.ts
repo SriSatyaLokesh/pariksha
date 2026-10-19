@@ -272,6 +272,41 @@ export function registrationRoutes(deps: AppDeps): Hono<AppBindings> {
       return c.json({ registrationToken: await reissue(deps, test, row.id) });
     }
 
+    // **On a listed test the gate already settled who this is.** Without
+    // this, `21CS0148` passes the gate as themselves and submits
+    // `21CS0147`'s roll number: the write fills `21CS0148`'s row but
+    // claims `21CS0147`'s identity in `candidate_unique`, so the real
+    // `21CS0147` is refused 409 for the rest of the window with no
+    // operator path to clear the claim — and the row's stored answers
+    // disagree with its own `external_id`, so Phase 8 exports the wrong
+    // identity for them. A mistyped roll number does it by accident.
+    //
+    // This is M17's hole entered from the other end: that one closed
+    // re-entry by *values* on a listed test (`row === null` gates it),
+    // this closes registration by someone else's *identity*. Ruling 7's
+    // "do not refuse a returning candidate" is about the person the gate
+    // recognised, never about a different one.
+    if (row !== null && identity !== undefined && (externalId ?? "") !== (row.externalId ?? "")) {
+      throw invalid([
+        {
+          field: identity,
+          code: "identity_mismatch",
+          message: "This does not match the ID you were admitted with. Check what you typed.",
+        },
+      ]);
+    }
+
+    // `row === null` on a test that *has* a candidate list should now be
+    // unreachable — every mode either binds a list row or refuses before
+    // minting an entry token. It is refused rather than left to the
+    // self-registration path because that path would write an unlisted
+    // row on a listed test, open the bare-`link_code` re-entry branch
+    // Ruling 7 confined to tests with no list, and break the premise the
+    // failure path rests on (a `(test_id, external_id)` collision always
+    // has a claim behind it — an uploaded row carries none, so the
+    // collision would re-throw as a 500 on a candidate path).
+    if (row === null && test.settings.access?.candidate_list) throw refuse("code_wrong");
+
     const now = deps.now();
     const registrationToken = randomToken();
     // Minted here rather than in the repository, so the registration

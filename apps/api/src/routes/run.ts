@@ -372,7 +372,19 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
           test.testId,
           payload.externalId,
         );
-        if (invited) claim.listRef = invited.id;
+        // Refused, not admitted unbound. An invite whose identity is no
+        // longer on the list belongs to a candidate the organiser has
+        // removed; letting it through would make a listed test's
+        // registration take the *unlisted* path — a row with no set and
+        // no prefill, the bare-`link_code` re-entry branch reachable,
+        // and a `(test_id, external_id)` collision with a surviving row
+        // that has no claim behind it to turn into a 409. `code_wrong`
+        // is the same refusal an off-list identifier gets, byte for
+        // byte (`S-10`). The link is spent either way: the payload is
+        // the only place the identity lives, so it cannot be checked
+        // before the token is consumed.
+        if (!invited) throw refuse("code_wrong");
+        claim.listRef = invited.id;
         if (payload.email !== null) claim.email = payload.email;
         break;
       }

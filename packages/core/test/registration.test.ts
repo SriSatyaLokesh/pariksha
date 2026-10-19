@@ -150,6 +150,58 @@ describe("T-17: one issue per broken rule, positioned on the field", () => {
   });
 });
 
+describe("AC-12: a rule cannot be skipped by sending another JSON type", () => {
+  // The whole of `AC-12` is "the server refuses a rule the browser was
+  // patched to skip", and the cheapest patch is not a wrong *value* but a
+  // wrong *type*: every string rule lives behind a string, so a number
+  // slipped past `min_length`, `pattern` and `allowed_domains` alike and
+  // was then coerced and stored. Each row below is a body no honest
+  // client can produce.
+  it.each([
+    ["a number where a pattern is declared", rollForm.fields[0]!, { roll: 12345 }],
+    ["a number where a domain rule is declared", field({ id: "e", type: "email", label: "E", validation: { allowed_domains: ["*.ac.in"] } }), { e: 999 }],
+    ["an object where text is declared", field({ id: "n", type: "short_text", label: "N", validation: { min_length: 3 } }), { n: { toString: 1 } }],
+    ["an array where text is declared", field({ id: "n", type: "short_text", label: "N" }), { n: ["a", "b"] }],
+    ["an array where a number is declared", field({ id: "c", type: "number", label: "C", validation: { max: 10 } }), { c: [5] }],
+    ["an object where a date is declared", field({ id: "d", type: "date", label: "D", validation: { max: "2026-01-01" } }), { d: {} }],
+    ["a string where consent is declared", field({ id: "c", type: "consent", label: "C", required: true }), { c: "no" }],
+    ["a number where consent is declared", field({ id: "c", type: "consent", label: "C", required: true }), { c: 1 }],
+    ["a number inside a checkbox group", field({ id: "s", type: "checkbox", label: "S", options: ["a"] }), { s: [1] }],
+    ["an object where a dropdown is declared", field({ id: "d", type: "dropdown", label: "D", options: ["BE"] }), { d: { v: "BE" } }],
+  ])("%s is an issue, not a pass", (_name, f, values) => {
+    expect(validateRegistration({ fields: [f] }, values)[0]).toMatchObject({
+      field: f.id,
+      code: "wrong_type",
+    });
+  });
+
+  it("the two rules a wrong type used to walk past are both still applied", () => {
+    // The reviewer's own reproduction, as a test: these two produced an
+    // empty issue list and a 201.
+    const form = {
+      fields: [
+        rollForm.fields[0]!,
+        field({ id: "email", type: "email", label: "E", validation: { allowed_domains: ["*.ac.in"] } }),
+      ],
+    };
+    expect(validateRegistration(form, { roll: 12345, email: 999 }).map((i) => i.field)).toEqual([
+      "roll",
+      "email",
+    ]);
+  });
+
+  it("a number field still takes the string an HTML number input posts", () => {
+    const f = field({ id: "c", type: "number", label: "C", validation: { max: 10 } });
+    expect(validateRegistration({ fields: [f] }, { c: "9.5" })).toEqual([]);
+    expect(validateRegistration({ fields: [f] }, { c: 9.5 })).toEqual([]);
+  });
+
+  it("a checkbox group still takes one bare string as well as an array", () => {
+    const f = field({ id: "s", type: "checkbox", label: "S", options: ["a", "b"] });
+    expect(validateRegistration({ fields: [f] }, { s: "a" })).toEqual([]);
+  });
+});
+
 describe("#129: the pattern matcher is injected, so the server can bound it", () => {
   it("the injected matcher is what runs a pattern", () => {
     const seen: string[] = [];

@@ -405,8 +405,57 @@ it("a candidate admitted as one listed identity cannot register as another", asy
   // registration token of `21CS0147`, whose attempt is already running.
   await register("roster", await gate("roster", "21CS0147"), VALID);
   const res = await register("roster", await gate("roster", "21CS0148"), VALID);
-  expect(res.status).toBe(409);
-  expect(await errorOf(res)).toMatchObject({ details: { fields: ["email", "roll"] } });
+  expect(res.status).toBe(422);
+  expect((await issuesOf(res))[0]).toMatchObject({ field: "roll", code: "identity_mismatch" });
+});
+
+it("C-2: claiming someone else's identity is refused before it can lock them out", async () => {
+  // The same hole entered from the other end, and the cheaper direction:
+  // `21CS0148` goes first. Before the binding check this wrote
+  // `21CS0147`'s `candidate_unique` claim against `21CS0148`'s row, and
+  // the real `21CS0147` was then 409 for the rest of the window with no
+  // operator path to clear the claim.
+  const impostor = await register("roster", await gate("roster", "21CS0148"), VALID);
+  expect(impostor.status).toBe(422);
+  expect((await issuesOf(impostor))[0]).toMatchObject({ field: "roll", code: "identity_mismatch" });
+
+  // Nothing was written, so the victim registers normally.
+  expect(await claimRows("roster")).toEqual([]);
+  expect(await registeredRows("roster")).toBe(0);
+  expect((await register("roster", await gate("roster", "21CS0147"), VALID)).status).toBe(201);
+
+  // And `21CS0148` can still register as themselves afterwards.
+  const honest = await register("roster", await gate("roster", "21CS0148"), {
+    ...VALID,
+    roll: "21CS0148",
+    email: "bharat@vce.ac.in",
+    full_name: "Bharat",
+  });
+  expect(honest.status, await honest.clone().text()).toBe(201);
+});
+
+it("C-1: a rule cannot be skipped by sending a number where the form asked for text", async () => {
+  // A body no honest client produces: the browser's own form posts
+  // strings, so this is the one-line JavaScript patch `AC-12` is about.
+  // Before the shape gate it answered 201 and stored "12345" / "999".
+  const res = await register("signup", await gate("signup"), {
+    ...VALID,
+    roll: 12345,
+    email: 999,
+  });
+  expect(res.status).toBe(422);
+  expect((await issuesOf(res)).map((i) => [i.field, i.code]).sort()).toEqual([
+    ["email", "wrong_type"],
+    ["roll", "wrong_type"],
+  ]);
+  expect(await registeredRows("signup")).toBe(0);
+  expect(await claimRows("signup")).toEqual([]);
+});
+
+it("C-1: consent cannot be accepted with a string that is not a yes", async () => {
+  const res = await register("signup", await gate("signup"), { ...VALID, consent: "no" });
+  expect(res.status).toBe(422);
+  expect((await issuesOf(res)).map((i) => i.field)).toContain("consent");
 });
 
 it("a listed candidate's registration fills their own row rather than inserting beside it", async () => {
@@ -491,6 +540,61 @@ it("B3: an invite survives a list re-upload, because it keys on the identity not
   expect(await readEntryToken(deps, await versionOf("invited"), entryToken)).toMatchObject({
     listRef: after?.id,
   });
+});
+
+it("I-2: an invite whose identity has left the list is refused, never admitted unbound", async () => {
+  const testId = await testIdOf("invited");
+  const minted = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${testId}/invites`, {
+    ...json({ identifiers: ["21CS0151"] }),
+    headers: await invitesHeaders(),
+  });
+  expect(minted.status, await minted.clone().text()).toBe(200);
+  const { invites } = (await minted.json()) as { invites: { url?: string }[] };
+  const invite = new URL(invites[0]?.url ?? "").searchParams.get("invite") ?? "";
+
+  // The organiser re-uploads without that candidate. Admitting the link
+  // unbound would put a listed test's registration on the *unlisted*
+  // path — no set, no prefill, the bare-`link_code` re-entry branch
+  // reachable, and a `(test_id, external_id)` collision with a
+  // surviving row that has no claim behind it to turn into a 409.
+  await replaceCandidateList(
+    deps.db,
+    workspaceId,
+    testId,
+    INVITED_CANDIDATES.filter((one) => one.externalId !== "21CS0151"),
+    T + 1,
+  );
+
+  const res = await post("/api/v1/run/alpha/invited/access", { invite });
+  expect(res.status).toBe(403);
+  // Byte for byte the refusal an off-list identifier gets (`S-10`).
+  expect(await res.text()).toBe(
+    await (await post("/api/v1/run/alpha/listed/access", { code: "OPENSESAME", identifier: "nope" })).text(),
+  );
+});
+
+it("I-2: an unbound entry on a listed test is refused, not taken down the unlisted path", async () => {
+  // Every mode now binds a list row or refuses before minting an entry
+  // token, so this state should not occur — which is exactly why it is
+  // forged here rather than left unproven. If a later mode ever leaves
+  // an entry unbound on a listed test, the self-registration path would
+  // write an unlisted row with no set and no prefill, make the
+  // bare-`link_code` re-entry branch reachable, and turn a
+  // `(test_id, external_id)` collision with an uploaded row — which
+  // carries no claim to find — into a 500 on a candidate path.
+  const token = "c".repeat(43);
+  const version = await versionOf("roster");
+  await insertAuthToken(deps.db, {
+    tokenHash: await entryHash(version, token),
+    kind: "run_entry",
+    payload: { testVersionId: version, workspaceId },
+    now: T,
+    expiresAt: T + 60_000,
+  });
+  const res = await register("roster", token, VALID);
+  expect(res.status).toBe(403);
+  expect((await errorOf(res)).code).toBe("code_wrong");
+  expect(await registeredRows("roster")).toBe(0);
 });
 
 // --- S-07: the limiter --------------------------------------------------

@@ -377,6 +377,28 @@ it("email_code: the right code inside the window yields an entry token carrying 
   });
 });
 
+it("T2-I-2: a code issued to a padded address is redeemable, not dead on arrival", async () => {
+  // The lockout Task 2's review named: the issue leg hashed the address
+  // **as typed** and the redeem leg trimmed it, so a candidate who
+  // pasted their address with a space was refused forever by a code
+  // that was correct and no retry could fix. Both legs now go through
+  // `normaliseEmail`. A case-only fixture passes under the old
+  // `.toLowerCase()` too and proves nothing — the padding is the test.
+  await post("/api/v1/run/alpha/otp/email-code", { email: "  a@b.ac.in " });
+  const code = sentCode();
+  clock = T + EMAIL_CODE_TTL_MS - 1;
+  expect((await post("/api/v1/run/alpha/otp/access", { email: "a@b.ac.in", otp: code })).status).toBe(200);
+});
+
+it("T2-I-2: and the padding may be on the redeeming side instead", async () => {
+  await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" });
+  const code = sentCode();
+  clock = T + EMAIL_CODE_TTL_MS - 1;
+  expect(
+    (await post("/api/v1/run/alpha/otp/access", { email: " A@b.ac.in  ", otp: code })).status,
+  ).toBe(200);
+});
+
 it("email_code: a code is bound to its address, and spent when it is used", async () => {
   await post("/api/v1/run/alpha/otp/email-code", { email: "a@b.ac.in" });
   const code = sentCode();
