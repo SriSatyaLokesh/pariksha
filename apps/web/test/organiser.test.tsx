@@ -519,4 +519,26 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "New question" }),
     ).toBeInTheDocument();
   });
+
+  // Task 2 fix round, Critical 1: the Phase 4 C1 finding verbatim, for the
+  // other screen the empty dashboard opens onto. A test that renders
+  // `TestList` directly (apps/web/test/testbuilder/test-list.test.tsx)
+  // cannot see that nothing in the running app ever mounts it.
+  it("reaches the test list from the app's own entry point", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeInTheDocument();
+  });
 });
