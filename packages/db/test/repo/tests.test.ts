@@ -104,6 +104,32 @@ describe("createTest", () => {
   });
 });
 
+describe("publishTestVersion", () => {
+  // Review Focus 2 (partial — the timing-aware half is Task 11's):
+  // `publishTestVersion` used to write `status = "open"` unconditionally, a
+  // value that is not even in this task's own `TestStatus` union. It writes
+  // "published" now; reporting "Scheduled" ahead of `timing.opens_at` is
+  // Task 11's `deriveState()`, once a `timing` setting exists to read.
+  it("sets the test's status to 'published', not the old unconditional 'open'", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w12", name: "W12" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a12" });
+
+    await repo.publishTestVersion(db, ws, {
+      testId: created.id,
+      version: 2,
+      settings: {},
+      sections: [],
+      now: T,
+    });
+
+    const row = await repo.getTest(db, ws, created.id);
+    expect(row?.status).toBe("published");
+    expect(row?.status).not.toBe("open");
+    expect(row?.currentVersion).toBe(2);
+  });
+});
+
 describe("updateTest", () => {
   it("T-01: the slug is editable while current_version is null and refused once it is set", async () => {
     const ws = newId("wsp");
