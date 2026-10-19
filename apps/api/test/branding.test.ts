@@ -94,6 +94,46 @@ it("a brand colour that passes against cream is accepted and stored", async () =
   });
 });
 
+// Whole-branch test-honesty review, §2. The logo alt-text fix — the UI
+// collected the alt text and `uploadLogo` dropped it, an unlabelled logo
+// being an accessibility failure — shipped with covering tests that assert
+// the *stub's argument*, and this file, which drives the real route, sent
+// or read back neither `logo` nor `logo_alt` in any of its thirteen tests.
+// Delete `logo_alt` from the route's merge and the suite stayed green:
+// exactly the defect class the fix was for.
+//
+// So: through the route, and read back through a *second* real call rather
+// than the PATCH's own echo.
+it("a logo and its alt text survive the write and come back on the next read", async () => {
+  const wrote = await app.request(
+    wsUrl(),
+    send("PATCH", ownerCookie, { branding: { logo: "abc123.png", logo_alt: "Alpha College crest" } }),
+  );
+  expect(wrote.status).toBe(200);
+
+  const read = await app.request(wsUrl(), send("GET", ownerCookie));
+  expect((await read.json()).branding).toMatchObject({
+    logo: "abc123.png",
+    logo_alt: "Alpha College crest",
+  });
+});
+
+// `branding` is a named block that replaces whole and merges nothing
+// below it, the same rule `PATCH .../draft` states for `settings` — so the
+// panel always sends its whole workspace half (`BrandingPanel.tsx:105`),
+// and this is the assertion that says so rather than leaving a reader to
+// guess whether the alt text would survive a colour change.
+it("a branding write replaces the block whole, so the panel sends all of it", async () => {
+  await app.request(
+    wsUrl(),
+    send("PATCH", ownerCookie, { branding: { logo: "abc123.png", logo_alt: "Alpha College crest" } }),
+  );
+  await app.request(wsUrl(), send("PATCH", ownerCookie, { branding: { footer_text: "Alpha College" } }));
+
+  const read = await app.request(wsUrl(), send("GET", ownerCookie));
+  expect((await read.json()).branding).toEqual({ footer_text: "Alpha College" });
+});
+
 // The plan's own rule was "below 4.5:1 against cream *and* ink". #f59a6e
 // is 7.57:1 against ink, so under that rule it would be accepted — while
 // being illegible on the cream page a candidate actually sees. The gate
