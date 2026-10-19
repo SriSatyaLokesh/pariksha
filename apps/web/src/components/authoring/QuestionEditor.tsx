@@ -204,12 +204,20 @@ export function QuestionEditor({
   workspaceId,
   initial,
   client,
+  onDirty,
   onSaved,
 }: {
   bankId: string;
   workspaceId: string;
   initial?: Question | undefined;
   client: ApiClient;
+  /**
+   * Fix round (whole-branch review, M4): fires on every edit after the
+   * first render, including a type change — never on the save itself
+   * (`onSave` never calls `setQuestion`, see below). `question.tsx` uses it
+   * to reset "Saved.", which used to be set once and never cleared.
+   */
+  onDirty?: () => void;
   onSaved: (question: Question) => void;
 }) {
   const [question, setQuestion] = useState<Question>(
@@ -225,6 +233,15 @@ export function QuestionEditor({
   const changeTypeButtonRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const fillBlankGraveyard = useRef(new Map<string, Blank>());
+  const mounted = useRef(false);
+
+  useEffect(() => {
+    if (mounted.current) onDirty?.();
+    else mounted.current = true;
+    // `question` is the one piece of state every edit path above funnels
+    // through — deliberately not depending on `onDirty` itself, which
+    // question.tsx passes as a fresh closure every render.
+  }, [question]);
 
   // Review Focus 2's dialog (UX-06) moves focus into itself on open and
   // back to the button that opened it on close — a real focus trap (Tab

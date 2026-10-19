@@ -53,6 +53,7 @@ export function QuestionScreen({
           workspaceId={workspaceId}
           initial={initial}
           client={client}
+          onDirty={() => setJustSaved(false)}
           onSaved={(question) => {
             setJustSaved(true);
             onSaved(question);
