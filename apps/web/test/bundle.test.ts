@@ -250,3 +250,19 @@ describe("the QR generator is in the admin entry only (T-02)", () => {
     expect(staticModules(twoEntryChunks, "admin").join("\n")).toContain("qrcode-generator");
   });
 });
+
+// Phase 5 Task 3 (#55, P5.2): SectionList, QuestionPickerDrawer and the
+// builder shell (apps/web/src/{components/testbuilder,routes/test.tsx}) are
+// an organiser's own tools, reached only through organiser.tsx — an
+// exam-taker's island has no path to any of them. Global Constraints: the
+// candidate budget is 300 KB gzipped and Phase 5 adds nothing to it, the
+// same rule the QR generator check above enforces for its own dependency.
+describe("the test builder screens are in the admin entry only (#55, P5.2)", () => {
+  it("the island cannot reach src/components/testbuilder by static import", () => {
+    expect(staticModules(twoEntryChunks, "island").join("\n")).not.toMatch(/src[\\/]components[\\/]testbuilder/);
+  });
+
+  it("the admin entry does reach src/components/testbuilder", () => {
+    expect(staticModules(twoEntryChunks, "admin").join("\n")).toMatch(/src[\\/]components[\\/]testbuilder/);
+  });
+});
