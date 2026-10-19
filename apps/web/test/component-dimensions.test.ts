@@ -131,7 +131,6 @@ function effectiveBoxHeight(body: string): number {
   return paddingBlockPx(body) * 2 + borderWidthPx(body) * 2 + lineHeightPx(body);
 }
 
-const componentsCss = readCss("components.css");
 // P3.9: `.button-primary`, `.button-secondary`, `.card-hairline` and
 // `.mono-caption` moved into primitives.css so the organiser entry
 // (admin.css) can reuse them without dragging the landing page's hero,
@@ -177,30 +176,10 @@ describe("component dimensions match tokens.components (T30)", () => {
   // reached through block padding alone; .nav-link already does this
   // (no height/min-height of its own), so this is the same effective-box
   // assertion rather than a CSS change.
-  it(".nav-link's effective box clears the 44px hit-area floor", () => {
-    const body = ruleBody(componentsCss, ".nav-link ");
-    expect(tryDeclaration(body, "height")).toBeNull();
-    expect(tryDeclaration(body, "min-height")).toBeNull();
-    expect(effectiveBoxHeight(body)).toBeGreaterThanOrEqual(44);
-  });
-
-  // DESIGN.md's "top-nav" component has one padding/height pair, but the
-  // rendered box splits them across two selectors: `.top-nav` itself (no
-  // box model of its own) and `.top-nav__inner`, which carries the real
-  // `padding-inline`/`padding-block`/`min-height`. This test reads the inner
-  // element, which is what a reader and an axe audit actually measure.
-  it('.top-nav__inner padding matches tokens.components["top-nav"].padding (block inline)', () => {
-    const body = ruleBody(componentsCss, ".top-nav__inner ");
-    const block = resolveSpacing(declaration(body, "padding-block"));
-    const inline = resolveSpacing(declaration(body, "padding-inline"));
-    expect(`${block} ${inline}`).toBe(tokens.components["top-nav"].padding);
-  });
-
-  it('.top-nav__inner min-height matches tokens.components["top-nav"].height', () => {
-    const body = ruleBody(componentsCss, ".top-nav__inner ");
-    const height = resolveSpacing(declaration(body, "min-height"));
-    expect(height).toBe(tokens.components["top-nav"].height);
-  });
+  // `.nav-link` and `.top-nav__inner` were the old landing page's TopNav,
+  // deleted with it. DESIGN.md still specifies both — like most of its
+  // component table, which describes screens that are not built yet — so
+  // the spec stays and the guard returns when something implements it.
 
   // P3.9: the one component the organiser screens had to add. DESIGN.md
   // gives `text-input` a height AND a padding; with the global
