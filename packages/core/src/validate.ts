@@ -974,8 +974,10 @@ export function validateTest(
         });
       }
 
-      // Save-time in class (see `unsatisfiableValidation`), reported here
-      // so the whole report still arrives at once.
+      // Publish-time, with a live author-facing message in the builder —
+      // see `unsatisfiableValidation`. (It was labelled save-time here
+      // until the task 5/6 review, m4; `ecd526f` had already withdrawn
+      // that label from the plan.)
       const unsatisfiable = unsatisfiableValidation(field);
       if (unsatisfiable !== null) {
         issues.push({
