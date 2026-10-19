@@ -64,6 +64,22 @@ it.each([
   // The port scanner, against a perfectly public host.
   ["http://example.com:22/", "only links on the standard web ports"],
   ["http://example.com:6379/", "only links on the standard web ports"],
+  // Task 5/6 review, C1: the FQDN root label. `URL.hostname` keeps the
+  // trailing dot, so every row above used to be bypassable by typing one —
+  // and `http://metadata./` even satisfied the "a host with no dot" rule,
+  // because `"metadata."` has one. `http://127.0.0.1./` is deliberately not
+  // in this group: the IPv4 parser drops the empty part, so the literal
+  // rows never had the hole and looking only at them hid it.
+  ["http://localhost./", "network address"],
+  ["http://metadata.google.internal./", "network address"],
+  ["http://foo.local./", "network address"],
+  ["http://intranet./", "network address"],
+  ["http://metadata./", "network address"],
+  // More than one root label, and the full-width stops the WHATWG parser
+  // folds into "." before this code ever sees them.
+  ["http://localhost../", "network address"],
+  ["http://localhost。/", "network address"],
+  ["http://metadata．/", "network address"],
 ])("refuses %s without fetching", async (url, reason) => {
   const http = vi.fn();
   const result = await checkReachable(http as unknown as typeof globalThis.fetch, url, () => T);

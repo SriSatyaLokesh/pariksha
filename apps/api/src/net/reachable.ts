@@ -26,6 +26,8 @@
 // |                                          |   never needs one               |
 // | a host that is an IP literal, v4 or v6   | `refused` — link-local, loopback|
 // | a single-label host (`intranet`)         | `refused` — only ever internal  |
+// | any of the above with a trailing `.`     | `refused` — the root label is   |
+// |   (`localhost.`, `metadata.`)            |   stripped before comparing     |
 // | `localhost`, `*.localhost`, `*.internal`,| `refused`                       |
 // |   `*.local`                              |                                 |
 // | anything else                            | one `HEAD`, `redirect: manual`, |
@@ -90,7 +92,16 @@ function refusal(url: string): string | null {
   }
   if (!WEB_PORTS.has(parsed.port)) return "only links on the standard web ports can be checked";
 
-  const host = parsed.hostname.toLowerCase();
+  // The FQDN root label is dropped before any comparison below (task 5/6
+  // review, C1). `URL.hostname` keeps a trailing dot — `http://localhost./`
+  // parses to `"localhost."` — so every string comparison here used to miss
+  // it, and `http://metadata./` even satisfied the single-label check
+  // because `"metadata."` contains a dot. `http://127.0.0.1./` was never
+  // affected (the IPv4 parser drops the empty part), which is exactly why
+  // the literal half of the table above looked correct while this gap sat
+  // underneath it. The WHATWG parser already folds the full-width stops
+  // (U+3002, U+FF0E) into ".", so one strip covers those spellings too.
+  const host = parsed.hostname.toLowerCase().replace(/\.+$/, "");
   // `new URL("http://[::1]/").hostname` is `"[::1]"` — every IPv6 literal
   // keeps its brackets, which is the whole test.
   if (host.startsWith("[") || IPV4.test(host)) return ADDRESS_REFUSAL;
