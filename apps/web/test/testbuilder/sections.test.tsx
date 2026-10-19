@@ -141,6 +141,12 @@ describe("SectionList", () => {
     expect(screen.getByText(/3 short — needs 10, 7 match/i)).toBeVisible();
   });
 
+  it("UX-15: a healthy pool section still shows the live draw, not only a shortfall", () => {
+    render(<Harness initial={[QUANT]} draw={{ quant: { matching: 14, wanted: 10 } }} />);
+    expect(screen.getByText(/10 drawn from 14 matching/i)).toBeVisible();
+    expect(screen.queryByText(/short/i)).not.toBeInTheDocument();
+  });
+
   it("UX-16: the balance strip has a table equivalent, not only bars", () => {
     const reasoning: StoredSection = {
       id: "reasoning",

@@ -110,6 +110,12 @@
   white-space: normal;
 }
 
+.section-row__draw {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
 .section-row__flag-risk {
   color: var(--color-flag-risk);
   font-family: var(--type-mono-sm-family);

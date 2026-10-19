@@ -244,6 +244,18 @@ export function SectionList({
                 {collapsedLabel(section, draw, points)}
               </button>
 
+              {/* Fix round (task 3 review, I2): UX-15's live draw — "N drawn
+                  from M matching" — is the normal-case sentence
+                  (docs/design.md:225); the shortfall warning beside it is
+                  the alarm, not a replacement for it. The server computes
+                  `draw` for every pool section, healthy or not; this used
+                  to throw it away unless the pool was short. */}
+              {d !== undefined && (
+                <p className="section-row__draw">
+                  {Math.min(d.wanted, d.matching)} drawn from {d.matching} matching
+                </p>
+              )}
+
               {shortfall > 0 && (
                 <p className="section-row__flag-risk">
                   <span aria-hidden="true">⚠</span> {shortfall} short — needs {d!.wanted}, {d!.matching} match
