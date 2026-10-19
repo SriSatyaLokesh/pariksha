@@ -412,9 +412,9 @@ it("the layout pins every media key the selected questions reference, and nothin
   const layout = await layoutOf(paper.attemptId);
 
   const selected = new Set(paper.sections.flatMap((section) => section.questions.map((one) => one.id)));
-  const expected = new Set<string>(["media/log2-diagram.png"]);
+  const expected = new Set<string>(["log2-diagram.png"]);
   for (const [ref, id] of Object.entries(q)) {
-    if (ref.startsWith("QNT-") && selected.has(id)) expected.add(`media/${ref.toLowerCase()}.png`);
+    if (ref.startsWith("QNT-") && selected.has(id)) expected.add(`${ref.toLowerCase()}.png`);
   }
   expect(new Set(layout.media)).toEqual(expected);
 
@@ -424,7 +424,7 @@ it("the layout pins every media key the selected questions reference, and nothin
   const undrawn = Object.entries(q).filter(([ref, id]) => ref.startsWith("QNT-") && !selected.has(id));
   expect(undrawn.length).toBeGreaterThan(0);
   for (const [ref] of undrawn) {
-    expect(layout.media).not.toContain(`media/${ref.toLowerCase()}.png`);
+    expect(layout.media).not.toContain(`${ref.toLowerCase()}.png`);
   }
 });
 

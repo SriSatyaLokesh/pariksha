@@ -58,7 +58,7 @@ export async function seedBank(deps: AppDeps, workspaceId: string): Promise<Ques
 
   const docs: Question[] = [
     single("LOG-001", { shuffle_options: false }),
-    single("LOG-002", { media: [{ kind: "image", src: "media/log2-diagram.png", alt: "A diagram" }] }),
+    single("LOG-002", { media: [{ kind: "image", src: "log2-diagram.png", alt: "A diagram" }] }),
     {
       id: "LOG-003",
       type: "short_answer",
@@ -91,7 +91,7 @@ export async function seedBank(deps: AppDeps, workspaceId: string): Promise<Ques
       const ref = `QNT-${String(i + 1).padStart(3, "0")}`;
       return single(ref, {
         tags: ["quant"],
-        media: [{ kind: "image", src: `media/${ref.toLowerCase()}.png`, alt: ref }],
+        media: [{ kind: "image", src: `${ref.toLowerCase()}.png`, alt: ref }],
       });
     }),
     ...["A", "B", "C", "D", "E"].flatMap((set) =>
