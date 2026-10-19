@@ -349,3 +349,89 @@ describe("listWorkspaceTags", () => {
     expect(await repo.listWorkspaceTags(db, ws)).toEqual(["aaa-question-tag", "shared-tag", "zzz-bank-tag"]);
   });
 });
+
+// Fix round 1, findings 1+2: import used to write groups through a loop of
+// `upsertGroup` calls and *then* the questions through a separate
+// `upsertQuestions` batch — if the questions batch failed, every group
+// already applied stayed committed. `writeImportedBank` folds both into one
+// `db.batch()` call instead. No test anywhere returned after a write
+// actually started; this one forces a failure mid-write (a question whose
+// ref_id collides with one already in the bank — the exact race a
+// concurrent import past `listQuestionRefIds`'s pre-check would hit) and
+// asserts nothing landed, groups included.
+describe("writeImportedBank (Fix round 1, findings 1+2: atomic across groups and questions)", () => {
+  it("rolls back a groups_json merge too when a question statement in the same batch fails", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "atomic-import", name: "Atomic Import" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+
+    // A pre-existing group: a wrongly-applied "groups commit regardless"
+    // bug would show up as this one being silently replaced, not just as a
+    // missing new group.
+    await repo.upsertGroup(db, ws, bank, { id: "existing", passage: "Original passage" }, T);
+
+    // Simulates a concurrent import landing first, after this import's own
+    // `listQuestionRefIds` pre-check already ran and found nothing — the
+    // one case `question_bank_ref_uq` is the real backstop for.
+    await repo.upsertQuestion(db, ws, bank, { ...singleFixture, id: "DUP-01" }, T);
+
+    await expect(
+      repo.writeImportedBank(
+        db,
+        ws,
+        bank,
+        {
+          groups: [{ id: "new-group", passage: "New passage" }],
+          questions: [
+            { ...singleFixture, id: "FRESH-01" },
+            { ...singleFixture, id: "DUP-01" }, // collides with the row above
+          ],
+        },
+        T + 1,
+      ),
+    ).rejects.toThrow(/unique|constraint/i);
+
+    // Nothing from the failed batch landed: no new group, the existing one
+    // untouched, and no new question — including FRESH-01, whose own INSERT
+    // statement would have succeeded in isolation had the batch not rolled
+    // back as a whole.
+    const groups = await repo.listGroups(db, ws, bank);
+    expect(groups.map((g) => g.id)).toEqual(["existing"]);
+    expect(groups.find((g) => g.id === "existing")?.passage).toBe("Original passage");
+
+    const { rows } = await repo.listQuestions(db, ws, bank);
+    expect(rows.map((r) => r.refId)).toEqual(["DUP-01"]);
+  });
+
+  it("writes every group and every question in one batch when nothing collides", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "clean-import", name: "Clean Import" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    await repo.upsertGroup(db, ws, bank, { id: "existing", passage: "Kept as-is" }, T);
+
+    const { ids } = await repo.writeImportedBank(
+      db,
+      ws,
+      bank,
+      {
+        groups: [
+          { id: "existing", title: "Retitled", passage: "Kept as-is" },
+          { id: "new-group", passage: "New" },
+        ],
+        questions: [
+          { ...singleFixture, id: "Q1" },
+          { ...singleFixture, id: "Q2" },
+        ],
+      },
+      T + 1,
+    );
+
+    expect(ids).toHaveLength(2);
+    const groups = await repo.listGroups(db, ws, bank);
+    expect(groups.map((g) => g.id).sort()).toEqual(["existing", "new-group"]);
+    expect(groups.find((g) => g.id === "existing")?.title).toBe("Retitled");
+
+    const { rows } = await repo.listQuestions(db, ws, bank);
+    expect(rows.map((r) => r.refId).sort()).toEqual(["Q1", "Q2"]);
+  });
+});

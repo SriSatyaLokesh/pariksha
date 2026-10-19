@@ -461,19 +461,66 @@ export const upsertQuestion = scoped(
 );
 
 /**
+ * One INSERT per `doc`, with a fresh id — the statement-building half of
+ * `upsertQuestions`, pulled out so `writeImportedBank` (below) can fold
+ * these statements into the *same* `db.batch()` call as a `groups_json`
+ * update, rather than being forced through a second, separate batch of its
+ * own. Never calls `batch()` itself.
+ */
+function questionInsertStatements(
+  db: DbClient,
+  workspaceId: string,
+  bankId: string,
+  docs: readonly Question[],
+  now: number,
+): { ids: string[]; statements: { sql: string; params: unknown[] }[] } {
+  const ids: string[] = [];
+  const statements = docs.map((doc) => {
+    const id = newId("qst");
+    ids.push(id);
+    const row = toQuestionRow(doc);
+    return {
+      sql:
+        "INSERT INTO question (id, workspace_id, bank_id, ref_id, group_ref, type, prompt_md, media_json, " +
+        "options_json, key_json, scoring_json, points, difficulty, tags_json, explanation_md, extra_json, " +
+        "version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      params: [
+        id,
+        workspaceId,
+        bankId,
+        row.ref_id,
+        row.group_ref,
+        row.type,
+        row.prompt_md,
+        row.media_json == null ? null : db.jsonParam(row.media_json),
+        row.options_json == null ? null : db.jsonParam(row.options_json),
+        row.key_json == null ? null : db.jsonParam(row.key_json),
+        row.scoring_json == null ? null : db.jsonParam(row.scoring_json),
+        row.points,
+        row.difficulty,
+        db.jsonParam(row.tags_json ?? []),
+        row.explanation_md,
+        row.extra_json == null ? null : db.jsonParam(row.extra_json),
+        1,
+        now,
+        now,
+      ],
+    };
+  });
+  return { ids, statements };
+}
+
+/**
  * Task 7 (#51), Review Focus item 3: one `db.batch()` regardless of how many
  * `docs` there are, replacing the sequential SELECT-then-INSERT/UPDATE per
  * question this function used to spend through `upsertQuestion` — ~2N
  * subrequests against the 50-subrequest Workers ceiling, correct at ten
  * questions and over budget at sixty.
  *
- * Import (`apps/api/src/import/json.ts`), the only caller, has already
- * checked every `doc.id` against the bank's existing `ref_id`s before
- * calling this — so every statement built here is an INSERT with a fresh
- * id, never an UPDATE. `question_bank_ref_uq` (the `(bank_id, ref_id)`
- * unique index) is the backstop if that check is ever wrong or raced: a
- * collision throws inside the batch, which rolls the whole import back
- * rather than silently overwriting a row.
+ * `writeImportedBank` (below) is import's real entry point — it needs this
+ * function's statements folded into its own single batch alongside a
+ * `groups_json` update, which is why the statement-building half lives in
+ * `questionInsertStatements` and this function is a thin wrapper over it.
  *
  * ponytail: real upsert semantics (an existing `ref_id` updates in place
  * instead of erroring) would cost one more SELECT up front to resolve which
@@ -491,41 +538,7 @@ export const upsertQuestions = scoped(
     now: number,
   ): Promise<{ ids: string[] }> => {
     if (docs.length === 0) return { ids: [] };
-
-    const ids: string[] = [];
-    const statements = docs.map((doc) => {
-      const id = newId("qst");
-      ids.push(id);
-      const row = toQuestionRow(doc);
-      return {
-        sql:
-          "INSERT INTO question (id, workspace_id, bank_id, ref_id, group_ref, type, prompt_md, media_json, " +
-          "options_json, key_json, scoring_json, points, difficulty, tags_json, explanation_md, extra_json, " +
-          "version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        params: [
-          id,
-          workspaceId,
-          bankId,
-          row.ref_id,
-          row.group_ref,
-          row.type,
-          row.prompt_md,
-          row.media_json == null ? null : db.jsonParam(row.media_json),
-          row.options_json == null ? null : db.jsonParam(row.options_json),
-          row.key_json == null ? null : db.jsonParam(row.key_json),
-          row.scoring_json == null ? null : db.jsonParam(row.scoring_json),
-          row.points,
-          row.difficulty,
-          db.jsonParam(row.tags_json ?? []),
-          row.explanation_md,
-          row.extra_json == null ? null : db.jsonParam(row.extra_json),
-          1,
-          now,
-          now,
-        ],
-      };
-    });
-
+    const { ids, statements } = questionInsertStatements(db, workspaceId, bankId, docs, now);
     await db.batch(statements);
     return { ids };
   },
@@ -630,10 +643,21 @@ export const listGroups = scoped(
 );
 
 /**
+ * `group` added (a fresh `id`) or replaced (an existing one) within
+ * `current` — the one merge rule `upsertGroup` and `writeImportedBank` both
+ * apply, so an import's bulk merge and a single `POST .../groups` agree on
+ * what "already exists" means.
+ */
+function mergeGroup(current: readonly PassageGroup[], group: PassageGroup): PassageGroup[] {
+  const index = current.findIndex((g) => g.id === group.id);
+  return index === -1 ? [...current, group] : current.map((g, i) => (i === index ? group : g));
+}
+
+/**
  * Read-modify-write on `groups_json`: one read of the current array, one
- * `UPDATE` writing it back with `group` added (a fresh `id`) or replaced (an
- * existing one) — never a statement per field, and never more than the one
- * `UPDATE` the brief asks for.
+ * `UPDATE` writing it back with `group` merged in via `mergeGroup` — never a
+ * statement per field, and never more than the one `UPDATE` the brief asks
+ * for.
  *
  * ponytail: no optimistic concurrency — two concurrent calls for the same
  * bank both read the same `current`, and whichever `UPDATE` lands last wins,
@@ -652,8 +676,7 @@ export const upsertGroup = scoped(
   "upsertGroup",
   async (db: DbClient, workspaceId: string, bankId: string, group: PassageGroup, now: number): Promise<void> => {
     const current = await rawGroups(db, workspaceId, bankId);
-    const index = current.findIndex((g) => g.id === group.id);
-    const next = index === -1 ? [...current, group] : current.map((g, i) => (i === index ? group : g));
+    const next = mergeGroup(current, group);
 
     await db.run("UPDATE question_bank SET groups_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?", [
       db.jsonParam(next),
@@ -661,6 +684,64 @@ export const upsertGroup = scoped(
       workspaceId,
       bankId,
     ]);
+  },
+);
+
+/**
+ * Import's real write path (Fix round 1, findings 1+2): everything a
+ * whole-document import writes — every declared group merged into the
+ * bank's existing `groups_json`, and every question — goes through **one**
+ * `db.batch()` call, so the import is genuinely all-or-nothing rather than
+ * conditional on nothing failing between two separate writes. The previous
+ * shape (a loop of `upsertGroup` calls, each its own read-modify-write,
+ * followed by a *separate* `upsertQuestions` batch) left every already-
+ * applied group committed if the questions batch failed afterward — exactly
+ * the failure a concurrent import racing the same bank's duplicate-`ref_id`
+ * pre-check could trigger. `question_bank_ref_uq` (the `(bank_id, ref_id)`
+ * unique index) is still the backstop for that race, but now a collision
+ * rolls back the groups update too, not just the questions.
+ *
+ * One read of the bank's current groups (skipped entirely when the
+ * imported document declares none — the common case `bankOf(200)`-shaped
+ * fixtures exercise), one merge of every imported group into it with
+ * `mergeGroup`, one `UPDATE` statement prepended to the same array
+ * `questionInsertStatements` builds — so the cost is flat in both question
+ * count *and* group count, not just the former: Review Focus item 3's
+ * complaint applies equally to "a write per group" as to "a write per
+ * question", and this closes both the same way.
+ */
+export const writeImportedBank = scoped(
+  "writeImportedBank",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    bankId: string,
+    bank: { groups?: readonly PassageGroup[]; questions: readonly Question[] },
+    now: number,
+  ): Promise<{ ids: string[] }> => {
+    const statements: { sql: string; params: unknown[] }[] = [];
+    const importedGroups = bank.groups ?? [];
+
+    if (importedGroups.length > 0) {
+      let merged = await rawGroups(db, workspaceId, bankId);
+      for (const group of importedGroups) merged = mergeGroup(merged, group);
+      statements.push({
+        sql: "UPDATE question_bank SET groups_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
+        params: [db.jsonParam(merged), now, workspaceId, bankId],
+      });
+    }
+
+    const { ids, statements: questionStatements } = questionInsertStatements(
+      db,
+      workspaceId,
+      bankId,
+      bank.questions,
+      now,
+    );
+    statements.push(...questionStatements);
+
+    if (statements.length > 0) await db.batch(statements);
+    return { ids };
   },
 );
 
