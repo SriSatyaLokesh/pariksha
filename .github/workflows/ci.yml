@@ -30,34 +30,27 @@ jobs:
           -s schemas/test-1.json
           -d "examples/*/test.json"
 
-  build:
-    name: Lint, type-check, build and test
+  # The three jobs below have no `needs:` between them, deliberately: none
+  # consumes anything another produces, so they all start at t=0 and the
+  # critical path is the longest of them rather than their sum. Nothing is
+  # advisory — every check still runs on every pull request.
+  checks:
+    name: Lint, type-check and build
     runs-on: ubuntu-latest
-    # The schema has to migrate cleanly onto both dialects on every pull
-    # request, or SQLite and Postgres drift until a Postgres user reports it
-    # months later. packages/db's Postgres cases skip when this is absent, so
-    # a contributor without a database still gets a green local suite.
-    services:
-      postgres:
-        image: postgres:16
-        env:
-          POSTGRES_PASSWORD: pariksha
-          POSTGRES_DB: pariksha_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v7
+
+      # Before setup-node, not after: `cache: pnpm` resolves the store by
+      # running `pnpm store path`, so pnpm has to be on PATH already. The
+      # version is pinned by `packageManager` in the root package.json, so
+      # corepack needs no argument.
+      - name: Enable corepack
+        run: corepack enable
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Enable corepack
-        run: corepack enable
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -93,36 +86,46 @@ jobs:
       - name: Setup script is idempotent
         run: node deploy/cloudflare/setup.mjs --dry-run
 
+  test:
+    name: Test suite
+    runs-on: ubuntu-latest
+    # The schema has to migrate cleanly onto both dialects on every pull
+    # request, or SQLite and Postgres drift until a Postgres user reports it
+    # months later. packages/db's Postgres cases skip when this is absent, so
+    # a contributor without a database still gets a green local suite.
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: pariksha
+          POSTGRES_DB: pariksha_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # No build step: turbo's `test` task declares `dependsOn: ["^build"]`,
+      # so the packages apps/api imports by name are built here anyway.
       - name: Test
         run: pnpm test
         env:
           TEST_POSTGRES_URL: postgres://postgres:pariksha@localhost:5432/pariksha_test
-
-      # A step in this job, not a job of its own: a separate job would
-      # re-run checkout, `pnpm install` and `pnpm build` — several minutes —
-      # to reach the same state this one is already in, and it could not
-      # start until this job's build finished anyway. As a step it costs the
-      # browser download plus the run itself, roughly a minute.
-      #
-      # Chromium alone. The suite walks one flow against a Node API and an
-      # OpenID provider that both live on localhost; nothing in it is
-      # engine-sensitive, and it is not cross-browser coverage.
-      - name: Install Playwright Chromium
-        run: pnpm --filter @pariksha/web exec playwright install --with-deps chromium
-
-      # `pnpm test` deliberately does not reach this — e2e has its own
-      # script so the unit suite stays fast (apps/web/vite.config.ts excludes
-      # e2e/ from Vitest).
-      - name: End-to-end (first run)
-        run: pnpm --filter @pariksha/web e2e
-
-      - name: Upload Playwright traces
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-traces
-          path: apps/web/test-results/
-          retention-days: 7
 
       # Enforces the coverage the Phase 1 review measured by hand on
       # packages/core/src, so the figure stays true without someone
@@ -139,3 +142,60 @@ jobs:
           --coverage.thresholds.branches=93
           --coverage.thresholds.functions=100
           --coverage.thresholds.lines=98
+
+  # Its own job, no `needs:`. This used to be a step in the build job to
+  # avoid re-running checkout, install and build — but it never consumed
+  # that build: apps/web/playwright.config.ts builds both servers in its
+  # webServer commands (`pnpm --filter @pariksha/api build` and
+  # `pnpm build && vite preview`), deliberately, so the suite can never
+  # serve a stale dist/. As a step it was paying for that build twice and
+  # starting late; as a job it starts at t=0 and the only duplicated work is
+  # checkout plus a cache-warm install. It needs no SITE_URL either —
+  # playwright.config.ts supplies one to the preview build, the only
+  # consumer.
+  #
+  # Chromium alone. The suite walks one flow against a Node API and an
+  # OpenID provider that both live on localhost; nothing in it is
+  # engine-sensitive, and it is not cross-browser coverage.
+  e2e:
+    name: End-to-end
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Enable corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `playwright install` skips the download when the browser is already
+      # in this directory, so the step below needs no conditional. The apt
+      # libraries `--with-deps` installs are not cacheable and still run.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @pariksha/web exec playwright install --with-deps chromium
+
+      # `pnpm test` deliberately does not reach this — e2e has its own
+      # script so the unit suite stays fast (apps/web/vite.config.ts excludes
+      # e2e/ from Vitest).
+      - name: End-to-end (first run)
+        run: pnpm --filter @pariksha/web e2e
+
+      - name: Upload Playwright traces
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: apps/web/test-results/
+          retention-days: 7

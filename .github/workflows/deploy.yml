@@ -50,12 +50,18 @@ jobs:
           --health-retries 5
     steps:
       - uses: actions/checkout@v7
+
+      # Before setup-node, not after: `cache: pnpm` resolves the store by
+      # running `pnpm store path`, so pnpm has to be on PATH already. The
+      # version is pinned by `packageManager` in the root package.json, so
+      # corepack needs no argument.
+      - name: Enable corepack
+        run: corepack enable
+
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-
-      - name: Enable corepack
-        run: corepack enable
+          cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
