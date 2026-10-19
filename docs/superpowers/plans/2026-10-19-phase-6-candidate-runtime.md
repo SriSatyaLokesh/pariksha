@@ -733,9 +733,11 @@ git commit -s -m "feat(run): consent capture and server-side registration with u
 ## Task 4: Bot protection and rate limits (#68, P6.4)
 
 **Files:**
-- Create: `apps/api/src/run/ratelimit.ts`, `apps/api/src/run/captcha.ts`, `apps/api/test/run/ratelimit.test.ts`, `apps/api/test/run/captcha.test.ts`
-- Create: `docs/adr/00NN-bot-protection-narrows-the-no-third-party-script-rule.md` (**the next free number at execution time**) — **only if** the escalation below is resolved in favour of a hosted captcha
-- Modify: `packages/db/src/schema/columns.ts` (`rate_limit`), `packages/db/src/repo/run.ts`, `apps/api/src/env.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/middleware/security.ts` **and** `apps/web/public/_headers` (together, or not at all), `apps/web/test/hosting.test.ts`, `docs/adr/README.md`
+- Create: `apps/api/src/run/ratelimit.ts`, `apps/api/src/run/pow.ts`, `apps/api/src/run/captcha.ts`
+- Create: `apps/api/test/run/ratelimit.test.ts`, `apps/api/test/run/pow.test.ts`, `apps/api/test/run/captcha.test.ts`
+- Create: `apps/web/src/lib/pow.ts`, `apps/web/test/exam/pow.test.ts`
+- Modify: `packages/db/src/schema/columns.ts` (`rate_limit`), `packages/db/src/repo/run.ts`, `apps/api/src/env.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`, `apps/web/src/components/exam/RegistrationForm.tsx`, `apps/web/test/hosting.test.ts`, `docs/PRD.md` (the `AC-01` / acceptance checklist note that `S-07` is formally unmet)
+- **No ADR.** The CSP is not narrowed — see the ruling below. `apps/api/src/middleware/security.ts` and `apps/web/public/_headers` are **not** modified by this task.
 
 **Interfaces:**
 - Consumes: `scoped`, `DbClient.run` · `deps.http`, `deps.now`, `AppEnv` (`apps/api/src/env.ts`) · `ApiError` · `TestAccess` (**Phase 5** interface row 6, `captcha` defaulting to `true`).
@@ -753,7 +755,21 @@ git commit -s -m "feat(run): consent capture and server-side registration with u
   /** Throws ApiError(429) with Retry-After. `key` is a test version, candidate or email hash — never an IP. */
   export function limitOrThrow(deps: AppDeps, workspaceId: string, bucket: RateBucket, key: string): Promise<void>;
 
-  // apps/api/src/run/captcha.ts
+  // apps/api/src/run/pow.ts — the default bot protection. Same origin, no third party.
+  export const POW_DIFFICULTY_BITS = 18;          // ~0.3 s on a laptop, ~1.5 s on a slow phone
+  export const POW_TTL_MS = 10 * 60_000;
+  export interface PowChallenge { challenge: string; bits: number; expiresAt: number }
+  /** HMAC(SESSION_SECRET, `${testVersionId}:${nonce}:${expiresAt}`) — stateless, so issuing costs no row. */
+  export function issuePowChallenge(deps: AppDeps, testVersionId: string, now: number): Promise<PowChallenge>;
+  /** True when `solution` is a preimage whose SHA-256 over the challenge has POW_DIFFICULTY_BITS leading zeros
+   *  AND the challenge's HMAC and expiry verify. Throws nothing; a bad solution is false. */
+  export function verifyPow(deps: AppDeps, challenge: string, solution: string, now: number): Promise<boolean>;
+
+  // apps/web/src/lib/pow.ts — WebCrypto only; runs in the page, not a worker (it is sub-second)
+  export function solvePow(challenge: string, bits: number): Promise<string>;
+
+  // apps/api/src/run/captcha.ts — the per-instance opt-in, OFF by default
+  export function captchaConfigured(deps: AppDeps): boolean;
   export function captchaRequired(deps: AppDeps, access: TestAccess): boolean;
   /** Resolves true when unconfigured — an instance with no provider is not broken (AC-01). */
   export function verifyCaptcha(deps: AppDeps, token: string | undefined): Promise<boolean>;
@@ -765,13 +781,28 @@ git commit -s -m "feat(run): consent capture and server-side registration with u
 | A script brute-forces a short `access_code` over a public URL | `test_access` bucket, keyed by test version | The 11th wrong code in a minute is refused before the code is compared |
 | A script requests ten thousand codes to one address, or sprays one code across ten thousand addresses | `email_code` bucket, keyed by test version **and** separately by `sha256(email)` | Both directions refused; the email adapter records no send past the limit |
 | One valid registration opens a thousand attempts | `attempt_start` bucket, keyed by candidate, under `attempts_allowed` (Task 5) | The second attempt on a one-attempt test is 409 before any layout is computed |
-| A headless browser farm registers at human speed, under every limit | A captcha on registration (`S-07`) — **escalated** | `verifyCaptcha` is called with the submitted token and a failed verification is 403 |
+| A headless browser farm registers at human speed, under every limit | A same-origin proof of work on registration (see the ruling below) | Registering without a valid solution is 403; a solution for another test version, a replayed one and an expired one are each 403 |
+| An operator who wants a hosted captcha instead | `verifyCaptcha` over `deps.http`, off unless a secret is configured | A failed verification is 403 and writes no candidate; an unconfigured instance registers normally |
 
 **Limits are per attempt and per test, never per IP** — `S-07` and `docs/test-format.md:74`: "a whole campus often shares one."
 
+| Method | Path | Authority | `ROUTE_BUDGETS` |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/challenge` | `public` | `MEASURE` (expected **0** — an HMAC over the slug pair's already-resolved version, or 1 if it must resolve it) |
+
 **The bucket store is a D1 table, not KV and not a Durable Object.** One `INSERT … ON CONFLICT DO UPDATE` is a single statement, one subrequest, portable to SQLite and Postgres, and testable in memory; the alternatives are Cloudflare-only, which ADR 0002's adapter rule rules out for the reference path. Buckets apply to the expensive, abusable routes (access, email-code, register, start, submit, result-code) and **not** to the answer save: a save is already bounded by a live attempt token and a server deadline, and a counter write would double the hottest path against the PRD's "one D1 write" line for no attack it stops. `ponytail:` a `DELETE FROM rate_limit WHERE window_start < ?` sweep belongs beside Phase 8's retention job; until then the table grows one row per bucket per window.
 
-**Bot protection is escalated, not decided.** `S-07` names Turnstile or hCaptcha; `S-11` forbids third-party scripts; `apps/api/src/middleware/security.ts:17` is `script-src 'self'`; `apps/web/test/hosting.test.ts:25` asserts `_headers` contains no `https?://` at all. Two PRD clauses of equal precedence contradict each other and a committed test enforces one of them — see [Escalated](#escalated--needs-a-human-decision). **What this task builds either way** is the seam: `captchaRequired()` reads `access.captcha`, `verifyCaptcha()` posts to a configured `CAPTCHA_VERIFY_URL` with `CAPTCHA_SECRET` over `deps.http`, and **returns true when nothing is configured**, because `AC-01` promises a working deployment in thirty minutes "using no paid service". The browser half and the CSP change land only once the escalation is answered; the rate limits ship regardless and are the control that is enforceable today.
+### Ruling: bot protection is a same-origin proof of work, and a hosted captcha is a per-instance opt-in
+
+**Ruling: registration is protected by a same-origin proof of work by default; Turnstile / hCaptcha stays available behind `CAPTCHA_SECRET` for an operator who chooses it and accepts the CSP change on their own deployment. `S-07` is therefore formally unmet, and is recorded as unmet rather than quietly treated as satisfied.**
+
+— **Why:** the PRD contradicts itself, and the stronger clause is the privacy promise. Turnstile is named in **three** places, all of which this ruling overrides: `S-07` (`docs/PRD.md:386`, "Registration is protected by Cloudflare Turnstile or hCaptcha (both free) **and** by rate limits per attempt and per test"), the reference-stack diagram (`docs/PRD.md:437`, "Pages, Workers, D1, R2, **Turnstile**") and the adapter table (`docs/PRD.md:456`, "Bot protection | Turnstile | hCaptcha or Turnstile"). Against them stands `S-11`: "No analytics, telemetry or third-party scripts; fonts and the face model are served from the app itself." A widget from `challenges.cloudflare.com` needs `script-src`, `frame-src` and `connect-src` entries in a CSP that is `'self'` in two files that must stay byte-identical (`apps/api/src/middleware/security.ts:17`, `apps/web/public/_headers`), one of which `apps/web/test/hosting.test.ts:25` pins by asserting no `https?://` appears at all. `S-11` is the clause the product is marketed on and the one a self-hoster cannot restore after the fact; the three Turnstile mentions all name *a* mechanism for a goal a same-origin proof of work also serves, at the cost of being weaker against a determined farm. The proof of work is a few lines of WebCrypto, costs a candidate under a second (and `P-01` blocks phones anyway), and keeps every default deployment at `'self'`.
+
+— **Cost if wrong:** a farm with real CPU registers anyway, so a public `link_code` test accumulates junk candidate rows at whatever rate the `test_register` bucket allows. Recovery is one environment variable, not a code change: `verifyCaptcha`'s seam, `access.captcha` and `captchaConfigured()` all ship in this task, so an operator turns Turnstile on, adds the three CSP directives to their own `_headers`, and accepts that their instance no longer satisfies `S-11`.
+
+**Recorded as unmet.** `S-07`'s second half — rate limits per attempt and per test — ships in full. Its first half does not, on the default deployment, and this task edits the acceptance checklist in `docs/PRD.md` to say so rather than leaving a reader to infer it from a passing suite.
+
+**The seam, unchanged by the ruling:** `captchaRequired()` reads `access.captcha` and `captchaConfigured()`; `verifyCaptcha()` posts to `CAPTCHA_VERIFY_URL` with `CAPTCHA_SECRET` over `deps.http`, and **returns true when nothing is configured**, because `AC-01` promises a working deployment in thirty minutes "using no paid service". **This task does not touch the CSP in either file.**
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -822,7 +853,52 @@ it("the email-code bucket limits per address as well as per test", async () => {
 ```
 
 ```ts
-// apps/api/test/run/captcha.test.ts
+// apps/api/test/run/pow.test.ts — the default control
+it("registering without a proof of work is 403 and writes no candidate", async () => {
+  expect((await register(await gate(), valid, { pow: undefined })).status).toBe(403);
+  expect(await countCandidates(testId)).toBe(0);
+});
+
+it("a valid solution registers, and the same solution replayed is refused", async () => {
+  const { challenge, bits } = await (await get("/api/v1/run/alpha/aptitude/challenge")).json();
+  const solution = await solvePow(challenge, bits);
+  expect((await register(await gate(), valid, { challenge, solution })).status).toBe(201);
+  expect((await register(await gate(), other, { challenge, solution })).status).toBe(403);
+});
+
+it("a challenge minted for another test version, or an expired one, is refused", async () => {
+  expect((await registerOn("other", await gate(), valid, solvedForAptitude)).status).toBe(403);
+  deps.now = () => T + POW_TTL_MS + 1;
+  expect((await register(await gate(), valid, solvedForAptitude)).status).toBe(403);
+});
+
+it("issuing a challenge costs no database row — it is an HMAC, not a table", async () => {
+  const counting = countingDeps(deps);
+  await createApp(counting.deps).request("/api/v1/run/alpha/aptitude/challenge");
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/challenge"]);
+});
+
+it("S-11: the solver uses WebCrypto only and reaches no third-party origin", async () => {
+  const seen: string[] = [];
+  await withFetchSpy(seen, () => solvePow(challenge, POW_DIFFICULTY_BITS));
+  expect(seen).toEqual([]);
+});
+
+it("the work is bounded: solving at the shipped difficulty stays under 3 s in jsdom", async () => {
+  const started = performance.now();
+  await solvePow(challenge, POW_DIFFICULTY_BITS);
+  expect(performance.now() - started).toBeLessThan(3000);
+});
+
+it("a candidate whose browser cannot run it gets a message, not a dead button", async () => {
+  render(<RegistrationForm form={f} onSubmit={noop} solve={() => Promise.reject(new Error("no subtle"))} />);
+  await userEvent.click(screen.getByRole("button", { name: /continue/i }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/could not complete the security check/i);
+});
+```
+
+```ts
+// apps/api/test/run/captcha.test.ts — the opt-in
 it("AC-01: an instance with no captcha configured registers normally", async () =>
   expect((await register(await gate(), valid)).status).toBe(201));
 
@@ -841,14 +917,16 @@ it("the verification goes through deps.http and sends the secret, never the site
 
 it("access.captcha=false turns it off for that test even when configured", () =>
   expect(captchaRequired(withCaptchaDeps, { mode: "link_code", access_code: "x", captcha: false })).toBe(false));
+
+it("the proof of work still applies on an instance that also configured a captcha", async () =>
+  expect((await register(await gate(), valid, { captchaToken: "ok", pow: undefined }, withCaptchaDeps)).status)
+    .toBe(403));
 ```
 
 ```ts
-// apps/web/test/hosting.test.ts (extended) — S-11's guard, kept honest
-const ALLOWED_THIRD_PARTY_ORIGINS: string[] = [];   // widened only by the bot-protection ADR
-
-it("S-11: the CSP names no third-party origin unless an ADR says which one", () =>
-  expect(headers.match(/https?:\/\/[^\s;]+/g) ?? []).toEqual(ALLOWED_THIRD_PARTY_ORIGINS));
+// apps/web/test/hosting.test.ts (extended) — S-11's guard, now unconditional
+it("S-11: the shipped CSP names no third-party origin, bot protection included", () =>
+  expect(headers.match(/https?:\/\/[^\s;]+/g) ?? []).toEqual([]));
 
 it("the API's headers and _headers still agree byte for byte", () =>
   expect(cspOf(headers)).toBe(SECURITY_HEADERS["Content-Security-Policy"]));
@@ -860,7 +938,7 @@ Run: `pnpm vitest run apps/api/test/run/ratelimit.test.ts apps/api/test/run/capt
 
 - [ ] **Step 3: Implement `rate_limit`, `takeRateToken`, `limitOrThrow` and the captcha seam**
 
-`rate_limit(workspace_id, bucket, window_start, count)` with `UNIQUE (workspace_id, bucket)`. `takeRateToken` must roll the window and increment in the *same* statement, or two concurrent requests both read a stale count:
+`issuePowChallenge` is stateless: the challenge is `${testVersionId}:${nonce}:${expiresAt}` plus its HMAC under `SESSION_SECRET`, so issuing costs no row and verifying costs no read, and single use comes from the registration write consuming the entry token in the same batch rather than from a second table. `rate_limit(workspace_id, bucket, window_start, count)` with `UNIQUE (workspace_id, bucket)`. `takeRateToken` must roll the window and increment in the *same* statement, or two concurrent requests both read a stale count:
 
 ```sql
 INSERT INTO rate_limit (id, workspace_id, bucket, window_start, count) VALUES (?, ?, ?, ?, 1)
@@ -870,7 +948,7 @@ ON CONFLICT (workspace_id, bucket) DO UPDATE SET
 RETURNING count, window_start
 ```
 
-**Do not touch the CSP in this step** — the two header files change together, in whichever direction the escalation is answered.
+**Do not touch the CSP in this step, or in any step of this phase.** The ruling above is that it does not change.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -881,7 +959,7 @@ Expected: PASS, with every Task 2 and 3 budget re-measured — a route that gain
 
 ```bash
 git add packages/db apps/api apps/web
-git commit -s -m "feat(run): per-test and per-attempt rate limits and the captcha seam"
+git commit -s -m "feat(run): same-origin proof of work, per-test rate limits and the captcha seam"
 ```
 
 ---
