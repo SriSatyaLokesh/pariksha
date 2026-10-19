@@ -160,6 +160,16 @@ async function patchQuestion(refId: string, doc: Question): Promise<Response> {
   );
 }
 
+/** `POST .../questions`, not import — the question-create route's
+ * `assertValid` only blocks on `isSaveTimeIssue` (`group` or
+ * `unsafe_regex`), so a question whose options share text saves here even
+ * though `validateBank` (and, since Fix round 1 finding 2, export itself)
+ * refuses it — exactly the "ordinary mid-draft state" the Task 6 ruling
+ * protects. */
+function postQuestion(doc: Question): Promise<Response> {
+  return app.request(`/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions`, send("POST", authorCookie, doc));
+}
+
 function exportWithout(doc: Bank, id: string): Bank {
   return { ...doc, questions: doc.questions.filter((q) => q.id !== id) };
 }
@@ -273,6 +283,96 @@ it("?ids= exports only the selected questions and still validates", async () => 
   expect(validateBank(sel).ok).toBe(true);
 });
 
+// Fix round 1, finding 1: a round-trip test that never POSTs the exported
+// document back to `/import` proves nothing about the actual round trip —
+// `toEqual` against the bank already imported only proves export reads back
+// what import wrote, not that import will take the result back. This is the
+// proof the brief asked for.
+it("AC-05's missing half: the exported document itself re-imports clean into a second bank", async () => {
+  await importJson(exampleBank());
+  const out = await exportBank();
+
+  const secondBankRes = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks`,
+    send("POST", authorCookie, { name: "Second bank" }),
+  );
+  const secondBankId = (await secondBankRes.json()).id;
+
+  const reimportRes = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${secondBankId}/import`,
+    send("POST", authorCookie, out),
+  );
+  expect(reimportRes.status, await reimportRes.clone().text()).toBe(200);
+
+  const reexportRes = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${secondBankId}/export`,
+    send("GET", authorCookie),
+  );
+  const reexported = (await reexportRes.json()) as Bank;
+  // `name`/`description`/`license` are the *bank's* own metadata, never
+  // written by `importBankJson` (Task 7 — confirmed by this file's own
+  // `matchBankMetadata` helper, needed for exactly this reason) — the
+  // second bank keeps the name it was created with, so only what import
+  // actually writes (groups and questions) is compared here.
+  expect(byId(reexported).questions).toEqual(byId(out).questions);
+  expect(reexported.groups).toEqual(out.groups);
+});
+
+// Fix round 1, finding 1's two concrete breakages — closed by finding 2's
+// fix: export now runs the same structural + cross-field checks import
+// would, and refuses rather than hands back a file import would reject.
+it("an empty bank is refused at export, not downloaded as a file its own import would reject", async () => {
+  // `beforeEach` leaves `bankId` with no questions at all yet.
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/banks/${bankId}/export`, send("GET", authorCookie));
+  expect(res.status).toBe(422);
+  const body = (await res.json()) as { error: { code: string; details: { issues: unknown[] } } };
+  expect(body.error.code).toBe("not_exportable");
+  expect(body.error.details.issues.length).toBeGreaterThan(0);
+});
+
+it("?ids= matching no real question is refused the same way an empty bank is", async () => {
+  await importJson(exampleBank());
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/export?ids=does-not-exist`,
+    send("GET", authorCookie),
+  );
+  expect(res.status).toBe(422);
+});
+
+// Fix round 1, finding 2: the question-create route saves this (Task 6's own
+// ruling — only `group`/`unsafe_regex` block a save), so the only place left
+// to catch it is export itself, which is exactly what this proves.
+it("a question with colliding option text reaches storage through the editor, and export refuses to re-emit it", async () => {
+  await importJson(exampleBank());
+  const bad: Question = {
+    id: "COL-001",
+    type: "single",
+    prompt: "Pick one.",
+    options: [
+      { id: "o1", text: "X" },
+      { id: "o2", text: "X" },
+    ],
+    key: "o2",
+  };
+  const createRes = await postQuestion(bad);
+  expect(createRes.status, await createRes.clone().text()).toBe(201);
+
+  const bankExportRes = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/export`,
+    send("GET", authorCookie),
+  );
+  expect(bankExportRes.status).toBe(422);
+  const bankBody = (await bankExportRes.json()) as { error: { details: { issues: { code?: string }[] } } };
+  expect(bankBody.error.details.issues.some((i) => i.code === "duplicate_option_text")).toBe(true);
+
+  const qid = await internalQuestionId("COL-001");
+  const questionExportRes = await app.request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${qid}/export`,
+    send("GET", authorCookie),
+  );
+  expect(questionExportRes.status).toBe(422);
+});
+
 it("a Viewer cannot export", async () => {
   await importJson(exampleBank());
   const res = await app.request(
@@ -370,7 +470,31 @@ it("?ids= costs the same as an unfiltered export, regardless of selection size",
   expect(counting.counts().total).toBe(ROUTE_BUDGETS[EXPORT_ROUTE_KEY]!);
 });
 
+// Fix round 1, finding 2's budget consequence: validating a single
+// question's `group` reference for real (rather than always handing an
+// empty `groups` array to `exportIssues` and risking a false "group does not
+// exist" refusal on an otherwise-valid, group-referencing question) costs
+// one more fetch — but only when the question actually names a group.
+// Pinned against the worst case, "DIN-001" (references "library-loans"), not
+// the cheapest realistic question — the same "measure the heavy case, not
+// the convenient one" rule this task's other budgets already follow.
 it("measures the real subrequest cost of the single-question export against ROUTE_BUDGETS", async () => {
+  await importJson(exampleBank());
+  const qid = await internalQuestionId("DIN-001");
+
+  const counting = countingDeps(deps);
+  const res = await createApp(counting.deps).request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/questions/${qid}/export`,
+    send("GET", authorCookie),
+  );
+  expect(res.status, await res.clone().text()).toBe(200);
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS[QUESTION_EXPORT_ROUTE_KEY]!);
+});
+
+// The cheap, common case: a question with no `group` costs no extra fetch at
+// all — `assertQuestionExportable` only reads groups when the question
+// names one.
+it("a question with no group costs 2 less than one with a group, in the single-question export", async () => {
   await importJson(exampleBank());
   const qid = await internalQuestionId("LOG-001");
 
@@ -380,7 +504,7 @@ it("measures the real subrequest cost of the single-question export against ROUT
     send("GET", authorCookie),
   );
   expect(res.status, await res.clone().text()).toBe(200);
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[QUESTION_EXPORT_ROUTE_KEY]!);
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS[QUESTION_EXPORT_ROUTE_KEY]! - 2);
 });
 
 it("every route this task mounts has a ROUTE_BUDGETS entry under the ceiling", () => {

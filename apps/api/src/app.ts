@@ -152,10 +152,18 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // the 50-subrequest ceiling.
   "/api/v1/workspaces/:id/banks/:bankId/export": 6,
   // The single-question sibling: auth (2) + `getQuestion` (1, already one
-  // query with its own correlated "used in tests" subquery) = 3. The brief
-  // named 1, which the same authentication floor rules out; 3 is the
-  // measured number.
-  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": 3,
+  // query with its own correlated "used in tests" subquery) + `listGroups`
+  // (2, only fetched when the question names a group — a question that
+  // does not costs 3, not 5: `exportIssues` would otherwise have to check a
+  // group reference against an empty `groups` array it was never given, and
+  // falsely refuse an otherwise-valid, group-referencing question). Fix
+  // round 1, finding 2: pinned against the worst case — "DIN-001"
+  // (examples/reasoning-aptitude/questions.json), which names
+  // "library-loans" — not the cheapest realistic question, the same "measure
+  // the heavy case" rule every other budget here already follows. The brief
+  // named 1, which the authentication floor alone already rules out; 5 is
+  // the measured ceiling.
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": 5,
 };
 
 /**

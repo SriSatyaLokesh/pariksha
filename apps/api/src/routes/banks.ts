@@ -14,7 +14,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import type { PassageGroup } from "@pariksha/core";
+import type { Bank, PassageGroup } from "@pariksha/core";
 import {
   appendAudit,
   createBank,
@@ -32,7 +32,7 @@ import {
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
-import { toBankDocument } from "../export/bank.js";
+import { exportIssues, toBankDocument, toSingleQuestionDocument } from "../export/bank.js";
 import { importBankJson, importBankText } from "../import/json.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 
@@ -117,6 +117,24 @@ async function allQuestions(deps: AppDeps, workspaceId: string, bankId: string):
     out.push(...page.rows);
     if (page.cursor === undefined) return out;
     cursor = page.cursor;
+  }
+}
+
+/**
+ * Fix round 1, finding 2: refuses the request (422, positioned issues) when
+ * `doc` is one `/import` would itself reject — the property this buys is
+ * that this system never hands an author a file it will not take back.
+ * Called against the document a route is *about* to return, never earlier.
+ */
+function assertExportable(doc: Bank): void {
+  const issues = exportIssues(doc);
+  if (issues.length > 0) {
+    throw new ApiError(
+      422,
+      "not_exportable",
+      "This cannot be exported: the document would fail its own import.",
+      { issues },
+    );
   }
 }
 
@@ -365,6 +383,14 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
   // existing repository functions allow — `?ids=` filters the already-
   // fetched set in memory, so the cost never grows with how many ids are
   // named.
+  //
+  // Fix round 1, finding 2: `exportIssues` runs against the document this
+  // route is *about* to return, and a non-empty result refuses the request
+  // (422) rather than downloading a file this system's own `/import` would
+  // reject — an empty bank, an `?ids=` selection matching nothing (both fail
+  // `questions.minItems: 1`), or a question that reached storage with
+  // colliding option text through the editor's save path, which blocks on
+  // far less than a full `validateBank` pass (Task 6's own ruling).
   routes.get("/:id/banks/:bankId/export", requires("banks.edit"), async (c) => {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
@@ -381,7 +407,9 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
             .map((id) => questions.find((q) => q.document.id === id))
             .filter((q): q is QuestionRow => q !== undefined);
 
-    return c.json(toBankDocument(bank, groups, selected));
+    const doc = toBankDocument(bank, groups, selected);
+    assertExportable(doc);
+    return c.json(doc);
   });
 
   // The single-question sibling: no `bankOr404` of its own — `getQuestion`
@@ -389,11 +417,22 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
   // and a question that does not exist in a bank that does both answer the
   // same 404 either way, and checking twice would only spend a second
   // subrequest proving what the first call's `null` already said.
+  //
+  // Fix round 1, finding 2's sibling check: the question is wrapped in a
+  // one-question bank before `exportIssues` runs, the same shape
+  // `questions.ts`'s own `assertValid` already builds — but only *with* its
+  // real groups when the question actually names one, so a legitimate
+  // group-referencing question is not falsely refused against an empty
+  // `groups` array, and a question with no group pays no extra subrequest at
+  // all for a check it cannot possibly need.
   routes.get("/:id/banks/:bankId/questions/:qid/export", requires("banks.edit"), async (c) => {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
     const question = await getQuestion(deps.db, workspaceId, bankId, c.req.param("qid"));
     if (!question) throw new ApiError(404, "not_found", "No such resource.");
+
+    const groups = question.document.group !== undefined ? await listGroups(deps.db, workspaceId, bankId) : [];
+    assertExportable(toSingleQuestionDocument(question.document, groups));
     return c.json(question.document);
   });
 
