@@ -885,3 +885,804 @@ git commit -s -m "feat(run): per-test and per-attempt rate limits and the captch
 ```
 
 ---
+
+## Task 5: Attempt creation with version and layout pinning (#69, P6.5)
+
+**Files:**
+- Create: `apps/api/src/run/attempt.ts`, `apps/api/src/run/scrub.ts`, `apps/api/src/middleware/attemptContext.ts`
+- Create: `apps/api/test/run/start.test.ts`, `apps/api/test/run/attempt-context.test.ts`
+- Modify: `packages/db/src/repo/candidate-entry.ts` (+ its pinned set and test), `packages/db/src/repo/banks.ts` (one new scoped read), `packages/db/src/repo/run.ts`, `packages/db/src/schema/columns.ts` (`max_index`, `section_started_at` on `attempt`), `packages/db/test/parity.test.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`, `apps/api/src/instrument.ts` (register `attemptContext` in the authority WeakMap), `apps/web/src/lib/run.ts`
+
+**Interfaces:**
+- Consumes: `consumeEntryToken` / `EntryClaim` (Task 2) · `registerCandidate` (Task 3) · `limitOrThrow` (Task 4) · `createAttempt(db, ws, { candidateId, testVersionId, setNo, layout, startedAt, deadlineAt, tokenHash }): Promise<string>`, `getAttempt`, `listResponses`, `appendAudit`, `toQuestionDocument` (`@pariksha/db`) · `layoutForAttempt`, `assignSet`, `AttemptLayout`, `PoolTooSmallError`, `Question`, `ResponseValue` (`@pariksha/core`) · `randomToken`, `sha256Hex` · `setSignedCookie` pattern from `apps/api/src/middleware/authenticate.ts`. From **Phase 5**: sections (row 3), timing (row 8), set assignment (row 4), `attempts_allowed` / `cooldown_minutes` (row 8).
+- Produces — **the attempt lifecycle types every later task reads. Names and shapes are fixed here:**
+  ```ts
+  // packages/db/src/repo/candidate-entry.ts (second pre-workspace read)
+  export interface AttemptRecord {
+    attemptId: string; workspaceId: string; candidateId: string;
+    testId: string; testVersionId: string; version: number;
+    setNo: number; layout: unknown;                     // PinnedLayout, as stored
+    startedAt: number; deadlineAt: number;
+    submittedAt: number | null; submitReason: string | null;
+    sectionStartedAt: number | null; maxIndex: number; flag: string;
+    settings: unknown; sections: unknown;               // joined from test_version
+  }
+  /** One join: attempt + test_version. The workspace is what it produces (ADR 0006). */
+  export function readAttemptByTokenHash(db: DbClient, tokenHash: string): Promise<AttemptRecord | null>;
+
+  // packages/db/src/repo/banks.ts — scoped(), in REPO_FUNCTIONS
+  /** Every question in the banks a test version draws from, in one statement.
+   *  ponytail: bounded by the test's declared banks; if a bank ever holds
+   *  thousands, narrow to the ref_ids fixed/sets name plus the pool filters. */
+  export const listQuestionsForBanks: ScopedFn<[bankIds: readonly string[]], Question[]>;
+
+  // packages/db/src/repo/run.ts — scoped(), in REPO_FUNCTIONS
+  export const countAttemptsForCandidate: ScopedFn<[candidateId: string], { count: number; lastStartedAt: number | null }>;
+
+  // apps/api/src/run/attempt.ts
+  export type PinnedLayout = AttemptLayout & { media: string[] };
+  export const ATTEMPT_COOKIE = "pk_attempt";
+  export function startAttempt(deps: AppDeps, claim: RegistrationClaim, now: number):
+    Promise<{ attemptId: string; token: string; deadlineAt: number; paper: AttemptPaper }>;
+
+  // apps/api/src/run/scrub.ts — Task 12 proves it complete; Task 5 writes the first version
+  export interface CandidateQuestion {
+    id: string; type: QuestionType; prompt: string; points: number;
+    media?: { kind: "image"; src: string; alt: string }[];
+    options?: { id: string; text: string }[];          // already in the pinned order
+    left?: string[]; right?: string[]; items?: string[];
+    blanks?: { id: string }[]; unit?: string; assertion?: string; reason?: string;
+    maxLength?: number; k?: number;
+    group?: { id: string; passage: string };
+  }
+  export function forCandidate(
+    q: Question,
+    opts: { optionOrder?: readonly string[]; mediaBase: string; group?: PassageGroup },
+  ): CandidateQuestion;
+  export function mediaKeysOf(questions: readonly Question[]): string[];
+
+  // apps/api/src/run/attempt.ts — the one payload /start and GET /attempt both answer with
+  export interface AttemptPaper {
+    attemptId: string;                                  // C-08's receipt reference
+    sections: { id: string; title: string; instructions: string | null;
+                timeLimitMinutes: number | null; questions: CandidateQuestion[] }[];
+    responses: Record<string, ResponseValue | null>;
+    navigation: "free" | "linear" | "per_section";
+    maxIndex: number;
+    remainingMs: number; sectionRemainingMs: number | null;
+    warnAtMinutes: number[]; lateSyncGraceSeconds: number;
+    allowCalculator: boolean; serverNow: number;
+  }
+
+  // apps/api/src/middleware/attemptContext.ts
+  export type AttemptContextVar = AttemptRecord & { layout: PinnedLayout };
+  /** 401 when the cookie is absent or dead. Registers itself so routeAuthorities() can read it back. */
+  export function attemptContext(deps: AppDeps): MiddlewareHandler<AppBindings>;
+  // AppBindings["Variables"] gains: attempt: AttemptContextVar
+
+  // apps/web/src/lib/run.ts (widened)
+  export interface RunClient {
+    start(registrationToken: string): Promise<AttemptPaper>;
+    resume(): Promise<AttemptPaper | null>;             // the cookie travels on its own
+  }
+  ```
+
+**The attempt token is an HttpOnly cookie, not a body field.** `C-06` requires a browser restart to resume the same attempt, so the token must outlive the tab — a `Max-Age` cookie does, `sessionStorage` does not. HttpOnly keeps it out of reach of any script, which matters more here than in the organiser app because the runner renders author-written Markdown. It rides every `fetch` automatically, including the offline queue's replay (Task 8), and never appears in a URL or a log. Cookie options follow `apps/api/src/middleware/authenticate.ts:31` — `httpOnly`, `secure`, `sameSite: "Lax"` — with `path: "/api/v1/run"` and `maxAge = duration + late_sync_grace`. The stored form is `sha256Hex(token)` in `attempt.token_hash`, which is already `UNIQUE` in the manifest (`columns.ts:289`), satisfying `S-06`.
+
+**Pinning, in one place.** `layoutForAttempt` runs once, seeded with the `att_` id minted before the insert, and its output plus `mediaKeysOf(selected)` is `attempt.layout_json`. Nothing recomputes it: `AC-11`'s "a refresh keeps each order" and `AC-14`'s "resumes with the same questions" are both properties of reading one column. `layout.media` is what makes Review Focus 2's media authorisation free — Task 7 checks membership in an array that is already in memory.
+
+**Two new `attempt` columns, and only two.** `max_index` (the furthest flat question index reached, default 0) carries *both* navigation rules — `linear` refuses a target below it, `per_section` derives the current section from it — so no second column is needed for section locking. `section_started_at` is what a per-section deadline is measured from.
+
+**The start gate**, in order, refusing before any work: the window (`opens_at`, `closes_at`, `latest_start_at`), `attempts_allowed` and `cooldown_minutes` against `countAttemptsForCandidate` (`T-14`), then the rate bucket, then the layout. `PoolTooSmallError` is caught and returned as a 409 naming the section and the shortfall — a published version goes stale the moment a drawn question is deleted, and a stack trace in a candidate's browser is the wrong way to find out.
+
+| Method | Path | Authority | `ROUTE_BUDGETS` |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/start` | `public` (registration token) | `MEASURE` (consume + attempt count + bank read + batch + audit) |
+| `GET` | `/api/v1/run/attempt` | `attempt` | `MEASURE` (the one join + `listResponses`) |
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/run/start.test.ts
+it("S-06: the attempt token is 256 bits, arrives as an HttpOnly cookie, and is stored only as a hash", async () => {
+  const res = await start(registrationToken);
+  const cookie = res.headers.get("set-cookie")!;
+  expect(cookie).toMatch(/pk_attempt=/);
+  expect(cookie).toContain("HttpOnly"); expect(cookie).toContain("Secure"); expect(cookie).toContain("SameSite=Lax");
+  expect(cookie).toContain("Path=/api/v1/run");
+  expect(JSON.stringify(await attemptRows())).not.toContain(tokenFrom(cookie));
+  expect((await res.json()).token).toBeUndefined();       // the body never carries it
+});
+
+it("AC-03: the attempt pins the version it started on; publishing v2 does not move it", async () => {
+  const before = (await attemptRow(attemptId)).test_version_id;
+  await publishVersion2();
+  expect((await attemptRow(attemptId)).test_version_id).toBe(before);
+  expect((await resume(cookie)).sections[0].questions[0].id).toBe(firstQuestionOfV1);
+});
+
+it("AC-11: two candidates on the same set see different question and option orders", async () => {
+  const [a, b] = await Promise.all([startFresh(), startFresh()]);
+  expect(order(a)).not.toEqual(order(b));
+});
+
+it("AC-11: a refresh keeps each order, and pinned options stay in place", async () => {
+  expect(order(await resume(cookie))).toEqual(order(paper));
+  expect(optionIds(await resume(cookie), "LOG-001")[0]).toBe("none-of-the-above");  // shuffle_options: false
+});
+
+it("AC-09: five sets, round robin, 50 registrations split 10 each with no two neighbours alike", async () => {
+  const sets = await Promise.all(Array.from({ length: 50 }, () => startFresh().then((p) => setNoOf(p))));
+  expect(countBy(sets)).toEqual({ A: 10, B: 10, C: 10, D: 10, E: 10 });
+  expect(sets.some((s, i) => i > 0 && s === sets[i - 1])).toBe(false);
+});
+
+it("AC-10: '10 from pool, tag sql, medium' gives 10 distinct questions matching the filter", async () => {
+  const qs = (await startFresh("pooled")).sections[0].questions;
+  expect(new Set(qs.map((q) => q.id)).size).toBe(10);
+  expect(qs.every((q) => q.tags === undefined)).toBe(true);     // tags are not candidate-facing
+});
+
+it("the layout pins every media key the selected questions reference, and nothing else", async () => {
+  const layout = JSON.parse((await attemptRow(attemptId)).layout_json);
+  expect(layout.media).toEqual(expect.arrayContaining([keyOfDiagramInSelectedQuestion]));
+  expect(layout.media).not.toContain(keyOfDiagramInUnselectedQuestion);
+});
+
+it("T-14: a second attempt on a one-attempt test is 409 before any layout is computed", async () => {
+  const counting = countingDeps(deps);
+  const res = await start(await registerAgain(), createApp(counting.deps));
+  expect(res.status).toBe(409);
+  expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/start"]);
+});
+
+it("T-12: starting after latest_start_at is refused and the window is named", async () => {
+  deps.now = () => latestStartAt + 1;
+  expect((await (await start(t)).json()).error).toMatchObject({ code: "window_closed" });
+});
+
+it("AC-13: deadline_at is started_at + duration, from the server clock, not the request", async () => {
+  expect((await attemptRow(attemptId)).deadline_at).toBe(FIXED_NOW + 45 * 60_000);
+});
+
+it("a stale published version whose pool no longer fills is a 409 naming the section", async () => {
+  await deleteQuestionsUntilPoolIsShort();
+  expect((await (await start(await reg())).json()).error)
+    .toMatchObject({ code: "pool_too_small", details: { section: "quant" } });
+});
+
+it("S-10: /start's paper carries no key, explanation, rubric, tag or internal id", async () => {
+  const text = JSON.stringify(await start(t).then((r) => r.json()));
+  for (const leak of ["key", "explanation", "rubric", "model_answer", "accept", "qst_", "wsp_", "bnk_"]) {
+    expect(text, leak).not.toContain(leak);
+  }
+});
+
+it("the bank is read once, not once per question", async () => {
+  const counting = countingDeps(deps);
+  await start(await reg(), createApp(counting.deps));
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/start"]);
+});
+```
+
+```ts
+// apps/api/test/run/attempt-context.test.ts
+it("no cookie, a junk cookie and a cookie for a deleted attempt are all the same 401", async () => {
+  const bodies = await Promise.all([undefined, "pk_attempt=junk", `pk_attempt=${await deadToken()}`]
+    .map(async (c) => (await app.request("/api/v1/run/attempt", c ? { headers: { cookie: c } } : {})).text()));
+  expect(new Set(bodies).size).toBe(1);
+});
+
+it("the context read is one statement — the attempt and its version settings together", async () => {
+  const counting = countingClient(db);
+  await readAttemptByTokenHash(counting.db, hash);
+  expect(counting.count()).toBe(1);
+});
+
+it("ADR 0006: readAttemptByTokenHash is pinned unscoped and reaches neither the barrel nor the registry", () => {
+  expect(new Set(functionNames(candidateEntry)))
+    .toEqual(new Set(["resolvePublishedTest", "readAttemptByTokenHash"]));
+  expect(repo).not.toHaveProperty("readAttemptByTokenHash");
+  expect(REPO_FUNCTIONS).not.toHaveProperty("readAttemptByTokenHash");
+});
+
+it("a candidate's cookie reaches only their own attempt's workspace", async () => {
+  const ctx = await contextFor(cookieOfCandidateInWorkspaceB);
+  expect(ctx.workspaceId).toBe(wspB);
+});
+
+it("C-06: a browser restart resumes the same questions, answers and remaining time", async () => {
+  await saveAnswer(cookie, "LOG-001", answer);
+  deps.now = () => FIXED_NOW + 10 * 60_000;
+  const resumed = await resume(cookie);                      // a fresh client, same cookie jar
+  expect(order(resumed)).toEqual(order(paper));
+  expect(resumed.responses["LOG-001"]).toEqual(answer);
+  expect(resumed.remainingMs).toBe(35 * 60_000);
+});
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/db apps/api/test/run` — FAIL.
+
+- [ ] **Step 3: Implement the two columns, `readAttemptByTokenHash`, `listQuestionsForBanks`, `startAttempt`, `forCandidate` and `attemptContext`**
+
+`readAttemptByTokenHash` is one `SELECT` joining `attempt` to `test_version` on `test_version_id`, written as a single statement for the same reason `readSessionActor` is. `startAttempt` mints the `att_` id first and uses it as `layoutForAttempt`'s `seed`, so the seed is reproducible from the row and nothing else has to store it. `attemptContext` registers itself in the authority `WeakMap` the way `guard()` registers in `GUARDS`, so `routeAuthorities()` reads what is mounted rather than what was declared. `forCandidate` is a `switch` over the 12 types that *builds* the candidate shape field by field rather than deleting from the stored one — a denylist misses the field added next phase, an allowlist does not (Review Focus 5).
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/db apps/api` with `TEST_POSTGRES_URL` set — PASS on both dialects.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/db apps/api apps/web
+git commit -s -m "feat(run): attempt creation with pinned version, layout and media keys"
+```
+
+---
+
+## Task 6: Test runner shell (#70, P6.6)
+
+**Files:**
+- Create: `apps/web/src/components/exam/Runner.tsx`, `Palette.tsx`, `ViewControls.tsx`, `Calculator.tsx`
+- Create: `apps/web/test/exam/runner.test.tsx`, `apps/web/test/exam/calculator.test.tsx`
+- Modify: `apps/web/src/routes/exam.tsx`, `apps/web/src/styles/exam.css`, `apps/web/test/no-hex-colors.test.ts` (no change expected; re-run as the gate)
+
+**Interfaces:**
+- Consumes: `AttemptPaper`, `CandidateQuestion` (Task 5) · `RunClient.resume` (Task 5) · `RenderedHtml` (Phase 4) · `tokens.ts`. The `Clock` component arrives in Task 9 and the answer blocks in Task 7; this task renders a `questionSlot` prop and a `clockSlot` prop so it is testable and committable before either exists.
+- Produces:
+  ```ts
+  export type PaletteState = "unanswered" | "answered" | "marked" | "current" | "locked";
+  export function Palette(props: {
+    questions: { id: string; number: number; state: PaletteState }[];
+    onJump: (questionId: string) => void;
+  }): JSX.Element;
+
+  export function Runner(props: {
+    paper: AttemptPaper;
+    index: number;
+    onIndex: (next: number) => void;
+    marked: ReadonlySet<string>;
+    onToggleMark: (questionId: string) => void;
+    onClear: (questionId: string) => void;
+    questionSlot: (q: CandidateQuestion) => JSX.Element;    // Task 7
+    clockSlot: JSX.Element;                                 // Task 9
+    bannerSlot: JSX.Element;                                // Task 8
+  }): JSX.Element;
+
+  export function ViewControls(props: {
+    fontScale: 1 | 1.25 | 1.5; onFontScale: (s: 1 | 1.25 | 1.5) => void;
+    highContrast: boolean; onHighContrast: (on: boolean) => void;
+  }): JSX.Element;
+
+  export function Calculator(props: { onClose: () => void }): JSX.Element;
+  ```
+
+**`DESIGN.md` is binding here and says the opposite of the marketing pages.** "The clock kills the canvas … The test runner is cream and ink, hairline-ruled, and the voltage survives only as the 'you are here' square in the question palette and the focus ring on a selected answer row." Layout is fixed: question column `1fr` with a `680px` max width, palette rail a fixed `240px`, one tempo for the whole attempt, **no animation of any kind** ("a candidate who thinks the page reloaded thinks their answer was lost"). Below 1024px there is no mobile layout, because `P-01` blocks the device.
+
+**Every palette state carries a non-colour signal**, because `DESIGN.md` requires it by name: `answered` is filled, `marked` carries a corner notch, `current` carries a ring, `locked` carries a lock glyph. A candidate with deuteranopia reads the palette from shape alone, and the test asserts that rather than trusting the CSS.
+
+**Mark-for-review is browser state, not a column** — see the ruling in [Smaller calls](#smaller-calls-made-while-planning). It lives beside the offline queue in `localStorage`, keyed by attempt id, and the palette reads it from the `marked` prop.
+
+- [ ] **Step 1: Write the failing tests**
+
+```tsx
+// apps/web/test/exam/runner.test.tsx
+it("C-04: the runner shows the question panel, the numbered palette and the four controls", () => {
+  render(<Runner {...props} />);
+  expect(screen.getByRole("navigation", { name: /question palette/i })).toBeVisible();
+  for (const n of [/previous/i, /next/i, /mark for review/i, /clear answer/i]) {
+    expect(screen.getByRole("button", { name: n })).toBeVisible();
+  }
+});
+
+it("C-04: the palette numbers every question and marks the current one", async () => {
+  expect(screen.getAllByRole("button", { name: /question \d+/i })).toHaveLength(17);
+  expect(screen.getByRole("button", { name: /question 1 .*current/i })).toHaveAttribute("aria-current", "true");
+});
+
+it("DESIGN.md: every palette state carries a non-colour carrier a greyscale reader can see", () => {
+  for (const [state, carrier] of [["answered", "is-filled"], ["marked", "has-notch"],
+                                  ["current", "has-ring"], ["locked", "has-lock"]] as const) {
+    expect(squareFor(state)).toHaveClass(carrier);
+    expect(squareFor(state)).toHaveAccessibleName(new RegExp(state, "i"));   // and a word, not only a shape
+  }
+});
+
+it("Mark for review toggles the palette state and the button's pressed state", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /mark for review/i }));
+  expect(screen.getByRole("button", { name: /mark for review/i })).toHaveAttribute("aria-pressed", "true");
+  expect(squareFor("marked")).toBeVisible();
+});
+
+it("Clear answer asks before discarding, naming what is discarded (DESIGN.md: button-danger)", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /clear answer/i }));
+  expect(screen.getByRole("dialog")).toHaveTextContent(/question 1/i);
+  expect(await axe(container)).toHaveNoViolations();
+});
+
+it("the whole runner is operable from the keyboard alone, including the palette", async () => {
+  await userEvent.tab(); await userEvent.keyboard("{Enter}");
+  expect(document.activeElement).toHaveAccessibleName(/question/i);
+});
+
+it("C-04: the font-size control scales the question stem and the choice persists across a remount", async () => {
+  await userEvent.click(screen.getByRole("radio", { name: /large/i }));
+  expect(document.documentElement).toHaveAttribute("data-font-scale", "1.5");
+  cleanup(); render(<Runner {...props} />);
+  expect(document.documentElement).toHaveAttribute("data-font-scale", "1.5");
+});
+
+it("C-04: high contrast is a token swap and keeps every non-colour carrier", async () => {
+  await userEvent.click(screen.getByRole("switch", { name: /high contrast/i }));
+  expect(document.documentElement).toHaveAttribute("data-contrast", "high");
+  expect(squareFor("marked")).toHaveClass("has-notch");
+});
+
+it("DESIGN.md: nothing inside a live attempt animates", () => {
+  for (const el of container.querySelectorAll("*")) {
+    expect(getComputedStyle(el).transitionDuration).toBe("0s");
+    expect(getComputedStyle(el).animationName).toBe("none");
+  }
+});
+
+it("the calculator appears only when the test allows it", () => {
+  render(<Runner {...props} paper={{ ...paper, allowCalculator: false }} />);
+  expect(screen.queryByRole("button", { name: /calculator/i })).toBeNull();
+});
+
+it("the runner has no axe violations at 100% and at 200% zoom", async () => {
+  expect(await axe(container)).toHaveNoViolations();
+  document.documentElement.style.fontSize = "32px";
+  expect(await axe(container)).toHaveNoViolations();
+});
+```
+
+```tsx
+// apps/web/test/exam/calculator.test.tsx
+it.each([["2+3=", "5"], ["7/2=", "3.5"], ["9-10=", "-1"], ["5*0.2=", "1"], ["1/0=", "Error"]])(
+  "%s gives %s", async (keys, shown) => { await type(keys); expect(display()).toBe(shown); });
+
+it("every key is reachable by keyboard and labelled", async () => {
+  expect(await axe(container)).toHaveNoViolations();
+  await userEvent.keyboard("12{+}3{Enter}");
+  expect(display()).toBe("15");
+});
+
+it("Escape closes it and returns focus to the control that opened it", async () => {
+  await userEvent.keyboard("{Escape}");
+  expect(document.activeElement).toHaveAccessibleName(/calculator/i);
+});
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/web/test/exam` — FAIL.
+
+- [ ] **Step 3: Implement `Runner`, `Palette`, `ViewControls` and `Calculator`**
+
+The palette is a `nav` of buttons, one per question, each with an accessible name carrying both the number and the state word. `ViewControls` writes `data-font-scale` and `data-contrast` on `documentElement` and mirrors them into `localStorage`, so `exam.css` is a token swap and no component branches on contrast. `Calculator` is a `dialog` with a focus trap and a reducer over a four-function state machine — about sixty lines, no dependency. Every value in `exam.css` comes from `tokens.css`; `no-hex-colors.test.ts` is the gate.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run apps/web` — PASS, with `no-hex-colors.test.ts` and `bundle.test.ts` green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web
+git commit -s -m "feat(run): test runner shell, question palette and view controls"
+```
+
+---
+
+## Task 7: Answer rendering and input for all 12 types, and attempt-scoped media (#71, P6.7)
+
+**Files:**
+- Create: `apps/web/src/components/exam/answer/Choice.tsx`, `Structured.tsx`, `Written.tsx`, `index.tsx`
+- Create: `apps/web/test/exam/answer-choice.test.tsx`, `answer-structured.test.tsx`, `answer-written.test.tsx`
+- Create: `apps/api/test/run/media.test.ts`
+- Modify: `apps/web/src/components/authoring/ReorderableList.tsx` (**add the pointer-drag enhancement Phase 4 deferred** — no prop change), `apps/web/test/authoring/reorder.test.tsx`, `apps/api/src/routes/run.ts`, `apps/api/src/run/scrub.ts` (`mediaBase` rewriting), `apps/api/src/app.ts`, `apps/web/src/routes/exam.tsx`
+
+**Interfaces:**
+- Consumes: `CandidateQuestion`, `forCandidate`, `PinnedLayout`, `AttemptContextVar` (Task 5) · `Runner`'s `questionSlot` (Task 6) · `ResponseValue` (`@pariksha/core`) · `RenderedHtml({ markdown, className? })`, `renderMarkdown(src): Promise<string>`, `ReorderableList<T>({ items, keyOf, labelOf, onReorder, renderItem, legend })` (Phase 4) · `MEDIA_TYPE_EXT` / `EXT_MEDIA_TYPE` and the `media/<workspaceId>/<sha256>.<ext>` key convention (`apps/api/src/routes/media.ts`).
+- Produces:
+  ```ts
+  export function AnswerInput(props: {
+    question: CandidateQuestion;
+    value: ResponseValue | null;
+    onChange: (next: ResponseValue | null) => void;
+    disabled: boolean;
+  }): JSX.Element;
+  /** The sentinel the inline-blank renderer splits on. Markdown-inert by construction. */
+  export const BLANK_MARKER: (id: string) => string;       // `⁣pkb:${id}⁣`
+  ```
+
+### Closing Phase 4's media hand-off
+
+`GET /api/v1/workspaces/:id/media/:key` is guarded by `banks.edit` (`apps/api/src/app.ts:199`), which was right for Phase 4 and leaves a candidate unable to load a question's images. Phase 6 adds a sibling, authorised by the attempt and **not** by the workspace:
+
+| Method | Path | Authority | `ROUTE_BUDGETS` |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/run/attempt/media/:key` | `attempt` | `MEASURE` (expected 2: the context join + one storage read) |
+
+The authorisation is membership in `layout.media`, the array Task 5 pinned — not "this attempt names a workspace, so serve anything in it" (Review Focus 2). It costs no subrequest because the array is already in `c.var.attempt`. Two Phase 4 properties are carried verbatim: `Cache-Control: private, max-age=31536000, immutable` (`apps/api/src/routes/media.ts:200` — `private`, because the response needed a credential and there is no `Vary`), and the refusal of `image/svg+xml` (that file's fixture-review finding 11 — an SVG can carry `<script>`, and `script-src 'self'` should not be the only thing standing between a stored SVG and XSS). The scrubber rewrites every `media.src` to this path, so a candidate's browser never requests the organiser one.
+
+### The twelve inputs
+
+Three components, the same families Phase 4's editors use, so the candidate side and the authoring side stay recognisably the same code shape. The prompt, the explanation-free stem and any passage render through Phase 4's `RenderedHtml` — `UX-09`'s "it is the same renderer the candidate runtime uses", now literally.
+
+`AC-07` asks for "drag **and** keyboard reordering" and Phase 4 shipped only the keyboard half, recording the drag half as a known deferral with the exact shape it should take: "`draggable` on the row with native HTML5 `dragstart` / `dragover` / `drop` handlers calling the `onReorder(from, to)` Task 3 already exposes, plus a drop-position indicator — no dependency, and no change to `ReorderableList`'s props." **This task closes it**, which is why `ReorderableList.tsx` is modified rather than copied, and why Phase 4's `reorder.test.tsx` is extended rather than replaced: the keyboard path must keep passing unchanged.
+
+`fill_blank` renders its inputs **inside** the prompt, which is the one place the shared renderer and candidate input meet. The prompt's `{{id}}` placeholders are replaced with `BLANK_MARKER(id)` *before* `renderMarkdown` runs; the rendered HTML is split on the marker and the pieces interleaved with `<input>`s. The marker is two invisible separators around an ASCII payload so that `markdown-it` cannot reinterpret it as emphasis, a link or a code span, and so that a prompt that happens to contain the literal text cannot forge one — the test pins all three.
+
+- [ ] **Step 1: Write the failing tests**
+
+```tsx
+// apps/web/test/exam/answer-choice.test.tsx
+it.each(["single", "multiple", "select_k", "true_false", "assertion_reason"] as const)(
+  "%s renders its options in the pinned order with the whole row as the hit target", async (type) => {
+    render(<AnswerInput question={fixture(type)} value={null} onChange={spy} disabled={false} />);
+    expect(optionTexts()).toEqual(pinnedOrder(type));
+    await userEvent.click(screen.getByText(pinnedOrder(type)[1]!));     // the label text, not the control
+    expect(spy).toHaveBeenCalled();
+  });
+
+it("AC-07: select_k locks further choices once k options are picked, and unlocks on deselect", async () => {
+  render(<AnswerInput question={{ ...selectK, k: 2 }} value={null} onChange={onChange} disabled={false} />);
+  await pick("A"); await pick("B");
+  expect(screen.getByRole("checkbox", { name: /C/ })).toBeDisabled();
+  await pick("A");
+  expect(screen.getByRole("checkbox", { name: /C/ })).toBeEnabled();
+});
+
+it("the locked state is announced, not only visual", async () => {
+  expect(screen.getByRole("status")).toHaveTextContent(/2 of 2 chosen/i);
+});
+
+it("S-10: no option carries a correctness marker in the DOM or in its props", () => {
+  expect(container.innerHTML).not.toMatch(/correct|is-key|data-answer/i);
+});
+
+it("every choice type is operable with the keyboard alone and has no axe violations", async () => {
+  await userEvent.tab(); await userEvent.keyboard("{ArrowDown}{Space}");
+  expect(onChange).toHaveBeenCalled();
+  expect(await axe(container)).toHaveNoViolations();
+});
+```
+
+```tsx
+// apps/web/test/exam/answer-structured.test.tsx
+it("matching: each left item takes one right item, and a used right item cannot be reused", async () => {
+  await userEvent.selectOptions(screen.getByLabelText(/INNER JOIN/), "Only matching rows");
+  expect(within(screen.getByLabelText(/LEFT JOIN/)).queryByRole("option", { name: "Only matching rows" }))
+    .toBeDisabled();
+});
+
+it("multi_matching accepts several right items per left item", async () => {
+  await check("A matches X"); await check("A matches Y");
+  expect(onChange).toHaveBeenLastCalledWith({ kind: "multimap", pairs: { A: ["X", "Y"] } });
+});
+
+it("UX-08: ordering shows the shuffled order, and the candidate's order is the answer", async () => {
+  expect(itemTexts()).toEqual(pinnedShuffledOrder);
+  await userEvent.click(screen.getByRole("button", { name: /move .* down/i }));
+  expect(onChange).toHaveBeenLastCalledWith({ kind: "order", items: expect.any(Array) });
+});
+
+it("AC-07 (Phase 4 deferral): ordering reorders by keyboard AND by pointer drag", async () => {
+  const down = screen.getByRole("button", { name: /move item A down/i });
+  down.focus(); await userEvent.keyboard("{Enter}");
+  expect(itemTexts()[1]).toBe("A");
+  expect(document.activeElement).toHaveAccessibleName(/move item A down/i);   // Phase 4's focus rule holds
+  fireEvent.dragStart(rowFor("A")); fireEvent.dragOver(rowFor("C")); fireEvent.drop(rowFor("C"));
+  expect(itemTexts()[2]).toBe("A");
+});
+
+it("drag is an enhancement: with no pointer events at all, every reorder is still reachable", async () => {
+  expect(screen.getAllByRole("button", { name: /move .*(up|down)/i }).length).toBeGreaterThan(0);
+  expect(await axe(container)).toHaveNoViolations();
+});
+```
+
+```tsx
+// apps/web/test/exam/answer-written.test.tsx
+it("fill_blank renders an input inline, in the prompt, one per placeholder, in prompt order", () => {
+  render(<AnswerInput question={fillBlankFixture} value={null} onChange={spy} disabled={false} />);
+  expect(screen.getAllByRole("textbox")).toHaveLength(2);
+  expect(screen.getByLabelText(/blank 1/i).previousSibling).toHaveTextContent(/The capital is/);
+});
+
+it("a prompt containing the marker's literal text cannot forge a blank", () => {
+  render(<AnswerInput question={{ ...fillBlankFixture, prompt: `pkb:1 and ${BLANK_MARKER("1")}` }} {...rest} />);
+  expect(screen.getAllByRole("textbox")).toHaveLength(1);
+});
+
+it("the marker survives markdown-it unchanged inside emphasis, a link and a code span", async () => {
+  for (const wrap of [(s) => `*${s}*`, (s) => `[${s}](https://x.test)`, (s) => `\`${s}\``]) {
+    expect(await renderMarkdown(wrap(BLANK_MARKER("1")))).toContain(BLANK_MARKER("1"));
+  }
+});
+
+it("numeric accepts a number and a unit is shown but not typed into", async () => {
+  await userEvent.type(screen.getByRole("spinbutton"), "9.81");
+  expect(onChange).toHaveBeenLastCalledWith({ kind: "number", value: 9.81 });
+  expect(screen.getByText("m/s²")).toBeVisible();
+});
+
+it("short_answer and long_answer enforce max_length and show a live remaining count", async () => {
+  expect(screen.getByRole("textbox")).toHaveAttribute("maxlength", "500");
+  await userEvent.type(screen.getByRole("textbox"), "x".repeat(10));
+  expect(screen.getByRole("status")).toHaveTextContent(/490 characters left/i);
+});
+
+it("S-10: no accepted answer, tolerance, rubric or model answer reaches the DOM", () => {
+  for (const leak of ["Delhi", "tolerance", "rubric", "model"]) expect(container.innerHTML).not.toContain(leak);
+});
+
+it("LaTeX in a prompt renders through the shared renderer and loads KaTeX only when present", async () => {
+  render(<AnswerInput question={{ ...numericFixture, prompt: "Find $x^2$" }} {...rest} />);
+  expect(await screen.findByText("", { selector: "math" })).toBeInTheDocument();
+});
+
+it("all four written types have no axe violations and every input is labelled", async () =>
+  expect(await axe(container)).toHaveNoViolations());
+```
+
+```ts
+// apps/api/test/run/media.test.ts — Review Focus 2
+it("a candidate loads exactly the media in their own attempt's pinned layout", async () => {
+  const res = await app.request(`/api/v1/run/attempt/media/${keyInMyPaper}`, { headers: { cookie } });
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toBe("image/png");
+});
+
+it("a key in the same workspace but outside this attempt's layout is 404", async () =>
+  expect((await app.request(`/api/v1/run/attempt/media/${keyInAnotherQuestion}`, { headers: { cookie } })).status)
+    .toBe(404));
+
+it("a key from another workspace is the same 404, byte for byte", async () => {
+  const [mine, theirs] = await Promise.all([fetchMedia(keyInAnotherQuestion), fetchMedia(keyInWorkspaceB)]);
+  expect(await mine.text()).toBe(await theirs.text());
+});
+
+it("no cookie is 401, and the organiser route is still banks.edit", async () => {
+  expect((await app.request(`/api/v1/run/attempt/media/${keyInMyPaper}`)).status).toBe(401);
+  expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/media/:key"]).toBe("banks.edit");
+});
+
+it("the response is private and immutable, and SVG is still refused", async () => {
+  expect((await fetchMedia(keyInMyPaper)).headers.get("cache-control"))
+    .toBe("private, max-age=31536000, immutable");
+  expect((await fetchMedia("x.svg")).status).toBe(404);
+});
+
+it("the scrubber rewrites media.src to the run path, so no paper names the organiser route", async () => {
+  const text = JSON.stringify(await resume(cookie));
+  expect(text).toContain("/api/v1/run/attempt/media/");
+  expect(text).not.toContain("/api/v1/workspaces/");
+});
+
+it("authorising the key costs no extra subrequest", async () => {
+  const counting = countingDeps(deps);
+  await fetchMedia(keyInMyPaper, createApp(counting.deps));
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/attempt/media/:key"]);
+});
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/web/test/exam apps/web/test/authoring/reorder.test.tsx apps/api/test/run/media.test.ts` — FAIL.
+
+- [ ] **Step 3: Implement the three answer components, the inline-blank renderer, the drag enhancement and the media route**
+
+`AnswerInput` dispatches on `question.type` to one of three components; each is a controlled component over `ResponseValue` and holds no copy of a key, because the key is not in `CandidateQuestion` at all. The inline-blank renderer replaces placeholders with `BLANK_MARKER(id)`, awaits `renderMarkdown`, splits the HTML on the marker, and renders the pieces through `RenderedHtml`'s existing single `dangerouslySetInnerHTML` site with `<input>`s between them — one algorithm the signature does not determine, so: split on the marker **after** rendering, never before, or the inputs land inside escaped text. The drag enhancement adds `draggable`, `onDragStart`, `onDragOver` and `onDrop` to `ReorderableList`'s row, all four calling the existing `onReorder(from, to)`; the props do not change.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run apps/web apps/api` — PASS, with Phase 4's `reorder.test.tsx` green unchanged.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/web apps/api
+git commit -s -m "feat(run): candidate input for all 12 types and attempt-scoped media"
+```
+
+---
+
+## Task 8: Autosave with an offline queue (#72, P6.8)
+
+**Files:**
+- Create: `apps/web/src/lib/queue.ts`, `apps/web/src/components/exam/SaveBanner.tsx`
+- Create: `apps/web/test/exam/queue.test.ts`, `apps/web/test/exam/autosave.test.tsx`, `apps/api/test/run/answer.test.ts`
+- Modify: `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/run.ts`, `apps/web/src/routes/exam.tsx`
+
+**Interfaces:**
+- Consumes: `upsertResponse(db, ws, { attemptId, questionId, value, clientSeq, savedAt }): Promise<{ stored: boolean }>` (`packages/db/src/repo/attempts.ts:149` — **already sequence-safe; do not rewrite it**) · `AttemptContextVar`, `AttemptPaper` (Task 5) · `Runner`'s `bannerSlot` (Task 6) · `ResponseValue`.
+- Produces:
+  ```ts
+  // apps/web/src/lib/queue.ts
+  export type SaveOutcome = "accepted" | "superseded" | "refused" | "offline";
+  export interface QueuedSave { questionId: string; value: ResponseValue | null; clientSeq: number; queuedAt: number }
+  export interface SaveQueue {
+    enqueue(questionId: string, value: ResponseValue | null): void;
+    drain(): Promise<void>;
+    pending(): readonly QueuedSave[];
+    subscribe(listener: (s: SaveState) => void): () => void;
+  }
+  export type SaveState =
+    | { kind: "idle" } | { kind: "saving"; pending: number }
+    | { kind: "saved"; at: number } | { kind: "offline"; pending: number }
+    | { kind: "refused"; questionId: string; message: string };
+  export const SAVE_DEBOUNCE_MS = 800;                 // C-05's 2 s, with room for one retry
+  export function createSaveQueue(attemptId: string, put: PutAnswer, storage?: Storage): SaveQueue;
+  export type PutAnswer = (s: QueuedSave) => Promise<{ outcome: SaveOutcome; message?: string }>;
+
+  // apps/web/src/components/exam/SaveBanner.tsx
+  export function SaveBanner(props: { state: SaveState }): JSX.Element;
+
+  // apps/web/src/lib/run.ts (widened)
+  export interface RunClient {
+    putAnswer(s: QueuedSave): Promise<{ outcome: SaveOutcome; message?: string; remainingMs: number }>;
+  }
+  ```
+
+**The server side already exists.** `upsertResponse` is one statement — `INSERT … ON CONFLICT (attempt_id, question_id) DO UPDATE … WHERE excluded.client_seq > response.client_seq` — which is exactly the idempotent, sequence-safe upsert the PRD's durability row names, and its `{ stored }` already distinguishes "this call won" from "a newer answer is already there". The route maps that to the wire: `stored: true` → `accepted`, `stored: false` → `superseded`. Nothing is re-implemented.
+
+**Review Focus 3 is this task's gate.** A queue that drains on HTTP 200 also drains on a refusal. The three outcomes are distinct on the wire — 200 `accepted`, 200 `superseded`, 409/403 `refused` — the queue drops the first two and **keeps** the third, and `SaveBanner` never shows "Saved" while anything refused is outstanding.
+
+**`localStorage`, not IndexedDB.** `C-05` and `AC-14` require the queue to survive a reload and a browser restart; `localStorage` does both, is synchronous (so a `beforeunload` flush actually lands), and needs no polyfill in jsdom. `ponytail:` text answers only — move to IndexedDB if an answer ever carries a blob.
+
+| Method | Path | Authority | `ROUTE_BUDGETS` |
+| --- | --- | --- | --- |
+| `PUT` | `/api/v1/run/attempt/answer` | `attempt` | `MEASURE` (expected **2**: the context join and the one upsert — one D1 write, per the PRD's hot-path rule) |
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/run/answer.test.ts
+it("a save is one read and one write, and nothing else", async () => {
+  const counting = countingDeps(deps);
+  await putAnswer(createApp(counting.deps), cookie, { questionId: "LOG-001", value: v, clientSeq: 1 });
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/attempt/answer"]);
+  expect(counting.counts().db).toBe(2);
+  expect(counting.counts().storage).toBe(0);
+});
+
+it("a late retry of sequence 4 after 5 is superseded, not a regression", async () => {
+  await put({ clientSeq: 5, value: newer });
+  expect((await (await put({ clientSeq: 4, value: older })).json()).outcome).toBe("superseded");
+  expect((await resume(cookie)).responses["LOG-001"]).toEqual(newer);
+});
+
+it("the same sequence sent twice is idempotent", async () => {
+  await put({ clientSeq: 7, value: v }); await put({ clientSeq: 7, value: v });
+  expect(await countResponses(attemptId)).toBe(1);
+});
+
+it("a save for a question outside this attempt's layout is 404, not a stored row", async () => {
+  expect((await put({ questionId: "NOT-MINE", clientSeq: 1 })).status).toBe(404);
+  expect(await countResponses(attemptId)).toBe(0);
+});
+
+it("a save after submission is refused and the stored answer is unchanged", async () => {
+  await submit(cookie);
+  expect((await put({ clientSeq: 9, value: other })).status).toBe(409);
+  expect((await attemptResponses()).["LOG-001"]).toEqual(v);
+});
+
+it("every save response carries the server's remainingMs so the client can re-anchor (Task 9)", async () =>
+  expect((await (await put({ clientSeq: 1 })).json()).remainingMs).toBe(45 * 60_000));
+```
+
+```ts
+// apps/web/test/exam/queue.test.ts — Review Focus 3
+it("C-05: a change is sent within 2 seconds", async () => {
+  queue.enqueue("LOG-001", v);
+  await advance(SAVE_DEBOUNCE_MS + 50);
+  expect(put).toHaveBeenCalledTimes(1);
+});
+
+it("rapid edits to one question collapse to one request carrying the latest value", async () => {
+  for (const x of ["a", "b", "c"]) queue.enqueue("LOG-001", text(x));
+  await advance(SAVE_DEBOUNCE_MS + 50);
+  expect(put).toHaveBeenCalledTimes(1);
+  expect(put.mock.lastCall![0].value).toEqual(text("c"));
+});
+
+it("AC-14: two minutes offline then reconnect loses no answers, and order is preserved", async () => {
+  goOffline();
+  for (const [i, q] of questionIds.entries()) queue.enqueue(q, text(String(i)));
+  await advance(120_000);
+  expect(put).not.toHaveBeenCalled();
+  expect(queue.pending()).toHaveLength(questionIds.length);
+  goOnline();
+  await flush();
+  expect(put.mock.calls.map((c) => c[0].questionId)).toEqual(questionIds);
+  expect(queue.pending()).toEqual([]);
+});
+
+it("AC-14: the queue survives a reload — a new queue over the same storage drains what the old one held", async () => {
+  goOffline(); queue.enqueue("LOG-001", v); await advance(1000);
+  const revived = createSaveQueue(attemptId, put, storage);
+  goOnline(); await revived.drain();
+  expect(put).toHaveBeenCalledWith(expect.objectContaining({ questionId: "LOG-001" }));
+});
+
+it("Review Focus 3: a refused save is KEPT and surfaced; a superseded one is dropped", async () => {
+  put.mockResolvedValueOnce({ outcome: "superseded" }).mockResolvedValueOnce({ outcome: "refused", message: "Time is up." });
+  queue.enqueue("A", v); queue.enqueue("B", v);
+  await flush();
+  expect(queue.pending().map((p) => p.questionId)).toEqual(["B"]);
+  expect(lastState()).toMatchObject({ kind: "refused", questionId: "B", message: "Time is up." });
+});
+
+it("Review Focus 3: the banner never reads Saved while anything refused is outstanding", async () => {
+  put.mockResolvedValue({ outcome: "refused", message: "Time is up." });
+  queue.enqueue("A", v); await flush();
+  queue.enqueue("C", v); put.mockResolvedValue({ outcome: "accepted" }); await flush();
+  expect(lastState().kind).not.toBe("saved");
+});
+
+it("clientSeq rises monotonically per question across a reload", async () => {
+  queue.enqueue("A", v); await flush();
+  const revived = createSaveQueue(attemptId, put, storage);
+  revived.enqueue("A", v2); await flush();
+  expect(put.mock.calls.at(-1)![0].clientSeq).toBeGreaterThan(put.mock.calls[0]![0].clientSeq);
+});
+
+it("a transport failure retries with backoff rather than dropping", async () => {
+  put.mockRejectedValueOnce(new TypeError("Failed to fetch")).mockResolvedValue({ outcome: "accepted" });
+  queue.enqueue("A", v); await flush();
+  expect(queue.pending()).toEqual([]);
+  expect(put).toHaveBeenCalledTimes(2);
+});
+
+it("storage that throws (private mode, blocked site data) degrades to in-memory, never to a crash", () => {
+  expect(() => createSaveQueue(attemptId, put, throwingStorage).enqueue("A", v)).not.toThrow();
+});
+```
+
+```tsx
+// apps/web/test/exam/autosave.test.tsx
+it.each([
+  [{ kind: "saving", pending: 1 }, /saving/i], [{ kind: "saved", at: 0 }, /saved/i],
+  [{ kind: "offline", pending: 3 }, /offline.*3/i], [{ kind: "refused", questionId: "A", message: "Time is up." }, /not saved/i],
+])("C-05: the banner states %j", (state, text) => {
+  render(<SaveBanner state={state} />);
+  expect(screen.getByRole("status")).toHaveTextContent(text);
+});
+
+it("the banner is a live region, and the refused state is an alert, not a status", () => {
+  render(<SaveBanner state={{ kind: "refused", questionId: "A", message: "Time is up." }} />);
+  expect(screen.getByRole("alert")).toBeVisible();
+});
+
+it("the banner carries a word, not only a colour, and has no axe violations", async () => {
+  expect(screen.getByRole("status").textContent).toMatch(/\w/);
+  expect(await axe(container)).toHaveNoViolations();
+});
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/run/answer.test.ts apps/web/test/exam/queue.test.ts apps/web/test/exam/autosave.test.tsx` — FAIL.
+
+- [ ] **Step 3: Implement the route, `createSaveQueue` and `SaveBanner`**
+
+The route reads `c.var.attempt`, refuses a `questionId` outside the pinned layout, and calls `upsertResponse`. The queue is a map of question id to the latest pending save plus a monotonic per-question sequence, mirrored to `localStorage` on every mutation inside a `try/catch`; the drain is sequential (ordering is asserted) with exponential backoff on a transport error, and it reacts to `online`, `visibilitychange` and `beforeunload`. The one algorithm the tests do not determine is the retry schedule: 1 s, 2 s, 4 s, capped at 30 s, which keeps a ten-minute drop (the PRD's availability row) inside a bounded number of attempts.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run apps/api apps/web` — PASS, with the answer route measured at 2.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api apps/web
+git commit -s -m "feat(run): answer autosave with an offline queue and a three-outcome banner"
+```
+
+---
