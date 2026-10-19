@@ -270,4 +270,66 @@ describe("component dimensions match tokens.components (T30)", () => {
       );
     }
   });
+
+  // ---- option-row (P6.7, #71) -------------------------------------------
+  //
+  // DESIGN.md: "White, 1px hairline-strong, 6px radius, 14x16px padding.
+  // The entire row is the hit target, not just the radio or checkbox.
+  // Minimum height 48px." Four of those five facts are in
+  // tokens.components; the 48px floor is prose only, so it is asserted
+  // against the literal DESIGN.md states.
+
+  it('.exam-option-row padding matches tokens.components["option-row"].padding', () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    expect(resolveSpacing(declaration(body, "padding"))).toBe(
+      tokens.components["option-row"].padding,
+    );
+  });
+
+  it('.exam-option-row border-radius matches tokens.components["option-row"].rounded', () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    expect(declaration(body, "border-radius")).toBe("var(--rounded-md)");
+    expect(tokens.rounded.md).toBe(tokens.components["option-row"].rounded);
+  });
+
+  it('.exam-option-row typography matches tokens.components["option-row"]', () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    const typography = tokens.components["option-row"].typography;
+    expect(declaration(body, "font-size")).toBe("var(--type-option-label-size)");
+    expect(declaration(body, "line-height")).toBe("var(--type-option-label-line-height)");
+    expect(tokens.typography["option-label"].fontSize).toBe(typography.fontSize);
+    expect(tokens.typography["option-label"].lineHeight).toBe(typography.lineHeight);
+  });
+
+  it(".exam-option-row clears DESIGN.md's 48px minimum hit target", () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    expect(toPx(declaration(body, "min-height"))).toBeGreaterThanOrEqual(48);
+    // The whole row, not the control: a flex row with the padding above
+    // is the hit target only because the element itself is the label.
+    expect(declaration(body, "display")).toBe("flex");
+  });
+
+  // The selected variant is a different FILL and a different EDGE, never
+  // a different box — D5's failure mode, and the reason a candidate's
+  // layout must not shift when they answer ("a layout that shifts between
+  // questions reads as the page reloading").
+  it("the selected and disabled variants redeclare no box of their own", () => {
+    for (const selector of [
+      ".exam-option-row.is-selected",
+      ".exam-option-row:has(input:disabled)",
+    ]) {
+      const body = ruleBody(examCss, selector);
+      expect(tryDeclaration(body, "min-height"), selector).toBeNull();
+      expect(tryDeclaration(body, "height"), selector).toBeNull();
+      expect(tryDeclaration(body, "padding"), selector).toBeNull();
+    }
+    // The selected row's 2px border is DESIGN.md's own, and it is drawn
+    // inside the same box because the base rule already reserves an edge.
+    expect(
+      declaration(ruleBody(examCss, ".exam-option-row.is-selected"), "border-width"),
+    ).toBe("2px");
+    expect(tokens.components["option-row-selected"].padding).toBe(
+      tokens.components["option-row"].padding,
+    );
+  });
 });

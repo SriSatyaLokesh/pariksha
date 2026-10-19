@@ -17,6 +17,8 @@
    Nothing here animates. A candidate sits inside these screens under a
    running clock, often already nervous (DESIGN.md). */
 
+@import "./question.css";
+
 .exam-landing {
   display: flex;
   flex-direction: column;
@@ -603,4 +605,294 @@
 .exam-runner :focus-visible {
   outline: var(--exam-ring, 2px) solid var(--color-voltage-deep);
   outline-offset: 2px;
+}
+
+/* ---- The answer block (Task 7, #71) ------------------------------------
+
+   One tempo for the whole attempt (DESIGN.md, "Rhythm"): every type uses
+   the same 24px stack and the same option-row box, so moving between a
+   `single` and an `ordering` question does not read as a page reload.
+
+   Nothing here animates. Every state carries a second, non-colour
+   carrier: a filled control plus a 2px edge for a chosen option, a
+   dashed edge for a disabled one, a solid leading bar for a drop
+   target. */
+
+.exam-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0 0 24px;
+  padding: 0;
+  border: 0;
+}
+
+.exam-prompt {
+  margin: 0;
+}
+
+.exam-media {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+}
+
+.exam-passage {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-assertion-reason {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 16px;
+  border-inline-start: 3px solid var(--color-hairline-strong);
+}
+
+.exam-assertion-reason dt {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.exam-assertion-reason dd {
+  margin: 0;
+}
+
+.exam-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.exam-options-legend {
+  padding: 0 0 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* The live region behind the select_k counter and the remaining-character
+   count. Visible, not screen-reader-only: a sighted candidate under a
+   clock needs the same fact, and a greyed-out checkbox explains nothing
+   on its own. */
+.exam-answer-status {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+/* DESIGN.md's `option-row`, pinned against tokens.components by
+   component-dimensions.test.ts: white, 1px hairline-strong, 6px radius,
+   14px 16px padding, minimum height 48px, and THE ENTIRE ROW IS THE HIT
+   TARGET — which is why this is a label wrapping the control rather than
+   a control with a label beside it. */
+.exam-option-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 14px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  font-weight: var(--type-option-label-weight);
+  line-height: var(--type-option-label-line-height);
+  cursor: pointer;
+}
+
+/* DESIGN.md's `option-row-selected`: cream fill, 2px voltage border, PLUS
+   the filled control. Two carriers, so the choice survives a colour-blind
+   reading and a greyscale print. */
+.exam-option-row.is-selected {
+  border-width: 2px;
+  border-color: var(--color-voltage);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: var(--type-option-label-size);
+  font-weight: 500;
+}
+
+/* A locked option (select_k at its limit) and a read-only attempt. The
+   fill stays the page's own canvas in BOTH themes: the high-contrast
+   block swaps hairline to ink, and a lighter fill under an unchanged
+   label is exactly what inverted a pair in Task 6 (fix round 1, C1). The
+   dashed edge is the non-colour carrier a lighter fill never was. */
+.exam-option-row:has(input:disabled) {
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-option-label-size);
+  cursor: not-allowed;
+}
+
+.exam-option-text {
+  flex: 1;
+}
+
+.exam-matching {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exam-match-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-match-left {
+  flex: 1;
+  color: var(--color-ink);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  line-height: var(--type-option-label-line-height);
+}
+
+.exam-match-grid {
+  border-collapse: collapse;
+}
+
+.exam-match-caption {
+  padding-bottom: 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-align: start;
+  text-transform: uppercase;
+}
+
+.exam-match-grid th,
+.exam-match-grid td {
+  min-width: 48px;
+  height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-hairline-strong);
+  text-align: start;
+}
+
+/* The drop-position indicator for AC-07's drag half. A bar on the leading
+   edge rather than a fill: it has to read against every row state the
+   list can be in, and in greyscale. */
+.reorderable-list__item.is-drop-target {
+  border-inline-start: 4px solid var(--color-voltage);
+}
+
+.exam-select,
+.exam-text-input,
+.exam-text-area {
+  min-height: 48px;
+  padding: 12px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+}
+
+.exam-text-area {
+  width: 100%;
+  resize: vertical;
+}
+
+.exam-select:disabled,
+.exam-text-input:disabled,
+.exam-text-area:disabled {
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-body-md-size);
+  cursor: not-allowed;
+}
+
+.exam-field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.exam-numeric,
+.exam-written {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-numeric {
+  align-items: start;
+}
+
+.exam-unit {
+  color: var(--color-muted);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+}
+
+/* The blanks are interleaved into the rendered prompt, so the prompt's
+   own block elements have to lie down in the line: the paragraph
+   markdown-it wraps each block in would otherwise break every blank onto
+   a row of its own. The loose line-height is what keeps the fields from
+   colliding with the line above. */
+.exam-blanks {
+  color: var(--color-ink);
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  line-height: 2.2;
+}
+
+.exam-blanks p {
+  display: inline;
+  margin: 0;
+}
+
+.exam-blank-input {
+  min-width: 10ch;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 0;
+  border-bottom: 2px solid var(--color-hairline-strong);
+  border-radius: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+}
+
+.exam-blank-input:disabled {
+  border-bottom-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-body-md-size);
+  cursor: not-allowed;
 }

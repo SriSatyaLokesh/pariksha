@@ -232,7 +232,10 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // Same palette and the same reasoning: the editor and the preview are
   // panels on the body's cream, each filling itself with canvas, so every
   // colour authoring.css sets is read on canvas.
-  ".rendered--stem": "canvas",
+  // Phase 6 Task 7 (#71): the candidate runtime now renders every prompt
+  // through the same component, and the runner's ground is the page's own
+  // cream rather than a card's canvas.
+  ".rendered--stem": ["canvas", "cream"],
   ".prompt-editor__tool": "canvas",
   ".prompt-editor__source": "canvas",
   ".preview__heading": "canvas",
@@ -310,6 +313,32 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".palette-square.has-lock": "state-locked",
   ".exam-calc-display": "canvas",
   ".exam-calc-key, .exam-calc-close": "canvas",
+
+  // ---- exam.css: the answer block (Phase 6 Task 7, #71) ------------------
+  // The runner's own ground is the cream base.css paints on <body>; every
+  // control that fills itself (option rows, selects, text fields, the
+  // inline blanks) reads on its own canvas fill, and that fill is what is
+  // named here. Both grounds are re-audited under the high-contrast swap
+  // by the block at the foot of this file.
+  ".exam-assertion-reason dt": "cream",
+  ".exam-options-legend": "cream",
+  ".exam-answer-status": "cream",
+  ".exam-option-row": "canvas",
+  // DESIGN.md's option-row-selected fills itself with cream.
+  ".exam-option-row.is-selected": "cream",
+  // Disabled fills itself with the page's own canvas in BOTH themes, with
+  // a dashed edge carrying the de-emphasis — the fix round 1 C1 rule.
+  ".exam-option-row:has(input:disabled)": "canvas",
+  ".exam-match-left": "canvas",
+  ".exam-match-caption": "cream",
+  ".exam-select, .exam-text-input, .exam-text-area": "canvas",
+  ".exam-select:disabled, .exam-text-input:disabled, .exam-text-area:disabled": "canvas",
+  ".exam-field-label": "cream",
+  ".exam-unit": "cream",
+  // The blanks are interleaved into the prompt, which sits on the page.
+  ".exam-blanks": "cream",
+  ".exam-blank-input": "canvas",
+  ".exam-blank-input:disabled": "canvas",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
