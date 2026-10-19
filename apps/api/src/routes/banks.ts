@@ -182,11 +182,17 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     // `updateBank`'s `name?: string` — spreading only the keys the request
     // actually named closes that gap rather than widening `updateBank`'s
     // signature to match a JSON body that can never truly hold `undefined`.
+    //
+    // Fix round (whole-branch review, M6): one `now` for both this write
+    // and the audit row below — `updateBank` used to call `Date.now()`
+    // itself, so the two could read apart under a fixed test clock.
+    const now = deps.now();
     const updated = await updateBank(deps.db, workspaceId, bankId, {
       ...(patch.name !== undefined && { name: patch.name }),
       ...(patch.description !== undefined && { description: patch.description }),
       ...(patch.license !== undefined && { license: patch.license }),
       ...(patch.tags !== undefined && { tags: patch.tags }),
+      now,
     });
     if (!updated) throw new ApiError(404, "not_found", "No such resource.");
 
@@ -195,7 +201,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
       action: "bank.update",
       target: bankId,
       detail: { fields: Object.keys(patch).sort() },
-      now: deps.now(),
+      now,
     });
 
     return c.json(await getBank(deps.db, workspaceId, bankId));
@@ -321,7 +327,12 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     // `deleteGroup` answer `deleted: false, blockedBy: []` for an unknown
     // group, rather than falsely reporting it deleted) — a 404 and a 409
     // read apart on `blockedBy`, not on a second query for the same fact.
-    const result = await deleteGroup(deps.db, workspaceId, bankId, groupId);
+    //
+    // Fix round (whole-branch review, M6): one `now` for both this write
+    // and the audit row below — `deleteGroup` used to call `Date.now()`
+    // itself.
+    const now = deps.now();
+    const result = await deleteGroup(deps.db, workspaceId, bankId, groupId, now);
     if (result.blockedBy.length > 0) {
       // Same shape as UX-05's question/bank refusals — fix round
       // (whole-branch review, I4): including the wire key, which used to
@@ -341,7 +352,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
       actor: actor.userId,
       action: "group.delete",
       target: groupId,
-      now: deps.now(),
+      now,
     });
 
     return c.body(null, 204);

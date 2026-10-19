@@ -192,6 +192,32 @@ describe("deleteBank (fixture-review finding 5)", () => {
   });
 });
 
+// Fix round (whole-branch review, M6): both used to call `Date.now()`
+// directly — every sibling write in this file takes an injected clock, and
+// a fixed test clock could never reach either column.
+describe("updateBank / deleteGroup honour an injected clock (whole-branch review, M6)", () => {
+  it("updateBank stamps updated_at from the given now, not the real clock", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "bank-clock-ws", name: "Bank Clock WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank", now: T });
+
+    await repo.updateBank(db, ws, bank, { name: "Renamed", now: T + 1000 });
+
+    expect((await repo.getBank(db, ws, bank))?.updatedAt).toBe(T + 1000);
+  });
+
+  it("deleteGroup stamps updated_at from the given now, not the real clock", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "group-clock-ws", name: "Group Clock WS" });
+    const bank = await repo.createBank(db, ws, { name: "Bank", now: T });
+    await repo.upsertGroup(db, ws, bank, { id: "g1", passage: "x" }, T);
+
+    await repo.deleteGroup(db, ws, bank, "g1", T + 2000);
+
+    expect((await repo.getBank(db, ws, bank))?.updatedAt).toBe(T + 2000);
+  });
+});
+
 describe("toQuestionDocument / toQuestionRow — fixture-review findings 2 and 9", () => {
   it("$schema round-trips rather than being dropped (finding 2)", () => {
     const withSchema: Question = {

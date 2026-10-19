@@ -253,7 +253,7 @@ export const updateBank = scoped(
     db: DbClient,
     workspaceId: string,
     bankId: string,
-    patch: { name?: string; description?: string; license?: string; tags?: string[] },
+    patch: { name?: string; description?: string; license?: string; tags?: string[]; now?: number },
   ): Promise<boolean> => {
     const { changes } = await db.run(
       "UPDATE question_bank SET name = COALESCE(?, name), description = COALESCE(?, description), " +
@@ -264,7 +264,12 @@ export const updateBank = scoped(
         patch.description ?? null,
         patch.license ?? null,
         patch.tags === undefined ? null : db.jsonParam(patch.tags),
-        Date.now(),
+        // Fix round (whole-branch review, M6): every sibling write takes an
+        // injected clock (`createBank`'s own `input.now`, same fallback,
+        // same precedent) — this one called `Date.now()` directly, so the
+        // audit row for the same PATCH request (routes/banks.ts, `deps.now()`)
+        // and this column could disagree under a fixed test clock.
+        patch.now ?? Date.now(),
         workspaceId,
         bankId,
       ],
@@ -759,6 +764,10 @@ export const deleteGroup = scoped(
     workspaceId: string,
     bankId: string,
     groupId: string,
+    // Fix round (whole-branch review, M6): `upsertGroup` (this file's own
+    // sibling write to the same `groups_json` column) takes an injected
+    // clock; this one called `Date.now()` directly.
+    now = Date.now(),
   ): Promise<{ deleted: boolean; blockedBy: string[] }> => {
     const referencing = await db.query<{ ref_id: string }>(
       "SELECT ref_id FROM question WHERE workspace_id = ? AND bank_id = ? AND group_ref = ? ORDER BY ref_id",
@@ -773,7 +782,7 @@ export const deleteGroup = scoped(
 
     const { changes } = await db.run(
       "UPDATE question_bank SET groups_json = ?, updated_at = ? WHERE workspace_id = ? AND id = ?",
-      [db.jsonParam(next), Date.now(), workspaceId, bankId],
+      [db.jsonParam(next), now, workspaceId, bankId],
     );
     return { deleted: changes > 0, blockedBy: [] };
   },
