@@ -158,11 +158,21 @@
   color: var(--color-cream);
 }
 
+/* Fix round 1, C1. This used to fill itself with `hairline` and write an
+   `ink-soft` label on it. `hairline` is one of the tokens the
+   high-contrast block below swaps — to `ink` — and a swapped BACKGROUND
+   inverts a pair that a swapped foreground could only ever improve: the
+   two measured 1.47:1 with high contrast on. A disabled control still has
+   to be readable, so the ground is the page's own canvas in both themes
+   and the de-emphasis is carried by `muted` (5.34:1 default, 11.0:1 high
+   contrast) plus a dashed edge — a carrier that survives greyscale, which
+   a lighter fill never did. */
 .exam-landing-actions button:disabled {
   cursor: not-allowed;
+  border-style: dashed;
   border-color: var(--color-hairline-strong);
-  background: var(--color-hairline);
-  color: var(--color-ink-soft);
+  background: var(--color-canvas);
+  color: var(--color-muted);
 }
 
 .exam-device-report li {
@@ -365,10 +375,14 @@
   font-weight: 700;
 }
 
+/* Fix round 1, C1 — the same inversion as the landing page's disabled
+   button above, and the one a candidate meets first: `Previous` is
+   disabled on question 1 of every paper. */
 .exam-button:disabled {
   cursor: not-allowed;
-  background: var(--color-hairline);
-  color: var(--color-ink-soft);
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
   font-size: var(--type-button-md-size);
 }
 

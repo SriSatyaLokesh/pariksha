@@ -268,8 +268,10 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
   // not voltage — a button label is body text and gets the 4.5:1 bar.
   ".exam-landing-actions .exam-start": "voltage-deep",
-  // The disabled state fills itself with hairline.
-  ".exam-landing-actions button:disabled": "hairline",
+  // The disabled state fills itself with the page's own canvas in both
+  // themes (fix round 1, C1 — it used to fill itself with `hairline`,
+  // which the high-contrast block swaps to `ink`).
+  ".exam-landing-actions button:disabled": "canvas",
   // The device report sits on the page's own cream, like everything else
   // in `.exam-landing-body`.
   '.exam-device-report li[data-ok="false"] .exam-finding-mark': "cream",
@@ -293,7 +295,7 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".exam-contrast-switch, .exam-calc-open, .exam-button, .exam-clear": "canvas",
   '.exam-contrast-switch[aria-checked="true"]': "cream",
   '.exam-button[aria-pressed="true"]': "canvas",
-  ".exam-button:disabled": "hairline",
+  ".exam-button:disabled": "canvas",
   ".exam-clear": "canvas",
   ".exam-question-stem": "cream",
   ".exam-confirm": "canvas",
@@ -648,6 +650,104 @@ describe("every selector's fg/size/weight resolves cleanly from its own CSS", ()
   it("has no selector that fails to resolve (fails loudly, never skips)", () => {
     expect(resolutionErrors).toEqual([]);
   });
+});
+
+// ---------------------------------------------------------------------------
+// The high-contrast cascade (Phase 6 Task 6, fix round 1, C1)
+//
+// `exam.css` carries a `:root[data-contrast="high"]` block that redefines
+// five `--color-*` tokens, and `ViewControls` sets that attribute on
+// <html>. Everything above audits the DEFAULT cascade only, so for a while
+// the report claimed the default was "the floor, not an average" on the
+// grounds that every swap raises contrast. That is true of a swapped
+// FOREGROUND against a fixed ground and false of a swapped BACKGROUND:
+// `hairline` -> `ink` under an `ink-soft` label measured 1.47:1, on the
+// `Previous` button that is disabled on question 1 of every paper.
+//
+// So the swap is read out of the stylesheet itself — never hand-typed,
+// which would drift — and every exam.css usage is audited a second time
+// with both halves of the pair mapped through it. The attribute is
+// document-global and survives the runner unmounting, so the landing
+// selectors in the same file are in scope too.
+const examRules = parseRuleBodies(readResolvedCss(EXAM_CSS_PATH));
+const EXAM_SELECTORS = new Set(examRules.map((rule) => rule.selector));
+const HIGH_CONTRAST_SELECTOR = ':root[data-contrast="high"]';
+const CUSTOM_COLOR_PROPERTY_RE = /^--color-([a-z0-9-]+)$/i;
+
+function parseHighContrastSwap(): Partial<Record<ColorName, ColorName>> {
+  const body = examRules.find(
+    (rule) => rule.selector === HIGH_CONTRAST_SELECTOR,
+  )?.body;
+  if (body === undefined) {
+    throw new Error(`exam.css declares no ${HIGH_CONTRAST_SELECTOR} rule`);
+  }
+  const swap: Partial<Record<ColorName, ColorName>> = {};
+  for (const decl of declarations(body)) {
+    const colon = decl.indexOf(":");
+    if (colon === -1) continue;
+    const property = CUSTOM_COLOR_PROPERTY_RE.exec(decl.slice(0, colon).trim());
+    const from = property?.[1];
+    if (!from) continue; // --exam-edge / --exam-ring, not colours
+    const to = COLOR_VAR_RE.exec(decl.slice(colon + 1).trim())?.[1];
+    if (!from || !to || !(from in tokens.colors) || !(to in tokens.colors)) {
+      throw new Error(
+        `${HIGH_CONTRAST_SELECTOR} maps --color-${String(from)} to something that is not a token var(--color-*)`,
+      );
+    }
+    swap[from as ColorName] = to as ColorName;
+  }
+  return swap;
+}
+
+const HIGH_CONTRAST = parseHighContrastSwap();
+
+function underHighContrast(name: ColorName): ColorName {
+  return HIGH_CONTRAST[name] ?? name;
+}
+
+describe('exam.css with data-contrast="high" clears the same bar (C1)', () => {
+  it("reads a real swap out of the stylesheet, so the sweep below is not vacuous", () => {
+    expect(Object.keys(HIGH_CONTRAST).length).toBeGreaterThanOrEqual(5);
+    expect(HIGH_CONTRAST.hairline).toBe("ink");
+    expect(HIGH_CONTRAST["hairline-strong"]).toBe("ink");
+  });
+
+  it("swaps at least one token exam.css uses as a BACKGROUND, which is the whole point", () => {
+    // A swapped foreground can only raise the ratio against a fixed
+    // ground; only a swapped ground can invert a pair. If no exam.css
+    // surface is ever swapped, every assertion below duplicates one
+    // already made and this file would be auditing nothing new.
+    const swappedGrounds = [
+      ...new Set(
+        Object.keys(SURFACE)
+          .filter((selector) => EXAM_SELECTORS.has(selector))
+          .flatMap((selector) => surfacesOf(selector)),
+      ),
+    ].filter((bg) => bg in HIGH_CONTRAST);
+    expect(swappedGrounds.length).toBeGreaterThan(0);
+  });
+
+  for (const selector of Object.keys(SURFACE)) {
+    if (!EXAM_SELECTORS.has(selector)) continue;
+    for (const bg of surfacesOf(selector)) {
+      it(`${selector} on ${bg} clears its WCAG threshold in high contrast`, () => {
+        const usage = resolved.get(selector);
+        expect(usage, `${selector} did not resolve`).toBeDefined();
+        if (!usage) return;
+        const fg = underHighContrast(usage.fg);
+        const ground = underHighContrast(bg);
+        const threshold =
+          usage.px >= 24 || (usage.px >= 18.66 && usage.weight >= 700)
+            ? 3
+            : 4.5;
+        const ratio = contrastRatio(tokens.colors[fg], tokens.colors[ground]);
+        expect(
+          ratio,
+          `${selector} in high contrast: ${fg} on ${ground} at ${usage.px}px/${usage.weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
+        ).toBeGreaterThanOrEqual(threshold);
+      });
+    }
+  }
 });
 
 describe("every colour-on-surface usage clears its real WCAG threshold", () => {
