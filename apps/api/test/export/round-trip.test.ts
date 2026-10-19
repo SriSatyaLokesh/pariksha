@@ -437,13 +437,20 @@ it("exporting a bank with 200 questions stays within the route's budget", async 
   expect(counting.counts().total).toBeLessThanOrEqual(ROUTE_BUDGETS[EXPORT_ROUTE_KEY]!);
 });
 
-// The number in ROUTE_BUDGETS itself, measured against a realistic bank
-// (seventeen questions, one passage group — examples/reasoning-aptitude/
-// questions.json, not `bankOf(200)`'s group-free fixture), pinned with
-// `toBe`, not `toBeLessThanOrEqual` — a budget that merely bounds the
-// measurement from above would let a too-low guess ship uncaught, the same
-// finding Task 7's review made of its own import budget.
-it("measures the real subrequest cost of exporting a realistic bank against ROUTE_BUDGETS", async () => {
+// Measured against a realistic bank (seventeen questions, one passage
+// group — examples/reasoning-aptitude/questions.json, not `bankOf(200)`'s
+// group-free fixture), pinned with `toBe`, not `toBeLessThanOrEqual` — a
+// budget that merely bounds the measurement from above would let a too-low
+// guess ship uncaught, the same finding Task 7's review made of its own
+// import budget.
+//
+// Fix round (whole-branch review, I5): this fixture is one page of
+// `listQuestions`, so it costs less than `ROUTE_BUDGETS[EXPORT_ROUTE_KEY]`
+// — that constant is now the worst case (a bank at the question-count
+// ceiling, see the test below), not this common one. Pinned to the literal
+// measured number instead, so this test does not silently start asserting
+// a different thing the next time the declared ceiling changes.
+it("measures the real subrequest cost of exporting a realistic, one-page bank", async () => {
   await importJson(exampleBank());
 
   const counting = countingDeps(deps);
@@ -452,7 +459,7 @@ it("measures the real subrequest cost of exporting a realistic bank against ROUT
     send("GET", authorCookie),
   );
   expect(res.status, await res.clone().text()).toBe(200);
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[EXPORT_ROUTE_KEY]!);
+  expect(counting.counts().total).toBe(6);
 });
 
 // `?ids=` must cost the same regardless of how many ids are named — the
@@ -467,6 +474,35 @@ it("?ids= costs the same as an unfiltered export, regardless of selection size",
     send("GET", authorCookie),
   );
   expect(res.status, await res.clone().text()).toBe(200);
+  expect(counting.counts().total).toBe(6);
+});
+
+// Fix round (whole-branch review, I5): `ROUTE_BUDGETS[EXPORT_ROUTE_KEY]`
+// itself, measured at the real worst case — a bank sitting at
+// `IMPORT_MAX_QUESTIONS` (500, the bank-level ceiling I5 added in
+// import/json.ts) with a passage group, which costs 3 `allQuestions` pages
+// (ceil(500 / 200)) instead of the 1 the fixture above needed. Pinned with
+// `toBe`, not merely bounded — the same discipline every other budget here
+// already follows.
+it("measures the real worst-case subrequest cost of exporting a bank at the question-count ceiling", async () => {
+  const group = { id: "g1", passage: "A passage every question below names." };
+  const atCeiling: Bank = {
+    ...bankOf(500 - 1),
+    groups: [group],
+    questions: [
+      ...bankOf(500 - 1).questions,
+      { id: "Q-group", type: "true_false", prompt: "Grouped question", key: true, group: group.id },
+    ],
+  };
+  const res1 = await importJson(atCeiling);
+  expect(res1.status, await res1.clone().text()).toBe(200);
+
+  const counting = countingDeps(deps);
+  const res2 = await createApp(counting.deps).request(
+    `/api/v1/workspaces/${workspaceId}/banks/${bankId}/export`,
+    send("GET", authorCookie),
+  );
+  expect(res2.status, await res2.clone().text()).toBe(200);
   expect(counting.counts().total).toBe(ROUTE_BUDGETS[EXPORT_ROUTE_KEY]!);
 });
 

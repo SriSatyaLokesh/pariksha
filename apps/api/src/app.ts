@@ -130,27 +130,28 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `exampleBank` fixture (12 questions, one passage group): 7, which is
   // the number here.
   "/api/v1/workspaces/:id/banks/:bankId/import": 7,
-  // Task 9 (#53, P4.9): export. Measured (apps/api/test/export/round-trip.
-  // test.ts's "measures the real subrequest cost..." tests) against
-  // examples/reasoning-aptitude/questions.json (17 questions, one passage
-  // group) — a realistic fixture, not the cheapest possible one. auth (2) +
-  // bankOr404 (1) + listGroups (2, this fixture has a group) +
-  // `allQuestions` (1, one page covers any bank at or under 200 questions)
-  // = 6, flat in both question count up to 200 and in `?ids=`'s selection
-  // size (filtered in memory after the same one fetch).
+  // Task 9 (#53, P4.9): export. `allQuestions` (apps/api/src/routes/
+  // banks.ts) pages `listQuestions` at 200 a time, so this route's cost is
+  // NOT flat in bank size the way the comment here used to claim — it was
+  // measured only against examples/reasoning-aptitude/questions.json (17
+  // questions, one group), which is one page. `?ids=` costs the same as an
+  // unfiltered export regardless of selection size (filtered in memory
+  // after the same fetch), but an unfiltered export of a large bank is not
+  // the same cost as a small one.
   //
-  // The task brief that planned this route named a lower, illustrative
-  // number (3) — unreachable in this application: authentication alone
-  // already spends 2 subrequests on every authenticated route (the session
-  // join and the idle-window write, apps/api/src/auth/session.ts's
-  // `readSession`), so no authenticated route that reads anything at all can
-  // cost less than 3, and this one reuses three already-audited repository
-  // functions (`getBank`, `listGroups`, `listQuestions`) rather than a
-  // bespoke combined query that would shave a couple of subrequests at the
-  // cost of a second, parallel way to read a bank. 6 is measured, declared
-  // with `toBe` (not guessed, not merely bounded above), and nowhere near
-  // the 50-subrequest ceiling.
-  "/api/v1/workspaces/:id/banks/:bankId/export": 6,
+  // Fix round (whole-branch review, I5): the real ceiling is bounded, not
+  // unbounded — `import/json.ts`'s `IMPORT_MAX_QUESTIONS` caps a *bank* at
+  // 500 questions (not just one import request), so the worst case is a
+  // 500-question bank with a passage group: auth (2) + bankOr404 (1) +
+  // listGroups (2, this bank has a group) + `allQuestions` (3, ceil(500 /
+  // 200) pages) = 8. Measured against exactly that
+  // (round-trip.test.ts's "measures the real worst-case subrequest cost of
+  // exporting a bank at the question-count ceiling"), pinned with `toBe`,
+  // not guessed — and still nowhere near the 50-subrequest ceiling. The
+  // 17-question fixture above costs only 6; the declared number here is the
+  // bound every bank size up to the cap must stay under, not the common
+  // case.
+  "/api/v1/workspaces/:id/banks/:bankId/export": 8,
   // The single-question sibling: auth (2) + `getQuestion` (1, already one
   // query with its own correlated "used in tests" subquery) + `listGroups`
   // (2, only fetched when the question names a group — a question that

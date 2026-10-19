@@ -101,6 +101,22 @@ async function importBankDocument(
   // bank, so re-importing the same document is reported rather than quietly
   // overwriting what is already there.
   const existingRefIds = new Set(await listQuestionRefIds(deps.db, workspaceId, bankId));
+
+  // Fix round (whole-branch review, I5): the check above caps one
+  // *request*; nothing capped the *bank*, so repeated imports could grow it
+  // past 200 questions (`listQuestions`' own page size) without limit —
+  // which is what made `GET .../export`'s declared, `toBe`-pinned budget
+  // false at a size this route itself would happily reach. Reusing the
+  // ref-id set already fetched for the duplicate check below, at no extra
+  // cost.
+  if (existingRefIds.size + rawQuestions.length > IMPORT_MAX_QUESTIONS) {
+    throw new ApiError(
+      413,
+      "import_too_large",
+      `A bank is limited to ${IMPORT_MAX_QUESTIONS} questions; this bank already has ${existingRefIds.size}, and this import would add ${rawQuestions.length}.`,
+    );
+  }
+
   const duplicates: ImportIssue[] = [];
   rawQuestions.forEach((raw, index) => {
     if (!isRecord(raw) || typeof raw.id !== "string") return;

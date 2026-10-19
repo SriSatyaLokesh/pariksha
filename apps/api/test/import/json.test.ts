@@ -303,6 +303,20 @@ it("an import over IMPORT_MAX_QUESTIONS is refused before structural or cross-fi
   expect(await questionCount()).toBe(0);
 });
 
+// Fix round (whole-branch review, I5): the check above only ever capped one
+// *request* — nothing stopped a second, third, or twentieth import from
+// growing the same bank past 500 without limit, which is what let export's
+// subrequest cost grow unboundedly past its declared budget (apps/api/src/
+// app.ts's ROUTE_BUDGETS). A bank already at the ceiling refuses one more
+// question the same way an over-sized single request does.
+it("an import that would push the bank's own total past IMPORT_MAX_QUESTIONS is refused", async () => {
+  const atCeiling = await post(bankOf(500), authorCookie);
+  expect(atCeiling.status, await atCeiling.clone().text()).toBe(200);
+
+  const oneMore = await post({ ...bankOf(1), questions: [{ id: "one-more", type: "true_false", prompt: "P", key: true }] }, authorCookie);
+  expect(oneMore.status).toBe(413);
+});
+
 // Fix round (whole-branch review, I2): `IMPORT_MAX_QUESTIONS` only fires
 // after one `JSON.parse` of the whole body — `await json(c.req.raw)` used
 // to buffer it in full first. An oversized raw body (not just an oversized
