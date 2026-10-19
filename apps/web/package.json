@@ -9,7 +9,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "pnpm --filter @pariksha/api... build && playwright test"
   },
   "dependencies": {
     "@pariksha/core": "workspace:*",

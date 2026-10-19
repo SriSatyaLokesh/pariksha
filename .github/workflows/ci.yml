@@ -143,16 +143,18 @@ jobs:
           --coverage.thresholds.functions=100
           --coverage.thresholds.lines=98
 
-  # Its own job, no `needs:`. This used to be a step in the build job to
-  # avoid re-running checkout, install and build — but it never consumed
-  # that build: apps/web/playwright.config.ts builds both servers in its
-  # webServer commands (`pnpm --filter @pariksha/api build` and
-  # `pnpm build && vite preview`), deliberately, so the suite can never
-  # serve a stale dist/. As a step it was paying for that build twice and
-  # starting late; as a job it starts at t=0 and the only duplicated work is
-  # checkout plus a cache-warm install. It needs no SITE_URL either —
-  # playwright.config.ts supplies one to the preview build, the only
-  # consumer.
+  # Its own job, no `needs:`. It used to be a step in the build job, where it
+  # silently depended on that job's earlier `pnpm build`: the two webServer
+  # commands in apps/web/playwright.config.ts build apps/api and apps/web, but
+  # not the workspace packages those two import by name, which resolve to a
+  # dist/ that has to already exist. Splitting the job broke it, so the `e2e`
+  # script now builds @pariksha/api and its dependencies itself and the suite
+  # stands alone — one command from a clean checkout, here and locally.
+  #
+  # As a job it starts at t=0 instead of behind lint and type-check, and the
+  # only duplicated work is checkout plus a cache-warm install. It needs no
+  # SITE_URL — playwright.config.ts supplies one to the preview build, the
+  # only consumer.
   #
   # Chromium alone. The suite walks one flow against a Node API and an
   # OpenID provider that both live on localhost; nothing in it is
