@@ -1,40 +1,42 @@
-// Landing page v3 — the full assembly, culled.
-// docs/superpowers/specs/2026-10-17-landing-page-v3-interactive.md §4: twelve
-// bands become eight plus the footer. S5 and S6 are absorbed into
-// HowItWorks as h3s (#features, #no-code); S9's roadmap ledger is deleted
-// and its honesty merges into NotForSection as an h3 (#status). This file
-// only wires TopNav, the skip link, the one <main> landmark and the eight
-// surviving sections in the new spine's order, plus the footer landmark.
-import { TopNav } from "../components/TopNav";
-import { Hero, HeroBridge } from "../sections/s1-s3/Hero";
-import { WhatIsPariksha } from "../sections/s1-s3/WhatIsPariksha";
-import { HowItWorks } from "../sections/s1-s3/HowItWorks";
-import { S4Comparison } from "../sections/s4-s6/S4Comparison";
-import { CostSection } from "../sections/s7-s9/CostSection";
-import { NotForSection } from "../sections/s7-s9/NotForSection";
-import { Faq } from "../sections/s10-s12/Faq";
-import { Closing } from "../sections/s10-s12/Closing";
-import { Footer } from "../sections/s10-s12/Footer";
+// The landing page, on the Signal direction.
+// `.planning/landing/signal-reference.html` is the prototype; its spine is
+// eight movements of deliberately unequal weight rather than a stack of
+// identical bands: an ink hero carrying a live pool draw, the type rail,
+// the anti-form argument, the integrity ethic on its own ground, the cost
+// arithmetic, the comparison, the build status, the FAQ and the close.
+import { SignalHero, SignalNav, SignalTypeRail } from "../sections/signal/Head";
+import {
+  SignalCompare,
+  SignalCost,
+  SignalIntegrity,
+  SignalNotAForm,
+} from "../sections/signal/Body";
+import {
+  SignalClose,
+  SignalFaq,
+  SignalFooter,
+  SignalStatus,
+} from "../sections/signal/Tail";
 
 export function Landing() {
   return (
-    <>
+    <div className="signal">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <TopNav />
+      <SignalNav />
       <main id="main-content">
-        <Hero />
-        <WhatIsPariksha />
-        <HeroBridge />
-        <HowItWorks />
-        <S4Comparison />
-        <CostSection />
-        <NotForSection />
-        <Faq />
-        <Closing />
+        <SignalHero />
+        <SignalTypeRail />
+        <SignalNotAForm />
+        <SignalIntegrity />
+        <SignalCost />
+        <SignalCompare />
+        <SignalStatus />
+        <SignalFaq />
+        <SignalClose />
       </main>
-      <Footer />
-    </>
+      <SignalFooter />
+    </div>
   );
 }

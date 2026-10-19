@@ -92,7 +92,11 @@ function withDatabaseId(toml, uuid) {
  */
 function d1OverWrangler(cf, name) {
   const run = (sql) =>
-    cf(["d1", "execute", name, "--remote", "--json", "--command", sql]);
+    // `--command=<sql>`, never `--command <sql>`: every migration opens with
+    // a `--` SQL comment, and yargs reads a separate value that starts with
+    // `--` as the next flag rather than as this option's value. The `=` form
+    // binds it. See the `Unknown arguments:` failure this replaced.
+    cf(["d1", "execute", name, "--remote", "--json", `--command=${sql}`]);
   return {
     dialect: "d1",
     exec: (sql) => Promise.resolve(void run(sql)),
@@ -148,7 +152,7 @@ function fakeCloudflare() {
       // Only `_migrations` is read back, and only for the names in it. Every
       // other statement is accepted unexamined — this fake checks the
       // script's control flow, not SQLite's.
-      const sql = args[args.length - 1];
+      const sql = args[args.length - 1].replace(/^--command=/, "");
       const insert =
         /INSERT INTO _migrations \(name, applied_at\) VALUES \('(.*?)'/.exec(
           sql,

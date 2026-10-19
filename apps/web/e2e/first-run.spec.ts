@@ -34,12 +34,12 @@ test("AC-01 (partial): a fresh deployment goes landing → sign in → wizard �
 }) => {
   await page.goto("/");
   // The plan clicks `link, name: /get started/i` here. The landing page has
-  // no such link — v3 ships five nav anchors, two hero text links and a
-  // GitHub CTA, and nothing on it points at the organiser app at all. So
+  // no such link — its CTAs are in-page anchors and a GitHub link, and
+  // nothing on it points at the organiser app at all. So
   // the landing page is asserted, then the organiser app is opened the way
   // an organiser reaches it today: by its URL.
   await expect(
-    page.getByRole("heading", { level: 1, name: /run real exams you host yourself/i }),
+    page.getByRole("heading", { level: 1, name: /run real exams on infrastructure/i }),
   ).toBeVisible();
 
   await page.goto(ORGANISER);
