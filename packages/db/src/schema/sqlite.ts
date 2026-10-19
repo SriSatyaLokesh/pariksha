@@ -194,6 +194,7 @@ export const candidate = sqliteTable(
     source: text("source").notNull(),
     formValuesJson: text("form_values_json", { mode: "json" }).notNull(),
     consentVersion: text("consent_version"),
+    consentAt: integer("consent_at"),
     createdAt: integer("created_at").notNull(),
   },
   (t) => [
@@ -201,6 +202,35 @@ export const candidate = sqliteTable(
     index("candidate_test_idx").on(t.testId),
     uniqueIndex("candidate_test_external_uq").on(t.testId, t.externalId),
   ],
+);
+
+export const candidateUnique = sqliteTable(
+  "candidate_unique",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    testId: text("test_id").notNull(),
+    candidateId: text("candidate_id").notNull(),
+    fieldId: text("field_id").notNull(),
+    valueHash: text("value_hash").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    index("candidate_unique_workspace_idx").on(t.workspaceId),
+    index("candidate_unique_test_idx").on(t.testId),
+    index("candidate_unique_candidate_idx").on(t.candidateId),
+    uniqueIndex("candidate_unique_value_uq").on(t.testId, t.fieldId, t.valueHash),
+  ],
+);
+
+export const rateLimit = sqliteTable(
+  "rate_limit",
+  {
+    bucket: text("bucket").primaryKey(),
+    windowStart: integer("window_start").notNull(),
+    count: integer("count").notNull(),
+  },
+  (t) => [index("rate_limit_window_idx").on(t.windowStart)],
 );
 
 export const attempt = sqliteTable(
