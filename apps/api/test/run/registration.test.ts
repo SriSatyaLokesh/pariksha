@@ -13,6 +13,7 @@ import {
   replaceCandidateList,
   addMembership,
   createUser,
+  insertAuthToken,
   resolvePublishedTest,
 } from "@pariksha/db";
 import { validateRegistration } from "@pariksha/core";
@@ -20,7 +21,8 @@ import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { LIMITS } from "../../src/run/limit.js";
 import { matchBounded } from "../../src/run/bounded.js";
-import { REFUSALS } from "../../src/run/entry.js";
+import { entryHash, readEntryToken, REFUSALS } from "../../src/run/entry.js";
+import { sha256Hex } from "../../src/auth/tokens.js";
 import { issueSession } from "../../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "../deps.js";
 import {
@@ -138,6 +140,39 @@ beforeEach(async () => {
 it("the form route answers only behind a live entry token", async () => {
   expect((await form("signup")).status).toBe(401);
   expect((await form("signup", "a".repeat(43))).status).toBe(410);
+});
+
+it("T2-I-1: the entry row is keyed by the token salted with its test version", async () => {
+  // The salt and `asClaim`'s comparison are belt and braces, and each
+  // hides the other from an end-to-end probe — so the salt is pinned
+  // here, against the digest actually stored. Without it the row is
+  // findable at every test on the instance, and only the claim check
+  // stands between a `link_code` candidate and an `invite_only` paper.
+  const token = await gate("signup");
+  const version = await versionOf("signup");
+  const stored = await deps.db.query<{ token_hash: string }>(
+    "SELECT token_hash FROM auth_token WHERE kind = 'run_entry'",
+    [],
+  );
+  expect(stored.map((row) => row.token_hash)).toEqual([await entryHash(version, token)]);
+  expect(stored[0]?.token_hash).not.toBe(await sha256Hex(token));
+});
+
+it("T2-I-1: a live row whose claim names another test version is still refused", async () => {
+  // The other half, pinned where the salt cannot reach it: the row is
+  // written under this test's own salt, so it is found — and refused
+  // anyway, because the claim inside it is for somewhere else.
+  const token = "b".repeat(43);
+  const version = await versionOf("signup");
+  await insertAuthToken(deps.db, {
+    tokenHash: await entryHash(version, token),
+    kind: "run_entry",
+    payload: { testVersionId: await versionOf("roster"), workspaceId },
+    now: T,
+    expiresAt: T + 60_000,
+  });
+  expect(await readEntryToken(deps, version, token)).toBeNull();
+  expect((await form("signup", token)).status).toBe(410);
 });
 
 it("T2-I-1: an entry token earned at one test is refused at another", async () => {
@@ -316,6 +351,30 @@ it("T-14: the same candidate coming back is recognised, not refused", async () =
 
 // --- T-21: a registration reconciles with the list row ------------------
 
+it("a self-registration writes its own external_id, so the backstop exists on a public test", async () => {
+  // `(test_id, external_id)` is the race backstop the 409 rests on. A
+  // registration that left the column null would leave a public test
+  // with no backstop at all — only uploads would ever fill it.
+  await register("signup", await gate("signup"), VALID);
+  const row = await getCandidateByExternalId(
+    deps.db,
+    workspaceId,
+    await testIdOf("signup"),
+    "21CS0147",
+  );
+  expect(row).toMatchObject({ source: "registration", externalId: "21CS0147" });
+});
+
+it("a candidate admitted as one listed identity cannot register as another", async () => {
+  // The gate said who this is. Re-entry by matching unique values is the
+  // bare `link_code` path only — here it would hand `21CS0148` the
+  // registration token of `21CS0147`, whose attempt is already running.
+  await register("roster", await gate("roster", "21CS0147"), VALID);
+  const res = await register("roster", await gate("roster", "21CS0148"), VALID);
+  expect(res.status).toBe(409);
+  expect(await errorOf(res)).toMatchObject({ details: { fields: ["email", "roll"] } });
+});
+
 it("a listed candidate's registration fills their own row rather than inserting beside it", async () => {
   const token = await gate("roster", "21CS0147");
   expect((await register("roster", token, VALID)).status).toBe(201);
@@ -389,6 +448,15 @@ it("B3: an invite survives a list re-upload, because it keys on the identity not
   const invite = new URL(url).searchParams.get("invite") ?? "";
   const redeemed = await post("/api/v1/run/alpha/invited/access", { invite });
   expect(redeemed.status, await redeemed.clone().text()).toBe(200);
+
+  // And the entry it mints is bound to the row that exists *now*. The
+  // payload's own `candidateId` is the id the row had at mint time and
+  // is already stale; trusting it would give Task 5 a `listRef` pointing
+  // at nothing, so the set label and the prefill would both be lost.
+  const { entryToken } = (await redeemed.json()) as { entryToken: string };
+  expect(await readEntryToken(deps, await versionOf("invited"), entryToken)).toMatchObject({
+    listRef: after?.id,
+  });
 });
 
 // --- S-07: the limiter --------------------------------------------------
@@ -428,6 +496,30 @@ it("S-07: the access gate counts refusals and never successes", async () => {
 
   expect((await post("/api/v1/run/alpha/signup/access", { code: "nope" })).status).toBe(403);
   expect(await count()).toBe(1);
+});
+
+it("S-07: a malformed request is not a guess at the secret, so it is not charged", async () => {
+  const bucket = `test_access:${await versionOf("signup")}`;
+  // An empty body answers 400 `invalid_request`. Charging it would mean
+  // the `public` reachability probes in `route-authority.test.ts` wrote
+  // rate-limit rows, and a broken client could lock out a whole hall.
+  expect((await post("/api/v1/run/alpha/signup/access", {})).status).toBe(400);
+  expect(
+    await deps.db.query("SELECT bucket FROM rate_limit WHERE bucket = ?", [bucket]),
+  ).toEqual([]);
+});
+
+it("#129: an unsafe organiser pattern is never compiled on the server", async () => {
+  // `(a+)+$` against forty `a`s and one character that cannot match is
+  // 2^40 backtracking paths for a plain `RegExp.test`, which is what the
+  // browser's matcher is — the organiser's defect, and one the candidate
+  // must not pay for. The server injects `matchBounded`, which refuses
+  // to compile an unsafe pattern at all and lets the value through: this
+  // answers in milliseconds, and a server that forgot to inject the
+  // bounded matcher never answers at all.
+  const token = await gate("unsafe");
+  const res = await register("unsafe", token, { roll: `${"a".repeat(40)}!`, consent: true });
+  expect(res.status).toBe(201);
 });
 
 it("S-07: once the refusal bucket is empty the gate says to wait, and the code is not tried", async () => {

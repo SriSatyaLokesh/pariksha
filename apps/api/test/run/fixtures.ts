@@ -467,6 +467,35 @@ export async function seedRegistrationTests(deps: AppDeps, workspaceId: string):
     },
   });
 
+  // An organiser's catastrophically backtracking pattern, saved before
+  // `unsatisfiableValidation` blocked it at publish. The candidate must
+  // still be able to register: the defect is the author's, and the
+  // server's bounded matcher refuses to *compile* it rather than
+  // refusing them.
+  await seedTest(deps, workspaceId, {
+    name: "Unsafe",
+    slug: "unsafe",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "link_code", access_code: "OPENSESAME" },
+        consent: CONSENT,
+        registration_form: {
+          fields: [
+            {
+              id: "roll",
+              type: "short_text" as const,
+              label: "Roll number",
+              required: true,
+              validation: { pattern: "(a+)+$" },
+            },
+          ],
+        },
+      },
+      sections: oneSection,
+    },
+  });
+
   const roster = await seedTest(deps, workspaceId, {
     name: "Roster",
     slug: "roster",
