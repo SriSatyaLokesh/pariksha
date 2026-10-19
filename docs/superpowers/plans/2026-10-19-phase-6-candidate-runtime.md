@@ -1570,7 +1570,7 @@ it("a save for a question outside this attempt's layout is 404, not a stored row
 it("a save after submission is refused and the stored answer is unchanged", async () => {
   await submit(cookie);
   expect((await put({ clientSeq: 9, value: other })).status).toBe(409);
-  expect((await attemptResponses()).["LOG-001"]).toEqual(v);
+  expect((await attemptResponses())["LOG-001"]).toEqual(v);
 });
 
 it("every save response carries the server's remainingMs so the client can re-anchor (Task 9)", async () =>
@@ -1686,3 +1686,692 @@ git commit -s -m "feat(run): answer autosave with an offline queue and a three-o
 ```
 
 ---
+
+## Task 9: Server-authoritative timer (#73, P6.9)
+
+**Files:**
+- Create: `apps/api/src/run/clock.ts`, `apps/api/test/run/clock.test.ts`
+- Create: `apps/web/src/components/exam/Clock.tsx`, `apps/web/test/exam/clock.test.tsx`
+- Modify: `apps/api/src/routes/run.ts` (the deadline check on every write), `packages/db/src/repo/run.ts`, `apps/web/src/routes/exam.tsx`, `apps/web/src/lib/run.ts`
+
+**Interfaces:**
+- Consumes: `AttemptContextVar`, `AttemptPaper` (Task 5) · `Runner`'s `clockSlot` (Task 6) · `SaveOutcome` (Task 8) · timing (**Phase 5** interface row 8: `duration_minutes`, `warn_at_minutes`, `late_sync_grace_seconds`, per-section `time_limit_minutes`).
+- Produces:
+  ```ts
+  // apps/api/src/run/clock.ts — pure over the attempt row and a now
+  export interface ClockView {
+    remainingMs: number; sectionRemainingMs: number | null;
+    expired: boolean; withinGrace: boolean; sectionExpired: boolean;
+  }
+  export function clockOf(attempt: AttemptContextVar, now: number): ClockView;
+  /** Throws ApiError(409, "time_up") past deadline + grace. The one place a write is refused on time. */
+  export function assertWritable(attempt: AttemptContextVar, now: number): void;
+
+  // packages/db/src/repo/run.ts
+  export const advanceSection: ScopedFn<[{ attemptId: string; sectionStartedAt: number }], void>;
+
+  // apps/web/src/components/exam/Clock.tsx
+  export interface ClockAnchor { remainingMs: number; sectionRemainingMs: number | null; at: number }  // at = performance.now()
+  export function Clock(props: { anchor: ClockAnchor; warnAtMinutes: readonly number[]; onZero: () => void }): JSX.Element;
+  /** Re-anchors from any server response. Called by the queue's drain and by resume. */
+  export function anchorFrom(remainingMs: number, sectionRemainingMs: number | null): ClockAnchor;
+  ```
+
+**`AC-13` has two halves and only one of them is easy.** The server half: `deadline_at` is an epoch column, every write route calls `assertWritable` against `deps.now()`, and an answer arriving more than `late_sync_grace_seconds` after the deadline is refused. The display half is Review Focus 4: the countdown is `anchor.remainingMs - (performance.now() - anchor.at)`, never `deadlineAt - Date.now()`, and it re-anchors from every server response — `/start`, resume, and each save (which is why Task 8's `putAnswer` returns `remainingMs`). `performance.now()` is monotonic, so a clock change, a correction after sleep, or a deliberate edit moves nothing.
+
+**Section timers.** `section_started_at` is written when the candidate first reaches a question in a later section; `sectionRemainingMs` is `time_limit_minutes` from it. Auto-advance (`C-07`) happens on the client at zero and on the server the next time any request arrives past a section deadline — a write to an expired section is refused with the next section named.
+
+**Auto-submit at zero** — see the ruling in [Smaller calls](#smaller-calls-made-while-planning): whichever of the client at zero or the server's next request materialises it first, with `submit_reason = "timeout"`. There is no sweeper in this phase and a candidate who closes the tab and never returns leaves an attempt that is submitted when it is next read.
+
+| Where | What changes |
+| --- | --- |
+| `PUT /run/attempt/answer`, `POST /run/attempt/submit` | `assertWritable` first; both already measured in Tasks 8 and 11 |
+| `GET /run/attempt` | Adds `remainingMs`, `sectionRemainingMs`, `warnAtMinutes`, `serverNow`; no new subrequest |
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/run/clock.test.ts
+it("AC-13: the server timer ignores the client clock entirely", async () => {
+  const res = await put({ clientSeq: 1, clientNow: FIXED_NOW - 3_600_000 });   // a lying client
+  expect((await res.json()).remainingMs).toBe(45 * 60_000);
+});
+
+it("AC-13: an answer 29 s after the deadline is accepted and 31 s is rejected", async () => {
+  deps.now = () => deadlineAt + 29_000;
+  expect((await put({ clientSeq: 2 })).status).toBe(200);
+  deps.now = () => deadlineAt + 31_000;
+  const late = await put({ clientSeq: 3 });
+  expect(late.status).toBe(409);
+  expect((await late.json()).error.code).toBe("time_up");
+});
+
+it("a rejected late answer leaves the stored response untouched", async () =>
+  expect((await attemptResponses())["LOG-001"]).toEqual(valueFromSeq2));
+
+it("the grace comes from the version's late_sync_grace_seconds, not a constant", async () => {
+  deps.now = () => deadlineAt + 45_000;
+  expect((await putOn("sixty-second-grace", { clientSeq: 1 })).status).toBe(200);
+});
+
+it("C-07: a write to a section whose time has ended is refused and names the next section", async () => {
+  deps.now = () => sectionStartedAt + 10 * 60_000 + 1;
+  expect((await (await put({ questionId: inSectionOne, clientSeq: 4 })).json()).error)
+    .toMatchObject({ code: "section_over", details: { nextSection: "quant" } });
+});
+
+it("entering a later section stamps section_started_at exactly once", async () => {
+  await put({ questionId: firstOfSectionTwo, clientSeq: 5 });
+  const stamped = (await attemptRow(attemptId)).section_started_at;
+  await put({ questionId: secondOfSectionTwo, clientSeq: 6 });
+  expect((await attemptRow(attemptId)).section_started_at).toBe(stamped);
+});
+
+it("C-07: the first request past the deadline submits the attempt with reason timeout", async () => {
+  deps.now = () => deadlineAt + 60_000;
+  await resume(cookie);
+  expect(await attemptRow(attemptId)).toMatchObject({ submitted_at: expect.any(Number), submit_reason: "timeout" });
+});
+```
+
+```tsx
+// apps/web/test/exam/clock.test.tsx — Review Focus 4
+it("AC-13: moving the system clock forward an hour does not move the countdown", () => {
+  render(<Clock anchor={anchorFrom(45 * 60_000, null)} warnAtMinutes={[10, 2]} onZero={noop} />);
+  const before = screen.getByRole("timer").textContent;
+  vi.setSystemTime(Date.now() + 3_600_000);
+  act(() => { vi.advanceTimersByTime(1000); });
+  expect(screen.getByRole("timer").textContent).not.toBe(before);         // it ticked one second
+  expect(minutesShown()).toBe(44);                                        // not zero
+});
+
+it("the countdown advances with performance.now(), one second per second", () => {
+  act(() => { advancePerformanceNow(60_000); vi.advanceTimersByTime(60_000); });
+  expect(minutesShown()).toBe(44);
+});
+
+it("a server response re-anchors the countdown, correcting any drift", () => {
+  rerender(<Clock anchor={anchorFrom(10 * 60_000, null)} {...rest} />);
+  expect(minutesShown()).toBe(10);
+});
+
+it("C-07: the chip swaps once at each warning mark and never pulses or animates", () => {
+  act(() => advanceTo(10 * 60_000));
+  expect(screen.getByRole("timer")).toHaveClass("timer-chip-urgent");
+  expect(getComputedStyle(screen.getByRole("timer")).animationName).toBe("none");
+});
+
+it("a warning is announced in words as well as colour", () => {
+  expect(screen.getByRole("status")).toHaveTextContent(/10 minutes remaining/i);
+});
+
+it("C-07: onZero fires exactly once at zero", () => {
+  act(() => advanceTo(45 * 60_000 + 5_000));
+  expect(onZero).toHaveBeenCalledTimes(1);
+});
+
+it("DESIGN.md: the digits are tabular so the countdown does not jitter", () =>
+  expect(getComputedStyle(screen.getByRole("timer")).fontVariantNumeric).toContain("tabular-nums"));
+
+it("section and total clocks sit side by side, each labelled, with no axe violations", async () => {
+  expect(screen.getAllByRole("timer")).toHaveLength(2);
+  expect(await axe(container)).toHaveNoViolations();
+});
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/run/clock.test.ts apps/web/test/exam/clock.test.tsx` — FAIL.
+
+- [ ] **Step 3: Implement `clockOf`, `assertWritable`, `advanceSection` and `Clock`**
+
+`clockOf` is pure arithmetic over the attempt row and a `now`, so every route shares one definition of "expired" and of "within grace". `Clock` holds `anchor` in state, ticks on a one-second `setInterval` reading `performance.now()`, and derives everything displayed; it stores no absolute deadline at all, which is what makes Review Focus 4 structurally impossible rather than merely tested.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run apps/api apps/web` — PASS, with Tasks 5 and 8's budgets unchanged.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api apps/web packages/db
+git commit -s -m "feat(run): server-authoritative deadline and a monotonic candidate countdown"
+```
+
+---
+
+## Task 10: Navigation modes enforced server-side (#74, P6.10)
+
+**Files:**
+- Create: `apps/api/src/run/navigation.ts`, `apps/api/test/run/navigation.test.ts`
+- Create: `apps/web/test/exam/navigation.test.tsx`
+- Modify: `apps/api/src/routes/run.ts`, `packages/db/src/repo/run.ts`, `apps/web/src/components/exam/Runner.tsx`, `apps/web/src/components/exam/Palette.tsx`
+
+**Interfaces:**
+- Consumes: `PinnedLayout`, `AttemptContextVar` (Task 5) · `assertWritable` (Task 9) · `upsertResponse`, `DbClient.batch` · `PaletteState` (Task 6) · `navigation` (**Phase 5** interface row 8).
+- Produces:
+  ```ts
+  // apps/api/src/run/navigation.ts — pure
+  /** Presentation order across sections; the index into this is `attempt.max_index`. */
+  export function flatQuestionIds(layout: PinnedLayout): string[];
+  export function indexOf(layout: PinnedLayout, questionId: string): number;      // -1 when not in the paper
+  export function sectionIndexOf(layout: PinnedLayout, flatIndex: number): number;
+  /** Throws ApiError(403, "navigation_locked") naming the rule. Never a 404. */
+  export function assertReachable(
+    layout: PinnedLayout, mode: "free" | "linear" | "per_section", maxIndex: number, questionId: string,
+  ): void;
+  export function paletteStates(
+    layout: PinnedLayout, mode: "free" | "linear" | "per_section", maxIndex: number,
+    answered: ReadonlySet<string>, marked: ReadonlySet<string>, current: string,
+  ): Record<string, PaletteState>;
+
+  // packages/db/src/repo/run.ts
+  /** Bumps only when it rises, so an ordinary save costs no extra statement. */
+  export const advanceMaxIndex: ScopedFn<[{ attemptId: string; maxIndex: number }], void>;
+  ```
+
+**The rule is "no going back", not "no looking forward", and that is what makes offline work possible.** `AC-14` requires the whole paper in the browser before the network drops, so withholding later questions is not available. `T-13` does not ask for it: `linear` is "no going back", `per_section` is "free inside a section, locked once left". Both forbid *returning*, and both are enforceable on the write path alone — which is where `AC-15`'s "either through the interface or through the API" actually bites. So `assertReachable` refuses a write to an index below `max_index` under `linear`, and to any section before `sectionIndexOf(maxIndex)` under `per_section`.
+
+**`max_index` rises in the same subrequest as the save.** When the target index exceeds `max_index`, the route issues `db.batch([upsert, advanceMaxIndex])`, which `countingDeps` counts as one (`apps/api/src/instrument.ts:70`); when it does not — the common case, re-editing an answer in place — there is no second statement at all. The answer route's measured budget therefore does not move.
+
+**Attack and test.** The attack is a candidate scripting `PUT /run/attempt/answer` against an earlier question after the interface stopped offering it — reading a later question, going back to improve an earlier one, and in `per_section` re-entering a section whose time has been banked. The test drives the route directly with a hand-built body, never the UI.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/run/navigation.test.ts
+it("AC-15: linear — the API refuses a write to an earlier question, with the rule named", async () => {
+  await put({ questionId: flat[3]!, clientSeq: 1 });
+  const back = await put({ questionId: flat[1]!, clientSeq: 2 });
+  expect(back.status).toBe(403);
+  expect((await back.json()).error).toMatchObject({ code: "navigation_locked", message: /going back/i });
+});
+
+it("AC-15: linear — the refused write stores nothing", async () =>
+  expect(await readResponseFor(flat[1]!)).toBeNull());
+
+it("linear allows re-editing the question the candidate is on, and moving forward", async () => {
+  expect((await put({ questionId: flat[3]!, clientSeq: 3 })).status).toBe(200);
+  expect((await put({ questionId: flat[9]!, clientSeq: 4 })).status).toBe(200);
+});
+
+it("per_section: free inside the current section, refused for a section already left", async () => {
+  await put({ questionId: firstOfSectionTwo, clientSeq: 5 });
+  expect((await put({ questionId: secondOfSectionTwo, clientSeq: 6 })).status).toBe(200);
+  expect((await put({ questionId: lastOfSectionOne, clientSeq: 7 })).status).toBe(403);
+});
+
+it("free allows any order", async () => {
+  for (const [i, q] of [flat[9]!, flat[0]!, flat[4]!].entries()) {
+    expect((await putOn("free-nav", { questionId: q, clientSeq: i + 1 })).status).toBe(200);
+  }
+});
+
+it("a question outside the pinned layout is 404, never 403 — existence is not disclosed", async () => {
+  const [mine, theirs] = await Promise.all([put({ questionId: flat[1]! }), put({ questionId: "OTHER-001" })]);
+  expect(theirs.status).toBe(404);
+  expect(mine.status).toBe(403);                                   // the two are distinguishable, deliberately
+});
+
+it("max_index rises inside the same batch, so the save's budget does not move", async () => {
+  const counting = countingDeps(deps);
+  await put({ questionId: flat[6]!, clientSeq: 8 }, createApp(counting.deps));
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/attempt/answer"]);
+});
+
+it("max_index never falls, so a resume cannot reopen a locked question", async () => {
+  const before = (await attemptRow(attemptId)).max_index;
+  await put({ questionId: flat[Number(before)]!, clientSeq: 9 });
+  expect((await attemptRow(attemptId)).max_index).toBe(before);
+});
+
+it("AC-15: a resumed attempt keeps the lock across a browser restart", async () => {
+  expect((await resume(cookie)).maxIndex).toBe((await attemptRow(attemptId)).max_index);
+  expect((await put({ questionId: flat[0]!, clientSeq: 10 })).status).toBe(403);
+});
+```
+
+```tsx
+// apps/web/test/exam/navigation.test.tsx
+it("linear: Previous is absent, not merely disabled, and locked squares carry a lock glyph", () => {
+  render(<Runner {...props} paper={{ ...paper, navigation: "linear", maxIndex: 3 }} />);
+  expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
+  expect(squareFor("locked")).toHaveClass("has-lock");
+});
+
+it("per_section: squares in a left section are locked and announce why", () => {
+  expect(screen.getByRole("button", { name: /question 1 .*locked/i })).toBeDisabled();
+  expect(screen.getByRole("button", { name: /question 1/i })).toHaveAccessibleDescription(/section is closed/i);
+});
+
+it("a server 403 the interface did not predict is shown, not swallowed", async () => {
+  putAnswer.mockResolvedValue({ outcome: "refused", message: "This test does not allow going back." });
+  await userEvent.click(screen.getByRole("button", { name: /question 1/i }));
+  expect(await screen.findByRole("alert")).toHaveTextContent(/going back/i);
+});
+
+it("the palette's locked state has no axe violations and is reachable by keyboard", async () =>
+  expect(await axe(container)).toHaveNoViolations());
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/run/navigation.test.ts apps/web/test/exam/navigation.test.tsx` — FAIL.
+
+- [ ] **Step 3: Implement `navigation.ts`, `advanceMaxIndex` and the palette states**
+
+`flatQuestionIds` concatenates `layout.sections[].questionIds` in order; everything else is arithmetic over that array and `max_index`. The route's order is `assertWritable` (Task 9), then `assertReachable`, then the upsert — time before navigation, because an expired attempt should say so rather than complain about ordering.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run apps/api apps/web` — PASS, with the answer route's budget unchanged.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api apps/web packages/db
+git commit -s -m "feat(run): free, linear and per-section navigation refused server-side"
+```
+
+---
+
+## Task 11: Submit, receipt and result release (#75, P6.11)
+
+**Files:**
+- Create: `apps/api/src/run/submit.ts`, `apps/api/src/run/release.ts`, `apps/api/test/run/submit.test.ts`, `apps/api/test/run/release.test.ts`, `apps/api/test/run/bounded.test.ts`
+- Create: `apps/web/src/components/exam/SubmitDialog.tsx`, `apps/web/src/components/exam/Receipt.tsx`, `apps/web/src/components/exam/ResultView.tsx`, `apps/web/test/exam/submit.test.tsx`
+- Modify: `apps/api/src/run/bounded.ts` (**closes issue [#129](https://github.com/SriSatyaLokesh/pariksha/issues/129)**), `packages/db/src/repo/run.ts`, `apps/api/src/routes/run.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/run.ts`, `docs/ROADMAP.md` (the Progress table)
+
+**Interfaces:**
+- Consumes: `AttemptContextVar`, `PinnedLayout`, `forCandidate` (Task 5) · `assertWritable`, `clockOf` (Task 9) · `flatQuestionIds` (Task 10) · `limitOrThrow` (Task 4) · `scoreAttempt({ questionsBySection, responses, awards, defaults, passMarkPercent }): AttemptScore`, `AttemptScore` (`packages/core/src/score.ts:25,43`), `gradeQuestion`, `matchBounded`'s call sites in `packages/core/src/grade/text.ts` · `listResponses`, `listQuestionsForBanks`, `appendAudit`, `insertAuthToken`, `consumeAuthToken`, `EmailAdapter`. From **Phase 5**: release (row 9), scoring defaults (row 2).
+- Produces:
+  ```ts
+  // apps/api/src/run/submit.ts
+  export type SubmitReason = "manual" | "timeout" | "limit";
+  export interface Receipt { attemptId: string; submittedAt: number; answered: number; unanswered: number; total: number }
+  export function submitAttempt(deps: AppDeps, attempt: AttemptContextVar, reason: SubmitReason, now: number):
+    Promise<{ receipt: Receipt; released: ReleasedResult | null }>;
+
+  // apps/api/src/run/release.ts — the server-side gate; the browser renders what it is given
+  export interface ReleasedResult {
+    show: "score_only" | "score_and_sections" | "full_review";
+    total: number; max: number; percent: number; passed: boolean | null; pending: string[];
+    sections?: { sectionId: string; title: string; points: number; max: number }[];
+    review?: { questionId: string; yourAnswer: unknown; correct: unknown; explanation: string | null; points: number }[];
+  }
+  /** null when the release setting says the candidate may not see it yet. */
+  export function releasedResult(
+    release: TestRelease, score: AttemptScore, questions: readonly Question[],
+    responses: Record<string, ResponseValue | null>, now: number,
+  ): ReleasedResult | null;
+
+  // packages/db/src/repo/run.ts
+  export const finishAttempt: ScopedFn<
+    [{ attemptId: string; submittedAt: number; reason: SubmitReason; score: AttemptScore }], { already: boolean }>;
+  export const findAttemptByReference: ScopedFn<[{ testId: string; attemptRef: string; emailHash: string }], string | null>;
+
+  // apps/api/src/run/bounded.ts (hardened — issue #129)
+  export class MatchBudgetExceeded extends Error { readonly pattern: string }
+  export function matchBounded(pattern: string, input: string): boolean;
+
+  // apps/web/src/lib/run.ts (widened)
+  export interface RunClient {
+    submit(): Promise<{ receipt: Receipt; released: ReleasedResult | null }>;
+    result(): Promise<ReleasedResult | null>;
+    requestResultCode(attemptRef: string, email: string): Promise<void>;
+    verifyResultCode(attemptRef: string, email: string, code: string): Promise<ReleasedResult | null>;
+  }
+  ```
+
+**The release gate is assembled on the server, not filtered in the browser.** `AC-16` — "Results show to candidates exactly as the release setting says, and never before it" — is a property of what the response *contains*: `score_only` carries no `sections` key at all, `score_and_sections` carries no `review` key, and `never` and a future `on_date` carry nothing but the receipt. A browser that renders less than it was given is a UI bug; a browser that was given more than it should have is the vulnerability `SECURITY.md` names ("Any way to read or change them from a candidate session **is** a vulnerability").
+
+**Submission is idempotent.** `finishAttempt` writes only when `submitted_at IS NULL`, in one statement, and returns `{ already: true }` otherwise — so the client at zero, the server's next request past the deadline, and a double-click cannot produce two scores or two audit rows.
+
+**`C-09`'s return visit** reuses `auth_token` once more: `POST /run/result/code` mints a 10-minute `run_result` code against `(attemptRef, email)` and emails it; `POST /run/result/verify` consumes it and answers `releasedResult` — the same function the finish page calls, so there is one gate and not two. Both are rate-limited by Task 4's `result_code` bucket, and a wrong reference and a wrong email produce the same response, so neither enumerates attempts.
+
+### Issue #129 lands here, widened
+
+**Ruling: [#129](https://github.com/SriSatyaLokesh/pariksha/issues/129) lands in Phase 6, as a step of this task, and its scope widens from `fill_blank` grading to every author-written regex run against candidate input.** — Why: #129 asks for "a server-side execution bound where grading actually runs", and **Phase 6 is the first phase where grading runs at all** — Phase 1 wrote `assertSafeRegex` as the authoring-time heuristic, Phase 4 let an author store a pattern, and nothing has ever executed one against a candidate's text. Phase 6 also adds a *second* execution site the issue predates: `registration_form` field `validation.pattern`, which `schemas/test-1.json` `$defs.validation` describes as "RE2-safe regular expression, checked on the server" and which Task 3 runs against candidate input before any attempt exists. Two surfaces, one helper. — Cost if wrong: if it is deferred instead, a single six-character pattern an author typed takes the candidate's request past the Workers 10 ms CPU limit and the candidate loses an answer save to a question someone else authored badly, which is the exact failure the issue says must not happen.
+
+`matchBounded` does what a pure package cannot: it caps the input at `MAX_MATCH_INPUT` (500, `question-format.md`'s `short_answer` ceiling), re-runs `assertSafeRegex` at execution time rather than trusting the authoring-time pass, and throws `MatchBudgetExceeded` rather than returning a verdict. `gradeQuestion`'s caller catches it per question: that question scores as **pending** and is flagged for the organiser, and the attempt completes — #129's acceptance criteria, and consistent with the PRD's rule that scoring failures never block answering.
+
+| Method | Path | Authority | `ROUTE_BUDGETS` |
+| --- | --- | --- | --- |
+| `POST` | `/api/v1/run/attempt/submit` | `attempt` | `MEASURE` (context + responses + questions + batch + audit) |
+| `GET` | `/api/v1/run/attempt/result` | `attempt` | `MEASURE` |
+| `POST` | `/api/v1/run/result/code` | `public` | `MEASURE` |
+| `POST` | `/api/v1/run/result/verify` | `public` | `MEASURE` |
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/run/submit.test.ts
+it("C-08: the receipt carries the attempt reference and the time, and no score", async () => {
+  const { receipt, released } = await (await submit(cookie)).json();
+  expect(receipt).toMatchObject({ attemptId: expect.stringMatching(/^att_/), submittedAt: expect.any(Number),
+    answered: 12, unanswered: 5, total: 17 });
+  expect(released).toBeNull();                                  // release.when = "never" on this fixture
+});
+
+it("submitting twice scores once and writes one audit row", async () => {
+  await submit(cookie); await submit(cookie);
+  expect(await auditCount(attemptId)).toBe(1);
+  expect((await attemptRow(attemptId)).score_json).toEqual(firstScore);
+});
+
+it("AC-06: the stored score matches scoreAttempt over the same responses", async () => {
+  expect(JSON.parse((await attemptRow(attemptId)).score_json))
+    .toEqual(scoreAttempt({ questionsBySection, responses, awards: {}, defaults, passMarkPercent: 50 }));
+});
+
+it("manual types are pending, not zero", async () =>
+  expect(JSON.parse((await attemptRow(attemptId)).score_json).pending).toEqual(["WRI-001"]));
+
+it("submit_reason records which of the three ended it", async () => {
+  expect((await attemptRow(manualId)).submit_reason).toBe("manual");
+  expect((await attemptRow(timedOutId)).submit_reason).toBe("timeout");
+});
+
+it("a save after submit is refused (Task 8's contract, from the other side)", async () =>
+  expect((await put({ clientSeq: 99 })).status).toBe(409));
+
+it("the submit route reads the questions once, not once per answer", async () => {
+  const counting = countingDeps(deps);
+  await submit(cookie, createApp(counting.deps));
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/attempt/submit"]);
+});
+```
+
+```ts
+// apps/api/test/run/release.test.ts
+it.each([
+  ["never",    "score_only",         null],
+  ["on_submit","score_only",         { total: expect.any(Number), sections: undefined, review: undefined }],
+  ["on_submit","score_and_sections", { sections: expect.any(Array), review: undefined }],
+  ["on_submit","full_review",        { sections: expect.any(Array), review: expect.any(Array) }],
+])("AC-16: when=%s show=%s returns %j and nothing more", async (when, show, expected) => {
+  const body = (await (await submitOn({ when, show })).json()).released;
+  expect(body).toEqual(expected === null ? null : expect.objectContaining(expected));
+});
+
+it("AC-16: on_date shows nothing before `at` and the result after it", async () => {
+  expect((await (await submitOn({ when: "on_date", at: future })).json()).released).toBeNull();
+  deps.now = () => Date.parse(future) + 1;
+  expect(await (await result(cookie)).json()).toMatchObject({ total: expect.any(Number) });
+});
+
+it("S-10: a score_and_sections release carries no key and no explanation", async () => {
+  const text = JSON.stringify(await releasedFor("score_and_sections"));
+  for (const leak of ["explanation", "correct", "key", "rubric"]) expect(text, leak).not.toContain(leak);
+});
+
+it("full_review carries the correct answer and the explanation, because that is what it means", async () => {
+  const r = await releasedFor("full_review");
+  expect(r.review![0]).toMatchObject({ correct: expect.anything(), explanation: expect.any(String) });
+});
+
+it("C-09: a result code is emailed, is 10-minute single-use, and a wrong email answers identically", async () => {
+  await requestResultCode(ref, "a@b.ac.in");
+  const code = sentCode(mailbox);
+  expect((await verifyResultCode(ref, "a@b.ac.in", code)).status).toBe(200);
+  expect((await verifyResultCode(ref, "a@b.ac.in", code)).status).toBe(410);
+  expect(await (await requestResultCode(ref, "wrong@b.ac.in")).text())
+    .toBe(await (await requestResultCode("att_000000000000", "a@b.ac.in")).text());
+});
+```
+
+```ts
+// apps/api/test/run/bounded.test.ts — issue #129
+it("#129: a catastrophic pattern does not block answering, saving or submitting", async () => {
+  await seedFillBlankWith("(a|a)+$", "a".repeat(30));
+  const res = await submit(cookie);
+  expect(res.status).toBe(200);
+  expect((await res.json()).receipt.attemptId).toBe(attemptId);
+});
+
+it("#129: the affected question is flagged for the organiser, not silently scored zero", async () => {
+  const score = JSON.parse((await attemptRow(attemptId)).score_json);
+  expect(score.pending).toContain("BLK-001");
+  expect(await auditFor(attemptId)).toContainEqual(expect.objectContaining({ action: "attempt.scoring_blocked" }));
+});
+
+it("matchBounded caps input length before it runs the pattern", () => {
+  expect(() => matchBounded("^a*$", "a".repeat(MAX_MATCH_INPUT + 1))).toThrow(MatchBudgetExceeded);
+});
+
+it("matchBounded re-checks the pattern at execution time, not only at authoring time", () => {
+  expect(() => matchBounded("(a+)+$", "aaaa")).toThrow(MatchBudgetExceeded);
+});
+
+it("#129's second surface: a registration pattern runs through the same helper", async () => {
+  await publishFormWithPattern("(a|a)+$");
+  expect((await register(await gate(), { roll: "a".repeat(40) })).status).toBe(422);
+});
+
+it("an ordinary pattern still matches", () => expect(matchBounded("^\\d{2}[A-Z]{2}\\d{4}$", "21CS0147")).toBe(true));
+```
+
+```tsx
+// apps/web/test/exam/submit.test.tsx
+it("C-08: the confirmation names the unanswered and marked counts before submitting", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /submit/i }));
+  expect(screen.getByRole("dialog")).toHaveTextContent(/5 unanswered.*2 marked/is);
+  expect(onSubmit).not.toHaveBeenCalled();
+});
+
+it("C-08: the finish page shows the reference and the time, and no score when release says never", () => {
+  render(<Receipt receipt={receipt} released={null} />);
+  expect(screen.getByText(receipt.attemptId)).toBeVisible();
+  expect(screen.queryByText(/score|%|passed/i)).toBeNull();
+});
+
+it("AC-16: the result view renders only what the payload carries", () => {
+  render(<ResultView result={{ show: "score_only", total: 31, max: 40, percent: 77.5, passed: true, pending: [] }} />);
+  expect(screen.queryByRole("table")).toBeNull();
+});
+
+it("the submit dialog traps focus, returns it on cancel, and has no axe violations", async () => {
+  expect(await axe(container)).toHaveNoViolations();
+  await userEvent.keyboard("{Escape}");
+  expect(document.activeElement).toHaveAccessibleName(/submit/i);
+});
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/run apps/web/test/exam/submit.test.tsx` — FAIL.
+
+- [ ] **Step 3: Implement `submitAttempt`, `releasedResult`, `finishAttempt`, the hardened `matchBounded`, and the three screens**
+
+`releasedResult` builds the payload by `show` level rather than deleting from a full one, for Review Focus 5's reason. `finishAttempt` is one `UPDATE … WHERE submitted_at IS NULL … RETURNING`, the same single-statement idempotence `consumeAuthToken` uses. `matchBounded` wraps the match in a `try` around `assertSafeRegex` plus the length cap; the per-question `catch` lives in `submitAttempt`, so one bad question costs one `pending` entry and one audit row.
+
+- [ ] **Step 4: Run the whole suite**
+
+Run: `pnpm lint && pnpm typecheck && pnpm build && pnpm test`, with `TEST_POSTGRES_URL` set — all pass on both dialects.
+
+- [ ] **Step 5: Close #129, update the roadmap and commit**
+
+Move Phase 6 to **Done** in `docs/ROADMAP.md`'s Progress table, naming what landed and the issues that closed, and note that #129 closed here rather than in Phase 1.
+
+```bash
+git add apps/api apps/web packages/db docs/ROADMAP.md
+git commit -s -m "feat(run): submit, receipt, release gate and a bounded regex at scoring time"
+```
+
+---
+
+## Task 12: Candidate response scrubbing (#76, P6.12)
+
+**Files:**
+- Create: `apps/api/test/run/scrub-scan.test.ts`, `apps/api/test/fixtures/run/sentinel-bank.json`
+- Modify: `apps/api/src/run/scrub.ts` (complete it for every type), `apps/api/src/run/release.ts`, `apps/api/src/app.ts` (no new route), `docs/ROADMAP.md`
+
+**Interfaces:**
+- Consumes: `ROUTE_AUTH`, `mountedEndpoints` (Task 1) · `forCandidate`, `CandidateQuestion` (Task 5) · `releasedResult` (Task 11) · every candidate route Tasks 1–11 mounted.
+- Produces: no new exported symbol. The deliverable is `apps/api/test/run/scrub-scan.test.ts`, the gate `AC-22` names, plus whatever `forCandidate` and `releasedResult` must drop to pass it.
+
+**`AC-22` asks for a scan, not a suite.** "No candidate API response contains keys, explanations or other candidates' data. This is checked by an automated test that scans every response." The scan is a fixture in which every secret is a unique sentinel string — `__KEY_LOG001__`, `__EXPL_LOG001__`, `__RUBRIC_WRI001__`, `__MODELANS_WRI001__`, `__ACCEPT_BLK001__`, `__TOL_QNT003__`, `__OTHER_CANDIDATE__`, `__ACCESS_CODE__` — replayed through **every** endpoint `ROUTE_AUTH` marks `attempt` or candidate-`public`, with the route list derived from `ROUTE_AUTH` rather than written by hand. A Phase 7 snapshot route is then either scanned or a failing enumeration, which is the only form of this test that survives the next phase (Review Focus 5).
+
+Two further leak classes ride the same scan, following `apps/api/test/export/round-trip.test.ts:1152`'s precedent: **internal identifiers** (`wsp_`, `bnk_`, `qst_`, `ver_`, `usr_`, and any `cnd_`/`att_` that is not this candidate's own) and **other candidates' data**, seeded by a second registered candidate whose every form value is a sentinel.
+
+The one deliberate exception is `full_review`, where the key and the explanation are exactly what `T-22` promises; the scan asserts the sentinels appear there and **only** there, and only once the release gate has opened.
+
+- [ ] **Step 1: Write the failing test**
+
+```ts
+// apps/api/test/run/scrub-scan.test.ts — AC-22's gate
+const SECRETS = ["__KEY_LOG001__", "__EXPL_LOG001__", "__RUBRIC_WRI001__", "__MODELANS_WRI001__",
+  "__ACCEPT_BLK001__", "__TOL_QNT003__", "__OTHER_CANDIDATE__", "__ACCESS_CODE__"];
+const INTERNAL = ["wsp_", "bnk_", "qst_", "ver_", "usr_"];
+
+/** Derived from ROUTE_AUTH, never hand-written: a route added later is scanned or fails. */
+const CANDIDATE_ENDPOINTS = Object.entries(ROUTE_AUTH)
+  .filter(([e, a]) => a === "attempt" || (a === "public" && e.includes("/run/")));
+
+it("AC-22: every candidate endpoint is covered by this scan", () => {
+  expect(CANDIDATE_ENDPOINTS.length).toBe(expectedCandidateEndpointCount);   // bumped deliberately
+  expect(scanned()).toEqual(new Set(CANDIDATE_ENDPOINTS.map(([e]) => e)));
+});
+
+it.each(CANDIDATE_ENDPOINTS)("AC-22: %s leaks no key, explanation or other candidate's data", async (endpoint) => {
+  const body = await replay(endpoint);                      // a live attempt over the sentinel fixture
+  for (const s of SECRETS) expect(body, `${endpoint} leaked ${s}`).not.toContain(s);
+});
+
+it.each(CANDIDATE_ENDPOINTS)("S-09: %s leaks no internal identifier", async (endpoint) => {
+  const body = await replay(endpoint);
+  for (const p of INTERNAL) expect(body, `${endpoint} leaked ${p}`).not.toContain(p);
+});
+
+it("AC-22: the scan would catch a leak — a deliberately unscrubbed route fails it", async () => {
+  // The scan's own guard: without this, a scan over an empty body passes forever.
+  expect(await replayWith(unscrubbedRoute)).toContain("__KEY_LOG001__");
+});
+
+it("T-22: full_review is the one place a key and an explanation appear, and only after release", async () => {
+  expect(await replay("GET /api/v1/run/attempt/result", { show: "full_review", when: "on_submit" }))
+    .toContain("__KEY_LOG001__");
+  expect(await replay("GET /api/v1/run/attempt/result", { show: "full_review", when: "on_date", at: future }))
+    .not.toContain("__KEY_LOG001__");
+});
+
+it("a candidate's own attempt and candidate ids are present; another candidate's are not", async () => {
+  const body = await replay("GET /api/v1/run/attempt");
+  expect(body).toContain(myAttemptId);
+  expect(body).not.toContain(otherAttemptId);
+});
+
+it.each(QUESTION_TYPES)("forCandidate builds %s field by field, so a new stored field cannot leak", (type) => {
+  const stored = { ...fixture(type), __future_secret__: "__LEAK__" } as unknown as Question;
+  expect(JSON.stringify(forCandidate(stored, { mediaBase }))).not.toContain("__LEAK__");
+});
+```
+
+- [ ] **Step 2: Run it to make sure it fails**
+
+Run: `pnpm vitest run apps/api/test/run/scrub-scan.test.ts` — FAIL, naming each endpoint and each sentinel it still carries.
+
+- [ ] **Step 3: Complete `forCandidate` and `releasedResult`**
+
+Fix whatever the scan reports. `forCandidate` must be an allowlist — it constructs `CandidateQuestion` field by field and never spreads the stored document — which is what makes the last test above pass and what keeps a field added in Phase 7 or 9 from leaking by default.
+
+- [ ] **Step 4: Run the whole suite**
+
+Run: `pnpm lint && pnpm typecheck && pnpm build && pnpm test`, with `TEST_POSTGRES_URL` set — all pass.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api docs/ROADMAP.md
+git commit -s -m "test(run): AC-22 scan of every candidate response for keys and other candidates' data"
+```
+
+---
+
+## Smaller calls made while planning
+
+The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
+
+- **Ruling: candidate routes mount under `/api/v1/run/…` and are authorised by the attempt token, not by workspace membership.** — Why: `docs/PRD.md`'s REST API table names those paths and that authority verbatim; `S-06`; [ADR 0005](../../adr/0005-organiser-auth-before-the-candidate-runtime.md) ("Nothing in this decision gives a candidate a user row"). — Cost if wrong: every route path and every `ROUTE_AUTH`, `ROUTE_BUDGETS` key changes, plus the candidate URL in `T-02`.
+- **Ruling: a third table, `ROUTE_AUTH`, declares every mounted endpoint's authority.** — Why: `authorization.test.ts:153` enumerates only guarded routes, and this phase makes "unguarded" ordinary (Review Focus 1). — Cost if wrong: one table and one test file to delete; the alternative is that a later phase's unguarded organiser route ships silently.
+- **Ruling: the two pre-workspace candidate reads live in `repo/candidate-entry.ts`, not in `identity.ts`.** — Why: [ADR 0006](../../adr/0006-identity-reads-sit-outside-the-workspace-guard.md)'s "to watch" section — a function that is not about users or sessions should take a workspace ID — and these cannot. — Cost if wrong: move two functions and merge two pinned lists.
+- **Ruling: the attempt token is an HttpOnly cookie scoped to `/api/v1/run`, not a body field the client stores.** — Why: `C-06` requires a browser restart to resume, which `sessionStorage` cannot do; `S-03` sets the cookie posture; HttpOnly keeps the token away from the runner's own Markdown rendering. — Cost if wrong: the client stores and sends a bearer token, and the offline queue has to carry it; one header, no schema change.
+- **Ruling: `attempt` gains exactly two columns, `max_index` and `section_started_at`.** — Why: `max_index` carries `linear` *and* `per_section` because the current section is `sectionIndexOf(max_index)` over the pinned layout, and `section_started_at` is the only thing a per-section deadline cannot be derived from. — Cost if wrong: one more column and one migration.
+- **Ruling: mark-for-review is browser state in `localStorage`, not a column.** — Why: `C-06` promises resume "in the same browser"; `C-08`'s confirmation is rendered client-side; a column would cost a D1 write per toggle against the 100,000/day budget for a flag the server never reads. — Cost if wrong: one `json` column on `attempt` and one field on the save route.
+- **Ruling: the offline queue uses `localStorage`, not IndexedDB.** — Why: `AC-14` needs survival across a reload, which both give; `localStorage` is synchronous (so a `beforeunload` flush lands), needs no jsdom polyfill, and answers are text. — Cost if wrong: swap one module behind `SaveQueue`'s interface.
+- **Ruling: rate-limit buckets are a D1 table, and the answer-save path takes none.** — Why: ADR 0002's adapter rule rules out KV and Durable Objects for the reference path; a save is already bounded by a live token and a server deadline, and a counter write would double the PRD's one-write hot path. — Cost if wrong: one table, and a limiter line on one route.
+- **Ruling: auto-submit at zero is whichever of the client at zero or the server's next request happens first, with no scheduled sweep.** — Why: nothing in the roadmap gives Phase 6 a Cron Trigger (Phases 10 and 11 introduce scheduling), and an attempt read past its deadline materialises the submission, so Phase 8's results read is correct either way. — Cost if wrong: one Cron Trigger and a `WHERE submitted_at IS NULL AND deadline_at < ?` sweep beside Phase 8's retention job.
+- **Ruling: `C-01`'s "Check my device" reports in Phase 6 and blocks in Phase 7.** — Why: `C-01` puts the button on the landing page, which is this phase; `docs/ROADMAP.md`'s Phase 7 "Delivers" owns "device and browser gating" and "the camera requirement". — Cost if wrong: the gate moves into `ExamLanding`'s existing `deviceReport()` call site.
+- **Ruling: no `POST /run/attempt/events` and no `/snapshot` route in Phase 6.** — Why: both appear in the PRD's REST table but every event and snapshot producer is a `P-*` control, and `docs/ROADMAP.md` puts all of them in Phase 7. `appendEvents` already exists in `packages/db` and is not called by this phase. — Cost if wrong: two routes and two `ROUTE_AUTH` lines.
+- **Ruling: the candidate app is a third Vite entry (`exam.html`), not a route inside the admin bundle.** — Why: the candidate's 300 KB budget is a PRD non-functional requirement and the admin bundle is unbounded; `bundle.test.ts`'s existing `ADMIN_PATH_RE` guard becomes enforceable for the candidate only if the entries are separate. — Cost if wrong: one Rollup input and one HTML file.
+- **Ruling: the SPA fallback mapping `/<ws>/<test>` to `exam.html` is ordered after every specific `_headers` / `_redirects` rule.** — Why: a two-segment wildcard would otherwise swallow `/api`, `/assets` and `/admin.html`; `apps/web/test/hosting.test.ts` already pins hosting configuration and is extended to pin the order. — Cost if wrong: a reordered rule and a failing hosting test, caught locally.
+- **Ruling: `validateRegistration` lives in `packages/core` and takes its regex matcher as an injected option.** — Why: `docs/test-format.md:110` makes the server the only copy that counts, and one implementation with two callers is the cheapest way to keep the browser's message identical; `packages/core` is a pure leaf package and cannot host a bounded matcher itself. — Cost if wrong: two validators that drift, which is the defect the ruling exists to prevent.
+- **Ruling: unique registration values are stored as SHA-256 hashes in `candidate_unique`, not as a JSON index.** — Why: neither SQLite nor Postgres gives a portable unique index into a JSON column, and a plaintext column would be a second copy of data `S-15` lets an operator encrypt. — Cost if wrong: a plain-value column, and a case-folding decision to make explicit.
+- **Ruling: `GET /api/v1/run/attempt/media/:key` is authorised by membership in `layout.media`, not by the attempt's workspace.** — Why: Review Focus 2; the pinned layout is already in memory so the check costs nothing, and the workspace check would authorise every image in the workspace. — Cost if wrong: a candidate can enumerate the workspace's content-addressed media, which is a reportable vulnerability under `SECURITY.md`'s scope note.
+- **Ruling: `GET /api/v1/workspaces/:id/media/:key` keeps `banks.edit` and is not relaxed.** — Why: Phase 4 chose it deliberately; relaxing it would widen the organiser route instead of adding a candidate one, and `ROUTE_ACTIONS` would stop expressing who may read a bank. — Cost if wrong: one line in `ROUTE_ACTIONS` and a weaker organiser boundary.
+- **Ruling: `AC-07`'s pointer drag, deferred by Phase 4, is closed in Task 7 by extending `ReorderableList` rather than writing a second control.** — Why: Phase 4's deferral note specifies the exact shape ("native HTML5 `dragstart` / `dragover` / `drop` handlers calling the `onReorder(from, to)` Task 3 already exposes … no change to `ReorderableList`'s props"). — Cost if wrong: the authoring and candidate sides grow two reordering controls that drift.
+- **Ruling: `fill_blank` inputs are interleaved into the *rendered* HTML on an invisible marker, not substituted into the Markdown source.** — Why: substituting an `<input>` before rendering requires `html: true`, which [ADR 0004](../../adr/0004-client-side-rendering-with-lazy-loaded-katex.md) and `markdown-it`'s `html: false` setting forbid, and would create the first stored-HTML surface in the product. — Cost if wrong: a different splitting token; the tests pin the three ways a marker can be mangled.
+- **Ruling: issue [#129](https://github.com/SriSatyaLokesh/pariksha/issues/129) lands in Phase 6 (Task 11) and widens to cover registration patterns.** — Why: Phase 6 is the first phase in which any author-written regex runs against candidate input, and it adds a second such surface the issue predates (`schemas/test-1.json` `$defs.validation.pattern`). — Cost if wrong: one `fill_blank` question can cost every candidate who answers it a failed save, which is what the issue was filed to prevent.
+
+## Known deferrals, recorded so they are not rediscovered as bugs
+
+- **`T-21`'s uploaded candidate-list allowlist is not enforced.** Issue [#66](https://github.com/SriSatyaLokesh/pariksha/issues/66) names the four access modes; `allow_email_domains` and `allow_ip_ranges` ship in Task 2, and "only listed IDs may register" does not, because the list is a Phase 5 artefact whose storage shape this plan could not read (interface row 14). What would be added: one lookup in `entry.ts`'s pre-switch allowlist block, against whatever Phase 5 stores. **Until that lands, `T-21` is partly met.**
+- **`C-10`'s proctor broadcast banner is not built.** The PRD lists it under Candidate experience, but `docs/ROADMAP.md`'s Phase 6 "Delivers" omits it and Phase 8 owns "the live monitor with proctor actions" — the sender. `DESIGN.md` specifies `proctor-banner` as a runner component; Phase 6 ships no receiver, so both halves land together in Phase 8.
+- **`T-19`'s URL reachability check is not performed.** `validation.check_reachable` is accepted and ignored. A server-side `fetch` of a candidate-supplied URL during registration is an SSRF surface and a latency hazard on a 10 ms CPU budget, and the PRD's own wording is "flag it as unverified", which is a results-side annotation. What would be added: a queued check in Phase 8, writing the flag onto the candidate row.
+- **`T-24`'s per-test interface language is English only.** The PRD scopes translation files to v1 and `docs/ROADMAP.md` puts internationalisation in Phase 12; the candidate runtime adds no hard-coded string that a translation file could not later replace, but there is no translation file in this phase.
+- **No scheduled auto-submit sweep** — see the ruling above. An attempt whose candidate closes the tab stays un-submitted until it is next read.
+- **No `rate_limit` row expiry.** The table grows one row per bucket per window until Phase 8's retention job sweeps it.
+- **Phase 7 will add `blob:` to `img-src`** for camera frames (`apps/api/src/middleware/security.ts:10` already says so). Phase 6 changes `img-src` not at all.
+
+## Escalated — needs a human decision
+
+**1. Bot protection breaks the "no third-party scripts" promise, and two PRD clauses of equal precedence disagree.**
+`S-07`: "Registration is protected by Cloudflare Turnstile or hCaptcha (both free)". `S-11`: "No analytics, telemetry or third-party scripts; fonts and the face model are served from the app itself." A Turnstile or hCaptcha widget is a script from `challenges.cloudflare.com` (or `hcaptcha.com`), an iframe and an XHR, so it needs `script-src`, `frame-src` and `connect-src` entries in a CSP that is `'self'` everywhere today — in two files that must stay byte-identical, one of which is pinned by `apps/web/test/hosting.test.ts:25` asserting no `https?://` appears at all. `docs/ROADMAP.md`'s operator table lists "A Turnstile site key and secret — Registration bot protection — Phase 6", which favours Turnstile, but the roadmap ranks below the PRD and cannot overrule `S-11`.
+- **(a) Ship Turnstile, narrow `S-11`.** Costs: an ADR amending `S-11`; three CSP directives naming one origin; `hosting.test.ts` gains an allowlist; every candidate's browser contacts Cloudflare on the registration page, on a product whose landing page sells "no third-party scripts"; a self-hoster with no Cloudflare account gets no bot protection.
+- **(b) Ship no captcha; rate limits only.** Costs: `S-07` is unmet and the acceptance checklist must say so; a browser farm registering at human speed is unstopped, which on a public `link_code` test means junk candidate rows and D1 writes. `S-11` and the CSP are untouched.
+- **(c) Ship a same-origin proof-of-work on registration** (a few lines of WebCrypto, one server-issued challenge, no third-party anything). Costs: it is not what `S-07` names, so `S-07` is still formally unmet; it raises a farm's cost without stopping a determined one; it costs a candidate on a slow phone a second or two — and `P-01` already blocks phones.
+- **Recommendation: (c), with (a) available as a per-instance opt-in.** It keeps the `S-11` promise the product is marketed on, keeps the CSP at `'self'` for every default deployment, and leaves `verifyCaptcha`'s seam in place so an operator who wants Turnstile configures a secret and accepts the CSP change on their own instance. If (a) is chosen instead, Task 4's ADR is written and `ALLOWED_THIRD_PARTY_ORIGINS` names exactly one origin.
+
+**2. `full_review` on submit hands a candidate the answer key before their next attempt.**
+`T-22` allows `when: "on_submit"` with `show: "full_review"`, and `T-14` allows `attempts_allowed > 1`. Together they mean a candidate finishes attempt 1, reads every correct answer and explanation, and starts attempt 2. `docs/test-format.md:190` says "use only after the test has closed for everyone", which is advice to an organiser, not a rule the server enforces, and nothing says who should enforce it.
+- **(a) Nobody enforces it.** Costs: an organiser configuring a retake with full review silently hands out the key; it will be reported as a bug.
+- **(b) Phase 5 refuses the combination at publish**, in the `UX-17` checklist. Costs: one checklist row; an organiser who genuinely wants it (a practice test) cannot have it.
+- **(c) Phase 6 degrades it at runtime** — `full_review` falls back to `score_and_sections` while the candidate has attempts remaining, and opens fully once they do not.
+- **Recommendation: (c).** It is three lines in `releasedResult` and the only option that serves both the practice-test case and the retake case correctly, but it is a product behaviour nobody has specified, so it is not a planner's call to make.
+
+**3. Which attempt's score does a candidate see when `attempts_allowed > 1`?**
+`T-14` sets `counted_attempt` to `highest`, `latest` or `average` — a *results* concept the roadmap gives to Phase 8. `AC-16` says results show "exactly as the release setting says" and is silent on which attempt. On the finish page after attempt 2 of 3, a candidate could reasonably be shown this attempt's score or the counted one, and the two disagree whenever `counted_attempt` is `highest` or `average`.
+- **(a) This attempt's score.** Matches what a finish page means; disagrees with the organiser's CSV.
+- **(b) The counted score.** Matches the CSV; requires reading every prior attempt on the finish page, which adds a subrequest to a route that currently needs none, and tells a candidate mid-series something about earlier attempts.
+- **Recommendation: (a)**, with the receipt naming which attempt it is ("Attempt 2 of 3"). It is cheaper, it is what the page appears to promise, and Phase 8 owns the counted figure.
+
+## Done when
+
+- `AC-12` passes: required, regex, domain and unique rules each block an invalid registration with the message on the field, driven through `POST /run/:ws/:test/register` with a body no honest client could produce, and a repeat of a unique field is refused with no half-written candidate behind it.
+- `AC-13` passes: the server deadline ignores the client clock, an answer 31 s past the deadline is refused where 29 s is accepted, and moving the system clock forward an hour does not move the rendered countdown.
+- `AC-14` passes: two minutes with the network off loses no answers and preserves their order, and a new queue over the same `localStorage` drains what the old one held; a resumed attempt reproduces the same questions, the same option order, the same answers and the correct remaining time.
+- `AC-15` passes: in `linear`, `PUT /run/attempt/answer` against an earlier question is 403 with the rule named and stores nothing — asserted against the route, not the interface — and the lock survives a browser restart.
+- `AC-16` passes: for every `(when, show)` combination the response body contains exactly what the setting allows and no more, `on_date` carries nothing before `at`, and `full_review` is the only shape carrying a key or an explanation.
+- `AC-22` passes: a sentinel fixture replayed through every endpoint `ROUTE_AUTH` marks `attempt` or candidate-`public` leaks no key, explanation, rubric, model answer, accepted answer, tolerance, access code, internal identifier or other candidate's value — with the endpoint list derived from `ROUTE_AUTH`, and a self-check proving the scan would catch a leak.
+- `AC-07`'s remaining half is closed: `ordering` reorders by pointer drag as well as by keyboard, through the same `onReorder`, with Phase 4's focus and live-region behaviour unchanged.
+- The candidate can load exactly the media in their own attempt's pinned layout and nothing else; a key in the same workspace but outside the layout is the same 404 as a key from another workspace; the response is `private, max-age=31536000, immutable`; SVG is still refused; and `GET /api/v1/workspaces/:id/media/:key` is still `banks.edit`.
+- Issue [#129](https://github.com/SriSatyaLokesh/pariksha/issues/129) is closed: a `fill_blank` carrying `(a|a)+$` against 30 characters does not block answering, saving or submitting; the question is flagged rather than silently zeroed; and a registration `validation.pattern` runs through the same bound.
+- `ROUTE_AUTH` covers every mounted endpoint, its `workspace` set equals `ROUTE_ACTIONS`'s keys, its `public` set matches a literal allowlist, and `authorization.test.ts` passes unchanged.
+- `ROUTE_BUDGETS` covers every route this phase mounts, each number measured with `toBe` rather than bounded, none reaching 50, and `PUT /run/attempt/answer` at exactly one D1 read and one D1 write.
+- Every candidate screen passes `jest-axe` at 100% and 200% zoom, every control's accessible name contains its visible label, every palette and banner state carries a non-colour signal, nothing inside a live attempt animates, and `apps/web/test/no-hex-colors.test.ts` still finds nothing.
+- `katex` is in no entry's static graph including `exam`, no organiser module is statically reachable from `exam`, and `_headers` still names no third-party origin unless the escalation above was answered (a) and an ADR says which one.
+- `pnpm lint typecheck build test` passes with SQLite and Postgres both migrating in CI.
+
+## Self-review
+
+Run after writing, against the spec, by the planner.
+
+**1. Spec coverage.** `C-01`→T1, `C-02`→T2, `C-03`+`S-12`→T3, `C-04`→T6, `C-05`→T8, `C-06`→T5+T8, `C-07`→T9, `C-08`+`C-09`→T11, `S-06`→T5, `S-07`→T4, `S-10`→T12, `T-12`/`T-14`→T5, `T-13`→T10, `T-16`/`T-17`→T3, `T-20`→T2, `T-21`→T2 (partly; see deferrals), `T-22`→T11, `T-23`→T1, `AC-07`→T7, `AC-09`–`AC-11`→T5, `AC-12`→T3, `AC-13`→T9, `AC-14`→T8, `AC-15`→T10, `AC-16`→T11, `AC-22`→T12. **Gaps, each recorded as a deferral with its reason:** `C-10` (Phase 8 owns the sender), `T-19` (`check_reachable`), `T-21`'s candidate list, `T-24` (translations, Phase 12).
+
+**2. Step scan.** Every Step 3 names the exact symbols to implement and carries prose only where the signature and tests leave a choice — the `rate_limit` upsert (two concurrent requests must not both read a stale count), the queue's retry schedule, the inline-blank split order, and the `max_index` batch. No step says "handle edge cases" or "add appropriate validation", and no step carries a function body the tests already determine.
+
+**3. Type consistency.** `AttemptRecord` (T5) is the shape `attemptContext` (T5) puts on `c.var.attempt` as `AttemptContextVar` and that T7, T8, T9, T10 and T11 consume by that name. `PinnedLayout = AttemptLayout & { media: string[] }` is defined once in T5 and used in T7 and T10. `AttemptPaper` (T5) is what `/start`, resume (T5), the runner (T6) and the clock (T9) share. `SaveOutcome` (T8) is the three-way result T9's `assertWritable` and T10's `assertReachable` produce. `PaletteState` is defined in T6 and produced by T10's `paletteStates`. `forCandidate` / `CandidateQuestion` are defined in T5 and completed in T12 — no second name. `matchBounded` is written in T3 and hardened in T11, same signature.
+
+**4. Review Focus.** 1 → `apps/api/test/route-authority.test.ts` (T1). 2 → `apps/api/test/run/media.test.ts` (T7). 3 → `apps/web/test/exam/queue.test.ts`'s "a refused save is KEPT" and "the banner never reads Saved" (T8). 4 → `apps/web/test/exam/clock.test.tsx`'s "moving the system clock forward an hour" (T9). 5 → `apps/api/test/run/scrub-scan.test.ts` (T12).
+
+**5. Proportion.** The spec this plan argues from is about 1,600 lines (`docs/PRD.md` 689, `docs/test-format.md` 217, `docs/ROADMAP.md` 245, `docs/question-format.md` 80, the six ADRs, `SECURITY.md`). The plan is about 2,380 lines — of that order, not a multiple of it. Code blocks are test names and assertions carrying the spec's exact values (`45 * 60_000`, `29_000` / `31_000`, `[10, 2]`, 500, `*.ac.in`, `21CS0147`), plus three implementation fragments the signatures genuinely do not determine: the `rate_limit` upsert, the `BLANK_MARKER` shape, and the `ROUTE_AUTH` declaration. No task carries a function body.
