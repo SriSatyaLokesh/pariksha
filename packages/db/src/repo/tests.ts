@@ -3,6 +3,7 @@
 import type { DbClient } from "../client.js";
 import { newId, newShortCode } from "../ids.js";
 import { scoped } from "./guard.js";
+import type { TestDocumentBody } from "./test-document.js";
 
 export type TestStatus = "draft" | "published" | "closed" | "archived";
 
@@ -354,5 +355,117 @@ export const getTestVersion = scoped(
       settings: db.jsonValue(row.settings_json),
       sections: db.jsonValue(row.sections_json),
     };
+  },
+);
+
+// Phase 5 Task 3 (#55, P5.2): the draft itself — "the draft is the whole
+// document" (Architecture). `TestVersionRow` here is the typed sibling of
+// `getTestVersion`'s anonymous return shape above; that function stays as
+// it is (Task 11 reads a *published* version by id, where only `settings`/
+// `sections` as `unknown` matter) rather than being rewritten onto this
+// type, which would touch lifecycle code this task does not own.
+
+export interface TestVersionRow {
+  id: string;
+  testId: string;
+  version: number;
+  body: TestDocumentBody;
+  publishedAt: number | null;
+  createdAt: number;
+}
+
+interface TestVersionRecord {
+  id: string;
+  test_id: string;
+  version: number;
+  settings_json: unknown;
+  sections_json: unknown;
+  published_at: number | null;
+  created_at: number;
+}
+
+function toTestVersionRow(db: DbClient, row: TestVersionRecord): TestVersionRow {
+  return {
+    id: row.id,
+    testId: row.test_id,
+    version: Number(row.version),
+    body: {
+      settings: row.settings_json == null ? {} : db.jsonValue(row.settings_json),
+      sections: row.sections_json == null ? [] : db.jsonValue(row.sections_json),
+    },
+    publishedAt: row.published_at === null ? null : Number(row.published_at),
+    createdAt: Number(row.created_at),
+  };
+}
+
+const TEST_VERSION_COLUMNS = "id, test_id, version, settings_json, sections_json, published_at, created_at";
+
+/** The one `published_at IS NULL` row for `testId` — T-04's draft head, or
+ * `null` for a test every version of which has been published and archived
+ * with nothing left in progress (not reachable before Task 11's lifecycle
+ * exists, but this function does not assume Task 2's invariant holds
+ * forever). */
+export const getDraftVersion = scoped(
+  "getDraftVersion",
+  async (db: DbClient, workspaceId: string, testId: string): Promise<TestVersionRow | null> => {
+    const rows = await db.query<TestVersionRecord>(
+      `SELECT ${TEST_VERSION_COLUMNS} FROM test_version WHERE workspace_id = ? AND test_id = ? AND published_at IS NULL`,
+      [workspaceId, testId],
+    );
+    const row = rows[0];
+    return row ? toTestVersionRow(db, row) : null;
+  },
+);
+
+/**
+ * Replaces the draft's whole stored body. Create-or-replace, not
+ * update-only — `now` is for the branch neither Task 3 nor Task 2 ever
+ * takes today but Task 11's lifecycle will: publishing stamps the current
+ * draft's `published_at` and leaves no `published_at IS NULL` row behind
+ * (`publishTestVersion`, above, does not create one), so the next edit
+ * after a publish finds none and this function starts the next draft
+ * itself — version `currentVersion + 1`, fresh content, `now` as its own
+ * `created_at` — rather than every lifecycle task re-deriving "what comes
+ * after the last version" on its own.
+ *
+ * `body` replaces the stored document wholesale; the merge that turns a
+ * `DraftPatch` into a whole `TestDocumentBody` (Review Focus item 3 — a
+ * settings patch that merges where it must replace) is the route's job,
+ * one layer up, same as `updateTest` leaves `TestPatch` assembly to its
+ * caller.
+ */
+export const putDraftVersion = scoped(
+  "putDraftVersion",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    testId: string,
+    body: TestDocumentBody,
+    now: number,
+  ): Promise<TestVersionRow> => {
+    const existing = await getDraftVersion(db, workspaceId, testId);
+
+    if (existing) {
+      await db.run("UPDATE test_version SET settings_json = ?, sections_json = ? WHERE workspace_id = ? AND id = ?", [
+        db.jsonParam(body.settings),
+        db.jsonParam(body.sections),
+        workspaceId,
+        existing.id,
+      ]);
+      // Built from `existing` plus the body just written, rather than a
+      // second read proving what the `UPDATE` just wrote — `updateTest`'s
+      // own precedent, above.
+      return { ...existing, body };
+    }
+
+    const test = await getTest(db, workspaceId, testId);
+    const version = (test?.currentVersion ?? 0) + 1;
+    const id = newId("ver");
+    await db.run(
+      "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, " +
+        "published_at, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
+      [id, workspaceId, testId, version, db.jsonParam(body.settings), db.jsonParam(body.sections), now],
+    );
+    return { id, testId, version, body, publishedAt: null, createdAt: now };
   },
 );

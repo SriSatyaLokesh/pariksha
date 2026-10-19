@@ -232,3 +232,99 @@ describe("Review Focus 1: draft references do not block a delete", () => {
     expect(unused.rows.map((r) => r.id)).toContain(questionId);
   });
 });
+
+// Task 3 (#55, P5.2): the draft itself.
+describe("getDraftVersion / putDraftVersion", () => {
+  it("getDraftVersion reads the version 1 row createTest already seeded", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w13", name: "W13" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a13" });
+
+    const draft = await repo.getDraftVersion(db, ws, created.id);
+    expect(draft).toMatchObject({ version: 1, publishedAt: null, body: { settings: {}, sections: [] } });
+  });
+
+  it("putDraftVersion replaces the stored body wholesale and keeps the same row", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w14", name: "W14" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a14" });
+    const before = await repo.getDraftVersion(db, ws, created.id);
+
+    const body = { settings: { access: { mode: "link_code" as const, access_code: "X" } }, sections: [] };
+    const after = await repo.putDraftVersion(db, ws, created.id, body, T);
+
+    expect(after.id).toBe(before?.id);
+    expect(after.version).toBe(1);
+    expect(after.body).toEqual(body);
+    expect((await repo.getDraftVersion(db, ws, created.id))?.body).toEqual(body);
+  });
+
+  it("starts a fresh numbered draft when the test currently has none (Task 11's publish-then-edit case)", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w15", name: "W15" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a15" });
+    await repo.publishTestVersion(db, ws, { testId: created.id, version: 2, settings: {}, sections: [], now: T });
+    // Clearing the draft row itself is Task 11's lifecycle feature, not this
+    // one — stood in for here with a raw delete, the same way Task 2's own
+    // `draftNaming` helper (top of this file) stands in for Task 3's own
+    // feature elsewhere in this suite.
+    await db.run(
+      "DELETE FROM test_version WHERE workspace_id = ? AND test_id = ? AND published_at IS NULL",
+      [ws, created.id],
+    );
+    expect(await repo.getDraftVersion(db, ws, created.id)).toBeNull();
+
+    const body = { settings: {}, sections: [] };
+    const draft = await repo.putDraftVersion(db, ws, created.id, body, T + 1);
+
+    expect(draft.version).toBe(3);
+    expect(draft.publishedAt).toBeNull();
+    expect(draft.createdAt).toBe(T + 1);
+  });
+});
+
+describe("existingRowIds / workspaceQuestionSummaries", () => {
+  it("existingRowIds answers which ids are this workspace's own, of both kinds, in one call", async () => {
+    const ws = newId("wsp");
+    const other = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w16", name: "W16" });
+    await repo.createWorkspace(db, other, { slug: "w16b", name: "W16B" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    const foreignBank = await repo.createBank(db, other, { name: "Foreign bank" });
+    const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
+
+    const result = await repo.existingRowIds(db, ws, {
+      questionIds: [questionId, "qst_doesnotexist00"],
+      bankIds: [bank, foreignBank],
+    });
+
+    expect(result.questionIds).toEqual(new Set([questionId]));
+    expect(result.bankIds).toEqual(new Set([bank]));
+  });
+
+  it("existingRowIds costs nothing when neither list names anything", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w17", name: "W17" });
+    expect(await repo.existingRowIds(db, ws, { questionIds: [], bankIds: [] })).toEqual({
+      questionIds: new Set(),
+      bankIds: new Set(),
+    });
+  });
+
+  it("workspaceQuestionSummaries lists every question in the workspace with the draw/points columns", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w18", name: "W18" });
+    const bank = await repo.createBank(db, ws, { name: "Bank" });
+    const { id: questionId } = await repo.upsertQuestion(db, ws, bank, singleFixture, T);
+
+    const summaries = await repo.workspaceQuestionSummaries(db, ws);
+    expect(summaries).toContainEqual({
+      id: questionId,
+      bankId: bank,
+      points: 1,
+      difficulty: "easy",
+      tags: ["demo"],
+      type: "single",
+    });
+  });
+});

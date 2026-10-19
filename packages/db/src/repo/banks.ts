@@ -813,3 +813,97 @@ export const deleteGroup = scoped(
     return { deleted: changes > 0, blockedBy: [] };
   },
 );
+
+// Phase 5 Task 3 (#55, P5.2): the test builder's own two reads of this
+// table, neither shaped like `listQuestions` (which pages one bank at a
+// time) — both need every question *this workspace* holds, regardless of
+// bank, in one statement so the draft route's budget stays flat whether a
+// test's sections name one bank or ten.
+
+/** The columns a pool's live draw (UX-15) and a set's points balance
+ * (UX-16) need, and nothing else — never the full `QuestionRow` mapping
+ * (`toQuestionDocument`, Markdown and all), which this is deliberately
+ * cheaper than. */
+export interface QuestionSummary {
+  id: string;
+  bankId: string;
+  points: number;
+  difficulty: Difficulty | null;
+  tags: string[];
+  type: QuestionType;
+}
+
+/**
+ * Every question row in the workspace, lightly shaped. The draft route
+ * builds `draw` (matching each pool section's filter with `matchesFilter`,
+ * `@pariksha/core`) and `setPoints` (summing a `sets` source's own named
+ * ids) from this one list in memory, so a test with ten pool sections still
+ * costs one statement, not ten.
+ */
+export const workspaceQuestionSummaries = scoped(
+  "workspaceQuestionSummaries",
+  async (db: DbClient, workspaceId: string): Promise<QuestionSummary[]> => {
+    const rows = await db.query<{
+      id: string;
+      bank_id: string;
+      points: number;
+      difficulty: string | null;
+      tags_json: unknown;
+      type: string;
+    }>("SELECT id, bank_id, points, difficulty, tags_json, type FROM question WHERE workspace_id = ?", [
+      workspaceId,
+    ]);
+    return rows.map((row) => ({
+      id: row.id,
+      bankId: row.bank_id,
+      points: Number(row.points),
+      difficulty: row.difficulty as Difficulty | null,
+      tags: row.tags_json == null ? [] : db.jsonValue<string[]>(row.tags_json),
+      type: row.type as QuestionType,
+    }));
+  },
+);
+
+/**
+ * Which of `questionIds`/`bankIds` actually name a row in this workspace —
+ * the draft route's save-time guard against a `fixed`/`sets` source naming
+ * another tenant's question, or a `pool` source naming another tenant's
+ * bank (the plan's own "Save-time versus publish-time" rule: a
+ * cross-workspace reference is a read waiting to happen, not a half-built
+ * draft). One statement regardless of how many ids either list holds —
+ * `UNION ALL` over the two tables, not one `IN (...)` query per table and
+ * never one per id. Both lists empty is the common PATCH (a settings-only
+ * patch names no row at all) and costs nothing.
+ */
+export const existingRowIds = scoped(
+  "existingRowIds",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    ids: { questionIds: readonly string[]; bankIds: readonly string[] },
+  ): Promise<{ questionIds: Set<string>; bankIds: Set<string> }> => {
+    if (ids.questionIds.length === 0 && ids.bankIds.length === 0) {
+      return { questionIds: new Set(), bankIds: new Set() };
+    }
+
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (ids.questionIds.length > 0) {
+      clauses.push(
+        `SELECT id, 'question' AS kind FROM question WHERE workspace_id = ? AND id IN (${ids.questionIds.map(() => "?").join(", ")})`,
+      );
+      params.push(workspaceId, ...ids.questionIds);
+    }
+    if (ids.bankIds.length > 0) {
+      clauses.push(
+        `SELECT id, 'bank' AS kind FROM question_bank WHERE workspace_id = ? AND id IN (${ids.bankIds.map(() => "?").join(", ")})`,
+      );
+      params.push(workspaceId, ...ids.bankIds);
+    }
+
+    const rows = await db.query<{ id: string; kind: "question" | "bank" }>(clauses.join(" UNION ALL "), params);
+    const questionIds = new Set(rows.filter((row) => row.kind === "question").map((row) => row.id));
+    const bankIds = new Set(rows.filter((row) => row.kind === "bank").map((row) => row.id));
+    return { questionIds, bankIds };
+  },
+);
