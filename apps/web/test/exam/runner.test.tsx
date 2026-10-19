@@ -7,7 +7,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { readResolvedCss } from "../css-chain";
 import { ExamApp } from "../../src/routes/exam";
-import { Runner, type AttemptPaper, type CandidateQuestion } from "../../src/components/exam/Runner";
+import { Runner } from "../../src/components/exam/Runner";
+import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 
 // C-04, the runner shell. Task 7 brings the answer blocks, Task 8 the save
@@ -15,12 +16,9 @@ import type { LandingPayload, RunClient } from "../../src/lib/run";
 // `questionSlot`, `bannerSlot` and `clockSlot` are props and the tests
 // drive them with stand-ins.
 //
-// `paper` is typed against `AttemptPaper` as the plan pins it. Task 5
-// defines that type in `apps/web/src/lib/run.ts` (together with
-// `RunClient.start`); this task declares it beside the component that
-// consumes it so the shell is committable before the API half lands, and
-// the merge is an import move, not a rewrite. Same for `PaperClient` in
-// `routes/exam.tsx`.
+// `paper` is typed against `AttemptPaper` in `apps/web/src/lib/paper.ts`
+// — the shape the server really answers with, imported rather than
+// re-declared since the Phase 6 merge.
 //
 // No `@testing-library/user-event` in this workspace, by a decision this
 // repo already made and documented (`test/authoring/reorder.test.tsx:44`,
@@ -68,6 +66,7 @@ const paper: AttemptPaper = {
   lateSyncGraceSeconds: 120,
   allowCalculator: true,
   serverNow: NOW,
+  submittedAt: null,
 };
 
 type Props = ComponentProps<typeof Runner>;

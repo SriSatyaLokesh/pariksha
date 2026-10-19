@@ -1,6 +1,6 @@
 import { useId } from "react";
 import type { ResponseValue } from "@pariksha/core";
-import type { CandidateQuestion } from "../Runner";
+import type { CandidateQuestion } from "../../../lib/paper";
 import { ReorderableList } from "../../authoring/ReorderableList";
 import { reordered } from "../../answer-common";
 import type { AnswerProps } from "./props";

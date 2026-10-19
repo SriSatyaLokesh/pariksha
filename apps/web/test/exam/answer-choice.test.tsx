@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
-import type { CandidateQuestion } from "../../src/components/exam/Runner";
+import type { CandidateQuestion } from "../../src/lib/paper";
 import { ExamApp } from "../../src/routes/exam";
 import { examPaper, landingPayload, startFromRoot } from "./answer-fixtures";
 

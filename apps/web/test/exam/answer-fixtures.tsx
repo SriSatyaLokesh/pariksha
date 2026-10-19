@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { ExamApp } from "../../src/routes/exam";
-import type { AttemptPaper } from "../../src/components/exam/Runner";
+import type { AttemptPaper } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 
 // The pre-submit checklist's first item, shared by the three answer test
@@ -8,10 +8,8 @@ import type { LandingPayload, RunClient } from "../../src/lib/run";
 // root and CLICKS its way there. Rendering `AnswerInput` directly proves
 // nothing about whether a candidate can ever reach it.
 //
-// `AttemptPaper` is Task 5's type, declared locally in Runner.tsx until
-// `lib/paper.ts` arrives (Task 6's report, "RunClient methods stubbed
-// rather than called"); this file imports it from there rather than
-// re-declaring a third copy.
+// `AttemptPaper` is Task 5's type, from `lib/paper.ts` — the one
+// declaration both tracks import since the Phase 6 merge.
 
 const NOW = 1_760_000_000_000;
 
@@ -126,6 +124,7 @@ export const examPaper: AttemptPaper = {
   lateSyncGraceSeconds: 120,
   allowCalculator: false,
   serverNow: NOW,
+  submittedAt: null,
 };
 
 export const landingPayload: LandingPayload = {

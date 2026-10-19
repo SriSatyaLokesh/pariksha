@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactElement } from "react";
-import type { QuestionType, ResponseValue } from "@pariksha/core";
+import type { AttemptPaper, CandidateQuestion } from "../../lib/paper";
 import { Palette, type PaletteQuestion, type PaletteState } from "./Palette";
 import { ViewControls, useViewPreferences } from "./ViewControls";
 import { Calculator } from "./Calculator";
@@ -18,52 +18,6 @@ import { useDialogKeys } from "../useDialogKeys";
  * reloaded thinks their answer was lost. Below 1024px there is no layout,
  * because `P-01` blocks the device.
  */
-
-/**
- * Task 5 defines `CandidateQuestion` and `AttemptPaper` in
- * `apps/web/src/lib/run.ts`, alongside the `RunClient.start`/`resume`
- * methods that answer with them. They are declared here, against the
- * plan's pinned shape, so the shell can be built and reviewed before the
- * API half lands; the merge deletes these two and re-points the import.
- */
-export interface CandidateQuestion {
-  id: string;
-  type: QuestionType;
-  prompt: string;
-  points: number;
-  media?: { kind: "image"; src: string; alt: string }[];
-  options?: { id: string; text: string }[];
-  left?: string[];
-  right?: string[];
-  items?: string[];
-  blanks?: { id: string }[];
-  unit?: string;
-  assertion?: string;
-  reason?: string;
-  maxLength?: number;
-  k?: number;
-  group?: { id: string; passage: string };
-}
-
-export interface AttemptPaper {
-  attemptId: string;
-  sections: {
-    id: string;
-    title: string;
-    instructions: string | null;
-    timeLimitMinutes: number | null;
-    questions: CandidateQuestion[];
-  }[];
-  responses: Record<string, ResponseValue | null>;
-  navigation: "free" | "linear" | "per_section";
-  maxIndex: number;
-  remainingMs: number;
-  sectionRemainingMs: number | null;
-  warnAtMinutes: number[];
-  lateSyncGraceSeconds: number;
-  allowCalculator: boolean;
-  serverNow: number;
-}
 
 /** Every question in paper order, which is the order the palette numbers
  * and the order `maxIndex` counts in. */

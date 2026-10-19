@@ -4,7 +4,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
-import type { CandidateQuestion } from "../../src/components/exam/Runner";
+import type { CandidateQuestion } from "../../src/lib/paper";
 import { jumpTo, startFromRoot } from "./answer-fixtures";
 
 // Task 7 (#71, P6.7), the structured family: matching, multi_matching and

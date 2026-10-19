@@ -13,14 +13,8 @@
 // exam-taker under a clock downloads only what they are about to use.
 
 import { useCallback, useEffect, useState } from "react";
-import type { LandingPayload, RunClient } from "../lib/run";
-import {
-  Runner,
-  readMarked,
-  writeMarked,
-  type AttemptPaper,
-  type CandidateQuestion,
-} from "../components/exam/Runner";
+import type { AttemptPaper, CandidateQuestion, LandingPayload, RunClient } from "../lib/run";
+import { Runner, readMarked, writeMarked } from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
 
 // --- "Check my device" (C-01) -------------------------------------------

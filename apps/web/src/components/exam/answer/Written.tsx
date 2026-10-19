@@ -1,6 +1,6 @@
 import { useId, useMemo } from "react";
 import { placeholderIds } from "@pariksha/core";
-import type { CandidateQuestion } from "../Runner";
+import type { CandidateQuestion } from "../../../lib/paper";
 import { useRenderedMarkdown } from "../../authoring/RenderedHtml";
 import { MAX_LENGTH_CEILING, numberFieldValue } from "../../answer-common";
 import type { AnswerProps } from "./props";

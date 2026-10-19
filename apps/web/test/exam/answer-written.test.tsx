@@ -6,7 +6,7 @@ import type { ResponseValue } from "@pariksha/core";
 import { renderMarkdown } from "../../src/render/markdown";
 import { AnswerInput, BLANK_MARKER } from "../../src/components/exam/answer";
 import { numberFieldValue } from "../../src/components/answer-common";
-import type { CandidateQuestion } from "../../src/components/exam/Runner";
+import type { CandidateQuestion } from "../../src/lib/paper";
 import { jumpTo, startFromRoot } from "./answer-fixtures";
 
 // Task 7 (#71, P6.7), the written family: fill_blank, numeric,
