@@ -418,64 +418,56 @@ export const getDraftVersion = scoped(
 );
 
 /**
- * Replaces the draft's whole stored body. Create-or-replace, not
- * update-only — `now` is for the branch neither Task 3 nor Task 2 ever
- * takes today but Task 11's lifecycle will: publishing stamps the current
- * draft's `published_at` and leaves no `published_at IS NULL` row behind
- * (`publishTestVersion`, above, does not create one), so the next edit
- * after a publish finds none and this function starts the next draft
- * itself — version `currentVersion + 1`, fresh content, `now` as its own
- * `created_at` — rather than every lifecycle task re-deriving "what comes
- * after the last version" on its own.
+ * Replaces the draft's whole stored body on the one row `existing` names.
  *
- * `body` replaces the stored document wholesale; the merge that turns a
- * `DraftPatch` into a whole `TestDocumentBody` (Review Focus item 3 — a
- * settings patch that merges where it must replace) is the route's job,
- * one layer up, same as `updateTest` leaves `TestPatch` assembly to its
- * caller.
+ * Fix round (task 3 review, I7/I8 — "settle the missing-draft contract
+ * before Task 11 inherits it"): this never creates a draft. A missing draft
+ * is Task 11's lifecycle to produce explicitly — publishing stamps the
+ * current draft's `published_at` and starts the next numbered version as
+ * its own visible step (`UX-18`: "Version 2 (draft). Attempts in progress
+ * stay on version 1.") — not a silent side effect of a PATCH that merely
+ * meant to save. `GET …/draft` already refuses the same way (404, no
+ * creation); this makes PATCH agree with it rather than disagree.
+ *
+ * `existing` is the caller's own prior `getDraftVersion` read (the route's
+ * merge base) — passed in rather than re-read here, which is also what
+ * keeps this to one write instead of a read-then-write: the route already
+ * paid for the read it needed anyway. `body` replaces the stored document
+ * wholesale; the merge that turns a `DraftPatch` into a whole
+ * `TestDocumentBody` (Review Focus item 3) is the route's job, one layer
+ * up, same as `updateTest` leaves `TestPatch` assembly to its caller.
  */
 export const putDraftVersion = scoped(
   "putDraftVersion",
   async (
     db: DbClient,
     workspaceId: string,
-    testId: string,
+    existing: TestVersionRow,
     body: TestDocumentBody,
     now: number,
   ): Promise<TestVersionRow> => {
-    const existing = await getDraftVersion(db, workspaceId, testId);
-
-    if (existing) {
-      // Fix round (task 3 review, I5): a draft save never touched
-      // `test.updated_at`, which `updateTest` does and which `listTests`
-      // sorts on — the one field that says "I worked on this" was the one
-      // the builder could not move. Batched with the `test_version` write
-      // (one subrequest either way, `instrument.ts`'s own rule) rather than
-      // a second statement.
-      await db.batch([
-        {
-          sql: "UPDATE test_version SET settings_json = ?, sections_json = ? WHERE workspace_id = ? AND id = ?",
-          params: [db.jsonParam(body.settings), db.jsonParam(body.sections), workspaceId, existing.id],
-        },
-        {
-          sql: "UPDATE test SET updated_at = ? WHERE workspace_id = ? AND id = ?",
-          params: [now, workspaceId, testId],
-        },
-      ]);
-      // Built from `existing` plus the body just written, rather than a
-      // second read proving what the `UPDATE` just wrote — `updateTest`'s
-      // own precedent, above.
-      return { ...existing, body };
-    }
-
-    const test = await getTest(db, workspaceId, testId);
-    const version = (test?.currentVersion ?? 0) + 1;
-    const id = newId("ver");
-    await db.run(
-      "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, " +
-        "published_at, created_at) VALUES (?, ?, ?, ?, ?, ?, NULL, ?)",
-      [id, workspaceId, testId, version, db.jsonParam(body.settings), db.jsonParam(body.sections), now],
+    // Fix round (task 3 review, I5): bumps `test.updated_at`, the field
+    // `updateTest` does set and `listTests` sorts on — batched with the
+    // `test_version` write (one subrequest either way) rather than a second
+    // statement. `AND published_at IS NULL` guards against `existing`
+    // having been published out from under this call (a race, not the
+    // common path) — the WHERE then matches no row, `changes` is 0, and the
+    // explicit refusal below fires instead of silently reporting success.
+    const { changes } = await db.run(
+      "UPDATE test_version SET settings_json = ?, sections_json = ? " +
+        "WHERE workspace_id = ? AND id = ? AND published_at IS NULL",
+      [db.jsonParam(body.settings), db.jsonParam(body.sections), workspaceId, existing.id],
     );
-    return { id, testId, version, body, publishedAt: null, createdAt: now };
+    if (changes === 0) {
+      throw new Error(
+        "putDraftVersion: no open draft to update. Starting the next one after a publish is Task 11's " +
+          "lifecycle to own explicitly, not a side effect of this function.",
+      );
+    }
+    await db.run("UPDATE test SET updated_at = ? WHERE workspace_id = ? AND id = ?", [now, workspaceId, existing.testId]);
+    // Built from `existing` plus the body just written, rather than a
+    // second read proving what the `UPDATE` just wrote — `updateTest`'s own
+    // precedent, above.
+    return { ...existing, body };
   },
 );

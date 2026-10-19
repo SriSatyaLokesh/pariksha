@@ -251,7 +251,7 @@ describe("getDraftVersion / putDraftVersion", () => {
     const before = await repo.getDraftVersion(db, ws, created.id);
 
     const body = { settings: { access: { mode: "link_code" as const, access_code: "X" } }, sections: [] };
-    const after = await repo.putDraftVersion(db, ws, created.id, body, T);
+    const after = await repo.putDraftVersion(db, ws, before!, body, T);
 
     expect(after.id).toBe(before?.id);
     expect(after.version).toBe(1);
@@ -264,34 +264,38 @@ describe("getDraftVersion / putDraftVersion", () => {
     await repo.createWorkspace(db, ws, { slug: "w14b", name: "W14B" });
     const created = await repo.createTest(db, ws, { name: "A", slug: "a14b", now: T });
     expect(created.updatedAt).toBe(T);
+    const existing = await repo.getDraftVersion(db, ws, created.id);
 
-    await repo.putDraftVersion(db, ws, created.id, { settings: {}, sections: [] }, T + 1000);
+    await repo.putDraftVersion(db, ws, existing!, { settings: {}, sections: [] }, T + 1000);
 
     const row = await repo.getTest(db, ws, created.id);
     expect(row?.updatedAt).toBe(T + 1000);
   });
 
-  it("starts a fresh numbered draft when the test currently has none (Task 11's publish-then-edit case)", async () => {
+  // Fix round (task 3 review, I7/I8 — the missing-draft contract, decided):
+  // putDraftVersion refuses to create a draft; Task 11's publish lifecycle
+  // owns starting the next one explicitly (UX-18). Replaces the old
+  // "starts a fresh numbered draft" test, which exercised exactly the
+  // silent-creation behaviour this decision removes.
+  it("refuses to update a draft that is no longer open — Task 11's lifecycle starts the next one, not this function", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "w15", name: "W15" });
     const created = await repo.createTest(db, ws, { name: "A", slug: "a15" });
+    const existing = await repo.getDraftVersion(db, ws, created.id);
     await repo.publishTestVersion(db, ws, { testId: created.id, version: 2, settings: {}, sections: [], now: T });
     // Clearing the draft row itself is Task 11's lifecycle feature, not this
     // one — stood in for here with a raw delete, the same way Task 2's own
     // `draftNaming` helper (top of this file) stands in for Task 3's own
     // feature elsewhere in this suite.
-    await db.run(
-      "DELETE FROM test_version WHERE workspace_id = ? AND test_id = ? AND published_at IS NULL",
-      [ws, created.id],
-    );
+    await db.run("DELETE FROM test_version WHERE workspace_id = ? AND test_id = ? AND published_at IS NULL", [
+      ws,
+      created.id,
+    ]);
     expect(await repo.getDraftVersion(db, ws, created.id)).toBeNull();
 
-    const body = { settings: {}, sections: [] };
-    const draft = await repo.putDraftVersion(db, ws, created.id, body, T + 1);
-
-    expect(draft.version).toBe(3);
-    expect(draft.publishedAt).toBeNull();
-    expect(draft.createdAt).toBe(T + 1);
+    await expect(repo.putDraftVersion(db, ws, existing!, { settings: {}, sections: [] }, T + 1)).rejects.toThrow(
+      /no open draft/i,
+    );
   });
 });
 

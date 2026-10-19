@@ -436,9 +436,14 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
     // No separate `getTest` existence check: a test that does not exist in
-    // this workspace and a test that (not reachable before Task 11's
-    // lifecycle exists) currently has no draft both answer the identical
-    // 404 below, so there is nothing a second read would tell the caller.
+    // this workspace and a test that currently has no draft (reachable once
+    // Task 11 publishes) both answer the identical 404 below, so there is
+    // nothing a second read would tell the caller. Fix round (task 3
+    // review, I7/I8): this must never start the next draft itself — a GET
+    // with that side effect would be wrong on its own terms, and UX-18
+    // makes creating draft N+1 a user-visible lifecycle event with its own
+    // message, which is Task 11's territory. PATCH (below) agrees: the same
+    // 404, never a silent create.
     const draft = await getDraftVersion(deps.db, workspaceId, testId);
     if (!draft) throw new ApiError(404, "not_found", "No such resource.");
 
@@ -451,6 +456,11 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
     const patch = parse(draftPatch, await json(c.req.raw));
+    // Fix round (task 3 review, I7/I8): PATCH now agrees with GET — a
+    // missing draft is a 404 on both, never a silent create. Starting the
+    // next draft after a publish is Task 11's lifecycle to own explicitly
+    // (`UX-18`), not a side effect of a PATCH that meant to save; see
+    // `putDraftVersion`'s own comment (packages/db/src/repo/tests.ts).
     const existing = await getDraftVersion(deps.db, workspaceId, testId);
     if (!existing) throw new ApiError(404, "not_found", "No such resource.");
 
@@ -515,7 +525,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
 
     const body: TestDocumentBody = { settings, sections };
     const now = deps.now();
-    const updated = await putDraftVersion(deps.db, workspaceId, testId, body, now);
+    const updated = await putDraftVersion(deps.db, workspaceId, existing, body, now);
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,
