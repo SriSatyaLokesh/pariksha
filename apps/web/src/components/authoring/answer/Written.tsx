@@ -9,7 +9,7 @@ import type {
   RubricLevel,
   ShortAnswerQuestion,
 } from "@pariksha/core";
-import { validateBank } from "@pariksha/core";
+import { placeholderIds, validateBank } from "@pariksha/core";
 
 export type WrittenQuestion = FillBlankQuestion | NumericQuestion | ShortAnswerQuestion | LongAnswerQuestion;
 
@@ -19,25 +19,15 @@ export function isWrittenQuestion(question: { type: string }): question is Writt
   return (WRITTEN_TYPES as readonly string[]).includes(question.type);
 }
 
-/** `{{id}}` placeholders in a fill_blank prompt, in prompt order,
- * deduplicated. Same expression packages/core/src/validate.ts's own
- * (private) `placeholdersIn` uses for the same purpose — the regex is
- * copied, not the rule: this is a UI-side read of the prompt text, not a
- * reimplementation of validateBank's placeholder/blank cross-check
- * (that one returns an unordered `Set`; this one keeps prompt order, which
- * is what the UI needs and the Set-returning version doesn't give). */
-export function placeholdersIn(prompt: string): string[] {
-  const seen = new Set<string>();
-  const ids: string[] = [];
-  for (const m of prompt.matchAll(/\{\{([^{}]+)\}\}/g)) {
-    const id = m[1];
-    if (id !== undefined && !seen.has(id)) {
-      seen.add(id);
-      ids.push(id);
-    }
-  }
-  return ids;
-}
+/**
+ * Fix round (whole-branch review, M8): this used to re-implement the same
+ * `{{id}}` regex `packages/core/src/validate.ts`'s own (private)
+ * `placeholdersIn` scans with — now a re-export of core's `placeholderIds`,
+ * which returns the same ordered, deduplicated array this file always
+ * needed (core's own `placeholdersIn` wraps it in a `Set` for its unordered
+ * cross-check instead).
+ */
+export const placeholdersIn = placeholderIds;
 
 /** A fresh blank for a placeholder the prompt just grew — `case_insensitive`
  * matches schemas/question-1.json's own default for `blanks[].match`. */

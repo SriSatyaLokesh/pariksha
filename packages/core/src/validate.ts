@@ -97,14 +97,32 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/** `{{id}}` placeholders in a fill_blank prompt. */
-function placeholdersIn(prompt: string): Set<string> {
-  const ids = new Set<string>();
+/**
+ * `{{id}}` placeholders in a fill_blank prompt, in prompt order,
+ * deduplicated.
+ *
+ * Fix round (whole-branch review, M8): exported — `apps/web/src/components/
+ * authoring/answer/Written.tsx` used to copy this same regex rather than
+ * import it (its own comment named the two return shapes it needed: an
+ * ordered array for the editor's blank list, an unordered `Set` for this
+ * file's cross-check below). One scan, two views: `placeholdersIn` below
+ * wraps this in a `Set` for its own unordered membership checks.
+ */
+export function placeholderIds(prompt: string): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
   for (const m of prompt.matchAll(/\{\{([^{}]+)\}\}/g)) {
     const id = m[1];
-    if (id !== undefined) ids.add(id);
+    if (id !== undefined && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
   }
   return ids;
+}
+
+function placeholdersIn(prompt: string): Set<string> {
+  return new Set(placeholderIds(prompt));
 }
 
 /**
