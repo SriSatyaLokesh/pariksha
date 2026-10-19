@@ -19,6 +19,9 @@ import { authRoutes } from "./routes/auth.js";
 import { me } from "./routes/me.js";
 import { setupRoutes } from "./routes/setup.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
+import { bankRoutes } from "./routes/banks.js";
+import { questionRoutes } from "./routes/questions.js";
+import { mediaRoutes } from "./routes/media.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -80,6 +83,88 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // The heaviest: resolve the invitee, list the members, write the change,
   // revoke the member's sessions, append the audit row.
   "/api/v1/workspaces/:id/members": 10,
+
+  // Phase 4 Task 2: banks, questions and media. These numbers are measured
+  // (apps/api/test/banks.test.ts's and media.test.ts's "measures the real
+  // subrequest cost" tests, via `countingDeps` — the same technique
+  // `budget.test.ts` uses for `/health`), not estimated: a first pass here
+  // guessed roughly half these values before `bankOr404`'s existence check
+  // and each write's audit row were accounted for, and fixture review
+  // caught that the declared numbers and the real cost had drifted apart.
+  // Each is the most expensive method sharing that path — authentication
+  // alone costs 2 (the session join and the idle-window write), so even the
+  // cheapest GET here never reads for less than 3.
+  "/api/v1/workspaces/:id/banks": 5,
+  "/api/v1/workspaces/:id/banks/:bankId": 7,
+  "/api/v1/workspaces/:id/tags": 3,
+  // Phase 4 Task 6: passage groups. `assertValid` adds one `listGroups` call
+  // (itself one or two statements, depending on whether the bank has any
+  // groups yet) to every question write, which is why these two numbers grew
+  // from Task 2's.
+  "/api/v1/workspaces/:id/banks/:bankId/questions": 9,
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid": 10,
+  "/api/v1/workspaces/:id/banks/:bankId/media": 4,
+  "/api/v1/workspaces/:id/media/:key": 3,
+  // Fix round 1, finding 1: measured against a bank that already has a
+  // group, not an empty one — `listGroups` costs one statement on an empty
+  // bank (`rawGroups.length === 0` short-circuits) and two once there is a
+  // group to count, which is the common case after the first write.
+  "/api/v1/workspaces/:id/banks/:bankId/groups": 8,
+  // Fix round 1, finding 8: PATCH costs 8 (bankOr404, listGroups at 2,
+  // upsertGroup at 2, appendAudit); DELETE dropped from 9 to 7 once it
+  // stopped re-fetching `listGroups` only to check existence — `deleteGroup`
+  // already answers that itself (finding 8's other half). The higher of the
+  // two, not the old padded number.
+  "/api/v1/workspaces/:id/banks/:bankId/groups/:groupId": 8,
+  // Task 7 (#51, P4.7): whole-bank import. Review Focus item 3's whole
+  // point — authentication (2, every authenticated route) + bankOr404 (1) +
+  // the one `listQuestionRefIds` duplicate-check query (1) +
+  // `writeImportedBank`'s one `batch()` (1, groups and questions together)
+  // + appendAudit (1) is 6, flat in question count: `bankOf(200)` costs
+  // exactly this. A bank that declares any passage group (fix round 1,
+  // findings 1+2 — `writeImportedBank`'s own comment) adds exactly one more
+  // read, to merge the imported groups into the bank's existing
+  // `groups_json` before the same batch writes it — 7, flat in *group*
+  // count too: ten groups costs this one read, not ten. Measured (not
+  // estimated — finding 5) against `apps/api/test/import/json.test.ts`'s
+  // `exampleBank` fixture (12 questions, one passage group): 7, which is
+  // the number here.
+  "/api/v1/workspaces/:id/banks/:bankId/import": 7,
+  // Task 9 (#53, P4.9): export. `allQuestions` (apps/api/src/routes/
+  // banks.ts) pages `listQuestions` at 200 a time, so this route's cost is
+  // NOT flat in bank size the way the comment here used to claim — it was
+  // measured only against examples/reasoning-aptitude/questions.json (17
+  // questions, one group), which is one page. `?ids=` costs the same as an
+  // unfiltered export regardless of selection size (filtered in memory
+  // after the same fetch), but an unfiltered export of a large bank is not
+  // the same cost as a small one.
+  //
+  // Fix round (whole-branch review, I5): the real ceiling is bounded, not
+  // unbounded — `import/json.ts`'s `IMPORT_MAX_QUESTIONS` caps a *bank* at
+  // 500 questions (not just one import request), so the worst case is a
+  // 500-question bank with a passage group: auth (2) + bankOr404 (1) +
+  // listGroups (2, this bank has a group) + `allQuestions` (3, ceil(500 /
+  // 200) pages) = 8. Measured against exactly that
+  // (round-trip.test.ts's "measures the real worst-case subrequest cost of
+  // exporting a bank at the question-count ceiling"), pinned with `toBe`,
+  // not guessed — and still nowhere near the 50-subrequest ceiling. The
+  // 17-question fixture above costs only 6; the declared number here is the
+  // bound every bank size up to the cap must stay under, not the common
+  // case.
+  "/api/v1/workspaces/:id/banks/:bankId/export": 8,
+  // The single-question sibling: auth (2) + `getQuestion` (1, already one
+  // query with its own correlated "used in tests" subquery) + `listGroups`
+  // (2, only fetched when the question names a group — a question that
+  // does not costs 3, not 5: `exportIssues` would otherwise have to check a
+  // group reference against an empty `groups` array it was never given, and
+  // falsely refuse an otherwise-valid, group-referencing question). Fix
+  // round 1, finding 2: pinned against the worst case — "DIN-001"
+  // (examples/reasoning-aptitude/questions.json), which names
+  // "library-loans" — not the cheapest realistic question, the same "measure
+  // the heavy case" rule every other budget here already follows. The brief
+  // named 1, which the authentication floor alone already rules out; 5 is
+  // the measured ceiling.
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": 5,
 };
 
 /**
@@ -96,6 +181,36 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/members": "members.manage",
   "POST /api/v1/workspaces/:id/members": "members.manage",
   "DELETE /api/v1/workspaces/:id/members": "members.manage",
+
+  // Phase 4 Task 2. There is no `banks.view` (docs/design.md's permission
+  // matrix has only `banks.edit`), so the read routes are guarded by it too
+  // — a Viewer is 403 on all of these, not just the writes.
+  "GET /api/v1/workspaces/:id/banks": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "GET /api/v1/workspaces/:id/tags": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/media": "banks.edit",
+  "GET /api/v1/workspaces/:id/media/:key": "banks.edit",
+
+  // Phase 4 Task 6.
+  "GET /api/v1/workspaces/:id/banks/:bankId/groups": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/groups": "banks.edit",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "banks.edit",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "banks.edit",
+
+  // Task 7.
+  "POST /api/v1/workspaces/:id/banks/:bankId/import": "banks.edit",
+
+  // Task 9.
+  "GET /api/v1/workspaces/:id/banks/:bankId/export": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "banks.edit",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -122,6 +237,9 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // through `actorOr401`, the way `/me` and `/workspaces` do.
   app.route("/api/v1/setup", setupRoutes(deps));
   app.route("/api/v1/workspaces", workspaceRoutes(deps));
+  app.route("/api/v1/workspaces", bankRoutes(deps));
+  app.route("/api/v1/workspaces", questionRoutes(deps));
+  app.route("/api/v1/workspaces", mediaRoutes(deps));
 
   return app;
 }

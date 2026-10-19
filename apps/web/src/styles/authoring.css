@@ -184,3 +184,441 @@
 .preview__key-line {
   margin-block: 0 var(--space-sm);
 }
+
+/* ---- Reorderable list (P4.2 Review Focus 5) ---------------------------- */
+
+/* No colour declared anywhere in this block: every piece of text here
+   inherits the page's own ink-on-cream/canvas from base.css's `body` rule,
+   already checked by contrast-usage.test.ts, so none of these selectors
+   needs its own SURFACE entry. */
+
+.reorderable-list {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.reorderable-list__legend {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* Visually present (not visually-hidden): the move controls already carry
+   the same words as a tooltip would, so the live region doubles as a
+   lightweight on-screen status line rather than a screen-reader-only one. */
+.reorderable-list__announcement {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.reorderable-list__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorderable-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+}
+
+.reorderable-list__controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.reorderable-list__move {
+  min-width: 2.25rem;
+}
+
+.reorderable-list__position {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.reorderable-list__position input {
+  width: 4rem;
+}
+
+.reorderable-list__content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Question editor skeleton (UX-07) ----------------------------------- */
+
+.question-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.question-editor__answer-bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.question-editor__dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-lg);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background-color: var(--color-canvas);
+}
+
+/* ---- Type picker (UX-06) ------------------------------------------------- */
+
+.type-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.type-picker__group {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.type-picker__group-label {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* ---- Scoring row (P4.2) -------------------------------------------------- */
+
+.scoring-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-md);
+}
+
+/* ---- Choice answer block (P4.2) ------------------------------------------ */
+
+.choice-option {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.choice-option__flag {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.choice-true-false,
+.choice-assertion-reason {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* ---- Structured answer block (P4.3) --------------------------------------
+   No colour declared anywhere in this block, same reasoning as the
+   reorderable list above: every piece of text inherits the page's own
+   ink-on-cream/canvas from base.css, so none of these needs a SURFACE
+   entry in contrast-usage.test.ts. */
+
+.structured-matching,
+.structured-ordering {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.structured-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.structured-grid {
+  border-collapse: collapse;
+}
+
+.structured-grid th,
+.structured-grid td {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline);
+  text-align: center;
+}
+
+.structured-grid th[scope="row"] {
+  text-align: start;
+}
+
+.structured-grid__caption {
+  caption-side: top;
+  padding-block-end: var(--space-xs);
+  text-align: start;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* ---- Written answer block (P4.4) ------------------------------------------
+   No colour declared anywhere in this block, same reasoning as the
+   structured block above: every piece of text inherits the page's own
+   ink-on-cream/canvas from base.css, so none of these needs a SURFACE entry
+   in contrast-usage.test.ts. */
+
+.written-blanks,
+.written-numeric,
+.written-manual {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.written-blank,
+.written-rubric {
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.written-rubric-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+}
+
+.written-rubric-row + .written-rubric-row {
+  border-block-start: 1px solid var(--color-hairline);
+}
+
+/* ---- Bank list (UX-02) -------------------------------------------------- */
+
+.bank-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bank-list__item {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  text-align: start;
+  cursor: pointer;
+}
+
+.bank-list__item:hover,
+.bank-list__item:focus-visible {
+  border-color: var(--color-hairline-strong);
+}
+
+.bank-list__count {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  white-space: nowrap;
+}
+
+/* ---- Bank browser (UX-03, UX-04, UX-05) -------------------------------- */
+
+.bank-browser {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-xl);
+}
+
+.bank-browser__rail {
+  display: flex;
+  flex: 0 0 220px;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding-inline-end: var(--space-lg);
+  border-inline-end: 1px solid var(--color-hairline);
+}
+
+.bank-browser__groups,
+.bank-browser__chips {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.bank-browser__chips {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.bank-browser__group-label {
+  margin: 0 0 var(--space-xs);
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.bank-browser__tag-chip {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-full);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  cursor: pointer;
+}
+
+.bank-browser__tag-chip[aria-pressed="true"] {
+  border-color: var(--color-voltage);
+  background-color: var(--color-voltage-soft);
+}
+
+.bank-browser__filter-select {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.bank-browser__filter-select select {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+}
+
+.bank-browser__filter-check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.bank-browser__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.bank-browser__bulk-bar {
+  margin-block-end: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background-color: var(--color-canvas);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.bank-browser__notice {
+  margin-block-end: var(--space-md);
+  color: var(--color-flag-risk);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.bank-browser__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.bank-browser__table th,
+.bank-browser__table td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--color-hairline);
+  text-align: start;
+  vertical-align: top;
+}
+
+.bank-browser__table th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.bank-browser__select-col {
+  width: 2.5rem;
+}
+
+.bank-browser__empty {
+  padding-block: var(--space-xl);
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+/* Fix round 1, finding 11: ImportDialog's own issues table — same rules as
+   .bank-browser__table (above), not a shared mixin, because the two belong
+   to different components' BEM blocks and neither should reach into the
+   other's class by name. */
+.import-dialog__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.import-dialog__table th,
+.import-dialog__table td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--color-hairline);
+  text-align: start;
+  vertical-align: top;
+}
+
+.import-dialog__table th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}

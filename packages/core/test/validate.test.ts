@@ -197,6 +197,69 @@ describe("validateBank", () => {
     expect(r.ok).toBe(true);
   });
 
+  // Task 9 (#53) review finding, carried over from Task 8: CSV and GIFT use
+  // an option's own text as its identity (there is no separate id column in
+  // either format — docs/question-format.md, apps/api/src/import/csv.ts's
+  // own header comment). Two options sharing text in a `pariksha/bank@1`
+  // document — ids distinct, so nothing else here catches it — round-trips
+  // through CSV/GIFT with the key silently rebound to whichever option that
+  // text's first occurrence lands on. Caught here, in the one place every
+  // import format (JSON, CSV, GIFT) already converges on, rather than in a
+  // CSV/GIFT *export* mapper: refusing at the gate every format already
+  // passes through keeps a colliding bank from ever reaching storage, which
+  // closes the hole for every current and future export path at once,
+  // instead of re-deriving the same check per converter.
+  it("rejects two options sharing text within one question — text is CSV/GIFT's option identity", () => {
+    const bank: Bank = {
+      format: "pariksha/bank@1",
+      name: "Colliding option text",
+      questions: [
+        {
+          id: "COL-001",
+          type: "single",
+          prompt: "Pick one.",
+          options: [
+            { id: "o1", text: "X" },
+            { id: "o2", text: "X" },
+          ],
+          key: "o2",
+        },
+      ],
+    };
+
+    const r = validateBank(bank);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual(
+      expect.objectContaining({
+        questionId: "COL-001",
+        field: "options",
+        code: "duplicate_option_text",
+        message: expect.stringContaining('"X"'),
+      }),
+    );
+  });
+
+  it("does not reject options with distinct text that merely share a substring", () => {
+    const r = validateBank({
+      format: "pariksha/bank@1",
+      name: "x",
+      questions: [
+        {
+          id: "OK-001",
+          type: "single",
+          prompt: "Pick one.",
+          options: [
+            { id: "a", text: "A" },
+            { id: "b", text: "AB" },
+          ],
+          key: "a",
+        },
+      ],
+    });
+    expect(r.ok).toBe(true);
+  });
+
   it("does not crash on malformed, non-bank input", () => {
     expect(validateBank(null).ok).toBe(false);
     expect(validateBank({}).ok).toBe(false);

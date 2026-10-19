@@ -36,6 +36,16 @@ interface RawOps {
   /** Run one parameterised statement for its effect, and say how many rows it changed. */
   run(sql: string, params?: unknown[]): Promise<{ changes: number }>;
   /**
+   * Task 7 (#51), Review Focus item 3: every statement, in one round trip —
+   * `binding.batch()` on D1 (one subrequest against the 50-subrequest
+   * ceiling, however many statements it carries), `BEGIN … COMMIT` around
+   * them on `better-sqlite3`, `sql.begin` on `postgres` — and the whole
+   * group commits or none of it does. `upsertQuestions`
+   * (packages/db/src/repo/banks.ts) is the first caller: N single-row writes
+   * costs ~2N subrequests, one `batch()` costs one no matter how big N gets.
+   */
+  batch(statements: readonly { sql: string; params?: unknown[] }[]): Promise<void>;
+  /**
    * Encode a value bound for a JSON column. SQLite stores JSON as text and
    * Postgres as jsonb, so the two drivers want different things — the one
    * place that difference is allowed to live.
@@ -74,6 +84,23 @@ export function sqliteClient(path: string): DbClient {
       const { changes } = sqlite.prepare(sql).run(...params);
       return Promise.resolve({ changes });
     },
+    // `sqlite.transaction()` wraps the callback in `BEGIN`/`COMMIT` and
+    // rolls back automatically if it throws. Not `async`: better-sqlite3 is
+    // synchronous end to end, so a thrown error is caught here and turned
+    // into a rejected Promise explicitly rather than by the usual
+    // `async`-function mechanism, which an `await`-free async body is not
+    // actually using.
+    batch: (statements) => {
+      try {
+        const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) => {
+          for (const s of stmts) sqlite.prepare(s.sql).run(...(s.params ?? []));
+        });
+        run(statements);
+        return Promise.resolve();
+      } catch (err) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    },
     jsonParam: (value) => JSON.stringify(value),
     jsonValue: parseJsonText,
     close: () => {
@@ -109,6 +136,12 @@ export function d1Client(binding: D1Database): DbClient {
         .run();
       return { changes: meta.changes ?? 0 };
     },
+    // One `binding.batch()` call — one subrequest — carrying every prepared
+    // statement. D1 runs a batch inside an implicit transaction and rejects
+    // the whole thing if any statement fails.
+    batch: async (statements) => {
+      await binding.batch(statements.map((s) => binding.prepare(s.sql).bind(...(s.params ?? []))));
+    },
     jsonParam: (value) => JSON.stringify(value),
     jsonValue: parseJsonText,
     // D1 is a binding, not a connection: there is nothing to release.
@@ -135,6 +168,16 @@ export function pgClient(url: string): DbClient {
         params as never[],
       );
       return { changes: result.count };
+    },
+    // `sql.begin` opens a transaction, commits on a resolved callback and
+    // rolls back on a rejected one — the transaction-scoped `tx`, not the
+    // outer `sql`, is what every statement in the batch must run through.
+    batch: async (statements) => {
+      await sql.begin(async (tx) => {
+        for (const s of statements) {
+          await tx.unsafe(toNumberedPlaceholders(s.sql), (s.params ?? []) as never[]);
+        }
+      });
     },
     // postgres.js serialises a JS value into jsonb; handing it a JSON string
     // would store the string itself, quotes and all.

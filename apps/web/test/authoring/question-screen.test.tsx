@@ -1,0 +1,111 @@
+import { describe, it, expect } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import type { SingleQuestion } from "@pariksha/core";
+
+import type { ApiClient } from "../../src/lib/api";
+import { QuestionScreen } from "../../src/routes/question";
+
+const SINGLE: SingleQuestion = {
+  id: "Q1",
+  type: "single",
+  prompt: "Which HTTP method is idempotent?",
+  options: [
+    { id: "a", text: "GET" },
+    { id: "b", text: "POST" },
+  ],
+  key: "a",
+};
+
+function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
+  return {
+    setupStatus: async () => ({ needed: false, providers: [] }),
+    me: async () => null,
+    workspaces: async () => [],
+    completeSetup: async () => ({ id: "wsp_1", name: "W" }),
+    requestMagicLink: async () => undefined,
+    signOut: async () => undefined,
+    listBanks: async () => [],
+    createBank: async () => {
+      throw new Error("not used");
+    },
+    listQuestions: async () => ({ questions: [] }),
+    deleteQuestion: async () => undefined,
+    saveQuestion: async (_workspaceId, bankId, doc) => ({
+      id: "qst_1",
+      bankId,
+      refId: doc.id,
+      document: doc,
+      points: 1,
+      usedInTests: 0,
+      updatedAt: 0,
+    }),
+    listTags: async () => [],
+    listGroups: async () => [],
+    createGroup: async () => {
+      throw new Error("not used");
+    },
+    updateGroup: async () => {
+      throw new Error("not used");
+    },
+    deleteGroup: async () => undefined,
+    importBank: async () => ({ imported: 0, issues: [] }),
+    exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
+    exportQuestion: async () => {
+      throw new Error("not used");
+    },
+    ...overrides,
+  };
+}
+
+// Fix round (whole-branch review, M4): `justSaved` used to be set `true` on
+// save and never reset — "Saved." stayed on screen, asserting the opposite
+// of the truth, through every later edit.
+describe("QuestionScreen's 'Saved.' status", () => {
+  it("appears after a save and clears on the next edit", async () => {
+    render(
+      <QuestionScreen
+        workspaceId="wsp_1"
+        bankId="bnk_1"
+        initial={SINGLE}
+        client={fakeClient()}
+        actorEmail="author@example.edu"
+        onSignOut={() => undefined}
+        onBack={() => undefined}
+        onSaved={() => undefined}
+      />,
+    );
+
+    expect(screen.queryByText("Saved.")).not.toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
+    expect(await screen.findByText("Saved.")).toBeVisible();
+
+    fireEvent.change(screen.getByLabelText("Prompt"), {
+      target: { value: "Which HTTP method is safe?" },
+    });
+    expect(screen.queryByText("Saved.")).not.toBeInTheDocument();
+  });
+
+  it("does not clear on its own just because the editor re-rendered after the save", async () => {
+    render(
+      <QuestionScreen
+        workspaceId="wsp_1"
+        bankId="bnk_1"
+        initial={SINGLE}
+        client={fakeClient()}
+        actorEmail="author@example.edu"
+        onSignOut={() => undefined}
+        onBack={() => undefined}
+        onSaved={() => undefined}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
+    const saved = await screen.findByText("Saved.");
+
+    // A moment with no further edit — the status must still read "Saved.",
+    // not flip back on a re-render the save itself causes.
+    await waitFor(() => expect(saved).toBeVisible());
+    expect(screen.getByText("Saved.")).toBeVisible();
+  });
+});

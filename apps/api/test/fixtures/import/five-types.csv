@@ -1,0 +1,6 @@
+id,type,prompt,options,key,points,mode,difficulty,tags,explanation
+Q1,single,What is the sum of 2 and 2?,3|4|5,4,,,easy,,
+Q2,multiple,Which of these are prime numbers?,2|3|4,2+3,,,,,
+Q3,true_false,The sky is blue.,,true,,,,,
+Q4,numeric,What is the value of pi to 2 decimal places?,,3.14:0.01,,,,,
+Q5,fill_blank,The capital of France is {{a}}.,,a:Paris+City of Light,,,,,

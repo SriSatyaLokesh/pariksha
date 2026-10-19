@@ -1,0 +1,4 @@
+id,type,prompt,options,key,points,mode,difficulty,tags,explanation
+Q1,single,"Line one
+Line two",A|B,A,,,,,
+Q2,single,Pick one.,X|Y,z,,,,,

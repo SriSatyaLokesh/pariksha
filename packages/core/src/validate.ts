@@ -35,6 +35,32 @@ import type { ScoringDefaults } from "./grade/result.js";
 import { APPLICABLE_MODES, resolveScoring, round2 } from "./grade/result.js";
 import { matchesFilter } from "./select.js";
 
+/**
+ * Every value `ImportIssue.code` can hold. Not a plain `string` — fix round
+ * 1, finding 10: a plain string coupled the producer (this file) to the
+ * consumer (`apps/api/src/routes/questions.ts`'s `isSaveTimeIssue`) only by
+ * both sides typing the same literal correctly, with nothing to catch a
+ * typo on either end. Extend this union, not the type of `code` itself,
+ * when another issue needs one.
+ *
+ * Task 8 fix round 1, finding 14: `apps/api/src/import/csv.ts` and
+ * `gift.ts` carry their own converter-detected issues (a type outside the
+ * five, a header that doesn't match, a cell that cannot be parsed at all,
+ * a GIFT construct this format cannot express) — these codes let a test
+ * (or `ImportDialog`, later) match on *which* defect fired without parsing
+ * `message` prose, the same reason `unsafe_regex` exists.
+ */
+export type ImportIssueCode =
+  | "unsafe_regex"
+  | "duplicate_option_text"
+  | "csv_unsupported_type"
+  | "csv_column_count"
+  | "csv_header_mismatch"
+  | "csv_unparseable_value"
+  | "gift_unsupported_construct"
+  | "gift_unparseable_value"
+  | "gift_no_correct_answer";
+
 export interface ImportIssue {
   /** The question's `id`, or null for an issue not about one specific question. */
   questionId: string | null;
@@ -48,6 +74,16 @@ export interface ImportIssue {
   index: number;
   field: string;
   message: string;
+  /**
+   * A stable, machine-matchable identifier for *which* rule fired — set only
+   * where a caller actually needs to act on one specific rule rather than
+   * read `message` to a person. Task 7 (#51): `apps/api/src/routes/
+   * questions.ts`'s `isSaveTimeIssue` used to match the unsafe-regex issue by
+   * `field === "blanks"` plus a message substring, because this field did
+   * not exist; it is added here, narrowly, rather than given to every issue
+   * this file raises, which would be a speculative rename nothing asks for.
+   */
+  code?: ImportIssueCode;
 }
 
 type ValidationResult =
@@ -61,31 +97,75 @@ function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
-/** `{{id}}` placeholders in a fill_blank prompt. */
-function placeholdersIn(prompt: string): Set<string> {
-  const ids = new Set<string>();
+/**
+ * `{{id}}` placeholders in a fill_blank prompt, in prompt order,
+ * deduplicated.
+ *
+ * Fix round (whole-branch review, M8): exported — `apps/web/src/components/
+ * authoring/answer/Written.tsx` used to copy this same regex rather than
+ * import it (its own comment named the two return shapes it needed: an
+ * ordered array for the editor's blank list, an unordered `Set` for this
+ * file's cross-check below). One scan, two views: `placeholdersIn` below
+ * wraps this in a `Set` for its own unordered membership checks.
+ */
+export function placeholderIds(prompt: string): string[] {
+  const seen = new Set<string>();
+  const ids: string[] = [];
   for (const m of prompt.matchAll(/\{\{([^{}]+)\}\}/g)) {
     const id = m[1];
-    if (id !== undefined) ids.add(id);
+    if (id !== undefined && !seen.has(id)) {
+      seen.add(id);
+      ids.push(id);
+    }
   }
   return ids;
+}
+
+function placeholdersIn(prompt: string): Set<string> {
+  return new Set(placeholderIds(prompt));
 }
 
 /**
  * Usable option IDs from an `options` array: a non-object element (one that
  * fails `isRecord`) is reported and skipped rather than dereferenced.
+ *
+ * Also catches two options sharing the same `text` within one question.
+ * `schemas/question-1.json` does not require option `id`s to be distinct
+ * either (no rule here does, and none is added by this change — a bank with
+ * two identical `id`s is a separate, pre-existing gap this task's brief did
+ * not raise), but CSV and GIFT have no `id` column at all — an option's own
+ * text *is* its identity there (apps/api/src/import/csv.ts's own header
+ * comment). A bank that passes
+ * this check can always be re-expressed in either format with its answer
+ * key intact; one that does not would round-trip through CSV/GIFT with the
+ * key silently rebound to whichever option that text's first occurrence
+ * lands on — a defect found in Task 8's review, fixed here rather than in a
+ * CSV/GIFT *export* mapper so it is caught at the one gate every import
+ * format (JSON included) already passes through, closing the hole for every
+ * current and future export path at once.
  */
 function optionIds(
   options: readonly QuestionOption[],
-  issue: (field: string, message: string) => void,
+  issue: (field: string, message: string, code?: ImportIssueCode) => void,
 ): Set<string> {
   const ids = new Set<string>();
+  const textOwners = new Map<string, string>();
   options.forEach((o, i) => {
     if (!isRecord(o)) {
       issue("options", `option at position ${i} is not an object`);
       return;
     }
     ids.add(o.id);
+    const owner = textOwners.get(o.text);
+    if (owner !== undefined) {
+      issue(
+        "options",
+        `options "${owner}" and "${o.id}" share the text "${o.text}" — CSV and GIFT use an option's text as its identity, so this would silently rebind the answer key on export`,
+        "duplicate_option_text",
+      );
+    } else {
+      textOwners.set(o.text, o.id);
+    }
   });
   return ids;
 }
@@ -171,8 +251,8 @@ export function validateBank(bank: unknown): ValidationResult {
     }
     const q = raw as unknown as Question;
 
-    const issue = (field: string, message: string): void => {
-      issues.push({ questionId: q.id, index, field, message });
+    const issue = (field: string, message: string, code?: ImportIssueCode): void => {
+      issues.push({ questionId: q.id, index, field, message, ...(code !== undefined && { code }) });
     };
 
     // Layer 1 (above, and `optionIds`/`usableBlanks` below) guards the two
@@ -295,6 +375,7 @@ export function validateBank(bank: unknown): ValidationResult {
                   issue(
                     "blanks",
                     `blank "${blank.id}" has an unsafe regex pattern "${pattern}": ${message}`,
+                    "unsafe_regex",
                   );
                 }
               }
