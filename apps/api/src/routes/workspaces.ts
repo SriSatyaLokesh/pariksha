@@ -27,7 +27,7 @@ import {
   setMembershipRole,
   updateWorkspace,
 } from "@pariksha/db";
-import { ROLES } from "@pariksha/core";
+import { CREAM, HEX_COLOUR, ROLES, contrastRatio, meetsAA } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { revokeAllSessions } from "../auth/session.js";
 import { ApiError } from "../errors.js";
@@ -40,13 +40,57 @@ const newWorkspace = z.object({
   name: z.string().min(1).max(200),
 });
 
+/**
+ * T-23's workspace half (Task 10, #61, P5.8). `logo`, `primary_colour` and
+ * `footer_text` are per workspace; `start_message` and `finish_message`
+ * are per test and go through `PATCH .../draft` instead. Only the three
+ * are accepted here, so an organiser cannot smuggle a per-test field into
+ * workspace settings and wonder why no test shows it.
+ */
+const brandingPatch = z
+  .object({
+    logo: z.string().max(200).optional(),
+    primary_colour: z.string().optional(),
+    footer_text: z.string().max(500).optional(),
+  })
+  .strict();
+
 const workspacePatch = z
   .object({
     name: z.string().min(1).max(200).optional(),
-    branding: z.unknown().optional(),
+    branding: brandingPatch.optional(),
     settings: z.unknown().optional(),
   })
   .refine((patch) => Object.keys(patch).length > 0, "names nothing to change");
+
+/**
+ * **Save-time, deliberately.** An unchosen release date or a half-typed
+ * access code is a draft; a stored brand colour below 4.5:1 is not — it is
+ * a setting that makes candidate-facing text unreadable the moment any
+ * page renders with it, the preview on the screen that set it included,
+ * and `workspace.branding_json` has no draft state to be half-built in.
+ *
+ * The ground is `CREAM`, the candidate page's own background, and not "the
+ * worse of cream and ink". The plan asked for "below 4.5:1 against cream
+ * **and** ink", which measures nothing useful: its own example, `#f59a6e`,
+ * reaches 7.57:1 against ink and would have passed, while being 2.09:1 —
+ * illegible — on the page a candidate actually sees. `--brand-primary` is
+ * accent text and link colour on cream; cream is the ground that matters.
+ */
+function refuseUnreadableBrandColour(branding: z.infer<typeof brandingPatch> | undefined): void {
+  const colour = branding?.primary_colour;
+  if (colour === undefined) return;
+  if (!HEX_COLOUR.test(colour)) {
+    throw new ApiError(422, "invalid_colour", `"${colour}" is not a colour. Use a hex value like #b63a10.`);
+  }
+  if (meetsAA(colour, CREAM)) return;
+  const ratio = Math.round(contrastRatio(colour, CREAM) * 100) / 100;
+  throw new ApiError(
+    422,
+    "unreadable_colour",
+    `${colour} reaches only ${ratio}:1 against cream, and candidate text in the brand colour needs at least 4.5:1. Choose a darker shade.`,
+  );
+}
 
 const memberInput = z
   .object({
@@ -98,6 +142,7 @@ export function workspaceRoutes(deps: AppDeps): Hono<AppBindings> {
     const actor = actorOr401(c);
     const id = c.req.param("id");
     const patch = parse(workspacePatch, await json(c.req.raw));
+    refuseUnreadableBrandColour(patch.branding);
 
     await updateWorkspace(deps.db, id, patch);
     await appendAudit(deps.db, id, {

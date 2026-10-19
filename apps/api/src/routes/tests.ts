@@ -9,7 +9,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import { allowlistIssues, matchesFilter, type QuestionSource } from "@pariksha/core";
+import { CREAM, HEX_COLOUR, allowlistIssues, contrastRatio, matchesFilter, meetsAA, type QuestionSource } from "@pariksha/core";
 import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
 import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
@@ -597,6 +597,25 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       if (badAllowlist.length > 0) {
         throw new ApiError(422, "invalid_settings", "An allowlist entry cannot be matched.", {
           issues: badAllowlist,
+        });
+      }
+
+      // Task 10 (#61, P5.8): the same brand-colour gate `PATCH
+      // /workspaces/:id` runs, because `branding.primary_colour` is a
+      // property of the *document*'s branding object too and the schema
+      // has no way to say "4.5:1 against cream". Enforcing it only on the
+      // workspace route would leave the identical unreadable value
+      // reachable one route over, which is the shape of bug the phase
+      // keeps finding. Save-time for the reason stated on the workspace
+      // route: a colour is never half-built, and it makes candidate text
+      // unreadable the moment anything renders with it.
+      const colour = settings.branding?.primary_colour;
+      if (colour !== undefined && !(HEX_COLOUR.test(colour) && meetsAA(colour, CREAM))) {
+        const detail = HEX_COLOUR.test(colour)
+          ? `reaches only ${Math.round(contrastRatio(colour, CREAM) * 100) / 100}:1 against cream, and candidate text in the brand colour needs at least 4.5:1`
+          : "is not a colour; use a hex value like #b63a10";
+        throw new ApiError(422, "unreadable_colour", `${colour} ${detail}.`, {
+          issues: [{ field: "branding.primary_colour", message: `${colour} ${detail}.` }],
         });
       }
     }

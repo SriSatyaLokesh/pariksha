@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll } from "vitest";
+import { contrastRatio } from "@pariksha/core";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -37,29 +38,11 @@ const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
 const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 
-function hexToRgb(hex: string): [number, number, number] {
-  const normalized = hex.replace("#", "");
-  const r = Number.parseInt(normalized.slice(0, 2), 16);
-  const g = Number.parseInt(normalized.slice(2, 4), 16);
-  const b = Number.parseInt(normalized.slice(4, 6), 16);
-  return [r, g, b];
-}
-
-function relativeLuminance([r, g, b]: [number, number, number]): number {
-  const [rl, gl, bl] = [r, g, b].map((channel) => {
-    const c = channel / 255;
-    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  }) as [number, number, number];
-  return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
-}
-
-function contrastRatio(fg: string, bg: string): number {
-  const l1 = relativeLuminance(hexToRgb(fg));
-  const l2 = relativeLuminance(hexToRgb(bg));
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
-}
+// Task 10 (#61, P5.8): `contrastRatio` used to be defined here, and
+// byte-identically in the sibling file. It is `@pariksha/core`'s now — the
+// server re-checks T-23's brand colour with it, so there can be only one
+// copy. Nothing else in this file changed, which is the proof the move was
+// a move.
 
 // landing.css no longer carries any component's rules itself (besides the
 // five "reused unchanged" ones, §6) — it only @imports the files that do.

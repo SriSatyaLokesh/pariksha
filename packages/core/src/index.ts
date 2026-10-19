@@ -58,6 +58,12 @@ export { PoolTooSmallError, assignSet, layoutForAttempt, matchesFilter } from ".
 // Cross-field import validation, for a bank and for a test document.
 export * from "./validate.js";
 
+// WCAG contrast, for T-23's brand colour (Task 10, #61, P5.8). Public
+// because three callers need the identical number: the colour picker, the
+// server that re-checks the write, and the two apps/web test files that
+// used to carry their own copy of this arithmetic.
+export * from "./contrast.js";
+
 // The repo's one regex-safety gate. Public since Task 5 (#57, P5.4): the
 // registration form's `validation.pattern` is organiser-supplied and is
 // compiled in the *builder's* browser to preview the candidate's own error

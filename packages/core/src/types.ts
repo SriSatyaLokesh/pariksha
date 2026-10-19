@@ -375,12 +375,51 @@ export interface TestAccess {
   captcha?: boolean;
 }
 
+export type ReleaseWhen = "never" | "on_submit" | "on_date";
+export type ReleaseShow = "score_only" | "score_and_sections" | "full_review";
+
 export interface TestRelease {
-  when: "never" | "on_submit" | "on_date";
+  when: ReleaseWhen;
   /** Required when `when` is `on_date`. */
   at?: string;
-  show?: "score_only" | "score_and_sections" | "full_review";
+  show?: ReleaseShow;
 }
+
+/**
+ * T-23's `branding` (Task 10, #61, P5.8). Mirrors
+ * `schemas/test-1.json`'s root `branding` object exactly.
+ *
+ * One type, two homes, which is the PRD's own split (T-23) and is what
+ * keeps an Author out of workspace settings: `logo`, `primary_colour` and
+ * `footer_text` are **per workspace** and live in `workspace.branding_json`
+ * behind `workspace.settings`; `start_message` and `finish_message` are
+ * **per test** and live in the draft's `settings.branding` behind
+ * `tests.edit`.
+ */
+export interface TestBranding {
+  /** A media key from `POST .../banks/:bankId/media`, not a URL. */
+  logo?: string;
+  /** `#rrggbb`. Refused at the write below 4.5:1 against `CREAM`. */
+  primary_colour?: string;
+  footer_text?: string;
+  start_message?: string;
+  finish_message?: string;
+}
+
+/** What each release timing means for the candidate, in one sentence.
+ * Beside `NAVIGATION_CONSEQUENCE` and for the same reason: the builder and
+ * Task 13's checklist state the consequence once, not twice. */
+export const RELEASE_CONSEQUENCE: Readonly<Record<ReleaseWhen, string>> = {
+  never: "Candidates never see a score.",
+  on_submit: "Candidates see their result on the finish page, as soon as they submit.",
+  on_date: "Candidates see nothing until the date you choose, then their result appears.",
+};
+
+export const SHOW_CONSEQUENCE: Readonly<Record<ReleaseShow, string>> = {
+  score_only: "The total and whether they passed.",
+  score_and_sections: "The total, whether they passed, and each section's score.",
+  full_review: "All of that, plus the correct answers and the explanations — use it only once the test has closed for everyone.",
+};
 
 export interface Test {
   "$schema"?: string;
@@ -415,6 +454,7 @@ export interface Test {
   access?: TestAccess;
   registration_form?: RegistrationFormSpec;
   release?: TestRelease;
+  branding?: TestBranding;
   sections: Section[];
 }
 
