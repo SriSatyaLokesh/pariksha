@@ -33,7 +33,12 @@ export interface StructuralIssue {
 // always alongside the one leaf error (`required`, `type`, `minItems`, …)
 // that actually says what is wrong. Dropped here rather than threaded
 // through field-by-field logic below.
-const WRAPPER_KEYWORDS = new Set([
+// Exported (fix round, task 3 review C1/C2/I1): `apps/api/src/routes/
+// tests.ts` reuses both to map its own schema's `OutputUnit`s the same way,
+// over a differently-shaped document (`{settings}`/`{sections}` rather than
+// a whole bank), which is why `fieldOf` below — tied to the "questions"/
+// "groups" container convention — is not also exported; these two are not.
+export const WRAPPER_KEYWORDS = new Set([
   "properties",
   "items",
   "allOf",
@@ -50,7 +55,7 @@ const WRAPPER_KEYWORDS = new Set([
   "false",
 ]);
 
-function pathOf(instanceLocation: string): string[] {
+export function pathOf(instanceLocation: string): string[] {
   return instanceLocation.replace(/^#\/?/, "").split("/").filter(Boolean);
 }
 

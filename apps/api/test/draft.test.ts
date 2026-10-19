@@ -250,6 +250,54 @@ it("a pool source naming a bank in another workspace is 422", async () => {
   expect(status).toBe(422);
 });
 
+it("fix round (task 3 review, C1): a fixed source missing `questions` is 422, not a 500", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed" } }],
+  });
+  expect(status).toBe(422);
+  expect(JSON.stringify(body)).toContain("questions");
+});
+
+it("fix round (task 3 review, C1): a sets source missing `sets` is 422, not a 500", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    sections: [{ id: "s1", title: "Section 1", source: { kind: "sets" } }],
+  });
+  expect(status).toBe(422);
+});
+
+it("fix round (task 3 review, C2): a settings key the schema does not know is 422", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { nonsense_key: 1 },
+  });
+  expect(status).toBe(422);
+  expect(JSON.stringify(body)).toContain("nonsense_key");
+});
+
+it("fix round (task 3 review, C2): access.mode outside its enum is 422", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { access: { mode: "banana" } },
+  });
+  expect(status).toBe(422);
+});
+
+it("fix round (task 3 review, I1): two sections sharing one id is 422", async () => {
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    sections: [
+      { id: "dup", title: "A", source: { kind: "fixed", questions: [] } },
+      { id: "dup", title: "B", source: { kind: "fixed", questions: [] } },
+    ],
+  });
+  expect(status).toBe(422);
+  expect(JSON.stringify(body)).toContain("dup");
+});
+
+it("fix round (task 3 review, I1): a section id outside the schema's pattern is 422", async () => {
+  const { status } = await patchDraft(workspaceId, testId, authorCookie, {
+    sections: [{ id: "NOT VALID!!", title: "A", source: { kind: "fixed", questions: [] } }],
+  });
+  expect(status).toBe(422);
+});
+
 it("a pool source carrying a stale field from a different source kind is 422", async () => {
   // The structural half of Review Focus item 3: a hand-built body that
   // already has the bug a naive merge would introduce, so the save-time

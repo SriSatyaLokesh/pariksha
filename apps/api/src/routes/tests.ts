@@ -8,7 +8,10 @@
 
 import { Hono, type Context } from "hono";
 import { z } from "zod";
+import { Validator, type OutputUnit } from "@cfworker/json-schema";
 import { matchesFilter, type Question, type QuestionSource } from "@pariksha/core";
+import testSchema from "../../../../schemas/test-1.json" with { type: "json" };
+import { WRAPPER_KEYWORDS, pathOf } from "../import/schema.js";
 import {
   appendAudit,
   createTest,
@@ -56,13 +59,12 @@ const testPatch = z
 // Task 3 (#55, P5.2): the draft itself. `settings`/`sections` are each
 // checked only as "a plain object" / "an array of plain objects" here —
 // Zod's job stops at JSON shape, the same line `questionDoc`
-// (apps/api/src/routes/questions.ts) draws with `.passthrough()`. What a
-// section's `source` may actually contain is `checkSection`'s job, below:
-// hand-written rather than run through `schemas/test-1.json` a second time,
-// because that schema's `minItems` on `sourceFixed.questions` and
-// `sourceSets.sets` would reject the UX-13 empty section this route must
-// accept in Draft — this checks the same "only these fields, for this kind"
-// shape `additionalProperties: false` enforces, and nothing it does not.
+// (apps/api/src/routes/questions.ts) draws with `.passthrough()`. The real
+// shape check — every type, every `required`, every `additionalProperties:
+// false` schemas/test-1.json declares — is `schemaIssues`, below: this is
+// the one place a settings block's save-time validation lives, so Tasks 5,
+// 7, 8 and 10 each inherit it the moment they add a key to `settings`
+// without writing a check of their own.
 const draftPatch = z
   .object({
     settings: z.record(z.string(), z.unknown()).optional(),
@@ -70,67 +72,78 @@ const draftPatch = z
   })
   .refine((patch) => patch.settings !== undefined || patch.sections !== undefined, "names nothing to change");
 
-interface SectionIssue {
+interface DraftIssue {
   field: string;
   message: string;
 }
 
-const SECTION_FIELDS = ["id", "title", "instructions", "time_limit_minutes", "shuffle_questions", "source"];
-// Mirrors schemas/test-1.json's `$defs/sourceFixed`/`sourcePool`/`sourceSets`
-// `properties` lists exactly, minus the `minItems`/`count` floors this
-// save-time check deliberately does not enforce (UX-13; those are
-// Task 11's publish checklist).
-const SOURCE_FIELDS: Record<string, readonly string[]> = {
-  fixed: ["kind", "questions"],
-  pool: ["kind", "bank", "count", "filter"],
-  sets: ["kind", "assignment", "sets"],
-};
-
-function unknownField(keys: readonly string[], allowed: readonly string[]): string | undefined {
-  return keys.find((key) => !allowed.includes(key));
+/**
+ * Fix round (task 3 review, C1/C2/I1): the save-time gate is
+ * `schemas/test-1.json` itself, run through the `@cfworker/json-schema`
+ * `Validator` the repo already owns (`apps/api/src/import/schema.ts`) — not
+ * a hand-written field-name check, and not a second validator. Built once,
+ * at module scope, from a schema that is the real document minus the three
+ * floors UX-13 (a section may be empty in Draft) would otherwise trip:
+ * `sourceFixed.questions`'s `minItems`, `sourceSets.sets`'s `minItems`, and
+ * the root `required` — dropped because `settings` is validated as a plain
+ * object missing `format`/`name`/`slug`/`sections` (they live on the `test`
+ * row or in their own column, never in `settings`), not as a whole
+ * `pariksha/test@1` document. Nothing else is relaxed: every `type`, every
+ * `enum`, every other `required` and every `additionalProperties: false`
+ * (`$defs/timing`, `$defs/access`, `$defs/scoring`, `$defs/release`
+ * included) runs exactly as import will one day run it.
+ */
+function draftSchema(): object {
+  const schema = structuredClone(testSchema) as {
+    required?: unknown;
+    $defs: { sourceFixed: { properties: { questions: { minItems?: number } } }; sourceSets: { properties: { sets: { minItems?: number } } } };
+  };
+  delete schema.required;
+  delete schema.$defs.sourceFixed.properties.questions.minItems;
+  delete schema.$defs.sourceSets.properties.sets.minItems;
+  return schema;
 }
 
-/**
- * Review Focus item 3's own words: "`$defs/sourcePool` and `$defs/sourceSets`
- * carry `additionalProperties: false`, so a merged `sets` key inside a
- * `pool` source fails the schema." This is that check, run at save time
- * against the row-id-named stored shape rather than the document the real
- * schema validates — a `pool` source that still carries a stale `sets` key
- * from whatever source it replaced is exactly what `unknownField` below
- * catches, one section's `source` object at a time.
- */
-function checkSection(raw: unknown, index: number): SectionIssue[] {
-  const path = (field: string): string => `sections[${index}].${field}`;
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return [{ field: path("source"), message: `entry at index ${index} is not a section object` }];
-  }
-  const section = raw as Record<string, unknown>;
-  const issues: SectionIssue[] = [];
+const draftValidator = new Validator(draftSchema() as never, "2020-12", false);
 
-  const badField = unknownField(Object.keys(section), SECTION_FIELDS);
-  if (badField !== undefined) {
-    issues.push({ field: path(badField), message: `a section does not have a "${badField}" field` });
+/** The field a leaf schema error is about — `sections[0].source.questions`,
+ * or a bare property name for a `required`/`additionalProperties` failure —
+ * the same `{ field, message }` shape the 422 below already emits. */
+function fieldOfDraftError(err: OutputUnit): string {
+  const segments = pathOf(err.instanceLocation);
+  let field =
+    segments.length === 0
+      ? "document"
+      : segments.reduce((acc, seg, i) => (i === 0 ? seg : /^\d+$/.test(seg) ? `${acc}[${seg}]` : `${acc}.${seg}`), "");
+  if (err.keyword === "required") {
+    const prop = /required property "([^"]+)"/.exec(err.error)?.[1];
+    if (prop !== undefined) field = field === "document" ? prop : `${field}.${prop}`;
+  } else if (err.keyword === "additionalProperties") {
+    const prop = /Property "([^"]+)"/.exec(err.error)?.[1];
+    if (prop !== undefined) field = field === "document" ? prop : `${field}.${prop}`;
   }
+  return field;
+}
 
-  const source = section.source;
-  if (typeof source !== "object" || source === null || Array.isArray(source)) {
-    issues.push({ field: path("source"), message: "a section needs a source" });
-    return issues;
+function schemaIssues(instance: unknown): DraftIssue[] {
+  const { errors } = draftValidator.validate(instance);
+  return errors
+    .filter((err) => !WRAPPER_KEYWORDS.has(err.keyword))
+    .map((err) => ({ field: fieldOfDraftError(err), message: err.error }));
+}
+
+/** I1: a section id is the key of `draw`/`setPoints`/`points`, the React
+ * key and the `?section=` URL value — the schema proves the shape
+ * (`^[a-z0-9_-]{1,40}$`, required) but has no way to compare *across*
+ * array entries, so uniqueness is this one extra pass. */
+function duplicateSectionIds(sections: readonly { id: string }[]): string[] {
+  const seen = new Set<string>();
+  const dupes = new Set<string>();
+  for (const section of sections) {
+    if (seen.has(section.id)) dupes.add(section.id);
+    seen.add(section.id);
   }
-  const kind = (source as Record<string, unknown>).kind;
-  if (kind !== "fixed" && kind !== "pool" && kind !== "sets") {
-    issues.push({ field: path("source.kind"), message: 'source.kind must be "fixed", "pool" or "sets"' });
-    return issues;
-  }
-  const allowed = SOURCE_FIELDS[kind]!;
-  const badSourceField = unknownField(Object.keys(source), allowed);
-  if (badSourceField !== undefined) {
-    issues.push({
-      field: path(`source.${badSourceField}`),
-      message: `a ${kind} source does not have a "${badSourceField}" field`,
-    });
-  }
-  return issues;
+  return [...dupes];
 }
 
 /** Every `qst_`/`bnk_` row id a section's source names, deduplicated — the
@@ -429,15 +442,47 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     const existing = await getDraftVersion(deps.db, workspaceId, testId);
     if (!existing) throw new ApiError(404, "not_found", "No such resource.");
 
-    let sections: StoredSection[] | undefined;
+    // Review Focus item 3: each named top-level block replaces whole and
+    // merges nothing below it — `settings` is one level of `Object.assign`
+    // (a key the patch names replaces that key's entire value; a key it
+    // does not name is untouched) and `sections`, when the patch names it
+    // at all, replaces the whole array. Never a merge keyed by section id or
+    // by a field inside `source`, which is exactly what would let a stale
+    // `access_code`, or a stale `sets`/`assignment` left over from a
+    // section's previous source kind, survive underneath a patch that meant
+    // to replace it.
+    let settings = existing.body.settings;
+    if (patch.settings !== undefined) {
+      const merged = { ...existing.body.settings, ...patch.settings };
+      const issues = schemaIssues(merged);
+      if (issues.length > 0) {
+        throw new ApiError(422, "invalid_settings", "A settings block is not shaped correctly.", { issues });
+      }
+      // Checked above: `merged` parses against schemas/test-1.json minus the
+      // root `required` (settings carries no format/name/slug/sections), so
+      // this is safe to treat as `TestSettings` from here on.
+      settings = merged as typeof existing.body.settings;
+    }
+
+    let sections = existing.body.sections;
     if (patch.sections !== undefined) {
-      const issues = patch.sections.flatMap((section, index) => checkSection(section, index));
+      const issues = schemaIssues({ sections: patch.sections });
       if (issues.length > 0) {
         throw new ApiError(422, "invalid_section", "A section is not shaped correctly.", { issues });
       }
-      // Checked above: every entry names only fields its own source kind
-      // uses, so this is safe to treat as the stored shape from here on.
+      // Checked above: every entry parses against $defs/section (id
+      // pattern, required fields, and its own source kind's shape), so this
+      // is safe to treat as the stored shape from here on. The schema
+      // cannot compare *across* entries, so id uniqueness (I1) is its own
+      // pass, next.
       sections = patch.sections as unknown as StoredSection[];
+
+      const dupes = duplicateSectionIds(sections);
+      if (dupes.length > 0) {
+        throw new ApiError(422, "duplicate_section_id", "Two sections share the same id.", {
+          issues: dupes.map((id) => ({ field: "sections", message: `section id "${id}" is used more than once` })),
+        });
+      }
 
       const wanted = collectReferencedIds(sections);
       const found = await existingRowIds(deps.db, workspaceId, wanted);
@@ -456,19 +501,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       }
     }
 
-    // Review Focus item 3: each named top-level block replaces whole and
-    // merges nothing below it — `settings` is one level of `Object.assign`
-    // (a key the patch names replaces that key's entire value; a key it
-    // does not name is untouched) and `sections`, when the patch names it
-    // at all, replaces the whole array. Never a merge keyed by section id or
-    // by a field inside `source`, which is exactly what would let a stale
-    // `access_code`, or a stale `sets`/`assignment` left over from a
-    // section's previous source kind, survive underneath a patch that meant
-    // to replace it.
-    const body: TestDocumentBody = {
-      settings: patch.settings !== undefined ? { ...existing.body.settings, ...patch.settings } : existing.body.settings,
-      sections: sections ?? existing.body.sections,
-    };
+    const body: TestDocumentBody = { settings, sections };
     const now = deps.now();
     const updated = await putDraftVersion(deps.db, workspaceId, testId, body, now);
 
