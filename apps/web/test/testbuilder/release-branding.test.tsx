@@ -7,7 +7,13 @@ import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { RELEASE_CONSEQUENCE, SHOW_CONSEQUENCE, type TestBranding, type TestRelease } from "@pariksha/core";
+import {
+  RELEASE_CONSEQUENCE,
+  SHOW_CONSEQUENCE,
+  brandColourIssue,
+  type TestBranding,
+  type TestRelease,
+} from "@pariksha/core";
 
 import { ReleasePanel } from "../../src/components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../../src/components/testbuilder/BrandingPanel";
@@ -185,6 +191,21 @@ describe("BrandingPanel", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/is not a colour/i);
     expect(screen.queryByText(/against cream/)).toBeNull();
     expect(saveButton()).toBeDisabled();
+  });
+
+  // Whole-branch drift review, M-04. The panel hand-rolled this sentence
+  // one directory from `brandColourIssue`, with three wording differences,
+  // under a header comment claiming it was "the same gate, from the same
+  // function, that the server runs". Nothing asserted the wording, so the
+  // drift was invisible. Asserted against that function's own output
+  // rather than a literal, so a second copy cannot come back unnoticed.
+  it.each(["#f59a6e", "crimson"])("the refusal for %s is the server's own sentence", (value) => {
+    render(<BrandingHarness />);
+    fireEvent.change(colourInput(), { target: { value } });
+
+    const server = brandColourIssue({ primary_colour: value });
+    expect(server).not.toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(server?.message ?? "");
   });
 
   it("the brand colour reaches CSS as a custom property, never a style attribute", () => {

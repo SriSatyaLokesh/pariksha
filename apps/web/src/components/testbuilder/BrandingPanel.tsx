@@ -1,13 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import {
-  CREAM,
-  EXAMPLE_BRAND_COLOUR,
-  HEX_COLOUR,
-  INK,
-  contrastRatio,
-  meetsAA,
-  type TestBranding,
-} from "@pariksha/core";
+import { CREAM, HEX_COLOUR, INK, brandColourIssue, contrastRatio, type TestBranding } from "@pariksha/core";
 
 // T-23 (Task 10, #61, P5.8): the logo, the brand colour, the footer, and
 // the two messages a candidate meets.
@@ -25,8 +17,8 @@ import {
 // src (and any hex literal), so the previews set `--brand-primary` with
 // `ref.current.style.setProperty` in an effect. The value is
 // user-supplied, so it is refused unless it is `#rrggbb` *and* clears
-// 4.5:1 against cream — the same gate, from the same function, that the
-// server runs on the write.
+// 4.5:1 against cream — the same gate, from the same function
+// (`brandColourIssue`), that the server runs on the write.
 
 /** The ratio an unreadable colour is reported at, rounded the way the
  * server rounds it so the two messages cannot read differently. */
@@ -34,13 +26,21 @@ function ratio(colour: string, ground: string): number {
   return Math.round(contrastRatio(colour, ground) * 100) / 100;
 }
 
-/** Why this colour cannot be saved, or `null`. The server's own refusal,
- * reproduced here only so the organiser hears it before the round trip. */
+/**
+ * Why this colour cannot be saved, or `null` — the server's own sentence,
+ * from the server's own function.
+ *
+ * Whole-branch drift review, M-04: this was a hand-rolled recomposition of
+ * the same four imports, one directory from `brandColourIssue`, with three
+ * wording differences, under a header comment claiming it was "the same
+ * gate, from the same function, that the server runs on the write". It was
+ * not — and `colourRefusal` also decides whether `useBrandColour` paints
+ * `--brand-primary`, so the preview and the server could disagree about
+ * what is acceptable the moment either wording or either threshold moved.
+ */
 function colourRefusal(colour: string): string | null {
   if (colour === "") return null;
-  if (!HEX_COLOUR.test(colour)) return `"${colour}" is not a colour. Use a hex value like ${EXAMPLE_BRAND_COLOUR}.`;
-  if (meetsAA(colour, CREAM)) return null;
-  return `${colour} reaches only ${ratio(colour, CREAM)}:1 against cream, and candidate text in the brand colour needs at least 4.5:1. Choose a darker shade.`;
+  return brandColourIssue({ primary_colour: colour })?.message ?? null;
 }
 
 /** Paints `--brand-primary` on an element without a `style` attribute. */
