@@ -446,11 +446,21 @@ export const putDraftVersion = scoped(
     const existing = await getDraftVersion(db, workspaceId, testId);
 
     if (existing) {
-      await db.run("UPDATE test_version SET settings_json = ?, sections_json = ? WHERE workspace_id = ? AND id = ?", [
-        db.jsonParam(body.settings),
-        db.jsonParam(body.sections),
-        workspaceId,
-        existing.id,
+      // Fix round (task 3 review, I5): a draft save never touched
+      // `test.updated_at`, which `updateTest` does and which `listTests`
+      // sorts on — the one field that says "I worked on this" was the one
+      // the builder could not move. Batched with the `test_version` write
+      // (one subrequest either way, `instrument.ts`'s own rule) rather than
+      // a second statement.
+      await db.batch([
+        {
+          sql: "UPDATE test_version SET settings_json = ?, sections_json = ? WHERE workspace_id = ? AND id = ?",
+          params: [db.jsonParam(body.settings), db.jsonParam(body.sections), workspaceId, existing.id],
+        },
+        {
+          sql: "UPDATE test SET updated_at = ? WHERE workspace_id = ? AND id = ?",
+          params: [now, workspaceId, testId],
+        },
       ]);
       // Built from `existing` plus the body just written, rather than a
       // second read proving what the `UPDATE` just wrote — `updateTest`'s

@@ -259,6 +259,18 @@ describe("getDraftVersion / putDraftVersion", () => {
     expect((await repo.getDraftVersion(db, ws, created.id))?.body).toEqual(body);
   });
 
+  it("fix round (task 3 review, I5): bumps test.updated_at, the field listTests sorts on", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w14b", name: "W14B" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a14b", now: T });
+    expect(created.updatedAt).toBe(T);
+
+    await repo.putDraftVersion(db, ws, created.id, { settings: {}, sections: [] }, T + 1000);
+
+    const row = await repo.getTest(db, ws, created.id);
+    expect(row?.updatedAt).toBe(T + 1000);
+  });
+
   it("starts a fresh numbered draft when the test currently has none (Task 11's publish-then-edit case)", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "w15", name: "W15" });
