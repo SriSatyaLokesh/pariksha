@@ -317,47 +317,15 @@ export const headVersionsByTest = scoped(
   },
 );
 
-export const getTestVersion = scoped(
-  "getTestVersion",
-  async (
-    db: DbClient,
-    workspaceId: string,
-    testVersionId: string,
-  ): Promise<{
-    id: string;
-    testId: string;
-    version: number;
-    settings: unknown;
-    sections: unknown;
-  } | null> => {
-    const rows = await db.query<{
-      id: string;
-      test_id: string;
-      version: number;
-      settings_json: unknown;
-      sections_json: unknown;
-    }>(
-      "SELECT id, test_id, version, settings_json, sections_json FROM test_version WHERE workspace_id = ? AND id = ?",
-      [workspaceId, testVersionId],
-    );
-    const row = rows[0];
-    if (!row) return null;
-    return {
-      id: row.id,
-      testId: row.test_id,
-      version: Number(row.version),
-      settings: db.jsonValue(row.settings_json),
-      sections: db.jsonValue(row.sections_json),
-    };
-  },
-);
-
 // Phase 5 Task 3 (#55, P5.2): the draft itself — "the draft is the whole
-// document" (Architecture). `TestVersionRow` here is the typed sibling of
-// `getTestVersion`'s anonymous return shape above; that function stays as
-// it is (Task 11 reads a *published* version by id, where only `settings`/
-// `sections` as `unknown` matter) rather than being rewritten onto this
-// type, which would touch lifecycle code this task does not own.
+// document" (Architecture).
+//
+// `getTestVersion` used to sit above this, the untyped sibling of
+// `TestVersionRow`, kept by a comment saying Task 11 would read a
+// published version by id. Task 11 reads `getPublishedVersion`
+// (`apps/api/src/export/test.ts:101`), the comment's reason was never
+// true, and the function had no caller in src or in tests on this branch
+// or on main (whole-branch drift review, L-02). Deleted with it.
 
 export interface TestVersionRow {
   id: string;

@@ -133,19 +133,19 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // — renders on cream. .runner-mock__title is shared with the bridge
   // band's h3, which is cream too.
   ".runner-mock__title": "cream",
-  ".runner-mock__fallback": "cream",
   ".runner-mock__note": "cream",
   // Created at runtime by src/island/exam-demo.ts. The island sets no
   // colour of its own (I-7), so these rules are the whole of its palette.
-  ".runner-mock__control": "cream",
-  ".runner-mock__control--primary": "voltage-deep",
-  ".runner-mock__hint": "cream",
+  // The entries beside them — __fallback, __control, __control--primary,
+  // __hint, __result-summary/-prose/-link — described no DOM: the hero
+  // rewrite moved the demo onto .exam-card__* / .exam-demo__* and nothing
+  // has rendered those classes since, so the assertions passed against the
+  // stylesheet and proved nothing about the app, while being what blocked
+  // anyone from deleting the rules (whole-branch drift review, M-02).
   ".runner-mock__result-type": "cream",
   ".runner-mock__result-points": "cream",
   ".runner-mock__result-verdict": "cream",
-  ".runner-mock__result-summary, .runner-mock__result-explanation, .runner-mock__result-prose, .runner-mock__result-link":
-    "cream",
-  ".runner-mock__result-link a": "cream",
+  ".runner-mock__result-explanation": "cream",
 
   // ---- components.css: section heading -----------------------------------
   // Used on both cream bands (S2, S3, S5, S6, S7, S8, S10) and canvas bands
@@ -203,19 +203,9 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".integrity-badge-review": "canvas",
   ".integrity-badge-risk": "canvas",
 
-  // ---- sections-s1-s3.css: runner mock (M-1, aria-hidden, S1) -------------
-  // .runner-mock itself sets background: cream (it's a card on the voltage
-  // hero); individual squares/options set their own canvas where noted.
-  ".runner-mock__section, .runner-mock__points, .runner-mock__saved, .runner-mock__candidate":
-    "cream",
-  ".runner-mock__timer": "cream",
-  ".runner-mock__question-of": "cream",
-  ".runner-mock__stem": "cream",
-  ".runner-mock__option": "canvas",
-  ".runner-mock__square": "canvas",
-  ".runner-mock__square--answered": "state-answered",
-  ".runner-mock__square--marked": "state-marked",
-  ".runner-mock__square--current": "canvas",
+  // sections-s1-s3.css's whole runner-mock block went with the rules it
+  // described (M-02) — the static mock it styled was replaced by
+  // .exam-card__* in the hero rewrite.
 
   // ---- sections-s1-s3.css: B2 and B3 (both cream, v3 §4) ------------------
   ".verification-strip": "cream",
@@ -386,11 +376,6 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".integrity-badge-clean": { px: 12, weight: 400 },
   ".integrity-badge-review": { px: 12, weight: 400 },
   ".integrity-badge-risk": { px: 12, weight: 400 },
-  // Each sets colour (and background/border) only; size/weight come from
-  // the shared .runner-mock__square base rule (mono-sm, 12px/400).
-  ".runner-mock__square--answered": { px: 12, weight: 400 },
-  ".runner-mock__square--marked": { px: 12, weight: 400 },
-  ".runner-mock__square--current": { px: 12, weight: 400 },
   // No ancestor in the bundle sets a font-size; these inherit the page's
   // base body-md size (16px/400) from base.css.
   ".comparison-intro": { px: 16, weight: 400 },
@@ -398,12 +383,6 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".feature-lead": { px: 16, weight: 400 },
   ".footer-col a": { px: 16, weight: 400 },
   ".footer-col p": { px: 16, weight: 400 },
-  // Sets colour only; size and weight come from the shared
-  // .runner-mock__control base rule (button-md, 16px/500).
-  ".runner-mock__control--primary": { px: 16, weight: 500 },
-  // Sets colour only; size and weight come from the shared body-sm rule
-  // for the paragraph this anchor sits in (14px/400).
-  ".runner-mock__result-link a": { px: 14, weight: 400 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with
