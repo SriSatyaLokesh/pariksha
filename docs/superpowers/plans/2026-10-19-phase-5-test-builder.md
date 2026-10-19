@@ -38,7 +38,7 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 1. **The UX-05 usage predicate going blind the moment a draft lives in `test_version`.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:188`) scan `test_version.sections_json` and **none filters on `published_at`**, because on Phase 4's branch every row is published — `publishTestVersion` is the only writer and always stamps it. Task 2 starts writing `published_at IS NULL` rows, and all three go wrong at once: an Author who adds a question to a *draft* test can no longer delete it from its bank, the refusal names a test nobody published, and the browser's "not used in any test" filter hides it. Phase 4's suite cannot catch it — `packages/db/test/repo/banks.test.ts` only ever inserts published versions. — Task 2, re-run by Task 10.
 2. **`publishTestVersion` setting `status = "open"` unconditionally** (`packages/db/src/repo/tests.ts`). Wrong the moment `timing.opens_at` is in the future: `T-04`'s **Scheduled** state would never exist and a Phase 6 candidate reading `status` is told a test is open hours early. Invisible today because nothing reads `status`. — Task 10.
 3. **A settings patch that merges where it must replace.** Switching `access.mode` from `link_code` to `sso` must drop `access_code`. The sibling case is caught for free — `$defs/sourcePool` and `$defs/sourceSets` carry `additionalProperties: false`, so a merged `sets` key inside a `pool` source fails the schema. **`access` is not**: `access_code` is a legal property of `access` under every mode, so a stale code survives, passes the schema, passes `validateTest` (whose rule fires only *when* the mode is `link_code`), publishes, and leaves the workspace inside an exported file. The proof is an **export** assertion, not a read-back of the patch. — Task 3 builds the merge; Task 8 owns the proof.
-4. **A publish checklist computed twice.** The screen has every number it needs, so computing rows in the browser is the obvious move; then the server computes them again, slightly differently, and either an all-green checklist 422s on publish or a red row is not enforced — the second being worse, because it teaches organisers to ignore the list. — Task 12, and every task from 4 onward that adds a row.
+4. **A publish checklist computed twice.** The screen has every number it needs, so computing rows in the browser is the obvious move; then the server computes them again, slightly differently, and either an all-green checklist 422s on publish or a red row is not enforced — the second being worse, because it teaches organisers to ignore the list. Tasks 4–9 each *name* their publish-time rules; Task 10 creates `checklist.ts` carrying the blocking rows and makes `POST …/publish` refuse on them; Task 12 adds the advisory rows, the `GET …/checklist` route and the screen. — Tasks 10 and 12.
 5. **The short code scoped to a workspace.** Every tenant-table unique in `TABLE_MANIFEST` is composite with `workspace_id` (`test` already has `[["workspace_id","slug"]]`), so copying that shape is the natural move and is wrong: `/t/<code>` carries no workspace, two workspaces can hold one code, and `AC-02` fails silently on any instance with more than one workspace. — Task 2.
 6. **The #58 reachability check as an SSRF pivot and an unbudgeted subrequest.** An outbound `fetch` is one subrequest against the same 50 the database shares; and on Docker (Phase 11) the same code runs inside someone's network, where `http://169.254.169.254/` is reachable and a redirect can walk to it from a URL that looked fine. — Task 6.
 
@@ -1184,5 +1184,419 @@ Expected: PASS, with `contrast.test.ts` and `contrast-usage.test.ts` green again
 ```bash
 git add packages apps
 git commit -s -m "feat(tests): result release and branding with a contrast gate"
+```
+
+---
+
+## Task 10: Lifecycle and numbered published versions (#62, P5.9)
+
+**Files:**
+- Create: `apps/api/src/publish/checklist.ts`, `apps/web/src/components/testbuilder/VersionBanner.tsx`
+- Modify: `packages/db/src/repo/tests.ts`, `packages/db/src/repo/test-document.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/tests.tsx`, `apps/web/src/routes/test.tsx`
+- Test: `packages/db/test/repo/tests.test.ts` (extend), `apps/api/test/lifecycle.test.ts`, `apps/web/test/testbuilder/lifecycle.test.tsx`
+
+**Interfaces:**
+- Consumes: `getTest`, `updateTest`, `getDraftVersion`, `putDraftVersion` (Tasks 2–3); `validateTest`, `TestTiming` (Tasks 5, 7); `describeAllowlists` (Task 8); `can`, `requires("tests.publish")`, `appendAudit`.
+- Produces:
+  ```ts
+  // packages/db/src/repo/tests.ts
+  export interface TestVersionSummary { version: number; publishedAt: number | null; attemptCount: number }
+  export const listVersions: ScopedFn<[testId: string], TestVersionSummary[]>;
+  export const getPublishedVersion: ScopedFn<[testId: string, version?: number], TestVersionRow | null>;
+  /** Stamps published_at on the draft head, sets test.current_version, and opens
+   *  no new draft — the next edit does that (UX-18). One db.batch. */
+  export const publishDraftVersion: ScopedFn<[testId: string, now: number], { version: number }>;
+  export const setTestStatus: ScopedFn<[testId: string, status: TestStatus, now: number], boolean>;
+
+  // packages/db/src/repo/test-document.ts
+  export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
+  export function deriveState(status: TestStatus, timing: TestTiming | undefined, now: number): TestState;
+
+  // apps/api/src/publish/checklist.ts
+  export type ChecklistSeverity = "blocking" | "advisory";
+  export interface ChecklistRow { id: string; severity: ChecklistSeverity; message: string; field: string; sectionId?: string }
+  export function buildChecklist(input: {
+    test: TestRow; body: TestDocumentBody; questions: readonly Question[]; now: number;
+  }): ChecklistRow[];
+
+  // apps/web/src/components/testbuilder/VersionBanner.tsx
+  export function VersionBanner(props: { draftVersion: number; publishedVersion: number | null; onOpenPublished: () => void }): JSX.Element;
+  ```
+
+| Method | Path | Guard | Budget (estimate — measure and pin) |
+| --- | --- | --- | --- |
+| POST | `/api/v1/workspaces/:id/tests/:testId/publish` | `tests.publish` | 8 |
+| POST | `/api/v1/workspaces/:id/tests/:testId/close` | `tests.publish` | 5 |
+| POST | `/api/v1/workspaces/:id/tests/:testId/archive` | `tests.publish` | 5 |
+| GET | `/api/v1/workspaces/:id/tests/:testId/versions` | `tests.edit` | 4 |
+
+**Review Focus 2 lands here.** `test.status` stores only the four states a human causes — `draft`, `published`, `closed`, `archived` — and `deriveState` turns `published` into **Scheduled** or **Open** against `timing.opens_at` / `closes_at` and `now`. `publishDraftVersion` replaces `publishTestVersion`'s `status = 'open'` with `status = 'published'`.
+
+**UX-18's shape.** Publishing stamps `published_at` on the draft head; it opens no new draft. The *next* edit does: `PATCH …/draft` on a test whose head is published inserts version N+1 with `published_at IS NULL`, copying the published body, and returns it. So a test has at most one unpublished version, `test.current_version` always names the highest published one, and the banner is `draftVersion > publishedVersion`.
+
+**`buildChecklist` is created here with the blocking rows only** (Task 12 adds the advisory ones and the surface). It is pure: it takes the body, the drawable questions and `now`, and calls `validateTest` for everything already in it rather than re-deriving any rule.
+
+| Row `id` | Severity | Message shape | Source |
+| --- | --- | --- | --- |
+| `section_empty` | blocking | `section "<title>" has no questions` | `UX-13`, `UX-17` |
+| `pool_no_bank` | blocking | `pool section "<title>" names no bank` | the `SourcePool.bank` ruling |
+| `window_backwards` | blocking | `the window closes before it opens` | `validateTest` |
+| `window_past` | blocking | `the window closed <n> days ago` | `UX-17` ("the availability window is in the future"); needs `now`, so it is not a `validateTest` rule |
+| `access_code_missing` | blocking | `access mode "link_code" requires an access code` | `validateTest` (`packages/core/src/validate.ts:542`) |
+| `release_at_missing` | blocking | `release "on_date" requires a date` | `validateTest` (`:551`) |
+| `duplicate_ids` | blocking | `section id "<id>" is used more than once` | Task 5's rule |
+| `section_durations` | blocking | `sections total <n> minutes against an overall <m>` | Task 7's rule |
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// packages/db/test/repo/tests.test.ts (extend)
+it("T-04: publishing freezes the draft head and points current_version at it", async () => {
+  expect(await publishDraftVersion(db, ws, id, T)).toEqual({ version: 1 });
+  expect((await getTest(db, ws, id))!.status).toBe("published");
+  expect((await getDraftVersion(db, ws, id))).toBeNull();
+});
+it("Review Focus 2: status is never stored as open", async () => {
+  expect(await db.query("SELECT DISTINCT status FROM test")).not.toContainEqual({ status: "open" });
+});
+it.each([
+  ["published", { opens_at: future, closes_at: later }, "scheduled"],
+  ["published", { opens_at: past, closes_at: future }, "open"],
+  ["published", { opens_at: past, closes_at: past }, "closed"],
+  ["published", {}, "open"],                    // no window means open from publish
+  ["closed", { opens_at: past, closes_at: future }, "closed"],
+  ["archived", { opens_at: past, closes_at: future }, "archived"],
+])("deriveState(%s, %o) is %s", (status, timing, state) =>
+  expect(deriveState(status, { duration_minutes: 60, ...timing }, NOW)).toBe(state));
+it("AC-03: editing a published test opens draft version 2 and leaves version 1 intact", async () => {
+  await putDraftVersion(db, ws, id, editedBody, T);
+  expect((await getDraftVersion(db, ws, id))!.version).toBe(2);
+  expect((await getPublishedVersion(db, ws, id, 1))!.body).toEqual(originalBody);
+  expect((await getTest(db, ws, id))!.currentVersion).toBe(1);
+});
+it("listVersions reports each version's published time and how many attempts are pinned to it", async () => {
+  expect(await listVersions(db, ws, id)).toEqual([{ version: 1, publishedAt: T, attemptCount: 2 }]);
+});
+```
+
+```ts
+// apps/api/test/lifecycle.test.ts
+it("an Author gets 403 on publish and an Admin gets 200", async () => { /* both */ });
+it("publish refuses on any blocking checklist row and writes no version", async () => {
+  const res = await app.request(publishUrl, post({}, adminCookie));
+  expect(res.status).toBe(422);
+  expect((await res.json()).error.details.rows.map((r) => r.id)).toContain("section_empty");
+  expect(await versionCount(testId)).toBe(0);
+});
+it("publish writes one audit entry naming the version", async () => { /* appendAudit, action "test.publish" */ });
+it("AC-03: a new attempt would get version 2 and an existing one keeps version 1", async () => {
+  // Phase 5 has no attempt row; the production composition is the version read
+  expect((await getPublishedVersion(db, ws, testId))!.version).toBe(2);
+  expect((await getTestVersion(db, ws, pinnedVersionId))!.version).toBe(1);
+});
+it("close and archive each confirm through their own route and are audit-logged", async () => { /* status transitions */ });
+it("archiving a draft is refused — Archived follows Closed", async () => { /* 409 */ });
+it("measures the real subrequest cost of publish, close, archive and versions", async () => { /* toBe */ });
+```
+
+```tsx
+// apps/web/test/testbuilder/lifecycle.test.tsx
+it("the state is text plus glyph wherever it appears", () => { /* list row and builder header */ });
+it("UX-18: the banner is one line, on every screen of a test with a newer draft, and links to the published version", () => {
+  expect(screen.getByRole("status")).toHaveTextContent("Version 2 (draft). Attempts in progress stay on version 1.");
+  expect(screen.getByRole("button", { name: /view version 1/i })).toBeVisible();
+});
+it("UX-11: an Author sees Publish in place, disabled, with the reason in text beside it and reachable by keyboard", async () => {
+  const button = screen.getByRole("button", { name: /^publish$/i });
+  expect(button).toBeDisabled();
+  expect(button).toHaveAttribute("aria-describedby");
+  expect(screen.getByText("Needs an Admin — request review instead")).toBeVisible();
+  await userEvent.tab();                                   // reachable, so a reader meets the explanation
+  expect(document.activeElement).toBe(button);
+});
+it("UX-10: requesting review sets the flag and the list shows the In review badge", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /request review/i }));
+  expect(client.updateTest).toHaveBeenCalledWith("tst_1", { reviewRequested: true });
+});
+it("closing and archiving confirm, and name what candidates will see afterwards", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /^close$/i }));
+  expect(screen.getByRole("dialog")).toHaveTextContent(/candidates opening the link will see that the test has closed/i);
+});
+it("version history lists each version with when it was published and how many attempts are pinned", () => { /* a table row per version */ });
+it("the builder header, banner and dialogs have no axe violations", async () => { /* axe on each */ });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/db apps/api/test/lifecycle.test.ts apps/web/test/testbuilder/lifecycle.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement the lifecycle, `deriveState` and the blocking checklist**
+
+`publishDraftVersion` is one `db.batch` — the `UPDATE test_version SET published_at` and the `UPDATE test SET current_version, status` — so it is one subrequest on D1 and one transaction elsewhere, and a half-published test cannot exist. `attemptCount` in `listVersions` is a correlated subquery over `attempt.test_version_id`, not a query per version, matching `QUESTION_SELECT`'s shape in `packages/db/src/repo/banks.ts:103`. `buildChecklist` calls `validateTest` once and maps its `ImportIssue`s onto rows, adding only the rows that need `now`.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/db apps/api apps/web`
+Expected: PASS, including Review Focus 1's draft-reference tests from Task 2, which this task's new published rows re-exercise.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages apps
+git commit -s -m "feat(tests): lifecycle with numbered published versions"
+```
+
+---
+
+## Task 11: Clone, whole-test export and import (#63, P5.10)
+
+**Files:**
+- Create: `apps/api/src/export/test.ts`, `apps/api/src/import/test.ts`
+- Modify: `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/api/src/import/schema.ts` (compile `schemas/test-1.json` beside the bank schemas), `packages/db/src/repo/tests.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/tests.tsx`, `apps/web/src/components/authoring/ImportDialog.tsx`
+- Test: `apps/api/test/export/test-round-trip.test.ts`, `apps/api/test/clone.test.ts`, `apps/web/test/testbuilder/clone-import.test.tsx`
+
+**Interfaces:**
+- Consumes: `toTestDocument`, `toStoredBody`, `IdRefs` (Task 3); `getPublishedVersion`, `getDraftVersion` (Tasks 3, 10); `validateTest`; `validateBankDocumentStructure` and the `@cfworker/json-schema` compilation in `apps/api/src/import/schema.ts` (Phase 4 Task 7); `listQuestions`, `listBanks`; `createTest`, `putDraftVersion`; `newShortCode` (Task 2).
+- Produces:
+  ```ts
+  // packages/db/src/repo/tests.ts
+  export const cloneTest: ScopedFn<[testId: string, input: { name: string; slug: string; now: number }], TestRow>;
+
+  // apps/api/src/export/test.ts
+  export function exportTest(deps: AppDeps, workspaceId: string, testId: string, version?: number): Promise<Test>;
+
+  // apps/api/src/import/test.ts
+  export interface TestImportReport {
+    testId: string | null; imported: boolean;
+    issues: ImportIssue[];
+    /** Question IDs the file named that resolved into a bank other than the one its `banks` entry implied. */
+    rebound: { questionId: string; bankName: string }[];
+  }
+  export function importTestDocument(deps: AppDeps, workspaceId: string, body: unknown, opts: { dryRun: boolean; now: number }): Promise<TestImportReport>;
+
+  // apps/api/src/import/schema.ts (added)
+  export function validateTestDocumentStructure(doc: unknown): StructuralIssue[];
+  ```
+
+| Method | Path | Guard | Budget (estimate — measure and pin) |
+| --- | --- | --- | --- |
+| POST | `/api/v1/workspaces/:id/tests/:testId/clone` | `tests.edit` | 7 |
+| GET | `/api/v1/workspaces/:id/tests/:testId/export` | `tests.edit` | 7 |
+| POST | `/api/v1/workspaces/:id/tests/import` | `tests.edit` | 8 |
+
+**Export is a mapping, not a serialiser**, for the same reason Phase 4's bank export was: `toTestDocument` already exists (Task 3) and export reads the test row, the version and the questions the sections name, then assembles. `?version=` selects a published version; the default is `current_version`, falling back to the draft head when nothing is published yet. The document carries `$schema`, `format`, `name`, `slug` and every settings block including the ones Phase 5 has no editor for; **the `tst_` ID, the short code and the QR code are omitted**, which `docs/test-format.md` § Identity states outright ("generated by Pariksha and are not part of the file, so an exported test can be imported anywhere without colliding"). `banks` is the list of bank names the sections draw from, and the `qst_` / `bnk_` IDs in `sections_json` become the bank file's own IDs through `IdRefs`.
+
+**Import is all-or-nothing** and reuses Phase 4's three-stage order exactly: structural (`validateTestDocumentStructure`), then `validateTest`, then one `db.batch` writing the test row and its draft version 1. A slug already used in the workspace is a **409 naming the field**, matching Phase 4's `duplicate_group` precedent, not a silent suffix. Questions are resolved by `id` against the workspace's banks; one that resolves into a different bank than the file's `banks` entry implied is reported in `rebound` and imports — #63's "says plainly when questions resolved to a different bank" — while one that resolves nowhere is an issue and nothing imports.
+
+**Clone** copies the test's *editable head* — the draft if there is one, else the latest published version — into a new Draft with a new `tst_` ID, a new short code and a new slug (`<slug>-copy`, suffixed with `-2`, `-3`… on collision). It does not copy: published versions, the version number (the clone starts at draft 1), `review_requested`, or anything candidate-side (there is none yet). The response names all three new identifiers so the screen can show them.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/export/test-round-trip.test.ts — against examples/reasoning-aptitude/test.json
+it("AC-04: the worked example round-trips through import and export", async () => {
+  await importTest(exampleTest);
+  expect(await json(exportUrl)).toEqual({ ...exampleTest, $schema: expect.any(String) });
+});
+it("the exported document validates against test-1.json and validateTest", async () => {
+  expect(validateTestDocumentStructure(out)).toEqual([]);
+  expect(validateTest(out, exampleQuestions).ok).toBe(true);
+});
+it("export carries no internal identifier", async () => {
+  for (const leak of ["workspace_id", "tst_", "qst_", "bnk_", "ver_"]) expect(text, leak).not.toContain(leak);
+});
+it("export carries no review comment key (ADR 0007)", () => { expect(Object.keys(out)).not.toContain("comments"); });
+it("blocks Phase 5 has no editor for survive the round trip", () => {
+  for (const k of ["consent", "proctoring", "retention"]) expect(out[k]).toEqual(exampleTest[k]);
+});
+it("?version= exports a published version and the default exports the current one", async () => { /* two reads */ });
+it("a bad section in the file imports nothing and reports the position and reason", async () => {
+  const res = await importRequest(withUnknownQuestionId(exampleTest));
+  expect(res.status).toBe(422);
+  expect(await testCount()).toBe(0);
+  expect((await res.json()).error.details.issues[0]).toMatchObject({ index: 1, field: "source.sets", questionId: "NOPE-001" });
+});
+it("a slug already used in the workspace is 409 with the field named", async () => { /* code "duplicate_slug", details.field "slug" */ });
+it("a question resolving into a different bank imports and is reported in rebound", async () => { /* rebound[0] */ });
+it("exporting a test with 200 questions across its sections stays at the route's budget", async () => { /* toBe, flat in question count */ });
+it("measures the real subrequest cost of clone, export and import", async () => { /* toBe */ });
+```
+
+```ts
+// apps/api/test/clone.test.ts
+it("AC-04: a clone has the same settings and sections and a new id, slug and short code", async () => {
+  expect(clone.id).not.toBe(original.id);
+  expect(clone.slug).toBe("midterm-copy");
+  expect(clone.shortCode).not.toBe(original.shortCode);
+  expect((await getDraftVersion(db, ws, clone.id))!.body).toEqual(originalBody);
+});
+it("a clone starts in Draft at version 1 with no published version", async () => { /* status draft, currentVersion null */ });
+it("a clone does not copy review_requested", async () => { expect(clone.reviewRequested).toBe(false); });
+it("cloning twice gives midterm-copy and midterm-copy-2", async () => { /* both */ });
+```
+
+```tsx
+// apps/web/test/testbuilder/clone-import.test.tsx
+it("a clone opens with its new name, id and slug visible and states what it did not copy", () => {
+  expect(screen.getByText(/version history and the review flag were not copied/i)).toBeVisible();
+});
+it("the clone's name is editable immediately, with focus in the field", () => {
+  expect(document.activeElement).toBe(screen.getByLabelText(/^name$/i));
+});
+it("import reports what landed and what was skipped in the #51 error-summary pattern", async () => {
+  expect(screen.getAllByRole("row", { name: /NOPE-001/ })).toHaveLength(1);
+  expect(screen.getByText(/nothing was imported/i)).toBeVisible();
+});
+it("import says plainly when questions resolved to a different bank", async () => {
+  expect(screen.getByText(/LOG-001 resolved to bank “Aptitude”/i)).toBeVisible();
+});
+it("export reports started and finished with the file name", async () => {
+  expect(await screen.findByRole("status")).toHaveTextContent(/saved reasoning-aptitude-2026\.json/i);
+});
+it("the clone and import dialogs have no axe violations", async () => { /* both */ });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/export apps/api/test/clone.test.ts apps/web/test/testbuilder/clone-import.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement export, import and clone**
+
+Compile `schemas/test-1.json` in `apps/api/src/import/schema.ts` beside the bank schemas — same `@cfworker/json-schema` instance, same `StructuralIssue` shape, imported as a JSON module so it inlines into the Worker bundle (Ajv compiles with `new Function`, which Workers forbid). `exportTest` omits every field the format calls optional when the stored value is absent, so a test that never had a licence does not export `"license": null` and fail a strict importer elsewhere. `cloneTest` is one `db.batch`: the `test` insert and the `test_version` insert.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages apps`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps packages
+git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing import"
+```
+
+---
+
+## Task 12: Pre-publish warnings (#64, P5.11)
+
+**Files:**
+- Create: `apps/web/src/components/testbuilder/PublishChecklist.tsx`
+- Modify: `apps/api/src/publish/checklist.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/routes/test.tsx`, `docs/ROADMAP.md`
+- Test: `apps/api/test/checklist.test.ts`, `apps/web/test/testbuilder/checklist.test.tsx`
+
+**Interfaces:**
+- Consumes: `buildChecklist`, `ChecklistRow`, `ChecklistSeverity` (Task 10); `validateTest`, `matchesFilter`, `describeAllowlists`; `getDraftVersion`, `listQuestions`.
+- Produces:
+  ```ts
+  // apps/web/src/lib/api.ts — on ApiClient
+  //   checklist(testId: string): Promise<ChecklistRow[]>
+  // apps/web/src/components/testbuilder/PublishChecklist.tsx
+  export function PublishChecklist(props: {
+    rows: readonly ChecklistRow[];
+    onGoTo: (row: ChecklistRow) => void;
+    onConfirm: () => void;
+    onClose: () => void;
+    busy: boolean;
+  }): JSX.Element;
+  ```
+
+| Method | Path | Guard | Budget (estimate — measure and pin) |
+| --- | --- | --- | --- |
+| GET | `/api/v1/workspaces/:id/tests/:testId/checklist` | `tests.edit` | 6 |
+
+**Advisory rows this task adds to `buildChecklist`.** Advisory, not blocking, and the distinction is the PRD's: `T-11` says the builder *warns* on both, and `docs/test-format.md` § "Rules checked on import" says "Import is stricter: it refuses the file for either, because an imported file is one an author can still edit." `design.md`'s `UX-17` "all green" is the lower-precedence document and is read as every row acknowledged.
+
+| Row `id` | Severity | Message shape | Source |
+| --- | --- | --- | --- |
+| `pool_short` | advisory | `pool needs 10, bank has 7` | `T-11`, `UX-15` |
+| `sets_unbalanced` | advisory | `set A is 8 points, set B is 6 — 2 apart, tolerance 0` | `T-11`, `UX-16` |
+| `no_unique_field` | advisory | `no registration field is unique, so a candidate can register twice` | `UX-17` |
+| `allowlist_empty` | advisory | `<describeAllowlists output>, which matches nobody` | #60's acceptance |
+| `candidate_list_empty` | advisory | `the candidate list has no rows` | #60's acceptance — **deferred, see Escalated** |
+
+Every row states the **measured fact**, never a category: the message carries the two numbers. `buildChecklist` gets these from `validateTest`'s existing issues wherever it already raises them (the pool and set rules are `packages/core/src/validate.ts:560` and `:568`), so the numbers in the checklist and the numbers an import would report are the same numbers.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/checklist.test.ts
+it("a pool shortfall is advisory and states both numbers", async () => {
+  expect(rows.find((r) => r.id === "pool_short")).toMatchObject({ severity: "advisory", message: "pool needs 10, bank has 7", sectionId: "quant" });
+});
+it("unequal sets are advisory and name each set's total", async () => { /* severity advisory, both totals in the message */ });
+it("T-11: publish succeeds over advisory rows and refuses over blocking ones", async () => {
+  expect((await app.request(publishUrl, post({}, adminCookie))).status).toBe(200);     // pool_short only
+  await emptyASection();
+  expect((await app.request(publishUrl, post({}, adminCookie))).status).toBe(422);
+});
+it("import refuses the same pool shortfall that publish only warns about", async () => {
+  expect((await importRequest(testWithShortPool)).status).toBe(422);
+});
+it("the checklist and publish compute the same rows — one function, two callers", async () => {
+  await emptyASection();
+  const fromGet = (await json(checklistUrl)).filter((r) => r.severity === "blocking");
+  const fromPublish = (await (await app.request(publishUrl, post({}, adminCookie))).json()).error.details.rows;
+  expect(fromPublish).toEqual(fromGet);
+});
+it("an all-green test returns an empty row list", async () => { expect(await json(checklistUrl)).toEqual([]); });
+it("every row names a field a screen can navigate to", async () => { for (const r of rows) expect(r.field).not.toBe(""); });
+it("measures the real subrequest cost of the checklist route", async () => { /* toBe, flat in section count */ });
+```
+
+```tsx
+// apps/web/test/testbuilder/checklist.test.tsx
+it("blocking and advisory are distinguished in words, not only by colour or icon", () => {
+  expect(screen.getByText(/must fix/i)).toBeVisible();
+  expect(screen.getByText(/worth checking/i)).toBeVisible();
+});
+it("each row states the measured fact", () => { expect(screen.getByText("pool needs 10, bank has 7")).toBeVisible(); });
+it("every row links to the exact field, and returning keeps the checklist open", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /go to Quantitative aptitude/i }));
+  expect(props.onGoTo).toHaveBeenCalledWith(expect.objectContaining({ sectionId: "quant" }));
+  expect(screen.getByRole("dialog", { name: /publish checklist/i })).toBeVisible();
+});
+it("the checklist is focusable and announced when it opens, and closing returns focus to the opener", async () => {
+  const opener = screen.getByRole("button", { name: /^publish$/i });
+  await userEvent.click(opener);
+  expect(screen.getByRole("dialog", { name: /publish checklist/i })).toHaveFocus();
+  await userEvent.keyboard("{Escape}");
+  expect(document.activeElement).toBe(opener);
+});
+it("re-running the checks does not rebuild the list under the reader's cursor", async () => {
+  const first = screen.getAllByRole("listitem")[0];
+  await userEvent.click(screen.getByRole("button", { name: /re-run/i }));
+  expect(screen.getAllByRole("listitem")[0]).toBe(first);     // same node, keyed by row id
+});
+it("an all-green checklist still asks for a confirmation and states that publishing freezes the version", async () => {
+  expect(screen.getByText(/publishing freezes version 2/i)).toBeVisible();
+  expect(screen.getByRole("button", { name: /publish version 2/i })).toBeEnabled();
+});
+it("the checklist has no axe violations", async () => { expect(await axe(container)).toHaveNoViolations(); });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/checklist.test.ts apps/web/test/testbuilder/checklist.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Add the advisory rows, the route and the screen**
+
+The rows come from `validateTest`'s issues wherever it already raises them; `buildChecklist` maps issue → row and sets the severity, so no rule is written twice. `PublishChecklist` renders the array it is given, keyed by `row.id`, and computes nothing (Review Focus 4). Re-running replaces `rows` with a fresh array whose items keep the same keys, so React reuses the nodes.
+
+- [ ] **Step 4: Run the whole suite**
+
+Run: `pnpm lint && pnpm typecheck && pnpm build && pnpm test`, with `TEST_POSTGRES_URL` set.
+Expected: all pass, on both dialects.
+
+- [ ] **Step 5: Update the roadmap Progress table and commit**
+
+Move Phase 5 to **Done** in `docs/ROADMAP.md`'s Progress table, naming what landed, the issues that closed, and the deferrals below.
+
+```bash
+git add apps docs/ROADMAP.md
+git commit -s -m "feat(tests): pre-publish checklist with blocking and advisory rows"
 ```
 </content>
