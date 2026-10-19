@@ -62,3 +62,143 @@
 .qr-code {
   color: var(--color-ink);
 }
+
+/* A `<button>` that reads as the test's name, not as a button — the same
+   role `BankList`'s own row buttons play, styled flat here because
+   `button-secondary`'s pill chrome would read as a second, competing
+   action next to the row it opens. */
+.button-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  color: var(--color-voltage);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* Task 3 (#55, P5.2): sections (UX-12 – UX-16) and the question picker
+   drawer (UX-14). */
+
+.section-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.section-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding-block: var(--space-sm);
+  border-block-end: 1px solid var(--color-hairline);
+}
+
+.section-row__summary {
+  display: block;
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: none;
+  padding: var(--space-xs) 0;
+  font: inherit;
+  color: var(--color-ink);
+  cursor: pointer;
+  /* UX-12: the collapsed sentence wraps rather than truncates, so it stays
+     readable at phone width instead of hiding words behind an ellipsis. */
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.section-row__flag-risk {
+  color: var(--color-flag-risk);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.section-row__balance {
+  border-collapse: collapse;
+}
+
+.section-row__balance th,
+.section-row__balance td {
+  padding-inline-end: var(--space-md);
+  text-align: start;
+}
+
+.section-row__undo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.section-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline);
+}
+
+.section-editor__source {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.section-editor__sets {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0;
+  list-style: none;
+}
+
+.section-editor__preview {
+  border: 1px solid var(--color-hairline);
+  padding: var(--space-sm);
+}
+
+.picker-drawer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline-strong);
+}
+
+.picker-drawer__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+}
+
+.picker-drawer__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: 0;
+  list-style: none;
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.picker-drawer__row {
+  display: flex;
+  align-items: start;
+  gap: var(--space-xs);
+}
+
+.picker-drawer__points {
+  color: var(--color-muted);
+}
+
+.picker-drawer__footer {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.picker-drawer__actions {
+  display: flex;
+  gap: var(--space-sm);
+}

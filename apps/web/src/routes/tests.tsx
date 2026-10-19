@@ -86,12 +86,16 @@ export function TestList({
   actorEmail,
   onSignOut,
   onBack,
+  onOpenTest,
 }: {
   workspaceId: string;
   client: ApiClient;
   actorEmail: string;
   onSignOut: () => void;
   onBack: () => void;
+  /** Task 3 (#55, P5.2): a test's name opens its builder (Screen 7 onward),
+   * the same `onOpenBank` pattern `BankList` already follows. */
+  onOpenTest: (testId: string) => void;
 }) {
   const [filter, setFilter] = useState<UrlFilter>(() => filterFromSearch(window.location.search));
   const [tests, setTests] = useState<TestSummary[] | null>(null);
@@ -362,7 +366,11 @@ export function TestList({
                     <td>
                       <code className="test-id">{test.id}</code>
                     </td>
-                    <td>{test.name}</td>
+                    <td>
+                      <button type="button" className="button-link" onClick={() => onOpenTest(test.id)}>
+                        {test.name}
+                      </button>
+                    </td>
                     <td>
                       <span className="test-state">
                         <span aria-hidden="true">{STATE_GLYPH[test.state]}</span> {STATE_LABEL[test.state]}

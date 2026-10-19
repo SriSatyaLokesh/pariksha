@@ -15,6 +15,7 @@ import { BankList } from "./banks";
 import { BankBrowser } from "./bank";
 import { QuestionScreen } from "./question";
 import { TestList } from "./tests";
+import { TestBuilder } from "./test";
 
 // Routing, without a router.
 //
@@ -53,6 +54,7 @@ type View =
   | { kind: "dashboard"; actor: Actor; workspace: Workspace }
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
+  | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
   | { kind: "bank"; actor: Actor; workspace: Workspace; bankId: string }
   | {
       kind: "question";
@@ -162,6 +164,18 @@ export function OrganiserApp({
           actorEmail={view.actor.email}
           onSignOut={signOut}
           onBack={() => setView({ kind: "dashboard", actor: view.actor, workspace: view.workspace })}
+          onOpenTest={(testId) => setView({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
+        />
+      );
+    case "test":
+      return (
+        <TestBuilder
+          workspaceId={view.workspace.id}
+          testId={view.testId}
+          client={client}
+          actorEmail={view.actor.email}
+          onSignOut={signOut}
+          onBack={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
         />
       );
     case "banks":

@@ -94,7 +94,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 
 const renderList = (client: ApiClient) =>
   render(
-    <TestList workspaceId="wsp_1" client={client} actorEmail="rao@example.edu" onSignOut={() => undefined} onBack={() => undefined} />,
+    <TestList
+      workspaceId="wsp_1"
+      client={client}
+      actorEmail="rao@example.edu"
+      onSignOut={() => undefined}
+      onBack={() => undefined}
+      onOpenTest={() => undefined}
+    />,
   );
 
 beforeEach(() => {

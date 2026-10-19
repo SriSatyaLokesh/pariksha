@@ -547,4 +547,68 @@ describe("OrganiserApp routes on state, not on a URL", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeInTheDocument();
   });
+
+  // Task 3 (#55, P5.2), same lesson applied a third time: a test that
+  // renders `SectionList`/`TestBuilder` directly (apps/web/test/testbuilder/
+  // sections.test.tsx) cannot see that nothing in the running app ever
+  // mounts them. This one walks Dashboard -> Tests -> the builder the only
+  // way an Author actually can.
+  it("reaches the test builder from the app's own entry point", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [
+            {
+              id: "tst_1",
+              name: "Midterm",
+              slug: "midterm",
+              description: null,
+              shortCode: "ab12cd",
+              state: "draft",
+              currentVersion: null,
+              draftVersion: 1,
+              reviewRequested: false,
+              tags: [],
+              updatedAt: 0,
+            },
+          ],
+          test: async () => ({
+            id: "tst_1",
+            name: "Midterm",
+            slug: "midterm",
+            description: null,
+            shortCode: "ab12cd",
+            state: "draft",
+            currentVersion: null,
+            draftVersion: 1,
+            reviewRequested: false,
+            tags: [],
+            updatedAt: 0,
+          }),
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Midterm" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Sections" })).toBeInTheDocument();
+  });
 });
