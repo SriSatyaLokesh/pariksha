@@ -364,6 +364,15 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // listed test is answered at `/form` before the batch is built.
   "/api/v1/run/:workspaceSlug/:testSlug/register": 6,
 
+  // Phase 6 Task 4 (#68, P6.4): the proof-of-work challenge (ADR 0009).
+  // Measured at **2** — `openTest` (1) and the entry-token read (1) — and
+  // the challenge itself costs nothing at all, because it is a digest of
+  // the token the caller already presented rather than a row this route
+  // mints. That is the whole reason the challenge is derived from the
+  // entry token instead of stored: 500 candidates asking for one cost 500
+  // reads of a token they already hold, and no writes.
+  "/api/v1/run/:workspaceSlug/:testSlug/challenge": 2,
+
   // The one organiser route of this phase: authentication (2), the test
   // and its slugs (1), the candidate list (1), the already-invited set
   // (1), one `batch` however long the list is (1), and the audit row (1).
@@ -538,6 +547,10 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // token, which is the one thing a `public` route may never do.
   "GET /api/v1/run/:workspaceSlug/:testSlug/form": "entry",
   "POST /api/v1/run/:workspaceSlug/:testSlug/register": "entry",
+  // Phase 6 Task 4 (#68, P6.4). `entry` for the same reason and with
+  // more force than its two neighbours: the challenge **is** a digest of
+  // the entry token, so a caller with no token has nothing to be issued.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/challenge": "entry",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

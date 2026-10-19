@@ -55,6 +55,8 @@ import { ApiError } from "../errors.js";
 import { sha256Hex, randomToken } from "../auth/tokens.js";
 import { matchBounded } from "./bounded.js";
 import { limitOrThrow } from "./limit.js";
+import { captchaRequired, verifyCaptcha } from "./captcha.js";
+import { POW_DIFFICULTY_BITS, powChallenge, verifyPow } from "./pow.js";
 import {
   ENTRY_KIND,
   REGISTRATION_KIND,
@@ -72,9 +74,12 @@ const registerRequest = z.object({
    *  `normaliseValues` rather than refused: a form that gained a field
    *  since the tab was opened must not 400 the whole submission. */
   values: z.record(z.string(), z.unknown()).default({}),
-  /** Task 4's proof of work. Accepted and ignored until it lands, so the
-   *  browser's request shape does not change when it does. */
+  /** The hosted captcha's token, on an instance that configured one.
+   *  Ignored by default, because by default none is (ADR 0009). */
   captchaToken: z.string().max(4000).optional(),
+  /** The proof of work: a preimage whose digest over the challenge this
+   *  entry token cuts has `POW_DIFFICULTY_BITS` leading zero bits. */
+  solution: z.string().max(200).optional(),
 });
 
 /** The form a test declares, or an empty one — a test may legitimately ask
@@ -175,9 +180,26 @@ export function registrationRoutes(deps: AppDeps): Hono<AppBindings> {
   });
 
   /**
+   * The proof of work the registration below demands (`S-07`, ADR 0009).
+   *
+   * Behind the entry token on purpose: the challenge **is** a digest of
+   * that token, so the route has nothing to mint, nothing to store and
+   * nothing to expire — and a caller who has not passed the access gate
+   * has no challenge to work on in the first place. `bits` is in the
+   * response rather than compiled into the browser, so raising the
+   * difficulty against an abusive deployment is an API deploy.
+   */
+  routes.get("/:workspaceSlug/:testSlug/challenge", async (c) => {
+    const test = await openTest(deps, c);
+    const { token } = await entryClaim(deps, c, test);
+    return c.json({ challenge: await powChallenge(token), bits: POW_DIFFICULTY_BITS });
+  });
+
+  /**
    * The server's decision. The order is: read the entry token, charge the
-   * volume limit, validate, hash the unique values, then **one**
-   * `db.batch` so a `UNIQUE` violation rolls the whole registration back.
+   * volume limit, check the proof of work, validate, hash the unique
+   * values, then **one** `db.batch` so a `UNIQUE` violation rolls the
+   * whole registration back.
    */
   routes.post("/:workspaceSlug/:testSlug/register", async (c) => {
     const test = await openTest(deps, c);
@@ -191,6 +213,21 @@ export function registrationRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!parsed.success) {
       throw new ApiError(400, "invalid_request", "That form could not be read. Try again.");
     }
+    // `S-07`'s bot protection, before a line of the submission is looked
+    // at: a caller who did not pay for this registration does not get the
+    // server's opinion of their form values either. Costs no subrequest —
+    // the challenge is a digest of the token already in hand — so the
+    // route's measured budget is what it was without it.
+    if (!(await verifyPow(token, parsed.data.solution))) throw refuse("bot_check_failed");
+    // The per-instance opt-in, and a no-op on an instance that configured
+    // no provider — which is every default one (`AC-01`).
+    if (
+      captchaRequired(deps, test.settings.access) &&
+      !(await verifyCaptcha(deps, parsed.data.captchaToken))
+    ) {
+      throw refuse("bot_check_failed");
+    }
+
     const submitted = parsed.data.values;
     const form = formOf(test);
     const consent = consentOf(test);

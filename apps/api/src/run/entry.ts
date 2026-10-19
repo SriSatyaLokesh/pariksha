@@ -143,6 +143,17 @@ export const REFUSALS = {
     code: "too_many_attempts",
     message: "Too many attempts from this test just now. Wait a minute and try again.",
   },
+  /** `S-07`'s default bot protection (ADR 0009): the browser did not
+   *  send a proof of work, or sent one that does not solve the challenge
+   *  its entry token cuts. One answer for all of them, because a real
+   *  candidate reaches it only when the solver could not run at all and
+   *  the only thing that helps either of them is a reload. */
+  bot_check_failed: {
+    status: 403,
+    code: "bot_check_failed",
+    message:
+      "The security check on this page did not complete. Reload the page and try again, or ask your organiser.",
+  },
   /** The `run_entry` token is single use and short-lived: a replayed
    *  registration, a reloaded tab an hour later, a link out of a browser
    *  history. All one answer, because none of them is distinguishable to

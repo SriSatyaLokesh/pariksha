@@ -6,6 +6,7 @@
 // happens to call is a rule the route can stop calling.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
+import { createHash } from "node:crypto";
 import {
   closeClient,
   getCandidateByExternalId,
@@ -20,6 +21,7 @@ import { validateRegistration } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { LIMITS } from "../../src/run/limit.js";
+import { POW_DIFFICULTY_BITS } from "../../src/run/pow.js";
 import { matchBounded } from "../../src/run/bounded.js";
 import { entryHash, readEntryToken, REFUSALS } from "../../src/run/entry.js";
 import { sha256Hex } from "../../src/auth/tokens.js";
@@ -75,8 +77,40 @@ const form = (slug: string, token?: string): Promise<Response> =>
     token === undefined ? {} : { headers: { authorization: `Bearer ${token}` } },
   );
 
-const register = (slug: string, token: string, values: Record<string, unknown>): Promise<Response> =>
-  post(`/api/v1/run/alpha/${slug}/register`, { values }, token);
+/**
+ * A registration, with Task 4's proof of work paid (ADR 0009).
+ *
+ * The solve is folded into the helper rather than spread over forty call
+ * sites, and a challenge this token cannot be issued (spent, expired,
+ * earned at another test) falls through with a placeholder — so the
+ * route still answers the refusal the test is about, which happens
+ * before the bot check, instead of the helper throwing.
+ */
+const register = async (
+  slug: string,
+  token: string,
+  values: Record<string, unknown>,
+): Promise<Response> => {
+  const challenged = await app.request(`/api/v1/run/alpha/${slug}/challenge`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const solution =
+    challenged.status === 200
+      ? solvePow(((await challenged.json()) as { challenge: string }).challenge)
+      : "unsolved";
+  return post(`/api/v1/run/alpha/${slug}/register`, { values, solution }, token);
+};
+
+/** Node's synchronous SHA-256, so forty registrations do not spend forty
+ *  bursts of WebCrypto promises. Same arithmetic as `verifyPow`. */
+function solvePow(challenge: string): string {
+  const prefix = "0".repeat(POW_DIFFICULTY_BITS >> 2);
+  for (let i = 0; ; i++) {
+    if (createHash("sha256").update(`${challenge}:${String(i)}`).digest("hex").startsWith(prefix)) {
+      return String(i);
+    }
+  }
+}
 
 const VALID = {
   roll: "21CS0147",
@@ -545,6 +579,16 @@ it("C-02: too_many_attempts tells the candidate what to do next", () => {
 
 // --- measured budgets ---------------------------------------------------
 
+/** The proof of work for one entry token, off the real `/challenge`
+ *  route — the budget below measures `/register` alone, so the solve
+ *  happens outside the counted app. */
+async function solutionFor(slug: string, token: string): Promise<string> {
+  const res = await app.request(`/api/v1/run/alpha/${slug}/challenge`, {
+    headers: { authorization: `Bearer ${token}` },
+  });
+  return solvePow(((await res.json()) as { challenge: string }).challenge);
+}
+
 const measure = async (run: (request: typeof app.request) => Promise<unknown>): Promise<number> => {
   const counting = countingDeps(deps);
   const scoped = createApp(counting.deps);
@@ -573,10 +617,11 @@ it("POST /register stays within its measured budget", async () => {
   // and the claims are read once to name the field.
   await register("roster", await gate("roster", "21CS0147"), VALID);
   const token = await gate("roster", "21CS0148");
+  const solution = await solutionFor("roster", token);
   const spent = await measure(async (request) => {
     const res = await request(
       `/api/v1/run/alpha/roster/register`,
-      json({ values: { ...VALID, roll: "21CS0148" } }, token),
+      json({ values: { ...VALID, roll: "21CS0148" }, solution }, token),
     );
     expect(res.status).toBe(409);
   });
@@ -586,8 +631,12 @@ it("POST /register stays within its measured budget", async () => {
 it("T-14 re-entry costs no more than a refusal, so neither path exceeds the budget", async () => {
   await register("signup", await gate("signup"), VALID);
   const token = await gate("signup");
+  const solution = await solutionFor("signup", token);
   const spent = await measure(async (request) => {
-    const res = await request(`/api/v1/run/alpha/signup/register`, json({ values: VALID }, token));
+    const res = await request(
+      `/api/v1/run/alpha/signup/register`,
+      json({ values: VALID, solution }, token),
+    );
     expect(res.status).toBe(200);
   });
   expect(spent).toBe(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/register"]);

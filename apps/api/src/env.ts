@@ -41,6 +41,12 @@ export interface EmailConfig {
   from: string;
 }
 
+/** A hosted captcha an operator turned on for their own instance. */
+export interface CaptchaConfig {
+  secret: string;
+  verifyUrl: string;
+}
+
 const json = <T extends z.ZodType>(schema: T) =>
   z
     .string()
@@ -70,6 +76,16 @@ const auth = z.object({
   NODE_ENV: z.string().min(1).optional(),
   /** Origin the magic-link URL is built against. */
   APP_URL: z.url().optional(),
+  /**
+   * The hosted-captcha opt-in (ADR 0009). Both or neither: an endpoint
+   * with no secret is a verification that fails on the first real
+   * registration rather than at boot, and a secret with no endpoint is a
+   * setting that silently does nothing. The provider's URL is
+   * configuration rather than a constant, which is what keeps a
+   * third-party origin out of this source tree — `S-11`.
+   */
+  CAPTCHA_SECRET: secret.optional(),
+  CAPTCHA_VERIFY_URL: z.url().optional(),
 });
 
 const workers = auth.extend({ SESSION_SECRET: secret });
@@ -97,6 +113,9 @@ interface AuthEnv {
   allowConsoleEmail?: true | undefined;
   nodeEnv?: string | undefined;
   appUrl?: string | undefined;
+  /** Absent on every default deployment, which is the shipped answer to
+   *  `S-07`'s first half (ADR 0009). */
+  captcha?: CaptchaConfig | undefined;
 }
 
 export type AppEnv =
@@ -147,9 +166,15 @@ function authEnv(parsed: z.infer<typeof auth>): AuthEnv {
         }
       : undefined;
 
+  const captcha =
+    parsed.CAPTCHA_SECRET && parsed.CAPTCHA_VERIFY_URL
+      ? { secret: parsed.CAPTCHA_SECRET, verifyUrl: parsed.CAPTCHA_VERIFY_URL }
+      : undefined;
+
   return {
     oidcProviders: parsed.OIDC_PROVIDERS,
     email,
+    captcha,
     allowConsoleEmail: parsed.EMAIL_CONSOLE === "true" ? true : undefined,
     nodeEnv: parsed.NODE_ENV,
     appUrl: parsed.APP_URL,

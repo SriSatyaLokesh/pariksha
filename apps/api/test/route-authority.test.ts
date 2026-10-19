@@ -93,6 +93,7 @@ it("the entry set is a literal allowlist too — the run_entry token, as a Beare
       .map(([endpoint]) => endpoint)
       .sort(),
   ).toEqual([
+    "GET /api/v1/run/:workspaceSlug/:testSlug/challenge",
     "GET /api/v1/run/:workspaceSlug/:testSlug/form",
     "POST /api/v1/run/:workspaceSlug/:testSlug/register",
   ]);
@@ -135,6 +136,9 @@ const PROBE_URL: Readonly<Record<string, string>> = {
   // header at all: both must answer 401, which is what makes them `entry`
   // rather than `public`.
   "GET /api/v1/run/:workspaceSlug/:testSlug/form": "/api/v1/run/alpha/aptitude/form",
+  // Task 4's proof-of-work challenge, probed the same way and for the
+  // same reason: no Authorization header, so it must answer 401.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/challenge": "/api/v1/run/alpha/aptitude/challenge",
   "POST /api/v1/run/:workspaceSlug/:testSlug/register": "/api/v1/run/alpha/aptitude/register",
   "GET /api/v1/auth/:provider/start": "/api/v1/auth/google/start",
   "GET /api/v1/auth/:provider/callback": "/api/v1/auth/google/callback",

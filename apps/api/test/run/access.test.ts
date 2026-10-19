@@ -545,6 +545,13 @@ async function exhaustedGate(): Promise<Response> {
   return res;
 }
 
+/** One trip through `alpha/signup`'s gate, for the one refusal that only
+ *  a registration can produce. */
+async function signupEntryToken(): Promise<string> {
+  const res = await post("/api/v1/run/alpha/signup/access", { code: "OPENSESAME" });
+  return ((await res.json()) as { entryToken: string }).entryToken;
+}
+
 it("C-02: the codes the gate really answers with are the catalogue's own", async () => {
   // A catalogue is only worth asserting on if the routes use it: each of
   // these is a real refusal one of the four modes produces.
@@ -563,6 +570,16 @@ it("C-02: the codes the gate really answers with are the catalogue's own", async
       headers: { authorization: `Bearer ${"a".repeat(43)}` },
     }),
     await exhaustedGate(),
+    // Task 4's: a registration with no proof of work (ADR 0009). The
+    // entry token is real, so this is the bot check and nothing else.
+    await app.request("/api/v1/run/alpha/signup/register", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${await signupEntryToken()}`,
+      },
+      body: JSON.stringify({ values: {} }),
+    }),
   ]) {
     seen.add(((await res.json()) as { error: { code: string } }).error.code);
   }
