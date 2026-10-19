@@ -275,6 +275,39 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   '.exam-device-report li[data-ok="false"] .exam-finding-mark': "cream",
   '.exam-device-report li[data-ok="true"] .exam-finding-mark': "cream",
   ".exam-landing-footer": "cream",
+
+  // ---- exam.css: the test runner (Phase 6 Task 6, #70) -------------------
+  // DESIGN.md, "The clock kills the canvas": the runner is cream and ink.
+  // The page's own ground is the cream base.css paints on <body>; a
+  // control that fills itself (every button, the palette squares, the
+  // calculator) reads on its own fill instead, and that fill is what is
+  // named here.
+  //
+  // The high-contrast swap in the same file redefines five of these
+  // tokens on `:root[data-contrast="high"]`, and every one of those swaps
+  // RAISES the ratio (hairlines to ink, cream to white, muted to
+  // ink-soft). The default theme audited below is therefore the floor,
+  // not an average.
+  ".exam-skip": "canvas",
+  ".exam-font-scale legend, .exam-view-choice": "cream",
+  ".exam-contrast-switch, .exam-calc-open, .exam-button, .exam-clear": "canvas",
+  '.exam-contrast-switch[aria-checked="true"]': "cream",
+  '.exam-button[aria-pressed="true"]': "canvas",
+  ".exam-button:disabled": "hairline",
+  ".exam-clear": "canvas",
+  ".exam-question-stem": "cream",
+  ".exam-confirm": "canvas",
+  ".exam-confirm-danger": "canvas",
+  // DESIGN.md's `palette-square` family. Each variant fills itself from
+  // its own state token and writes the number in cream; the default and
+  // the "you are here" ring sit on the square's own canvas.
+  ".palette-square": "canvas",
+  ".palette-square.is-filled": "state-answered",
+  ".palette-square.has-notch": "state-marked",
+  ".palette-square.has-ring": "canvas",
+  ".palette-square.has-lock": "state-locked",
+  ".exam-calc-display": "canvas",
+  ".exam-calc-key, .exam-calc-close": "canvas",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
