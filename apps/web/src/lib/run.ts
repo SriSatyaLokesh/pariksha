@@ -191,6 +191,20 @@ function hasLeadingZeroBits(digest: Uint8Array, bits: number): boolean {
 export const BOT_CHECK_MESSAGE =
   "Your browser could not complete the security check on this page. Reload the page and try again, or ask your organiser.";
 
+/**
+ * What to show while `register()` is running, and the reason the screen
+ * must show something.
+ *
+ * Submitting used to be a single round trip. It is now a round trip, a
+ * sub-second-to-a-few-seconds proof of work, and a second round trip —
+ * long enough on a phone that a candidate with no feedback presses the
+ * button again. The screen's obligation is to disable the control and
+ * show this line for the duration; `register()` closes the hole from its
+ * own side as well (see the de-duplication below), but a button that
+ * looks dead for three seconds before a timed exam is its own defect.
+ */
+export const REGISTER_PENDING_MESSAGE = "Checking your browser…";
+
 /** The error envelope every route answers with: `{ error: { code, message } }`. */
 export class RunError extends Error {
   readonly status: number;
@@ -270,6 +284,42 @@ async function post<T>(
  */
 export function createRunClient(workspaceSlug: string, testSlug: string): RunClient {
   const base = `/api/v1/run/${encodeURIComponent(workspaceSlug)}/${encodeURIComponent(testSlug)}`;
+  /** Registrations in flight, by entry token. At most one entry. */
+  const registering = new Map<string, Promise<{ registrationToken: string }>>();
+
+  /**
+   * The proof of work is part of registering, not a separate step a
+   * screen has to remember: the challenge is cut from this very entry
+   * token, so the only caller that could ask for it is this one. A
+   * browser that cannot run it says so in one sentence rather than
+   * leaving a dead Continue button.
+   */
+  async function registerOnce(
+    entryToken: string,
+    values: Record<string, unknown>,
+    captchaToken: string | undefined,
+  ): Promise<{ registrationToken: string }> {
+    const { challenge, bits } = await get<{ challenge: string; bits: number }>(
+      `${base}/challenge`,
+      bearer(entryToken),
+    );
+    let solution: string;
+    try {
+      solution = await solvePow(challenge, bits);
+    } catch (error) {
+      throw error instanceof RunError
+        ? error
+        : new RunError(0, "bot_check_failed", BOT_CHECK_MESSAGE);
+    }
+    return (
+      (await post<{ registrationToken: string }>(
+        `${base}/register`,
+        { values, solution, ...(captchaToken === undefined ? {} : { captchaToken }) },
+        bearer(entryToken),
+      )) ?? { registrationToken: "" }
+    );
+  }
+
   return {
     landing: () => get<LandingPayload>(base),
     access: async (input) =>
@@ -281,31 +331,28 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
       send<RegistrationPayload>(`${base}/form`, { headers: bearer(entryToken) }) as Promise<
         RegistrationPayload
       >,
-    register: async (entryToken, values, captchaToken) => {
-      // The proof of work is part of registering, not a separate step a
-      // screen has to remember: the challenge is cut from this very
-      // entry token, so the only caller that could ask for it is this
-      // one. A browser that cannot run it says so in one sentence rather
-      // than leaving a dead Continue button.
-      const { challenge, bits } = await get<{ challenge: string; bits: number }>(
-        `${base}/challenge`,
-        bearer(entryToken),
-      );
-      let solution: string;
-      try {
-        solution = await solvePow(challenge, bits);
-      } catch (error) {
-        throw error instanceof RunError
-          ? error
-          : new RunError(0, "bot_check_failed", BOT_CHECK_MESSAGE);
-      }
-      return (
-        (await post<{ registrationToken: string }>(
-          `${base}/register`,
-          { values, solution, ...(captchaToken === undefined ? {} : { captchaToken }) },
-          bearer(entryToken),
-        )) ?? { registrationToken: "" }
-      );
+    register: (entryToken, values, captchaToken) => {
+      // **One registration per entry token at a time.** A second press
+      // during the solve used to be a second challenge, a second solve
+      // and a second POST on the same single-use token: whichever batch
+      // landed first consumed it, and the loser's answer was
+      // 410 `entry_expired` — "this registration link is no longer
+      // valid" — to a candidate who had just filled the form before a
+      // timed exam. The window was tens of milliseconds before the proof
+      // of work and is seconds after it, so the fix belongs here, at the
+      // one place both presses pass through, rather than only in a
+      // screen's disabled attribute (which the screen must still have —
+      // `REGISTER_PENDING_MESSAGE`). The second caller joins the first's
+      // promise and gets the same token.
+      const already = registering.get(entryToken);
+      if (already) return already;
+
+      const attempt = registerOnce(entryToken, values, captchaToken);
+      registering.set(entryToken, attempt);
+      // Cleared on settle, not on success: a 422 is a form the candidate
+      // can correct and resubmit against the same entry token.
+      void attempt.catch(() => undefined).finally(() => registering.delete(entryToken));
+      return attempt;
     },
   };
 }

@@ -8,7 +8,8 @@
 The PRD asks for two things that cannot both be true on the same deployment,
 and it asks for them in the same document.
 
-**It names a hosted captcha in three places.**
+**It names a hosted captcha in three places**, and a fourth sits in an earlier
+ADR.
 
 - [`docs/PRD.md`](../PRD.md), `S-07`: "Registration is protected by Cloudflare
   Turnstile or hCaptcha (both free) **and** by rate limits per attempt and per
@@ -18,9 +19,17 @@ and it asks for them in the same document.
 - [`docs/PRD.md`](../PRD.md), the adapter table: "Bot protection | **Turnstile**
   | hCaptcha or Turnstile".
 
-**And it forbids one, in a clause it is marketed on.** `S-11`: "Collect only
-what the test's form asks for. No analytics, telemetry or third-party scripts;
-fonts and the face model are served from the app itself."
+**[ADR 0002](0002-cloudflare-reference-stack-with-adapters.md) repeats it**, in
+the sentence a reader lands on when they ask what the reference deployment is
+made of: "The reference deployment uses Cloudflare Pages, Workers, D1, R2,
+**Turnstile** and Cron Triggers on the free plan", with "identity (OIDC, email,
+**captcha**)" beside it. **This ADR amends that list.** 0002 is not rewritten —
+an ADR is a record of what was decided when — but it now carries a pointer here,
+and this is the fourth place the same requirement is stated.
+
+**And one clause forbids all four, in a promise the product is marketed on.**
+`S-11`: "Collect only what the test's form asks for. No analytics, telemetry or
+third-party scripts; fonts and the face model are served from the app itself."
 
 That is not a stylistic tension. A Turnstile or hCaptcha widget is a script
 from `challenges.cloudflare.com` (or `hcaptcha.com`) in an iframe that calls
@@ -41,7 +50,11 @@ Three further facts narrowed the choice:
 - **`S-07`'s second half is not in dispute.** Rate limits per attempt and per
   test, never per IP, are built: a `rate_limit` table, `LIMITS`, `limitOrThrow`
   and `limitMisses` in [`apps/api/src/run/limit.ts`](../../apps/api/src/run/limit.ts),
-  covering the access gate, the emailed code, registration and the short link.
+  covering the access gate (`test_access`, misses only), the emailed code
+  (`email_code` per test version **and** `email_code_address` per digest of the
+  address — the two shapes a code-sending route is abused in), registration
+  (`test_register`) and the short link (`short_link`, instance-wide, because a
+  sweep across a six-character space never guesses the same code twice).
 - **A captcha's job here is narrow.** It is not identity and not proctoring
   (`P-01` already blocks phones on a proctored test, and the candidate list,
   invite links and emailed codes already gate who may register at all). It is
@@ -128,18 +141,46 @@ awaiting them together brings it to ~5 µs. A budget Android is perhaps three
 to four times slower, which puts the median near a second and the tail past
 two.
 
+**Why 16 bits, and why the number is not the interesting part.** 2¹⁶ digests is
+roughly six milliseconds of native CPU to anyone who wants to spend it — ten
+million SHA-256 a second is an ordinary machine. So the work factor does not
+bound a determined farm at any difficulty a candidate would tolerate; what
+bounds bulk registration is `test_register`, at 1000 per five minutes per test
+version. The bit count is therefore a dial between "costs a `curl` loop
+something" and "costs a candidate something", with no security gradient in the
+range worth arguing about: 18 would quadruple a phone's wait for nothing, and
+14 would save a phone most of a second for nothing. 16 is kept.
+
+**The real exposure the measurement points at is the second press, not the
+wait.** Submitting used to be one round trip and is now a round trip, a
+multi-second search and a second round trip. The entry token is single use, so
+two presses meant two challenges, two solves and two writes against one token —
+and the loser was told *"this registration link is no longer valid"* moments
+before a timed exam. A Web Worker does **not** fix that, and would not help with
+the wait either: `solvePow` awaits a block of 256 digests at a time, so it
+already yields to the event loop hundreds of times during a search and the page
+is never frozen. The fix is in two places, both shipped or required here:
+`createRunClient`'s `register()` de-duplicates concurrent calls on one entry
+token so the second press joins the first, and the registration screen must
+disable its control and show `REGISTER_PENDING_MESSAGE` for the duration.
+
 **To watch.**
 
-1. **Measure the solve on a real phone before the first live unproctored
-   test.** If the tail exceeds roughly two seconds there, the answer is to move
-   the search into a Web Worker so the page stays responsive — **not** to lower
-   `POW_DIFFICULTY_BITS`, which would weaken the only control this decision
-   ships.
-2. **If a real deployment is overrun despite the rate limits,** raise
-   `POW_DIFFICULTY_BITS` first (one constant, no web deploy, because the
-   browser is told the number) and revisit this record second.
-3. **If `S-11` is ever relaxed for some other reason,** reconsider this ADR
+1. **The registration screen must disable the submit while `register()` runs**
+   and show the pending line. The client-side de-duplication makes a second
+   press harmless, but a control that looks dead for several seconds before a
+   timed exam is its own defect. This, not a Web Worker, is what the
+   measurement calls for.
+2. **Measure the solve on a real phone before the first live unproctored
+   test** — the numbers above are a desktop measurement and an extrapolation.
+   If a phone is far worse than four times slower, lower `POW_DIFFICULTY_BITS`
+   rather than contorting the implementation: per the paragraph above, the work
+   factor is not what is holding the line.
+3. **If a real deployment is overrun despite the rate limits,** the answer is
+   the buckets, not the bits — tighten `test_register`, and only then revisit
+   this record.
+4. **If `S-11` is ever relaxed for some other reason,** reconsider this ADR
    rather than silently inheriting it: the whole argument rests on `S-11`
    holding.
-4. **A sweep for `rate_limit` rows** belongs beside the retention job; until
+5. **A sweep for `rate_limit` rows** belongs beside the retention job; until
    then the table grows one row per bucket per window.

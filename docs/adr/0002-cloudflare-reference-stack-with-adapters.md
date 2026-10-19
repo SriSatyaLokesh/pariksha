@@ -1,6 +1,8 @@
 # 0002. Cloudflare free plan as the reference stack, behind adapters
 
-- **Status:** Accepted
+- **Status:** Accepted — the reference-stack list below is **amended by
+  [ADR 0009](0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md)**,
+  which drops Turnstile from the default deployment. Everything else stands.
 - **Date:** 2026-10-16
 
 ## Context
@@ -16,8 +18,8 @@ Some organisers will not want Cloudflare and will run their own servers.
 
 ## Decision
 
-- The reference deployment uses Cloudflare Pages, Workers, D1, R2, Turnstile and Cron Triggers on the free plan.
-- All code is written against three interfaces: database (Drizzle, for D1, SQLite and Postgres), object storage (R2, S3, disk) and identity (OIDC, email, captcha).
+- The reference deployment uses Cloudflare Pages, Workers, D1, R2, Turnstile and Cron Triggers on the free plan. **(Amended by [ADR 0009](0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md): Turnstile is not in the default deployment. Bot protection is a same-origin proof of work, and a hosted captcha is a per-instance opt-in, because a widget's `script-src`, `frame-src` and `connect-src` entries cannot be reconciled with `S-11`.)**
+- All code is written against three interfaces: database (Drizzle, for D1, SQLite and Postgres), object storage (R2, S3, disk) and identity (OIDC, email, captcha). The captcha half of the identity adapter ships as `verifyCaptcha`, switched off — ADR 0009 again.
 - The API uses Hono so the same code runs on Workers and Node, and a Docker deployment is maintained alongside.
 - To stay inside free limits, the snapshot upload doubles as the heartbeat, events are batched, and interval snapshots get no database row.
 - Strong password hashing does not fit the Workers free plan's 10 ms CPU limit, so organiser sign-in there uses OIDC or magic links. Passwords with Argon2id are offered on Docker only.

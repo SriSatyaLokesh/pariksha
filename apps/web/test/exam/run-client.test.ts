@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BOT_CHECK_MESSAGE,
   createRunClient,
+  REGISTER_PENDING_MESSAGE,
   RegistrationInvalid,
   RunError,
   slugPairFromPath,
@@ -300,6 +301,66 @@ describe("the access gate (Task 2)", () => {
     );
     const hex = [...digest].map((byte) => byte.toString(16).padStart(2, "0")).join("");
     expect(hex.startsWith("00")).toBe(true);
+  });
+
+  it("the second press during a solve joins the first, rather than earning a 410", async () => {
+    // The proof of work turned a one-round-trip submit into seconds of
+    // work, and the entry token is single use: two presses used to mean
+    // two challenges, two solves and two POSTs, with the loser told
+    // "this registration link is no longer valid" right before a timed
+    // exam. One registration per entry token at a time.
+    const calls = stubFetch(withChallenge(() => Response.json({ registrationToken: "reg" })));
+    const client = createRunClient("alpha", "signup");
+    const [first, second] = await Promise.all([
+      client.register("tok", { email: "a@b.ac.in" }),
+      client.register("tok", { email: "a@b.ac.in" }),
+    ]);
+    expect(first).toEqual({ registrationToken: "reg" });
+    expect(second).toEqual(first);
+    // One challenge and one register, not two of each.
+    expect(calls.map((call) => call.url)).toEqual([
+      "/api/v1/run/alpha/signup/challenge",
+      "/api/v1/run/alpha/signup/register",
+    ]);
+  });
+
+  it("a refused registration can be corrected and resubmitted on the same entry token", async () => {
+    // The de-duplication must not become a latch: a 422 is a form the
+    // candidate fixes and sends again, against the entry token the
+    // server never consumed.
+    let refuse = true;
+    const calls = stubFetch(
+      withChallenge(() => {
+        if (!refuse) return Response.json({ registrationToken: "reg" });
+        refuse = false;
+        return new Response(
+          JSON.stringify({
+            error: { code: "invalid_registration", message: "x", details: { issues: [] } },
+          }),
+          { status: 422, headers: { "content-type": "application/json" } },
+        );
+      }),
+    );
+    const client = createRunClient("alpha", "signup");
+    await expect(client.register("tok", {})).rejects.toBeInstanceOf(RegistrationInvalid);
+    await expect(client.register("tok", {})).resolves.toEqual({ registrationToken: "reg" });
+    expect(calls).toHaveLength(4);
+  });
+
+  it("two candidates registering at once are not de-duplicated into one", async () => {
+    // The key is the entry token, not the client: two tabs, two gates,
+    // two tokens, two registrations.
+    const calls = stubFetch(withChallenge(() => Response.json({ registrationToken: "reg" })));
+    const client = createRunClient("alpha", "signup");
+    await Promise.all([client.register("tok-a", {}), client.register("tok-b", {})]);
+    expect(calls.filter((call) => call.url.endsWith("/register"))).toHaveLength(2);
+  });
+
+  it("C-02: the pending copy exists, because the submit now takes seconds", () => {
+    // A screen that shows nothing for a one-to-four-second solve invites
+    // the second press this client now absorbs; the sentence lives here
+    // so both the screen and this file name it the same way.
+    expect(REGISTER_PENDING_MESSAGE).toMatch(/check/i);
   });
 
   it("C-02: a browser that cannot run the check says so, rather than leaving a dead button", async () => {
