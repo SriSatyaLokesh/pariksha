@@ -89,6 +89,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => {
       throw new Error("not used");
     },
+    publishTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    closeTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    archiveTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    versions: async () => [],
     checkUrl: async () => {
       throw new Error("not used");
     },

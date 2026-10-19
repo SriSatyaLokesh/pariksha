@@ -88,6 +88,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => {
       throw new Error("not used");
     },
+    publishTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    closeTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    archiveTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    versions: async () => [],
     checkUrl: async () => {
       throw new Error("not used");
     },
@@ -176,10 +186,17 @@ describe("TestList", () => {
     expect(within(row as HTMLElement).getByText(/in review/i)).toBeVisible();
   });
 
-  it("a 'published' state (Important 5) renders its own label and glyph, not a blank cell", async () => {
-    renderList(fakeClient({ tests: async () => [{ ...PUBLISHED, state: "published" }] }));
+  // Task 11 (#62) replaced the interim "published" state with the derived
+  // five — the server now answers Scheduled or Open against the published
+  // version's own window — so the case this used to cover is these two.
+  it.each([
+    ["scheduled", "Scheduled"],
+    ["open", "Open"],
+    ["archived", "Archived"],
+  ] as const)("the derived %s state renders its own label and glyph, not a blank cell", async (state, label) => {
+    renderList(fakeClient({ tests: async () => [{ ...PUBLISHED, state }] }));
     const row = (await screen.findByText("Midterm")).closest("tr");
-    expect(within(row as HTMLElement).getByText("Published")).toBeVisible();
+    expect(within(row as HTMLElement).getByText(label)).toBeVisible();
     expect(row?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
   });
 

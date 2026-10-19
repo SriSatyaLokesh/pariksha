@@ -66,20 +66,35 @@ export interface ImportReport {
 
 // Phase 5 Task 2 (#54): tests. Mirrors `packages/db/src/repo/tests.ts`'s
 // `TestRow`, widened at the wire boundary the way `apps/api/src/routes/
-// tests.ts`'s own `toWire` builds it — `state` is `status` verbatim in this
-// task (Scheduled and Open do not exist until Task 11 adds `deriveState`,
-// once a `timing` setting exists for it to read), and `draftVersion` is the
-// version number of the test's unpublished draft, or null once none exists.
-// The wire type is declared whole here so no later task renames a field the
-// screens already read.
+// tests.ts`'s own `toWire` builds it, and `draftVersion` is the version
+// number of the test's unpublished draft.
 //
-// Task 2 fix round (Important 5): `"published"` is in this union, not mapped
-// to `"open"`, because `status` can already be `"published"` today (any test
-// `publishTestVersion` has touched) while nothing yet reads `timing` to say
-// whether it has actually opened — guessing "Open" would be false. Task 11's
-// `deriveState()` replaces this whole field with the derived five-state
-// value and removes `"published"` again.
-export type TestState = "draft" | "scheduled" | "open" | "published" | "closed" | "archived";
+// Task 11 (#62, P5.9): `state` is now the **derived** five-state value
+// `deriveState` computes server-side, so `"published"` is gone from this
+// union — the stored status by that name is Scheduled or Open depending on
+// the published version's own window, and the browser is never the place
+// that decides which (Review Focus 2 and 4 both).
+export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
+
+/** Task 11 (#62, P5.9): one row of `GET .../versions` — mirrors
+ * `TestVersionSummary` (`packages/db/src/repo/tests.ts`). `publishedAt` is
+ * null for the one open draft, which the history shows rather than hides. */
+export interface TestVersionSummary {
+  version: number;
+  publishedAt: number | null;
+  attemptCount: number;
+}
+
+/** Task 11/13: one row of the publish checklist — mirrors `ChecklistRow`
+ * (`apps/api/src/publish/checklist.ts`). The screen renders this array and
+ * computes nothing (Review Focus 4). */
+export interface ChecklistRow {
+  id: string;
+  severity: "blocking" | "advisory";
+  message: string;
+  field: string;
+  sectionId?: string;
+}
 
 export interface TestSummary {
   id: string;
@@ -345,6 +360,14 @@ export interface ApiClient {
   // all write through.
   draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
   patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
+
+  // Task 11 (#62, P5.9): the lifecycle. Each answers with the same
+  // `TestSummary` every other test route returns, so the screen that
+  // called one has the new state without a second read.
+  publishTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  closeTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  archiveTest(workspaceId: string, testId: string): Promise<TestSummary>;
+  versions(workspaceId: string, testId: string): Promise<TestVersionSummary[]>;
 
   // Task 6 (#58, P5.5). `workspaceId` first, like every sibling above — the
   // plan's own sketch wrote `checkUrl(testId, url)`, which cannot reach the
@@ -660,6 +683,15 @@ export function createApiClient(): ApiClient {
 
     updateTest: (workspaceId, testId, patch) =>
       json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`, patchBody(patch)),
+
+    publishTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/publish`, post({})),
+    closeTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/close`, post({})),
+    archiveTest: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/archive`, post({})),
+    versions: async (workspaceId, testId) =>
+      (await json<{ versions: TestVersionSummary[] }>(`/workspaces/${workspaceId}/tests/${testId}/versions`)).versions,
 
     draft: (workspaceId, testId) => json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
 

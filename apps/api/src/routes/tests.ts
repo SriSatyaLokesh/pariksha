@@ -9,13 +9,7 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import {
-  allowlistIssues,
-  brandColourIssue,
-  matchesFilter,
-  type Question,
-  type QuestionSource,
-} from "@pariksha/core";
+import { allowlistIssues, brandColourIssue, matchesFilter, type QuestionSource } from "@pariksha/core";
 import {
   CANDIDATE_IMPORT_MAX_BYTES,
   convertCandidateCsv,
@@ -31,7 +25,6 @@ import {
   replaceCandidateList,
   existingRowIds,
   getDraftVersion,
-  getPublishedVersion,
   getTest,
   listTests,
   listVersions,
@@ -776,7 +769,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       test,
       body,
       now,
-      questions: questions.map((q) => ({ ...q.document, id: q.id }) as Question),
+      questions: questions.map((q) => ({ ...q.document, id: q.id })),
     });
   }
 

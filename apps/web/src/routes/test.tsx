@@ -6,9 +6,12 @@ import {
   type Actor,
   type ApiClient,
   type CandidateRow,
+  type ChecklistRow,
   type DraftPatch,
   type StoredSection,
+  type TestSummary,
   type TestVersionRow,
+  type TestVersionSummary,
 } from "../lib/api";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
@@ -18,6 +21,9 @@ import { TimingPanel } from "../components/testbuilder/TimingPanel";
 import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
+import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
+import { TestStateBadge } from "./tests";
+import { useDialogKeys } from "../components/testbuilder/useDialogKeys";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -74,12 +80,20 @@ export function TestBuilder({
   // filling the form in.
   const role = actor.memberships.find((m) => m.workspaceId === workspaceId)?.role;
   const canEditWorkspace = role !== undefined && can({ role, action: "workspace.settings" });
-  const [name, setName] = useState<string | null>(null);
+  // Task 11 (#62, P5.9): the whole summary, not just the name — the header
+  // shows the derived state, the lifecycle buttons depend on it, and
+  // `currentVersion` is what `UX-18`'s banner compares the draft against.
+  const [test, setTest] = useState<TestSummary | null>(null);
+  const [versions, setVersions] = useState<readonly TestVersionSummary[]>([]);
+  const [confirming, setConfirming] = useState<"close" | "archive" | null>(null);
+  const [blocked, setBlocked] = useState<readonly ChecklistRow[]>([]);
+  const [publishing, setPublishing] = useState(false);
   // UX-18 (Task 7): a test with a published version behind it is the case
   // where a timing change has to say what happens to attempts already
   // running, so the panel is told. `currentVersion` is what names one — the
   // draft row itself is always unpublished.
-  const [published, setPublished] = useState(false);
+  const published = test !== null && test.currentVersion !== null;
+  const canPublish = role !== undefined && can({ role, action: "tests.publish" });
   // T-23's workspace half (Task 10). Loaded beside the draft rather than
   // inside `BrandingPanel`, so the panel stays a controlled component like
   // every other one in this shell and the shell keeps owning every call.
@@ -105,9 +119,11 @@ export function TestBuilder({
   // later one already has.
   const saveSeq = useRef(0);
 
+  const historyRef = useRef<HTMLDivElement>(null);
+
   const load = useCallback(async () => {
     try {
-      const [test, version, branding, listed] = await Promise.all([
+      const [summary, version, branding, listed, history] = await Promise.all([
         client.test(workspaceId, testId),
         client.draft(workspaceId, testId),
         // An Author cannot write workspace branding but can read it — the
@@ -118,9 +134,10 @@ export function TestBuilder({
         // `candidates.manage`, so an Author asks for nothing rather than
         // collecting a 403 that would fail this whole load.
         canManageCandidates ? client.candidates(workspaceId, testId) : Promise.resolve([]),
+        client.versions(workspaceId, testId),
       ]);
-      setName(test.name);
-      setPublished(test.currentVersion !== null);
+      setTest(summary);
+      setVersions(history);
       setWorkspaceBranding(branding);
       setCandidates(listed);
       setDraft(version);
@@ -260,6 +277,54 @@ export function TestBuilder({
     setPending((prev) => ({ ...prev, settings: { ...prev?.settings, ...settings } }));
   }
 
+  async function onPublish(): Promise<void> {
+    setPublishing(true);
+    setBlocked([]);
+    try {
+      setTest(await client.publishTest(workspaceId, testId));
+      setError(undefined);
+      // The publish opened the next numbered draft server-side (UX-18), so
+      // the whole screen is re-read rather than patched up field by field:
+      // the draft row, its version number and the history all moved at once.
+      await load();
+    } catch (cause) {
+      const rows = cause instanceof ApiError ? (cause.details as { rows?: ChecklistRow[] } | undefined)?.rows : undefined;
+      if (rows !== undefined) setBlocked(rows);
+      else setError(cause instanceof ApiError ? cause.message : "The test could not be published.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  // UX-10 / ADR 0007: an Author who cannot publish flags the test for an
+  // Admin instead. One field on the test row, the same `PATCH .../tests/:id`
+  // the list screen already uses for the slug.
+  async function onRequestReview(): Promise<void> {
+    try {
+      setTest(await client.updateTest(workspaceId, testId, { reviewRequested: true }));
+      setError(undefined);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "The review request could not be saved.");
+    }
+  }
+
+  async function onTransition(kind: "close" | "archive"): Promise<void> {
+    setPublishing(true);
+    try {
+      setTest(
+        await (kind === "close"
+          ? client.closeTest(workspaceId, testId)
+          : client.archiveTest(workspaceId, testId)),
+      );
+      setError(undefined);
+      setConfirming(null);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "The test could not be updated.");
+    } finally {
+      setPublishing(false);
+    }
+  }
+
   return (
     <>
       <a className="skip-link" href="#main-content">
@@ -269,12 +334,89 @@ export function TestBuilder({
 
       <main id="main-content" className="organiser organiser--wide">
         <MonoCaption>Test builder</MonoCaption>
-        <h1 className="organiser__title">{name ?? "Test builder"}</h1>
+        <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
+
+        {test !== null && (
+          <div className="testbuilder-lifecycle">
+            <TestStateBadge state={test.state} />
+
+            {/* UX-11: the button is in place and disabled for an Author,
+                not hidden — a control that vanishes teaches nothing, and
+                the reason has to be reachable by keyboard, which a
+                `disabled` button is not. `aria-disabled` plus a no-op
+                handler keeps it in the tab order so a reader meets the
+                explanation `aria-describedby` points at. */}
+            <button
+              type="button"
+              className="button-primary button-primary--surface"
+              aria-disabled={!canPublish || publishing || draft === null}
+              aria-describedby={canPublish ? undefined : "publish-why"}
+              onClick={() => {
+                if (canPublish && !publishing) void onPublish();
+              }}
+            >
+              Publish
+            </button>
+            {!canPublish && <span id="publish-why">Needs an Admin — request review instead</span>}
+
+            {!canPublish && !test.reviewRequested && (
+              <button type="button" className="button-secondary" onClick={() => void onRequestReview()}>
+                Request review
+              </button>
+            )}
+            {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
+
+            {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
+              <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
+                Close
+              </button>
+            )}
+            {canPublish && test.state === "closed" && (
+              <button type="button" className="button-secondary" onClick={() => setConfirming("archive")}>
+                Archive
+              </button>
+            )}
+          </div>
+        )}
+
+        {test !== null && draft !== null && (
+          <VersionBanner
+            draftVersion={draft.version}
+            publishedVersion={test.currentVersion}
+            onOpenPublished={() => historyRef.current?.focus()}
+          />
+        )}
 
         {error !== undefined && (
           <p className="organiser__notice" role="alert">
             {error}
           </p>
+        )}
+
+        {blocked.length > 0 && (
+          <div className="organiser__notice" role="alert">
+            <p>This test is not ready to publish.</p>
+            <ul>
+              {blocked.map((row) => (
+                <li key={`${row.id}:${row.sectionId ?? row.field}:${row.message}`}>{row.message}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {confirming !== null && (
+          <ConfirmTransition
+            kind={confirming}
+            busy={publishing}
+            onCancel={() => setConfirming(null)}
+            onConfirm={() => void onTransition(confirming)}
+          />
+        )}
+
+        {versions.some((v) => v.publishedAt !== null) && (
+          <div ref={historyRef} tabIndex={-1}>
+            <VersionHistory versions={versions} />
+          </div>
         )}
 
         {draft === null ? (
@@ -365,4 +507,56 @@ export function TestBuilder({
  * exists to avoid. */
 function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
   return form?.fields.find((field) => field.unique === true) ?? null;
+}
+
+
+/** T-04's two confirmations. Each names **what a candidate will see
+ * afterwards** rather than asking "are you sure?": closing is the moment
+ * the public link stops working, and an organiser pressing it needs to be
+ * told that, not asked to agree with themselves. */
+const TRANSITION_COPY: Readonly<Record<"close" | "archive", { title: string; body: string; confirm: string }>> = {
+  close: {
+    title: "Close this test?",
+    body: "Candidates opening the link will see that the test has closed. Attempts already in progress keep running to their own deadline.",
+    confirm: "Close the test",
+  },
+  archive: {
+    title: "Archive this test?",
+    body: "Candidates opening the link will see that the test has closed. Archiving is the last state a test has — it cannot be reopened, and the test is never deleted.",
+    confirm: "Archive the test",
+  },
+};
+
+function ConfirmTransition({
+  kind,
+  busy,
+  onCancel,
+  onConfirm,
+}: {
+  kind: "close" | "archive";
+  busy: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const copy = TRANSITION_COPY[kind];
+  const { dialogRef, onKeyDown } = useDialogKeys<HTMLDivElement>(true, onCancel);
+  return (
+    <div
+      className="organiser__panel"
+      role="dialog"
+      aria-label={copy.title}
+      ref={dialogRef}
+      tabIndex={-1}
+      onKeyDown={onKeyDown}
+    >
+      <h2>{copy.title}</h2>
+      <p>{copy.body}</p>
+      <button type="button" className="button-primary button-primary--surface" disabled={busy} onClick={onConfirm}>
+        {copy.confirm}
+      </button>
+      <button type="button" className="button-secondary" onClick={onCancel}>
+        Cancel
+      </button>
+    </div>
+  );
 }

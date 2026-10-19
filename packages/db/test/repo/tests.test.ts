@@ -118,8 +118,8 @@ describe("createTest", () => {
     await repo.createWorkspace(db, ws, { slug: "w5", name: "W5" });
     const row = await repo.createTest(db, ws, { name: "A", slug: "a5" });
 
-    const drafts = await repo.draftVersionsByTest(db, ws, row.id);
-    expect(drafts.get(row.id)).toBe(1);
+    const heads = await repo.headVersionsByTest(db, ws, row.id);
+    expect(heads.get(row.id)).toEqual({ draftVersion: 1, publishedTiming: undefined });
   });
 });
 
@@ -473,5 +473,25 @@ describe("deriveState", () => {
 
   it("a published test with no timing block at all is Open", () => {
     expect(deriveState("published", undefined, NOW)).toBe("open");
+  });
+});
+
+describe("headVersionsByTest", () => {
+  it("names the open draft and the *current* published version's window, two rows per test at most", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "w26", name: "W26" });
+    const created = await repo.createTest(db, ws, { name: "A", slug: "a26" });
+    const timing = { duration_minutes: 45, opens_at: "2026-11-14T09:00:00+05:30" };
+
+    await publishWith(ws, created.id, [], { timing });
+    // A second publish, so there are two frozen versions and the join has
+    // something to narrow: only `current_version` may come back.
+    await publishWith(ws, created.id, [], { timing: { ...timing, duration_minutes: 50 } });
+
+    const heads = await repo.headVersionsByTest(db, ws);
+    expect(heads.get(created.id)).toEqual({
+      draftVersion: 3,
+      publishedTiming: { ...timing, duration_minutes: 50 },
+    });
   });
 });

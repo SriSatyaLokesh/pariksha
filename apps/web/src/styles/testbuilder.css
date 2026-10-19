@@ -521,3 +521,19 @@
   margin: 0 0 var(--space-sm);
   color: var(--brand-primary, var(--color-ink));
 }
+
+/* Task 11 (#62, P5.9): the lifecycle row and UX-18's banner. */
+.testbuilder-lifecycle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-block: var(--space-md);
+}
+
+.version-banner {
+  margin-block: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-inline-start: 2px solid var(--color-hairline);
+  color: var(--color-ink-soft);
+}

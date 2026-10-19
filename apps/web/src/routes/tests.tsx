@@ -15,10 +15,6 @@ const STATE_LABEL: Record<TestState, string> = {
   draft: "Draft",
   scheduled: "Scheduled",
   open: "Open",
-  // Interim, same reason `lib/api.ts`'s `TestState` carries it: Task 11's
-  // `deriveState()` replaces "published" with "Scheduled" or "Open" once
-  // `timing` exists to tell them apart.
-  published: "Published",
   closed: "Closed",
   archived: "Archived",
 };
@@ -29,10 +25,21 @@ const STATE_GLYPH: Record<TestState, string> = {
   draft: "●",
   scheduled: "◐",
   open: "○",
-  published: "◎",
   closed: "■",
   archived: "▢",
 };
+
+/** The one rendering of a test's state, used by this list and by the
+ * builder header (`routes/test.tsx`) — the plan asks for "text plus glyph
+ * *wherever it appears*", and two copies of a label map is exactly how one
+ * of them ends up saying something else. */
+export function TestStateBadge({ state }: { state: TestState }) {
+  return (
+    <span className="test-state">
+      <span aria-hidden="true">{STATE_GLYPH[state]}</span> {STATE_LABEL[state]}
+    </span>
+  );
+}
 
 type Sort = "name" | "updated" | "created";
 
@@ -372,9 +379,7 @@ export function TestList({
                       </button>
                     </td>
                     <td>
-                      <span className="test-state">
-                        <span aria-hidden="true">{STATE_GLYPH[test.state]}</span> {STATE_LABEL[test.state]}
-                      </span>
+                      <TestStateBadge state={test.state} />
                       {test.reviewRequested && (
                         <span className="test-badge">
                           <span aria-hidden="true">◆</span> In review
