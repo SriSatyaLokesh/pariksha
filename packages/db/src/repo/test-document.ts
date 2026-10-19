@@ -105,8 +105,43 @@ function mapSection(
 export function toStoredBody(doc: Test, refs: IdRefs): TestDocumentBody {
   const { $schema: _schema, format: _format, name: _name, slug: _slug, sections, ...settings } = doc;
   return {
-    settings,
+    settings: foldAllowlistCase(settings),
     sections: sections.map((section) => mapSection(section, refs.questionIdByRef, refs.bankIdByFile)),
+  };
+}
+
+/**
+ * `access.allow_email_domains` and `allow_ip_ranges`, folded to lower case.
+ *
+ * A domain label is case-insensitive and so is IPv6 hex, so both parsers
+ * lower-case a *local copy* before judging — `Example.COM` and
+ * `2001:DB8::/32` validate, and were then stored exactly as typed. Phase 6's
+ * matcher would have to remember the fold, and an entry that never matches
+ * reads on screen exactly like one that does: every candidate refused on
+ * test day by a capital letter typed weeks earlier.
+ *
+ * **Here, rather than only on the route.** The task 7/8/10 review put the
+ * fold on `PATCH .../draft` and called that "the one route that writes
+ * them"; the whole-branch security review (M1) found it was not —
+ * `POST .../tests/import` goes through `toStoredBody`, which carried
+ * `settings` by object rest with no normalisation, and `cloneTest` copies a
+ * stored body forward. `PATCH .../draft` builds its settings by merge and
+ * never reaches `toStoredBody`, so it calls this same helper rather than
+ * keeping a second copy of the arithmetic.
+ */
+export function foldAllowlistCase<T extends TestSettings>(settings: T): T {
+  const access = settings.access;
+  if (access === undefined) return settings;
+  const lower = (values: readonly string[]): string[] => values.map((value) => value.toLowerCase());
+  return {
+    ...settings,
+    access: {
+      ...access,
+      ...(access.allow_email_domains === undefined
+        ? {}
+        : { allow_email_domains: lower(access.allow_email_domains) }),
+      ...(access.allow_ip_ranges === undefined ? {} : { allow_ip_ranges: lower(access.allow_ip_ranges) }),
+    },
   };
 }
 

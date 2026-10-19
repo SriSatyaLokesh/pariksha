@@ -246,6 +246,31 @@ it("an unreadable brand colour is refused at import, not only on the two PATCH r
   expect(fields).toContain("branding.primary_colour");
 });
 
+// Whole-branch security review, M1: the fold landed on `PATCH .../draft`
+// under a comment calling that "the one route that writes them". It was
+// not — this path stored them exactly as typed, and on test day Phase 6's
+// lower-cased matcher refuses every candidate. Read back through the real
+// export, so it cannot pass against a mapper that folds on the way out.
+it("an allowlist arrives from import folded to lower case, as it does from the draft route", async () => {
+  const testId = await importedTestId(
+    copyOfExample((doc) => {
+      doc.access = {
+        mode: "link_code",
+        access_code: "APTI-2026",
+        allow_email_domains: ["Example.COM", "*.AC.in"],
+        allow_ip_ranges: ["2001:DB8::/32"],
+      };
+    }),
+  );
+
+  expect((await exported(testId)).access).toEqual({
+    mode: "link_code",
+    access_code: "APTI-2026",
+    allow_email_domains: ["example.com", "*.ac.in"],
+    allow_ip_ranges: ["2001:db8::/32"],
+  });
+});
+
 it("a question resolving into a different bank imports and is reported in rebound", async () => {
   // LOG-001 lives in "questions.json"; a file that declares a different
   // bank name still imports, and says where the question actually came

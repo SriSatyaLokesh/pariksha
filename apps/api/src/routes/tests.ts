@@ -32,6 +32,7 @@ import {
   cloneTest,
   countCandidates,
   existingRowIds,
+  foldAllowlistCase,
   getDraftVersion,
   getTest,
   listTests,
@@ -649,28 +650,13 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
         });
       }
 
-      // task 7/8/10 review, m4: both parsers compare lower-cased — a
-      // domain label is case-insensitive and so is IPv6 hex — so
-      // `Example.COM` and `2001:DB8::/32` validate and were then stored
-      // exactly as typed. Phase 6's matcher would have to remember the
-      // fold, and an entry that never matches is the silent test-day
-      // refusal this whole block exists to prevent. Folded once, here, on
-      // the one route that writes them.
-      if (settings.access !== undefined) {
-        const lower = (values: readonly string[]): string[] => values.map((value) => value.toLowerCase());
-        settings = {
-          ...settings,
-          access: {
-            ...settings.access,
-            ...(settings.access.allow_email_domains !== undefined
-              ? { allow_email_domains: lower(settings.access.allow_email_domains) }
-              : {}),
-            ...(settings.access.allow_ip_ranges !== undefined
-              ? { allow_ip_ranges: lower(settings.access.allow_ip_ranges) }
-              : {}),
-          },
-        };
-      }
+      // task 7/8/10 review m4, corrected by the whole-branch security
+      // review M1: this was folded inline here and the comment called this
+      // "the one route that writes them". It is not — `POST .../tests/import`
+      // writes them too, through `toStoredBody`, which stored them as typed.
+      // The fold now lives beside that mapping and this route calls it, so
+      // there is one copy and both write paths run it.
+      settings = foldAllowlistCase(settings);
 
       // Task 10 (#61, P5.8): the same brand-colour gate `PATCH
       // /workspaces/:id` runs, because `branding.primary_colour` is a
