@@ -198,13 +198,16 @@ describe("BankBrowser", () => {
     });
     render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
 
-    const exportButton = await screen.findByRole("button", { name: /export the whole bank/i });
+    const exportButton = await screen.findByRole("button", { name: /^export bank$/i });
     fireEvent.click(exportButton);
     await waitFor(() => expect(exportBank).toHaveBeenCalledWith("wsp_1", "bnk_1", undefined));
 
     const checkboxes = await screen.findAllByRole("checkbox", { name: /select question/i });
     fireEvent.click(checkboxes[0]!);
-    fireEvent.click(screen.getByRole("button", { name: /export the 1 selected question/i }));
+    // Fix round 1, finding 3 (Label in Name): the accessible name is the
+    // visible "Export selected" *plus* a count, never a replacement of it —
+    // "Export selected (1 question)", not "Export the 1 selected question".
+    fireEvent.click(screen.getByRole("button", { name: /^export selected \(1 question\)$/i }));
     await waitFor(() => expect(exportBank).toHaveBeenCalledWith("wsp_1", "bnk_1", ["Q1"]));
   });
 
@@ -216,11 +219,35 @@ describe("BankBrowser", () => {
     });
     render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
 
-    const exportButton = await screen.findByRole("button", { name: /export the whole bank/i });
+    const exportButton = await screen.findByRole("button", { name: /^export bank$/i });
     exportButton.focus();
     expect(exportButton).toHaveFocus();
     fireEvent.click(exportButton);
     expect(await screen.findByText("The bank could not be reached.")).toBeVisible();
+  });
+
+  // Fix round 1, finding 3: WCAG 2.1 SC 2.5.3, Label in Name — the
+  // accessible name must contain the visible label verbatim (as a
+  // case-insensitive substring), both with and without a selection, or
+  // speech input ("click Export selected") cannot match the control.
+  // `jest-axe`'s default ruleset does not include `label-content-name-
+  // mismatch` (experimental), so this is checked directly rather than
+  // relying on the axe passes elsewhere in this file to catch it.
+  it("the export control's accessible name contains its visible label", async () => {
+    const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }) });
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+
+    function labelInName(button: HTMLElement): void {
+      const visible = button.textContent!.trim().toLowerCase();
+      const accessibleName = (button.getAttribute("aria-label") ?? button.textContent ?? "").toLowerCase();
+      expect(accessibleName).toContain(visible);
+    }
+
+    labelInName(await screen.findByRole("button", { name: /^export bank$/i }));
+
+    const checkboxes = await screen.findAllByRole("checkbox", { name: /select question/i });
+    fireEvent.click(checkboxes[0]!);
+    labelInName(screen.getByRole("button", { name: /export selected/i }));
   });
 
   it("a refused group delete names the questions holding it", async () => {

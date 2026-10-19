@@ -277,17 +277,20 @@ export function BankBrowser({
             anything is selected — selecting nothing exports the whole bank,
             the same way the filters above answer "no filter" with
             everything. `role="status"` stays on the count text alone, not
-            the bar itself, so the live region announces only what changes. */}
+            the bar itself, so the live region announces only what changes.
+            Fix round 1, finding 3 (WCAG 2.1 SC 2.5.3, Label in Name): the
+            accessible name must contain the visible label verbatim, or
+            speech input ("click Export bank") cannot match it — so the
+            `aria-label` below only ever appends to the visible text, never
+            replaces it. */}
         <div className="bank-browser__bulk-bar">
           <span role="status">{selected.size > 0 ? `${selected.size} selected` : ""}</span>
           <button
             type="button"
             className="button-secondary"
-            aria-label={
-              selected.size > 0
-                ? `Export the ${selected.size} selected question${selected.size === 1 ? "" : "s"}`
-                : "Export the whole bank"
-            }
+            {...(selected.size > 0 && {
+              "aria-label": `Export selected (${selected.size} question${selected.size === 1 ? "" : "s"})`,
+            })}
             onClick={() => void onExport()}
           >
             {selected.size > 0 ? "Export selected" : "Export bank"}
