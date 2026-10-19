@@ -202,6 +202,17 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // collapsing them would mean `putDraftVersion` trusting a caller-supplied
   // row it never checked, which is the wrong end to save a query at.
   "/api/v1/workspaces/:id/tests/:testId/draft": 7,
+  // Task 6 (#58, P5.5): T-19's reachability check. Measured
+  // (`apps/api/test/reachable.test.ts`'s own "measures the real subrequest
+  // cost" test), not estimated: auth (2) + `getTest`'s existence check (1)
+  // + **one outbound `fetch`** (1). That last one is a subrequest on
+  // Workers exactly as a D1 query is, which is why `countingDeps`
+  // (apps/api/src/instrument.ts) wraps `deps.http` too — otherwise the one
+  // call this route exists to make is the one call the budget cannot see.
+  // A URL `checkReachable` refuses costs 3, not 4: the refusal happens
+  // before the first fetch. The higher of the two, same rule every other
+  // budget here follows.
+  "/api/v1/workspaces/:id/tests/:testId/check-url": 4,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -263,6 +274,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // Task 3 (#55, P5.2).
   "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
   "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
+  // Task 6 (#58, P5.5).
+  "POST /api/v1/workspaces/:id/tests/:testId/check-url": "tests.edit",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };

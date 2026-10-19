@@ -35,6 +35,7 @@ import {
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
+import { checkReachable } from "../net/reachable.js";
 
 // The same shape `apps/api/src/routes/workspaces.ts` validates its own slug
 // with — lowercase, digits and hyphens, starting alphanumeric.
@@ -71,6 +72,15 @@ const draftPatch = z
     sections: z.array(z.record(z.string(), z.unknown())).optional(),
   })
   .refine((patch) => patch.settings !== undefined || patch.sections !== undefined, "names nothing to change");
+
+// Task 6 (#58, P5.5): T-19's reachability check. Zod's job stops at "a
+// string that is at most this long" — every refusal that matters (scheme,
+// userinfo, port, address literal, internal suffix) is `checkReachable`'s,
+// because a URL this route *refuses* is still a 200 carrying `refused`, not
+// a 400. Telling the two apart in the response body is what lets the
+// builder say "that link cannot be checked" rather than "your request was
+// malformed".
+const checkUrlBody = z.object({ url: z.string().min(1).max(2048) });
 
 interface DraftIssue {
   field: string;
@@ -591,6 +601,28 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     // own extra statement — a screen that wants fresh numbers right after a
     // save already re-fetches `GET .../draft` for the rest of the payload.
     return c.json(updated);
+  });
+
+  // Task 6 (#58, P5.5): the one route this phase adds outside Task 3's
+  // GET/PATCH pair, because it is the only one that is not a read or a
+  // write of the draft — it makes an outbound request and stores nothing.
+  // Advisory throughout: a refused URL is a 200 carrying `refused`, the
+  // result never touches the field, and no rule from it reaches the publish
+  // checklist.
+  routes.post("/:id/tests/:testId/check-url", requires("tests.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    const input = parse(checkUrlBody, await json(c.req.raw));
+
+    // The existence check is the point of mounting this under a test at all:
+    // without it, `tests.edit` on *any* test in the workspace would turn the
+    // route into a general-purpose fetcher reachable by test id guesswork.
+    // No audit row — nothing is changed, and an audit entry per keystroke on
+    // a "Check" button is noise, not a record.
+    const test = await getTest(deps.db, workspaceId, testId);
+    if (!test) throw new ApiError(404, "not_found", "No such resource.");
+
+    return c.json(await checkReachable(deps.http ?? globalThis.fetch, input.url, deps.now));
   });
 
   return routes;

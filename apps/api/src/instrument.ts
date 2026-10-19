@@ -17,6 +17,9 @@ export const SUBREQUEST_LIMIT = 50;
 export interface SubrequestCounts {
   db: number;
   storage: number;
+  /** Task 6 (#58, P5.5). An outbound `fetch` is a subrequest on Workers
+   * exactly as a D1 query is, and `/check-url` exists to make exactly one. */
+  http: number;
   total: number;
 }
 
@@ -36,6 +39,12 @@ export interface SubrequestCounts {
  * request, so counting it would make every budget read higher than the
  * platform charges and push routes toward handing out fewer URLs than they
  * should.
+ *
+ * Counted on `http`: every call. Task 6 (#58, P5.5) added the first route
+ * that makes one — without this, the one call `/check-url` exists to make
+ * would be the one call its budget could not see. Wrapped only when
+ * `deps.http` is set at all: it is optional (`AppDeps`), and production
+ * leaves it unset so `globalThis.fetch` is used directly.
  */
 export function countingDeps(deps: AppDeps): {
   deps: AppDeps;
@@ -43,8 +52,10 @@ export function countingDeps(deps: AppDeps): {
 } {
   let db = 0;
   let storage = 0;
+  let http = 0;
   const inner = deps.db;
   const store = deps.storage;
+  const innerHttp = deps.http;
 
   const countedDb: DbClient = {
     ...inner,
@@ -93,9 +104,25 @@ export function countingDeps(deps: AppDeps): {
     },
   };
 
+  const countedHttp: typeof globalThis.fetch | undefined =
+    innerHttp === undefined
+      ? undefined
+      : (input, init) => {
+          http++;
+          return innerHttp(input, init);
+        };
+
   return {
-    deps: { ...deps, db: countedDb, storage: countedStorage },
-    counts: () => ({ db, storage, total: db + storage }),
+    deps: {
+      ...deps,
+      db: countedDb,
+      storage: countedStorage,
+      // Key-by-key, not spread with `undefined`:
+      // `exactOptionalPropertyTypes` holds "absent" and "explicitly
+      // undefined" apart, and `AppDeps.http` is optional.
+      ...(countedHttp !== undefined && { http: countedHttp }),
+    },
+    counts: () => ({ db, storage, http, total: db + storage + http }),
   };
 }
 
