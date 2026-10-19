@@ -1,0 +1,9 @@
+::Q1:: What is the sum of 2 and 2? {=4 ~3 ~5}
+
+::Q2:: Which of these are prime numbers? {~%50%2 ~%50%3 ~%-100%4}
+
+::Q3:: The sky is blue. {T}
+
+::Q4:: What is the value of pi to 2 decimal places? {#3.14:0.01}
+
+::Q5:: The capital of France is {=Paris =City of Light}.
