@@ -82,9 +82,14 @@ interface DraftIssue {
  * `schemas/test-1.json` itself, run through the `@cfworker/json-schema`
  * `Validator` the repo already owns (`apps/api/src/import/schema.ts`) — not
  * a hand-written field-name check, and not a second validator. Built once,
- * at module scope, from a schema that is the real document minus the three
+ * at module scope, from a schema that is the real document minus the four
  * floors UX-13 (a section may be empty in Draft) would otherwise trip:
- * `sourceFixed.questions`'s `minItems`, `sourceSets.sets`'s `minItems`, and
+ * `sourceFixed.questions`'s `minItems`, `sourceSets.sets`'s `minItems`,
+ * the root `sections`'s `minItems` (task 3 re-review — the same class as
+ * the other two, missed the first time: `createTest` seeds `sections: []`,
+ * so an author who adds one section and deletes it again was answered 422
+ * on a state the row already holds; "at least one section" is Task 11's
+ * publish gate, not a save-time rule), and
  * the root `required` — dropped because `settings` is validated as a plain
  * object missing `format`/`name`/`slug`/`sections` (they live on the `test`
  * row or in their own column, never in `settings`), not as a whole
@@ -96,9 +101,11 @@ interface DraftIssue {
 function draftSchema(): object {
   const schema = structuredClone(testSchema) as {
     required?: unknown;
+    properties: { sections: { minItems?: number } };
     $defs: { sourceFixed: { properties: { questions: { minItems?: number } } }; sourceSets: { properties: { sets: { minItems?: number } } } };
   };
   delete schema.required;
+  delete schema.properties.sections.minItems;
   delete schema.$defs.sourceFixed.properties.questions.minItems;
   delete schema.$defs.sourceSets.properties.sets.minItems;
   return schema;

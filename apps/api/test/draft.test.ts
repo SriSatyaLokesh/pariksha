@@ -166,6 +166,26 @@ it("UX-13: a section with no questions saves in Draft", async () => {
   expect(body.body).toMatchObject({ sections: [{ id: "s1", source: { kind: "fixed", questions: [] } }] });
 });
 
+// Task 3 re-review: `draftSchema()` dropped three publish-time floors and
+// missed a fourth of exactly the same class — the root
+// `properties.sections.minItems: 1`. `createTest` seeds `sections: []`, so
+// empty is already a legal stored state; an author who adds one section and
+// then deletes it sends `[]` back and used to get a 422 ("A section is not
+// shaped correctly"), with the optimistic state rolling back and the
+// section refusing to go away. "At least one section" is Task 11's publish
+// gate, not a save-time rule.
+it("task 3 re-review: deleting the last section saves — an empty sections array is a legal draft", async () => {
+  const added = await patchDraft(workspaceId, testId, authorCookie, {
+    sections: [{ id: "s1", title: "Section 1", source: { kind: "fixed", questions: [] } }],
+  });
+  expect(added.status).toBe(200);
+
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, { sections: [] });
+  expect(status).toBe(200);
+  expect(body.body).toMatchObject({ sections: [] });
+  expect((await draft(workspaceId, testId, authorCookie)).body.body).toMatchObject({ sections: [] });
+});
+
 it("a section whose source kind changes is replaced, not merged", async () => {
   const bankId = await createBank(workspaceId, authorCookie);
   const q1 = await createQuestion(workspaceId, bankId, authorCookie, { id: "Q1" });
