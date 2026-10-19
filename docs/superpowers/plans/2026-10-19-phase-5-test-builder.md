@@ -356,14 +356,17 @@ git commit -s -m "feat(tests): test crud with slugs, short links and qr codes"
 - Test: `packages/db/test/repo/test-document.test.ts`, `apps/api/test/draft.test.ts`, `apps/web/test/testbuilder/sections.test.tsx`
 
 **Interfaces:**
-- Consumes: `getTest`, `createTest` (Task 2); `listQuestions`, `listBanks`, `QuestionRow`, `BankRow` (`packages/db/src/repo/banks.ts`); `validateTest`, `Section`, `QuestionSource`, `SourceFixed`, `SourcePool`, `SourceSets`, `Test` (`@pariksha/core`); `ReorderableList` (`apps/web/src/components/authoring/ReorderableList.tsx`); `RenderedHtml` (`apps/web/src/components/authoring/RenderedHtml.tsx`).
-- Produces:
+- Consumes: `getTest`, `createTest` (Task 2); `listQuestions`, `listBanks`, `QuestionRow`, `BankRow` (`packages/db/src/repo/banks.ts`); `validateTest`, `Section`, `QuestionSource`, `SourceFixed`, `SourcePool`, `SourceSets`, `Test` (`@pariksha/core`); `ReorderableList`, `RenderedHtml` (`apps/web/src/components/authoring/`).
+- Produces — **CORRECTED after Task 3 shipped and was reviewed.** The block originally
+  written here was wrong in ways Tasks 4–9 would each have hit: `workspaceId` was missing
+  from `ApiClient.draft`/`patchDraft` and from the two components' props (nothing can reach
+  the API without it, and every sibling method takes it first); `QuestionPickerDrawer` was
+  implied to live inside `SectionList.tsx`; and three things it never named at all are
+  listed below. Trust this block, not the original:
+
   ```ts
-  // packages/db/src/repo/test-document.ts — pure mappers, re-exported from
-  // packages/db/src/index.ts and NOT from repo/index.ts (they are not scoped
-  // repository functions; repo/question-document.ts is the same arrangement)
+  // packages/db/src/repo/test-document.ts — as planned, no change
   export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
-  /** A `Section` whose `source` names `qst_`/`bnk_` row IDs rather than the bank file's own. */
   export type StoredSection = Section;
   export interface TestDocumentBody { settings: TestSettings; sections: StoredSection[] }
   export interface IdRefs {
@@ -373,42 +376,93 @@ git commit -s -m "feat(tests): test crud with slugs, short links and qr codes"
   export function toTestDocument(test: TestRow, body: TestDocumentBody, refs: IdRefs): Test;
   export function toStoredBody(doc: Test, refs: IdRefs): TestDocumentBody;
 
-  // packages/db/src/repo/tests.ts (added)
-  export interface TestVersionRow { id: string; testId: string; version: number; body: TestDocumentBody; publishedAt: number | null; createdAt: number }
+  // packages/db/src/repo/tests.ts — as planned, no change
+  export interface TestVersionRow {
+    id: string; testId: string; version: number;
+    body: TestDocumentBody; publishedAt: number | null; createdAt: number;
+  }
   export const getDraftVersion: ScopedFn<[testId: string], TestVersionRow | null>;
   export const putDraftVersion: ScopedFn<[testId: string, body: TestDocumentBody, now: number], TestVersionRow>;
 
-  // apps/web/src/lib/api.ts
+  // packages/db/src/repo/banks.ts — NOT IN THE PLAN. Two new scoped reads the
+  // draft route builds every derived number from; Tasks 4, 8 and 13 will want
+  // both. Exported from @pariksha/db.
+  export interface QuestionSummary {
+    id: string; bankId: string; points: number;
+    difficulty: Difficulty | null; tags: string[]; type: QuestionType;
+  }
+  export const workspaceQuestionSummaries: ScopedFn<[], QuestionSummary[]>;
+  export const existingRowIds: ScopedFn<
+    [ids: { questionIds: readonly string[]; bankIds: readonly string[] }],
+    { questionIds: Set<string>; bankIds: Set<string> }
+  >;
+
+  // @pariksha/core — NOT IN THE PLAN. matchesFilter is now public.
+  export function matchesFilter(question: Question, filter: PoolFilter | undefined): boolean;
+  // After fix 5 below, this becomes:
+  // export function matchesFilter(q: Pick<Question, "tags" | "difficulty" | "type">, filter?: PoolFilter): boolean;
+
+  // apps/web/src/lib/api.ts — mirrors of the db types (this package never
+  // imports @pariksha/db), plus the wire shapes.
+  export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
+  export type StoredSection = Section;
+  export interface TestDocumentBody { settings: TestSettings; sections: StoredSection[] }
+  export interface TestVersionRow {
+    id: string; testId: string; version: number;
+    body: TestDocumentBody; publishedAt: number | null; createdAt: number;
+    // present on GET only; see Interfaces note 1 — split these out
+    draw?: Record<string, { matching: number; wanted: number }>;
+    setPoints?: Record<string, { set: string; points: number }[]>;
+    points?: Record<string, number>;
+  }
   export interface DraftPatch { settings?: Partial<TestSettings>; sections?: StoredSection[] }
-  // on ApiClient:  draft(testId): Promise<TestVersionRow>;  patchDraft(testId, patch: DraftPatch): Promise<TestVersionRow>
+
+  // on ApiClient — workspaceId FIRST, as every sibling method takes it:
+  draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
+  patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
 
   // apps/web/src/components/testbuilder/SectionList.tsx
   export function SectionList(props: {
     sections: readonly StoredSection[];
-    draw: Readonly<Record<string, { matching: number; wanted: number }>>;  // UX-15, from the server
-    setPoints: Readonly<Record<string, { set: string; points: number }[]>>; // UX-16
+    draw: Readonly<Record<string, { matching: number; wanted: number }>>;
+    setPoints: Readonly<Record<string, { set: string; points: number }[]>>;
+    points: Readonly<Record<string, number>>;          // additive — UX-12's collapsed-row figure
     onChange: (next: StoredSection[]) => void;
     openSectionId: string | null;
     onOpenSection: (id: string | null) => void;
+    client: ApiClient;                                  // additive — bank <select>
+    workspaceId: string;                                // additive
   }): JSX.Element;
+
+  // apps/web/src/components/testbuilder/QuestionPickerDrawer.tsx  ← its OWN module,
+  // not SectionList.tsx as the plan's Interfaces block implies
   export function QuestionPickerDrawer(props: {
     bankId: string | null; selected: readonly string[];
     onConfirm: (questionIds: string[]) => void; onCancel: () => void;
+    client: ApiClient; workspaceId: string;             // additive
   }): JSX.Element;
+
+  // apps/web/src/routes/test.tsx — NOT IN THE PLAN, and the shell Tasks 5, 7,
+  // 8, 10, 11 and 13 all mount their panel into.
+  export function TestBuilder(props: {
+    workspaceId: string; testId: string; client: ApiClient;
+    actorEmail: string; onSignOut: () => void; onBack: () => void;
+  }): JSX.Element;
+
+  // apps/web/src/routes/tests.tsx — TestList grew one prop
+  onOpenTest: (testId: string) => void;
   ```
 
-**Routes.** Two, and they are the only ones Tasks 4 through 9 need — each of those tasks widens this payload rather than adding a route of its own.
+  Routes, for the six tasks that add none of their own:
 
-| Method | Path | Guard | Budget (estimate — measure and pin) |
-| --- | --- | --- | --- |
-| GET | `/api/v1/workspaces/:id/tests/:testId/draft` | `tests.edit` | 5 |
-| PATCH | `/api/v1/workspaces/:id/tests/:testId/draft` | `tests.edit` | 7 |
-
-`GET …/draft` returns the draft body **and** the derived numbers the builder cannot compute — `draw` (UX-15's "10 drawn from 14 matching", one grouped query over `question`, never one per section) and `setPoints` (UX-16's balance strip). Computing them server-side is the same rule as Review Focus 4: the browser renders what it is given.
-
-**PATCH replaces each named top-level block whole and merges nothing below it** (Review Focus 3). A body `{ settings: { access: {...} } }` replaces `settings.access` entirely and leaves `settings.timing` untouched; `{ sections: [...] }` replaces the whole array.
-
-**Save-time versus publish-time, per rule.** Save-time, because the stored document would otherwise be unreadable or dangerous: the body must parse against `schemas/test-1.json` (`additionalProperties: false` is what catches a merged `sets` key inside a `pool` source), and every `fixed`/`sets` question ID and every `pool` bank ID must name a row in **this workspace** — a reference to another tenant's row is a cross-workspace read waiting to happen, not a half-built draft. Everything else is publish-time: an empty section (`UX-13`), a pool that matches fewer than `count` (`UX-15`), sets of unequal points (`UX-16`), a section with no title.
+  ```
+  GET   /api/v1/workspaces/:id/tests/:testId/draft    tests.edit   budget 7 (GET measures 4)
+  PATCH /api/v1/workspaces/:id/tests/:testId/draft    tests.edit   budget 7 (settings-only 6)
+  ```
+  `GET` returns `TestVersionRow` **plus** `draw`, `setPoints` and `points`;
+  `PATCH` returns `TestVersionRow` alone. `PATCH` replaces `settings`
+  one level deep (a named key's whole value is replaced; an unnamed key is
+  untouched) and replaces `sections` wholesale.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -860,6 +914,14 @@ git commit -s -m "feat(tests): server-side url reachability check for registrati
 ---
 
 ## Task 7: Timing, navigation and attempt policy (#59, P5.6)
+
+> **Warning, added after Task 3 shipped.** Making `timing` required on `TestSettings`
+> breaks four places that assume it is optional, and all four must change in this task:
+> `toTestVersionRow` and `toTestDocument`'s spread (`packages/db/src/repo/test-document.ts`),
+> `apps/api/test/draft.test.ts:146`, and `createTest`'s `{}` settings seed
+> (`packages/db/src/repo/tests.ts`). Decide deliberately whether `timing` becomes required
+> at all — a draft legitimately has no timing yet, and the save path enforces only what must
+> never reach storage, so the publish checklist is the natural place for the requirement.
 
 **Files:**
 - Create: `apps/web/src/components/testbuilder/TimingPanel.tsx`
