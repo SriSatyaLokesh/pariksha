@@ -109,10 +109,8 @@ export function validateBankDocumentStructure(doc: unknown): StructuralIssue[] {
       if (prop === "questions" || prop === "groups") continue;
     }
 
-    const entry =
-      container === "questions" && isRecord(doc) && Array.isArray(doc.questions)
-        ? doc.questions[index]
-        : undefined;
+    const questions = isRecord(doc) && Array.isArray(doc.questions) ? doc.questions : undefined;
+    const entry: unknown = container === "questions" ? questions?.[index] : undefined;
     const questionId = isRecord(entry) && typeof entry.id === "string" ? entry.id : null;
 
     issues.push({ questionId, index, field: fieldOf(err, path, container), message: err.error });

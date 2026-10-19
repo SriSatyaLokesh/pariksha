@@ -85,14 +85,21 @@ export function sqliteClient(path: string): DbClient {
       return Promise.resolve({ changes });
     },
     // `sqlite.transaction()` wraps the callback in `BEGIN`/`COMMIT` and
-    // rolls back automatically if it throws — async only so a synchronous
-    // throw inside becomes a rejected Promise rather than one thrown out of
-    // a non-async function.
-    batch: async (statements) => {
-      const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) => {
-        for (const s of stmts) sqlite.prepare(s.sql).run(...(s.params ?? []));
-      });
-      run(statements);
+    // rolls back automatically if it throws. Not `async`: better-sqlite3 is
+    // synchronous end to end, so a thrown error is caught here and turned
+    // into a rejected Promise explicitly rather than by the usual
+    // `async`-function mechanism, which an `await`-free async body is not
+    // actually using.
+    batch: (statements) => {
+      try {
+        const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) => {
+          for (const s of stmts) sqlite.prepare(s.sql).run(...(s.params ?? []));
+        });
+        run(statements);
+        return Promise.resolve();
+      } catch (err) {
+        return Promise.reject(err instanceof Error ? err : new Error(String(err)));
+      }
     },
     jsonParam: (value) => JSON.stringify(value),
     jsonValue: parseJsonText,
