@@ -1173,6 +1173,15 @@ git commit -s -m "feat(tests): access modes and allowlists"
 
 ## Task 9: Candidate list ingest (#60 / #56, P5.7b)
 
+> **Correction, found building this task.** The text below says `roll_number` is the example
+> test's first `unique: true` field. It is not — `examples/reasoning-aptitude/test.json` puts
+> `email` first and `roll_number` fourth, so the stated rule ("the test's first `unique` field,
+> in form order") keys that example on **email**. The rule is correct and shipped; only this
+> sentence was wrong. The example's CSV header leading with `roll_number` is not evidence of
+> the key: columns match by name, not position, and the worked example imports whole either
+> way. Email is also the better key for Phase 6, which mints an invite link per candidate and
+> has to deliver it somewhere.
+
 **Files:**
 - Modify: `packages/db/src/schema/columns.ts`, `packages/db/src/schema/sqlite.ts`, `packages/db/src/schema/pg.ts`, `packages/db/src/repo/index.ts`, `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/components/testbuilder/AccessPanel.tsx`
 - Create: `packages/db/src/repo/candidates.ts`, `apps/api/src/import/candidates.ts`
@@ -1469,6 +1478,15 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 ---
 
 ## Task 11: Lifecycle and numbered published versions (#62, P5.9)
+
+> **Two blocking rows this task owes, named by the `draftSchema()` pin test (`8d32cb0`).**
+> The pin now lists 18 stripped paths: 9 have publish-time twins, 4 are deliberately
+> unenforced and say so, and 5 are owed to this task. **Two of those five are real gaps that
+> must close here**: root `sections` `minItems` — a test can currently be published with no
+> sections at all — and `section.title` `minLength` — a section can be published with a blank
+> title. Both are save-legal on purpose, because a half-built draft is ordinary authoring;
+> neither should survive publish. The pin test fails if a future change strips another floor
+> without naming its twin, so add the rows rather than widening the pin's deliberate list.
 
 > **A blocking row this task owns, found building Task 7 and first misfiled against Task 13.**
 > There is no publish-time rule anywhere for a **missing `timing` block**. Task 7 deliberately
