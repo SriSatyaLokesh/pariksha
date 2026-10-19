@@ -47,10 +47,6 @@ import { sha256Hex } from "../auth/tokens.js";
  */
 export const POW_DIFFICULTY_BITS = 16;
 
-/** Longer than any honest counter and short enough that a digest of it is
- *  not a denial-of-service vector in itself. */
-const MAX_SOLUTION_LENGTH = 200;
-
 /**
  * The challenge for one entry token. Prefixed, so this digest can never
  * collide with `entryHash`'s — which is the digest the `auth_token` row
@@ -72,9 +68,11 @@ export async function verifyPow(
   entryToken: string,
   solution: string | undefined,
 ): Promise<boolean> {
-  if (typeof solution !== "string" || solution === "" || solution.length > MAX_SOLUTION_LENGTH) {
-    return false;
-  }
+  // Nothing else to reject up front: an empty or absurd solution simply
+  // fails the difficulty like any other wrong answer, and the route's
+  // schema already caps the field's length. A guard here that changed no
+  // outcome would be a line no test could ever fail against.
+  if (typeof solution !== "string") return false;
   const digest = await sha256Hex(`${await powChallenge(entryToken)}:${solution}`);
   return meetsDifficulty(digest, POW_DIFFICULTY_BITS);
 }

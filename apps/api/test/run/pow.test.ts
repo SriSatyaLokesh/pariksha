@@ -17,7 +17,13 @@ import { createHash } from "node:crypto";
 import { closeClient, listCandidates, replaceCandidateList, resolvePublishedTest } from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
-import { POW_DIFFICULTY_BITS, powChallenge, verifyPow } from "../../src/run/pow.js";
+import {
+  meetsDifficulty,
+  POW_DIFFICULTY_BITS,
+  powChallenge,
+  verifyPow,
+} from "../../src/run/pow.js";
+import { sha256Hex } from "../../src/auth/tokens.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { CONSENT, ROSTER_CANDIDATES, seedPublishedTest } from "./fixtures.js";
 
@@ -189,7 +195,13 @@ it("the challenge is bound to the candidate's own entry token, so two candidates
   // puts the challenge in a `<script>`-reachable variable and the entry
   // token is a credential.
   expect((await challengeOf("signup", a)).challenge).not.toContain(a);
-  expect((await challengeOf("signup", a)).challenge).toBe(await powChallenge(a));
+  // Pinned to the construction, not to `powChallenge`'s own output —
+  // the second would be the same assertion on both sides of the equals
+  // sign and would pass however the digest was built. The `pow:` prefix
+  // is the domain separation that keeps this value from ever being a
+  // lookup key for some other digest of the same token.
+  expect((await challengeOf("signup", a)).challenge).toBe(await sha256Hex(`pow:${a}`));
+  expect((await challengeOf("signup", a)).challenge).not.toBe(await sha256Hex(a));
 });
 
 it("the server states the difficulty, so raising it needs no new web build", async () => {
@@ -277,6 +289,23 @@ it("verifyPow is false for a missing, empty, over-long or wrong solution", async
   expect(await verifyPow("tok", "x".repeat(300))).toBe(false);
   expect(await verifyPow("tok", "1")).toBe(false);
   expect(await verifyPow("tok", solve(challenge))).toBe(true);
+});
+
+it("the difficulty is bits, so raising it to one that is not a multiple of four still costs more", () => {
+  // At the shipped 16 this branch never runs, which is exactly why it is
+  // worth pinning: the operational answer to an overrun deployment is to
+  // raise `POW_DIFFICULTY_BITS`, and 18 must really cost four times 16
+  // rather than quietly costing the same as it.
+  //
+  // `0x30…` is `0011 0000…`: two leading zero bits and no more.
+  expect(meetsDifficulty("30000000", 2)).toBe(true);
+  expect(meetsDifficulty("30000000", 3)).toBe(false);
+  expect(meetsDifficulty("0000c000", 16)).toBe(true);
+  expect(meetsDifficulty("0000c000", 17)).toBe(false);
+  // `0x0000 3…` is seventeen zero bits followed by a one: 17 yes, 18 no.
+  expect(meetsDifficulty("00003000", 17)).toBe(true);
+  expect(meetsDifficulty("00003000", 18)).toBe(true);
+  expect(meetsDifficulty("00003000", 19)).toBe(false);
 });
 
 it("S-11: the difficulty really is the stated number of bits, not a prefix of hex characters", async () => {
