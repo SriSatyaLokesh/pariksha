@@ -365,12 +365,17 @@ it("UX-16: the draft reports each set's total points", async () => {
   });
 });
 
-it("UX-12: the draft reports each section's points, for all three source kinds", async () => {
+it("UX-12: the draft reports each section's points as a range, for all three source kinds", async () => {
   const bankId = await createBank(workspaceId, authorCookie);
   const f1 = await createQuestion(workspaceId, bankId, authorCookie, { id: "F1", points: 3 });
   const f2 = await createQuestion(workspaceId, bankId, authorCookie, { id: "F2", points: 5 });
+  // Fix round (task 3 review, I3): three matching questions of *differing*
+  // points (2, 4, 10), drawing 2 of them — a pool in a real bank usually
+  // looks like this, not the all-equal fixture the plan's own test used,
+  // which could not tell a range apart from a single estimate.
   await createQuestion(workspaceId, bankId, authorCookie, { id: "P1", points: 2, tags: ["x"] });
-  await createQuestion(workspaceId, bankId, authorCookie, { id: "P2", points: 2, tags: ["x"] });
+  await createQuestion(workspaceId, bankId, authorCookie, { id: "P2", points: 10, tags: ["x"] });
+  await createQuestion(workspaceId, bankId, authorCookie, { id: "P3", points: 4, tags: ["x"] });
 
   await patchDraft(workspaceId, testId, authorCookie, {
     sections: [
@@ -380,9 +385,9 @@ it("UX-12: the draft reports each section's points, for all three source kinds",
   });
 
   const { body } = await draft(workspaceId, testId, authorCookie);
-  // fixed: exact sum (3 + 5). pool: both matching questions are worth 2
-  // each, so any 2-of-2 draw is worth 4 regardless of which are picked.
-  expect(body.points).toMatchObject({ fixed1: 8, pool1: 4 });
+  // fixed: exact sum (3 + 5), min === max. pool: the cheapest 2-of-3 (2 + 4)
+  // and the dearest 2-of-3 (4 + 10) — a real range, not a single figure.
+  expect(body.points).toMatchObject({ fixed1: { min: 8, max: 8 }, pool1: { min: 6, max: 14 } });
 });
 
 it("the draw costs one query however many pool sections there are", async () => {

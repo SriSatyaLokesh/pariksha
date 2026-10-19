@@ -82,7 +82,7 @@ function Harness({
   client?: ApiClient;
   draw?: Record<string, { matching: number; wanted: number }>;
   setPoints?: Record<string, { set: string; points: number }[]>;
-  points?: Record<string, number>;
+  points?: Record<string, { min: number; max: number }>;
 }) {
   const [sections, setSections] = useState(initial);
   const [openSectionId, setOpenSectionId] = useState<string | null>(initial[0]?.id ?? null);
@@ -110,7 +110,7 @@ const QUANT: StoredSection = {
 
 describe("SectionList", () => {
   it("UX-12: a collapsed section reads title, source, question count, points and time", () => {
-    render(<Harness initial={[QUANT]} points={{ quant: 8 }} />);
+    render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
     expect(
       screen.getByRole("button", { name: /Quantitative aptitude · pool · 4 questions · 8 points · 15 min/i }),
     ).toBeVisible();
@@ -259,7 +259,7 @@ describe("SectionList", () => {
   });
 
   it("the collapsed row stays readable at 400 px", () => {
-    const { container } = render(<Harness initial={[QUANT]} points={{ quant: 8 }} />);
+    const { container } = render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
     container.style.width = "400px";
     const button = screen.getByRole("button", { name: /^Quantitative aptitude ·/i });
     expect(button).toBeVisible();
@@ -271,7 +271,7 @@ describe("SectionList", () => {
   });
 
   it("the section list and the picker drawer have no axe violations", async () => {
-    const { container: closed } = render(<Harness initial={[QUANT]} points={{ quant: 8 }} />);
+    const { container: closed } = render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
     expect(await axe(closed)).toHaveNoViolations();
 
     const bank: Bank = {

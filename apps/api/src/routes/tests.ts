@@ -180,34 +180,46 @@ function collectReferencedIds(sections: readonly StoredSection[]): {
  */
 /**
  * UX-12's collapsed row wants a points figure for every section, not only
- * `sets` ones — summed here, from the same one `summaries` list `draw` and
- * `setPoints` already read, at zero extra query cost. `fixed` is exact (it
- * names the questions outright); `sets` takes one set's total, since a
- * balanced `sets` section is worth the same either way the sets strip
- * already shows; `pool` is the one estimate — the actual draw is random per
- * attempt (`layoutForAttempt`, `@pariksha/core`), so this sums whichever
- * `count` matching questions sort first by id, a stand-in for "about how
- * much this section is worth" rather than a promise of exactly these
- * questions.
+ * `sets` ones — computed here, from the same one `summaries` list `draw`
+ * and `setPoints` already read, at zero extra query cost. `fixed` is exact
+ * (it names the questions outright) and `sets` takes one set's total
+ * (a balanced `sets` section is worth the same either way the sets strip
+ * already shows), so both come back as `{ min, max }` with `min === max`.
+ *
+ * `pool` is the one real estimate — the actual draw is random per attempt
+ * (`layoutForAttempt`, `@pariksha/core`) and a real pool's questions
+ * usually differ in points. Fix round (task 3 review, I3): presenting one
+ * number (whichever `count` matching questions happened to sort first by
+ * id) as "Section A is 20 marks" states a fact the engine does not honour.
+ * A range — the cheapest possible draw and the dearest — is the honest
+ * version of the same sentence, and collapses to one figure (`min ===
+ * max`) whenever every matching question is worth the same.
  */
 function sectionPoints(
   source: QuestionSource,
   pointsById: ReadonlyMap<string, number>,
   pool: readonly QuestionSummary[],
-): number {
+): { min: number; max: number } {
   if (source.kind === "fixed") {
-    return source.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+    const total = source.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+    return { min: total, max: total };
   }
   if (source.kind === "sets") {
     const first = source.sets[0];
-    return first === undefined ? 0 : first.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+    const total = first === undefined ? 0 : first.questions.reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+    return { min: total, max: total };
   }
-  const matching = pool.filter((q) => matchesFilter(q as unknown as Question, source.filter));
-  return matching
-    .map((q) => q.id)
-    .sort()
-    .slice(0, source.count)
-    .reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
+  const matchingPoints = pool
+    .filter((q) => matchesFilter(q as unknown as Question, source.filter))
+    .map((q) => pointsById.get(q.id) ?? 0)
+    .sort((a, b) => a - b);
+  const count = source.count;
+  if (matchingPoints.length === 0 || count <= 0) return { min: 0, max: 0 };
+  const sum = (values: readonly number[]): number => values.reduce((total, v) => total + v, 0);
+  return {
+    min: sum(matchingPoints.slice(0, count)),
+    max: sum(matchingPoints.slice(-count)),
+  };
 }
 
 function draftDerived(
@@ -216,12 +228,12 @@ function draftDerived(
 ): {
   draw: Record<string, { matching: number; wanted: number }>;
   setPoints: Record<string, { set: string; points: number }[]>;
-  points: Record<string, number>;
+  points: Record<string, { min: number; max: number }>;
 } {
   const pointsById = new Map(summaries.map((q) => [q.id, q.points]));
   const draw: Record<string, { matching: number; wanted: number }> = {};
   const setPoints: Record<string, { set: string; points: number }[]> = {};
-  const points: Record<string, number> = {};
+  const points: Record<string, { min: number; max: number }> = {};
 
   for (const section of sections) {
     const source: QuestionSource = section.source;

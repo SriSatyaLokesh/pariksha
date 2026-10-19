@@ -70,15 +70,23 @@ function countLabel(section: StoredSection, draw: Readonly<Record<string, { matc
   return pluralQuestions(source.sets[0]?.questions.length ?? 0);
 }
 
+/** Fix round (task 3 review, I3): a pool's points figure is a range, not a
+ * fact — "8–40 points" when the matching questions actually differ,
+ * collapsing to "8 points" when every one of them is worth the same. */
+function pointsLabel(range: { min: number; max: number } | undefined): string {
+  if (range === undefined) return "0 points";
+  return range.min === range.max ? `${range.min} points` : `${range.min}–${range.max} points`;
+}
+
 /** UX-12's collapsed-row sentence: "Title · kind · N questions · M points ·
  * T min" — the accessible name of the row's own `<button>`, so a screen
  * reader hears the same sentence a sighted reader reads. */
 function collapsedLabel(
   section: StoredSection,
   draw: Readonly<Record<string, { matching: number; wanted: number }>>,
-  points: Readonly<Record<string, number>>,
+  points: Readonly<Record<string, { min: number; max: number }>>,
 ): string {
-  return `${section.title || "Untitled section"} · ${section.source.kind} · ${countLabel(section, draw)} · ${points[section.id] ?? 0} points · ${timeLabel(section)}`;
+  return `${section.title || "Untitled section"} · ${section.source.kind} · ${countLabel(section, draw)} · ${pointsLabel(points[section.id])} · ${timeLabel(section)}`;
 }
 
 function replaceAt<T>(items: readonly T[], index: number, value: T): T[] {
@@ -122,8 +130,9 @@ export function SectionList({
   setPoints: Readonly<Record<string, { set: string; points: number }[]>>;
   // Additive (see this file's own header note on `client`/`workspaceId`
   // below): UX-12's points figure, one per section — `GET .../draft`'s own
-  // `points` field.
-  points: Readonly<Record<string, number>>;
+  // `points` field. `{ min, max }`, task 3 review I3 — a pool's estimate is
+  // a range, not a fact.
+  points: Readonly<Record<string, { min: number; max: number }>>;
   onChange: (next: StoredSection[]) => void;
   openSectionId: string | null;
   onOpenSection: (id: string | null) => void;

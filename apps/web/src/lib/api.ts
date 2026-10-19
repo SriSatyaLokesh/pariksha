@@ -143,9 +143,13 @@ export interface TestVersionRow {
   draw?: Record<string, { matching: number; wanted: number }>;
   setPoints?: Record<string, { set: string; points: number }[]>;
   /** UX-12's collapsed-row points figure, one per section, every source
-   * kind — exact for `fixed`, a representative set for `sets`, an estimate
-   * of a typical draw for `pool` (the real draw is random per attempt). */
-  points?: Record<string, number>;
+   * kind — `{ min, max }`, `min === max` for `fixed` (exact) and `sets` (one
+   * set's own total). `pool` is a real range: the cheapest and the dearest
+   * `count` matching questions, since a real pool's questions usually
+   * differ in points and the real draw is random per attempt. Render
+   * "N points" when `min === max`, else "min–max points" (task 3 review,
+   * I3 — a single estimate stated a fact the engine does not honour). */
+  points?: Record<string, { min: number; max: number }>;
 }
 /** `PATCH .../draft`'s body. Each named top-level block replaces whole —
  * `settings` one level deep, `sections` as a full array — never merges
