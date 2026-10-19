@@ -146,7 +146,32 @@ describe("SectionList", () => {
   it("UX-15: a healthy pool section still shows the live draw, not only a shortfall", () => {
     render(<Harness initial={[QUANT]} draw={{ quant: { matching: 14, wanted: 10 } }} />);
     expect(screen.getByText(/10 drawn from 14 matching/i)).toBeVisible();
-    expect(screen.queryByText(/short/i)).not.toBeInTheDocument();
+    // Not a bare /short/i: fix round I13's type filter <select> legitimately
+    // renders a "short_answer" <option>.
+    expect(screen.queryByText(/\d+ short —/i)).not.toBeInTheDocument();
+  });
+
+  it("fix round (task 3 review, I13): T-08/AC-10 — a pool's filter can be given a difficulty and a type, not only tags", () => {
+    render(<Harness initial={[QUANT]} />);
+    const difficulty = screen.getByLabelText(/^difficulty$/i);
+    const type = screen.getByLabelText(/^type$/i);
+    const tags = screen.getByLabelText(/tags/i);
+    expect(tags).toHaveValue("quantitative");
+
+    fireEvent.change(difficulty, { target: { value: "medium" } });
+    expect(difficulty).toHaveValue("medium");
+    // Setting difficulty does not disturb the existing tags filter.
+    expect(tags).toHaveValue("quantitative");
+
+    fireEvent.change(type, { target: { value: "single" } });
+    expect(type).toHaveValue("single");
+    expect(difficulty).toHaveValue("medium");
+
+    fireEvent.change(difficulty, { target: { value: "" } });
+    expect(difficulty).toHaveValue("");
+    // Clearing difficulty back to "Any" does not clear type or tags.
+    expect(type).toHaveValue("single");
+    expect(tags).toHaveValue("quantitative");
   });
 
   it("UX-16: the balance strip has a table equivalent, not only bars", () => {

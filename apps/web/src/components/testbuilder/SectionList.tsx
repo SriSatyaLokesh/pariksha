@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react";
-import type { QuestionSource, SetAssignment, SetDefinition } from "@pariksha/core";
+import { QUESTION_TYPES, type Difficulty, type PoolFilter, type QuestionSource, type QuestionType, type SetAssignment, type SetDefinition, type SourcePool } from "@pariksha/core";
 import type { ApiClient, Bank, StoredSection } from "../../lib/api";
 import { ReorderableList } from "../authoring/ReorderableList";
 import { RenderedHtml } from "../authoring/RenderedHtml";
@@ -54,6 +54,25 @@ function discardDescription(source: QuestionSource): string {
   if (source.kind === "pool") return "its bank, count and filter";
   const n = source.sets.length;
   return `its ${n} set${n === 1 ? "" : "s"}`;
+}
+
+/** Fix round (task 3 review, I13): a pool's filter could only be given
+ * tags, though the server already filters on `difficulty` and `type` too
+ * (`matchesFilter`, `@pariksha/core`) and `AC-10`'s own example is
+ * "10 from pool, tag sql, medium". Sets or clears one filter key at a
+ * time — `rest` first, so a later explicit key always wins over a stale
+ * one spread before it, and the whole `filter` is dropped once every key
+ * is empty, the same "configured means it names something" rule
+ * `isConfigured` already applies to the source as a whole. */
+function withFilterField<K extends keyof PoolFilter>(
+  source: SourcePool,
+  key: K,
+  value: NonNullable<PoolFilter[K]> | undefined,
+): SourcePool {
+  const { [key]: _drop, ...rest } = source.filter ?? {};
+  const next: PoolFilter = value === undefined || value.length === 0 ? rest : { ...rest, [key]: value };
+  const { filter: _dropFilter, ...withoutFilter } = source;
+  return Object.keys(next).length > 0 ? { ...withoutFilter, filter: next } : withoutFilter;
 }
 
 function timeLabel(section: StoredSection): string {
@@ -556,14 +575,49 @@ function SectionEditor({
                   .split(",")
                   .map((t) => t.trim())
                   .filter((t) => t.length > 0);
-                const { filter: _drop, ...rest } = source;
-                // Only `tags` has an editor yet, so this is the one filter
-                // key this field owns — `difficulty`/`types` wait for a
-                // later task's own UI, same reason `isConfigured` above only
-                // asks whether a filter exists at all.
-                onChangeSource(tags.length > 0 ? { ...rest, filter: { tags } } : rest);
+                onChangeSource(withFilterField(source, "tags", tags));
               }}
             />
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor={`${sourceId}-difficulty`}>
+              Difficulty
+            </label>
+            <select
+              id={`${sourceId}-difficulty`}
+              className="text-input"
+              value={source.filter?.difficulty?.[0] ?? ""}
+              onChange={(event) => {
+                const value = event.target.value as Difficulty | "";
+                onChangeSource(withFilterField(source, "difficulty", value ? [value] : undefined));
+              }}
+            >
+              <option value="">Any difficulty</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
+          <div className="field">
+            <label className="field-label" htmlFor={`${sourceId}-type`}>
+              Type
+            </label>
+            <select
+              id={`${sourceId}-type`}
+              className="text-input"
+              value={source.filter?.types?.[0] ?? ""}
+              onChange={(event) => {
+                const value = event.target.value as QuestionType | "";
+                onChangeSource(withFilterField(source, "types", value ? [value] : undefined));
+              }}
+            >
+              <option value="">Any type</option>
+              {QUESTION_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       )}
