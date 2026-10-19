@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState, type JSX } from "react";
 
-// Buttons-first reordering (WCAG 2.1.1) — no drag, and no drag-and-drop
-// dependency; that stays a deferred enhancement. `onReorder(from, to)` is
-// the one mutation every control calls, and the seam a later drag handler
-// would attach to without changing these props.
+// Buttons-first reordering (WCAG 2.1.1). `onReorder(from, to)` is the one
+// mutation every control calls.
+//
+// Phase 6 Task 7 (#71) closed AC-07's drag half, which Phase 4 deferred
+// with the exact shape it should take: `draggable` on the row with native
+// HTML5 dragstart/dragover/drop handlers calling that same
+// `onReorder(from, to)`, plus a drop-position indicator — no dependency,
+// and no change to these props. Drag is an enhancement laid over the
+// buttons, never instead of them: every reorder stays reachable with the
+// keyboard alone, and `reorder.test.tsx` asserts both halves.
 //
 // Review Focus item 5: moving a row with React re-keys the list, and a
 // naive implementation loses focus to document.body. This component tracks
@@ -103,6 +109,12 @@ export function ReorderableList<T>({
   describedBy?: string | undefined;
 }) {
   const [announcement, setAnnouncement] = useState("");
+  // Which row a drag started on, and which row the pointer is currently
+  // over. `dragFrom` is a ref because nothing renders from it and a drag
+  // must not re-render the list under the pointer; `dropAt` is state
+  // because the indicator is the one thing that does render.
+  const dragFrom = useRef<number | null>(null);
+  const [dropAt, setDropAt] = useState<number | null>(null);
   const buttons = useRef(new Map<string, { up: HTMLButtonElement | null; down: HTMLButtonElement | null }>());
   const pendingFocus = useRef<MoveTarget | null>(null);
   // A trailing run of zero-width spaces, one longer every call, so every
@@ -142,6 +154,26 @@ export function ReorderableList<T>({
     announce(item, to);
   }
 
+  /**
+   * The drag half of AC-07. `moveBy` cannot be reused: a drag lands on an
+   * arbitrary row rather than the neighbouring one, and it must NOT steal
+   * focus the way a button press does — the pointer user's focus is
+   * wherever they left it.
+   */
+  function dropOn(to: number): void {
+    const from = dragFrom.current;
+    dragFrom.current = null;
+    setDropAt(null);
+    // A drop with no drag in progress (a file dragged in from the
+    // desktop, say), a drop on the row the drag started from, and a drop
+    // on a pinned row are all non-moves.
+    if (from === null || from === to) return;
+    const item = items[from];
+    if (item === undefined || isPinned(item) || isPinned(items[to])) return;
+    onReorder(from, to);
+    announce(item, to);
+  }
+
   function moveToPosition(from: number, position: number): void {
     const to = position - 1;
     if (!Number.isInteger(to) || to < 0 || to >= items.length || to === from) return;
@@ -166,7 +198,40 @@ export function ReorderableList<T>({
           const label = labelOf(item);
           const pinned = isPinned(item);
           return (
-            <li className="reorderable-list__item" key={key}>
+            <li
+              className={
+                dropAt === index
+                  ? "reorderable-list__item is-drop-target"
+                  : "reorderable-list__item"
+              }
+              key={key}
+              draggable={!pinned}
+              onDragStart={(event) => {
+                dragFrom.current = index;
+                // Firefox refuses to start a drag unless dragstart sets
+                // data. jsdom's synthetic event carries no dataTransfer
+                // at all, hence the guard rather than a bare call.
+                const transfer: DataTransfer | undefined = event.dataTransfer;
+                if (transfer) {
+                  transfer.effectAllowed = "move";
+                  transfer.setData("text/plain", key);
+                }
+              }}
+              onDragOver={(event) => {
+                if (dragFrom.current === null || pinned) return;
+                // Without this the browser never fires a drop at all.
+                event.preventDefault();
+                setDropAt(index);
+              }}
+              onDrop={(event) => {
+                event.preventDefault();
+                dropOn(index);
+              }}
+              onDragEnd={() => {
+                dragFrom.current = null;
+                setDropAt(null);
+              }}
+            >
               <div className="reorderable-list__controls">
                 <button
                   type="button"
