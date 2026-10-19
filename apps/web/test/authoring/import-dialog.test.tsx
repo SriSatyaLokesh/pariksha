@@ -19,6 +19,10 @@ function jsonFile(name: string, body: unknown): File {
   return new File([JSON.stringify(body)], name, { type: "application/json" });
 }
 
+function textFile(name: string, text: string): File {
+  return new File([text], name, { type: "text/plain" });
+}
+
 const GOOD_BANK = {
   format: "pariksha/bank@1",
   name: "Good bank",
@@ -179,6 +183,59 @@ describe("ImportDialog", () => {
     uploadFile(screen.getByLabelText(/file/i), jsonFile("big.json", GOOD_BANK));
 
     expect(await screen.findByText(/limited to 500 questions/i)).toBeVisible();
+  });
+
+  // Task 8 (#52, P4.8): a `.csv`/`.gift` file is sent as text, not parsed
+  // JSON, and carries `format` through both the dry-run and the real
+  // import — these would fail against an implementation that always sent
+  // `{dryRun: true}` with no `format` (the file would arrive as a JSON
+  // string literal server-side and fail to parse as a bank at all).
+  it("a .csv file is read as text and sent with format: csv, both dry-run and for real", async () => {
+    const calls: { doc: unknown; opts: { dryRun?: boolean; format?: string } | undefined }[] = [];
+    const client = fakeClient({
+      importBank: async (_w, _b, doc, opts) => {
+        calls.push({ doc, opts });
+        return { imported: 1, issues: [] };
+      },
+    });
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+
+    uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /^import$/i })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: /^import$/i }));
+    await waitFor(() => expect(calls).toHaveLength(2));
+
+    expect(calls).toEqual([
+      { doc: "id,type,prompt,options,key\n", opts: { dryRun: true, format: "csv" } },
+      { doc: "id,type,prompt,options,key\n", opts: { dryRun: false, format: "csv" } },
+    ]);
+  });
+
+  it("a CSV import issue renders its source line, not a bank.questions index", async () => {
+    const client = fakeClient({
+      importBank: async () => ({
+        imported: 0,
+        issues: [{ questionId: null, index: -1, field: "key", message: `key "z" is not among the options`, line: 4 }],
+      }),
+    });
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+
+    uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
+
+    expect(await screen.findByText(/nothing was imported/i)).toBeVisible();
+    expect(screen.getAllByRole("row", { name: /line 4/ })).toHaveLength(1);
+  });
+
+  it("a file with an extension this dialog does not recognise is reported without calling the API", async () => {
+    const importBank = vi.fn(async () => ({ imported: 0, issues: [] }) as ImportReport);
+    render(
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={fakeClient({ importBank })} onImported={noop} />,
+    );
+
+    uploadFile(screen.getByLabelText(/file/i), textFile("bank.txt", "whatever"));
+
+    expect(await screen.findByText(/\.json, \.csv or \.gift/i)).toBeVisible();
+    expect(importBank).not.toHaveBeenCalled();
   });
 
   it("the import dialog has no axe violations and the report is readable by a screen reader", async () => {

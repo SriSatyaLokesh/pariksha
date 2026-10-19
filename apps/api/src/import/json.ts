@@ -115,9 +115,11 @@ async function importBankDocument(
   });
 
   const lines = opts.lines;
-  const positioned: (ImportIssue & { line?: number })[] = [...structural, ...(crossField.ok ? [] : crossField.issues), ...duplicates].map(
-    (issue) => (lines !== undefined && issue.index >= 0 && lines[issue.index] !== undefined ? { ...issue, line: lines[issue.index] } : issue),
-  );
+  const toLine = (issue: ImportIssue): ImportIssue & { line?: number } => {
+    const line = lines !== undefined && issue.index >= 0 ? lines[issue.index] : undefined;
+    return line !== undefined ? { ...issue, line } : issue;
+  };
+  const positioned = [...structural, ...(crossField.ok ? [] : crossField.issues), ...duplicates].map(toLine);
   const issues: (ImportIssue & { line?: number })[] = [...(opts.extraIssues ?? []), ...positioned];
 
   if (issues.length > 0) {

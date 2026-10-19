@@ -1,6 +1,18 @@
 import { useId, useRef, useState } from "react";
 import { ApiError, type ApiClient, type ImportReport } from "../../lib/api";
 
+/** Task 8 (#52, P4.8): the extension decides the format — `.csv`/`.gift`
+ * are sent as text with `?format=…`, everything else is parsed as JSON
+ * the way Task 7 always did. `undefined` means "not a file this dialog
+ * accepts", reported rather than guessed at. */
+function formatOf(name: string): "json" | "csv" | "gift" | undefined {
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".csv")) return "csv";
+  if (lower.endsWith(".gift")) return "gift";
+  if (lower.endsWith(".json")) return "json";
+  return undefined;
+}
+
 // Task 7 (#51, P4.7): the web half of whole-bank import. A file is read and
 // parsed locally, then dry-run against the API (`?dryRun=1`) so the report —
 // imported or not, and every issue found — renders before anything is
@@ -8,6 +20,11 @@ import { ApiError, type ApiClient, type ImportReport } from "../../lib/api";
 // `ApiClient.importBank` and one report shape (`ImportReport`), which is why
 // there is only one render path for "a clean dry run" and "a real import
 // that also turned out clean" below.
+//
+// Task 8: a CSV/GIFT file is read as text, not `JSON.parse`d, and carries
+// its own `format` through both calls — `doc` is `unknown` either way
+// (a parsed document or a source string), which is what lets this
+// component and `ApiClient.importBank` stay agnostic about which.
 export function ImportDialog({
   workspaceId,
   bankId,
@@ -20,6 +37,7 @@ export function ImportDialog({
   onImported: (report: ImportReport) => void;
 }) {
   const [doc, setDoc] = useState<unknown>(undefined);
+  const [format, setFormat] = useState<"json" | "csv" | "gift">("json");
   const [report, setReport] = useState<ImportReport | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [importing, setImporting] = useState(false);
@@ -40,19 +58,36 @@ export function ImportDialog({
     setError(undefined);
     if (!file) return;
 
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(await file.text());
-    } catch {
-      if (thisGeneration === generation.current) setError("That file is not valid JSON.");
+    const fileFormat = formatOf(file.name);
+    if (fileFormat === undefined) {
+      setError("Choose a .json, .csv or .gift file.");
       return;
     }
 
+    let parsed: unknown;
+    if (fileFormat === "json") {
+      try {
+        parsed = JSON.parse(await file.text());
+      } catch {
+        if (thisGeneration === generation.current) setError("That file is not valid JSON.");
+        return;
+      }
+    } else {
+      // CSV/GIFT: the converter (apps/api/src/import/csv.ts, gift.ts) reads
+      // the text itself — nothing here parses it, same as Task 7 never
+      // validated the JSON it parsed.
+      parsed = await file.text();
+    }
+
     try {
-      const dry = await client.importBank(workspaceId, bankId, parsed, { dryRun: true });
+      const dry = await client.importBank(workspaceId, bankId, parsed, {
+        dryRun: true,
+        ...(fileFormat !== "json" && { format: fileFormat }),
+      });
       if (thisGeneration !== generation.current) return;
       setReport(dry);
       setDoc(parsed);
+      setFormat(fileFormat);
     } catch (cause) {
       if (thisGeneration !== generation.current) return;
       setError(cause instanceof ApiError ? cause.message : "The file could not be checked.");
@@ -64,7 +99,10 @@ export function ImportDialog({
     setImporting(true);
     setError(undefined);
     try {
-      const result = await client.importBank(workspaceId, bankId, doc, { dryRun: false });
+      const result = await client.importBank(workspaceId, bankId, doc, {
+        dryRun: false,
+        ...(format !== "json" && { format }),
+      });
       setReport(result);
       if (result.issues.length === 0) onImported(result);
     } catch (cause) {
@@ -91,10 +129,10 @@ export function ImportDialog({
         className="text-input"
         id={fileId}
         type="file"
-        accept="application/json,.json"
+        accept="application/json,.json,.csv,.gift"
         onChange={(event) => void onFileChange(event)}
       />
-      <p className="field-help">A pariksha/bank@1 JSON file.</p>
+      <p className="field-help">A pariksha/bank@1 JSON file, a CSV file, or a Moodle GIFT file.</p>
 
       {error !== undefined && (
         <p className="field-error" role="alert">
@@ -116,12 +154,20 @@ export function ImportDialog({
 
           {/* Fix round 1, finding 11: this table is ImportDialog's own, not
               bank-browser's — `.import-dialog__table` (authoring.css) rather
-              than borrowing another component's BEM block by class name. */}
+              than borrowing another component's BEM block by class name.
+              Task 8: a fourth "Line" column extends the same three-column
+              design rather than replacing it with per-row `aria-label`s —
+              for a CSV/GIFT import `issue.line` is the only position a
+              person can act on (there is no `bank.questions` to show them),
+              and it also keeps two otherwise-identical rows (no
+              `questionId`, the same field) distinguishable by accessible
+              name. */}
           <table className="import-dialog__table">
             <caption className="visually-hidden">Import issues, one row per problem found</caption>
             <thead>
               <tr>
                 <th scope="col">Question</th>
+                <th scope="col">Line</th>
                 <th scope="col">Field</th>
                 <th scope="col">Problem</th>
               </tr>
@@ -133,7 +179,8 @@ export function ImportDialog({
                 // place, so there is no row identity to preserve across a
                 // reorder.
                 <tr key={index}>
-                  <td>{issue.questionId ?? `entry ${issue.index}`}</td>
+                  <td>{issue.questionId ?? (issue.line === undefined ? `entry ${issue.index}` : `line ${issue.line}`)}</td>
+                  <td>{issue.line ?? "—"}</td>
                   <td>{issue.field}</td>
                   <td>{issue.message}</td>
                 </tr>

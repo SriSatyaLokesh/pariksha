@@ -109,3 +109,14 @@ it("a GIFT file with any error imports nothing", async () => {
   await importGift("one-bad.gift");
   expect(await questionCount()).toBe(0);
 });
+
+// Round-trips the whole pipeline a unit test of `convertGift` alone cannot:
+// `validateBankDocumentStructure` (the JSON Schema) sees the bank too, not
+// just `validateBank`'s cross-field rules — so this also confirms the
+// options/blanks/key shapes `convertGift` builds satisfy schemas/
+// question-1.json, not only this package's own cross-field checks.
+it("the five supported GIFT forms import whole through the real route", async () => {
+  const res = await importGift("five-types.gift");
+  expect(res.status, await res.clone().text()).toBe(200);
+  expect(await questionCount()).toBe(5);
+});

@@ -170,12 +170,17 @@ export interface ApiClient {
    * dry-run both come back as an `ImportReport` rather than a thrown
    * `ApiError` — `ImportDialog` renders one report shape either way; a
    * genuine transport/size failure (413, 404, …) still throws.
+   *
+   * Task 8 (#52, P4.8): `opts.format` sends `doc` (a `string` in this case,
+   * not a parsed document — `ImportDialog` reads the file as text rather
+   * than `JSON.parse`ing it) as the request body verbatim, on the same
+   * route and with `?format=csv|gift` added, instead of JSON-encoding it.
    */
   importBank(
     workspaceId: string,
     bankId: string,
     doc: unknown,
-    opts?: { dryRun?: boolean },
+    opts?: { dryRun?: boolean; format?: "csv" | "gift" },
   ): Promise<ImportReport>;
 }
 
@@ -383,9 +388,18 @@ export function createApiClient(): ApiClient {
     },
 
     async importBank(workspaceId, bankId, doc, opts = {}) {
-      const qs = opts.dryRun ? "?dryRun=1" : "";
+      const params = new URLSearchParams();
+      if (opts.dryRun) params.set("dryRun", "1");
+      if (opts.format) params.set("format", opts.format);
+      const qs = params.toString() ? `?${params}` : "";
+      // Task 8: a CSV/GIFT import sends `doc` (already a string — see this
+      // method's own doc comment) as the body verbatim; JSON keeps `post`'s
+      // existing `JSON.stringify` + `Content-Type: application/json`.
+      const init: RequestInit = opts.format
+        ? { method: "POST", headers: { "Content-Type": "text/plain", Accept: "application/json" }, body: doc as string }
+        : post(doc);
       try {
-        return await json<ImportReport>(`/workspaces/${workspaceId}/banks/${bankId}/import${qs}`, post(doc));
+        return await json<ImportReport>(`/workspaces/${workspaceId}/banks/${bankId}/import${qs}`, init);
       } catch (error) {
         // Fix round 1, finding 9: a validation failure
         // (apps/api/src/import/json.ts) is a 422 whose `details` *is* an

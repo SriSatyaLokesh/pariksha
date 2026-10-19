@@ -71,6 +71,43 @@ The schemas check structure. The importer also checks:
 
 Import is all-or-nothing. A file with any error imports nothing and returns a list of errors with their positions.
 
+## CSV and Moodle GIFT import
+
+`POST .../import?format=csv` or `?format=gift` accepts a text file covering the five most common types — `single`, `multiple`, `true_false`, `numeric`, `fill_blank` — instead of a full `pariksha/bank@1` JSON document. Either format is converted into that same document first, so it is checked by exactly the rules above: a CSV or GIFT file with a bad key, a duplicate ID, or any other defect listed under "Rules checked on import" gets the same message a JSON import of the same mistake would, and fails the whole import the same way.
+
+### CSV
+
+The first row is a header and is never read for its contents, only skipped — row 2 of the file is `bank.questions[0]`. Columns, in order:
+
+| Column | Holds |
+| --- | --- |
+| `id` | The question ID |
+| `type` | One of `single`, `multiple`, `true_false`, `numeric`, `fill_blank` |
+| `prompt` | Markdown, as in JSON. A `fill_blank` prompt must contain a `{{id}}` placeholder for each blank named in `key` |
+| `options` | `single`/`multiple` only: option texts, `\|`-separated. An option's own text is its id — `key` names an option by that same text |
+| `key` | By `type`: `single` — the correct option's text. `multiple` — correct option texts, `+`-separated. `true_false` — `true` or `false`. `numeric` — `value`, `value:tolerance`, or `value:tolerance:type` (`type` is `absolute` or `percent`). `fill_blank` — blanks, `\|`-separated, each `id:answer+answer`, `id` matching a `{{id}}` in `prompt` |
+| `points`, `mode` | Optional; fill `scoring.points` / `scoring.mode` when given |
+| `difficulty` | Optional: `easy`, `medium` or `hard` |
+| `tags` | Optional, `\|`-separated |
+| `explanation` | Optional Markdown |
+
+A row naming a `type` outside the five, or with the wrong number of columns, is reported at its line and the import fails whole — it is never silently skipped or shifted into the wrong columns.
+
+### Moodle GIFT
+
+Only the forms that map onto the five types above are supported; `::title::` is optional and becomes the question's `id`. A `$CATEGORY` line, an essay (`{}`), a matching question (`->`), or a numeric range (`{#min..max}`) is reported at its line and fails the whole import — GIFT can write constructs this format cannot express, and an import that silently dropped them would tell an author they imported a bank that in fact lost questions.
+
+```gift
+// A comment, and a true/false question.
+::Q1:: The sky is blue. {T}
+
+::Q2:: 2 + 2 is {#4}
+
+::Q3:: Pick the primes. {~%50%2 ~%50%3 ~%-100%4}
+```
+
+An answer block with only `=` entries (no `~`) is a fill-in-the-blank with one or more accepted answers; one with any `~` entry is multiple-choice — `single` when exactly one option has positive weight, `multiple` when more than one does (as in `Q3` above, where `2` and `3` both carry positive weight and `4` does not).
+
 ## Example
 
 [`examples/reasoning-aptitude/questions.json`](../examples/reasoning-aptitude/questions.json) contains one question of every type, with its answer key and explanation. The folder around it shows the same questions inside a complete test: [examples/reasoning-aptitude/](../examples/reasoning-aptitude/).
