@@ -157,9 +157,10 @@ export function validateField(field: FormField, value: unknown): string | undefi
         }
       } catch {
         // An unsafe or unparseable pattern is the *organiser's* defect, not
-        // the candidate's, and the builder already shows it to them
-        // (`FormBuilder`). Refusing a candidate's answer over it would be
-        // the wrong party to punish.
+        // the candidate's: `unsatisfiableValidation` (@pariksha/core) is
+        // what tells them, in the builder's own alert row and again at the
+        // publish gate. Refusing a candidate's answer over it would be the
+        // wrong party to punish.
       }
     }
     if (v.allowed_domains !== undefined && (field.type === "email" || field.type === "url")) {

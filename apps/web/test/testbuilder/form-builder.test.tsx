@@ -249,6 +249,26 @@ describe("FormBuilder (T-16 - T-18)", () => {
     expect(screen.getByRole("alert")).toHaveTextContent(/minimum 10 is above maximum 5 — lower the minimum/i);
   });
 
+  it("a pattern no candidate can be checked against is caught in the same row", () => {
+    // The other half of the same acceptance row — "a regex matching
+    // nothing allowed is caught in the builder with cause and fix" — which
+    // nothing surfaced before (task 5/6 review, M3).
+    render(<Harness />);
+    addField("short_text");
+
+    typeInto(screen.getByLabelText(/^pattern$/i), "([a-z]+)+$");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      /pattern "\(\[a-z\]\+\)\+\$" cannot be used — a group with an unbounded repeat/i,
+    );
+    // Cause and fix, not just a refusal — and nothing offered that a
+    // registration field does not have.
+    expect(screen.getByRole("alert")).toHaveTextContent(/bound the repeat instead/i);
+    expect(screen.getByRole("alert")).not.toHaveTextContent(/accepted/i);
+
+    typeInto(screen.getByLabelText(/^pattern$/i), "^[0-9]{2}[A-Z]{2}[0-9]{4}$");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
   it("activating a focused move button reorders a field and announces the new position", () => {
     render(<Harness initial={FORM_TEMPLATES.course_exam} />);
 
@@ -397,7 +417,10 @@ describe("validateField — the one copy both halves call", () => {
   it("an organiser's unsafe pattern never becomes the candidate's error", () => {
     // `assertSafeRegex` (@pariksha/core) refuses this; refusing the
     // candidate's answer over the organiser's defect is the wrong party to
-    // punish, and the builder shows it to the organiser instead.
+    // punish. The organiser is the one told, through
+    // `unsatisfiableValidation` — "a pattern no candidate can be checked
+    // against is caught in the same row", above. Until the task 5/6 review
+    // (M3) nobody was told at all, and this comment said otherwise.
     const field = {
       id: "x",
       type: "short_text" as const,

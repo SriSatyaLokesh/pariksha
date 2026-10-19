@@ -956,6 +956,41 @@ describe("validateTest", () => {
     expect(unsatisfiableValidation({ id: "a", type: "number", label: "A" })).toBeNull();
   });
 
+  // task 5/6 review, M3: #57's acceptance row names two unsatisfiable
+  // shapes — "min above max, a regex matching nothing allowed" — and only
+  // the first had shipped. `assertSafeRegex` was exported from this package
+  // for the second and nothing acted on what it threw.
+  it("an unsafe or unparseable pattern is unsatisfiable too, in the builder's own words", () => {
+    const pattern = (p: string): string | null =>
+      unsatisfiableValidation({ id: "roll", type: "short_text", label: "R", validation: { pattern: p } });
+
+    expect(pattern("([a-z]+)+$")).toMatch(
+      /^pattern "\(\[a-z\]\+\)\+\$" cannot be used — a group with an unbounded repeat/,
+    );
+    // The lesser variant: an unparseable pattern makes the field's format
+    // rule silently inert rather than slow.
+    expect(pattern("(unclosed")).toMatch(/is not a valid regular expression/);
+    // A pattern the renderer will actually run is not reported.
+    expect(pattern("^[0-9]{2}[A-Z]{2}[0-9]{4}$")).toBeNull();
+    // And the sentence never offers `accepted` — that is a grading list of
+    // whole answers, and a registration field has none to put it in.
+    expect(pattern("(a)\\1")).toMatch(/backreferences/);
+    expect(pattern("(a)\\1")).not.toMatch(/accepted/);
+  });
+
+  it("an unsafe pattern is refused at publish, with the field id in the message", () => {
+    const r = validateTest(
+      withForm([field({ id: "roll_number", type: "short_text", validation: { pattern: "([a-z]+)+$" } })]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "registration_form",
+      message: expect.stringMatching(/"roll_number": pattern .* cannot be used/),
+    });
+  });
+
   // --- Task 7 (#59, P5.6): timing -------------------------------------
 
   const WINDOW: TestTiming = {

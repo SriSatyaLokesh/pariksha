@@ -450,6 +450,14 @@ const CHOICE_FIELD_TYPES: readonly string[] = ["dropdown", "radio", "checkbox"];
  * are compared only when both are the same JSON type: the schema allows a
  * number (a `number` field) or a string (a `date` field's ISO bound), and
  * comparing one against the other says nothing.
+ *
+ * `validation.pattern` is the third shape, and #57's acceptance row names
+ * it alongside the other two — "min above max, *a regex matching nothing
+ * allowed*" (task 5/6 review, M3). It is here rather than in its own
+ * function for the same reason the other two are: the builder renders one
+ * `role="alert"` row per field and `validateTest` pushes one issue per
+ * field, so a second function would be a second row, a second issue and a
+ * second thing to keep wired.
  */
 export function unsatisfiableValidation(field: FormField): string | null {
   const v = field.validation;
@@ -461,6 +469,27 @@ export function unsatisfiableValidation(field: FormField): string | null {
   }
   if (min !== undefined && max !== undefined && typeof min === typeof max && min > max) {
     return `minimum ${min} is above maximum ${max} — lower the minimum, or raise the maximum`;
+  }
+  // The same check `matchBlank` runs on a question author's pattern, and
+  // the reason `assertSafeRegex` is exported from this package at all: the
+  // candidate-side renderer swallows the throw deliberately (an organiser's
+  // defect must not become the candidate's error), so without this the
+  // pattern was inert everywhere and an organiser's `([a-z]+)+$` saved,
+  // published, and met every candidate's registration on the server.
+  if (v.pattern !== undefined) {
+    try {
+      assertSafeRegex(v.pattern);
+    } catch (err) {
+      // `assertSafeRegex` speaks to a *question* author and offers
+      // `accepted`, a list of whole answers a registration field does not
+      // have. The cause is the half worth repeating; the offer is dropped
+      // rather than made to someone who cannot act on it.
+      const why = (err instanceof Error ? err.message : String(err))
+        .replace(/^unsafe regex: /, "")
+        .replace(/(, or|—) list the alternative forms in `accepted` instead/, "")
+        .trim();
+      return `pattern "${v.pattern}" cannot be used — ${why}`;
+    }
   }
   return null;
 }

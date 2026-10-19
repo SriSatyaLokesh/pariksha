@@ -732,7 +732,7 @@ git commit -s -m "feat(tests): set assignment strategies and shuffle configurati
 - form field IDs are unique within the test (and so are section IDs — the same loop, the other half of the same rule line)
 - every `options` list belongs to a `dropdown`, `radio` or `checkbox` field
 
-**Save-time** is the one rule whose breach is not a half-built form: an unsatisfiable `validation` (`min` above `max`, `max_length` below `min_length`), because it silently refuses every candidate at registration and nothing before Phase 6 would surface it. It reports `field: "registration_form"` with the field's `id` in the message.
+**Publish-time, with a live author-facing message** (the correction at the head of this task) is the one rule whose breach is not a half-built form: an unsatisfiable `validation`, because it silently refuses every candidate at registration and nothing before Phase 6 would surface it. Three shapes, all through `unsatisfiableValidation`: `min` above `max`, `max_length` below `min_length`, and a `pattern` `assertSafeRegex` refuses — #57's acceptance row names that third one ("a regex matching nothing allowed is caught in the builder with cause and fix") and the task 5/6 review found it missing (M3). It reports `field: "registration_form"` with the field's `id` in the message.
 
 - [ ] **Step 1: Write the failing tests**
 
