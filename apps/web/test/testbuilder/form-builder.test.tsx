@@ -462,6 +462,22 @@ describe("validateField — the one copy both halves call", () => {
     expect(validateField(field, "rao@a.b.ac.in")).toMatch(/\*\.edu\.in/);
   });
 
+  it("a run of stars in a domain glob is one wildcard, not one unbounded repeat per star", () => {
+    // `**.com` used to compile to two abutting `[^.]+`, which is the
+    // catastrophic-backtracking shape and runs in the *candidate's*
+    // browser (task 5/6 review, m2). It also made a one-character label
+    // fail a glob that says it should match.
+    const field = {
+      id: "email",
+      type: "email" as const,
+      label: "Email",
+      validation: { allowed_domains: ["**.com"] },
+    };
+    expect(validateField(field, "rao@a.com")).toBeUndefined();
+    // And one star still means one label, not "anything".
+    expect(validateField(field, "rao@a.b.com")).toMatch(/\*\*\.com/);
+  });
+
   it("a blank answer is required-or-nothing, never a format complaint", () => {
     const field = {
       id: "roll",

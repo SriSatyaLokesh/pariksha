@@ -133,7 +133,14 @@ function domainAllowed(host: string, patterns: readonly string[]): boolean {
     const escaped = pattern
       .toLowerCase()
       .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*/g, "[^.]+");
+      // A run of stars is one wildcard, not one per star: `*****.com`
+      // compiling to five abutting `[^.]+` is the catastrophic-backtracking
+      // shape, `assertSafeRegex` is not applied on this path, and this runs
+      // in the *candidate's* browser at registration (task 5/6 review, m2).
+      // Collapsing the run also matches what the dialect means — one `*`
+      // stands for one or more label characters, so two in a row cannot
+      // say anything the first does not.
+      .replace(/\*+/g, "[^.]+");
     return new RegExp(`^${escaped}$`).test(lower);
   });
 }
