@@ -49,8 +49,9 @@ const listed = (externalId: string, setLabel: string | null): NewCandidate => ({
 async function insertRegisteredRow(externalId: string): Promise<void> {
   await db.run(
     "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, " +
-      "form_values_json, consent_version, created_at) VALUES (?, ?, ?, ?, NULL, 'registration', ?, '1.0', ?)",
-    [newId("cnd"), ws, testId, externalId, db.jsonParam({}), T - 1],
+      "form_values_json, consent_version, consent_at, created_at) " +
+      "VALUES (?, ?, ?, ?, NULL, 'registration', ?, '1.0', ?, ?)",
+    [newId("cnd"), ws, testId, externalId, db.jsonParam({}), T - 1, T - 1],
   );
 }
 
@@ -138,4 +139,68 @@ it("S-09: a replace from another workspace deletes nothing and writes nothing re
   await replaceCandidateList(db, other, testId, [], T + 1);
 
   expect((await listCandidates(db, ws, testId)).map((r) => r.externalId)).toEqual(["21CS0147"]);
+});
+
+// --- Phase 6 Task 3 (#67): the re-upload rules a registration creates ---
+
+/** A *listed* candidate who has since registered: `source` stays `"list"`
+ *  (the registration fills the row in place) and `consent_at` is what says
+ *  they registered. This is the row every assertion below is about. */
+async function markRegistered(
+  externalId: string,
+  formValues: Record<string, unknown>,
+): Promise<void> {
+  await db.run(
+    "UPDATE candidate SET form_values_json = ?, consent_version = '2026-10-01', consent_at = ? " +
+      "WHERE workspace_id = ? AND test_id = ? AND external_id = ?",
+    [db.jsonParam(formValues), T + 5, ws, testId, externalId],
+  );
+}
+
+it("registeredAt is consent_at, which is the definition of registered", async () => {
+  await replaceCandidateList(db, ws, testId, [listed("21CS0147", "A")], T);
+  expect((await getCandidateByExternalId(db, ws, testId, "21CS0147"))?.registeredAt).toBeNull();
+  await markRegistered("21CS0147", { email: "a@b.ac.in" });
+  expect((await getCandidateByExternalId(db, ws, testId, "21CS0147"))?.registeredAt).toBe(T + 5);
+});
+
+it("a re-upload leaves a registered candidate byte-identical, set and answers alike", async () => {
+  await replaceCandidateList(db, ws, testId, [listed("21CS0147", "A")], T);
+  await markRegistered("21CS0147", { email: "typed@vce.ac.in" });
+  const before = await getCandidateByExternalId(db, ws, testId, "21CS0147");
+
+  // The organiser changes both the set and the prefill and uploads again.
+  await replaceCandidateList(
+    db,
+    ws,
+    testId,
+    [{ externalId: "21CS0147", setLabel: "C", formValues: { email: "organiser@guess.test" } }],
+    T + 100,
+  );
+
+  expect(await getCandidateByExternalId(db, ws, testId, "21CS0147")).toEqual(before);
+});
+
+it("a registered candidate absent from the new file is still there", async () => {
+  await replaceCandidateList(db, ws, testId, [listed("21CS0147", "A"), listed("21CS0162", "B")], T);
+  await markRegistered("21CS0147", { email: "a@b.ac.in" });
+
+  await replaceCandidateList(db, ws, testId, [listed("21EC0211", "A")], T + 100);
+
+  expect((await listCandidates(db, ws, testId)).map((r) => r.externalId).sort()).toEqual([
+    "21CS0147",
+    "21EC0211",
+  ]);
+});
+
+it("an unregistered candidate absent from the new file is gone — replace still replaces", async () => {
+  await replaceCandidateList(db, ws, testId, [listed("21CS0147", "A")], T);
+  await replaceCandidateList(db, ws, testId, [listed("21EC0211", "A")], T + 100);
+  expect(await getCandidateByExternalId(db, ws, testId, "21CS0147")).toBeNull();
+});
+
+it("an unregistered listed candidate's set still moves on a re-upload", async () => {
+  await replaceCandidateList(db, ws, testId, [listed("21CS0147", "A")], T);
+  await replaceCandidateList(db, ws, testId, [listed("21CS0147", "C")], T + 100);
+  expect((await getCandidateByExternalId(db, ws, testId, "21CS0147"))?.setLabel).toBe("C");
 });

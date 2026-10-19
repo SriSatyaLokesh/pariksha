@@ -32,6 +32,7 @@ export const ID_PREFIXES = [
   "snp", // snapshot
   "rev", // review
   "aud", // audit_log
+  "cuq", // candidate_unique
 ] as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[number];

@@ -10,6 +10,7 @@
 // scan recorded as A-2.
 
 import type { DbClient } from "../client.js";
+import { newId } from "../ids.js";
 import type { RegistrationFormSpec } from "@pariksha/core";
 import { scoped } from "./guard.js";
 import type { TestSettings } from "./test-document.js";
@@ -120,3 +121,198 @@ export const inviteTarget = scoped(
     };
   },
 );
+
+// --- Task 3 (#67, P6.3): the registration write ------------------------
+
+/** One `unique: true` field's claim on a value, as a digest. The value
+ *  itself never reaches that table (`S-15`). */
+export interface UniqueClaim {
+  fieldId: string;
+  valueHash: string;
+}
+
+export interface RegisterCandidateInput {
+  testId: string;
+  /** The `source = "list"` row the access gate already bound this entry
+   *  to, or `null` for a candidate who matched no list row. When it is
+   *  set the row is filled **in place**: `(test_id, external_id)` is
+   *  unique, so a second row is impossible, and `set_label` must survive
+   *  or `assignSet` loses the `listValue` it draws a set from. */
+  listRef: string | null;
+  /** The normalised value of the form's first `unique: true` field
+   *  (`normaliseUniqueValue`, @pariksha/core), written on a
+   *  self-registration too — it is what makes `(test_id, external_id)` a
+   *  real race backstop on a public test rather than a column only
+   *  uploads ever fill. */
+  externalId: string | null;
+  formValues: unknown;
+  consentVersion: string;
+  consentAt: number;
+  claims: readonly UniqueClaim[];
+  /** The `run_entry` token's digest. Spent in the same batch as the write,
+   *  so a refused registration does not burn it and send the candidate
+   *  back through the access gate to fix a typo. */
+  entryTokenHash: string;
+  entryKind: string;
+  /** The `run_registration` token `/start` will spend, written in the same
+   *  batch so a duplicate rolls it back with everything else. */
+  registration: { tokenHash: string; kind: string; payload: unknown; expiresAt: number };
+  now: number;
+}
+
+/** `{ taken }` names the fields whose value is already claimed **and the
+ *  candidate holding each**, because the route's answer differs: every
+ *  unique value belonging to one existing candidate is that candidate
+ *  coming back (`T-14`), and a value belonging to someone else is the
+ *  409. */
+export type RegisterResult =
+  | { candidateId: string }
+  | { taken: { fieldId: string; candidateId: string }[] };
+
+/**
+ * One candidate, their unique claims, the entry token they spend and the
+ * registration token they leave with — in **one** `db.batch`, so a
+ * `UNIQUE` violation rolls the whole thing back and `AC-12`'s refusal has
+ * no half-written candidate behind it.
+ *
+ * The in-place fill carries `AND consent_at IS NULL`. Without it a second
+ * person typing a *registered* roll number would overwrite the sitting
+ * candidate's typed answers and consent, on the row their attempt points
+ * at — unrecoverable, and the one row where it matters most. The route
+ * reads that row first and answers re-entry or 409 before ever reaching
+ * here; this clause is what makes the read a message rather than the only
+ * defence.
+ *
+ * Which `UNIQUE` fired is worked out by reading, not by parsing a driver's
+ * error string — those differ across all three dialects. On failure the
+ * claims are looked up, and the `(test_id, external_id)` backstop after
+ * them, so neither constraint can surface as a 500.
+ *
+ * **The accepted race.** `db.batch` cannot branch on an `UPDATE`'s row
+ * count, so if the entry token was spent concurrently the consume matches
+ * nothing and the rest of the batch still commits. The route's
+ * `readEntryToken` closes the ordinary replay; what is left is one
+ * candidate double-submitting their own registration against their own
+ * gate, bounded by `test_register` and, on a listed test, by
+ * `(test_id, external_id)`.
+ */
+export const registerCandidate = scoped(
+  "registerCandidate",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: RegisterCandidateInput,
+  ): Promise<RegisterResult> => {
+    const candidateId = input.listRef ?? newId("cnd");
+    const claimRows = input.claims.map((claim) => ({
+      sql:
+        "INSERT INTO candidate_unique (id, workspace_id, test_id, candidate_id, field_id, value_hash, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+      params: [
+        newId("cuq"),
+        workspaceId,
+        input.testId,
+        candidateId,
+        claim.fieldId,
+        claim.valueHash,
+        input.now,
+      ],
+    }));
+
+    const write =
+      input.listRef === null
+        ? {
+            sql:
+              "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, " +
+              "form_values_json, consent_version, consent_at, created_at) " +
+              "VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?)",
+            params: [
+              candidateId,
+              workspaceId,
+              input.testId,
+              input.externalId,
+              "registration",
+              db.jsonParam(input.formValues),
+              input.consentVersion,
+              input.consentAt,
+              input.now,
+            ],
+          }
+        : {
+            sql:
+              "UPDATE candidate SET form_values_json = ?, consent_version = ?, consent_at = ? " +
+              "WHERE workspace_id = ? AND id = ? AND consent_at IS NULL",
+            params: [
+              db.jsonParam(input.formValues),
+              input.consentVersion,
+              input.consentAt,
+              workspaceId,
+              input.listRef,
+            ],
+          };
+
+    try {
+      await db.batch([
+        {
+          sql:
+            "UPDATE auth_token SET used_at = ? WHERE token_hash = ? AND kind = ? " +
+            "AND used_at IS NULL AND expires_at > ?",
+          params: [input.now, input.entryTokenHash, input.entryKind, input.now],
+        },
+        write,
+        ...claimRows,
+        {
+          sql:
+            "INSERT INTO auth_token (token_hash, kind, payload_json, created_at, expires_at, used_at) " +
+            "VALUES (?, ?, ?, ?, ?, NULL)",
+          params: [
+            input.registration.tokenHash,
+            input.registration.kind,
+            db.jsonParam(input.registration.payload),
+            input.now,
+            input.registration.expiresAt,
+          ],
+        },
+      ]);
+    } catch (error) {
+      const taken = await takenClaims(db, workspaceId, input);
+      if (taken.length > 0) return { taken };
+      throw error;
+    }
+    return { candidateId };
+  },
+);
+
+/** The failure path only: which of this registration's unique values are
+ *  already claimed, and by whom. */
+async function takenClaims(
+  db: DbClient,
+  workspaceId: string,
+  input: RegisterCandidateInput,
+): Promise<{ fieldId: string; candidateId: string }[]> {
+  if (input.claims.length === 0) return [];
+  const placeholders = input.claims.map(() => "?").join(", ");
+  const rows = await db.query<{ field_id: string; candidate_id: string }>(
+    "SELECT field_id, candidate_id FROM candidate_unique " +
+      `WHERE workspace_id = ? AND test_id = ? AND value_hash IN (${placeholders})`,
+    [workspaceId, input.testId, ...input.claims.map((claim) => claim.valueHash)],
+  );
+  if (rows.length > 0) {
+    return rows.map((row) => ({ fieldId: row.field_id, candidateId: row.candidate_id }));
+  }
+  // The `(test_id, external_id)` backstop. It fires when two registrations
+  // for one listed identity race and the loser's claims were rolled back
+  // with its own insert, so there is nothing in `candidate_unique` left to
+  // find — and a raw constraint error here would be the one refusal `C-02`
+  // cannot word.
+  if (input.externalId === null) return [];
+  const existing = await db.query<{ id: string }>(
+    "SELECT id FROM candidate WHERE workspace_id = ? AND test_id = ? AND external_id = ?",
+    [workspaceId, input.testId, input.externalId],
+  );
+  const row = existing[0];
+  const identity = input.claims[0];
+  return row === undefined || identity === undefined
+    ? []
+    : [{ fieldId: identity.fieldId, candidateId: row.id }];
+}
