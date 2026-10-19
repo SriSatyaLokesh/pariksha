@@ -119,3 +119,26 @@ describe("createApiClient: importBank normalises a 422 into an ImportReport", ()
     ]);
   });
 });
+
+// Task 9 (#53, P4.9).
+describe("createApiClient: exportBank", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("omits ?ids= with no selection, and comma-joins (url-encoded) ids with one", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockImplementation(() => jsonResponse({ format: "pariksha/bank@1", name: "x", questions: [] }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await createApiClient().exportBank("wsp_1", "bnk_1");
+    await createApiClient().exportBank("wsp_1", "bnk_1", ["LOG-001", "a/b"]);
+
+    const urls = fetchSpy.mock.calls.map((call) => call[0] as string);
+    expect(urls).toEqual([
+      "/api/v1/workspaces/wsp_1/banks/bnk_1/export",
+      "/api/v1/workspaces/wsp_1/banks/bnk_1/export?ids=LOG-001,a%2Fb",
+    ]);
+  });
+});
