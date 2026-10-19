@@ -35,7 +35,7 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 
 ## Review Focus
 
-1. **The UX-05 usage predicate going blind the moment a draft lives in `test_version`.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:188`) scan `test_version.sections_json` and **none filters on `published_at`**, because on Phase 4's branch every row is published — `publishTestVersion` is the only writer and always stamps it. Task 2 starts writing `published_at IS NULL` rows, and all three go wrong at once: an Author who adds a question to a *draft* test can no longer delete it from its bank, the refusal names a test nobody published, and the browser's "not used in any test" filter hides it. Phase 4's suite cannot catch it — `packages/db/test/repo/banks.test.ts` only ever inserts published versions. — Task 2, re-run by Task 10.
+1. **The UX-05 usage predicate going blind the moment a draft lives in `test_version`.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:185`) scan `test_version.sections_json` and **none filters on `published_at`**, because on Phase 4's branch every row is published — `publishTestVersion` is the only writer and always stamps it. Task 2 starts writing `published_at IS NULL` rows, and all three go wrong at once: an Author who adds a question to a *draft* test can no longer delete it from its bank, the refusal names a test nobody published, and the browser's "not used in any test" filter hides it. Phase 4's suite cannot catch it — `packages/db/test/repo/banks.test.ts` only ever inserts published versions. — Task 2, re-run by Task 10.
 2. **`publishTestVersion` setting `status = "open"` unconditionally** (`packages/db/src/repo/tests.ts`). Wrong the moment `timing.opens_at` is in the future: `T-04`'s **Scheduled** state would never exist and a Phase 6 candidate reading `status` is told a test is open hours early. Invisible today because nothing reads `status`. — Task 10.
 3. **A settings patch that merges where it must replace.** Switching `access.mode` from `link_code` to `sso` must drop `access_code`. The sibling case is caught for free — `$defs/sourcePool` and `$defs/sourceSets` carry `additionalProperties: false`, so a merged `sets` key inside a `pool` source fails the schema. **`access` is not**: `access_code` is a legal property of `access` under every mode, so a stale code survives, passes the schema, passes `validateTest` (whose rule fires only *when* the mode is `link_code`), publishes, and leaves the workspace inside an exported file. The proof is an **export** assertion, not a read-back of the patch. — Task 3 builds the merge; Task 8 owns the proof.
 4. **A publish checklist computed twice.** The screen has every number it needs, so computing rows in the browser is the obvious move; then the server computes them again, slightly differently, and either an all-green checklist 422s on publish or a red row is not enforced — the second being worse, because it teaches organisers to ignore the list. Tasks 4–9 each *name* their publish-time rules; Task 10 creates `checklist.ts` carrying the blocking rows and makes `POST …/publish` refuse on them; Task 12 adds the advisory rows, the `GET …/checklist` route and the screen. — Tasks 10 and 12.
@@ -212,7 +212,7 @@ git commit -s -m "docs(adr): review comments on a draft test"
 
 `short_code` is six characters from `packages/db/src/ids.ts`'s Crockford alphabet (`0123456789abcdefghjkmnpqrstvwxyz`, no `i`/`l`/`o`/`u`), minted with the same `crypto.getRandomValues` masking `newId` uses — read aloud down a phone line, it cannot be misheard as another valid code. Export a `newShortCode(): string` from `ids.ts` beside `newId`; `createTest` retries once on the unique violation.
 
-**Review Focus 1 lands here.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:188`) each gain `AND tv.published_at IS NOT NULL`, because this task is the first to write a `test_version` row that is not published.
+**Review Focus 1 lands here.** `TV_REFERENCES_Q_ROW` (`packages/db/src/repo/banks.ts:99-101`), `testsUsingQuestion` (`:165`) and `testsUsingBank` (`:185`) each gain `AND tv.published_at IS NOT NULL`, because this task is the first to write a `test_version` row that is not published.
 
 **Routes.** Guarded with `requires("tests.edit")`, including the reads: there is no `tests.view` in `packages/core/src/permissions.ts`, and Phase 4 set this precedent explicitly for banks in `apps/api/src/app.ts`'s `ROUTE_ACTIONS` comment, so a Viewer is 403 on all of these.
 
@@ -1014,7 +1014,7 @@ git commit -s -m "feat(tests): timing, navigation and attempt policy"
 | `email_code` | "Types their email and then the 6-digit code it receives." | "The link only." |
 | `sso` | "Signs in with their own school or company account." | "The link only." |
 
-**Save-time versus publish-time.** Save-time: a malformed CIDR in `allow_ip_ranges` or a malformed glob in `allow_email_domains`, because a stored value nothing can parse becomes a candidate silently refused on test day and the organiser never sees the cause. Publish-time (checklist rows, Task 12): `access_code` missing under `link_code` — `validateTest` already carries this rule at `packages/core/src/validate.ts:542` — an allowlist that can match nothing, and a candidate list with no rows.
+**Save-time versus publish-time.** Save-time: a malformed CIDR in `allow_ip_ranges` or a malformed glob in `allow_email_domains`, because a stored value nothing can parse becomes a candidate silently refused on test day and the organiser never sees the cause. Publish-time (checklist rows, Task 12): `access_code` missing under `link_code` — `validateTest` already carries this rule at `packages/core/src/validate.ts:480` — an allowlist that can match nothing, and a candidate list with no rows.
 
 Rotating the access code is a write to `settings.access.access_code` like any other; the panel states before the write that existing links keep working and the old code stops.
 
@@ -1261,8 +1261,8 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 | `pool_no_bank` | blocking | `pool section "<title>" names no bank` | the `SourcePool.bank` ruling |
 | `window_backwards` | blocking | `the window closes before it opens` | `validateTest` |
 | `window_past` | blocking | `the window closed <n> days ago` | `UX-17` ("the availability window is in the future"); needs `now`, so it is not a `validateTest` rule |
-| `access_code_missing` | blocking | `access mode "link_code" requires an access code` | `validateTest` (`packages/core/src/validate.ts:542`) |
-| `release_at_missing` | blocking | `release "on_date" requires a date` | `validateTest` (`:551`) |
+| `access_code_missing` | blocking | `access mode "link_code" requires an access code` | `validateTest` (`packages/core/src/validate.ts:480`) |
+| `release_at_missing` | blocking | `release "on_date" requires a date` | `validateTest` (`:489`) |
 | `duplicate_ids` | blocking | `section id "<id>" is used more than once` | Task 5's rule |
 | `section_durations` | blocking | `sections total <n> minutes against an overall <m>` | Task 7's rule |
 
@@ -1536,7 +1536,7 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 | `allowlist_empty` | advisory | `<describeAllowlists output>, which matches nobody` | #60's acceptance |
 | `candidate_list_empty` | advisory | `the candidate list has no rows` | #60's acceptance — **deferred, see Escalated** |
 
-Every row states the **measured fact**, never a category: the message carries the two numbers. `buildChecklist` gets these from `validateTest`'s existing issues wherever it already raises them (the pool and set rules are `packages/core/src/validate.ts:560` and `:568`), so the numbers in the checklist and the numbers an import would report are the same numbers.
+Every row states the **measured fact**, never a category: the message carries the two numbers. `buildChecklist` gets these from `validateTest`'s existing issues wherever it already raises them (the pool and set rules are `packages/core/src/validate.ts:551` and `:571`), so the numbers in the checklist and the numbers an import would report are the same numbers.
 
 - [ ] **Step 1: Write the failing tests**
 
