@@ -387,14 +387,17 @@ export function createApiClient(): ApiClient {
       try {
         return await json<ImportReport>(`/workspaces/${workspaceId}/banks/${bankId}/import${qs}`, post(doc));
       } catch (error) {
-        // A validation failure (apps/api/src/import/json.ts: structural,
-        // cross-field or duplicate-ref_id issues) is a 422 carrying
-        // `details.issues` — the same shape a clean import's `ImportReport`
-        // already has, just non-empty. Normalised here so `ImportDialog`
-        // renders one report shape whether the import succeeded or not,
-        // rather than a try/catch of its own around every call.
-        if (error instanceof ApiError && error.status === 422 && isIssuesDetails(error.details)) {
-          return { imported: 0, issues: error.details.issues };
+        // Fix round 1, finding 9: a validation failure
+        // (apps/api/src/import/json.ts) is a 422 whose `details` *is* an
+        // `ImportReport` (`imported: 0`, `issues` populated) — the server
+        // throws that exact shape rather than a bare `{ issues }`, so this
+        // is the one type used uniformly on both outcomes, not two
+        // identically-named types with opposite invariants. Normalised here
+        // so `ImportDialog` renders one report shape whether the import
+        // succeeded or not, rather than a try/catch of its own around every
+        // call.
+        if (error instanceof ApiError && error.status === 422 && isImportReport(error.details)) {
+          return error.details;
         }
         throw error;
       }
@@ -402,6 +405,11 @@ export function createApiClient(): ApiClient {
   };
 }
 
-function isIssuesDetails(value: unknown): value is { issues: (ImportIssue & { line?: number })[] } {
-  return typeof value === "object" && value !== null && Array.isArray((value as { issues?: unknown }).issues);
+function isImportReport(value: unknown): value is ImportReport {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { imported?: unknown }).imported === "number" &&
+    Array.isArray((value as { issues?: unknown }).issues)
+  );
 }

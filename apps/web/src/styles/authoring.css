@@ -598,3 +598,27 @@
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
 }
+
+/* Fix round 1, finding 11: ImportDialog's own issues table — same rules as
+   .bank-browser__table (above), not a shared mixin, because the two belong
+   to different components' BEM blocks and neither should reach into the
+   other's class by name. */
+.import-dialog__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.import-dialog__table th,
+.import-dialog__table td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--color-hairline);
+  text-align: start;
+  vertical-align: top;
+}
+
+.import-dialog__table th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}

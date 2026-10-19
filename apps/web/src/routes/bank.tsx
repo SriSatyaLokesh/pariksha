@@ -3,6 +3,7 @@ import { QUESTION_TYPES, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { MonoCaption } from "../components/MonoCaption";
 import { GroupEditor } from "../components/authoring/GroupEditor";
+import { ImportDialog } from "../components/authoring/ImportDialog";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -62,6 +63,11 @@ export function BankBrowser({
   // `undefined`: no passage-group form open. `"new"`: the "New group" form.
   // A `PassageGroupSummary`: editing that existing group.
   const [editingGroup, setEditingGroup] = useState<PassageGroupSummary | "new" | undefined>(undefined);
+  // Fix round 1 (this review round), finding 4: Task 7's ImportDialog had no
+  // host — unreachable from the running app. A toggle next to "New group"
+  // is the smallest wiring; Task 8 (CSV/GIFT) and Task 9 (export) are what
+  // this screen's import/export affordances actually grow into later.
+  const [importing, setImporting] = useState(false);
   // Fix round 1, finding 9: a static id collides if `BankBrowser` is ever
   // rendered twice on one page — `PreviewPane` and `QuestionEditor` both use
   // `useId()` for exactly this reason.
@@ -239,6 +245,27 @@ export function BankBrowser({
           <p className="bank-browser__notice" role="alert">
             {notice}
           </p>
+        )}
+
+        <button
+          type="button"
+          className="button-secondary"
+          aria-expanded={importing}
+          onClick={() => setImporting((prev) => !prev)}
+        >
+          {importing ? "Cancel import" : "Import"}
+        </button>
+
+        {importing && (
+          <ImportDialog
+            workspaceId={workspaceId}
+            bankId={bankId}
+            client={client}
+            onImported={() => {
+              setImporting(false);
+              void load();
+            }}
+          />
         )}
 
         <section aria-labelledby={groupsHeadingId}>

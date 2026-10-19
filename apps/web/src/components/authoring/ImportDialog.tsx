@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { ApiError, type ApiClient, type ImportReport } from "../../lib/api";
 
 // Task 7 (#51, P4.7): the web half of whole-bank import. A file is read and
@@ -25,9 +25,16 @@ export function ImportDialog({
   const [importing, setImporting] = useState(false);
   const headingId = useId();
   const fileId = useId();
+  // Fix round 1, finding 11: picking file A then quickly picking file B
+  // starts two overlapping dry-run requests; without this, A's response can
+  // resolve after B's and land A's report (and `doc`) against B's already-
+  // chosen file. Each call captures its own generation number and only
+  // applies its result if nothing newer has started since.
+  const generation = useRef(0);
 
   async function onFileChange(event: React.ChangeEvent<HTMLInputElement>): Promise<void> {
     const file = event.target.files?.[0];
+    const thisGeneration = ++generation.current;
     setDoc(undefined);
     setReport(undefined);
     setError(undefined);
@@ -37,14 +44,17 @@ export function ImportDialog({
     try {
       parsed = JSON.parse(await file.text());
     } catch {
-      setError("That file is not valid JSON.");
+      if (thisGeneration === generation.current) setError("That file is not valid JSON.");
       return;
     }
 
     try {
-      setReport(await client.importBank(workspaceId, bankId, parsed, { dryRun: true }));
+      const dry = await client.importBank(workspaceId, bankId, parsed, { dryRun: true });
+      if (thisGeneration !== generation.current) return;
+      setReport(dry);
       setDoc(parsed);
     } catch (cause) {
+      if (thisGeneration !== generation.current) return;
       setError(cause instanceof ApiError ? cause.message : "The file could not be checked.");
     }
   }
@@ -92,45 +102,51 @@ export function ImportDialog({
         </p>
       )}
 
-      {report !== undefined && (
-        <div aria-live="polite">
-          {hasIssues ? (
-            <p className="field-error" role="alert">
-              Nothing was imported — {report.issues.length}{" "}
-              {report.issues.length === 1 ? "issue" : "issues"} found.
-            </p>
-          ) : (
-            <p>
-              {report.imported} {report.imported === 1 ? "question" : "questions"} ready to import.
-            </p>
-          )}
+      {/* Fix round 1, finding 11: `role="alert"` already implies an
+          assertive live region on its own paragraph — wrapping it in a
+          second, `aria-live="polite"` region announced the same text twice.
+          Only the non-alert "ready to import" message needs a live region
+          of its own, and `role="status"` (implicit `aria-live="polite"`)
+          is that region without nesting one inside another. */}
+      {report !== undefined && hasIssues && (
+        <>
+          <p className="field-error" role="alert">
+            Nothing was imported — {report.issues.length} {report.issues.length === 1 ? "issue" : "issues"} found.
+          </p>
 
-          {hasIssues && (
-            <table className="bank-browser__table">
-              <caption className="visually-hidden">Import issues, one row per problem found</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Question</th>
-                  <th scope="col">Field</th>
-                  <th scope="col">Problem</th>
+          {/* Fix round 1, finding 11: this table is ImportDialog's own, not
+              bank-browser's — `.import-dialog__table` (authoring.css) rather
+              than borrowing another component's BEM block by class name. */}
+          <table className="import-dialog__table">
+            <caption className="visually-hidden">Import issues, one row per problem found</caption>
+            <thead>
+              <tr>
+                <th scope="col">Question</th>
+                <th scope="col">Field</th>
+                <th scope="col">Problem</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.issues.map((issue, index) => (
+                // `index` is a stable key here — the dry-run report is
+                // replaced wholesale on every file change, never patched in
+                // place, so there is no row identity to preserve across a
+                // reorder.
+                <tr key={index}>
+                  <td>{issue.questionId ?? `entry ${issue.index}`}</td>
+                  <td>{issue.field}</td>
+                  <td>{issue.message}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {report.issues.map((issue, index) => (
-                  // `index` is a stable key here — the dry-run report is
-                  // replaced wholesale on every file change, never patched
-                  // in place, so there is no row identity to preserve
-                  // across a reorder.
-                  <tr key={index}>
-                    <td>{issue.questionId ?? `entry ${issue.index}`}</td>
-                    <td>{issue.field}</td>
-                    <td>{issue.message}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {report !== undefined && !hasIssues && (
+        <p role="status">
+          {report.imported} {report.imported === 1 ? "question" : "questions"} ready to import.
+        </p>
       )}
 
       <button
