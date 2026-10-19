@@ -405,6 +405,19 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // **Task 9 will make this route materialise a late submission**; when
   // it does, this is the line that moves and it must be re-measured.
   "/api/v1/run/attempt": 2,
+  // Phase 6 Task 8 (#72, P6.8): saving one answer — the hot path, and the
+  // one route in this product a candidate calls hundreds of times.
+  // Measured at **2** in `test/run/answer.test.ts`: the attempt join the
+  // cookie resolves through (one read) and `upsertResponse` (one write).
+  // That is exactly the PRD's non-functional row — one D1 write plus at
+  // most one R2 call — so it is pinned with `toBe` rather than bounded,
+  // and the membership check that refuses a question outside the pinned
+  // paper costs nothing, because `layout.sections` is already in memory
+  // on the row that join returned. Task 9's deadline check and Task 10's
+  // navigation check are both pure functions over that same row, so this
+  // number must not move when they land; `advanceMaxIndex` rides in a
+  // `db.batch` with the upsert, which `countingDeps` counts as one.
+  "/api/v1/run/attempt/answer": 2,
   // Phase 6 Task 7 (#71, P6.7): one image off the candidate's own paper.
   // Measured at **2** in `test/run/media.test.ts` — the attempt join the
   // cookie resolves through, and the one object read. The authorisation
@@ -606,6 +619,12 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // `attemptContext` fails, and mounting one without declaring it fails
   // too.
   "GET /api/v1/run/attempt": "attempt",
+  // Phase 6 Task 8 (#72, P6.8): saving one answer. `attempt` is the scope
+  // as well as the credential — the question must be on the paper
+  // `/start` pinned on this very row, so a candidate cannot write an
+  // answer against a question they were never given even inside their
+  // own workspace.
+  "PUT /api/v1/run/attempt/answer": "attempt",
   // Phase 6 Task 7 (#71, P6.7): the images on the candidate's own paper.
   // `attempt` is not merely the credential here, it is the *scope*: what
   // the route serves is bounded by `layout.media` on the very row the

@@ -115,7 +115,14 @@ it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", 
       .filter(([, authority]) => authority === "attempt")
       .map(([endpoint]) => endpoint)
       .sort(),
-  ).toEqual(["GET /api/v1/run/attempt", "GET /api/v1/run/attempt/media/:key"]);
+  ).toEqual([
+    "GET /api/v1/run/attempt",
+    "GET /api/v1/run/attempt/media/:key",
+    // Task 8 (#72, P6.8): the save path. The attempt token is the scope
+    // as well as the credential — the question must be on the paper this
+    // very row pinned.
+    "PUT /api/v1/run/attempt/answer",
+  ]);
 });
 
 it("every endpoint the attempt allowlist names refuses a caller with no cookie", async () => {

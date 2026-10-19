@@ -42,6 +42,7 @@
 
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
+import { z } from "zod";
 import {
   appendAudit,
   countAttemptsForCandidate,
@@ -52,6 +53,7 @@ import {
   instant,
   listResponses,
   newId,
+  upsertResponse,
   workspaceGroups,
   workspaceQuestions,
   type PublishedTest,
@@ -94,6 +96,62 @@ export const RECEIPT_WINDOW_MS = 60 * 60_000;
  * (standing decision 4).
  */
 export const MEDIA_BASE = "/api/v1/run/attempt/media/";
+
+/**
+ * The save path (Task 8, #72), as one constant.
+ *
+ * `ROUTE_BUDGETS` keys on the mounted path and the browser's queue posts
+ * to it; naming it once keeps the declared budget, the measured budget
+ * and the URL from drifting apart in three files.
+ */
+export const ANSWER_PATH = "/api/v1/run/attempt/answer";
+
+/**
+ * The longest text one answer may carry, in characters of JSON string.
+ *
+ * A trust boundary, not a product rule: `max_length` is per question and
+ * belongs to grading, but *something* has to stop a candidate's browser —
+ * or a script wearing its cookie — from writing a megabyte into a D1 row
+ * on a 100,000-write daily budget. Generous enough that no real
+ * `long_answer` meets it.
+ */
+export const MAX_ANSWER_TEXT = 50_000;
+
+/**
+ * `ResponseValue`, at the door.
+ *
+ * `@pariksha/core` declares the union as a type and the graders are
+ * already defensive about it (`r.kind === "number"` and so on), so this
+ * is not about correctness downstream — it is about never storing a shape
+ * nobody will ever be able to read, and about bounding what one row can
+ * hold. The nine arms are `ResponseValue`'s nine arms; a tenth added
+ * there without a line here is a 400 on a real answer, which is a failing
+ * test rather than a silent acceptance.
+ */
+const answerText = z.string().max(MAX_ANSWER_TEXT);
+const answerKey = z.string().min(1).max(400);
+const answerList = z.array(answerKey).max(400);
+
+const responseValue: z.ZodType<ResponseValue> = z.union([
+  z.object({ kind: z.literal("option"), option: answerKey }),
+  z.object({ kind: z.literal("options"), options: answerList }),
+  z.object({ kind: z.literal("boolean"), value: z.boolean() }),
+  z.object({ kind: z.literal("map"), pairs: z.record(answerKey, answerKey) }),
+  z.object({ kind: z.literal("multimap"), pairs: z.record(answerKey, answerList) }),
+  z.object({ kind: z.literal("order"), items: answerList }),
+  z.object({ kind: z.literal("blanks"), values: z.record(answerKey, answerText) }),
+  z.object({ kind: z.literal("number"), value: z.number().finite() }),
+  z.object({ kind: z.literal("text"), text: answerText }),
+]);
+
+const answerRequest = z.object({
+  questionId: z.string().min(1).max(200),
+  /** `null` is a cleared answer, which is a save and not an absence. */
+  value: responseValue.nullable(),
+  /** The browser's own monotonic counter. `upsertResponse` compares it,
+   *  and `AttemptPaper.clientSeq` is what a fresh client seeds it from. */
+  clientSeq: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+});
 
 /** Reconciliation row 8: `timing` is optional on `Test` and these
  *  defaults live only in the builder UI, so the server applies its own —
@@ -138,6 +196,18 @@ export interface AttemptPaper {
    *  and the label is what a receipt and a regrade have to agree on. */
   setNo?: string;
   responses: Record<string, ResponseValue | null>;
+  /**
+   * The highest `client_seq` the server holds for this attempt, and 0 on
+   * a fresh one — **the seed for the browser's own counter** (Task 8).
+   *
+   * Without it, a second tab or a wiped `localStorage` restarts that
+   * counter at 1, every save comes back `superseded` because
+   * `upsertResponse` stores only a strictly higher sequence, the queue
+   * drops each one as "the server holds newer", and the candidate is
+   * shown "Saved" over answers that were never written. It is the one
+   * data-loss path in this design that passes every other test.
+   */
+  clientSeq: number;
   navigation: NavigationMode;
   maxIndex: number;
   remainingMs: number;
@@ -420,6 +490,7 @@ export function paperFrom(input: {
   sectionStartedAt: number | null;
   maxIndex: number;
   responses: Record<string, ResponseValue | null>;
+  clientSeq: number;
   now: number;
 }): AttemptPaper {
   const timing = timingOf(input.settings);
@@ -430,6 +501,7 @@ export function paperFrom(input: {
     sections: input.layout.paper,
     ...(input.layout.setNo === undefined ? {} : { setNo: input.layout.setNo }),
     responses: input.responses,
+    clientSeq: input.clientSeq,
     navigation: timing.navigation ?? "free",
     maxIndex: input.maxIndex,
     remainingMs: Math.max(0, input.deadlineAt - input.now),
@@ -598,6 +670,7 @@ export async function startAttempt(
       sectionStartedAt: null,
       maxIndex: 0,
       responses: {},
+      clientSeq: 0,
       now,
     }),
   };
@@ -694,6 +767,10 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     for (const row of rows) responses[row.questionId] = row.value as ResponseValue | null;
     return c.json(
       paperFrom({
+        // Task 8's seed, off the rows this read already returned — so it
+        // is free, and so a browser that has lost its counter cannot
+        // restart below what the server holds.
+        clientSeq: rows.reduce((highest, row) => Math.max(highest, row.clientSeq), 0),
         attemptId: attempt.attemptId,
         layout: attempt.layout,
         settings: attempt.settings,
@@ -706,6 +783,85 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         now: deps.now(),
       }),
     );
+  });
+
+  /**
+   * Saving one answer (Task 8, #72) — the hot path, and **Review Focus 3**.
+   *
+   * Two subrequests and no more: the attempt join the cookie resolves
+   * through, and the one conditional upsert. The PRD's non-functional
+   * table budgets this at one D1 write plus at most one R2 call and a
+   * candidate makes hundreds of them, so the number is pinned with `toBe`
+   * in `test/run/answer.test.ts` rather than bounded.
+   *
+   * **The write is not re-implemented here.** `upsertResponse` is one
+   * statement — `INSERT … ON CONFLICT DO UPDATE … WHERE
+   * excluded.client_seq > response.client_seq` — which is already the
+   * idempotent, sequence-safe upsert this route needs, and `{ stored }`
+   * already says whether this call was the one that won. All this handler
+   * does is map that to a wire word.
+   *
+   * **The outcomes are distinct, and that is the whole point.** A queue
+   * that drains on HTTP 200 drains correctly on `superseded` and *also*
+   * drains on every refusal, marks the answer saved, and drops it:
+   *
+   *  * `accepted` (200) — stored. Drop it from the queue.
+   *  * `superseded` (200) — the server holds a higher sequence. Drop it;
+   *    a late retry of 4 after 5 must not regress the answer.
+   *  * 409 — refused. **Keep it**, and never show "Saved". Submitted
+   *    today; Task 9 adds the deadline and Task 10 the navigation rule to
+   *    this same handler, and the queue needs no change when they do
+   *    because it reads the status, not a list of codes.
+   *  * 404 — the question is not on this candidate's pinned paper.
+   *    Nothing was written and nothing ever will be, so the queue drops
+   *    it and says so — but it is not a save, and must not read "Saved"
+   *    either.
+   *
+   * `savedAt` is the server's clock. The browser's is a value a candidate
+   * can change, and `saved_at` is evidence.
+   */
+  routes.put("/attempt/answer", attemptContext(deps), async (c) => {
+    const attempt = c.get("attempt");
+    const parsed = answerRequest.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) {
+      throw new ApiError(400, "invalid_request", "That answer could not be read. Try again.");
+    }
+    const { questionId, value, clientSeq } = parsed.data;
+    const now = deps.now();
+
+    // Time first, then the paper — the order Task 9 and Task 10 extend:
+    // a candidate whose attempt is over should be told that, not told
+    // their question does not exist.
+    if (attempt.submittedAt !== null) {
+      throw conflict(
+        "already_submitted",
+        "You have already submitted this test, so this answer was not saved.",
+      );
+    }
+    // Membership in the pinned layout, in memory, off the row the cookie
+    // already resolved — the same reading the media route authorises by,
+    // and the same single 404 body every refusal in this runtime answers
+    // with (`S-10`).
+    const onPaper = attempt.layout.sections.some((section) =>
+      section.questionIds.includes(questionId),
+    );
+    if (!onPaper) throw new ApiError(404, "not_found", "No such resource.");
+
+    const { stored } = await upsertResponse(deps.db, attempt.workspaceId, {
+      attemptId: attempt.attemptId,
+      questionId,
+      value,
+      clientSeq,
+      savedAt: now,
+    });
+
+    return c.json({
+      outcome: stored ? "accepted" : "superseded",
+      // `AC-13`'s anchor on the hottest path there is: the countdown
+      // re-anchors from every save, so a tab that slept for an hour is
+      // corrected by the next keystroke rather than by a reload (Task 9).
+      remainingMs: Math.max(0, attempt.deadlineAt - now),
+    });
   });
 
   /**
