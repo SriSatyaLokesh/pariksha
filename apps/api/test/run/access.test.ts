@@ -266,6 +266,18 @@ it("invite_only: an invite is bound to its test, and only a `run_invite` is one"
   expect((await redeem(url)).status).toBe(200);
 });
 
+it("invite_only: a link minted for one test is not even tried at another, let alone spent there", async () => {
+  const url = await mintOne("21CS0151");
+  const token = inviteIn(url);
+  // `open-invite` is `invite_only` with no candidate list, so the invite
+  // branch is really reached here. An unsalted digest would match this
+  // row and admit the candidate to a test they were never invited to.
+  expect((await post("/api/v1/run/alpha/open-invite/access", { invite: token })).status).toBe(410);
+  // And the wrong test did not spend it — the link still works where it
+  // belongs, which a read-then-consume would have broken.
+  expect((await redeem(url)).status).toBe(200);
+});
+
 it("invite_only: the entry token an invite yields carries the list row it was minted for", async () => {
   const url = await mintOne("21CS0150");
   const { entryToken } = (await (await redeem(url)).json()) as { entryToken: string };

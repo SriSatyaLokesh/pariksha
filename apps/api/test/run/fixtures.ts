@@ -256,6 +256,7 @@ export const INVITED_CANDIDATES: NewCandidate[] = [
   ...LISTED_CANDIDATES,
   { externalId: "21CS0149", setLabel: "A", formValues: { full_name: "Chetan" } },
   { externalId: "21CS0150", setLabel: "B", formValues: { email: "deepa@vce.ac.in", full_name: "Deepa" } },
+  { externalId: "21CS0151", setLabel: "A", formValues: { full_name: "Esha" } },
 ];
 
 const openWindow = {
@@ -341,6 +342,19 @@ export async function seedAccessModeTests(deps: AppDeps, workspaceId: string): P
         timing: openWindow,
         access: { mode: "sso", allow_email_domains: ["*.ac.in"] },
       },
+      sections: oneSection,
+    },
+  });
+
+  // A second `invite_only` test with **no** candidate list, so an invite
+  // presented at the wrong test reaches the invite branch instead of
+  // being short-circuited by T-21's list check. That is the only way to
+  // see whether the token's digest is really salted with its test.
+  await seedTest(deps, workspaceId, {
+    name: "Open invite",
+    slug: "open-invite",
+    body: {
+      settings: { timing: openWindow, access: { mode: "invite_only" } },
       sections: oneSection,
     },
   });
