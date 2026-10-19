@@ -46,6 +46,11 @@ function clientFor(payload: LandingPayload | Error): RunClient {
     // stub that resolved would hide a screen that started to.
     access: () => Promise.reject(new Error("the landing screen does not pass the gate")),
     requestEmailCode: () => Promise.reject(new Error("the landing screen sends no code")),
+    // Task 3 widened it again. Rejecting, not resolving, for the same
+    // reason: a landing screen that started asking for the registration
+    // form should fail here rather than pass quietly.
+    form: () => Promise.reject(new Error("the landing screen reads no form")),
+    register: () => Promise.reject(new Error("the landing screen registers nobody")),
   };
 }
 

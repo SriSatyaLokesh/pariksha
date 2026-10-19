@@ -11,9 +11,9 @@
 // `ApiClient` has and for the same reason: nothing here may need a deployed
 // Worker to be believed.
 
-import type { AccessMode } from "@pariksha/core";
+import type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent } from "@pariksha/core";
 
-export type { AccessMode };
+export type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent };
 
 /** The five states `deriveState` answers with — the stored column holds
  * only four of them and never `"open"`. */
@@ -70,6 +70,22 @@ export interface AccessRequest {
   captchaToken?: string;
 }
 
+/**
+ * `GET /api/v1/run/:ws/:test/form` — what to put in front of the candidate
+ * once the gate has let them through.
+ *
+ * `registered` is `T-14`'s re-entry: the gate recognised someone who has
+ * already consented and filled this form (a second allowed attempt, a lost
+ * cookie, another device), so the form is skipped and the token `/start`
+ * spends arrives here instead.
+ */
+export interface RegistrationPayload {
+  consent: TestConsent | null;
+  form: RegistrationFormSpec;
+  registered?: boolean;
+  registrationToken?: string;
+}
+
 /** Widened by Tasks 2, 3, 5, 8 and 11. */
 export interface RunClient {
   landing(): Promise<LandingPayload>;
@@ -79,6 +95,23 @@ export interface RunClient {
   /** The `email_code` mode's first leg. Resolves on 202 and tells the
    *  caller nothing else — the code goes to an inbox. */
   requestEmailCode(email: string): Promise<void>;
+  /** The consent text and the registration form, behind the entry token.
+   *  410 (`RunError`, `entry_expired`) once the token has been spent. */
+  form(entryToken: string): Promise<RegistrationPayload>;
+  /**
+   * The submission. The server re-checks every rule the browser just
+   * checked, so a 422 carries `issues` positioned on their fields — the
+   * same `FieldIssue[]` `validateRegistration` produced locally, with the
+   * same messages, which is what makes showing either one correct.
+   *
+   * `values` carries the form's own field ids plus the reserved
+   * `"consent"` key, which is the acceptance rather than a stored answer.
+   */
+  register(
+    entryToken: string,
+    values: Record<string, unknown>,
+    captchaToken?: string,
+  ): Promise<{ registrationToken: string }>;
 }
 
 /** The error envelope every route answers with: `{ error: { code, message } }`. */
@@ -94,6 +127,21 @@ export class RunError extends Error {
   }
 }
 
+const bearer = (entryToken: string): Record<string, string> => ({
+  authorization: `Bearer ${entryToken}`,
+});
+
+/** A 422 from `register`: the server's own copy of the rules, refused. */
+export class RegistrationInvalid extends RunError {
+  readonly issues: FieldIssue[];
+
+  constructor(message: string, issues: FieldIssue[]) {
+    super(422, "invalid_registration", message);
+    this.name = "RegistrationInvalid";
+    this.issues = issues;
+  }
+}
+
 async function send<T>(path: string, init: RequestInit = {}): Promise<T | null> {
   // Same origin, no credentials to send: a candidate carries no cookie and
   // the attempt token (Task 5) is its own header, not an ambient one.
@@ -103,13 +151,18 @@ async function send<T>(path: string, init: RequestInit = {}): Promise<T | null> 
   });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
-      | { error?: { code?: string; message?: string } }
+      | { error?: { code?: string; message?: string; details?: { issues?: unknown } } }
       | null;
-    throw new RunError(
-      res.status,
-      body?.error?.code ?? "request_failed",
-      body?.error?.message ?? "This test is not available.",
-    );
+    const code = body?.error?.code ?? "request_failed";
+    const message = body?.error?.message ?? "This test is not available.";
+    // The one refusal that carries more than a sentence: a registration
+    // the server re-checked and rejected names every field it rejected,
+    // so the screen can put each one back beside its own input.
+    const issues = body?.error?.details?.issues;
+    if (code === "invalid_registration" && Array.isArray(issues)) {
+      throw new RegistrationInvalid(message, issues as FieldIssue[]);
+    }
+    throw new RunError(res.status, code, message);
   }
   // 202 and 204 carry no body. Returning `null` rather than throwing on
   // the parse keeps "it worked and said nothing" distinct from "it
@@ -121,10 +174,14 @@ async function get<T>(path: string): Promise<T> {
   return (await send<T>(path)) as T;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T | null> {
+async function post<T>(
+  path: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Promise<T | null> {
   return send<T>(path, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
 }
@@ -143,6 +200,16 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
     requestEmailCode: async (email) => {
       await post(`${base}/email-code`, { email });
     },
+    form: (entryToken) =>
+      send<RegistrationPayload>(`${base}/form`, { headers: bearer(entryToken) }) as Promise<
+        RegistrationPayload
+      >,
+    register: async (entryToken, values, captchaToken) =>
+      (await post<{ registrationToken: string }>(
+        `${base}/register`,
+        { values, ...(captchaToken === undefined ? {} : { captchaToken }) },
+        bearer(entryToken),
+      )) ?? { registrationToken: "" },
   };
 }
 

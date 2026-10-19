@@ -520,19 +520,28 @@ function FieldEditor({
           Phase 6's. */}
       {field.type === "url" && (
         <>
+          {/* T-19 is deferred: fetching an organiser-chosen URL from the
+              registration path is an SSRF surface inside a 10 ms CPU
+              budget, and Phase 6 has nowhere to show the flag. The
+              switch is disabled rather than removed, because a switch
+              that silently does nothing is worse than an absent one —
+              an organiser would tick it and believe links were being
+              checked. The copy names the phase so the promise has a
+              date on it. */}
           <label className="form-builder__flag">
             <input
               type="checkbox"
+              disabled
               checked={v?.check_reachable === true}
               onChange={(event) =>
                 onChange((f) => withValidation(f, "check_reachable", event.target.checked || undefined))
               }
             />
-            Check the link is reachable
+            Check the link is reachable (not yet — Phase 8)
           </label>
           <p className="form-builder__fact">
-            The link a candidate gives is fetched once, at registration. One that does not answer 200 is flagged as
-            unverified for you to look at — it is never refused, and nothing is blocked.
+            Checking a candidate&rsquo;s link at registration is not built yet. When it is, a link that does not
+            answer 200 will be flagged as unverified for you to look at — never refused, and nothing blocked.
           </p>
           {v?.check_reachable === true && <UrlCheck id={`${ids}-try`} check={checkUrl} />}
         </>

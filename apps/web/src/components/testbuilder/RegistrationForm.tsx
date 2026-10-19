@@ -1,6 +1,7 @@
 import { useId } from "react";
 import {
-  assertSafeRegex,
+  validateField as validateFieldRule,
+  validateRegistration,
   type FormField,
   type FormFieldType,
   type RegistrationFormSpec,
@@ -12,10 +13,14 @@ import {
 // cannot drift from what a candidate actually sees.
 //
 // It takes `values`/`errors` from its caller and owns no submission — the
-// builder holds throwaway preview state, Phase 6 holds the real answer. The
-// one thing it does own is `validateField` (below), because a preview that
-// invented its own error messages would be exactly the drift this file
-// exists to prevent.
+// builder holds throwaway preview state, Phase 6 holds the real answer.
+//
+// **The rules are no longer here.** They moved to
+// `@pariksha/core`'s `validateRegistration` (Phase 6 Task 3, #67), because
+// the server has to re-check every one of them and a copy in each place is
+// the drift `docs/test-format.md:110` forbids. `validateField` and
+// `validateForm` below are the two-line adapters this file's callers
+// already expect: a sentence rather than a `FieldIssue`.
 
 /**
  * The input type, autocomplete token and `inputmode` each field type gets —
@@ -143,136 +148,31 @@ export const FORM_TEMPLATES: Readonly<
   },
 };
 
-/** `*.edu.in` / `drive.google.com` — the glob dialect `allowed_domains`
- * uses. One `*` stands for one or more label characters, nothing else; a
- * full regex here would be organiser-authored and unbounded.
- *
- * Three bounds, because this compiles an organiser's string to a live
- * `RegExp` in the *candidate's* browser and Phase 6 runs the same function
- * on the server (whole-branch security review, H1):
- *
- * 1. **Count the stars in the whole pattern, not the run.** The shipped
- *    `\*+` collapse merged only *adjacent* stars; `*a*a*a*a*a*a*a*b.com`
- *    is twenty characters, survives it untouched, and still compiles to
- *    eight abutting `[^.]+` — 32 ms on a 44-character host, and eleven
- *    stars did not finish in two minutes. One `*` is the dialect.
- * 2. **`assertSafeRegex` on the compiled source**, the same gate
- *    `validation.pattern` goes through one function below, so this path
- *    is no longer the one construction site without it.
- * 3. **A length cap**, because the compiled source grows with the pattern.
- *
- * An entry that fails any of them simply does not match. That is the
- * opposite of the `pattern` branch below — which lets the candidate
- * through on an organiser's bad regex — and deliberately so: a pattern is
- * a format hint, an allowlist is a gate, and a gate fails closed. Nothing
- * can store such an entry any more (`formDomainIssues` refuses it at save
- * and at publish); this is for rows written before that rule existed.
- */
-function domainAllowed(host: string, patterns: readonly string[]): boolean {
-  const lower = host.toLowerCase();
-  return patterns.some((pattern) => {
-    if (pattern.length > 253 || (pattern.match(/\*/g) ?? []).length > 1) return false;
-    const source = `^${pattern
-      .toLowerCase()
-      .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-      .replace(/\*/g, "[^.]+")}$`;
-    try {
-      assertSafeRegex(source);
-    } catch {
-      return false;
-    }
-    return new RegExp(source).test(lower);
-  });
-}
-
-function hostOf(value: string, kind: "email" | "url"): string | null {
-  if (kind === "email") return value.includes("@") ? (value.split("@").pop() ?? null) : null;
-  try {
-    return new URL(value).hostname;
-  } catch {
-    return null;
-  }
-}
-
-/** True for "the candidate has not answered this yet", for every control
- * shape: a blank box, an unticked consent, an empty checkbox group. */
-function isBlank(value: unknown): boolean {
-  if (value === undefined || value === null || value === false) return true;
-  if (typeof value === "string") return value.trim() === "";
-  if (Array.isArray(value)) return value.length === 0;
-  return false;
-}
-
 /**
- * One field's error sentence, or `undefined`. The *same* function the
- * builder's preview and Phase 6's candidate registration both call — a
- * second copy beside the real one is the defect this phase keeps finding.
+ * One field's error sentence, or `undefined` — `validateRegistration`'s
+ * rule for one field, rendered as the string this file's callers take.
  *
- * The server re-checks every one of these at registration (Phase 6): this
- * is the courtesy half, not the gate.
+ * The browser passes no matcher, so `@pariksha/core` uses `RegExp.test`
+ * and an organiser's unsafe or unparseable pattern simply passes: that is
+ * the *organiser's* defect, told to them by `unsatisfiableValidation` in
+ * the field editor and again at the publish gate, and refusing a
+ * candidate's answer over it would punish the wrong party. The server
+ * passes `matchBounded`, which adds `assertSafeRegex` and the same input
+ * cap, and reaches the same answer.
  */
 export function validateField(field: FormField, value: unknown): string | undefined {
-  if (isBlank(value)) return field.required === true ? "This answer is required." : undefined;
-  const v = field.validation;
-  if (v === undefined) return undefined;
-
-  if (typeof value === "string") {
-    if (v.min_length !== undefined && value.length < v.min_length) {
-      return `Use at least ${v.min_length} characters.`;
-    }
-    if (v.max_length !== undefined && value.length > v.max_length) {
-      return `Use at most ${v.max_length} characters.`;
-    }
-    if (v.pattern !== undefined) {
-      try {
-        assertSafeRegex(v.pattern);
-        if (!new RegExp(v.pattern).test(value)) {
-          return v.pattern_message ?? "This is not in the format this field expects.";
-        }
-      } catch {
-        // An unsafe or unparseable pattern is the *organiser's* defect, not
-        // the candidate's: `unsatisfiableValidation` (@pariksha/core) is
-        // what tells them, in the builder's own alert row and again at the
-        // publish gate. Refusing a candidate's answer over it would be the
-        // wrong party to punish.
-      }
-    }
-    if (v.allowed_domains !== undefined && (field.type === "email" || field.type === "url")) {
-      const host = hostOf(value, field.type);
-      if (host === null || !domainAllowed(host, v.allowed_domains)) {
-        return `Use an address at ${v.allowed_domains.join(", ")}.`;
-      }
-    }
-  }
-
-  if (field.type === "number") {
-    const n = Number(value);
-    if (Number.isNaN(n)) return "Enter a number.";
-    if (v.integer === true && !Number.isInteger(n)) return "Enter a whole number.";
-    if (typeof v.min === "number" && n < v.min) return `Enter ${v.min} or more.`;
-    if (typeof v.max === "number" && n > v.max) return `Enter ${v.max} or less.`;
-  }
-
-  if (field.type === "date" && typeof value === "string") {
-    if (typeof v.min === "string" && value < v.min) return `Choose ${v.min} or later.`;
-    if (typeof v.max === "string" && value > v.max) return `Choose ${v.max} or earlier.`;
-  }
-
-  return undefined;
+  return validateFieldRule(field, value)?.message;
 }
 
 /** Every field's error at once — what a caller about to submit wants, and
- * what the builder's preview recomputes on each change. */
+ *  what the builder's preview recomputes on each change. */
 export function validateForm(
   form: RegistrationFormSpec,
   values: Readonly<Record<string, unknown>>,
 ): Record<string, string> {
-  const errors: Record<string, string> = {};
-  for (const field of form.fields) {
-    const message = validateField(field, values[field.id]);
-    if (message !== undefined) errors[field.id] = message;
-  }
-  return errors;
+  return Object.fromEntries(
+    validateRegistration(form, values).map((issue) => [issue.field, issue.message]),
+  );
 }
 
 export function RegistrationForm({

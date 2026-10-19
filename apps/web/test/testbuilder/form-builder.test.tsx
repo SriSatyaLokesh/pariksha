@@ -474,7 +474,16 @@ describe("validateField — the one copy both halves call", () => {
     expect(validateField(field, "rao@gmail.com")).toMatch(/\*\.edu\.in/);
     // The glob is one label, not "anything": a subdomain of a subdomain
     // does not quietly pass.
-    expect(validateField(field, "rao@a.b.ac.in")).toMatch(/\*\.edu\.in/);
+    // Phase 6 Task 3 (#67) settled the dialect on `invalidDomainGlob`'s,
+    // which is the one the schema validates and the access gate's
+    // `emailInDomains` already used: `*.ac.in` covers `ac.in` and
+    // everything below it. This file's own copy read `*` as *exactly*
+    // one label, so `*.edu.in` refused `edu.in` and accepted only
+    // `x.edu.in` — a candidate let through the access gate's domain rule
+    // and refused by the form's, which is the drift
+    // `test-format.md:110` forbids.
+    expect(validateField(field, "rao@a.b.ac.in")).toBeUndefined();
+    expect(validateField(field, "rao@ac.in")).toBeUndefined();
   });
 
   it("a glob with more than one star is never compiled, so it cannot backtrack", () => {
@@ -507,7 +516,7 @@ describe("validateField — the one copy both halves call", () => {
     // One star is the dialect, and still means exactly one label.
     const ok = { ...field, validation: { allowed_domains: ["*.com"] } };
     expect(validateField(ok, "rao@a.com")).toBeUndefined();
-    expect(validateField(ok, "rao@a.b.com")).toMatch(/\*\.com/);
+    expect(validateField(ok, "rao@a.b.com")).toBeUndefined();
   });
 
   it("a blank answer is required-or-nothing, never a format complaint", () => {
