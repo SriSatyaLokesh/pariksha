@@ -78,12 +78,20 @@ export function TestBuilder({
   // instructions used to cost one PATCH *and* one full GET, with no
   // debounce and no in-flight guard — eleven keystrokes on a slow link cost
   // eleven round trips, and a reply landing after a later keystroke reset
-  // the controlled input mid-type. Debounced the way `TestList`'s own
-  // filter already is (same pattern, copied); the PATCH response's own
-  // `body` replaces local state directly rather than a follow-up GET —
-  // nothing here needs `draw`/`setPoints`/`points` fresher than the next
-  // full reload — and `saveSeq` (above) drops a response whose request is
-  // no longer the latest.
+  // the controlled input mid-type.
+  //
+  // What it does now (task 4 review, MIN-2 — this comment used to claim
+  // there was no follow-up GET, eight lines above the one there is):
+  // the save is debounced the way `TestList`'s own filter already is (same
+  // pattern, copied), so a burst of keystrokes costs one round trip rather
+  // than one each. One *settled* save is then followed by one
+  // `GET …/draft`, because PATCH deliberately answers without
+  // `draw`/`setPoints`/`points` (apps/api/src/routes/tests.ts) and without
+  // the re-fetch UX-15's live draw and UX-12's points froze from the first
+  // keystroke onward. Only the derived figures are taken from it —
+  // `{ ...fresh, body: prev.body }` — so a slow GET cannot type over the
+  // author, and `saveSeq` (above) drops both responses outright once a
+  // newer save has started.
   useEffect(() => {
     if (pendingSections === null) return;
     const seq = ++saveSeq.current;
