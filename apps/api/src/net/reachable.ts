@@ -52,7 +52,17 @@ export interface ReachResult {
   state: ReachState;
   /** The HTTP status, where there was one. Never a transport-level detail:
    * "connection refused" and "no such host" are the same `unverified` with
-   * `status: null`, so this cannot answer "is something listening there". */
+   * `status: null`, so this cannot answer "is something listening there".
+   *
+   * One channel survives that, and it is timing rather than content: every
+   * refusal and every transport failure returns promptly, while only a host
+   * that accepts the connection and then stalls costs the full
+   * `REACH_TIMEOUT_MS` — so `timeout` still separates "filtered, dropping
+   * packets" from "refusing, or not resolving". Small (an authenticated
+   * Author, a public name, a web port, no body read) but real, and the one
+   * thing the indistinguishable-`unverified` design above does not close.
+   * Folding `timeout` into `unverified` would close it and take away the
+   * retry #58 requires, so it is named here instead (task 5/6 review, m1). */
   status: number | null;
   /** Why it was refused. Present only on `refused` — a sentence for the
    * organiser, never an error from the network. */
