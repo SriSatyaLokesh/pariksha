@@ -39,6 +39,18 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
     css: false,
+    // jsdom warm-up plus React's first mount plus the first jest-dom/jest-axe
+    // matcher are all charged to whichever test renders first in a file:
+    // measured at 5-80x the median of every later test in the same file
+    // (sections-s4-s6's first `render` took 3.9 s against a 49 ms median).
+    // `pnpm test` is Turborepo running five package test tasks at once, each
+    // vitest sizing its own pool to every core, which stretches apps/web from
+    // 6.4 s standalone to 36 s — so the 5 s default leaves ~1.3x of headroom
+    // and a different handful of first-render tests loses the race each run
+    // (#161). That is real CPU in the only jsdom project here, not a hang;
+    // the node-environment packages keep the 5 s default so a genuine hang
+    // there still fails fast.
+    testTimeout: 20_000,
     // e2e/*.spec.ts matches Vitest's default include, and a Playwright spec
     // loaded by Vitest fails in a way that reads like a broken unit test.
     // `pnpm test` stays the fast suite; `pnpm --filter @pariksha/web e2e`
