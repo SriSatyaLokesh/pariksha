@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Pariksha">
-  <rect width="32" height="32" fill="#e24c18"/>
-  <g fill="none" stroke="#fffbf5" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter">
+  <rect width="32" height="32" fill="#19e68c"/>
+  <g fill="none" stroke="#04140c" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter">
     <path d="M5 23.5h6"/>
     <path d="M23 10.5l-6.5 6 6.5 6"/>
   </g>
