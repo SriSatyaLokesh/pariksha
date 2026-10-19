@@ -1094,6 +1094,11 @@ describe("validateTest", () => {
     ["10.0.0.0.0/24", /not an IPv4 address/],
     ["not-an-address/24", /not an IPv4 address/],
     ["2001:db8:::1/32", /not an IPv6 address/],
+    // Two `::` runs: the address is ambiguous, and this one has exactly
+    // eight groups, so only the "at most one run" rule refuses it.
+    ["1:2::3:4::5:6:7:8/64", /not an IPv6 address/],
+    ["1:2:3:4:5:6:7/64", /not an IPv6 address/],
+    ["1:2:3:4:5:6:7:8:9/64", /not an IPv6 address/],
     ["2001:dg8::/32", /not an IPv6 address/],
     ["fe80::1%eth0/64", /not an IPv6 address/],
     ["::ffff:10.0.0.1/96", /not an IPv6 address/],

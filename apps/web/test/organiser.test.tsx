@@ -886,4 +886,59 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       { settings: { timing: { timezone: "Asia/Kolkata", duration_minutes: 90 } } },
     ]);
   });
+  // Task 8 (#60, P5.7), an eighth time: access.test.tsx renders
+  // `AccessPanel` directly. This walks the app to it and checks the save
+  // goes out through the one draft route — and, the point of Review Focus
+  // 3, that switching mode sends an `access` object with the old mode's
+  // code *gone* rather than merged over, because the server merges
+  // `settings` one level deep and would keep whatever arrives.
+  it("reaches the access panel from the app's own entry point and drops the old mode's code on the wire", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: { access: { mode: "link_code" as const, access_code: "APTI-2026" } }, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const patchDraft = vi.fn(async () => DRAFT);
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "Who can take this test" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+
+    // The shell debounces at 250 ms (apps/web/src/routes/test.tsx).
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual(["wsp_1", "tst_1", { settings: { access: { mode: "sso" } } }]);
+    expect(JSON.stringify(patchDraft.mock.calls[0])).not.toContain("APTI-2026");
+  });
 });

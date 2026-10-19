@@ -387,3 +387,39 @@
   gap: var(--space-xs);
   color: var(--color-ink-soft);
 }
+
+/* Task 8 (#60, P5.7): access modes and allowlists. */
+.access-panel,
+.access-panel__group,
+.access-panel__choice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.access-panel__group {
+  border: 1px solid var(--color-hairline);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+.access-panel__fact,
+.access-panel__summary {
+  margin: 0;
+  color: var(--color-muted);
+}
+
+.access-panel__legend {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.access-panel__risk {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+}

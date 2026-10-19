@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { TestTiming } from "@pariksha/core";
+import type { TestAccess, TestTiming } from "@pariksha/core";
 import { ApiError, type ApiClient, type DraftPatch, type StoredSection, type TestVersionRow } from "../lib/api";
 import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
 import { TimingPanel } from "../components/testbuilder/TimingPanel";
+import { AccessPanel } from "../components/testbuilder/AccessPanel";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -26,6 +27,13 @@ function sectionFromUrl(): string | null {
  * schemas/test-1.json's `$defs/timing` requires, and every other field has
  * a documented default it is omitted until the organiser overrides. */
 const DEFAULT_TIMING: TestTiming = { duration_minutes: 60 };
+
+/** `mode` is the one member `$defs/access` requires, and `link_code` is
+ * the mode docs/test-format.md describes first — the public link plus a
+ * code announced in the room. The code itself is typed next, which is a
+ * separate keystroke and therefore a separate save (see `draftSchema`,
+ * apps/api/src/routes/tests.ts). */
+const DEFAULT_ACCESS: TestAccess = { mode: "link_code" };
 
 export function TestBuilder({
   workspaceId,
@@ -206,6 +214,13 @@ export function TestBuilder({
             sections={draft.body.sections}
             published={published}
             onChange={(timing) => saveSettings({ timing })}
+          />
+        )}
+
+        {draft !== null && (
+          <AccessPanel
+            access={draft.body.settings.access ?? DEFAULT_ACCESS}
+            onChange={(access) => saveSettings({ access })}
           />
         )}
 
