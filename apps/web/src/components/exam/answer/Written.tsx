@@ -2,7 +2,7 @@ import { useId, useMemo } from "react";
 import { placeholderIds } from "@pariksha/core";
 import type { CandidateQuestion } from "../Runner";
 import { useRenderedMarkdown } from "../../authoring/RenderedHtml";
-import { MAX_LENGTH_CEILING } from "../../answer-common";
+import { MAX_LENGTH_CEILING, numberFieldValue } from "../../answer-common";
 import type { AnswerProps } from "./props";
 
 /**
@@ -37,23 +37,6 @@ export const BLANK_MARKER = (id: string): string => `${SEP}pkb:${id}${SEP}`;
 /** Capturing, so `String.prototype.split` yields
  * `[text, id, text, id, …, text]` — the blanks at the odd indices. */
 const MARKER_RE = new RegExp(`${SEP}pkb:([^${SEP}]*)${SEP}`, "g");
-
-/**
- * A number field's value, or `null` for an empty or unusable one.
- *
- * The general form of a bug fixed three times in three files here
- * (`ReorderableList`'s position field, `authoring/answer/Written.tsx`'s
- * value and tolerance, `authoring/answer/Choice.tsx`'s k): `Number("")`
- * is `0`, so a candidate who clears a numeric answer silently submits
- * zero — a wrong answer, under negative marking a penalty, where they
- * meant to submit nothing at all. Every numeric field in the application
- * wants exactly this, and nothing else.
- */
-export function numberFieldValue(raw: string): number | null {
-  if (raw.trim() === "") return null;
-  const value = Number(raw);
-  return Number.isFinite(value) ? value : null;
-}
 
 function FillBlank({ question, value, onChange, disabled }: AnswerProps) {
   const declared = useMemo(

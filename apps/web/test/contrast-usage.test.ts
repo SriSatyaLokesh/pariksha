@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll } from "vitest";
 // Phase 5 moved contrastRatio into core so the brand-colour gate on the two
 // write paths and this stylesheet audit cannot disagree (Task 10, 240aa68).
 import { contrastRatio } from "@pariksha/core";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import {
@@ -10,6 +9,10 @@ import {
   type ColorName,
   type TypographyName,
 } from "../src/styles/tokens";
+// Fix round 1: one `@import` resolver for the suite — this file had
+// the only correct one, and Task 7's no-animation gate grew a
+// narrower copy. Both call `test/css-chain.ts` now.
+import { readResolvedCss } from "./css-chain";
 
 // The Signal rebuild replaced landing.css's own rules with two imports —
 // primitives.css (shared with admin.css; five selectors still used by the
@@ -66,21 +69,6 @@ const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
 // text, `body` and `.skip-link`, and both are checked directly, by the same
 // WCAG formula, in the "base.css" describe block below. That closes the gap
 // a plain exclusion comment would otherwise leave undocumented.
-const IMPORT_RE = /@import\s+["']\.\/([a-zA-Z0-9_-]+\.css)["'];?/g;
-
-function stripComments(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, "");
-}
-
-function readResolvedCss(path: string, seen: Set<string> = new Set()): string {
-  if (seen.has(path)) return ""; // guard against an accidental import cycle
-  seen.add(path);
-  const raw = stripComments(readFileSync(path, "utf8"));
-  return raw.replace(IMPORT_RE, (_whole, file: string) =>
-    readResolvedCss(resolve(dirname(path), file), seen),
-  );
-}
-
 // A selector's declared colour can render on more than one real background
 // (the four syntax-colour roles and the code block they live in, A3's
 // explicit requirement) — SURFACE may name one background or several, and

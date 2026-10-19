@@ -48,3 +48,27 @@ export function reordered<T>(items: readonly T[], from: number, to: number): T[]
   next.splice(to, 0, moved!);
   return next;
 }
+
+/**
+ * A number field's value, or `null` for an empty or unusable one.
+ *
+ * The general form of a bug this repo has now fixed three times in three
+ * files: `Number("")` is `0`, so a field a user clears reads back as
+ * zero rather than as nothing. On the candidate's numeric answer that is
+ * the expensive version — a cleared answer silently submits 0, which is
+ * a wrong answer and, under negative marking, a penalty, where they
+ * meant to submit nothing at all.
+ *
+ * It lives here rather than beside the one caller that needed it first
+ * so the three existing sites can actually adopt it: `ReorderableList`'s
+ * position field, `authoring/answer/Written.tsx`'s value and tolerance,
+ * and `authoring/answer/Choice.tsx`'s `k`. Each of those guards the case
+ * correctly by hand today, so none is broken and none is rewritten here;
+ * this is what any new numeric field should use instead of a fourth
+ * hand-rolled guard.
+ */
+export function numberFieldValue(raw: string): number | null {
+  if (raw.trim() === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}

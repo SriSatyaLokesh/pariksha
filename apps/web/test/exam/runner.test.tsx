@@ -5,6 +5,7 @@ import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { readResolvedCss } from "../css-chain";
 import { ExamApp } from "../../src/routes/exam";
 import { Runner, type AttemptPaper, type CandidateQuestion } from "../../src/components/exam/Runner";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
@@ -31,17 +32,6 @@ import type { LandingPayload, RunClient } from "../../src/lib/run";
 
 const NOW = 1_760_000_000_000;
 const EXAM_CSS = resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/exam.css");
-
-/** exam.css with its `@import`s inlined and its comments stripped — the
- * stylesheet a candidate's browser really assembles. */
-function examStylesheet(seen: Set<string> = new Set(), path: string = EXAM_CSS): string {
-  if (seen.has(path)) return "";
-  seen.add(path);
-  const raw = readFileSync(path, "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
-  return raw.replace(/@import\s+["']\.\/([a-zA-Z0-9_-]+\.css)["'];?/g, (_whole, file: string) =>
-    examStylesheet(seen, resolve(dirname(EXAM_CSS), file)),
-  );
-}
 
 function question(n: number): CandidateQuestion {
   return { id: `q${String(n)}`, type: "single", prompt: `Question ${String(n)} stem`, points: 1 };
@@ -422,7 +412,7 @@ describe("the runner shell (C-04)", () => {
     // Task 7 (#71): exam.css now @imports question.css, and a stylesheet
     // the candidate loads is in scope whichever file it lives in — so the
     // import chain is resolved rather than only the entry file read.
-    const css = examStylesheet();
+    const css = readResolvedCss(EXAM_CSS);
     expect(css).not.toMatch(/[\s;{]transition(-[a-z]+)?\s*:/);
     expect(css).not.toMatch(/[\s;{]animation(-[a-z]+)?\s*:/);
     expect(css).not.toMatch(/@keyframes/);

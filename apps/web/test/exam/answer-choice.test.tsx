@@ -21,9 +21,17 @@ import { examPaper, landingPayload, startFromRoot } from "./answer-fixtures";
 // already made in writing (test/authoring/reorder.test.tsx:44,
 // test/exam/landing.test.tsx:88, and Task 6's report decision 4). A
 // focused native control's real Enter/Space activation IS a `click`, so
-// `activate()` below focuses first and then clicks; every claim about a
-// key dispatches a real `keydown` on the element that actually has focus
-// and reads `preventDefault` back off `fireEvent`'s return value.
+// `activate()` below focuses first and then clicks.
+//
+// Corrected in fix round 1: an earlier version of this note claimed every
+// keyboard assertion dispatches a real `keydown`. None here do, and none
+// need to — not one component this task adds defines a key handler of its
+// own, so Task 6's trap (a handler on a container swallowing a key meant
+// for the focused child) has nothing to bite on here; every key these
+// controls answer to is the browser's own. Where this task DOES own an
+// event handler — `ReorderableList`'s drag — the assertion reads
+// `preventDefault` back off `fireEvent`'s return value, in
+// answer-structured.test.tsx and in reorder.test.tsx.
 
 const OPTIONS = [
   { id: "a", text: "Alpha" },
@@ -400,7 +408,7 @@ describe("the passage and the question's media", () => {
   });
 
   it("a passage and media have no axe violations, at 100% and at 200% zoom", async () => {
-    const both: CandidateQuestion = { ...withPassage, media: withMedia.media };
+    const both: CandidateQuestion = { ...withPassage, media: withMedia.media ?? [] };
     const { container } = render(<Harness question={both} />);
     await screen.findByText(/read the passage/i);
     expect(await axe(container)).toHaveNoViolations();
@@ -410,7 +418,7 @@ describe("the passage and the question's media", () => {
   });
 
   it("a passage and media are still inert when the attempt is read-only", () => {
-    const both: CandidateQuestion = { ...withPassage, media: withMedia.media };
+    const both: CandidateQuestion = { ...withPassage, media: withMedia.media ?? [] };
     const { container } = render(<Harness question={both} disabled />);
     for (const control of container.querySelectorAll<HTMLElement>("input")) {
       expect(control).toBeDisabled();

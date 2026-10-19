@@ -315,18 +315,18 @@ describe("the candidate runtime's exam entry (#65, P6.1)", () => {
   // src/components/answer-common.ts; this is what stops the next one.
   // ADMIN_PATH_RE never covered src/components/authoring, so nothing
   // else in this file would have noticed.
-  it("no authoring EDITOR is statically reachable from the exam entry", () => {
-    const modules = staticModules(entryChunks, "exam");
-    expect(
-      modules.filter((id) => /src[\\/]components[\\/]authoring[\\/]answer/.test(id)),
-    ).toEqual([]);
-    expect(
-      modules.filter((id) =>
-        /src[\\/]components[\\/]authoring[\\/](QuestionEditor|PromptEditor|GroupEditor|ImportDialog|PreviewPane|TypePicker|ScoringRow)/.test(
-          id,
-        ),
-      ),
-    ).toEqual([]);
+  // Fix round 1, I2: an ALLOWLIST, not a list of today's editors. A
+  // denylist naming the seven components that exist now is the same flaw
+  // ADMIN_PATH_RE had — the eighth, added next phase, walks straight
+  // through it. Two files are shared with the candidate on purpose; every
+  // other module under src/components/authoring is organiser-only until
+  // somebody deliberately adds it here, which is a line a reviewer sees.
+  it("no authoring module but the two shared ones reaches the exam entry", () => {
+    const SHARED = ["RenderedHtml", "ReorderableList"];
+    const leaked = staticModules(entryChunks, "exam")
+      .filter((id) => /src[\\/]components[\\/]authoring[\\/]/.test(id))
+      .filter((id) => !SHARED.some((name) => id.includes(`${name}.tsx`)));
+    expect(leaked).toEqual([]);
   });
 
   // The positive control for the assertion above: the Phase 4 modules the
