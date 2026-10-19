@@ -64,9 +64,11 @@ A bank is a named list of questions, plus optional passage groups.
 The schemas check structure. The importer also checks:
 
 - every option ID in a `key` exists in `options`
+- no two options in one question share the same `text` — CSV and GIFT use an option's own text as its id, so a collision would silently rebind the answer key on export; this is checked for every format, including Pariksha JSON
 - a `select_k` key has exactly `k` entries and `k` is less than the number of options
 - every `matching` / `multi_matching` key uses only items from `left` and `right`, and every `matching` right item is used at most once
 - every `fill_blank` blank has a matching `{{id}}` in the prompt, and every placeholder has a blank
+- a `fill_blank` blank with `match: "regex"` has a pattern safe against catastrophic backtracking
 - question IDs are unique within the bank, and every `group` exists
 
 Import is all-or-nothing. A file with any error imports nothing and returns a list of errors with their positions.
@@ -77,7 +79,7 @@ Import is all-or-nothing. A file with any error imports nothing and returns a li
 
 A cell that does not fit its own grammar — a `true_false` key that isn't exactly `true`/`false` (including `TRUE`, which spreadsheet software autocapitalizes), a `numeric` value or tolerance that doesn't parse as a number, a non-numeric `points` — is reported at its row, never silently turned into a plausible-looking wrong answer.
 
-**Caution:** an option's own text is its id (neither format has a separate id column); two options sharing identical text bind a `key` to whichever of them comes first. This is a property of the grammar, not something the importer checks for — keep option text distinct within a question.
+**Note:** an option's own text is its id (neither format has a separate id column). The importer refuses two options sharing identical text within a question, for every format including Pariksha JSON (see "Rules checked on import" above) — keep option text distinct within a question.
 
 ### CSV
 
