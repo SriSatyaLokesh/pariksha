@@ -161,8 +161,35 @@ describe("KaTeX is lazy and stays lazy (ADR 0004, Review Focus 1)", () => {
     const renderEntry = rendererChunks.find(
       (chunk) => chunk.isEntry && chunk.name === "render",
     );
+    expect(renderEntry, "render").toBeDefined();
     const byFile = new Map(rendererChunks.map((chunk) => [chunk.fileName, chunk]));
-    const dynamic = (renderEntry?.dynamicImports ?? []).map((file) => byFile.get(file));
+
+    // Fix round (whole-branch review, C1): now that `admin` also reaches
+    // this same renderer (QuestionEditor -> PreviewPane -> markdown.ts, by
+    // way of the bank/question screens C1 wired up), this isolated build
+    // merges `render`'s input with the config file's `admin`/`island`
+    // entries (vite's `build()` merges `rollupOptions.input`, it does not
+    // replace it) — two entries now share the renderer module, so Rollup is
+    // free to hoist the dynamic `import("katex")` edge onto a shared chunk
+    // reached from `render` only by a *static* import, rather than keeping
+    // it on the entry chunk itself. Which file holds the edge is Rollup's
+    // business; that it is still a dynamic edge somewhere in the graph
+    // `render` statically reaches is the actual guarantee this test checks
+    // — so the search now walks every chunk reachable by static import from
+    // `render`, unioning their dynamic imports, instead of reading only the
+    // entry chunk's own.
+    const seen = new Set<string>();
+    const queue = [renderEntry?.fileName ?? ""];
+    const dynamicTargets = new Set<string>();
+    while (queue.length > 0) {
+      const file = queue.pop() ?? "";
+      if (seen.has(file)) continue;
+      seen.add(file);
+      const chunk = byFile.get(file);
+      for (const next of chunk?.imports ?? []) queue.push(next);
+      for (const dyn of chunk?.dynamicImports ?? []) dynamicTargets.add(dyn);
+    }
+    const dynamic = [...dynamicTargets].map((file) => byFile.get(file));
     expect(dynamic.some((chunk) => chunk !== undefined && hasKatex(chunk))).toBe(true);
   });
 });

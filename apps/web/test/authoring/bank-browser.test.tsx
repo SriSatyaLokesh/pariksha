@@ -94,7 +94,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 
 describe("BankBrowser", () => {
   it("UX-04: the browser is a table with prompt, type, difficulty, tags, points, last edited and used-in", async () => {
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     // The headers are static JSX and render before `load()`'s promise
     // settles, but awaiting a `findBy` here (rather than asserting
     // synchronously) lets that promise's state update land inside an
@@ -108,14 +108,14 @@ describe("BankBrowser", () => {
   });
 
   it("UX-03: a tag with a slash renders as a breadcrumb chip and groups the left rail", async () => {
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     const rail = screen.getByRole("navigation", { name: /filters/i });
     expect(await within(rail).findByText("sdlc")).toBeVisible();
     expect(screen.getByRole("button", { name: "sdlc / agile" })).toBeVisible();
   });
 
   it("UX-04: rows select with a checkbox and the bulk bar reports the count", async () => {
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     const checkboxes = await screen.findAllByRole("checkbox", { name: /select question/i });
     fireEvent.click(checkboxes[0]!);
     expect(screen.getByText(/1 selected/)).toBeVisible();
@@ -127,14 +127,14 @@ describe("BankBrowser", () => {
         throw new ApiError(409, "question_in_use", "blocked", { blockedBy: ["Midterm"] });
       },
     });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     fireEvent.click(await screen.findByRole("button", { name: /delete/i }));
     expect(await screen.findByText(/Midterm/)).toBeVisible();
   });
 
   it("finding 10: each row's delete button has a distinct accessible name", async () => {
     const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }) });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     const deleteButtons = await screen.findAllByRole("button", { name: /^delete question:/i });
     expect(deleteButtons).toHaveLength(2);
@@ -144,7 +144,7 @@ describe("BankBrowser", () => {
 
   it("finding 12: changing a filter clears the selection", async () => {
     const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }) });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     const checkboxes = await screen.findAllByRole("checkbox", { name: /select question/i });
     fireEvent.click(checkboxes[0]!);
@@ -155,12 +155,21 @@ describe("BankBrowser", () => {
   });
 
   it("the bank list and the browser have no axe violations", async () => {
-    const list = render(<BankList workspaceId="wsp_1" client={fakeClient()} onOpenBank={() => undefined} />);
+    const list = render(
+      <BankList
+        workspaceId="wsp_1"
+        client={fakeClient()}
+        actorEmail="author@example.edu"
+        onSignOut={() => undefined}
+        onBack={() => undefined}
+        onOpenBank={() => undefined}
+      />,
+    );
     expect(await list.findByText("SQL basics")).toBeVisible();
     expect(await axe(list.container)).toHaveNoViolations();
     list.unmount();
 
-    const browser = render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} />);
+    const browser = render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={fakeClient()} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     expect(await browser.findByText("Which HTTP method is idempotent?")).toBeVisible();
     expect(await axe(browser.container)).toHaveNoViolations();
   });
@@ -171,7 +180,7 @@ describe("BankBrowser", () => {
   it("the browser with passage groups listed has no axe violations", async () => {
     const group: PassageGroupSummary = { id: "orders-table", title: "Orders", passage: "x", questionCount: 2 };
     const client = fakeClient({ listGroups: async () => [group] });
-    const browser = render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    const browser = render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     expect(await browser.findByText("Orders (2 questions)")).toBeVisible();
     expect(await axe(browser.container)).toHaveNoViolations();
   });
@@ -180,7 +189,7 @@ describe("BankBrowser", () => {
   it("lists the bank's passage groups and opens a new-group form", async () => {
     const group: PassageGroupSummary = { id: "orders-table", title: "Orders", passage: "x", questionCount: 2 };
     const client = fakeClient({ listGroups: async () => [group] });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     expect(await screen.findByText("Orders (2 questions)")).toBeVisible();
     expect(screen.queryByLabelText("Group ID")).not.toBeInTheDocument();
@@ -196,7 +205,7 @@ describe("BankBrowser", () => {
       listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }),
       exportBank,
     });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     const exportButton = await screen.findByRole("button", { name: /^export bank$/i });
     fireEvent.click(exportButton);
@@ -217,7 +226,7 @@ describe("BankBrowser", () => {
         throw new ApiError(500, "unexpected_response", "The bank could not be reached.");
       },
     });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     const exportButton = await screen.findByRole("button", { name: /^export bank$/i });
     exportButton.focus();
@@ -235,7 +244,7 @@ describe("BankBrowser", () => {
   // relying on the axe passes elsewhere in this file to catch it.
   it("the export control's accessible name contains its visible label", async () => {
     const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION, QUESTION_2] }) });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     function labelInName(button: HTMLElement): void {
       const visible = button.textContent!.trim().toLowerCase();
@@ -258,7 +267,7 @@ describe("BankBrowser", () => {
         throw new ApiError(409, "group_in_use", "blocked", { questions: ["DIN-001", "DIN-002"] });
       },
     });
-    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} />);
+    render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete passage group: Orders" }));
     expect(await screen.findByText(/DIN-001, DIN-002/)).toBeVisible();
