@@ -404,7 +404,8 @@
 /* Task 8 (#60, P5.7): access modes and allowlists. */
 .access-panel,
 .access-panel__group,
-.access-panel__choice {
+.access-panel__choice,
+.access-panel__half {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
@@ -435,6 +436,27 @@
   align-items: baseline;
   gap: var(--space-xs);
   color: var(--color-ink-soft);
+}
+
+/* Task 9 (#60 / #56, P5.7b): the candidate list's dry-run report. One row
+   per issue, each naming the line of the uploaded file it is about. */
+.access-panel__issues {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.access-panel__issues caption {
+  text-align: left;
+  color: var(--color-muted);
+  padding-bottom: var(--space-xs);
+}
+
+.access-panel__issues th,
+.access-panel__issues td {
+  border-bottom: 1px solid var(--color-hairline);
+  padding: var(--space-xs);
+  text-align: left;
+  vertical-align: top;
 }
 
 /* Task 10 (#61, P5.8): result release and branding. */

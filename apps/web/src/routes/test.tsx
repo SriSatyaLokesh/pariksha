@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { can } from "@pariksha/core";
-import type { TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
+import type { FormField, TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
 import {
   ApiError,
   type Actor,
   type ApiClient,
+  type CandidateRow,
   type DraftPatch,
   type StoredSection,
   type TestVersionRow,
@@ -82,7 +83,13 @@ export function TestBuilder({
   // T-23's workspace half (Task 10). Loaded beside the draft rather than
   // inside `BrandingPanel`, so the panel stays a controlled component like
   // every other one in this shell and the shell keeps owning every call.
+  const canManageCandidates = role !== undefined && can({ role, action: "candidates.manage" });
   const [workspaceBranding, setWorkspaceBranding] = useState<TestBranding>(NO_BRANDING);
+  // Task 9 (#60 / #56, P5.7b). Loaded beside the draft, and only when this
+  // actor holds `candidates.manage` — the route 403s otherwise, and an
+  // Author opening the builder must not meet an error banner for a panel
+  // they are only being shown read-only.
+  const [candidates, setCandidates] = useState<readonly CandidateRow[]>([]);
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
   const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
@@ -100,23 +107,28 @@ export function TestBuilder({
 
   const load = useCallback(async () => {
     try {
-      const [test, version, branding] = await Promise.all([
+      const [test, version, branding, listed] = await Promise.all([
         client.test(workspaceId, testId),
         client.draft(workspaceId, testId),
         // An Author cannot write workspace branding but can read it — the
         // route is `requireMember`, not `workspace.settings` — and has to,
         // because the preview below is what their candidates will see.
         client.workspaceBranding(workspaceId),
+        // Unlike branding, the candidate list is not readable without
+        // `candidates.manage`, so an Author asks for nothing rather than
+        // collecting a 403 that would fail this whole load.
+        canManageCandidates ? client.candidates(workspaceId, testId) : Promise.resolve([]),
       ]);
       setName(test.name);
       setPublished(test.currentVersion !== null);
       setWorkspaceBranding(branding);
+      setCandidates(listed);
       setDraft(version);
       setError(undefined);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "The test could not be loaded.");
     }
-  }, [client, workspaceId, testId]);
+  }, [client, workspaceId, testId, canManageCandidates]);
 
   useEffect(() => {
     void load();
@@ -296,6 +308,20 @@ export function TestBuilder({
           <AccessPanel
             access={draft.body.settings.access ?? DEFAULT_ACCESS}
             onChange={(access) => saveSettings({ access })}
+            candidates={candidates}
+            identityField={identityFieldOf(draft.body.settings.registration_form)}
+            canManageCandidates={canManageCandidates}
+            onImportCandidates={async (csv, opts) => {
+              const report = await client.importCandidates(workspaceId, testId, csv, opts);
+              // A dry run changed nothing, so there is nothing to re-read;
+              // a real one replaced the list, and the count the panel
+              // prints has to come from storage rather than from the
+              // report it just rendered.
+              if (!opts.dryRun && report.issues.length === 0) {
+                setCandidates(await client.candidates(workspaceId, testId));
+              }
+              return report;
+            }}
           />
         )}
 
@@ -329,4 +355,14 @@ export function TestBuilder({
       </main>
     </>
   );
+}
+
+/** The field a candidate list is keyed on: the first `unique: true` field
+ * in the registration form's own order. The same rule
+ * `apps/api/src/import/candidates.ts` applies — stated in both places
+ * because the panel prints it and the converter keys on it, and a screen
+ * naming one column while the server wants another is the defect this
+ * exists to avoid. */
+function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
+  return form?.fields.find((field) => field.unique === true) ?? null;
 }

@@ -4,8 +4,10 @@ import {
   invalidCidr,
   invalidDomainGlob,
   type AccessMode,
+  type FormField,
   type TestAccess,
 } from "@pariksha/core";
+import type { CandidateImportReport, CandidateRow } from "../../lib/api";
 import { useDialogKeys } from "./useDialogKeys";
 
 // T-20, T-21 (Task 8, #60, P5.7): how a candidate gets in, and who is let
@@ -77,13 +79,35 @@ function parseList(raw: string): string[] {
 export function AccessPanel({
   access,
   onChange,
+  candidates,
+  identityField,
+  canManageCandidates,
+  onImportCandidates,
 }: {
   access: TestAccess;
   onChange: (next: TestAccess) => void;
+  // T-20's other half (Task 9, #60 / #56, P5.7b): the candidate list. It
+  // lives here rather than on a screen of its own because it *is* who can
+  // take the test — `invite_only` has no meaning without it, and
+  // `from_candidate_list` set assignment reads it.
+  candidates: readonly CandidateRow[];
+  /** The test's first `unique: true` registration field — what the list is
+   *  keyed on. Null when the form has none, which is the one case an
+   *  upload cannot work at all. */
+  identityField: FormField | null;
+  /** Whether this actor holds `candidates.manage`. An Author holds
+   *  `tests.edit` and not this, so they can build the whole test and not
+   *  upload its list. The server refuses either way; this is so they are
+   *  told rather than 403'd after choosing a file. */
+  canManageCandidates: boolean;
+  onImportCandidates: (csv: string, opts: { dryRun: boolean }) => Promise<CandidateImportReport>;
 }) {
   const ids = useId();
   const [rotating, setRotating] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [report, setReport] = useState<CandidateImportReport | null>(null);
+  const [staged, setStaged] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | undefined>(undefined);
   // The two allowlists are edited as text and only parsed into the
   // document when every line is one the server would accept — a half-typed
   // "10.0.0.0/2" on the way to "/24" must not be stored and must not be
@@ -103,6 +127,35 @@ export function AccessPanel({
       : undefined;
 
   const dialog = useDialogKeys<HTMLDivElement>(rotating, () => setRotating(false));
+  const replaceDialog = useDialogKeys<HTMLDivElement>(staged !== null, () => setStaged(null));
+
+  const withoutSet = candidates.filter((row) => row.setLabel === null).length;
+
+  /** Reads the chosen file and runs it past the server without writing —
+   * UX-13's shape applied to an upload: the organiser sees what would
+   * happen, line by line, before anything replaces anything. */
+  async function stage(file: File): Promise<void> {
+    setUploadError(undefined);
+    const csv = await file.text();
+    try {
+      const dry = await onImportCandidates(csv, { dryRun: true });
+      setReport(dry);
+      setStaged(dry.issues.length === 0 ? csv : null);
+    } catch (cause) {
+      setStaged(null);
+      setReport(null);
+      setUploadError(cause instanceof Error ? cause.message : "The candidate list could not be read.");
+    }
+  }
+
+  async function commitUpload(csv: string): Promise<void> {
+    setStaged(null);
+    try {
+      setReport(await onImportCandidates(csv, { dryRun: false }));
+    } catch (cause) {
+      setUploadError(cause instanceof Error ? cause.message : "The candidate list could not be saved.");
+    }
+  }
 
   function setMode(mode: AccessMode): void {
     // Built from scratch, never merged: every key the old mode owned is
@@ -224,7 +277,12 @@ export function AccessPanel({
           <button type="button" className="button-secondary" onClick={() => setRotating(true)}>
             Rotate the access code
           </button>
-          <p role="status" className="access-panel__fact">
+          {/* Named, because the candidate-list upload below is a second
+              live region in the same panel and a screen reader user
+              hearing one of two unnamed statuses cannot tell which fired.
+              Hyphenated so the name does not also answer the control
+              queries — `getByLabelText(/access code/i)` is the input. */}
+          <p role="status" aria-label="Access-code clipboard" className="access-panel__fact">
             {copied ? "Access code copied." : ""}
           </p>
         </div>
@@ -251,6 +309,110 @@ export function AccessPanel({
       </div>
 
       <p className="access-panel__summary">{describeAllowlists(access)}</p>
+
+      <section aria-labelledby={`${ids}-candidates-heading`} className="access-panel__half">
+        <h3 id={`${ids}-candidates-heading`}>The candidate list</h3>
+        <p className="access-panel__fact">
+          {`${candidates.length} candidate${candidates.length === 1 ? "" : "s"} · ${withoutSet} with no set`}
+        </p>
+
+        <div className="field">
+          <label className="field-label" htmlFor={`${ids}-candidate-file`}>
+            Candidate list
+          </label>
+          <input
+            id={`${ids}-candidate-file`}
+            type="file"
+            accept=".csv,text/csv"
+            disabled={!canManageCandidates || identityField === null}
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) void stage(file);
+            }}
+          />
+          {identityField === null ? (
+            // A fact beside a disabled control, not a `role="alert"`: a
+            // test that has not reached its registration form yet has
+            // nothing wrong with it, and an assertive warning on every
+            // fresh draft is the noise UX-13 exists to avoid. UX-17's
+            // publish-checklist row is where this becomes a warning.
+            <p className="access-panel__fact">
+              This test has no registration field marked unique, so a list cannot be keyed. Mark one — a roll number
+              or a college email address — in the registration form first.
+            </p>
+          ) : (
+            <p className="access-panel__fact">
+              {`Expected columns: ${identityField.id} (required), set (optional), and any other registration field.`}
+            </p>
+          )}
+          {!canManageCandidates && (
+            <p className="access-panel__fact">Needs an Admin — candidate lists are managed by Admins and Owners</p>
+          )}
+        </div>
+
+        {report !== null && report.issues.length > 0 && (
+          <>
+            <p className="access-panel__risk" role="alert">
+              <span aria-hidden="true">⚠ </span>
+              Nothing was imported. Fix the file and upload it again.
+            </p>
+            <table className="access-panel__issues">
+              <caption>What stopped this candidate list</caption>
+              <thead>
+                <tr>
+                  <th scope="col">Line</th>
+                  <th scope="col">Column</th>
+                  <th scope="col">Problem</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.issues.map((problem) => (
+                  <tr key={`${problem.line}-${problem.field}-${problem.message}`}>
+                    <td>{`line ${problem.line}`}</td>
+                    <td>{problem.field}</td>
+                    <td>{problem.message}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+
+        <p role="status" aria-label="Candidate-list upload" className="access-panel__fact">
+          {report !== null && report.issues.length === 0 && staged === null
+            ? `${report.imported} candidates imported.`
+            : ""}
+        </p>
+        {uploadError !== undefined && (
+          <p className="access-panel__risk" role="alert">
+            <span aria-hidden="true">⚠ </span>
+            {uploadError}
+          </p>
+        )}
+      </section>
+
+      {staged !== null && (
+        <div
+          role="dialog"
+          aria-label="Replace the candidate list"
+          ref={replaceDialog.dialogRef}
+          tabIndex={-1}
+          onKeyDown={replaceDialog.onKeyDown}
+        >
+          <p>
+            {`Replace the ${candidates.length} listed candidate${
+              candidates.length === 1 ? "" : "s"
+            } with the ${report?.imported ?? 0} in this file?`}
+          </p>
+          <p>Candidates who have already registered are kept.</p>
+          <button type="button" className="button-secondary" onClick={() => setStaged(null)}>
+            Cancel
+          </button>
+          <button type="button" className="button-primary" onClick={() => void commitUpload(staged)}>
+            Replace the list
+          </button>
+        </div>
+      )}
 
       {rotating && (
         <div

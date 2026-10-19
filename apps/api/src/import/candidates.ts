@@ -18,7 +18,8 @@
 // span more than one line, which arithmetic cannot see.
 //
 // This file reports; it never throws and never writes. All-or-nothing is
-// the route's: `replaceCandidateList` runs only when `issues` is empty.
+// the route's and only the route's: `replaceCandidateList` runs only when
+// `issues` is empty, and `rows` is partial whenever it is not.
 
 import type { FormField, ImportIssue, RegistrationFormSpec } from "@pariksha/core";
 import type { NewCandidate } from "@pariksha/db";
@@ -165,7 +166,13 @@ export function convertCandidateCsv(
     rows.push({ externalId, setLabel: rawSet === "" ? null : rawSet, formValues });
   }
 
-  return { rows: issues.length > 0 ? [] : rows, issues };
+  // `rows` holds only the lines that converted, so it is partial whenever
+  // `issues` is non-empty. That is deliberate and the caller's business:
+  // all-or-nothing is the route's gate (it refuses before reading `rows`
+  // at all), and blanking the array here as well was a second copy of the
+  // rule that no test could ever see fail — a mutation run found exactly
+  // that and nothing caught it.
+  return { rows, issues };
 }
 
 /** Every set label the test's `sets` sections declare, deduplicated — what

@@ -116,6 +116,10 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadMedia: async () => {
       throw new Error("not used by this test file");
     },
+    candidates: async () => [],
+    importCandidates: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

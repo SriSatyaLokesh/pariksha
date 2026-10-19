@@ -14,11 +14,26 @@ import { useState } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import type { TestAccess } from "@pariksha/core";
+import type { FormField, TestAccess } from "@pariksha/core";
+import type { CandidateImportReport, CandidateRow } from "../../src/lib/api";
 
 import { ACCESS_CONSEQUENCE, AccessPanel } from "../../src/components/testbuilder/AccessPanel";
 
-function Harness({ initial, onChange }: { initial?: TestAccess; onChange?: (next: TestAccess) => void }) {
+function Harness({
+  initial,
+  onChange,
+  candidates = [],
+  identityField = EMAIL_FIELD,
+  canManageCandidates = true,
+  onImportCandidates = async () => ({ imported: 0, issues: [] }),
+}: {
+  initial?: TestAccess;
+  onChange?: (next: TestAccess) => void;
+  candidates?: readonly CandidateRow[];
+  identityField?: FormField | null;
+  canManageCandidates?: boolean;
+  onImportCandidates?: (csv: string, opts: { dryRun: boolean }) => Promise<CandidateImportReport>;
+}) {
   const [access, setAccess] = useState<TestAccess>(initial ?? { mode: "link_code", access_code: "APTI-2026" });
   return (
     <AccessPanel
@@ -27,9 +42,21 @@ function Harness({ initial, onChange }: { initial?: TestAccess; onChange?: (next
         onChange?.(next);
         setAccess(next);
       }}
+      candidates={candidates}
+      identityField={identityField}
+      canManageCandidates={canManageCandidates}
+      onImportCandidates={onImportCandidates}
     />
   );
 }
+
+/** The worked example's first `unique: true` field. */
+const EMAIL_FIELD: FormField = {
+  id: "email",
+  type: "email",
+  label: "College email address",
+  unique: true,
+};
 
 const ranges = (): HTMLElement => screen.getByLabelText(/ip ranges/i);
 const domains = (): HTMLElement => screen.getByLabelText(/email domains/i);
@@ -160,7 +187,11 @@ describe("AccessPanel", () => {
       fireEvent.click(screen.getByRole("button", { name: /copy the access code/i }));
 
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith("APTI-2026");
-      await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent(/access code copied/i));
+      // Scoped by name, not renamed copy: the candidate-list upload below
+      // is a second live region in this panel (task 9).
+      await waitFor(() =>
+        expect(screen.getByRole("status", { name: "Access-code clipboard" })).toHaveTextContent(/access code copied/i),
+      );
     });
 
     it("rotating states that the old one stops working, before it rotates", () => {

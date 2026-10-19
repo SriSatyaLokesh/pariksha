@@ -99,6 +99,10 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadMedia: async () => {
       throw new Error("not used by this test file");
     },
+    candidates: async () => [],
+    importCandidates: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }
@@ -1010,6 +1014,161 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     const [, , patch] = patchDraft.mock.calls[0] as unknown as [string, string, Record<string, unknown>];
     expect(patch.sections).toHaveLength(1);
     expect(patch.settings).toMatchObject({ access: { mode: "sso" }, timing: { navigation: "linear" } });
+  });
+
+  // Task 9 (#60 / #56, P5.7b), the candidate list.
+  // `candidate-list.test.tsx` renders the panel directly, so it cannot see
+  // whether the running app mounts it, reads the list through the real
+  // client method, knows which actor is looking, or re-reads storage after
+  // an upload instead of trusting the report it just rendered.
+  it("reaches the candidate list from the app's own entry point and uploads through the real client", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: {
+        settings: {
+          registration_form: {
+            fields: [
+              { id: "full_name", type: "short_text" as const, label: "Full name" },
+              { id: "email", type: "email" as const, label: "College email address", unique: true },
+            ],
+          },
+        },
+        sections: [],
+      },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+
+    const listed = {
+      id: "cnd_1",
+      testId: "tst_1",
+      externalId: "a@vce.edu.in",
+      setLabel: null,
+      formValues: {},
+      source: "list" as const,
+      consentVersion: null,
+      createdAt: 0,
+    };
+    // The second read is what the shell does after a real upload: the
+    // count on screen has to come from storage, not from the report.
+    const candidates = vi.fn().mockResolvedValueOnce([listed]).mockResolvedValue([listed, { ...listed, id: "cnd_2" }]);
+    const importCandidates = vi.fn(async () => ({ imported: 2, issues: [] }));
+
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          patchDraft: async () => DRAFT,
+          candidates,
+          importCandidates,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
+    // Read through the real client method, not invented by the panel, and
+    // the expected columns name the form's own first unique field.
+    await waitFor(() => expect(candidates).toHaveBeenCalledWith("wsp_1", "tst_1"));
+    expect(screen.getByText(/1 candidate · 1 with no set/i)).toBeVisible();
+    expect(screen.getByText(/email \(required\), set \(optional\)/i)).toBeVisible();
+
+    const csv = "email,set\na@vce.edu.in,\nb@vce.edu.in,\n";
+    fireEvent.change(screen.getByLabelText("Candidate list"), {
+      target: { files: [new File([csv], "candidates.csv", { type: "text/csv" })] },
+    });
+
+    const dialog = await screen.findByRole("dialog", { name: /replace the candidate list/i });
+    expect(importCandidates).toHaveBeenCalledWith("wsp_1", "tst_1", csv, { dryRun: true });
+
+    fireEvent.click(within(dialog).getByRole("button", { name: /replace the list/i }));
+    await waitFor(() => expect(importCandidates).toHaveBeenLastCalledWith("wsp_1", "tst_1", csv, { dryRun: false }));
+    // Re-read, not taken from the report.
+    await waitFor(() => expect(screen.getByText(/2 candidates · 2 with no set/i)).toBeVisible());
+    expect(candidates).toHaveBeenCalledTimes(2);
+  });
+
+  // The Author half of the same screen: the permission matrix's own
+  // "Manage candidate lists and invites" line, proved against the running
+  // app rather than against a prop.
+  it("an Author reaches the candidate list, cannot upload, and the app never asks for it", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const candidates = vi.fn(async () => []);
+
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+          patchDraft: async () => {
+            throw new Error("not used");
+          },
+          candidates,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+
+    expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Candidate list")).toBeDisabled();
+    expect(screen.getByText("Needs an Admin — candidate lists are managed by Admins and Owners")).toBeVisible();
+    // The route is `candidates.manage`, so asking would 403 and fail the
+    // whole load. The shell does not ask.
+    expect(candidates).not.toHaveBeenCalled();
   });
 
   // Task 10 (#61, P5.8), a ninth time. release-branding.test.tsx renders

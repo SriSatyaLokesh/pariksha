@@ -366,6 +366,50 @@ export interface ApiClient {
    * what `branding.logo` stores.
    */
   uploadMedia(workspaceId: string, bankId: string, file: File): Promise<{ key: string }>;
+
+  // Task 9 (#60 / #56, P5.7b): the candidate list. `workspaceId` first,
+  // like every sibling — the plan's sketch wrote `candidates(testId)`,
+  // which cannot reach a workspace-scoped path at all, the same slip its
+  // `checkUrl(testId, url)` made.
+  candidates(workspaceId: string, testId: string): Promise<CandidateRow[]>;
+  /**
+   * Uploads a candidate list as CSV. `dryRun: true` converts and reports
+   * without writing. A refusal (422) comes back as a report rather than a
+   * thrown `ApiError`, the same normalisation `importBank` does and for
+   * the same reason: the panel renders one report shape either way, and a
+   * genuine transport failure (413, 404, 403) still throws.
+   */
+  importCandidates(
+    workspaceId: string,
+    testId: string,
+    csv: string,
+    opts?: { dryRun?: boolean },
+  ): Promise<CandidateImportReport>;
+}
+
+/** One row of the uploaded list. Mirrors `CandidateRow` in
+ * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */
+export interface CandidateRow {
+  id: string;
+  testId: string;
+  externalId: string | null;
+  setLabel: string | null;
+  formValues: Record<string, unknown>;
+  source: "list" | "registration";
+  consentVersion: string | null;
+  createdAt: number;
+}
+
+export interface CandidateIssue {
+  field: string;
+  message: string;
+  /** The physical line of the uploaded file this is about. */
+  line: number;
+}
+
+export interface CandidateImportReport {
+  imported: number;
+  issues: CandidateIssue[];
 }
 
 const API = "/api/v1";
@@ -640,7 +684,37 @@ export function createApiClient(): ApiClient {
         headers: { "Content-Type": file.type, Accept: "application/json" },
         body: file,
       }),
+
+    candidates: async (workspaceId, testId) =>
+      (await json<{ candidates: CandidateRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/candidates`)).candidates,
+
+    async importCandidates(workspaceId, testId, csv, opts = {}) {
+      const qs = opts.dryRun ? "?dryRun=1" : "";
+      try {
+        return await json<CandidateImportReport>(
+          `/workspaces/${workspaceId}/tests/${testId}/candidates/import${qs}`,
+          { method: "POST", headers: { "Content-Type": "text/csv", Accept: "application/json" }, body: csv },
+        );
+      } catch (error) {
+        // The 422's `details` *is* the report (`imported: 0`, `issues`
+        // populated), so the panel renders one shape whether the upload
+        // landed or not. Anything else — 403, 404, 413 — still throws.
+        if (error instanceof ApiError && error.status === 422 && isCandidateReport(error.details)) {
+          return error.details;
+        }
+        throw error;
+      }
+    },
   };
+}
+
+function isCandidateReport(value: unknown): value is CandidateImportReport {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { imported?: unknown }).imported === "number" &&
+    Array.isArray((value as { issues?: unknown }).issues)
+  );
 }
 
 function isImportReport(value: unknown): value is ImportReport {
