@@ -89,14 +89,16 @@ Phases 1–3 are consumed, never re-implemented: `can()` and `PERMISSIONS` (`pac
 
 **Files:**
 - Create: `docs/adr/0007-review-comments-on-a-draft-test.md` (the next free number at execution time; `docs/adr/README.md` ends at 0006)
-- Modify: `docs/adr/README.md` (index row), `docs/design.md` (replace the "needs an ADR" entry at `:333-336` with the link)
+- Modify: `docs/adr/README.md` (index row), `docs/design.md` (replace the "needs an ADR" entry at `:333-336` with the link), `docs/ROADMAP.md` (a fourth entry under "Decisions that extend the PRD")
 - Test: `packages/core/test/permissions.test.ts`
 
 **Interfaces:**
 - Consumes: `ACTIONS`, `PERMISSIONS`, `can()` (`packages/core/src/permissions.ts`).
 - Produces: no code. The four decisions below are consumed by Task 2 (the `review_requested` column and badge) and Task 12 (export carries no comments).
 
-This is the one task in the phase with no red step: the deliverable is a decision, and the test it leaves behind is a **pin** that passes on the day it is written. Say so in the test's own comment rather than manufacturing a failure.
+**This ADR records a PRD extension, not an implementation of one.** The string "review comment" appears nowhere in `docs/PRD.md`; review on a draft test is `docs/design.md`'s own addition (`UX-10`, argued there as the one real gap its source case study exposes). So it belongs with the three entries under `docs/ROADMAP.md` § "Decisions that extend the PRD" — the public demo, BYOK drafting, and auth moving ahead of the candidate runtime — as a **fourth**, and is written the way those are: what is being added, and what it costs. Write that cost paragraph explicitly, covering the fourteenth permission action and its `AC-23` matrix row, the new table, and the retention and export obligations a row of one person's words about a colleague's work carries that a content row does not.
+
+This is also the one task in the phase with no red step: the deliverable is a decision, and the test it leaves behind is a **pin** that passes on the day it is written. Say so in the test's own comment rather than manufacturing a failure.
 
 The ADR answers the four questions [#148](https://github.com/SriSatyaLokesh/pariksha/issues/148) names. Write these decisions; the argument for each is given, and a reviewer should check the argument rather than the conclusion.
 
@@ -133,9 +135,9 @@ Expected: PASS. It pins the ADR rather than driving it.
 
 Copy `docs/adr/0000-template.md`. Record the four decisions above with their arguments, and the Consequences paragraph naming what Phase 5 does and does not ship.
 
-- [ ] **Step 4: Update the index and design.md**
+- [ ] **Step 4: Update the index, design.md and the roadmap**
 
-Add the row to `docs/adr/README.md`'s table with status Accepted. Replace `docs/design.md:333-336`'s "needs an ADR" entry with a link to it.
+Add the row to `docs/adr/README.md`'s table with status Accepted. Replace `docs/design.md:333-336`'s "needs an ADR" entry with a link to it. Add a fourth entry to `docs/ROADMAP.md` § "Decisions that extend the PRD", in the shape the three already there use.
 
 - [ ] **Step 5: Commit**
 
@@ -1721,8 +1723,8 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 | `sets_unbalanced` | advisory | `set A is 8 points, set B is 6 — 2 apart, tolerance 0` | `T-11`, `UX-16` |
 | `no_unique_field` | advisory | `no registration field is unique, so a candidate can register twice` | `UX-17` |
 | `allowlist_empty` | advisory | `<describeAllowlists output>, which matches nobody` | #60's acceptance |
-| `candidate_list_empty` | blocking | `the candidate list has no rows, so nobody can enter` | #60's acceptance. Blocking **only** when something depends on it — `access.mode` is `invite_only`, or a section assigns `from_candidate_list`; otherwise the row does not appear |
-| `candidate_no_set` | blocking | `4 of 50 candidates have no set, and cannot start` | #56's acceptance. Blocking because the consequence is a candidate who cannot begin an exam, and the fix is in the uploaded file — cheap before publish, impossible after |
+| `candidate_list_empty` | advisory | `the candidate list has no rows, so nobody can enter yet` | #60's acceptance. Shown **only** when something depends on it — `access.mode` is `invite_only`, or a section assigns `from_candidate_list`; otherwise the row does not appear |
+| `candidate_no_set` | advisory | `4 of 50 candidates have no set, and cannot start` | #56's acceptance. Advisory because the candidate list is test-level data publish does not pin — the organiser re-uploads the file afterwards, and for `invite_only` that is the ordinary order of work |
 
 Every row states the **measured fact**, never a category: the message carries the two numbers. `buildChecklist` gets these from `validateTest`'s existing issues wherever it already raises them (the pool and set rules are `packages/core/src/validate.ts:551` and `:571`), so the numbers in the checklist and the numbers an import would report are the same numbers.
 
@@ -1748,15 +1750,19 @@ it("the checklist and publish compute the same rows — one function, two caller
   const fromPublish = (await (await app.request(publishUrl, post({}, adminCookie))).json()).error.details.rows;
   expect(fromPublish).toEqual(fromGet);
 });
-it("an empty candidate list blocks publish for invite_only and does not appear otherwise", async () => {
+it("an empty candidate list is advisory for invite_only and does not appear otherwise", async () => {
   await setAccessMode("invite_only");
-  expect(rowIds(await json(checklistUrl))).toContain("candidate_list_empty");
+  expect((await json(checklistUrl)).find((r) => r.id === "candidate_list_empty")).toMatchObject({ severity: "advisory" });
   await setAccessMode("link_code");
   expect(rowIds(await json(checklistUrl))).not.toContain("candidate_list_empty");
 });
-it("candidates with no set block publish when a section assigns from_candidate_list, and state the count", async () => {
+it("candidates with no set are advisory and state the count", async () => {
   expect((await json(checklistUrl)).find((r) => r.id === "candidate_no_set"))
-    .toMatchObject({ severity: "blocking", message: "4 of 50 candidates have no set, and cannot start" });
+    .toMatchObject({ severity: "advisory", message: "4 of 50 candidates have no set, and cannot start" });
+});
+it("an invite_only test with an empty candidate list publishes — the roster is uploaded afterwards", async () => {
+  await setAccessMode("invite_only");
+  expect((await app.request(publishUrl, post({}, adminCookie))).status).toBe(200);
 });
 it("both candidate rows cost one query, not one per candidate", async () => {
   expect((await withCountingDeps(() => json(checklistUrl))).counts().total)
@@ -1851,11 +1857,11 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 
 **Ruling: `contrastRatio` moves into `@pariksha/core`.** — Why: it exists twice today, byte-identical, at `apps/web/test/contrast.test.ts:23` and `apps/web/test/contrast-usage.test.ts:56`, and T-23's gate needs a third copy in `src` and a fourth on the server. `packages/core` is the pure-leaf home with no runtime dependencies, and `docs/test-format.md`'s "every rule is re-checked on the server" is why the server needs it at all. — Cost if wrong: the module moves to `apps/web/src/lib/` and the server check goes.
 
-**Ruling: the candidate list splits across two phases — Phase 5 ingests the list, Phase 6 mints the invite links.** — Why: the two halves answer to different owners. The list is an input to the builder's own gate — `UX-17`'s checklist has to count its rows, #60's acceptance asks for an empty list to be caught before publish, and #56's `from_candidate_list` reads a `set` column off it — so it has to exist while the test is still a draft. The single-use signed token is an input to the runtime that redeems it (`S-06`, `C-02`), and its hashing, expiry and replay behaviour are decisions the consuming phase owns. Planning both phases in parallel left a hole between them: Phase 6's "Assumed Phase 5 interface" table expected Phase 5 to mint at `POST /tests/{id}/invites` and built only the consume side, while this plan expected Phase 6 to ingest — so neither built the surface. The split closes it, and Task 9's `Produces` block states the row shape explicitly so Phase 6 builds the mint side against real columns. Phase 5 adds **no** token column. — Cost if wrong: if minting should have been Phase 5's, Phase 6 writes one route and one column against rows that already exist; if ingestion should have been Phase 6's, Task 9's migration and repository move forward a phase intact.
+**Ruling: the candidate list splits across two phases — Phase 5 ingests the list, Phase 6 mints the invite links.** — Why: the two halves answer to different owners. The list is an input to the builder's own gate — `UX-17`'s checklist has to count its rows, #60's acceptance asks for an empty list to be caught before publish, and #56's `from_candidate_list` reads a `set` column off it — so it has to exist while the test is still a draft. The single-use signed token is an input to the runtime that redeems it (`S-06`, `C-02`), and its hashing, expiry and replay behaviour are decisions the consuming phase owns. Planning both phases in parallel left a hole between them: Phase 6's "Assumed Phase 5 interface" table expected Phase 5 to mint at `POST /tests/{id}/invites` and built only the consume side, while this plan expected Phase 6 to ingest — so neither built the surface. The split closes it, and Task 9's `Produces` block states the row shape explicitly so Phase 6 builds the mint side against real columns. Phase 5 adds **no** token column, and because the list is test-level data publish never pins, its two checklist rows are advisory under the severity ruling above. — Cost if wrong: if minting should have been Phase 5's, Phase 6 writes one route and one column against rows that already exist; if ingestion should have been Phase 6's, Task 9's migration and repository move forward a phase intact.
 
 **Ruling: two shuffle controls, not the three #56 names.** — Why: `T-10` names two shuffles; `schemas/test-1.json` `$defs/section` carries only `shuffle_questions`, and option order is `shuffle_options` per question (`schemas/question-1.json`, read by `layoutForAttempt` in `packages/core/src/select.ts`), which the Phase 4 editor already owns. No document names a third. #56's "three switches" is satisfied as three rows in one legend — one switch and two statements of fact, including `UX-08`'s. The one variant worth revisiting is a test-level `shuffle: { questions, options }` block (additive within `@1`), and only if organisers ask to override option shuffling per test; it would put a second decider on option order and make `layoutForAttempt` carry a precedence rule between the test setting and the question's own, which is why it is not done now. — Cost if wrong: that block plus one switch — one schema property, one field, one precedence line.
 
-**Ruling: pool shortfall and set imbalance are advisory at publish and blocking at import.** — Why: `T-11` says the builder "warns"; `docs/test-format.md` § "Rules checked on import" says "Import is stricter: it refuses the file for either, because an imported file is one an author can still edit." `design.md`'s `UX-17` "all green" is lower precedence and reads as every row acknowledged, which the confirmation step delivers. — Cost if wrong: two rows change severity; one line each.
+**Ruling: a checklist row blocks only when publish pins the thing it is about; everything else is advisory.** — Why: stated once as a rule so the next row does not have to be argued from scratch. A pool and a set source are resolved against the version publish freezes (`T-04`, "publishing freezes a numbered version"), so a shortfall or an imbalance is genuinely not fixable on that version afterwards — and the PRD still softens *those* to warnings (`T-11`, "the builder **warns**"), with `docs/test-format.md` § "Rules checked on import" making import the strict half ("Import is stricter: it refuses the file for either, because an imported file is one an author can still edit"). A candidate list is keyed `(test_id, external_id)` on a *test*-level table and is not pinned into `test_version` at all, so it stays editable after publish — and for `invite_only`, uploading the roster *after* publishing is the ordinary order of work, because Phase 6 mints invite links against a published version. Blocking the fixable case while the PRD only warns about the unfixable one would be backwards, so `candidate_list_empty` and `candidate_no_set` are advisory alongside `pool_short` and `sets_unbalanced`. The blocking rows are exactly the ones about the frozen document: an empty section, a bankless pool, a backwards or past window, a missing access code or release date, duplicate IDs, and section durations over the whole. `design.md`'s `UX-17` "all green" is lower precedence and reads as every row acknowledged, which the confirmation step delivers. **The test for any row Phase 6 or Phase 8 adds later: does publish freeze the thing this row is about?** — Cost if wrong: a row changes severity; one word each.
 
 **Ruling: `scoring.set_points_tolerance` is added to `pariksha/test@1`.** — Why: `T-11` says sets may differ "by more than a set amount" and names no home for the amount; `validateTest` already takes it as `options.setPointsTolerance` with a default of 0 and a comment saying the PRD names no number (`packages/core/src/validate.ts:394-411`). Adding a field within a major version is allowed by `docs/test-format.md` § Versioning. — Cost if wrong: one schema property removed and the parameter hardcoded to 0.
 
@@ -1894,7 +1900,7 @@ The planner's calls, not the PRD's. Listed so a human can overrule them cheaply.
 - `AC-04` passes: `examples/reasoning-aptitude/test.json` round-trips through import and export byte-for-byte including `consent`, `proctoring` and `retention`, carries no `tst_`, `qst_`, `bnk_`, `ver_` or `workspace_id`, and a clone reproduces the same settings and sections under a new ID, slug and short code.
 - `AC-09`, `AC-10` and `AC-11` pass against the *published version read back through `getTestVersion`*: round robin over 5 sets splits 50 registrations 10 each with no two consecutive alike; a pool draws `count` distinct matching questions per candidate; two candidates on one set get different question and option orders and pinned options do not move. `AC-11`'s refresh case is Phase 6's.
 - The UX-05 guarantee still holds and is now exact: a question referenced only by an unpublished draft can be deleted, the same reference in a published version refuses the delete and names the test, and a published pool's questions are undeletable because a bankless pool cannot be published.
-- The candidate list is real, queryable data: `examples/reasoning-aptitude/candidates.csv` imports whole keyed on the test's `unique` field, a bad line imports nothing and reports its position, an Author is 403, and the publish gate blocks on an empty list under `invite_only` and on rows with no set under `from_candidate_list`. Invite minting is Phase 6's and no token column exists.
+- The candidate list is real, queryable data: `examples/reasoning-aptitude/candidates.csv` imports whole keyed on the test's `unique` field, a bad line imports nothing and reports its position, an Author is 403, and the publish gate *warns* — never blocks — on an empty list under `invite_only` and on rows with no set under `from_candidate_list`, because publish pins no part of it. Invite minting is Phase 6's and no token column exists.
 - One publish gate: `GET …/checklist` and `POST …/publish` return the same blocking rows from the same function, every row states its measured numbers, publish succeeds over advisory rows and refuses over blocking ones, and import refuses what publish only warns about.
 - `ROUTE_BUDGETS` covers every route this phase mounts, every entry is pinned with `toBe` against a measurement, no entry reaches 50, and the draft read and the export stay flat in section and question count.
 - `GET /t/:code` is the only route in the application with no guard, and `apps/api/test/authorization.test.ts` says so.
