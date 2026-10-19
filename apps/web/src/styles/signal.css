@@ -63,18 +63,24 @@
   letter-spacing: -0.012em;
 }
 
-.signal p {
+/* :where() keeps the .signal scoping class out of these rules' specificity
+   (A1 fix): plain descendant selectors like `.signal p` would otherwise
+   outrank any single-class component selector applied to the same element
+   (e.g. .signal-btn, .signal-eyebrow, .signal-fine), silently overriding
+   their declared colour — in .signal-btn's case, to the same colour as its
+   own background, making the CTA's text invisible. */
+:where(.signal) p {
   margin: 0 0 15px;
   color: var(--color-signal-text-2);
   max-width: 62ch;
 }
 
-.signal strong {
+:where(.signal) strong {
   color: var(--color-signal-text);
   font-weight: 600;
 }
 
-.signal code {
+:where(.signal) code {
   font-family: var(--type-mono-sm-family);
   font-size: 0.86em;
   color: var(--color-signal-text);
@@ -156,7 +162,7 @@
   box-shadow: none;
 }
 
-.signal a {
+:where(.signal) a {
   color: var(--color-signal-accent);
 }
 
@@ -671,12 +677,19 @@
   color: var(--color-signal-accent);
 }
 
+/* A1 fix: the shared --color-flag-review/-risk tokens are tuned for the
+   organiser screens' light canvas (admin.css's .field-error, 6.5:1+ there)
+   and fall well under 4.5:1 on this dark surface — no single hex clears
+   both a near-white and a near-black background. .signal-pill--clean
+   already uses a signal-native token (signal-accent) rather than
+   flag-clean; these two just complete that pattern instead of reusing a
+   colour picked for the opposite surface. */
 .signal-pill--review {
-  color: var(--color-flag-review);
+  color: var(--color-signal-flag-review);
 }
 
 .signal-pill--risk {
-  color: var(--color-flag-risk);
+  color: var(--color-signal-flag-risk);
 }
 
 /* ---- metrics -------------------------------------------------------- */

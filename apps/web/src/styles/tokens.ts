@@ -32,6 +32,8 @@ export const tokens = {
     "signal-accent": "#19e68c",
     "signal-accent-deep": "#0fa968",
     "signal-accent-ink": "#04140c",
+    "signal-flag-review": "#f59e0b",
+    "signal-flag-risk": "#f87171",
     scrim: "rgba(35, 31, 29, 0.55)",
     shadow: "#231f1d",
   },
