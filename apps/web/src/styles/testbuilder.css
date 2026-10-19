@@ -108,6 +108,9 @@
      readable at phone width instead of hiding words behind an ellipsis. */
   overflow-wrap: anywhere;
   white-space: normal;
+  /* Fix round (task 3 review, I12): the question count, points and time
+     figures in this sentence, same as `.test-id` above. */
+  font-variant-numeric: tabular-nums;
 }
 
 .section-row__draw {
@@ -130,6 +133,10 @@
 .section-row__balance td {
   padding-inline-end: var(--space-md);
   text-align: start;
+  /* Fix round (task 3 review, I12): a column of points meant to be
+     compared at a glance — the entire reason this table exists — does not
+     line up with proportional digits. */
+  font-variant-numeric: tabular-nums;
 }
 
 .section-row__undo {
@@ -197,6 +204,8 @@
 
 .picker-drawer__points {
   color: var(--color-muted);
+  /* Fix round (task 3 review, I12). */
+  font-variant-numeric: tabular-nums;
 }
 
 .picker-drawer__footer {

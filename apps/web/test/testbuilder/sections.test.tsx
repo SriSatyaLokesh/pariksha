@@ -329,6 +329,15 @@ describe("SectionList", () => {
     expect(button).toHaveClass("section-row__summary");
   });
 
+  it("fix round (task 3 review, I12): counts, points and durations use tabular figures", () => {
+    const css = readFileSync(resolve(import.meta.dirname, "../../src/styles/testbuilder.css"), "utf8");
+    for (const selector of [".section-row__summary", ".section-row__balance th", ".picker-drawer__points"]) {
+      const escaped = selector.replace(/[.]/g, "\\.");
+      const rule = new RegExp(`${escaped}[^{]*\\{[^}]*\\}`).exec(css)?.[0] ?? "";
+      expect(rule, `${selector}'s rule`).toMatch(/font-variant-numeric:\s*tabular-nums/);
+    }
+  });
+
   it("the section list and the picker drawer have no axe violations", async () => {
     const { container: closed } = render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
     expect(await axe(closed)).toHaveNoViolations();
