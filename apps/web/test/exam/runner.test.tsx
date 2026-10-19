@@ -347,10 +347,12 @@ describe("the runner shell (C-04)", () => {
   });
 
   it("the persisted font size is read back from storage, not left behind on <html>", () => {
-    // The plan's own version of the test above passes whether or not
-    // anything is persisted: cleanup() does not touch <html>, so the
-    // attribute it asserts is still the one the click wrote. Clearing it
-    // first is what makes the remount prove the read-back.
+    // The plan's own version above leans on the remount overwriting the
+    // attribute with its own default (measured: it does, so that test is
+    // not vacuous). This one does not lean on anything: the attribute is
+    // deleted between the two renders, so only a real read-back can put
+    // it there — and the radio's checked state is asserted too, which the
+    // attribute alone never proves.
     render(<Runner {...props()} />);
     fireEvent.click(screen.getByRole("radio", { name: /large/i }));
     expect(localStorage.getItem("pariksha.view.fontScale")).toBe("1.5");
