@@ -56,6 +56,7 @@ import {
 import { limitMisses, limitOrThrow } from "../run/limit.js";
 import { sha256Hex } from "../auth/tokens.js";
 import { registrationRoutes } from "../run/registration.js";
+import { attemptRoutes } from "../run/attempt.js";
 import { clientIp, emailInDomains, ipInRanges } from "../run/net.js";
 import { identityField } from "../import/candidates.js";
 
@@ -534,6 +535,13 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
   // Task 3 (#67, P6.3): consent and registration, behind the entry token
   // the four modes above all end in.
   routes.route("/", registrationRoutes(deps));
+
+  // Task 5 (#69, P6.5): minting the attempt and resuming it. `GET
+  // /attempt` is a static first segment, which Hono prefers to the
+  // `:workspaceSlug` parameter beside it — and `resolvePublishedTest`
+  // refuses the slug "attempt" outright, so the two can never be
+  // confused even by someone reading a log.
+  routes.route("/", attemptRoutes(deps));
 
   return routes;
 }

@@ -10,6 +10,7 @@ import type { StorageAdapter } from "@pariksha/storage";
 import type { Action } from "@pariksha/core";
 import type { AppEnv } from "./env.js";
 import type { Actor } from "./auth/session.js";
+import type { AttemptContextVar } from "./middleware/attemptContext.js";
 import { securityHeaders } from "./middleware/security.js";
 import { logging } from "./middleware/logging.js";
 import { errorEnvelope, notFoundEnvelope } from "./middleware/errorEnvelope.js";
@@ -55,7 +56,15 @@ export interface AppDeps {
 }
 
 export type AppBindings = {
-  Variables: RequestIdVariables & { actor: Actor | null };
+  Variables: RequestIdVariables & {
+    actor: Actor | null;
+    /**
+     * Phase 6 Task 5 (#69): the attempt the candidate's cookie names,
+     * set by `attemptContext`. Present only on routes that mount it —
+     * which is exactly the `attempt` authority in `ROUTE_AUTH`.
+     */
+    attempt: AttemptContextVar;
+  };
 };
 
 /**
@@ -376,6 +385,27 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // reads of a token they already hold, and no writes.
   "/api/v1/run/:workspaceSlug/:testSlug/challenge": 2,
 
+  // Phase 6 Task 5 (#69, P6.5): minting the attempt, and resuming it.
+  // Both measured in `test/run/start.test.ts` and
+  // `test/run/attempt-context.test.ts`.
+  //
+  // `/start` on its most expensive path — a test whose `sets` section
+  // draws `from_candidate_list` with a null label, so the candidate row
+  // is read *and* the round-robin index is, and whose paper carries a
+  // passage group: `openTest` (1), the registration token's single-use
+  // consume (1), `countAttemptsForCandidate` (1), the candidate row (1),
+  // `countAttemptsForVersion` (1), `workspaceQuestions` (1),
+  // `workspaceGroups` (1) and the insert (1). The bank is read **once**,
+  // never once per question, which is the number this budget exists to
+  // pin. A stale-version refusal costs less and writes one audit row.
+  "/api/v1/run/:workspaceSlug/:testSlug/start": 8,
+  // `GET /attempt`: the one join `readAttemptByTokenHash` is, plus
+  // `listResponses`. The paper is not rebuilt — it is the column
+  // `/start` pinned — so this number is flat in the size of the paper.
+  // **Task 9 will make this route materialise a late submission**; when
+  // it does, this is the line that moves and it must be re-measured.
+  "/api/v1/run/attempt": 2,
+
   // The one organiser route of this phase: authentication (2), the test
   // and its slugs (1), the candidate list (1), the already-invited set
   // (1), one `batch` however long the list is (1), and the audit row (1).
@@ -554,6 +584,20 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // more force than its two neighbours: the challenge **is** a digest of
   // the entry token, so a caller with no token has nothing to be issued.
   "GET /api/v1/run/:workspaceSlug/:testSlug/challenge": "entry",
+
+  // Phase 6 Task 5 (#69, P6.5). `/start` is the last `entry`-shaped
+  // route of the runtime: it answers 401 to a caller with no
+  // `Authorization: Bearer`, and what it takes is the single-use
+  // `run_registration` token `POST .../register` answered with.
+  "POST /api/v1/run/:workspaceSlug/:testSlug/start": "entry",
+
+  // --- attempt: the 256-bit attempt token, as an HttpOnly cookie --------
+  // Phase 6 Task 5 (#69, P6.5). The only authority with middleware of
+  // its own besides `workspace`, so `routeAuthorities()` reads this back
+  // off the live route table: declaring it over a route that mounts no
+  // `attemptContext` fails, and mounting one without declaring it fails
+  // too.
+  "GET /api/v1/run/attempt": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

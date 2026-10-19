@@ -10,6 +10,7 @@ import type { StorageAdapter } from "@pariksha/storage";
 import type { Action } from "@pariksha/core";
 import type { AppBindings, AppDeps, RouteAuthority } from "./app.js";
 import { guardOf } from "./middleware/authorize.js";
+import { isAttemptContext } from "./middleware/attemptContext.js";
 
 /** Cloudflare Workers, free plan. A paid plan raises it; the guard does not. */
 export const SUBREQUEST_LIMIT = 50;
@@ -182,9 +183,9 @@ export function routeGuards(
  * itself. Phase 6 Task 1 (#65, ADR 0008).
  *
  * Only the authorities that *are* a piece of middleware appear here:
- * `workspace` (the `GUARDS` WeakMap, written by `guard()`) and, from Task
- * 5, `attempt` (the attempt-token context, which will register itself the
- * same way and add its branch here). `actor` and `public` carry no
+ * `workspace` (the `GUARDS` WeakMap, written by `guard()`) and `attempt`
+ * (the attempt-token context, Task 5, which registers itself the same
+ * way). `actor`, `entry` and `public` carry no
  * middleware to read — `actorOr401` is called inside a handler, and
  * "public" is the absence of anything — so they are declaration-only, and
  * `route-authority.test.ts` holds each to a literal allowlist instead.
@@ -198,6 +199,8 @@ export function routeAuthorities(
   for (const route of app.routes) {
     if (guardOf(route.handler)) {
       authorities[`${route.method} ${route.path}`] = "workspace";
+    } else if (isAttemptContext(route.handler)) {
+      authorities[`${route.method} ${route.path}`] = "attempt";
     }
   }
   return authorities;

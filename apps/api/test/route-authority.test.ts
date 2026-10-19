@@ -96,7 +96,34 @@ it("the entry set is a literal allowlist too — the run_entry token, as a Beare
     "GET /api/v1/run/:workspaceSlug/:testSlug/challenge",
     "GET /api/v1/run/:workspaceSlug/:testSlug/form",
     "POST /api/v1/run/:workspaceSlug/:testSlug/register",
+    "POST /api/v1/run/:workspaceSlug/:testSlug/start",
   ]);
+});
+
+/**
+ * The sixth list and the second authority with middleware behind it.
+ *
+ * Unlike `entry`, this one is checked *twice*: the literal below, and
+ * "the declared authorities match the middleware actually mounted"
+ * above, which reads `attemptContext` off the live route table. A route
+ * declared `attempt` that forgot to mount the context fails there, and
+ * one that mounts it without declaring it fails there too.
+ */
+it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", () => {
+  expect(
+    Object.entries(ROUTE_AUTH)
+      .filter(([, authority]) => authority === "attempt")
+      .map(([endpoint]) => endpoint)
+      .sort(),
+  ).toEqual(["GET /api/v1/run/attempt"]);
+});
+
+it("every endpoint the attempt allowlist names refuses a caller with no cookie", async () => {
+  const attempts = endpointsWithAuthority("attempt");
+  expect(attempts.length).toBeGreaterThan(0);
+  for (const endpoint of attempts) {
+    expect((await anonymously(endpoint)).status, endpoint).toBe(401);
+  }
 });
 
 it("the actor set is a literal allowlist too — signed in, but naming no workspace", () => {
@@ -140,6 +167,9 @@ const PROBE_URL: Readonly<Record<string, string>> = {
   // same reason: no Authorization header, so it must answer 401.
   "GET /api/v1/run/:workspaceSlug/:testSlug/challenge": "/api/v1/run/alpha/aptitude/challenge",
   "POST /api/v1/run/:workspaceSlug/:testSlug/register": "/api/v1/run/alpha/aptitude/register",
+  // Task 5's start gate, probed with no Authorization header: 401, for
+  // the same reason its two neighbours are.
+  "POST /api/v1/run/:workspaceSlug/:testSlug/start": "/api/v1/run/alpha/aptitude/start",
   "GET /api/v1/auth/:provider/start": "/api/v1/auth/google/start",
   "GET /api/v1/auth/:provider/callback": "/api/v1/auth/google/callback",
   "GET /t/:code": "/t/ABC123",
