@@ -16,6 +16,8 @@
    ══════════════════════════════════════════════════════════════════════ */
 
 :root {
+  color-scheme: light;
+
   --ground: #F1F1EF;
   --surface: #FFFFFF;
   --ink: #0C0D0F;
@@ -42,30 +44,11 @@
   --gut: 22px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --ground: #0B0C0E;
-    --surface: #15171A;
-    --ink: #F2F3F0;
-    --ink-2: #9DA1A6;
-    --ink-3: #6E7278;
-    --rule: #262A2E;
-    --rule-strong: #3A3F45;
-    --invert-bg: #050607;
-    --invert-ink: #F2F3F0;
-    --invert-ink-2: #9DA1A6;
-    --invert-rule: #22262A;
-    --clean: #4CBF93;
-    --review: #D9A43A;
-    --risk: #F07A70;
-  }
-}
-:root[data-theme="dark"] {
-  --ground: #0B0C0E; --surface: #15171A; --ink: #F2F3F0; --ink-2: #9DA1A6;
-  --ink-3: #6E7278; --rule: #262A2E; --rule-strong: #3A3F45;
-  --invert-bg: #050607; --invert-ink: #F2F3F0; --invert-ink-2: #9DA1A6; --invert-rule: #22262A;
-  --clean: #4CBF93; --review: #D9A43A; --risk: #F07A70;
-}
+/* Deliberately single-world, like Prototype F is deliberately dark.
+   The whole idea here is ink on paper with the verdicts as the only
+   colour; rendered on a dark ground it degrades to grey-on-grey and the
+   argument disappears. So this page commits to light and paints every
+   colour explicitly rather than following the OS. */
 
 * { box-sizing: border-box; }
 
@@ -85,12 +68,14 @@ body {
 /* ── type ─────────────────────────────────────────────────────────── */
 h1, h2, h3 { margin: 0; text-wrap: balance; }
 h1 {
-  font-size: clamp(44px, 9.4vw, 132px);
-  line-height: 0.88;
+  font-size: clamp(40px, 6.4vw, 92px);
+  line-height: 0.92;
   font-weight: 700;
-  font-stretch: 118%;
-  letter-spacing: -0.042em;
-  max-width: 14ch;
+  font-stretch: 112%;
+  letter-spacing: -0.038em;
+  max-width: 13ch;
+  overflow-wrap: break-word;
+  hyphens: auto;
 }
 h2 {
   font-size: clamp(30px, 4.6vw, 62px);
@@ -169,8 +154,8 @@ a:focus-visible, button:focus-visible {
 
 /* ── 1 · hero ─────────────────────────────────────────────────────── */
 .hero { padding-bottom: clamp(44px, 6vw, 84px); }
-.hero-top { display: grid; gap: 30px; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: end; padding: clamp(28px, 5vw, 64px) 0 clamp(32px, 4vw, 52px); }
-@media (max-width: 920px) { .hero-top { grid-template-columns: 1fr; align-items: start; } }
+.hero-top { display: grid; gap: 40px 52px; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: end; padding: clamp(28px, 5vw, 64px) 0 clamp(32px, 4vw, 52px); }
+@media (max-width: 1060px) { .hero-top { grid-template-columns: 1fr; align-items: start; gap: 28px; } }
 .status {
   display: inline-flex; align-items: center; gap: 10px;
   font-family: var(--mono); font-size: 10.5px; font-weight: 500;
@@ -252,7 +237,7 @@ a:focus-visible, button:focus-visible {
 .sheet-row {
   display: grid; grid-template-columns: 26px 1fr; gap: 14px;
   padding: 15px 18px; border-bottom: 1px solid var(--rule);
-  opacity: 0.22; transition: opacity 320ms ease-out;
+  opacity: 0.45; transition: opacity 320ms ease-out;
 }
 .sheet-row:last-child { border-bottom: 0; }
 .sheet-row[data-on="1"] { opacity: 1; }
@@ -267,8 +252,9 @@ a:focus-visible, button:focus-visible {
 /* ── 4 · the statement ────────────────────────────────────────────── */
 .statement { padding: clamp(72px, 11vw, 150px) 0; }
 .statement h2 {
-  font-size: clamp(38px, 8.6vw, 116px); line-height: 0.9;
-  font-stretch: 116%; letter-spacing: -0.042em; max-width: 13ch;
+  font-size: clamp(34px, 6.6vw, 96px); line-height: 0.94;
+  font-stretch: 110%; letter-spacing: -0.038em; max-width: 13ch;
+  overflow-wrap: break-word;
 }
 .statement-grid {
   display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
