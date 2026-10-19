@@ -537,14 +537,22 @@ export function invalidCidr(raw: string): string | null {
   if (address.includes(":")) {
     if (!isIpv6(address)) return `"${raw}" is not an IPv6 address — ${example}`;
     if (bits > 128) return `"${raw}" has a prefix length above 128 — an IPv6 range cannot, ${example}`;
-    return null;
+  } else {
+    const octets = address.split(".");
+    if (octets.length !== 4 || octets.some((octet) => !IPV4_OCTET.test(octet) || Number(octet) > 255)) {
+      return `"${raw}" is not an IPv4 address — four numbers 0-255 with no leading zeros, ${example}`;
+    }
+    if (bits > 32) return `"${raw}" has a prefix length above 32 — an IPv4 range cannot, ${example}`;
   }
 
-  const octets = address.split(".");
-  if (octets.length !== 4 || octets.some((octet) => !IPV4_OCTET.test(octet) || Number(octet) > 255)) {
-    return `"${raw}" is not an IPv4 address — four numbers 0-255 with no leading zeros, ${example}`;
+  // `/0` matches every address there is, however it is spelled — the same
+  // thing `invalidDomainGlob` refuses `*` for, and true of `0.0.0.0/0`,
+  // `::/0` and `10.0.0.0/0` alike. The case that matters is the typo:
+  // `10.0.0.0/0` written for `/8` renders as "Only from 10.0.0.0/0." and
+  // reads as a restriction, while admitting the whole internet on test day.
+  if (bits === 0) {
+    return `"${raw}" matches every address, which is not an allowlist — remove it, or narrow the range, ${example}`;
   }
-  if (bits > 32) return `"${raw}" has a prefix length above 32 — an IPv4 range cannot, ${example}`;
   return null;
 }
 

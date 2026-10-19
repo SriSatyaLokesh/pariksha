@@ -1105,11 +1105,11 @@ describe("validateTest", () => {
 
   it.each([
     "10.0.0.0/24",
-    "0.0.0.0/0",
+    "0.0.0.0/8",
     "192.168.1.0/32",
     "10.0.0.1/24",
     "2001:db8::/32",
-    "::/0",
+    "::/128",
     "fd00:0:0:0:0:0:0:1/128",
   ])("accepts the CIDR range %s", (range) => {
     expect(invalidCidr(range)).toBeNull();
@@ -1118,6 +1118,12 @@ describe("validateTest", () => {
   it.each([
     ["10.0.0.0/64", /prefix length above 32/],
     ["2001:db8::/129", /prefix length above 128/],
+    // `/0` is the CIDR spelling of `*`: a restriction on the screen that
+    // restricts nothing. The third is the one that actually happens — a
+    // typo for `/8`.
+    ["0.0.0.0/0", /matches every address, which is not an allowlist/],
+    ["::/0", /matches every address, which is not an allowlist/],
+    ["10.0.0.0/0", /matches every address, which is not an allowlist/],
     ["10.0.0.0", /has no prefix length/],
     ["10.0.0.0/24/8", /has no prefix length/],
     ["10.0.0.0/", /not a plain number/],
