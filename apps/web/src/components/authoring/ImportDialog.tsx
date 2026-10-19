@@ -179,7 +179,12 @@ export function ImportDialog({
                 // place, so there is no row identity to preserve across a
                 // reorder.
                 <tr key={index}>
-                  <td>{issue.questionId ?? (issue.line === undefined ? `entry ${issue.index}` : `line ${issue.line}`)}</td>
+                  {/* Fix round 1, finding 14: this used to repeat the line
+                      number here too ("line 4") when there was no
+                      `questionId` — the Line column already shows it. "—"
+                      falls back to the `bank.questions` index only when
+                      there is neither a question id nor a line to show. */}
+                  <td>{issue.questionId ?? (issue.line === undefined ? `entry ${issue.index}` : "—")}</td>
                   <td>{issue.line ?? "—"}</td>
                   <td>{issue.field}</td>
                   <td>{issue.message}</td>

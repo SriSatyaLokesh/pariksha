@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 
 import type { ApiClient, ImportReport } from "../../src/lib/api";
@@ -223,7 +223,26 @@ describe("ImportDialog", () => {
     uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
 
     expect(await screen.findByText(/nothing was imported/i)).toBeVisible();
-    expect(screen.getAllByRole("row", { name: /line 4/ })).toHaveLength(1);
+    // Fix round 1, finding 14: the Question column used to repeat "line 4"
+    // here too — redundant with the Line column, which is the one cell this
+    // asserts on directly, by its own exact text.
+    expect(screen.getByRole("cell", { name: "4" })).toBeVisible();
+  });
+
+  it("the Question column does not repeat the Line column's value for the same issue", async () => {
+    const client = fakeClient({
+      importBank: async () => ({
+        imported: 0,
+        issues: [{ questionId: null, index: -1, field: "key", message: "could not parse", line: 4 }],
+      }),
+    });
+    render(<ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />);
+
+    uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
+    await screen.findByText(/nothing was imported/i);
+
+    const row = screen.getByRole("row", { name: /could not parse/ });
+    expect(within(row).getAllByText("4")).toHaveLength(1);
   });
 
   it("a file with an extension this dialog does not recognise is reported without calling the API", async () => {
@@ -244,6 +263,29 @@ describe("ImportDialog", () => {
     );
 
     uploadFile(screen.getByLabelText(/file/i), jsonFile("bad.json", BAD_BANK));
+    await screen.findByText(/nothing was imported/i);
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // Fix round 1, finding 14: the axe check above only ever exercised a JSON
+  // report (no `line`, three columns effectively in use) — the four-column
+  // table a CSV/GIFT report actually renders was never scanned.
+  it("the four-column CSV/GIFT issue table has no axe violations", async () => {
+    const client = fakeClient({
+      importBank: async () => ({
+        imported: 0,
+        issues: [
+          { questionId: null, index: -1, field: "type", message: "unsupported type", line: 2 },
+          { questionId: null, index: -1, field: "key", message: "could not parse", line: 4 },
+        ],
+      }),
+    });
+    const { container } = render(
+      <ImportDialog workspaceId="wsp_1" bankId="bnk_1" client={client} onImported={noop} />,
+    );
+
+    uploadFile(screen.getByLabelText(/file/i), textFile("bank.csv", "id,type,prompt,options,key\n"));
     await screen.findByText(/nothing was imported/i);
 
     expect(await axe(container)).toHaveNoViolations();
