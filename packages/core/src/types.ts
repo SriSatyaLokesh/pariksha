@@ -187,11 +187,11 @@ export interface Bank {
 // Test-format types, mirroring schemas/test-1.json's `$defs/section`,
 // `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access`,
 // `release`, `form`, `formField` and `validation` exactly. Only what
-// question selection and import validation need: `timing`, `consent`,
-// `proctoring`, `retention` and `branding` are required or optional in the
-// schema but no rule in this package reads them, so they are not modelled
-// here yet. Add each when a phase needs it. `registration_form` was the
-// first to be claimed, by Task 5 (#57, P5.4).
+// question selection and import validation need: `consent`, `proctoring`
+// and `retention` are in the schema but no rule in this package reads
+// them, so they are not modelled here yet. Add each when a phase needs it.
+// `registration_form` was the first to be claimed, by Task 5 (#57, P5.4);
+// `timing` by Task 7 (#59, P5.6) and `branding` by Task 10 (#61, P5.8).
 
 export interface SourceFixed {
   kind: "fixed";
@@ -325,6 +325,45 @@ export interface RegistrationFormSpec {
   fields: FormField[];
 }
 
+export type NavigationMode = "free" | "linear" | "per_section";
+export type CountedAttempt = "highest" | "latest" | "average";
+
+/**
+ * T-12 - T-15's `timing` block (Task 7, #59, P5.6). Mirrors
+ * `schemas/test-1.json`'s `$defs/timing` exactly: `duration_minutes` is the
+ * only member the schema requires, and every other field has a documented
+ * default in `docs/test-format.md` § `timing` and is omitted until set.
+ *
+ * Timestamps are RFC 3339 strings with an offset, as the schema's
+ * `format: date-time` says. `timezone` is the IANA zone every time shown to
+ * a *candidate* is rendered in; it is not redundant with the offsets,
+ * because an offset cannot say which zone it came from or what happens
+ * across a DST boundary.
+ */
+export interface TestTiming {
+  timezone?: string;
+  opens_at?: string;
+  closes_at?: string;
+  latest_start_at?: string;
+  duration_minutes: number;
+  navigation?: NavigationMode;
+  attempts_allowed?: number;
+  cooldown_minutes?: number;
+  counted_attempt?: CountedAttempt;
+  warn_at_minutes?: number[];
+  late_sync_grace_seconds?: number;
+}
+
+/** What each navigation mode means for the candidate, in one sentence
+ * (#59 asks for this copy by name). Lives here, not in the panel, because
+ * Task 13's publish checklist states the same consequence as the builder
+ * does rather than wording it a second way. */
+export const NAVIGATION_CONSEQUENCE: Readonly<Record<NavigationMode, string>> = {
+  free: "A candidate can jump to any question at any time.",
+  linear: "A candidate cannot go back to an earlier question.",
+  per_section: "Free inside a section; a section is locked once the candidate leaves it.",
+};
+
 export type AccessMode = "link_code" | "invite_only" | "email_code" | "sso";
 
 export interface TestAccess {
@@ -353,6 +392,25 @@ export interface Test {
   license?: string;
   /** Bank files this test draws from, relative to the test file. */
   banks?: string[];
+  /**
+   * Task 7 (#59, P5.6) deliberately left this **optional**, against the
+   * plan's own `Interfaces` block and against `schemas/test-1.json`'s root
+   * `required`, which names it.
+   *
+   * A `Test` value is not only a finished document: `TestSettings`
+   * (`packages/db/src/repo/test-document.ts`) is `Omit<Test, …>` and is
+   * what a *draft* stores, and `createTest` seeds a draft with `{}`. The
+   * save-time gate (`draftSchema`, `apps/api/src/routes/tests.ts`) already
+   * drops the root `required` for exactly that reason, so a required
+   * `timing` here would be a type that storage can and does violate — and
+   * would have forced an invented duration into `toTestVersionRow`,
+   * `toTestDocument`'s spread, `createTest`'s seed and every fixture in
+   * `packages/core/test/validate.test.ts`.
+   *
+   * Presence is enforced where the document really is whole: the schema's
+   * root `required` on import, and the publish checklist (Task 13).
+   */
+  timing?: TestTiming;
   scoring?: TestScoring;
   access?: TestAccess;
   registration_form?: RegistrationFormSpec;

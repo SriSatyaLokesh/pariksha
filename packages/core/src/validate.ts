@@ -30,6 +30,7 @@ import type {
   QuestionOption,
   Section,
   Test,
+  TestTiming,
 } from "./types.js";
 import { assertSafeRegex } from "./grade/text.js";
 import type { ScoringDefaults } from "./grade/result.js";
@@ -462,6 +463,78 @@ export function unsatisfiableValidation(field: FormField): string | null {
   return null;
 }
 
+/**
+ * T-12 - T-15's three cross-field timing rules (Task 7, #59, P5.6), as
+ * `{ field, message }` pairs so the builder's `TimingPanel` and
+ * `validateTest` state the same sentence rather than wording it twice.
+ *
+ * **Publish-time.** A half-set window is an ordinary draft: an organiser
+ * who has typed `opens_at` and not yet `closes_at` has not made a mistake,
+ * and `apps/api/src/routes/tests.ts` deliberately saves it. The panel runs
+ * these on blur as a nag; Task 13's checklist is where they block.
+ *
+ * "Opens in the past" is deliberately *not* here: this package is pure and
+ * takes no clock, so that rule belongs to the checklist, which has `now`.
+ */
+export function timingIssues(
+  timing: TestTiming | undefined,
+  sections: readonly Section[],
+): { field: string; message: string }[] {
+  if (timing === undefined) return [];
+  const issues: { field: string; message: string }[] = [];
+
+  /** `NaN` compared against anything is false, so an unparseable timestamp
+   * would silently satisfy every rule below rather than fail one. Reported
+   * as its own issue instead, and withheld from the comparisons. */
+  const instant = (key: "opens_at" | "closes_at" | "latest_start_at"): number | null => {
+    const raw = timing[key];
+    if (raw === undefined) return null;
+    const parsed = Date.parse(raw);
+    if (Number.isNaN(parsed)) {
+      issues.push({
+        field: `timing.${key}`,
+        message: `"${raw}" is not a date and time — use an RFC 3339 timestamp, for example 2026-11-14T09:00:00+05:30`,
+      });
+      return null;
+    }
+    return parsed;
+  };
+
+  const opens = instant("opens_at");
+  const closes = instant("closes_at");
+  const latestStart = instant("latest_start_at");
+
+  if (opens !== null && closes !== null && closes <= opens) {
+    issues.push({
+      field: "timing.closes_at",
+      message: `the window closes at ${timing.closes_at ?? ""}, which is not after it opens at ${timing.opens_at ?? ""} — move the close later, or the open earlier`,
+    });
+  }
+
+  if (latestStart !== null) {
+    const beforeOpen = opens !== null && latestStart < opens;
+    const afterClose = closes !== null && latestStart > closes;
+    if (beforeOpen || afterClose) {
+      issues.push({
+        field: "timing.latest_start_at",
+        message: `the latest start ${timing.latest_start_at ?? ""} falls ${beforeOpen ? "before the window opens" : "after the window closes"} — it has to sit inside the window, and defaults to closes_at when unset`,
+      });
+    }
+  }
+
+  // T-12's "overall duration, optional per-section durations": a sum above
+  // the whole is unsatisfiable however the candidate spends the time.
+  const total = sections.reduce((sum, section) => sum + (section.time_limit_minutes ?? 0), 0);
+  if (total > timing.duration_minutes) {
+    issues.push({
+      field: "timing.duration_minutes",
+      message: `sections total ${total} minutes against an overall ${timing.duration_minutes} — raise the duration or shorten a section`,
+    });
+  }
+
+  return issues;
+}
+
 /** The ids that appear more than once in `ids`, each reported once, in the
  * order they first repeat. Both halves of docs/test-format.md's own
  * "ids are unique within the test" line — section ids and form field ids —
@@ -524,6 +597,14 @@ function totalPoints(questions: readonly Question[]): number {
  *   here so a document reaching this function by another route still gets
  *   the rule, and so the whole report arrives in one shape.
  * - every question ID a `fixed` or `sets` source names exists in `bank`.
+ * - `closes_at` is after `opens_at`, `latest_start_at` falls inside the
+ *   window, and the per-section durations sum to no more than
+ *   `duration_minutes` (Task 7, #59, P5.6).
+ * - every CIDR in `access.allow_ip_ranges` and every glob in
+ *   `access.allow_email_domains` parses (Task 8, #60, P5.7). Unlike the
+ *   rest of this function these are *save-time* in class — see
+ *   `allowlistIssues` — and are reported here so the whole report still
+ *   arrives at once.
  */
 export function validateTest(
   test: unknown,
@@ -566,6 +647,14 @@ export function validateTest(
       field: "release.at",
       message: 'release "on_date" requires an "at" timestamp',
     });
+  }
+
+  // Task 7 (#59, P5.6). The sections are read off `doc` rather than the
+  // raw array because only `time_limit_minutes` matters here and a
+  // structurally broken entry is already reported, at its own index, by
+  // the per-section pass below.
+  for (const issue of timingIssues(doc.timing, Array.isArray(doc.sections) ? doc.sections : [])) {
+    issues.push({ questionId: null, index: -1, ...issue });
   }
 
   // Task 5 (#57, P5.4): docs/test-format.md's "ids are unique within the

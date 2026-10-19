@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { join } from "node:path";
-import { unsatisfiableValidation, validateBank, validateTest } from "../src/validate.js";
+import { timingIssues, unsatisfiableValidation, validateBank, validateTest } from "../src/validate.js";
+import { NAVIGATION_CONSEQUENCE } from "../src/types.js";
 import type {
   Bank,
   FormField,
@@ -12,6 +13,7 @@ import type {
   ScoringMode,
   Section,
   Test,
+  TestTiming,
 } from "../src/types.js";
 
 const repoRoot = fileURLToPath(new URL("../../../", import.meta.url));
@@ -943,5 +945,116 @@ describe("validateTest", () => {
     );
     expect(unsatisfiableValidation({ id: "a", type: "number", label: "A", validation: { min: 1, max: 5 } })).toBeNull();
     expect(unsatisfiableValidation({ id: "a", type: "number", label: "A" })).toBeNull();
+  });
+
+  // --- Task 7 (#59, P5.6): timing -------------------------------------
+
+  const WINDOW: TestTiming = {
+    timezone: "Asia/Kolkata",
+    opens_at: "2026-11-14T09:00:00+05:30",
+    closes_at: "2026-11-14T13:00:00+05:30",
+    duration_minutes: 60,
+  };
+
+  /** Sections carrying only `time_limit_minutes`, which is all the
+   * duration rule reads; an empty `fixed` source keeps every other rule
+   * silent so a failure here can only be the timing one. */
+  function timed(...minutes: (number | undefined)[]): Section[] {
+    return minutes.map((m, i) => ({
+      id: `s${i + 1}`,
+      title: `Section ${i + 1}`,
+      source: { kind: "fixed" as const, questions: [] },
+      ...(m === undefined ? {} : { time_limit_minutes: m }),
+    }));
+  }
+
+  it("a window that ends before it opens is reported on closes_at", () => {
+    const r = validateTest(
+      doc({ timing: { ...WINDOW, opens_at: "2026-11-14T13:00:00+05:30", closes_at: "2026-11-14T09:00:00+05:30" } }),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({ field: "timing.closes_at", index: -1, questionId: null });
+  });
+
+  it("a window that closes at the instant it opens is reported too — after, not at", () => {
+    const at = "2026-11-14T09:00:00+05:30";
+    expect(validateTest(doc({ timing: { ...WINDOW, opens_at: at, closes_at: at } }), []).ok).toBe(false);
+  });
+
+  it("a latest_start_at outside the window is reported, on either side", () => {
+    const early = validateTest(doc({ timing: { ...WINDOW, latest_start_at: "2026-11-14T08:00:00+05:30" } }), []);
+    expect(early.ok).toBe(false);
+    if (early.ok) throw new Error("expected failure");
+    expect(early.issues[0]).toMatchObject({ field: "timing.latest_start_at" });
+    expect(early.issues[0]?.message).toMatch(/before the window opens/);
+
+    const late = validateTest(doc({ timing: { ...WINDOW, latest_start_at: "2026-11-14T18:00:00+05:30" } }), []);
+    expect(late.ok).toBe(false);
+    if (late.ok) throw new Error("expected failure");
+    expect(late.issues[0]?.message).toMatch(/after the window closes/);
+  });
+
+  it("a latest_start_at inside the window is clean", () => {
+    expect(validateTest(doc({ timing: { ...WINDOW, latest_start_at: "2026-11-14T12:00:00+05:30" } }), []).ok).toBe(
+      true,
+    );
+  });
+
+  it("per-section durations summing above the overall duration are reported with both numbers", () => {
+    const r = validateTest(doc({ timing: { duration_minutes: 60 }, sections: timed(40, 30) }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({
+      field: "timing.duration_minutes",
+      message: expect.stringMatching(/sections total 70 minutes against an overall 60/),
+    });
+    expect(r.issues[0]?.message).toMatch(/raise the duration or shorten a section/);
+  });
+
+  it("sections with no time limit do not count toward the sum", () => {
+    expect(validateTest(doc({ timing: { duration_minutes: 60 }, sections: timed(45, undefined) }), []).ok).toBe(true);
+  });
+
+  it("a per-section sum equal to the overall duration is allowed", () => {
+    expect(validateTest(doc({ timing: { duration_minutes: 60 }, sections: timed(30, 30) }), []).ok).toBe(true);
+  });
+
+  it("an unparseable timestamp is its own issue, never compared as NaN", () => {
+    const r = validateTest(doc({ timing: { ...WINDOW, closes_at: "next Tuesday" } }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    // One issue, not two: the window comparison is withheld rather than
+    // silently passing, because every comparison against NaN is false.
+    expect(r.issues).toHaveLength(1);
+    expect(r.issues[0]).toMatchObject({ field: "timing.closes_at" });
+    expect(r.issues[0]?.message).toMatch(/is not a date and time/);
+  });
+
+  it("a half-set window is not an issue — publish-time means the draft stays savable", () => {
+    expect(validateTest(doc({ timing: { duration_minutes: 60, opens_at: "2026-11-14T09:00:00+05:30" } }), []).ok).toBe(
+      true,
+    );
+    expect(validateTest(doc({}), []).ok).toBe(true);
+  });
+
+  it("timingIssues is the one copy of the rules the builder also shows", () => {
+    expect(timingIssues(undefined, [])).toEqual([]);
+    expect(timingIssues({ duration_minutes: 30 }, timed(45))).toEqual([
+      {
+        field: "timing.duration_minutes",
+        message: "sections total 45 minutes against an overall 30 — raise the duration or shorten a section",
+      },
+    ]);
+  });
+
+  it("NAVIGATION_CONSEQUENCE states a consequence for each of the three modes", () => {
+    expect(Object.keys(NAVIGATION_CONSEQUENCE)).toEqual(["free", "linear", "per_section"]);
+    expect(NAVIGATION_CONSEQUENCE.linear).toBe("A candidate cannot go back to an earlier question.");
+  });
+
+  it("the worked example still validates clean, timing and all", () => {
+    expect(validateTest(exampleTest, (exampleBank as Bank).questions).ok).toBe(true);
   });
 });
