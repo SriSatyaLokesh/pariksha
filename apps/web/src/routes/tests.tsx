@@ -119,12 +119,18 @@ export function TestList({
     [client, workspaceId],
   );
 
+  // Debounced: `filter` changes on every keystroke in Search or Tag, and
+  // without this a `GET .../tests` goes out per keystroke rather than once
+  // typing settles. Each dependency change clears the previous effect's
+  // timer (the cleanup below) before scheduling its own, so only the last
+  // one in a burst ever fires — the standard effect-cleanup debounce, no
+  // separate debounce helper needed. `load` is itself a dependency here
+  // (unlike the URL write below): it only changes identity when `client` or
+  // `workspaceId` does, so including it costs nothing and a lint rule that
+  // enforces exhaustive deps stays satisfied.
   useEffect(() => {
-    void load(filter);
-    // `load` itself is intentionally not a dependency: it is recreated only
-    // when `client`/`workspaceId` change, and including it would re-run this
-    // effect on every render of those for no reason beyond satisfying a
-    // lint rule this project does not enable.
+    const timer = setTimeout(() => void load(filter), 250);
+    return () => clearTimeout(timer);
   }, [load, filter.tag, filter.status, filter.search, filter.sort]);
 
   // Filters, tags and search live in the URL and survive the back button: a
@@ -140,7 +146,11 @@ export function TestList({
   function updateFilter(patch: Partial<UrlFilter>) {
     const next = { ...filter, ...patch };
     setFilter(next);
-    window.history.pushState(null, "", `${window.location.pathname}${searchFromFilter(next)}`);
+    // `replaceState`, not `pushState`: a filter change is not a page the
+    // user typed a URL for, and a `pushState` per keystroke turned seven
+    // characters typed into Search into seven Back-button stops that each
+    // restore one character.
+    window.history.replaceState(null, "", `${window.location.pathname}${searchFromFilter(next)}`);
   }
 
   const hasFilter = filter.tag !== "" || filter.status !== "" || filter.search !== "";

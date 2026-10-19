@@ -133,9 +133,26 @@ describe("TestList", () => {
     const tests = vi.fn(async () => [PUBLISHED]);
     renderList(fakeClient({ tests }));
     await screen.findByText("Midterm");
+    tests.mockClear();
 
-    fireEvent.change(screen.getByLabelText(/^search$/i), { target: { value: "mid" } });
+    // Several characters, one at a time like real typing — not one jump to
+    // the finished string — so this exercises the debounce (Important 7)
+    // rather than a path a single `fireEvent.change` can't see.
+    const pushSpy = vi.spyOn(window.history, "pushState");
+    const search = screen.getByLabelText(/^search$/i);
+    fireEvent.change(search, { target: { value: "m" } });
+    fireEvent.change(search, { target: { value: "mi" } });
+    fireEvent.change(search, { target: { value: "mid" } });
+
     await waitFor(() => expect(window.location.search).toContain("search=mid"));
+    // `replaceState`, not `pushState`: three keystrokes must not become
+    // three Back-button stops.
+    expect(pushSpy).not.toHaveBeenCalled();
+    // And the three keystrokes must not become three requests either — the
+    // debounce collapses them into the one that reflects where typing
+    // settled.
+    await waitFor(() => expect(tests).toHaveBeenCalledTimes(1));
+    expect(tests).toHaveBeenCalledWith("wsp_1", expect.objectContaining({ search: "mid" }));
 
     // The back button: the browser moves the location back and fires
     // `popstate` — dispatched here rather than relying on jsdom's own
