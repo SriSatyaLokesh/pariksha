@@ -49,7 +49,13 @@ test("AC-01 (partial): a fresh deployment goes landing → sign in → wizard �
   await page.getByRole("button", { name: /create workspace/i }).click();
 
   await expect(page.getByRole("heading", { name: "Placement cell" })).toBeVisible();
-  await expect(page.getByText(/no tests yet/i)).toBeVisible();
+  // Phase 5 replaced the dashboard's "no tests yet" line with a Tests card
+  // whose call to action opens the real test list. Asserting the control
+  // rather than the prose: it is what makes this an empty state a new
+  // organiser can act on, and it survives the next copy edit.
+  await expect(
+    page.getByRole("button", { name: /create your first test/i }),
+  ).toBeVisible();
 });
 
 test("the wizard cannot be re-opened once the instance has an owner", async ({
