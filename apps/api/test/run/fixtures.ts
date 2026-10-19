@@ -14,8 +14,10 @@ import {
   newId,
   publishDraftVersion,
   putDraftVersion,
+  replaceCandidateList,
   setTestStatus,
   updateTest,
+  type NewCandidate,
   type TestDocumentBody,
   type TestStatus,
 } from "@pariksha/db";
@@ -199,6 +201,8 @@ export async function seedPublishedTest(deps: AppDeps): Promise<string> {
     },
   });
 
+  await seedAccessModeTests(deps, workspaceId);
+
   // Two workspaces whose slug pair really would resolve, so the route's
   // "the slug 'attempt' cannot shadow the attempt routes" assertion has
   // something to refuse rather than passing on an absent fixture (review
@@ -218,4 +222,147 @@ export async function seedPublishedTest(deps: AppDeps): Promise<string> {
   }
 
   return workspaceId;
+}
+
+// --- Task 2 (#66, P6.2): one published test per access mode ------------
+
+/**
+ * The registration form the candidate-list tests are keyed on. `roll_number`
+ * is the first `unique: true` field, so it is `external_id` (`identityField`,
+ * `src/import/candidates.ts`); `email` is the first `type: "email"` field, so
+ * it is where `MintedInvite.email` is read from — reconciliation row 14, the
+ * `candidate` table has no email column.
+ */
+export const LISTED_FORM = {
+  fields: [
+    { id: "roll_number", type: "short_text" as const, label: "Roll number", unique: true },
+    { id: "email", type: "email" as const, label: "College email address" },
+    { id: "full_name", type: "short_text" as const, label: "Full name" },
+  ],
+};
+
+/** One entry with an email in its prefill and one without, so
+ *  `MintedInvite.email` is proved to be `null` rather than `undefined` or
+ *  the identifier when the form value is absent. */
+export const LISTED_CANDIDATES: NewCandidate[] = [
+  { externalId: "21CS0147", setLabel: "A", formValues: { email: "ananya@vce.ac.in", full_name: "Ananya" } },
+  { externalId: "21CS0148", setLabel: "B", formValues: { full_name: "Bharat" } },
+];
+
+/** `invited`'s list is a superset: the two extra identifiers are the ones
+ *  that prove a list lookup is scoped to its own test rather than to the
+ *  workspace, and give the invite tests rows nothing else has spent. */
+export const INVITED_CANDIDATES: NewCandidate[] = [
+  ...LISTED_CANDIDATES,
+  { externalId: "21CS0149", setLabel: "A", formValues: { full_name: "Chetan" } },
+  { externalId: "21CS0150", setLabel: "B", formValues: { email: "deepa@vce.ac.in", full_name: "Deepa" } },
+];
+
+const openWindow = {
+  duration_minutes: 30,
+  opens_at: iso(FIXED_NOW - DAY),
+  closes_at: iso(FIXED_NOW + DAY),
+};
+
+const oneSection = [{ id: "only", title: "Only", source: { kind: "pool" as const, count: 5 } }];
+
+/**
+ * `alpha/listed`, `alpha/otp`, `alpha/lab`, `alpha/invited`, `alpha/sso` and
+ * `alpha/gauntlet` — one published test per gate the access route has to
+ * pass or refuse, plus the uploaded candidate lists the list-gated ones read.
+ */
+export async function seedAccessModeTests(deps: AppDeps, workspaceId: string): Promise<void> {
+  // `link_code` behind a candidate list (T-21).
+  const listed = await seedTest(deps, workspaceId, {
+    name: "Listed",
+    slug: "listed",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "link_code", access_code: "OPENSESAME", candidate_list: "list.csv" },
+        registration_form: LISTED_FORM,
+      },
+      sections: oneSection,
+    },
+  });
+  await replaceCandidateList(deps.db, workspaceId, listed, LISTED_CANDIDATES, FIXED_NOW);
+
+  // `email_code`, with a domain allowlist so the pre-switch block has
+  // something to refuse on the same route.
+  await seedTest(deps, workspaceId, {
+    name: "Otp",
+    slug: "otp",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "email_code", allow_email_domains: ["*.ac.in"] },
+        registration_form: LISTED_FORM,
+      },
+      sections: oneSection,
+    },
+  });
+
+  // `link_code` behind a network allowlist. The range is lower-case
+  // already; `foldAllowlistCase` is what guarantees that for a real test.
+  await seedTest(deps, workspaceId, {
+    name: "Lab",
+    slug: "lab",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "link_code", access_code: "OPENSESAME", allow_ip_ranges: ["10.0.0.0/8"] },
+      },
+      sections: oneSection,
+    },
+  });
+
+  // `invite_only`, over the same list. The invite proves list membership,
+  // so this one takes no identifier at the gate.
+  const invited = await seedTest(deps, workspaceId, {
+    name: "Invited",
+    slug: "invited",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "invite_only", candidate_list: "list.csv" },
+        registration_form: LISTED_FORM,
+      },
+      sections: oneSection,
+    },
+  });
+  await replaceCandidateList(deps.db, workspaceId, invited, INVITED_CANDIDATES, FIXED_NOW);
+
+  // `sso`, with the domain rule the callback names in its refusal.
+  await seedTest(deps, workspaceId, {
+    name: "Sso",
+    slug: "sso",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: { mode: "sso", allow_email_domains: ["*.ac.in"] },
+      },
+      sections: oneSection,
+    },
+  });
+
+  // Every gate at once — a domain rule, a candidate list and a mode whose
+  // own gate consumes a token. It is the only combination that spends the
+  // declared `/access` budget, so it is what the budget is measured on.
+  const gauntlet = await seedTest(deps, workspaceId, {
+    name: "Gauntlet",
+    slug: "gauntlet",
+    body: {
+      settings: {
+        timing: openWindow,
+        access: {
+          mode: "email_code",
+          candidate_list: "list.csv",
+          allow_email_domains: ["*.ac.in"],
+        },
+        registration_form: LISTED_FORM,
+      },
+      sections: oneSection,
+    },
+  });
+  await replaceCandidateList(deps.db, workspaceId, gauntlet, LISTED_CANDIDATES, FIXED_NOW);
 }
