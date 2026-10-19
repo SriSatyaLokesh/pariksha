@@ -32,6 +32,14 @@ export default defineConfig({
         // injected into dist/index.html from the manifest by
         // scripts/prerender.mjs. Not a page; no HTML entry of its own.
         island: resolve(__dirname, "src/island/exam-demo.ts"),
+        // Phase 6 Task 1 (#65, P6.1): the candidate runtime — the FOURTH
+        // input, and a different thing entirely from `island` above
+        // despite both names saying "exam". `island` is the landing page's
+        // marketing demo; this is the page a real candidate sits a real
+        // test in. `bundle.test.ts` keeps organiser code out of it, and
+        // `hosting.test.ts` keeps the two from being confused for each
+        // other.
+        exam: resolve(__dirname, "exam.html"),
       },
     },
   },

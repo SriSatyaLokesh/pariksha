@@ -1,0 +1,25 @@
+# Cloudflare Workers static-asset redirects. Parsed by Workers out of the
+# deployed asset directory (Vite copies public/ into dist/, the same way it
+# carries _headers), evaluated top-down, first match wins.
+#
+# Phase 6 Task 1 (#65, P6.1). T-02 fixes the candidate URL at
+# /<workspace-slug>/<test-slug>, which is a path with no file behind it, so
+# without a rule here the asset router answers every candidate link with
+# dist/404.html before the page ever loads. The rule is a 200 rewrite, not a
+# redirect: the address bar must keep the slug pair, because src/exam-main.tsx
+# reads it to know which test to ask the API about.
+#
+# ORDERING IS THE WHOLE OF IT. /:workspaceSlug/:testSlug matches any
+# two-segment path, which includes /assets/index-abc123.js and
+# /fonts/anek-latin.woff2 — so those two are claimed first, as explicit
+# pass-throughs, and the fallback is last. Nothing may be added below it.
+#
+# /api/* and /t/* need no rule: wrangler.toml's run_worker_first sends both
+# to the Worker, and redirects here are not applied to a request the Worker
+# serves. /index.html, /admin.html, /exam.html and /404.html are single
+# segment, which the fallback's two-segment pattern cannot match.
+
+/assets/*  /assets/:splat  200
+/fonts/*   /fonts/:splat   200
+
+/:workspaceSlug/:testSlug  /exam.html  200

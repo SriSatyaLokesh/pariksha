@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { ExamApp, deviceReport } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
@@ -86,7 +85,14 @@ it("every section is listed with its own question count", async () => {
 
 it("C-01: 'Check my device' reports before the window opens and does not block starting", async () => {
   await mount({ ...landingFixture, state: "scheduled", opensAt: NOW + DAY });
-  await userEvent.click(screen.getByRole("button", { name: /check my device/i }));
+  // No @testing-library/user-event in this workspace, by a decision this
+  // repo already made and documented (`test/authoring/reorder.test.tsx:44`):
+  // a focused native <button>'s real Enter/Space activation is a `click` in
+  // every browser, so focusing and clicking exercises the code path a
+  // keyboard user reaches without adding a dependency for one test.
+  const check = screen.getByRole("button", { name: /check my device/i });
+  check.focus();
+  fireEvent.click(check);
   expect(await screen.findByRole("status")).toHaveTextContent(/screen|browser/i);
   // The window, not the device: the report never disables the button and
   // never enables it (Phase 7 owns the gate).
@@ -127,12 +133,20 @@ it("WCAG 2.5.3: every control's accessible name contains its visible label", asy
   }
 });
 
-it("every control is reachable with the keyboard alone", async () => {
+it("every control is a focusable native button, in the order a candidate meets them", async () => {
+  // Named for what it really checks. Without user-event no Tab key can be
+  // dispatched, so what is asserted is the thing that makes Tab work:
+  // native <button> elements, no tabindex override taking them out of (or
+  // jumping them ahead in) the sequence, and the document order a
+  // candidate reads — check the device, then start.
   await mount();
-  await userEvent.tab();
-  expect(screen.getByRole("button", { name: /check my device/i })).toHaveFocus();
-  await userEvent.tab();
-  expect(screen.getByRole("button", { name: /start/i })).toHaveFocus();
+  const buttons = screen.getAllByRole("button");
+  expect(buttons.map((b) => b.tagName)).toEqual(["BUTTON", "BUTTON"]);
+  for (const button of buttons) expect(button).not.toHaveAttribute("tabindex");
+  expect(buttons[0]).toHaveAccessibleName(/check my device/i);
+  expect(buttons[1]).toHaveAccessibleName(/start/i);
+  buttons[0]?.focus();
+  expect(buttons[0]).toHaveFocus();
 });
 
 describe("deviceReport", () => {

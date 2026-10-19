@@ -1,0 +1,208 @@
+/* The candidate runtime's stylesheet.
+
+   DESIGN.md, "Voltage as canvas" and "The clock kills the canvas": the
+   landing and finish pages carry the full-bleed vermilion block with a
+   cream display headline; the moment an attempt starts the system inverts
+   to cream and ink, hairline-ruled. This file holds both, and Task 1 builds
+   the first half.
+
+   Cream on voltage is 3.86:1 — legal for a 56px display headline and
+   illegal for anything smaller, which is why the hero carries only the
+   headline and the lede at display sizes and every fact below it sits on
+   cream. `contrast-usage.test.ts` audits this file and will say so.
+
+   No colour literal anywhere: every value is a token var(), and the one
+   legal alpha form is rgb(from var(--color-NAME) r g b / a).
+
+   Nothing here animates. A candidate sits inside these screens under a
+   running clock, often already nervous (DESIGN.md). */
+
+.exam-landing {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* DESIGN.md's `card-voltage`: the one saturated field, carrying the
+   headline and NOTHING else.
+
+   The colour is declared on the headline rather than on the field, on
+   purpose. Cream on voltage is 3.86:1, which clears the 3:1 bar for text
+   at 24px or more and fails the 4.5:1 bar for everything smaller — so a
+   `color` on the container would silently licence any later paragraph
+   dropped inside it. Declared on the one selector that also declares the
+   56px size, the two facts cannot drift apart. */
+.exam-landing-hero {
+  background: var(--color-voltage);
+  padding: 64px 32px;
+}
+
+.exam-landing-hero h1 {
+  margin: 0;
+  color: var(--color-cream);
+  font-family: var(--type-display-xl-family);
+  font-size: var(--type-display-xl-size);
+  font-weight: var(--type-display-xl-weight);
+  line-height: var(--type-display-xl-line-height);
+  letter-spacing: var(--type-display-xl-letter-spacing);
+}
+
+/* On cream, below the field — at 22px it would be 3.86:1 against voltage,
+   which is illegal at reading size. */
+.exam-landing-lede {
+  margin: 0 0 24px;
+  max-width: 54ch;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+.exam-landing-body {
+  flex: 1;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* Every out-of-window state says why in words. The border is the
+   non-colour carrier: colour is never the only thing that says a test is
+   shut (DESIGN.md). */
+.exam-notice {
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-left-width: 6px;
+  border-radius: 6px;
+  background: var(--color-canvas);
+}
+
+.exam-landing-message {
+  margin: 0 0 24px;
+  max-width: 64ch;
+}
+
+.exam-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  margin: 0 0 32px;
+}
+
+.exam-facts dt {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+}
+
+.exam-facts dd {
+  margin: 0;
+}
+
+.exam-landing-sections ul,
+.exam-device-report ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.exam-landing-sections li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.exam-section-title {
+  flex: 1;
+  min-width: 12ch;
+}
+
+.exam-section-count,
+.exam-section-limit {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
+.exam-landing-rules p {
+  max-width: 64ch;
+}
+
+.exam-landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 32px 0;
+}
+
+.exam-landing-actions button {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 999px;
+  background: var(--color-canvas);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* DESIGN.md: the cream pill CTA. Voltage-deep rather than voltage, because
+   a cream label on `voltage` is 3.86:1 and a button label is body text. */
+.exam-landing-actions .exam-start {
+  border-color: var(--color-voltage-deep);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+}
+
+.exam-landing-actions button:disabled {
+  cursor: not-allowed;
+  border-color: var(--color-hairline-strong);
+  background: var(--color-hairline);
+  color: var(--color-ink-soft);
+}
+
+.exam-device-report li {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+/* The non-colour carrier for every finding: the mark is read before the
+   colour is, and a candidate who cannot see the difference still can. */
+.exam-finding-mark {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-finding-label {
+  min-width: 9ch;
+  font-weight: 500;
+}
+
+.exam-device-report li[data-ok="false"] .exam-finding-mark {
+  color: var(--color-flag-risk);
+}
+
+.exam-device-report li[data-ok="true"] .exam-finding-mark {
+  color: var(--color-state-answered);
+}
+
+.exam-landing-footer {
+  padding: 24px 32px;
+  border-top: 1px solid var(--color-hairline);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
+.exam-loading,
+.exam-error {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px;
+}

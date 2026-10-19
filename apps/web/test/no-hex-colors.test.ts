@@ -37,7 +37,14 @@ function walk(dir: string, files: string[] = []): string[] {
 }
 
 const srcFiles = walk(SRC_DIR);
-const htmlFiles = [join(ROOT_DIR, "index.html"), join(ROOT_DIR, "admin.html")];
+// Phase 6 Task 1 (#65): exam.html is the fourth entry and is scanned like
+// the other two HTML ones — the list is by hand, so a new page is only
+// covered once it is named here.
+const htmlFiles = [
+  join(ROOT_DIR, "index.html"),
+  join(ROOT_DIR, "admin.html"),
+  join(ROOT_DIR, "exam.html"),
+];
 const allScannedFiles = [...srcFiles, ...htmlFiles];
 
 describe("no colour literal of any kind anywhere in apps/web/src", () => {

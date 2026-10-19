@@ -16,3 +16,7 @@
 
 /admin.html
   X-Robots-Tag: noindex
+
+/exam.html
+  X-Robots-Tag: noindex
+  Cache-Control: public, max-age=0, must-revalidate

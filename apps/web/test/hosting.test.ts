@@ -115,6 +115,46 @@ describe("exam.html", () => {
   });
 });
 
+// T-02's candidate URL is `/<workspace-slug>/<test-slug>` — a path with no
+// file behind it, so without a rewrite the asset router answers every
+// candidate link with dist/404.html. `_headers` cannot express a rewrite
+// (it sets headers), so the rule lives in `_redirects`, which Workers
+// parses out of the same deployed asset directory. These tests exist for
+// the ordering: the fallback matches ANY two-segment path, so a rule added
+// below it would be dead and an asset prefix not claimed above it would be
+// swallowed.
+describe("_redirects", () => {
+  const redirects = readFileSync(resolve(ROOT, "public/_redirects"), "utf8");
+  const rules = redirects
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+
+  it("rewrites the candidate slug pair onto exam.html with a 200, never a redirect", () => {
+    // 200 and not 301/302: the address bar has to keep the slug pair,
+    // because src/exam-main.tsx reads it to know which test to ask about.
+    expect(rules).toContain("/:workspaceSlug/:testSlug  /exam.html  200");
+  });
+
+  it("puts the catch-all fallback last, so nothing below it is dead", () => {
+    expect(rules.at(-1)).toMatch(/^\/:workspaceSlug\/:testSlug\b/);
+  });
+
+  it("claims every two-segment asset prefix above the fallback", () => {
+    // /assets/index-abc123.js and /fonts/anek.woff2 are two-segment paths
+    // and would otherwise match the fallback and serve the exam shell.
+    const fallbackAt = rules.findIndex((rule) => rule.startsWith("/:workspaceSlug"));
+    const above = rules.slice(0, fallbackAt).join("\n");
+    for (const prefix of ["/assets/*", "/fonts/*"]) {
+      expect(above, prefix).toContain(prefix);
+    }
+  });
+
+  it("never points at a third-party origin (S-11), as _headers does not", () => {
+    expect(redirects).not.toMatch(/https?:\/\//);
+  });
+});
+
 // The site and the API ship as one Worker (see the header of the config
 // itself), so its configuration no longer lives in this package — but these
 // are still the web app's hosting guarantees, and they are still asserted
@@ -179,6 +219,8 @@ describe("the public directory reaches the build", () => {
   it("is copied into dist, so _headers is deployed rather than only committed", () => {
     expect(publicDir).toBe("public");
     expect(existsSync(inPublicDir("_headers"))).toBe(true);
+    // Same reasoning, and the candidate URL is unreachable without it.
+    expect(existsSync(inPublicDir("_redirects"))).toBe(true);
   });
 
   it("carries every font face the stylesheet asks for", () => {
