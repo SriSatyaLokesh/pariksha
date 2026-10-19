@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import {
   allowlistIssues,
+  brandColourIssue,
   describeAllowlists,
   invalidCidr,
   invalidDomainGlob,
@@ -13,6 +14,7 @@ import {
   validateTest,
 } from "../src/validate.js";
 import { NAVIGATION_CONSEQUENCE } from "../src/types.js";
+import { EXAMPLE_BRAND_COLOUR } from "../src/contrast.js";
 import type {
   Bank,
   FormField,
@@ -1201,6 +1203,30 @@ describe("validateTest", () => {
     expect(r.ok).toBe(false);
     if (r.ok) throw new Error("expected failure");
     expect(r.issues[0]).toMatchObject({ field: "access.allow_ip_ranges", index: -1, questionId: null });
+  });
+
+  // --- Task 10 (#61, P5.8), task 7/8/10 review M7 ----------------------
+
+  it("an unreadable brand colour is an issue on the whole document, not only on the two PATCH routes", () => {
+    const r = validateTest(doc({ branding: { primary_colour: "#f59a6e" } }), []);
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues[0]).toMatchObject({ field: "branding.primary_colour", index: -1, questionId: null });
+    // The number the two routes report, so import and publish cannot word
+    // the same refusal differently.
+    expect(r.issues[0]?.message).toBe(
+      "#f59a6e reaches only 2.09:1 against cream, and candidate text in the brand colour needs at least 4.5:1.",
+    );
+  });
+
+  it("brandColourIssue refuses a non-colour with an example, and passes a readable one", () => {
+    expect(brandColourIssue({ primary_colour: "rebeccapurple" })).toEqual({
+      field: "branding.primary_colour",
+      message: "rebeccapurple is not a colour; use a hex value like #b63a10.",
+    });
+    expect(brandColourIssue({ primary_colour: EXAMPLE_BRAND_COLOUR })).toBeNull();
+    expect(brandColourIssue({ footer_text: "x" })).toBeNull();
+    expect(brandColourIssue(undefined)).toBeNull();
   });
 
   it("describeAllowlists states the combined effect in plain words", () => {

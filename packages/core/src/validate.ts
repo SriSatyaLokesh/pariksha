@@ -32,8 +32,10 @@ import type {
   Section,
   Test,
   TestAccess,
+  TestBranding,
   TestTiming,
 } from "./types.js";
+import { CREAM, EXAMPLE_BRAND_COLOUR, HEX_COLOUR, contrastRatio, meetsAA } from "./contrast.js";
 import { assertSafeRegex } from "./grade/text.js";
 import type { ScoringDefaults } from "./grade/result.js";
 import { APPLICABLE_MODES, resolveScoring, round2 } from "./grade/result.js";
@@ -647,6 +649,37 @@ export function allowlistIssues(
   return issues;
 }
 
+/**
+ * Why `branding.primary_colour` cannot be stored, as `{ field, message }`,
+ * or `null` when it can.
+ *
+ * **Save-time, like `allowlistIssues`.** A colour is never half-built, and
+ * one below 4.5:1 against the candidate page's own ground makes every
+ * piece of text painted in it unreadable the moment anything renders.
+ * `PATCH /workspaces/:id` and `PATCH .../draft` both gate on this; it is
+ * stated once here, and run from `validateTest` as well, because publish
+ * and Task 12's whole-test import are a third and fourth way the same
+ * value reaches storage and "a rule enforced on one of the routes that
+ * can store a value is not a rule".
+ *
+ * The ground is `CREAM` alone, not "the worse of cream and ink":
+ * `--brand-primary` is accent text and link colour on the cream page, and
+ * `#f59a6e` reaches 7.57:1 on ink while being 2.09:1 where a candidate
+ * actually reads it.
+ */
+export function brandColourIssue(
+  branding: TestBranding | undefined,
+): { field: string; message: string } | null {
+  const colour = branding?.primary_colour;
+  if (colour === undefined) return null;
+  const hex = HEX_COLOUR.test(colour);
+  if (hex && meetsAA(colour, CREAM)) return null;
+  const detail = hex
+    ? `reaches only ${Math.round(contrastRatio(colour, CREAM) * 100) / 100}:1 against cream, and candidate text in the brand colour needs at least 4.5:1`
+    : `is not a colour; use a hex value like ${EXAMPLE_BRAND_COLOUR}`;
+  return { field: "branding.primary_colour", message: `${colour} ${detail}.` };
+}
+
 /** What the two allowlists, together, let through — in the words the panel
  * shows an organiser and the words Task 13's checklist row uses, which is
  * the point of it living here rather than in either. */
@@ -940,6 +973,13 @@ export function validateTest(
   for (const issue of allowlistIssues(doc.access)) {
     issues.push({ questionId: null, index: -1, ...issue });
   }
+
+  // Task 10 (#61, P5.8), task 7/8/10 review M7. Save-time in class, same
+  // as the allowlists — stated here so Task 12's import and publish run
+  // the rule the two PATCH routes already run, rather than being a third
+  // and fourth way an unreadable colour reaches a candidate's screen.
+  const colour = brandColourIssue(doc.branding);
+  if (colour !== null) issues.push({ questionId: null, index: -1, ...colour });
 
   // Task 5 (#57, P5.4): docs/test-format.md's "ids are unique within the
   // test" line, both halves. **Publish-time** — an organiser mid-build may
