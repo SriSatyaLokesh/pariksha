@@ -31,6 +31,19 @@ export const examPaper: AttemptPaper = {
           type: "single",
           prompt: "What is the capital of France?",
           points: 1,
+          // Fix round 1, I1: one question carries a passage and media, so
+          // both are on a path a candidate can click to. `src` is used
+          // verbatim — the scrubber rewrote it to the attempt-scoped
+          // route when the layout was pinned, and nothing on this side
+          // builds a media URL.
+          group: { id: "geo", passage: "A short *passage* about European capitals." },
+          media: [
+            {
+              kind: "image",
+              src: "/api/v1/run/attempt/media/media/w1/map.png",
+              alt: "A map of France",
+            },
+          ],
           options: [
             { id: "a", text: "Paris" },
             { id: "b", text: "Lyon" },

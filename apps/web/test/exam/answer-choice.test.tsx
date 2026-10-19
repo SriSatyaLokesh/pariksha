@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -342,5 +342,105 @@ describe("every answer state carries a shape, not only a colour", () => {
 
   it("the option row is the hit target, at DESIGN.md's 48px floor", () => {
     expect(body(".exam-option-row")).toMatch(/min-height:\s*48px/);
+  });
+});
+
+// ---- the passage and the media (fix round 1, I1) --------------------------
+//
+// `AnswerInput` renders `question.group.passage` through the shared
+// renderer and `question.media[]` as <img>, and neither had a fixture
+// anywhere, so the alt-text path had never met axe. Both are data the
+// pinned layout supplies: the scrubber rewrites every `media.src` to the
+// attempt-scoped route before it reaches this component, which is why
+// nothing here builds a URL and the fixture's src is simply a string.
+
+const PASSAGE_SRC = "Read the passage. It mentions *Paris* and nothing else.";
+
+const withPassage: CandidateQuestion = {
+  ...fixture("single"),
+  group: { id: "g1", passage: PASSAGE_SRC },
+};
+
+const withMedia: CandidateQuestion = {
+  ...fixture("single"),
+  media: [
+    { kind: "image", src: "/api/v1/run/attempt/media/media/w1/abc.png", alt: "A circuit diagram" },
+    { kind: "image", src: "/api/v1/run/attempt/media/media/w1/def.png", alt: "Its truth table" },
+  ],
+};
+
+describe("the passage and the question's media", () => {
+  it("the passage renders through the shared renderer, inside its own labelled region", async () => {
+    render(<Harness question={withPassage} />);
+    const passage = screen.getByRole("region", { name: /passage/i });
+    expect(await within(passage).findByText(/read the passage/i)).toBeVisible();
+    // Markdown, not plain text: the emphasis really became an element.
+    expect(passage.querySelector("em")).not.toBeNull();
+  });
+
+  it("a question with no group renders no passage region at all", () => {
+    render(<Harness question={fixture("single")} />);
+    expect(screen.queryByRole("region", { name: /passage/i })).toBeNull();
+  });
+
+  it("every image carries the alt text the paper gave it, in order", () => {
+    render(<Harness question={withMedia} />);
+    expect(screen.getAllByRole("img").map((img) => img.getAttribute("alt"))).toEqual([
+      "A circuit diagram",
+      "Its truth table",
+    ]);
+  });
+
+  it("the src is used verbatim: nothing here builds a media URL", () => {
+    render(<Harness question={withMedia} />);
+    expect(screen.getByRole("img", { name: "A circuit diagram" })).toHaveAttribute(
+      "src",
+      "/api/v1/run/attempt/media/media/w1/abc.png",
+    );
+  });
+
+  it("a passage and media have no axe violations, at 100% and at 200% zoom", async () => {
+    const both: CandidateQuestion = { ...withPassage, media: withMedia.media };
+    const { container } = render(<Harness question={both} />);
+    await screen.findByText(/read the passage/i);
+    expect(await axe(container)).toHaveNoViolations();
+    document.documentElement.style.fontSize = "32px";
+    expect(await axe(container)).toHaveNoViolations();
+    document.documentElement.style.fontSize = "";
+  });
+
+  it("a passage and media are still inert when the attempt is read-only", () => {
+    const both: CandidateQuestion = { ...withPassage, media: withMedia.media };
+    const { container } = render(<Harness question={both} disabled />);
+    for (const control of container.querySelectorAll<HTMLElement>("input")) {
+      expect(control).toBeDisabled();
+    }
+    expect(container.querySelectorAll("[draggable='true']")).toHaveLength(0);
+  });
+});
+
+describe("reachability: the passage and the media, from the root", () => {
+  it("question 1's passage and image are on the screen a candidate actually reaches", async () => {
+    await startFromRoot();
+    const passage = await screen.findByRole("region", { name: /passage/i });
+    // textContent, not getByText: the renderer splits the sentence across
+    // an <em>, which is the point of rendering it through markdown at all.
+    await waitFor(() => {
+      expect(passage.textContent).toMatch(/A short passage about European capitals/);
+    });
+    expect(screen.getByRole("img", { name: "A map of France" })).toHaveAttribute(
+      "src",
+      "/api/v1/run/attempt/media/media/w1/map.png",
+    );
+  });
+
+  it("axe is clean on the whole runner with a passage and an image in it", async () => {
+    const view = render(<ExamApp client={{ landing: () => Promise.resolve(landingPayload), start: () => Promise.resolve(examPaper) }} />);
+    activate(await screen.findByRole("button", { name: /^start/i }));
+    const passage = await screen.findByRole("region", { name: /passage/i });
+    await waitFor(() => {
+      expect(passage.textContent).toMatch(/European capitals/);
+    });
+    expect(await axe(view.container)).toHaveNoViolations();
   });
 });
