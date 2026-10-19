@@ -10,8 +10,14 @@
 //                        one origin.
 //   stub IdP    (9797)   e2e/stub-idp.mjs. No network, no credentials.
 //
-// Both app servers build first, so `pnpm --filter @pariksha/web e2e` is one
-// command from a clean checkout and can never test a stale dist/.
+// Each app server builds itself below, so the suite can never test a stale
+// dist/. Those two builds are `tsc` and `vite build` on one package each —
+// neither builds the workspace packages they import by name, which resolve to
+// a dist/ that has to already exist. The `e2e` script therefore builds
+// @pariksha/api and its dependencies (core, db, storage) first, in one place
+// rather than in both webServer commands, which run concurrently and would
+// race on the same output directories. That is what keeps
+// `pnpm --filter @pariksha/web e2e` one command from a clean checkout.
 //
 // Chromium only. This suite is a smoke test of one flow, not cross-browser
 // coverage, and nothing in it is engine-sensitive.

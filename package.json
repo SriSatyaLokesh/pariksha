@@ -12,6 +12,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "test": "turbo run test && pnpm vitest run scripts",
+    "test:changed": "vitest run --changed",
+    "test:pkg": "turbo run test --filter",
     "tokens": "node scripts/tokens.mjs",
     "deploy:cf": "pnpm --filter @pariksha/api exec wrangler deploy -c ../../deploy/cloudflare/wrangler.toml"
   },
