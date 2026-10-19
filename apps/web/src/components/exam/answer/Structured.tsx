@@ -2,7 +2,7 @@ import { useId } from "react";
 import type { ResponseValue } from "@pariksha/core";
 import type { CandidateQuestion } from "../Runner";
 import { ReorderableList } from "../../authoring/ReorderableList";
-import { reordered } from "../../authoring/answer/Structured";
+import { reordered } from "../../answer-common";
 import type { AnswerProps } from "./props";
 
 /**

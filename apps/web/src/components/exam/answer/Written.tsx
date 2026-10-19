@@ -2,7 +2,7 @@ import { useId, useMemo } from "react";
 import { placeholderIds } from "@pariksha/core";
 import type { CandidateQuestion } from "../Runner";
 import { useRenderedMarkdown } from "../../authoring/RenderedHtml";
-import { MAX_LENGTH_CEILING } from "../../authoring/answer/Written";
+import { MAX_LENGTH_CEILING } from "../../answer-common";
 import type { AnswerProps } from "./props";
 
 /**

@@ -1,7 +1,7 @@
 import { useId } from "react";
 import type { ResponseValue } from "@pariksha/core";
 import type { CandidateQuestion } from "../Runner";
-import { ASSERTION_REASON_OPTIONS } from "../../authoring/answer/Choice";
+import { ASSERTION_REASON_OPTIONS } from "../../answer-common";
 import type { AnswerProps } from "./props";
 
 /**
