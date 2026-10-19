@@ -119,6 +119,11 @@ describe("TimingPanel", () => {
 
   it("a window that ends before it opens is caught on blur, on the close field", async () => {
     render(<Harness initial={{ ...BASE, closes_at: "2026-11-14T08:00:00+05:30" }} />);
+    // Nothing yet: an organiser who has not touched the control has not
+    // made a mistake, and a panel that opens red teaches people to ignore
+    // it. The alert arrives only once they leave the field.
+    expect(screen.queryByRole("alert")).toBeNull();
+
     fireEvent.blur(screen.getByLabelText(/closes at/i));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/is not after it opens/i);
@@ -200,7 +205,13 @@ describe("TimingPanel", () => {
     const onChange = vi.fn();
     render(<Harness onChange={onChange} />);
     fireEvent.change(screen.getByLabelText(/opens at/i), { target: { value: "" } });
-    expect(onChange).toHaveBeenCalledWith({ timezone: ZONE, closes_at: CLOSES, duration_minutes: 60 });
+
+    const next = onChange.mock.calls[0]?.[0] as TestTiming;
+    expect(next).toEqual({ timezone: ZONE, closes_at: CLOSES, duration_minutes: 60 });
+    // `toEqual` treats `{ opens_at: undefined }` as equal to `{}`, and the
+    // key being *present* and undefined is exactly the thing
+    // `exactOptionalPropertyTypes` exists to stop reaching the wire.
+    expect(Object.keys(next)).not.toContain("opens_at");
   });
 
   it("times and durations are marked as the figures that have to line up", () => {
