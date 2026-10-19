@@ -326,7 +326,7 @@ export function SectionList({
       )}
 
       {undo && (
-        <p className="section-row__undo" role="status">
+        <p className="section-row__undo" role="status" aria-label="Section deleted">
           Section deleted.{" "}
           <button type="button" className="button-secondary" onClick={restoreDeleted}>
             Undo
