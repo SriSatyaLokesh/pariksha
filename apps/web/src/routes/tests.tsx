@@ -116,8 +116,11 @@ export function TestList({
 
   useEffect(() => {
     void load(filter);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter.tag, filter.status, filter.search, filter.sort]);
+    // `load` itself is intentionally not a dependency: it is recreated only
+    // when `client`/`workspaceId` change, and including it would re-run this
+    // effect on every render of those for no reason beyond satisfying a
+    // lint rule this project does not enable.
+  }, [load, filter.tag, filter.status, filter.search, filter.sort]);
 
   // Filters, tags and search live in the URL and survive the back button: a
   // `popstate` (the browser's own Back/Forward, or a test dispatching one)
@@ -195,10 +198,8 @@ export function TestList({
     setCopiedId(test.id);
   }
 
-  function sortHeaderProps(column: Sort) {
-    return {
-      "aria-sort": (filter.sort === column ? "ascending" : undefined) as "ascending" | undefined,
-    };
+  function sortHeaderProps(column: Sort): { "aria-sort"?: "ascending" } {
+    return filter.sort === column ? { "aria-sort": "ascending" } : {};
   }
 
   return (
