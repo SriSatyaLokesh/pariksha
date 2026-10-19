@@ -41,15 +41,17 @@ const newWorkspace = z.object({
 });
 
 /**
- * T-23's workspace half (Task 10, #61, P5.8). `logo`, `primary_colour` and
- * `footer_text` are per workspace; `start_message` and `finish_message`
- * are per test and go through `PATCH .../draft` instead. Only the three
- * are accepted here, so an organiser cannot smuggle a per-test field into
- * workspace settings and wonder why no test shows it.
+ * T-23's workspace half (Task 10, #61, P5.8). `logo`, `logo_alt`,
+ * `primary_colour` and `footer_text` are per workspace; `start_message`
+ * and `finish_message` are per test and go through `PATCH .../draft`
+ * instead. Only the four are accepted here, so an organiser cannot
+ * smuggle a per-test field into workspace settings and wonder why no test
+ * shows it.
  */
 const brandingPatch = z
   .object({
     logo: z.string().max(200).optional(),
+    logo_alt: z.string().max(300).optional(),
     primary_colour: z.string().optional(),
     footer_text: z.string().max(500).optional(),
   })

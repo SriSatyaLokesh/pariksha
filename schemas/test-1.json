@@ -51,6 +51,7 @@
       "type": "object",
       "properties": {
         "logo": { "type": "string" },
+        "logo_alt": { "type": "string", "description": "What a screen reader says in place of the logo." },
         "primary_colour": { "type": "string" },
         "footer_text": { "type": "string" },
         "start_message": { "type": "string" },

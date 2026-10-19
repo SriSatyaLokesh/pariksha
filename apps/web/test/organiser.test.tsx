@@ -983,6 +983,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     };
     const patchDraft = vi.fn(async () => DRAFT);
     const saveWorkspaceBranding = vi.fn(async (_ws: string, branding: TestBranding) => branding);
+    const uploadMedia = vi.fn(async () => ({ key: "media/wsp_1/abc.png" }));
     render(
       <OrganiserApp
         client={fakeClient({
@@ -993,6 +994,21 @@ describe("OrganiserApp routes on state, not on a URL", () => {
           patchDraft,
           workspaceBranding: async () => ({ footer_text: "Alpha College" }),
           saveWorkspaceBranding,
+          // The shell hangs the logo on the workspace's first bank — the
+          // only media route this product has.
+          listBanks: async () => [
+            {
+              id: "bnk_1",
+              name: "Bank",
+              description: null,
+              license: null,
+              tags: [],
+              questionCount: 0,
+              createdAt: 0,
+              updatedAt: 0,
+            },
+          ],
+          uploadMedia,
         })}
       />,
     );
@@ -1014,12 +1030,27 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       { settings: { branding: { start_message: "Good luck." } } },
     ]);
 
-    // The workspace half does not: it is `PATCH /workspaces/:id`.
+    // task 7/8/10 review, M1: the logo upload is the one path none of the
+    // three reachability tests drove, and it is where the alt text was
+    // being dropped — the panel test asserted a stub's argument, and the
+    // shell's `uploadLogo` never had one. Driven here through the real
+    // call site, and asserted on what the workspace write carries.
+    fireEvent.change(screen.getByLabelText(/logo file/i), {
+      target: { files: [new File([new Uint8Array([137, 80, 78, 71])], "crest.png", { type: "image/png" })] },
+    });
+    fireEvent.change(screen.getByLabelText(/alt text/i), { target: { value: "Alpha College crest" } });
+    fireEvent.click(screen.getByRole("button", { name: /^upload$/i }));
+    await waitFor(() => expect(uploadMedia).toHaveBeenCalledWith("wsp_1", "bnk_1", expect.any(File)));
+
+    // The workspace half does not ride the draft route: it is
+    // `PATCH /workspaces/:id`.
     fireEvent.change(screen.getByLabelText(/primary colour/i), { target: { value: "#b63a10" } });
     fireEvent.click(screen.getByRole("button", { name: /save workspace branding/i }));
     await waitFor(() => expect(saveWorkspaceBranding).toHaveBeenCalled());
     expect(saveWorkspaceBranding).toHaveBeenCalledWith("wsp_1", {
       footer_text: "Alpha College",
+      logo: "media/wsp_1/abc.png",
+      logo_alt: "Alpha College crest",
       primary_colour: "#b63a10",
     });
   });

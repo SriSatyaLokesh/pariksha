@@ -71,14 +71,13 @@ export function BrandingPanel({
   canEditWorkspace: boolean;
   onChange: (next: TestBranding) => void;
   onSaveWorkspace: (next: TestBranding) => Promise<void>;
-  onUploadLogo: (file: File, alt: string) => Promise<{ key: string }>;
+  onUploadLogo: (file: File) => Promise<{ key: string }>;
 }) {
   const ids = useId();
   const [workspace, setWorkspace] = useState<TestBranding>(workspaceBranding);
   const [saveError, setSaveError] = useState<string | undefined>(undefined);
   const [saved, setSaved] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
-  const [alt, setAlt] = useState("");
 
   useEffect(() => {
     setWorkspace(workspaceBranding);
@@ -88,7 +87,9 @@ export function BrandingPanel({
   const refusal = colourRefusal(colour);
   const previewRef = useBrandColour(workspace.primary_colour);
 
-  function setWorkspaceKey(key: "primary_colour" | "footer_text" | "logo", value: string): void {
+  const alt = workspace.logo_alt ?? "";
+
+  function setWorkspaceKey(key: "primary_colour" | "footer_text" | "logo" | "logo_alt", value: string): void {
     setSaved(false);
     setWorkspace((prev) => {
       const next: Record<string, unknown> = { ...prev };
@@ -139,12 +140,16 @@ export function BrandingPanel({
           <label className="field-label" htmlFor={`${ids}-alt`}>
             Alt text
           </label>
+          {/* task 7/8/10 review, M1: a stored property of the branding,
+              not a staging field the Upload handler reads and drops. It
+              rides the same "Save workspace branding" write as the key the
+              upload produces, and comes back on the next load. */}
           <input
             className="text-input"
             id={`${ids}-alt`}
             value={alt}
             disabled={!canEditWorkspace}
-            onChange={(event) => setAlt(event.target.value)}
+            onChange={(event) => setWorkspaceKey("logo_alt", event.target.value)}
           />
           <p className="branding-panel__fact">
             What a screen reader says in place of the image. Name the institution, not the file.
@@ -159,7 +164,7 @@ export function BrandingPanel({
             disabled={!canEditWorkspace || logoFile === null || alt.trim() === ""}
             onClick={() => {
               if (logoFile === null) return;
-              void onUploadLogo(logoFile, alt.trim()).then(
+              void onUploadLogo(logoFile).then(
                 ({ key }) => setWorkspaceKey("logo", key),
                 (cause: unknown) =>
                   setSaveError(cause instanceof Error ? cause.message : "The logo could not be uploaded."),
@@ -262,7 +267,12 @@ export function BrandingPanel({
       <div className="branding-panel__previews" ref={previewRef}>
         <section aria-label="Start page preview" className="branding-panel__preview">
           <h4>Start page</h4>
-          {workspace.logo !== undefined && <p className="branding-panel__fact">Logo: {workspace.logo}</p>}
+          {workspace.logo !== undefined && (
+            <p className="branding-panel__fact">
+              {`Logo: ${workspace.logo}`}
+              {workspace.logo_alt !== undefined && ` — "${workspace.logo_alt}"`}
+            </p>
+          )}
           <p>{branding.start_message ?? "No start message yet."}</p>
           <p className="branding-panel__footer">{workspace.footer_text ?? ""}</p>
         </section>

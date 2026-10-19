@@ -399,6 +399,11 @@ export interface TestRelease {
 export interface TestBranding {
   /** A media key from `POST .../banks/:bankId/media`, not a URL. */
   logo?: string;
+  /** What a screen reader says in place of `logo`. Collected beside the
+   * file and stored with it: an unlabelled institution logo is how a
+   * candidate using a screen reader meets the test, and nothing later in
+   * the product asks for this again. */
+  logo_alt?: string;
   /** `#rrggbb`. Refused at the write below 4.5:1 against `CREAM`. */
   primary_colour?: string;
   footer_text?: string;

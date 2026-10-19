@@ -119,7 +119,7 @@ function BrandingHarness({
   canEditWorkspace?: boolean;
   onChange?: (next: TestBranding) => void;
   onSaveWorkspace?: (next: TestBranding) => Promise<void>;
-  onUploadLogo?: (file: File, alt: string) => Promise<{ key: string }>;
+  onUploadLogo?: (file: File) => Promise<{ key: string }>;
 }) {
   const [testBranding, setTestBranding] = useState(branding);
   return (
@@ -205,9 +205,15 @@ describe("BrandingPanel", () => {
     expect(previews()?.style.getPropertyValue("--brand-primary")).toBe("#b63a10");
   });
 
-  it("a logo upload requires alt text and states the render size", async () => {
+  // task 7/8/10 review, M1: the alt text used to be a `useState` the
+  // Upload handler read and the shell's `uploadLogo(file)` then dropped,
+  // and this test asserted the *stub's* second argument — which the
+  // production call site never had. It is asserted against the branding
+  // handed to `onSaveWorkspace` now: storage, not a callback shape.
+  it("a logo upload requires alt text, states the render size, and stores the alt text", async () => {
     const onUploadLogo = vi.fn(async () => UPLOADED);
-    render(<BrandingHarness onUploadLogo={onUploadLogo} />);
+    const onSaveWorkspace = vi.fn(async () => undefined);
+    render(<BrandingHarness onUploadLogo={onUploadLogo} onSaveWorkspace={onSaveWorkspace} />);
 
     fireEvent.change(screen.getByLabelText(/logo file/i), { target: { files: [pngFile()] } });
 
@@ -218,8 +224,21 @@ describe("BrandingPanel", () => {
     expect(screen.getByRole("button", { name: /^upload$/i })).toBeEnabled();
 
     fireEvent.click(screen.getByRole("button", { name: /^upload$/i }));
-    expect(onUploadLogo).toHaveBeenCalledWith(expect.any(File), "Acme College crest");
+    expect(onUploadLogo).toHaveBeenCalledWith(expect.any(File));
     await waitFor(() => expect(screen.getByText(/abc123\.png/)).toBeVisible());
+
+    fireEvent.click(saveButton());
+    await waitFor(() =>
+      expect(onSaveWorkspace).toHaveBeenCalledWith({ logo: "abc123.png", logo_alt: "Acme College crest" }),
+    );
+  });
+
+  it("the stored alt text comes back on the control and beside the key", () => {
+    render(<BrandingHarness workspaceBranding={{ logo: "abc123.png", logo_alt: "Acme College crest" }} />);
+    expect(screen.getByLabelText(/alt text/i)).toHaveValue("Acme College crest");
+    expect(
+      within(screen.getByRole("region", { name: /start page preview/i })).getByText(/Acme College crest/),
+    ).toBeVisible();
   });
 
   it("alt text that is only spaces does not count as alt text", () => {
