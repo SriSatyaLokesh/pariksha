@@ -36,14 +36,29 @@ import { APPLICABLE_MODES, resolveScoring, round2 } from "./grade/result.js";
 import { matchesFilter } from "./select.js";
 
 /**
- * Every value `ImportIssue.code` can hold. A one-member union today, not
- * `string` — fix round 1, finding 10: a plain string coupled the producer
- * (this file) to the consumer (`apps/api/src/routes/questions.ts`'s
- * `isSaveTimeIssue`) only by both sides typing the same literal correctly,
- * with nothing to catch a typo on either end. Extend this union, not the
- * type of `code` itself, when a second issue needs one.
+ * Every value `ImportIssue.code` can hold. Not a plain `string` — fix round
+ * 1, finding 10: a plain string coupled the producer (this file) to the
+ * consumer (`apps/api/src/routes/questions.ts`'s `isSaveTimeIssue`) only by
+ * both sides typing the same literal correctly, with nothing to catch a
+ * typo on either end. Extend this union, not the type of `code` itself,
+ * when another issue needs one.
+ *
+ * Task 8 fix round 1, finding 14: `apps/api/src/import/csv.ts` and
+ * `gift.ts` carry their own converter-detected issues (a type outside the
+ * five, a header that doesn't match, a cell that cannot be parsed at all,
+ * a GIFT construct this format cannot express) — these codes let a test
+ * (or `ImportDialog`, later) match on *which* defect fired without parsing
+ * `message` prose, the same reason `unsafe_regex` exists.
  */
-export type ImportIssueCode = "unsafe_regex";
+export type ImportIssueCode =
+  | "unsafe_regex"
+  | "csv_unsupported_type"
+  | "csv_column_count"
+  | "csv_header_mismatch"
+  | "csv_unparseable_value"
+  | "gift_unsupported_construct"
+  | "gift_unparseable_value"
+  | "gift_no_correct_answer";
 
 export interface ImportIssue {
   /** The question's `id`, or null for an issue not about one specific question. */
