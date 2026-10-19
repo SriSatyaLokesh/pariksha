@@ -148,11 +148,15 @@ describe("TestList", () => {
 
   it("the locked slug is read-only, not disabled, and says why", async () => {
     renderList(fakeClient());
-    await screen.findByText("Midterm");
+    const row = (await screen.findByText("Midterm")).closest("tr") as HTMLElement;
 
-    expect(screen.getByLabelText(/slug/i)).toHaveAttribute("readonly");
-    expect(screen.getByLabelText(/slug/i)).not.toBeDisabled();
-    expect(screen.getByText(/locked because this test has been published/i)).toBeVisible();
+    // Scoped with `within(row)`: the create form above has its own field
+    // also labelled "Slug" (PRD T-01, issue #54, docs/design.md:194 all
+    // call it that — product copy does not get renamed to disambiguate a
+    // test selector), so an unscoped query would throw on two matches.
+    expect(within(row).getByLabelText(/slug/i)).toHaveAttribute("readonly");
+    expect(within(row).getByLabelText(/slug/i)).not.toBeDisabled();
+    expect(within(row).getByText(/locked because this test has been published/i)).toBeVisible();
   });
 
   it("the QR code has a text alternative and the short link is reachable without it", async () => {

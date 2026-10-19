@@ -227,11 +227,7 @@ export function TestList({
         <CardHairline className="organiser__panel">
           <form className="organiser-form" onSubmit={(event) => void onCreate(event)} noValidate>
             <TextField id="test-name" label="Test name" help="1 to 200 characters." value={name} onChange={setName} inputRef={nameRef} />
-            {/* Labelled "Address", not "Slug": a published row's own slug
-                field below is labelled "Slug", and the two must stay
-                distinguishable by accessible name alone — there is no
-                scoping query that tells them apart otherwise. */}
-            <TextField id="test-slug" label="Address" help={SLUG_HELP} value={slug} onChange={setSlug} />
+            <TextField id="test-slug" label="Slug" help={SLUG_HELP} value={slug} onChange={setSlug} />
             {createError !== undefined && (
               <p className="field-error" role="alert">
                 <span aria-hidden="true">⚠</span> <span>{createError}</span>
