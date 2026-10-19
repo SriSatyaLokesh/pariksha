@@ -1120,6 +1120,9 @@ git commit -s -m "feat(tests): access modes and allowlists"
     setLabel: string | null;
     /** Prefill, keyed by registration field id. */
     formValues: Record<string, unknown>;
+    /** `"list"` is written by this task; `"registration"` by Phase 6 when a
+     *  candidate registers. The discriminator is what lets a re-upload
+     *  replace the list without touching anyone who has already signed up. */
     source: "list" | "registration";
     consentVersion: string | null;
     createdAt: number;
@@ -1181,7 +1184,11 @@ it("the same external_id in two different tests is accepted", async () => { /* r
 // packages/db/test/repo/candidates.test.ts
 it("replaceCandidateList replaces only the rows it owns", async () => {
   await replaceCandidateList(db, ws, testId, [a, b], T);
-  await registerCandidate(db, ws, testId, { externalId: "21CS0147" });   // source "registration"
+  // Phase 5 writes no `source: "registration"` row — Phase 6 does, when a
+  // candidate registers. The fixture inserts it directly, which is the one
+  // place in this phase a test may bypass a production path, because the
+  // production path is a phase away and this is what it must not destroy.
+  await insertCandidateRow(db, { workspaceId: ws, testId, externalId: "21CS0147", source: "registration" });
   await replaceCandidateList(db, ws, testId, [c], T);
   expect((await listCandidates(db, ws, testId)).map((r) => [r.externalId, r.source]))
     .toEqual([["21CS0147", "registration"], ["21EC0211", "list"]]);
