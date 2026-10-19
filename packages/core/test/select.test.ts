@@ -197,6 +197,29 @@ describe("selectForSection: sets", () => {
   it("throws when asked for a set that does not exist", () => {
     expect(() => selectForSection({ section, bank, seed: "x", setNo: "Z" })).toThrow();
   });
+
+  // The same refusal reached with no set at all, which is the shape a
+  // caller that forgot to assign one produces. The message has to name
+  // that case rather than interpolating `undefined` into it: it is what
+  // an organiser sees when a section is drawn without an assignment.
+  it("names the missing set when none was given at all", () => {
+    expect(() => selectForSection({ section, bank, seed: "x" })).toThrow(/has no set "\(none given\)"/);
+  });
+
+  it("throws when a set names a question the bank does not hold", () => {
+    const missing: Section = {
+      id: "reasoning",
+      title: "Reasoning",
+      source: {
+        kind: "sets",
+        assignment: "round_robin",
+        sets: [{ set: "A", questions: ["LOG-001", "LOG-999"] }],
+      },
+    };
+    expect(() => selectForSection({ section: missing, bank, seed: "x", setNo: "A" })).toThrow(
+      /question "LOG-999" not found in bank/,
+    );
+  });
 });
 
 describe("layoutForAttempt (AC-11)", () => {
@@ -256,5 +279,41 @@ describe("layoutForAttempt (AC-11)", () => {
   it("omits setNo entirely when not provided", () => {
     const layout = layoutForAttempt({ sections, bank, seed: "candidate-a" });
     expect("setNo" in layout).toBe(false);
+  });
+
+  // A layout mixes question types: only the option-bearing ones get an
+  // `optionOrder` entry, and a `shuffle_options: false` question keeps the
+  // authored order inside a layout whose other questions are shuffled.
+  // Both halves in one section, because the bug either would hide is "the
+  // other kind of question was quietly dropped from the layout".
+  it("carries a question with no options, and leaves a pinned-order question alone", () => {
+    const mixed = [
+      single("Q1"),
+      trueFalse("TF1"),
+      single("Q2", { shuffle_options: false }),
+    ];
+    const section: Section[] = [
+      { id: "sec1", title: "Section 1", source: { kind: "fixed", questions: ["Q1", "TF1", "Q2"] } },
+    ];
+    const layout = layoutForAttempt({ sections: section, bank: mixed, seed: "candidate-a" });
+
+    expect(new Set(layout.sections[0]?.questionIds)).toEqual(new Set(["Q1", "TF1", "Q2"]));
+    // A true/false question has no options to order, so it gets no entry
+    // rather than an empty one.
+    expect(Object.keys(layout.sections[0]?.optionOrder ?? {}).sort()).toEqual(["Q1", "Q2"]);
+    expect(layout.sections[0]?.optionOrder.Q2).toEqual(["Q2-a", "Q2-b", "Q2-c", "Q2-d"]);
+  });
+});
+
+describe("assignSet: the index is trusted but checked", () => {
+  // `round_robin` is `registrationIndex % sets.length`, and a negative
+  // index makes that negative — `sets[-1]` is `undefined`, which without
+  // this guard would be returned as the set label and become a key of
+  // `draw`/`setPoints` that matches nothing. A caller's defect, refused
+  // where it is cheap to see rather than at the point it is used.
+  it("refuses a negative registration index rather than returning no set", () => {
+    expect(() =>
+      assignSet({ sets: ["A", "B", "C"], assignment: "round_robin", registrationIndex: -1, candidateId: "cnd_1" }),
+    ).toThrow(RangeError);
   });
 });

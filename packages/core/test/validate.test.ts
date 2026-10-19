@@ -1144,6 +1144,82 @@ describe("validateTest", () => {
     ]);
   });
 
+  // The RFC 3339 parser `timingIssues` compares with. It is hand-written
+  // (no `Date.parse`: this package is pure, and `Date.parse` accepts
+  // "next Tuesday" on some engines and shifts a bare date into the host's
+  // zone on others), so the date arithmetic is the project's own and has
+  // to be tested as such. Every row below is one timestamp an organiser
+  // can type into `TimingPanel`'s box.
+  it.each([
+    ["2026-13-01T09:00:00Z", "a thirteenth month"],
+    ["2026-00-01T09:00:00Z", "a zeroth month"],
+    ["2026-01-00T09:00:00Z", "a zeroth day"],
+    ["2026-02-29T09:00:00Z", "the 29th of a February that has 28 days"],
+    ["2100-02-29T09:00:00Z", "the 29th of 2100, which is divisible by 100 and not a leap year"],
+    ["2026-04-31T09:00:00Z", "the 31st of a 30-day month"],
+    ["2026-01-32T09:00:00Z", "the 32nd of a 31-day month"],
+    ["2026-01-01T24:00:00Z", "24:00, which RFC 3339 allows and no organiser means"],
+    ["2026-01-01T09:60:00Z", "a sixtieth minute"],
+    ["2026-01-01T23:59:60Z", "a leap second"],
+    ["2026-01-01T09:00:00+24:00", "an offset of 24 hours"],
+    ["2026-01-01T09:00:00+00:60", "an offset with 60 minutes in it"],
+  ])("%s is refused — %s", (opens_at) => {
+    expect(timingIssues({ opens_at }, [])).toEqual([
+      {
+        field: "timing.opens_at",
+        message: `"${opens_at}" is not a date and time — use an RFC 3339 timestamp, for example 2026-11-14T09:00:00+05:30`,
+      },
+    ]);
+  });
+
+  it.each([
+    ["2024-02-29T09:00:00Z", "a leap day in a year divisible by 4"],
+    ["2000-02-29T09:00:00Z", "a leap day in a year divisible by 400"],
+    ["2026-01-31T09:00:00Z", "the 31st of January, which the month-to-day table reaches from its January branch"],
+    ["2026-06-30T09:00:00Z", "the 30th of June"],
+    ["2026-12-31T23:59:59Z", "the last second of a year"],
+    ["2026-11-14T09:00:00+05:30", "a positive offset"],
+    ["2026-11-14T09:00:00-05:00", "a negative offset"],
+    ["2026-11-14T09:00Z", "no seconds at all, which RFC 3339 allows"],
+  ])("%s is accepted — %s", (opens_at) => {
+    expect(timingIssues({ opens_at }, [])).toEqual([]);
+  });
+
+  // The offset is not merely parsed, it is applied: these two spellings
+  // are the same instant, so "closes after opens" must refuse them. A
+  // parser that read the offset and dropped it would see 09:00 against
+  // 03:30 and pass.
+  it("an offset shifts the instant it is compared at", () => {
+    expect(
+      timingIssues({ opens_at: "2026-11-14T09:00:00+05:30", closes_at: "2026-11-14T03:30:00Z" }, []),
+    ).toEqual([
+      {
+        field: "timing.closes_at",
+        message: expect.stringContaining("which is not after it opens at"),
+      },
+    ]);
+    expect(
+      timingIssues({ opens_at: "2026-11-14T09:00:00+05:30", closes_at: "2026-11-14T03:31:00Z" }, []),
+    ).toEqual([]);
+  });
+
+  // T-14: `latest_start_at` has to sit inside the window, and the sentence
+  // names which end it fell outside — the two halves are separate
+  // branches and a test that only tried one would leave the other's
+  // wording unexercised.
+  it.each([
+    ["2026-11-14T08:00:00Z", "before the window opens"],
+    ["2026-11-14T20:00:00Z", "after the window closes"],
+  ])("a latest start at %s is reported as falling %s", (latest_start_at, where) => {
+    const issues = timingIssues(
+      { opens_at: "2026-11-14T09:00:00Z", closes_at: "2026-11-14T12:00:00Z", latest_start_at },
+      [],
+    );
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.field).toBe("timing.latest_start_at");
+    expect(issues[0]?.message).toContain(`falls ${where}`);
+  });
+
   it("NAVIGATION_CONSEQUENCE states a consequence for each of the three modes", () => {
     expect(Object.keys(NAVIGATION_CONSEQUENCE)).toEqual(["free", "linear", "per_section"]);
     expect(NAVIGATION_CONSEQUENCE.linear).toBe("A candidate cannot go back to an earlier question.");
