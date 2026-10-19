@@ -120,6 +120,64 @@ describe("createApiClient: importBank normalises a 422 into an ImportReport", ()
   });
 });
 
+// Whole-branch drift review, M-03. `importTest` was the odd one of the
+// three 422-to-report handlers: a cast where its siblings use a guard, so
+// a 422 that is not this route's report became a report with zero issues
+// and `ImportDialog` rendered a dialog saying nothing happened and not
+// why. Same three cases its sibling above is held to.
+describe("createApiClient: importTest guards the 422 it normalises", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function errorResponse(status: number, code: string, message: string, details?: unknown): Response {
+    return new Response(JSON.stringify({ error: { code, message, details } }), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
+  it("a 422 carrying the route's report resolves rather than throwing", async () => {
+    const issues = [{ questionId: null, index: 0, field: "sections", message: "not a section object" }];
+    const rebound = [{ questionId: "LOG-001", bankName: "questions.json" }];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(errorResponse(422, "invalid_test", "This test was not imported.", { issues, rebound })),
+    );
+
+    expect(await createApiClient().importTest("wsp_1", {})).toEqual({
+      testId: null,
+      imported: false,
+      issues,
+      rebound,
+    });
+  });
+
+  it("a 422 that is not that report throws, rather than becoming an empty report", async () => {
+    // `unreadable_colour`'s own shape: a message and one issue list, no
+    // `rebound`. Under the old cast this resolved to `{ issues: [...] }`
+    // or, for a details-less 422, to a dialog with nothing in it at all.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(errorResponse(422, "unreadable_colour", "#f59a6e reaches only 2.09:1 against cream.")),
+    );
+
+    await expect(createApiClient().importTest("wsp_1", {})).rejects.toBeInstanceOf(ApiError);
+  });
+
+  it("a 413 still throws, with its own code", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(errorResponse(413, "payload_too_large", "A test import is limited to 2 MB.")),
+    );
+
+    await expect(createApiClient().importTest("wsp_1", {})).rejects.toMatchObject({
+      status: 413,
+      code: "payload_too_large",
+    });
+  });
+});
+
 // Task 9 (#53, P4.9).
 describe("createApiClient: exportBank", () => {
   afterEach(() => {

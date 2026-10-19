@@ -744,14 +744,15 @@ export function createApiClient(): ApiClient {
           post(doc),
         );
       } catch (error) {
-        if (error instanceof ApiError && error.status === 422) {
-          const details = (error.details ?? {}) as Partial<TestImportReport>;
-          return {
-            testId: null,
-            imported: false,
-            issues: details.issues ?? [],
-            rebound: details.rebound ?? [],
-          };
+        // Whole-branch drift review, M-03. This was a cast where its two
+        // siblings (`importBank`, `importCandidates`) use a guard, so a
+        // 422 whose `details` is *not* the route's report became a report
+        // with zero issues and `ImportDialog` rendered a dialog saying
+        // nothing happened and not why. Guarded now, and the fallbacks go
+        // with the cast: a report with no issues is not a thing this route
+        // produces, so inventing one hides whatever really went wrong.
+        if (error instanceof ApiError && error.status === 422 && isTestImportDetails(error.details)) {
+          return { testId: null, imported: false, issues: error.details.issues, rebound: error.details.rebound };
         }
         throw error;
       }
@@ -810,6 +811,21 @@ function isCandidateReport(value: unknown): value is CandidateImportReport {
     value !== null &&
     typeof (value as { imported?: unknown }).imported === "number" &&
     Array.isArray((value as { issues?: unknown }).issues)
+  );
+}
+
+/** The same kind of shape test its two siblings use, against what
+ * `POST .../tests/import` actually puts in a 422's `details` — the
+ * report's two lists, without the `testId`/`imported` the route already
+ * knows the answer to (`apps/api/src/routes/tests.ts`). */
+function isTestImportDetails(
+  value: unknown,
+): value is Pick<TestImportReport, "issues" | "rebound"> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Array.isArray((value as { issues?: unknown }).issues) &&
+    Array.isArray((value as { rebound?: unknown }).rebound)
   );
 }
 
