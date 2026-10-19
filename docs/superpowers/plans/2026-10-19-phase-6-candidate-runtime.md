@@ -350,15 +350,16 @@ git commit -s -m "feat(run): candidate landing page and the third request author
 
 ---
 
-## Task 2: Access gate for all four modes (#66, P6.2)
+## Task 2: Access gate for all four modes, and invite minting (#66, P6.2)
 
 **Files:**
-- Create: `apps/api/src/run/entry.ts`, `apps/api/src/run/net.ts`, `apps/api/test/run/access.test.ts`, `apps/api/test/run/net.test.ts`
+- Create: `apps/api/src/run/entry.ts`, `apps/api/src/run/net.ts`, `apps/api/src/routes/invites.ts`
+- Create: `apps/api/test/run/access.test.ts`, `apps/api/test/run/net.test.ts`, `apps/api/test/invites.test.ts`
 - Create: `apps/web/src/components/exam/AccessGate.tsx`, `apps/web/test/exam/access.test.tsx`
-- Modify: `apps/api/src/routes/run.ts`, `apps/api/src/app.ts` (four `ROUTE_BUDGETS` and four `ROUTE_AUTH` lines), `apps/api/src/auth/oidc.ts` (branch the callback), `apps/web/src/routes/exam.tsx`
+- Modify: `apps/api/src/routes/run.ts`, `apps/api/src/app.ts` (five `ROUTE_BUDGETS`, four `public` + **one `workspace`** `ROUTE_AUTH` line, and one `ROUTE_ACTIONS` line), `apps/api/src/auth/oidc.ts` (branch the callback), `packages/db/src/repo/run.ts`, `apps/web/src/routes/exam.tsx`
 
 **Interfaces:**
-- Consumes: `resolvePublishedTest` (Task 1) · `insertAuthToken(db, { tokenHash, kind, payload, now, expiresAt })`, `consumeAuthToken(db, tokenHash, kind, now): Promise<unknown>` (`packages/db/src/repo/identity.ts`) · `randomToken(): string`, `sha256Hex(value): Promise<string>` (`apps/api/src/auth/tokens.ts`) · `EmailAdapter` (`apps/api/src/email/adapter.ts`) · `deps.http`, `deps.now` · `TestAccess`, `AccessMode` (`@pariksha/core`; **Phase 5** interface row 6).
+- Consumes: `resolvePublishedTest` (Task 1) · `insertAuthToken(db, { tokenHash, kind, payload, now, expiresAt })`, `consumeAuthToken(db, tokenHash, kind, now): Promise<unknown>` (`packages/db/src/repo/identity.ts`) · `randomToken(): string`, `sha256Hex(value): Promise<string>` (`apps/api/src/auth/tokens.ts`) · `EmailAdapter` (`apps/api/src/email/adapter.ts`) · `requires("candidates.manage")`, `appendAudit`, `DbClient.batch` · `deps.http`, `deps.now` · `TestAccess`, `AccessMode` (`@pariksha/core`; **Phase 5** interface row 6) · **Phase 5's `candidate_list_entry` rows** (interface row 14 — a real dependency, not an assumption: `listCandidateListEntries` and `findCandidateListEntry`).
 - Produces:
   ```ts
   // apps/api/src/run/entry.ts
@@ -375,6 +376,14 @@ git commit -s -m "feat(run): candidate landing page and the third request author
   export function emailInDomains(email: string, globs: readonly string[]): boolean;
   export function clientIp(c: Context<AppBindings>): string | null;            // CF-Connecting-IP, then X-Forwarded-For
 
+  // apps/api/src/routes/invites.ts — organiser-facing, workspace authority, candidates.manage
+  export interface MintedInvite { listEntryId: string; identifier: string; email: string | null; url: string }
+  export function inviteRoutes(deps: AppDeps): Hono<AppBindings>;
+
+  // packages/db/src/repo/run.ts — scoped(), in REPO_FUNCTIONS
+  /** Which of a test's candidate-list entries already hold a live, unused invite. */
+  export const listInvitedEntryIds: ScopedFn<[{ testId: string }], string[]>;
+
   // apps/web/src/lib/run.ts (widened)
   export interface RunClient {
     access(input: { code?: string; invite?: string; email?: string; otp?: string; captchaToken?: string }):
@@ -388,22 +397,36 @@ All four modes end in one place — a single-use `run_entry` token carrying the 
 | Mode | The gate | The attack it stops | The test that proves it |
 | --- | --- | --- | --- |
 | `link_code` | Constant-time compare against `access.access_code` | Brute-forcing a short code over a public URL | The `test_access` bucket (Task 4) refuses the 11th wrong code in a minute |
-| `invite_only` | `consumeAuthToken(hash, "run_invite", now)` | Replaying one candidate's personal link; two tabs racing it | Two concurrent redemptions: exactly one 200, one 410, one candidate row |
+| `invite_only` | `consumeAuthToken(hash, "run_invite", now)` against a link this phase minted | Replaying one candidate's personal link; two tabs racing it; an invite forged for a candidate not on the list | Mint-then-consume as one round trip; two concurrent redemptions give exactly one 200, one 410, one candidate row; minting for an identifier absent from the list is 422 |
+| any mode with `access.candidate_list` | `findCandidateListEntry(testId, identifier)` before the switch (`T-21`) | A candidate who was never on the uploaded list registering on a public link | An identifier absent from the list is refused with the same body as a wrong code |
 | `email_code` | 6 digits, 10-minute expiry, stored only as `sha256(testVersionId:email:code)` | Reading codes out of a database dump; guessing by volume | No 6-digit string appears in an `auth_token` dump; the 6th wrong code for an address is refused |
 | `sso` | The organiser OIDC flow's discovery, PKCE and ID-token verification, branched at the end | A candidate outside `allow_email_domains`; an unverified `email` claim | A token with no `email_verified` is refused unless the provider is configured for it; an outside address is refused with the rule named |
 
 **`sso` creates no user row and issues no session cookie.** `apps/api/src/auth/oidc.ts` already performs discovery, PKCE S256, the token exchange and ID-token verification over the injectable `deps.http`; the candidate callback reuses all of it and branches where the organiser flow calls `createUser` and `issueSession`, minting a `run_entry` token with the verified email instead ([ADR 0005](../../adr/0005-organiser-auth-before-the-candidate-runtime.md): "Nothing in this decision gives a candidate a user row").
 
-**The allowlists are checked before the mode's own gate** (`docs/test-format.md:72`, `T-21`), so an off-network candidate never learns whether their code was right. A request carrying no client-IP header at all, on a test that sets `allow_ip_ranges`, is refused rather than allowed — failing open on an allowlist is the whole of the bug.
+### Ruling: Phase 6 mints the invite links, and it is this phase's one workspace-authority route
+
+**Ruling: `POST /tests/{id}/invites` is a Phase 6 deliverable, mounted as `POST /api/v1/workspaces/:id/tests/:testId/invites`, guarded by `requires("candidates.manage")`, and declared `workspace` in `ROUTE_AUTH`. Phase 5 owns the candidate list it draws from; Phase 6 owns the tokens.**
+
+— **Why:** the two plans were written in parallel and left a hole — this plan's interface row 13 assumed Phase 5 minted invites, and Phase 5 assumed Phase 6 ingested the list; neither built the other half. The split follows ownership of the data: the candidate list is organiser content uploaded during test building (`T-21`, `docs/ROADMAP.md`'s Phase 5 "Delivers": "access modes and allowlists"), while an invite is a single-use credential whose whole lifecycle — mint, deliver, consume, refuse a replay — is the access gate this task already builds, on the `auth_token` table it already uses. Splitting it the other way would put `consumeAuthToken`'s single-use semantics in one phase and its only producer in another. The path is `/api/v1/workspaces/:id/tests/:testId/invites` and not the PRD's bare `/tests/{id}/invites` for the reason stated in Global Constraints: `guard()` (`apps/api/src/middleware/authorize.ts:106`) reads `c.req.param("id")` and throws without it, and Phase 4 mounted `/workspaces/:id/banks/…` against the PRD's bare `/banks` for the same reason. `candidates.manage` is in the matrix already (`packages/core/src/permissions.ts:15`), held by owner and admin and by nobody else.
+
+— **Cost if wrong:** if Phase 5 turns out to mint them after all, this task deletes one route file and one `ROUTE_ACTIONS` line; the consume side is unchanged either way. If *neither* phase mints them, `invite_only` is a mode with no way to issue a link — which is the hole this ruling closes.
+
+**It is the first `workspace`-authority route in an otherwise candidate-facing phase, which is exactly what `ROUTE_AUTH` was built for.** `route-authority.test.ts`'s second direction — the `workspace` set equals `Object.keys(ROUTE_ACTIONS)` — covers it with no new machinery: the route adds one line to each table, and a mismatch between them fails. Add it to both in the same commit.
+
+**Mint and consume are tested as one round trip, not separately.** A mint test that asserts a row and a consume test that asserts a redemption can both pass while the URL shape, the `kind` string or the payload disagree between them. The test issues invites through the organiser route, hands the returned URL to the candidate route, and asserts the redemption — then replays it.
+
+**The allowlists are checked before the mode's own gate** (`docs/test-format.md:72`, `T-21`), so an off-network candidate never learns whether their code was right. A request carrying no client-IP header at all, on a test that sets `allow_ip_ranges`, is refused rather than allowed — failing open on an allowlist is the whole of the bug. **`T-21`'s candidate-list allowlist is no longer deferred**: Phase 5's `candidate_list_entry` rows are real and queryable, so a test whose `access.candidate_list` is set refuses an identifier that is not on the list, in the same pre-switch block as the domain and IP checks.
 
 **`C-02`'s errors say what to do next.** Codes: `invite_used` ("This invite link was already used. Contact the organiser." — the PRD's own wording), `code_wrong`, `code_expired`, `domain_not_allowed`, `ip_not_allowed`, `window_closed`, `too_many_attempts`.
 
-| Method | Path | Authority | `ROUTE_BUDGETS` |
-| --- | --- | --- | --- |
-| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/access` | `public` | `MEASURE` |
-| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/email-code` | `public` | `MEASURE` (the email send is not a D1 or R2 call) |
-| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/sso/start` | `public` | `MEASURE` |
-| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/sso/callback` | `public` | `MEASURE` |
+| Method | Path | Authority | `ROUTE_ACTIONS` | `ROUTE_BUDGETS` |
+| --- | --- | --- | --- | --- |
+| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/access` | `public` | — | `MEASURE` |
+| `POST` | `/api/v1/run/:workspaceSlug/:testSlug/email-code` | `public` | — | `MEASURE` (the email send is not a D1 or R2 call) |
+| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/sso/start` | `public` | — | `MEASURE` |
+| `GET` | `/api/v1/run/:workspaceSlug/:testSlug/sso/callback` | `public` | — | `MEASURE` |
+| `POST` | `/api/v1/workspaces/:id/tests/:testId/invites` | **`workspace`** | `candidates.manage` | `MEASURE` (auth 2 + list read + already-invited read + one `batch` + audit) |
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -420,18 +443,28 @@ it("link_code: a wrong code is refused with an actionable message and mints noth
   expect(await countAuthTokens("run_entry")).toBe(0);
 });
 
-it("invite_only: a link works once; the second redemption is 410 and names the next step", async () => {
-  const link = await mintInvite(ver, "row-7");
-  expect((await redeem(link)).status).toBe(200);
-  const again = await redeem(link);
+it("invite_only: a link minted by the organiser route works once, and the replay is 410", async () => {
+  // One round trip: the mint side and the consume side cannot drift on URL shape,
+  // `kind` or payload, because only one test touches both.
+  const [invite] = await mintInvites(testId, ["21CS0147"], asAdmin);
+  expect((await redeem(invite.url)).status).toBe(200);
+  const again = await redeem(invite.url);
   expect(again.status).toBe(410);
   expect((await again.json()).error.message).toMatch(/already used.*organiser/i);
 });
 
 it("invite_only: two concurrent redemptions produce exactly one entry token", async () => {
-  const link = await mintInvite(ver, "row-7");
-  const [a, b] = await Promise.all([redeem(link), redeem(link)]);
+  const [invite] = await mintInvites(testId, ["21CS0147"], asAdmin);
+  const [a, b] = await Promise.all([redeem(invite.url), redeem(invite.url)]);
   expect([a.status, b.status].sort()).toEqual([200, 410]);
+});
+
+it("T-21: an identifier absent from the candidate list is refused like a wrong code", async () => {
+  const onList = await post("/api/v1/run/alpha/listed/access", { code: "OPENSESAME", identifier: "21CS0147" });
+  const offList = await post("/api/v1/run/alpha/listed/access", { code: "OPENSESAME", identifier: "99XX9999" });
+  expect(onList.status).toBe(200);
+  expect(offList.status).toBe(403);
+  expect(await offList.text()).toBe(await (await post("/api/v1/run/alpha/listed/access", { code: "nope" })).text());
 });
 
 it("email_code: six digits, emailed, 10-minute expiry, never stored in the clear", async () => {
@@ -488,6 +521,56 @@ it.each([
 ])("emailInDomains(%j, %j) is %s", (e, g, x) => expect(emailInDomains(e, g)).toBe(x));
 ```
 
+```ts
+// apps/api/test/invites.test.ts — the organiser half, and this phase's one guarded route
+it("an Admin mints one single-use link per candidate-list entry", async () => {
+  const minted = await mintInvites(testId, ["21CS0147", "21CS0148"], asAdmin);
+  expect(minted.map((m) => m.identifier)).toEqual(["21CS0147", "21CS0148"]);
+  expect(new Set(minted.map((m) => m.url)).size).toBe(2);
+  expect(minted[0]!.url).toMatch(/^https:\/\/[^/]+\/alpha\/invited\?invite=/);
+});
+
+it("an Author cannot mint, and a cross-workspace test is 404 not 403", async () => {
+  expect((await mintRaw(testId, ["x"], asAuthor)).status).toBe(403);
+  expect((await mintRaw(testInWorkspaceB, ["x"], asAdmin)).status).toBe(404);
+});
+
+it("minting for an identifier that is not on the test's candidate list is 422, naming it", async () => {
+  const res = await mintRaw(testId, ["99XX9999"], asAdmin);
+  expect(res.status).toBe(422);
+  expect((await res.json()).error.details.unknown).toEqual(["99XX9999"]);
+});
+
+it("minting twice for the same entry does not issue a second live link", async () => {
+  await mintInvites(testId, ["21CS0147"], asAdmin);
+  expect((await mintInvites(testId, ["21CS0147"], asAdmin))[0]!.url).toBeUndefined();
+  expect(await liveInviteCount(testId, "21CS0147")).toBe(1);
+});
+
+it("only the hash is stored — the minted URL's token appears in no row", async () => {
+  const [m] = await mintInvites(testId, ["21CS0147"], asAdmin);
+  expect(JSON.stringify(await allAuthTokenRows())).not.toContain(tokenIn(m.url));
+});
+
+it("minting 200 invites is one batch, flat in the list's size", async () => {
+  const counting = countingDeps(deps);
+  await mintInvites(testId, twoHundredIdentifiers, asAdmin, createApp(counting.deps));
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/invites"]);
+});
+
+it("the route is in ROUTE_ACTIONS and declared workspace in ROUTE_AUTH", () => {
+  expect(ROUTE_ACTIONS["POST /api/v1/workspaces/:id/tests/:testId/invites"]).toBe("candidates.manage");
+  expect(ROUTE_AUTH["POST /api/v1/workspaces/:id/tests/:testId/invites"]).toBe("workspace");
+});
+
+it("S-18: minting writes one audit row naming the test and the count, not the tokens", async () => {
+  await mintInvites(testId, ["21CS0147", "21CS0148"], asAdmin);
+  const [row] = await auditFor(testId);
+  expect(row).toMatchObject({ action: "invites.minted", detail_json: expect.stringContaining('"count":2') });
+  expect(JSON.stringify(row)).not.toContain(tokenIn(minted[0]!.url));
+});
+```
+
 ```tsx
 // apps/web/test/exam/access.test.tsx
 it("the gate renders only the control the test's mode needs", () => {
@@ -517,7 +600,7 @@ Run: `pnpm vitest run apps/api/test/run apps/web/test/exam/access.test.tsx` — 
 
 - [ ] **Step 3: Implement the four gates**
 
-One handler, one `switch` on `access.mode`, with the allowlists checked before the switch. `ipInRanges` parses v4 into a 32-bit integer and v6 into two `BigInt` halves and masks — written here rather than taken from a dependency because the Worker bundle is size-constrained and the input is two well-defined notations. The email-code row's key is `sha256Hex(`${testVersionId}:${email.toLowerCase()}:${code}`)`, so the row is a lookup key and never a plaintext secret. The `sso` callback imports from `apps/api/src/auth/oidc.ts` and diverges only at the final step.
+One handler, one `switch` on `access.mode`, with the three allowlists — domains, IP ranges, candidate list — checked before the switch. `ipInRanges` parses v4 into a 32-bit integer and v6 into two `BigInt` halves and masks, written here rather than taken from a dependency because the Worker bundle is size-constrained and the input is two well-defined notations. The email-code row's key is `sha256Hex(`${testVersionId}:${email.toLowerCase()}:${code}`)`, so the row is a lookup key and never a plaintext secret. The `sso` callback imports from `apps/api/src/auth/oidc.ts` and diverges only at the final step. `inviteRoutes` mounts under the existing `/api/v1/workspaces` prefix beside `bankRoutes`, reads the test's candidate-list entries and the already-invited set, and writes every token row in **one** `db.batch` so the cost is flat in the list's size.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -528,7 +611,7 @@ Expected: PASS, with four new `ROUTE_AUTH` lines and four measured budgets.
 
 ```bash
 git add apps/api apps/web
-git commit -s -m "feat(run): access gate for link code, invite, email code and sso"
+git commit -s -m "feat(run): access gate for all four modes, allowlists and invite minting"
 ```
 
 ---
