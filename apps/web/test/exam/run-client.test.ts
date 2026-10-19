@@ -500,6 +500,80 @@ describe("the access gate (Task 2)", () => {
     await expect(createRunClient("alpha", "paper").resume()).rejects.toMatchObject({ status: 409 });
   });
 
+  // --- Task 8 (#72): the save transport, and Review Focus 3 ------------
+  //
+  // The whole of the review focus lives in these eight lines of mapping.
+  // A `putAnswer` that returned the body on 200 and threw on everything
+  // else would make the queue drain on refusals, mark them Saved, and
+  // drop the answers — which is the failure the phase gate names.
+
+  const save = { questionId: "q1", value: { kind: "text", text: "Delhi" } as const, clientSeq: 4, queuedAt: 0 };
+  const refusal = (code: string, message: string, status: number) =>
+    new Response(JSON.stringify({ error: { code, message } }), {
+      status,
+      headers: { "content-type": "application/json" },
+    });
+
+  it("putAnswer PUTs the save to the attempt path and passes the server's outcome through", async () => {
+    const calls = stubFetch(ok({ outcome: "superseded", remainingMs: 1000 }));
+    const answer = await createRunClient("alpha", "paper").putAnswer(save);
+
+    expect(calls[0]?.url).toBe("/api/v1/run/attempt/answer");
+    expect(calls[0]?.init?.method).toBe("PUT");
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      questionId: "q1",
+      value: { kind: "text", text: "Delhi" },
+      clientSeq: 4,
+    });
+    // `superseded` is the server's word and must survive the trip: it is
+    // a 200, and a client that reported "accepted" for it would be right
+    // about the HTTP and wrong about the answer.
+    expect(answer).toEqual({ outcome: "superseded", remainingMs: 1000 });
+  });
+
+  it("the attempt cookie rides it — nothing here carries a credential of its own", async () => {
+    const calls = stubFetch(ok({ outcome: "accepted", remainingMs: 1 }));
+    await createRunClient("alpha", "paper").putAnswer(save);
+    expect(calls[0]?.init?.credentials).toBe("same-origin");
+    expect(JSON.stringify(calls[0]?.init?.headers)).not.toMatch(/authorization/i);
+  });
+
+  it.each([
+    ["a deadline refusal", 409, "time_up", "refused"],
+    ["a navigation refusal", 403, "navigation_locked", "refused"],
+    ["a submitted attempt", 409, "already_submitted", "refused"],
+    ["a question outside the paper", 404, "not_found", "dropped"],
+  ])("%s becomes %s, not a throw and never a save", async (_name, status, code, outcome) => {
+    stubFetch(() => refusal(code, "Your time is up.", status));
+    const answer = await createRunClient("alpha", "paper").putAnswer(save);
+    expect(answer.outcome).toBe(outcome);
+    // A 404 carries the deliberately uninformative S-10 body, so the
+    // queue supplies its own sentence rather than showing it.
+    expect(answer.message).toBe(outcome === "dropped" ? undefined : "Your time is up.");
+    // Never a time to re-anchor the clock to: the server did not answer
+    // with one (Task 9).
+    expect(answer.remainingMs).toBeUndefined();
+  });
+
+  it.each([
+    ["a 500", 500],
+    ["a 502 from the edge", 502],
+  ])("%s throws, so the queue keeps the answer and backs off", async (_name, status) => {
+    stubFetch(() => refusal("server_error", "no", status));
+    await expect(createRunClient("alpha", "paper").putAnswer(save)).rejects.toBeInstanceOf(RunError);
+  });
+
+  it("a dropped connection throws rather than resolving to any outcome", async () => {
+    vi.stubGlobal("fetch", () => Promise.reject(new TypeError("Failed to fetch")));
+    await expect(createRunClient("alpha", "paper").putAnswer(save)).rejects.toBeInstanceOf(TypeError);
+  });
+
+  it("a cleared answer is sent as an explicit null, not omitted", async () => {
+    const calls = stubFetch(ok({ outcome: "accepted", remainingMs: 1 }));
+    await createRunClient("alpha", "paper").putAnswer({ ...save, value: null });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toHaveProperty("value", null);
+  });
+
   it("a spent entry token is an ordinary RunError, not a validation failure", async () => {
     stubFetch(
       withChallenge(
