@@ -137,13 +137,11 @@ export interface ApiClient {
 
   listBanks(workspaceId: string): Promise<Bank[]>;
   createBank(workspaceId: string, input: { name: string }): Promise<Bank>;
-  getBank(workspaceId: string, bankId: string): Promise<Bank>;
-  updateBank(
-    workspaceId: string,
-    bankId: string,
-    patch: { name?: string; description?: string; license?: string; tags?: string[] },
-  ): Promise<Bank>;
-  deleteBank(workspaceId: string, bankId: string): Promise<void>;
+  // Fix round (whole-branch review, M1/M3): `getBank`/`updateBank`/
+  // `deleteBank` were deleted here — no screen in apps/web ever called them,
+  // only test fixtures implementing this interface's shape. The API routes
+  // (GET/PATCH/DELETE .../banks/:bankId) stay; add these back, with a real
+  // caller, when a bank-settings screen exists.
   listQuestions(
     workspaceId: string,
     bankId: string,
@@ -205,6 +203,16 @@ export interface ApiClient {
    * route's cost is the same either way.
    */
   exportBank(workspaceId: string, bankId: string, ids?: string[]): Promise<BankDocument>;
+
+  /**
+   * Fix round (whole-branch review, M3): `exportBank`'s single-question
+   * sibling (`GET .../questions/:qid/export`, apps/api/src/routes/
+   * banks.ts) had a route, a budget line and five tests but no client
+   * method — this was its only missing half. Returns the question document
+   * itself, not a whole `pariksha/bank@1` — `questionId` is the row id
+   * (`QuestionSummary.id`), the same id `deleteQuestion` already takes.
+   */
+  exportQuestion(workspaceId: string, bankId: string, questionId: string): Promise<Question>;
 }
 
 const API = "/api/v1";
@@ -353,15 +361,6 @@ export function createApiClient(): ApiClient {
     createBank: (workspaceId, input) =>
       json<Bank>(`/workspaces/${workspaceId}/banks`, post(input)),
 
-    getBank: (workspaceId, bankId) => json<Bank>(`/workspaces/${workspaceId}/banks/${bankId}`),
-
-    updateBank: (workspaceId, bankId, patch) =>
-      json<Bank>(`/workspaces/${workspaceId}/banks/${bankId}`, patchBody(patch)),
-
-    async deleteBank(workspaceId, bankId) {
-      await request(`/workspaces/${workspaceId}/banks/${bankId}`, { method: "DELETE" });
-    },
-
     async listQuestions(workspaceId, bankId, filter = {}) {
       const qs = query({
         type: filter.type,
@@ -444,6 +443,9 @@ export function createApiClient(): ApiClient {
       const qs = ids && ids.length > 0 ? `?ids=${ids.map(encodeURIComponent).join(",")}` : "";
       return json<BankDocument>(`/workspaces/${workspaceId}/banks/${bankId}/export${qs}`);
     },
+
+    exportQuestion: (workspaceId, bankId, questionId) =>
+      json<Question>(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/export`),
   };
 }
 

@@ -43,9 +43,9 @@ function excerpt(prompt: string, max = 120): string {
  * (apps/web/src/lib/api.ts) is what makes the network call; everything here
  * only turns an already-fetched document into a saved file, with no
  * `fetch(` of its own. */
-function exportFilename(bankName: string): string {
-  const slug = bankName.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
-  return `${slug || "bank"}.json`;
+function exportFilename(name: string, fallback = "bank"): string {
+  const slug = name.replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "").toLowerCase();
+  return `${slug || fallback}.json`;
 }
 
 function downloadJson(doc: unknown, filename: string): void {
@@ -194,6 +194,20 @@ export function BankBrowser({
     }
   }
 
+  // Fix round (whole-branch review, I1): shared by every export handler
+  // below — a 422 `not_exportable` names every offending `questionId`
+  // (`apps/api/src/export/bank.ts`'s `exportIssues`), which this renders
+  // the way `ImportDialog` already renders an import report, rather than
+  // the `cause.message` generic alone.
+  function handleExportFailure(cause: unknown, fallback: string): void {
+    if (cause instanceof ApiError && cause.code === "not_exportable") {
+      setNotice(cause.message);
+      setExportIssues((cause.details as { issues?: ImportIssue[] } | undefined)?.issues ?? []);
+    } else {
+      setNotice(cause instanceof ApiError ? cause.message : fallback);
+    }
+  }
+
   // Task 9 (#53, P4.9): the bulk bar's export control — the whole bank with
   // nothing selected, or just the selected rows (named by `refId`, the
   // document id `?ids=` matches on, never `question.id`, the row id a URL
@@ -207,12 +221,21 @@ export function BankBrowser({
       const doc = await client.exportBank(workspaceId, bankId, ids);
       downloadJson(doc, exportFilename(doc.name));
     } catch (cause) {
-      if (cause instanceof ApiError && cause.code === "not_exportable") {
-        setNotice(cause.message);
-        setExportIssues((cause.details as { issues?: ImportIssue[] } | undefined)?.issues ?? []);
-      } else {
-        setNotice(cause instanceof ApiError ? cause.message : "The bank could not be exported.");
-      }
+      handleExportFailure(cause, "The bank could not be exported.");
+    }
+  }
+
+  // Fix round (whole-branch review, M3): `exportBank`'s single-question
+  // sibling had a route, a budget line and five tests but no caller
+  // anywhere in this app.
+  async function onExportQuestion(question: QuestionSummary) {
+    setNotice(undefined);
+    setExportIssues(undefined);
+    try {
+      const doc = await client.exportQuestion(workspaceId, bankId, question.id);
+      downloadJson(doc, exportFilename(doc.id, "question"));
+    } catch (cause) {
+      handleExportFailure(cause, "The question could not be exported.");
     }
   }
 
@@ -498,6 +521,14 @@ export function BankBrowser({
                     onClick={() => onEditQuestion(question)}
                   >
                     Edit
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    aria-label={`Export question: ${excerpt(question.document.prompt, 60)}`}
+                    onClick={() => void onExportQuestion(question)}
+                  >
+                    Export
                   </button>
                   <button
                     type="button"

@@ -53,13 +53,6 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createBank: async () => {
       throw new Error("not used by this test file");
     },
-    getBank: async () => {
-      throw new Error("not used by this test file");
-    },
-    updateBank: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteBank: async () => undefined,
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
     saveQuestion: async () => {
@@ -76,6 +69,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
+    exportQuestion: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }

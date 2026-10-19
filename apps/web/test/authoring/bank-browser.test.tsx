@@ -63,9 +63,6 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     signOut: async () => undefined,
     listBanks: async () => [BANK],
     createBank: async () => ({ ...BANK }),
-    getBank: async () => ({ ...BANK }),
-    updateBank: async () => ({ ...BANK }),
-    deleteBank: async () => undefined,
     listQuestions: async () => ({ questions: [QUESTION] }),
     deleteQuestion: async () => undefined,
     saveQuestion: async (_workspaceId, bankId, doc) => ({
@@ -88,6 +85,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
+    exportQuestion: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }
@@ -130,6 +130,29 @@ describe("BankBrowser", () => {
     render(<BankBrowser bankId="bnk_1" workspaceId="wsp_1" client={client} actorEmail="author@example.edu" onSignOut={() => undefined} onBack={() => undefined} onNewQuestion={() => undefined} onEditQuestion={() => undefined} />);
     fireEvent.click(await screen.findByRole("button", { name: /delete/i }));
     expect(await screen.findByText(/Midterm/)).toBeVisible();
+  });
+
+  // Fix round (whole-branch review, M3): `exportBank`'s single-question
+  // sibling had a route and five API tests but no caller anywhere in this
+  // app — this is the only control that reaches it.
+  it("M3: a row's Export button downloads that question alone", async () => {
+    const exportQuestion = vi.fn(async () => DOCUMENT);
+    const client = fakeClient({ exportQuestion });
+    render(
+      <BankBrowser
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        client={client}
+        actorEmail="author@example.edu"
+        onSignOut={() => undefined}
+        onBack={() => undefined}
+        onNewQuestion={() => undefined}
+        onEditQuestion={() => undefined}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /^export question:/i }));
+    await waitFor(() => expect(exportQuestion).toHaveBeenCalledWith("wsp_1", "bnk_1", QUESTION.id));
   });
 
   it("finding 10: each row's delete button has a distinct accessible name", async () => {
