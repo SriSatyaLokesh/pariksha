@@ -142,5 +142,5 @@ describe("Landing", () => {
     const { container } = render(<Landing />);
     const results = await axe(container);
     expect(results).toHaveNoViolations();
-  }, 20_000);
+  });
 });

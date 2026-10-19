@@ -85,6 +85,23 @@ async function insertQuestion(
   );
 }
 
+/** One `question` INSERT, as a `{ sql, params }` statement `db.batch()` can
+ * carry — the same row shape `insertQuestion` writes with `db.run`, reused
+ * here because a batch test needs more than one statement to send at once. */
+function questionInsert(
+  id: string,
+  workspaceId: string,
+  bankId: string,
+  refId: string,
+): { sql: string; params: unknown[] } {
+  return {
+    sql:
+      "INSERT INTO question (id, workspace_id, bank_id, ref_id, type, prompt_md, points, tags_json, version, created_at, updated_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    params: [id, workspaceId, bankId, refId, "single", "Prompt", 1, "[]", 1, 0, 0],
+  };
+}
+
 async function pointsColumnType(db: DbClient): Promise<string> {
   const rows =
     db.dialect === "pg"
@@ -132,6 +149,39 @@ describe("sqlite", () => {
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.name.endsWith(".sql"))).toBe(true);
   });
+
+  // Task 7 (#51), Review Focus item 3: `DbClient.batch()` is one round trip
+  // carrying every statement — `BEGIN … COMMIT` on `better-sqlite3`, one
+  // `env.DB.batch()` subrequest on D1, `sql.begin` on Postgres (below) — and
+  // the whole group commits or none of it does.
+  it("batch commits every statement as one unit", async () => {
+    await db.batch([
+      questionInsert("qst_batch_a", "ws_batch", "bnk_batch", "BA-01"),
+      questionInsert("qst_batch_b", "ws_batch", "bnk_batch", "BA-02"),
+    ]);
+
+    const rows = await db.all<{ ref_id: string }>(
+      "select ref_id from question where workspace_id = 'ws_batch' order by ref_id",
+    );
+    expect(rows.map((r) => r.ref_id)).toEqual(["BA-01", "BA-02"]);
+  });
+
+  it("batch rolls back the whole group when one statement violates a constraint", async () => {
+    // The same `(bank_id, ref_id)` unique index `migrate.test.ts` already
+    // exercises on a single `run()` — here two statements in one `batch()`,
+    // the second colliding with the first.
+    await expect(
+      db.batch([
+        questionInsert("qst_rb_a", "ws_rollback", "bnk_rollback", "RB-01"),
+        questionInsert("qst_rb_b", "ws_rollback", "bnk_rollback", "RB-01"),
+      ]),
+    ).rejects.toThrow(/unique|constraint/i);
+
+    const rows = await db.all<{ ref_id: string }>(
+      "select ref_id from question where workspace_id = 'ws_rollback'",
+    );
+    expect(rows).toEqual([]);
+  });
 });
 
 describePostgres("postgres", () => {
@@ -157,5 +207,31 @@ describePostgres("postgres", () => {
     await expect(insertQuestion(db, "qst_ref_b", "SQL-09")).rejects.toThrow(
       /unique|constraint/i,
     );
+  });
+
+  it("batch commits every statement as one unit", async () => {
+    await db.batch([
+      questionInsert("qst_pgbatch_a", "ws_pgbatch", "bnk_pgbatch", "PGBA-01"),
+      questionInsert("qst_pgbatch_b", "ws_pgbatch", "bnk_pgbatch", "PGBA-02"),
+    ]);
+
+    const rows = await db.all<{ ref_id: string }>(
+      "select ref_id from question where workspace_id = 'ws_pgbatch' order by ref_id",
+    );
+    expect(rows.map((r) => r.ref_id)).toEqual(["PGBA-01", "PGBA-02"]);
+  });
+
+  it("batch rolls back the whole group when one statement violates a constraint", async () => {
+    await expect(
+      db.batch([
+        questionInsert("qst_pgrb_a", "ws_pgrollback", "bnk_pgrollback", "PGRB-01"),
+        questionInsert("qst_pgrb_b", "ws_pgrollback", "bnk_pgrollback", "PGRB-01"),
+      ]),
+    ).rejects.toThrow(/unique|constraint/i);
+
+    const rows = await db.all<{ ref_id: string }>(
+      "select ref_id from question where workspace_id = 'ws_pgrollback'",
+    );
+    expect(rows).toEqual([]);
   });
 });

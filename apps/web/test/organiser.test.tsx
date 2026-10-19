@@ -46,6 +46,32 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     completeSetup: async () => WORKSPACE,
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
+    // Phase 4 Task 2: none of this screen's tests exercise banks or
+    // questions, so these never get called — only present to satisfy
+    // `ApiClient`'s shape.
+    listBanks: async () => [],
+    createBank: async () => {
+      throw new Error("not used by this test file");
+    },
+    listQuestions: async () => ({ questions: [] }),
+    deleteQuestion: async () => undefined,
+    saveQuestion: async () => {
+      throw new Error("not used by this test file");
+    },
+    listTags: async () => [],
+    listGroups: async () => [],
+    createGroup: async () => {
+      throw new Error("not used by this test file");
+    },
+    updateGroup: async () => {
+      throw new Error("not used by this test file");
+    },
+    deleteGroup: async () => undefined,
+    importBank: async () => ({ imported: 0, issues: [] }),
+    exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
+    exportQuestion: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }
@@ -283,6 +309,7 @@ describe("Dashboard", () => {
         actor={ACTOR}
         workspace={WORKSPACE}
         onSignOut={() => undefined}
+        onOpenBanks={() => undefined}
       />,
     );
 
@@ -298,6 +325,7 @@ describe("Dashboard", () => {
         actor={ACTOR}
         workspace={WORKSPACE}
         onSignOut={() => undefined}
+        onOpenBanks={() => undefined}
       />,
     );
 
@@ -318,6 +346,7 @@ describe("Dashboard", () => {
         }}
         workspace={WORKSPACE}
         onSignOut={() => undefined}
+        onOpenBanks={() => undefined}
       />,
     );
 
@@ -327,7 +356,7 @@ describe("Dashboard", () => {
   it("signs out through the client", async () => {
     const onSignOut = vi.fn();
     render(
-      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} />,
+      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
@@ -340,6 +369,7 @@ describe("Dashboard", () => {
         actor={ACTOR}
         workspace={WORKSPACE}
         onSignOut={() => undefined}
+        onOpenBanks={() => undefined}
       />,
     );
     expect(await axe(container)).toHaveNoViolations();
@@ -433,5 +463,45 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(
       /pariksha is restarting/i,
     );
+  });
+
+  // Fix round (whole-branch review, C1): the whole point of this finding is
+  // that a test rendering `BankBrowser` directly (apps/web/test/authoring/
+  // bank-browser.test.tsx) cannot see that nothing in the running app ever
+  // mounts it. This one starts from `OrganiserApp` — the real entry point
+  // admin-main.tsx renders — and walks Dashboard -> Banks -> BankBrowser ->
+  // QuestionScreen the only way an Author actually can, with no shortcut
+  // that renders a screen in isolation.
+  it("reaches a question editor from the app's own entry point", async () => {
+    const bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 1,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          listBanks: async () => [bank],
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Question banks" }));
+    fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "New question" }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "New question" }),
+    ).toBeInTheDocument();
   });
 });

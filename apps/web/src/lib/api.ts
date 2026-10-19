@@ -9,8 +9,66 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type { Role } from "@pariksha/core";
+import type {
+  Bank as BankDocument,
+  Difficulty,
+  ImportIssue,
+  PassageGroup,
+  Question,
+  QuestionType,
+  Role,
+} from "@pariksha/core";
 export type { Role };
+// Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
+// shape every other bank route already answers with, not the
+// `pariksha/bank@1` document export produces — same name, two different
+// things, so the core type keeps its own.
+export type { BankDocument };
+
+// Phase 4 Task 2: banks and questions. Mirrors
+// `packages/db/src/repo/banks.ts`'s `BankRow`/`QuestionRow` — this is the
+// JSON those rows serialise to, not a separate shape of its own.
+export interface Bank {
+  id: string;
+  name: string;
+  description: string | null;
+  license: string | null;
+  tags: string[];
+  questionCount: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface QuestionSummary {
+  id: string;
+  bankId: string;
+  refId: string;
+  document: Question;
+  points: number;
+  usedInTests: number;
+  updatedAt: number;
+}
+
+/** Phase 4 Task 6: a bank's passage groups, each with how many of the
+ * bank's questions currently reference it — `packages/db/src/repo/banks.ts`'s
+ * `listGroups` return type, unchanged over the wire. */
+export type PassageGroupSummary = PassageGroup & { questionCount: number };
+
+/** Task 7 (#51, P4.7): `apps/api/src/import/json.ts`'s `ImportReport`,
+ * unchanged over the wire — `issues` is empty on a clean import. */
+export interface ImportReport {
+  imported: number;
+  issues: (ImportIssue & { line?: number })[];
+}
+
+export interface QuestionListFilter {
+  type?: QuestionType;
+  tag?: string;
+  difficulty?: Difficulty;
+  unused?: boolean;
+  search?: string;
+  cursor?: string;
+}
 
 /** `apps/api/src/auth/identity.ts`, per the Phase 3 plan's Task 3. */
 export interface IdentityProvider {
@@ -76,6 +134,85 @@ export interface ApiClient {
   completeSetup(input: { workspaceName: string }): Promise<Workspace>;
   requestMagicLink(email: string): Promise<void>;
   signOut(): Promise<void>;
+
+  listBanks(workspaceId: string): Promise<Bank[]>;
+  createBank(workspaceId: string, input: { name: string }): Promise<Bank>;
+  // Fix round (whole-branch review, M1/M3): `getBank`/`updateBank`/
+  // `deleteBank` were deleted here — no screen in apps/web ever called them,
+  // only test fixtures implementing this interface's shape. The API routes
+  // (GET/PATCH/DELETE .../banks/:bankId) stay; add these back, with a real
+  // caller, when a bank-settings screen exists.
+  listQuestions(
+    workspaceId: string,
+    bankId: string,
+    filter?: QuestionListFilter,
+  ): Promise<{ questions: QuestionSummary[]; cursor?: string }>;
+  deleteQuestion(workspaceId: string, bankId: string, questionId: string): Promise<void>;
+  /**
+   * Phase 4 Task 3. One route for create and update: `POST
+   * /banks/:bankId/questions` (`apps/api/src/routes/questions.ts`) matches
+   * on `(bankId, doc.id)` and upserts either way, returning the saved row
+   * directly — no follow-up GET, and no second method for "update".
+   */
+  saveQuestion(workspaceId: string, bankId: string, doc: Question): Promise<QuestionSummary>;
+  /** Tags already used anywhere in the workspace (UX-03's autocomplete). */
+  listTags(workspaceId: string): Promise<string[]>;
+
+  /** Phase 4 Task 6: a bank's passage groups — a handful at most, so one
+   * route answers all of them (`GET /banks/:bankId/groups`), the same shape
+   * `listQuestions` for tags already follows. */
+  listGroups(workspaceId: string, bankId: string): Promise<PassageGroupSummary[]>;
+  createGroup(
+    workspaceId: string,
+    bankId: string,
+    input: { id: string; title?: string; passage: string },
+  ): Promise<PassageGroupSummary>;
+  updateGroup(
+    workspaceId: string,
+    bankId: string,
+    groupId: string,
+    patch: { title?: string; passage?: string },
+  ): Promise<PassageGroupSummary>;
+  deleteGroup(workspaceId: string, bankId: string, groupId: string): Promise<void>;
+
+  /**
+   * Task 7 (#51, P4.7): whole-bank JSON import. `dryRun: true` validates and
+   * reports without writing. A validation failure (422) and a clean
+   * dry-run both come back as an `ImportReport` rather than a thrown
+   * `ApiError` — `ImportDialog` renders one report shape either way; a
+   * genuine transport/size failure (413, 404, …) still throws.
+   *
+   * Task 8 (#52, P4.8): `opts.format` sends `doc` (a `string` in this case,
+   * not a parsed document — `ImportDialog` reads the file as text rather
+   * than `JSON.parse`ing it) as the request body verbatim, on the same
+   * route and with `?format=csv|gift` added, instead of JSON-encoding it.
+   */
+  importBank(
+    workspaceId: string,
+    bankId: string,
+    doc: unknown,
+    opts?: { dryRun?: boolean; format?: "csv" | "gift" },
+  ): Promise<ImportReport>;
+
+  /**
+   * Task 9 (#53, P4.9): the whole bank, or just `ids`, as one
+   * `pariksha/bank@1` document (`GET /banks/:bankId/export`,
+   * apps/api/src/routes/banks.ts). `ids`, when given, names questions by
+   * their own document `id` (a `QuestionSummary.refId`, never `.id` — the
+   * row id a URL path segment uses), not by how many are selected: the
+   * route's cost is the same either way.
+   */
+  exportBank(workspaceId: string, bankId: string, ids?: string[]): Promise<BankDocument>;
+
+  /**
+   * Fix round (whole-branch review, M3): `exportBank`'s single-question
+   * sibling (`GET .../questions/:qid/export`, apps/api/src/routes/
+   * banks.ts) had a route, a budget line and five tests but no client
+   * method — this was its only missing half. Returns the question document
+   * itself, not a whole `pariksha/bank@1` — `questionId` is the row id
+   * (`QuestionSummary.id`), the same id `deleteQuestion` already takes.
+   */
+  exportQuestion(workspaceId: string, bankId: string, questionId: string): Promise<Question>;
 }
 
 const API = "/api/v1";
@@ -155,12 +292,24 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   return (await request(path, init)).json() as Promise<T>;
 }
 
-function post(body: unknown): RequestInit {
+function withBody(method: string, body: unknown): RequestInit {
   return {
-    method: "POST",
+    method,
     headers: { "Content-Type": "application/json", Accept: "application/json" },
     body: JSON.stringify(body),
   };
+}
+
+const post = (body: unknown): RequestInit => withBody("POST", body);
+const patchBody = (body: unknown): RequestInit => withBody("PATCH", body);
+
+function query(params: Record<string, string | boolean | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export function createApiClient(): ApiClient {
@@ -205,5 +354,106 @@ export function createApiClient(): ApiClient {
     async signOut() {
       await request("/auth/signout", post({}));
     },
+
+    listBanks: async (workspaceId) =>
+      (await json<{ banks: Bank[] }>(`/workspaces/${workspaceId}/banks`)).banks,
+
+    createBank: (workspaceId, input) =>
+      json<Bank>(`/workspaces/${workspaceId}/banks`, post(input)),
+
+    async listQuestions(workspaceId, bankId, filter = {}) {
+      const qs = query({
+        type: filter.type,
+        tag: filter.tag,
+        difficulty: filter.difficulty,
+        unused: filter.unused,
+        search: filter.search,
+        cursor: filter.cursor,
+      });
+      return json<{ questions: QuestionSummary[]; cursor?: string }>(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions${qs}`,
+      );
+    },
+
+    async deleteQuestion(workspaceId, bankId, questionId) {
+      await request(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`, {
+        method: "DELETE",
+      });
+    },
+
+    saveQuestion: (workspaceId, bankId, doc) =>
+      json<QuestionSummary>(`/workspaces/${workspaceId}/banks/${bankId}/questions`, post(doc)),
+
+    listTags: async (workspaceId) => (await json<{ tags: string[] }>(`/workspaces/${workspaceId}/tags`)).tags,
+
+    listGroups: async (workspaceId, bankId) =>
+      (await json<{ groups: PassageGroupSummary[] }>(`/workspaces/${workspaceId}/banks/${bankId}/groups`)).groups,
+
+    createGroup: (workspaceId, bankId, input) =>
+      json<PassageGroupSummary>(`/workspaces/${workspaceId}/banks/${bankId}/groups`, post(input)),
+
+    // Fix round 1, finding 2: `groupId` is author-written (`newGroup.id`,
+    // `apps/api/src/routes/banks.ts`), unlike every other ID this client
+    // interpolates into a path — a question's `:qid` is the server-generated
+    // row id, never what an author typed. Encoded here the way `:qid` never
+    // needs to be.
+    updateGroup: (workspaceId, bankId, groupId, patch) =>
+      json<PassageGroupSummary>(
+        `/workspaces/${workspaceId}/banks/${bankId}/groups/${encodeURIComponent(groupId)}`,
+        patchBody(patch),
+      ),
+
+    async deleteGroup(workspaceId, bankId, groupId) {
+      await request(`/workspaces/${workspaceId}/banks/${bankId}/groups/${encodeURIComponent(groupId)}`, {
+        method: "DELETE",
+      });
+    },
+
+    async importBank(workspaceId, bankId, doc, opts = {}) {
+      const params = new URLSearchParams();
+      if (opts.dryRun) params.set("dryRun", "1");
+      if (opts.format) params.set("format", opts.format);
+      const qs = params.toString() ? `?${params}` : "";
+      // Task 8: a CSV/GIFT import sends `doc` (already a string — see this
+      // method's own doc comment) as the body verbatim; JSON keeps `post`'s
+      // existing `JSON.stringify` + `Content-Type: application/json`.
+      const init: RequestInit = opts.format
+        ? { method: "POST", headers: { "Content-Type": "text/plain", Accept: "application/json" }, body: doc as string }
+        : post(doc);
+      try {
+        return await json<ImportReport>(`/workspaces/${workspaceId}/banks/${bankId}/import${qs}`, init);
+      } catch (error) {
+        // Fix round 1, finding 9: a validation failure
+        // (apps/api/src/import/json.ts) is a 422 whose `details` *is* an
+        // `ImportReport` (`imported: 0`, `issues` populated) — the server
+        // throws that exact shape rather than a bare `{ issues }`, so this
+        // is the one type used uniformly on both outcomes, not two
+        // identically-named types with opposite invariants. Normalised here
+        // so `ImportDialog` renders one report shape whether the import
+        // succeeded or not, rather than a try/catch of its own around every
+        // call.
+        if (error instanceof ApiError && error.status === 422 && isImportReport(error.details)) {
+          return error.details;
+        }
+        throw error;
+      }
+    },
+
+    exportBank: (workspaceId, bankId, ids) => {
+      const qs = ids && ids.length > 0 ? `?ids=${ids.map(encodeURIComponent).join(",")}` : "";
+      return json<BankDocument>(`/workspaces/${workspaceId}/banks/${bankId}/export${qs}`);
+    },
+
+    exportQuestion: (workspaceId, bankId, questionId) =>
+      json<Question>(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/export`),
   };
+}
+
+function isImportReport(value: unknown): value is ImportReport {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { imported?: unknown }).imported === "number" &&
+    Array.isArray((value as { issues?: unknown }).issues)
+  );
 }

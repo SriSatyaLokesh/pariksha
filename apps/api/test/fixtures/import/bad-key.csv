@@ -1,0 +1,4 @@
+id,type,prompt,options,key,points,mode,difficulty,tags,explanation
+Q1,true_false,The sky is blue.,,true,,,,,
+Q2,single,Pick the capital of France.,Paris|London,Paris,,,,,
+Q3,single,Pick one.,X|Y,z,,,,,
