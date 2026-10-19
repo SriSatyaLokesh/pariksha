@@ -4,8 +4,8 @@
 // `node apps/web/scripts/generate-icons.mjs`; its output is committed, not
 // regenerated at build time.
 //
-// SEO-14: "the favicon is the wordmark's first letter in cream on voltage,
-// and that is enough" (DESIGN.md records that no mark exists yet). No image
+// The mark is `_<` — a prompt caret and an angle bracket, cream on voltage.
+// It reads as a terminal prompt at 16px where a letterform would not. No image
 // library: a PNG is eight lines of zlib + a hand-rolled CRC32 (the same
 // shape apps/web/test/seo.test.ts already reads og.png's IHDR with), and an
 // ICO is a six-field directory wrapping that same PNG — valid since Vista.
@@ -22,17 +22,18 @@ const PUBLIC_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../public")
 const VOLTAGE = [0xe2, 0x4c, 0x18];
 const CREAM = [0xff, 0xfb, 0xf5];
 
-// A geometric "P": a full-height stem plus a bowl occupying the top half,
-// open at the bottom-right — 4 columns x 7 rows, scaled to whatever size is
-// asked for. Blocky by design: a favicon is read at 16px, not admired.
+// `_<` on a 9 x 7 grid: the chevron fills the right six columns, the
+// underscore sits on the baseline under the left three. Scaled to whatever
+// size is asked for. Blocky by design: a favicon is read at 16px, not
+// admired — and the same two shapes are drawn as strokes in favicon().
 const GLYPH = [
-  [1, 1, 1, 1],
-  [1, 0, 0, 1],
-  [1, 0, 0, 1],
-  [1, 1, 1, 1],
-  [1, 0, 0, 0],
-  [1, 0, 0, 0],
-  [1, 0, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 1, 1],
+  [0, 0, 0, 0, 0, 1, 1, 0, 0],
+  [0, 0, 0, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 1, 1, 0, 0, 0, 0],
+  [0, 0, 0, 0, 0, 1, 1, 0, 0],
+  [0, 0, 0, 0, 0, 0, 0, 1, 1],
+  [1, 1, 1, 0, 0, 0, 0, 0, 0],
 ];
 
 function drawIcon(size) {
@@ -46,7 +47,7 @@ function drawIcon(size) {
 
   const cols = GLYPH[0].length;
   const rows = GLYPH.length;
-  const margin = size * 0.24;
+  const margin = size * 0.12;
   const boxW = size - margin * 2;
   const boxH = boxW * (rows / cols);
   const offsetY = (size - boxH) / 2;
@@ -144,9 +145,14 @@ function encodeIco(size, pngBuffer) {
 function favicon() {
   const [vr, vg, vb] = VOLTAGE.map((n) => n.toString(16).padStart(2, "0"));
   const [cr, cg, cb] = CREAM.map((n) => n.toString(16).padStart(2, "0"));
+  // Strokes, not a `<text>`: the glyph then looks the same everywhere
+  // instead of depending on which font the viewer happens to have.
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Pariksha">
   <rect width="32" height="32" fill="#${vr}${vg}${vb}"/>
-  <text x="16" y="23" text-anchor="middle" font-family="Arial, sans-serif" font-weight="700" font-size="21" fill="#${cr}${cg}${cb}">P</text>
+  <g fill="none" stroke="#${cr}${cg}${cb}" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter">
+    <path d="M5 23.5h6"/>
+    <path d="M23 10.5l-6.5 6 6.5 6"/>
+  </g>
 </svg>
 `;
 }
