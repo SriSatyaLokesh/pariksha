@@ -1470,6 +1470,15 @@ git commit -s -m "feat(tests): result release and branding with a contrast gate"
 
 ## Task 11: Lifecycle and numbered published versions (#62, P5.9)
 
+> **A blocking row this task owns, found building Task 7 and first misfiled against Task 13.**
+> There is no publish-time rule anywhere for a **missing `timing` block**. Task 7 deliberately
+> left `timing` optional — `TestSettings` is what a *draft* stores, `createTest` seeds `{}`, and
+> `draftSchema()` drops the root `required` precisely so a new test is legal — so presence is
+> enforced only by the schema's root `required` on import. Nothing catches it at publish.
+> It belongs **here**, as a blocking row, not in Task 13: Task 13's rows are all
+> `severity: advisory`, and a test published with no duration at all is not an advisory.
+> Without it a test can be published with no duration.
+
 > **Correction, found while building Task 4.** `publishTestVersion` currently INSERTs a
 > new `test_version` row, and `(test_id, version)` is unique — but `createTest` already
 > seeded the draft as version 1. So publishing a brand-new test raises
@@ -1772,14 +1781,6 @@ git commit -s -m "feat(tests): clone, whole-test export and all-or-nothing impor
 ---
 
 ## Task 13: Pre-publish warnings (#64, P5.11)
-
-> **Third trap, found building Task 7: there is no publish-time rule for a missing `timing`.**
-> Task 7 deliberately did **not** make `timing` required — `TestSettings` is what a *draft*
-> stores, `createTest` seeds `{}`, and `draftSchema()` drops the root `required` precisely so
-> a new test is legal. Presence is therefore enforced in exactly two places: the schema's root
-> `required` on import, and this checklist. **No rule in `validateTest` covers it**, and every
-> fixture there legitimately omits `timing`, so adding one there would break them. This task
-> must add the row, or a test can be published with no duration at all.
 
 > **Two traps, found reviewing Task 4.** (1) `scoring.set_points_tolerance` is schema-legal
 > and type-safe but has **no UI control** — Task 4 shipped it deliberately as schema, type and
