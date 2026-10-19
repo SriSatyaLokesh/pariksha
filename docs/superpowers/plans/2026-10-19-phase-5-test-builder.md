@@ -494,4 +494,353 @@ Expected: PASS.
 git add packages apps
 git commit -s -m "feat(tests): sections with fixed, pool and set sources"
 ```
+
+---
+
+## Task 4: Set assignment and shuffle configuration (#56, P5.3)
+
+**Files:**
+- Create: `apps/web/src/components/testbuilder/SetsPanel.tsx`
+- Modify: `schemas/test-1.json` (`scoring.set_points_tolerance`), `packages/core/src/types.ts` (`TestScoring.set_points_tolerance`), `apps/api/src/routes/tests.ts` (accept it in the patch), `apps/web/src/components/testbuilder/SectionList.tsx`, `apps/web/src/styles/testbuilder.css`
+- Test: `packages/core/test/select.test.ts` (extend), `apps/api/test/selection.test.ts`, `apps/web/test/testbuilder/sets.test.tsx`
+
+**Interfaces:**
+- Consumes: `assignSet`, `layoutForAttempt`, `SetAssignment`, `SourceSets`, `Section` (`packages/core/src/select.ts`, `types.ts`); `getPublishedVersion` (Task 10 — in this task's fixtures, read the draft through `getDraftVersion` and publish it with the Task 10 stub); `SectionList` (Task 3); `DraftPatch` (Task 3).
+- Produces:
+  ```ts
+  // packages/core/src/types.ts (added to TestScoring)
+  //   set_points_tolerance?: number;   // points; default 0 (any difference reported)
+  // apps/web/src/components/testbuilder/SetsPanel.tsx
+  export function SetsPanel(props: {
+    source: SourceSets;
+    shuffleQuestions: boolean;
+    onChange: (next: { source: SourceSets; shuffleQuestions: boolean }) => void;
+  }): JSX.Element;
+  export const ASSIGNMENT_CONSEQUENCE: Readonly<Record<SetAssignment, string>>;
+  ```
+
+This task adds **no route**: assignment and shuffling are fields of a section's `source` and of `settings.scoring`, written through Task 3's `PATCH …/draft`. If accepting them changes that route's measured cost, update its `ROUTE_BUDGETS` number and its `toBe` in the same commit.
+
+`ASSIGNMENT_CONSEQUENCE` is the one-line consequence each strategy carries as persistent helper text, and the exact copy is fixed here because it is the whole point of #56's design note:
+
+| Key | Copy |
+| --- | --- |
+| `round_robin` | "By registration order, so candidates sitting next to each other get different sets." |
+| `random` | "A different set per registration, not tied to the candidate." |
+| `hash` | "From the candidate's ID, so the same candidate always gets the same set across attempts." |
+| `from_candidate_list` | "From the `set` column of the uploaded candidate list. A candidate whose row has no set cannot start, and the publish checklist says so." |
+
+**Shuffle is two controls, not three** — see the ruling. The group carries a legend and three rows: one switch (`section.shuffle_questions`) and two statements of fact, that answer-option order is per question (`shuffle_options`, authored in the Phase 4 editor) and that `ordering` items always shuffle for the candidate whatever these say (`UX-08`).
+
+**All publish-time.** No rule here blocks a save: a `sets` source with one set, or with sets of unequal points, is an ordinary half-built draft.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/selection.test.ts — driven through the stored version, not through a hand-built Section
+it("AC-09: 5 sets, round robin, 50 registrations — 10 each, and no two consecutive the same", async () => {
+  const version = await getPublishedVersion(db, ws, testId);
+  const sets = version.body.sections[0].source.sets.map((s) => s.set);
+  const got = Array.from({ length: 50 }, (_, i) =>
+    assignSet({ sets, assignment: "round_robin", registrationIndex: i, candidateId: `cnd_${i}` }));
+  expect(countBy(got)).toEqual({ A: 10, B: 10, C: 10, D: 10, E: 10 });
+  expect(got.some((s, i) => i > 0 && s === got[i - 1])).toBe(false);
+});
+it("hash assignment is stable across attempts for one candidate", () => { /* two calls, differing registrationIndex, same set */ });
+it("from_candidate_list uses the listValue and throws without one", () => { /* both */ });
+it("AC-10: a pool section draws `count` distinct questions matching the filter, per candidate", async () => {
+  const layout = layoutForAttempt({ sections: version.body.sections, bank, seed: "cnd_1", setNo: "A" });
+  const drawn = layout.sections[0].questionIds;
+  expect(new Set(drawn).size).toBe(10);
+  expect(drawn.every((id) => byId.get(id).tags.includes("sql") && byId.get(id).difficulty === "medium")).toBe(true);
+});
+it("AC-11: two candidates on the same set get different question and option orders", () => { /* two seeds, orders differ */ });
+it("AC-11: a pinned option (shuffle_options false) stays in place for both", () => { /* equal arrays */ });
+it("T-10: shuffle_questions false keeps the authored order", () => { /* identical to source.questions */ });
+```
+
+```tsx
+// apps/web/test/testbuilder/sets.test.tsx
+it("each strategy carries its consequence as persistent helper text, not a tooltip", () => {
+  for (const [key, copy] of Object.entries(ASSIGNMENT_CONSEQUENCE)) {
+    expect(screen.getByRole("radio", { name: new RegExp(key.replace(/_/g, " "), "i") })).toBeVisible();
+    expect(screen.getByText(copy)).toBeVisible();
+  }
+});
+it("from the candidate list states what happens to a row with no set", () => {
+  expect(screen.getByText(/cannot start, and the publish checklist says so/i)).toBeVisible();
+});
+it("the shuffle controls are one group with a legend", () => {
+  expect(screen.getByRole("group", { name: /shuffling/i })).toBeVisible();
+});
+it("UX-08: ordering items are stated to shuffle regardless of these switches", () => {
+  expect(screen.getByText(/ordering questions always shuffle their items/i)).toBeVisible();
+});
+it("only the chosen strategy's own options are shown", async () => { /* round_robin shows no list column picker */ });
+it("the sets panel has no axe violations", async () => { expect(await axe(container)).toHaveNoViolations(); });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/selection.test.ts apps/web/test/testbuilder/sets.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Add `set_points_tolerance` and implement `SetsPanel`**
+
+Add `set_points_tolerance` (`number`, `minimum: 0`, default 0) to `$defs/scoring` in `schemas/test-1.json` and to `TestScoring` — additive within `@1`, which `docs/test-format.md` § Versioning allows. Thread it into `validateTest`'s existing `options.setPointsTolerance` parameter rather than adding a second path. `SetsPanel` is radios plus `ASSIGNMENT_CONSEQUENCE` beneath each; no strategy's own fields render unless it is chosen.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/core apps/api apps/web`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add schemas packages apps
+git commit -s -m "feat(tests): set assignment strategies and shuffle configuration"
+```
+
+---
+
+## Task 5: Registration form builder (#57, P5.4)
+
+**Files:**
+- Create: `apps/web/src/components/testbuilder/FormBuilder.tsx`, `apps/web/src/components/testbuilder/RegistrationForm.tsx`
+- Modify: `packages/core/src/types.ts`, `packages/core/src/validate.ts`, `packages/core/src/index.ts`, `apps/web/src/routes/test.tsx`, `apps/web/src/styles/testbuilder.css`
+- Test: `packages/core/test/validate-test.test.ts` (extend), `apps/web/test/testbuilder/form-builder.test.tsx`
+
+**Interfaces:**
+- Consumes: `validateTest`, `ImportIssue` (`packages/core/src/validate.ts`); `ReorderableList`; `DraftPatch` (Task 3).
+- Produces:
+  ```ts
+  // packages/core/src/types.ts — mirrors schemas/test-1.json $defs/form,
+  // $defs/formField and $defs/validation exactly
+  export const FORM_FIELD_TYPES = ["short_text","long_text","email","phone","number","date","dropdown","radio","checkbox","url","consent"] as const;
+  export type FormFieldType = (typeof FORM_FIELD_TYPES)[number];
+  export interface FieldValidation {
+    min_length?: number; max_length?: number; pattern?: string; pattern_message?: string;
+    min?: number | string; max?: number | string; integer?: boolean; decimals?: number;
+    allowed_domains?: string[]; default_country?: string; check_reachable?: boolean;
+    link_text?: string; link_target?: string;
+  }
+  export interface FormField {
+    id: string; type: FormFieldType; label: string; help?: string;
+    required?: boolean; unique?: boolean; options?: string[]; validation?: FieldValidation;
+  }
+  export interface RegistrationForm { title?: string; description?: string; fields: FormField[] }
+  // added to Test: registration_form?: RegistrationForm;
+
+  // packages/core/src/validate.ts — new rules inside validateTest, not a new function
+  // apps/web/src/components/testbuilder/RegistrationForm.tsx — the ONE renderer
+  export function RegistrationForm(props: {
+    form: RegistrationFormType;
+    values: Readonly<Record<string, unknown>>;
+    errors: Readonly<Record<string, string>>;
+    onChange: (id: string, value: unknown) => void;
+    disabled?: boolean;
+  }): JSX.Element;
+  export const FIELD_INPUT: Readonly<Record<FormFieldType, { type: string; autocomplete: string; inputMode?: string }>>;
+  export const FORM_TEMPLATES: Readonly<Record<"campus_hiring" | "course_exam" | "open_contest", RegistrationFormType>>;
+  ```
+
+`RegistrationForm.tsx` is **the one renderer**, the same structure [ADR 0004](../../adr/0004-client-side-rendering-with-lazy-loaded-katex.md) gave Markdown: the builder's preview imports it today and Phase 6's candidate registration imports it next, so the preview cannot drift from what a candidate sees. It takes `values`/`errors` from its caller and owns no submission.
+
+`FIELD_INPUT` is the table #57 asks to be true per type, and the values are fixed here so the test can assert them: `short_text` → `text`/`name`; `long_text` → textarea/`off`; `email` → `email`/`email`; `phone` → `tel`/`tel`, `inputMode: "tel"`; `number` → `number`/`off`, `inputMode: "decimal"`; `date` → `date`/`bday` where the label matches a birth date, else `off`; `url` → `url`/`url`; `dropdown`/`radio`/`checkbox`/`consent` → no autocomplete token.
+
+`FORM_TEMPLATES` carries T-18's three templates verbatim: *Campus hiring* (name, email, phone, college, roll number, degree, graduation year, CGPA, resume link, LinkedIn, GitHub), *Course exam* (name, student ID, email), *Open contest* (name, email, country). `examples/reasoning-aptitude/test.json`'s `registration_form` is the worked reference for field shapes.
+
+**Rules added to `validateTest`** — two of `docs/test-format.md` § "Rules checked on import" that it does not yet carry, both **publish-time** (an organiser mid-build may legitimately have two fields called `email` for a second):
+
+- form field IDs are unique within the test (and so are section IDs — the same loop, the other half of the same rule line)
+- every `options` list belongs to a `dropdown`, `radio` or `checkbox` field
+
+**Save-time** is the one rule whose breach is not a half-built form: an unsatisfiable `validation` (`min` above `max`, `max_length` below `min_length`), because it silently refuses every candidate at registration and nothing before Phase 6 would surface it. It reports `field: "registration_form"` with the field's `id` in the message.
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// packages/core/test/validate-test.test.ts (extend)
+it("duplicate form field ids are reported with the field named", () => {
+  const r = validateTest(testWithDuplicateFieldId, bank);
+  expect(r.ok).toBe(false);
+  expect(r.issues[0]).toMatchObject({ field: "registration_form.fields", index: -1, message: expect.stringMatching(/"email".*more than once/) });
+});
+it("duplicate section ids are reported", () => { /* field: "sections" */ });
+it("an options list on a short_text field is reported", () => {
+  expect(validateTest(testWithOptionsOnShortText, bank).issues[0]).toMatchObject({ field: "registration_form.fields" });
+});
+it("min above max is reported", () => { /* message names the field id */ });
+it("the worked example validates clean", () => { expect(validateTest(exampleTest, exampleQuestions).ok).toBe(true); });
+```
+
+```tsx
+// apps/web/test/testbuilder/form-builder.test.tsx
+it("all eleven field types can be added", async () => {
+  for (const type of FORM_FIELD_TYPES) { await addField(type); }
+  expect(screen.getAllByRole("group", { name: /field/i })).toHaveLength(11);
+});
+it("the preview is the candidate renderer, including its validation messages", async () => {
+  await userEvent.type(within(preview()).getByLabelText(/roll number/i), "nope");
+  await userEvent.tab();
+  expect(within(preview()).getByText("Format: 21CS0147 — two digits, two letters, four digits.")).toBeVisible();
+});
+it("the builder cannot produce a placeholder-only field", () => {
+  expect(screen.getByLabelText(/visible label/i)).toBeRequired();
+  expect(within(preview()).getByText(/^Full name/)).toBeVisible();
+});
+it("every field type sets the right input type and autocomplete token in the preview", () => {
+  for (const [type, spec] of Object.entries(FIELD_INPUT)) { /* assert type and autocomplete on the rendered input */ }
+});
+it("required is marked in the preview, not only in the editor", () => { /* aria-required and a visible marker */ });
+it("the unique flag states its effect in one line", () => {
+  expect(screen.getByText("A second registration with the same value is refused.")).toBeVisible();
+});
+it("validation that cannot be satisfied is caught in the builder with cause and fix", async () => {
+  await userEvent.type(screen.getByLabelText(/minimum/i), "10");
+  await userEvent.type(screen.getByLabelText(/maximum/i), "5");
+  expect(await screen.findByRole("alert")).toHaveTextContent(/minimum 10 is above maximum 5 — lower the minimum/i);
+});
+it("fields reorder by keyboard and announce the new position", async () => { /* ReorderableList, real {Enter} */ });
+it("applying a template over existing fields confirms first, and names what is replaced", async () => {
+  await userEvent.click(screen.getByRole("button", { name: /campus hiring/i }));
+  expect(screen.getByRole("dialog")).toHaveTextContent(/replace the 3 fields you have/i);
+});
+it("the builder and the preview have no axe violations", async () => { /* both containers */ });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run packages/core/test/validate-test.test.ts apps/web/test/testbuilder/form-builder.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement the types, the rules, the renderer and the builder**
+
+Add the types to `packages/core/src/types.ts` under the header comment at `:187-193` that defers them "until a phase needs it", and export them from `index.ts`. The new rules go inside `validateTest`'s existing body and push onto its existing `issues` array, so the whole report still arrives at once. `RegistrationForm` renders a native control per type — `<input type="date">`, `<select>`, `<input type="tel">` — and loads nothing: a country-code picker is a `<select>` of dialling codes, not a dependency.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run packages/core apps/web`
+Expected: PASS.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages apps
+git commit -s -m "feat(tests): registration form builder with the shared candidate renderer"
+```
+
+---
+
+## Task 6: URL field reachability check (#58, P5.5)
+
+**Files:**
+- Create: `apps/api/src/net/reachable.ts`
+- Modify: `apps/api/src/routes/tests.ts`, `apps/api/src/app.ts`, `apps/web/src/lib/api.ts`, `apps/web/src/components/testbuilder/FormBuilder.tsx`
+- Test: `apps/api/test/reachable.test.ts`, `apps/web/test/testbuilder/url-check.test.tsx`
+
+**Interfaces:**
+- Consumes: `AppDeps.http` (`apps/api/src/app.ts` — already injected and already optional, added in Phase 3 for OIDC), `deps.now`, `requires("tests.edit")`, `FormBuilder` (Task 5).
+- Produces:
+  ```ts
+  // apps/api/src/net/reachable.ts
+  export type ReachState = "reachable" | "unverified" | "timeout" | "refused";
+  export interface ReachResult { state: ReachState; status: number | null; reason?: string; checkedAt: number }
+  export const REACH_TIMEOUT_MS = 5000;
+  export function checkReachable(http: typeof globalThis.fetch, url: string, now: () => number): Promise<ReachResult>;
+
+  // apps/web/src/lib/api.ts — on ApiClient
+  //   checkUrl(testId: string, url: string): Promise<ReachResult>
+  ```
+
+| Method | Path | Guard | Budget (estimate — measure and pin) |
+| --- | --- | --- | --- |
+| POST | `/api/v1/workspaces/:id/tests/:testId/check-url` | `tests.edit` | 4 |
+
+Four: authentication's 2, the `getTest` existence check, and **one outbound `fetch`**, which is a subrequest on Workers exactly as a D1 query is. `countingDeps` counts the database and storage adapters, not `deps.http`, so this task extends it to wrap `http` too — otherwise the one call this route exists to make is the one call the budget cannot see.
+
+**Review Focus 6 is this task's whole shape.** `checkReachable` refuses before it fetches:
+
+| Input | Result |
+| --- | --- |
+| scheme other than `http:` / `https:` | `refused`, reason "only http and https links can be checked" |
+| host that parses as an IPv4 or IPv6 literal, or is `localhost` / ends in `.localhost` / `.internal` | `refused`, reason "a link to a network address cannot be checked" |
+| anything else | `HEAD` with `redirect: "manual"`, `AbortSignal.timeout(REACH_TIMEOUT_MS)` |
+| 405 on `HEAD` | retried once with `GET`; the body is never read |
+| 200 | `reachable` |
+| any other status, or a 3xx | `unverified` with the status |
+| abort | `timeout`, which the UI reports as a timeout with a retry, never as unreachable |
+
+Nothing here blocks anything: the result is advisory, is never stored on the field, and `POST …/check-url` 200s with the result even when the result is `refused`. T-19's "flag it as unverified" is a thing the organiser sees, not a thing the server enforces — **no rule from this task appears in the publish checklist.**
+
+- [ ] **Step 1: Write the failing tests**
+
+```ts
+// apps/api/test/reachable.test.ts — deps.http is a stub; no network in any case
+it.each([
+  ["file:///etc/passwd", "only http and https"],
+  ["ftp://example.com", "only http and https"],
+  ["http://127.0.0.1:5432/", "network address"],
+  ["http://169.254.169.254/latest/meta-data/", "network address"],
+  ["http://localhost/", "network address"],
+  ["http://[::1]/", "network address"],
+])("refuses %s without fetching", async (url, reason) => {
+  const http = vi.fn();
+  expect(await checkReachable(http, url, () => T)).toMatchObject({ state: "refused", reason: expect.stringContaining(reason) });
+  expect(http).not.toHaveBeenCalled();
+});
+it("a 200 is reachable and the body is never read", async () => {
+  const body = { getReader: vi.fn() };
+  expect(await checkReachable(okWithBody(body), "https://example.com/cv.pdf", () => T)).toMatchObject({ state: "reachable", status: 200, checkedAt: T });
+  expect(body.getReader).not.toHaveBeenCalled();
+});
+it("a 404 is unverified with the status, not an error", async () => { /* state "unverified", status 404 */ });
+it("a redirect is not followed and is unverified", async () => { /* redirect: "manual" passed; state "unverified", status 302 */ });
+it("a HEAD rejected with 405 is retried once with GET and no third call", async () => { /* http called exactly twice */ });
+it("an abort is a timeout, not unreachable", async () => { /* state "timeout" */ });
+it("the route answers 200 with the result even when the result is refused", async () => { /* 200 */ });
+it("a Viewer cannot call check-url", async () => { /* 403 */ });
+it("measures the real subrequest cost of check-url, counting the outbound fetch", async () => {
+  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/check-url"]);
+});
+```
+
+```tsx
+// apps/web/test/testbuilder/url-check.test.tsx
+it("the three states are text plus glyph, and unverified never reads as invalid", async () => {
+  expect(screen.getByText(/not checked/i)).toBeVisible();
+  await check("unverified");
+  expect(screen.getByText(/unverified — the link did not return 200/i)).toBeVisible();
+  expect(screen.queryByText(/invalid/i)).toBeNull();
+});
+it("the check shows it is running", async () => { /* role=status, /checking/i, while the promise is pending */ });
+it("a timeout reports a timeout with a retry, not unreachable", async () => {
+  expect(screen.getByText(/timed out/i)).toBeVisible();
+  expect(screen.getByRole("button", { name: /check again/i })).toBeEnabled();
+});
+it("the result says when it was checked", () => { expect(screen.getByText(/checked at /i)).toBeVisible(); });
+it("an unverified result blocks nothing — the draft still saves", async () => { /* save button enabled */ });
+it("the url field row has no axe violations", async () => { /* axe */ });
+```
+
+- [ ] **Step 2: Run them to make sure they fail**
+
+Run: `pnpm vitest run apps/api/test/reachable.test.ts apps/web/test/testbuilder/url-check.test.tsx`
+Expected: FAIL.
+
+- [ ] **Step 3: Implement `checkReachable`, the route and the field affordance**
+
+Parse with `new URL()` and refuse on the table above before the first `fetch`. The literal-address test is a regex over `url.hostname` for IPv4 dotted quads and bracketed IPv6 plus the three name suffixes — a DNS lookup is not available on Workers and is not attempted, so a hostname that *resolves* to a private address is out of scope and is named as such in a `ponytail:` comment with its upgrade path (resolve and check at the Node entry, Phase 11). Extend `countingDeps` in `apps/api/src/instrument.ts` to wrap `deps.http`.
+
+- [ ] **Step 4: Run the tests to verify they pass**
+
+Run: `pnpm vitest run apps/api apps/web`
+Expected: PASS, with `budget.test.ts` green.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps
+git commit -s -m "feat(tests): server-side url reachability check for registration fields"
+```
 </content>
