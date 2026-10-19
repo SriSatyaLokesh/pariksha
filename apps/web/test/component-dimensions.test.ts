@@ -139,6 +139,13 @@ function effectiveBoxHeight(body: string): number {
 // stylesheet is byte-for-byte the same set of declarations.
 const primitivesCss = readCss("primitives.css");
 const adminCss = readCss("admin.css");
+// P6.6 (#70): the candidate runtime's own stylesheet, and the one
+// DESIGN.md component this phase builds — `palette-square`, which
+// `DESIGN.md:344-350` already pins at 36px / `{rounded.sm}`. T30 exists
+// because `.top-nav__inner` drifted from DESIGN.md with nothing to catch
+// it; hand-writing 36px beside the guard built to measure it is the same
+// drift one commit earlier.
+const examCss = readCss("exam.css");
 
 describe("component dimensions match tokens.components (T30)", () => {
   it('.button-primary height matches tokens.components["button-primary"].height', () => {
@@ -210,5 +217,57 @@ describe("component dimensions match tokens.components (T30)", () => {
   it(".text-input declares no line-height that would break its stated 44px box", () => {
     const body = ruleBody(adminCss, ".text-input ");
     expect(tryDeclaration(body, "line-height")).toBeNull();
+  });
+
+  // ---- palette-square (P6.6, #70) ---------------------------------------
+
+  it('.palette-square height matches tokens.components["palette-square"].height', () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(resolveSpacing(declaration(body, "height"))).toBe(
+      tokens.components["palette-square"].height,
+    );
+  });
+
+  it(".palette-square is square: its width equals its stated height", () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(resolveSpacing(declaration(body, "width"))).toBe(
+      tokens.components["palette-square"].height,
+    );
+  });
+
+  it('.palette-square border-radius matches tokens.components["palette-square"].rounded', () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(declaration(body, "border-radius")).toBe("var(--rounded-sm)");
+    expect(tokens.rounded.sm).toBe(tokens.components["palette-square"].rounded);
+  });
+
+  it('.palette-square font-size matches tokens.components["palette-square"].typography', () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(declaration(body, "font-size")).toBe("var(--type-mono-sm-size)");
+    expect(tokens.typography["mono-sm"].fontSize).toBe(
+      tokens.components["palette-square"].typography.fontSize,
+    );
+  });
+
+  // DESIGN.md gives each variant the same 36px box, so none of them may
+  // redeclare a height of its own — the thing D5 caught on
+  // `.button-secondary`, where two declarations disagreed and neither was
+  // what rendered.
+  it("no palette-square variant redeclares a height that could drift from the base rule", () => {
+    for (const variant of ["is-filled", "has-notch", "has-ring", "has-lock"]) {
+      const body = ruleBody(examCss, `.palette-square.${variant}`);
+      expect(tryDeclaration(body, "height"), variant).toBeNull();
+      expect(tryDeclaration(body, "width"), variant).toBeNull();
+    }
+    // The three DESIGN.md names behind those classes carry the same box.
+    for (const name of [
+      "palette-square-answered",
+      "palette-square-marked",
+      "palette-square-current",
+    ] as const) {
+      expect(tokens.components[name].height).toBe(
+        tokens.components["palette-square"].height,
+      );
+    }
   });
 });
