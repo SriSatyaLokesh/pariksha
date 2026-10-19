@@ -370,7 +370,7 @@ pnpm build        # pnpm tokens && turbo run build -> node scripts/tokens.mjs, t
 pnpm test         # turbo run test && pnpm vitest run scripts
 pnpm --filter @pariksha/core exec vitest run --coverage.enabled --coverage.provider=v8 \
   --coverage.include="src/**" --coverage.reporter=text \
-  --coverage.thresholds.statements=97 --coverage.thresholds.branches=93 \
+  --coverage.thresholds.statements=98 --coverage.thresholds.branches=94 \
   --coverage.thresholds.functions=100 --coverage.thresholds.lines=98
 ```
 
