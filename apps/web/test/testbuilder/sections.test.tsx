@@ -209,6 +209,55 @@ describe("SectionList", () => {
     expect(within(status).getByRole("button", { name: /undo/i })).toBeInTheDocument();
   });
 
+  it("fix round (task 3 review, I9): Escape cancels the delete dialog, focus moves in and back", () => {
+    render(<Harness initial={[QUANT]} />);
+    const trigger = screen.getByRole("button", { name: /delete section/i });
+    // No @testing-library/user-event in this workspace: a real click
+    // focuses the element it activates, which `fireEvent.click` alone does
+    // not simulate — the same `.focus()` + `fireEvent.click` precedent
+    // `sections reorder by keyboard` (above) already uses.
+    trigger.focus();
+    fireEvent.click(trigger);
+
+    const dialog = screen.getByRole("dialog", { name: /delete this section/i });
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
+  it("fix round (task 3 review, I9): Escape cancels the source-switch dialog, focus moves in and back", () => {
+    render(<Harness initial={[QUANT]} />);
+    const select = screen.getByLabelText(/source/i);
+    select.focus();
+    fireEvent.change(select, { target: { value: "fixed" } });
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    // The source select is still "pool" — Escape cancelled, it did not switch.
+    expect(screen.getByLabelText(/source/i)).toHaveValue("pool");
+    expect(select).toHaveFocus();
+  });
+
+  it("fix round (task 3 review, I9): Escape closes the question picker and returns focus to Add questions", () => {
+    const fixed: StoredSection = { id: "written", title: "Written", source: { kind: "fixed", questions: [] } };
+    render(<Harness initial={[fixed]} />);
+
+    const trigger = screen.getByRole("button", { name: /add questions/i });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: /add questions/i });
+    expect(dialog).toHaveFocus();
+
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
+  });
+
   it("UX-14: the picker is a drawer over the builder, with the bank browser's filters and a running footer", async () => {
     const bank: Bank = {
       id: "bnk_1",

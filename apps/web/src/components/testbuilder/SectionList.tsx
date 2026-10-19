@@ -4,6 +4,7 @@ import type { ApiClient, Bank, StoredSection } from "../../lib/api";
 import { ReorderableList } from "../authoring/ReorderableList";
 import { RenderedHtml } from "../authoring/RenderedHtml";
 import { QuestionPickerDrawer } from "./QuestionPickerDrawer";
+import { useDialogKeys } from "./useDialogKeys";
 
 /** A fresh section id (`^[a-z0-9_-]{1,40}$` — schemas/test-1.json's
  * `$defs/section`). Same precedent as `QuestionEditor.tsx`'s own
@@ -150,6 +151,11 @@ export function SectionList({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ section: StoredSection; index: number } | null>(null);
   const [picker, setPicker] = useState<{ sectionId: string; setIndex?: number } | null>(null);
+
+  // Fix round (task 3 review, I9): Escape, initial focus and returning
+  // focus to the control that opened each dialog.
+  const switchDialog = useDialogKeys<HTMLDivElement>(pendingSwitch !== null, () => setPendingSwitch(null));
+  const deleteDialog = useDialogKeys<HTMLDivElement>(confirmDeleteId !== null, () => setConfirmDeleteId(null));
 
   useEffect(() => {
     void client.listBanks(workspaceId).then(setBanks);
@@ -337,7 +343,13 @@ export function SectionList({
       )}
 
       {pendingSwitch && (
-        <div role="dialog" aria-label="Replace this section's source">
+        <div
+          role="dialog"
+          aria-label="Replace this section's source"
+          ref={switchDialog.dialogRef}
+          tabIndex={-1}
+          onKeyDown={switchDialog.onKeyDown}
+        >
           <p>
             Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
             kept across a source change.
@@ -352,7 +364,13 @@ export function SectionList({
       )}
 
       {confirmDeleteId && (
-        <div role="dialog" aria-label="Delete this section">
+        <div
+          role="dialog"
+          aria-label="Delete this section"
+          ref={deleteDialog.dialogRef}
+          tabIndex={-1}
+          onKeyDown={deleteDialog.onKeyDown}
+        >
           <p>Delete this section? This cannot be undone once you leave this screen.</p>
           <button type="button" className="button-secondary" onClick={() => setConfirmDeleteId(null)}>
             Cancel

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { QUESTION_TYPES, type Difficulty, type QuestionType } from "@pariksha/core";
 import { ApiError, type ApiClient, type Bank, type QuestionSummary } from "../../lib/api";
 import { TextField } from "../TextField";
+import { useDialogKeys } from "./useDialogKeys";
 
 // UX-14: a drawer over the builder, with the bank browser's own filters
 // (type/difficulty/tag/search — `BankBrowser`, apps/web/src/routes/bank.tsx)
@@ -34,6 +35,11 @@ export function QuestionPickerDrawer({
   workspaceId: string;
 }) {
   const headingId = useId();
+  // Fix round (task 3 review, I9): Escape to close, initial focus into the
+  // drawer, and focus back to the control that opened it once this
+  // component unmounts — `active: true` for this component's whole life,
+  // same as `useDialogKeys`'s own header note describes.
+  const dialog = useDialogKeys<HTMLDivElement>(true, onCancel);
   const [banks, setBanks] = useState<Bank[] | null>(null);
   const [bankId, setBankId] = useState<string | null>(initialBankId);
   const [questions, setQuestions] = useState<QuestionSummary[] | null>(null);
@@ -85,7 +91,14 @@ export function QuestionPickerDrawer({
   const totalPoints = [...picked].reduce((sum, id) => sum + (pointsById.get(id) ?? 0), 0);
 
   return (
-    <div role="dialog" aria-labelledby={headingId} className="picker-drawer">
+    <div
+      role="dialog"
+      aria-labelledby={headingId}
+      className="picker-drawer"
+      ref={dialog.dialogRef}
+      tabIndex={-1}
+      onKeyDown={dialog.onKeyDown}
+    >
       <h2 id={headingId}>Add questions</h2>
 
       {bankId === null ? (
