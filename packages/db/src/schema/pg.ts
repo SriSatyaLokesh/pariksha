@@ -257,6 +257,8 @@ export const attempt = pgTable(
     scoreJson: jsonb("score_json"),
     flag: text("flag").notNull(),
     tokenHash: text("token_hash").notNull(),
+    maxIndex: integer("max_index").notNull(),
+    sectionStartedAt: bigint("section_started_at", { mode: "number" }),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

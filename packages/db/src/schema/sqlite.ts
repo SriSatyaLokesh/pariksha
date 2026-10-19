@@ -249,6 +249,8 @@ export const attempt = sqliteTable(
     scoreJson: text("score_json", { mode: "json" }),
     flag: text("flag").notNull(),
     tokenHash: text("token_hash").notNull(),
+    maxIndex: integer("max_index").notNull(),
+    sectionStartedAt: integer("section_started_at"),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

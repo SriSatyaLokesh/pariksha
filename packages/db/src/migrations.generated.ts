@@ -128,6 +128,10 @@ export const sqliteMigrations: Migration[] = [
     "CREATE TABLE `rate_limit` (\n\t`bucket` text PRIMARY KEY NOT NULL,\n\t`window_start` integer NOT NULL,\n\t`count` integer NOT NULL\n);",
     "CREATE INDEX `rate_limit_window_idx` ON `rate_limit` (`window_start`);",
   ] },
+  { name: "0007_attempt_progress.sql", statements: [
+    "-- Phase 6 Task 5 (#69, P6.5): the two columns an attempt needs to carry a\n-- candidate's progress, and only two.\n--\n-- `max_index` is the furthest flat question index reached. It carries both\n-- navigation rules at once -- `linear` refuses a target below it, and the\n-- current section is the one that index falls in -- so section locking needs\n-- no column of its own. `section_started_at` is what a per-section deadline\n-- is measured from.\n--\n-- Hand-written rather than taken from `drizzle-kit generate` verbatim, for\n-- the reason 0004, 0005 and 0006 record: SQLite refuses `ALTER TABLE ... ADD\n-- ... NOT NULL` unless a literal DEFAULT comes with it. `DEFAULT 0` is that\n-- literal, and it is also the right value for every attempt already in\n-- flight -- an attempt written before this migration has reached no index it\n-- can prove, so the safest reading is the first question.\n--\n-- No PRAGMA foreign_keys: D1 ignores it silently and\n-- `no-d1-hostile-sql.test.ts` refuses it.\nALTER TABLE `attempt` ADD `max_index` integer DEFAULT 0 NOT NULL;",
+    "ALTER TABLE `attempt` ADD `section_started_at` integer;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -237,5 +241,9 @@ export const pgMigrations: Migration[] = [
     "CREATE UNIQUE INDEX \"candidate_unique_value_uq\" ON \"candidate_unique\" USING btree (\"test_id\",\"field_id\",\"value_hash\");",
     "CREATE TABLE \"rate_limit\" (\n\t\"bucket\" text PRIMARY KEY NOT NULL,\n\t\"window_start\" bigint NOT NULL,\n\t\"count\" integer NOT NULL\n);",
     "CREATE INDEX \"rate_limit_window_idx\" ON \"rate_limit\" USING btree (\"window_start\");",
+  ] },
+  { name: "0007_attempt_progress.sql", statements: [
+    "-- Phase 6 Task 5 (#69, P6.5): the sqlite/0007_attempt_progress.sql sibling.\n-- Postgres needs no DEFAULT to add a NOT NULL column to a populated table,\n-- but it carries the same one so the two dialects agree on what an attempt\n-- written before this migration has reached.\nALTER TABLE \"attempt\" ADD COLUMN \"max_index\" integer DEFAULT 0 NOT NULL;",
+    "ALTER TABLE \"attempt\" ADD COLUMN \"section_started_at\" bigint;",
   ] },
 ];

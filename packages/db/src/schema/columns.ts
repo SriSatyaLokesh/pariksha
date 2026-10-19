@@ -388,6 +388,20 @@ export const TABLE_MANIFEST: TableSpec[] = [
       json("score_json", { null: true }),
       text("flag"),
       text("token_hash"),
+      // Phase 6 Task 5 (#69, P6.5). Two columns, and only two.
+      //
+      // `max_index` is the furthest flat question index this candidate has
+      // reached, counted across sections in the pinned order. It carries
+      // **both** navigation rules, which is why `per_section` needs no
+      // second column: `linear` refuses a target below it, and the current
+      // section is the one that index falls in. `NOT NULL DEFAULT 0`, which
+      // is the one shape SQLite's `ALTER TABLE … ADD COLUMN` accepts for a
+      // NOT NULL column.
+      //
+      // `section_started_at` is what a per-section deadline is measured
+      // from, and is null until the candidate enters a timed section.
+      int("max_index"),
+      ts("section_started_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
     uniques: [["token_hash"]],
