@@ -6,6 +6,7 @@ import {
   allowlistIssues,
   brandColourIssue,
   describeAllowlists,
+  formDomainIssues,
   invalidCidr,
   invalidDomainGlob,
   timingIssues,
@@ -922,6 +923,54 @@ describe("validateTest", () => {
       field: "registration_form",
       message: expect.stringMatching(/"cgpa".*minimum 10 is above maximum 5/),
     });
+  });
+
+  it("a pathological allowed_domains glob is refused at publish, not left to the candidate's browser", () => {
+    // Whole-branch security review, H1. Twenty characters, typeable in the
+    // panel's own box, compiling to eight abutting `[^.]+` in the
+    // *candidate's* browser — and Phase 6 runs the same matcher inside a
+    // 10 ms Worker budget. `invalidDomainGlob` permits `*` only as a
+    // leading `*.`, so the shape is unconstructible rather than slow.
+    const r = validateTest(
+      withForm([
+        field({ id: "email", type: "email", validation: { allowed_domains: ["*a*a*a*a*a*a*a*b.com"] } }),
+      ]),
+      [],
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) throw new Error("expected failure");
+    expect(r.issues).toContainEqual({
+      questionId: null,
+      index: -1,
+      field: "registration_form.fields",
+      message: expect.stringMatching(/"email" allows a domain that cannot be matched.*other than the front/),
+    });
+  });
+
+  it.each([
+    ["*", /matches every domain/],
+    ["**.com", /other than the front/],
+    ["ac.", /letters, digits and inner hyphens/],
+    ["in", /single label, not a domain/],
+    [" ac.in", /is not a domain/],
+  ])("allowed_domains entry %s is refused", (glob, why) => {
+    const issues = formDomainIssues({
+      fields: [field({ id: "email", type: "email", validation: { allowed_domains: [glob] } })],
+    });
+    expect(issues).toHaveLength(1);
+    expect(issues[0]?.message).toMatch(why);
+  });
+
+  it("the two legal shapes of an allowed_domains entry pass, and no form is no issue", () => {
+    expect(
+      formDomainIssues({
+        fields: [
+          field({ id: "email", type: "email", validation: { allowed_domains: ["*.ac.in", "nitk.ac.in"] } }),
+          field({ id: "site", type: "url" }),
+        ],
+      }),
+    ).toEqual([]);
+    expect(formDomainIssues(undefined)).toEqual([]);
   });
 
   it("max_length below min_length is reported", () => {

@@ -29,6 +29,7 @@ import type {
   Question,
   QuestionOption,
   AccessMode,
+  RegistrationFormSpec,
   Section,
   Test,
   TestAccess,
@@ -650,6 +651,43 @@ export function allowlistIssues(
 }
 
 /**
+ * The malformed `validation.allowed_domains` entries on a registration
+ * form, as `{ field, message }`.
+ *
+ * **Save-time, the twin of `allowlistIssues`** — and for a sharper reason
+ * than a candidate silently refused. `allowed_domains` is the only
+ * author-written string in the product compiled to a live regex
+ * (`RegistrationForm.tsx`'s `domainAllowed`), and it was parsed by
+ * nothing: `*a*a*a*a*a*a*a*b.com` is twenty characters, types into the
+ * panel's own box, compiles to eight abutting `[^.]+`, and takes 32 ms on
+ * a 44-character host in the *candidate's* browser — with Phase 6 due to
+ * run the same function server-side inside a 10 ms Worker budget
+ * (whole-branch security review, H1).
+ *
+ * So the field gets the dialect `access.allow_email_domains` already has:
+ * `invalidDomainGlob`, which permits `*` only as a leading `*.` and makes
+ * the shape unconstructible rather than merely slow. One parser, two
+ * fields, no second glob dialect to keep in step.
+ */
+export function formDomainIssues(
+  form: RegistrationFormSpec | undefined,
+): { field: string; message: string }[] {
+  const issues: { field: string; message: string }[] = [];
+  for (const field of form?.fields ?? []) {
+    for (const glob of field.validation?.allowed_domains ?? []) {
+      const why = invalidDomainGlob(glob);
+      if (why !== null) {
+        issues.push({
+          field: "registration_form.fields",
+          message: `form field "${field.id}" allows a domain that cannot be matched: ${why}`,
+        });
+      }
+    }
+  }
+  return issues;
+}
+
+/**
  * Why `branding.primary_colour` cannot be stored, as `{ field, message }`,
  * or `null` when it can.
  *
@@ -1074,6 +1112,14 @@ export function validateTest(
           message: `form field "${field.id}": ${unsatisfiable}`,
         });
       }
+    }
+
+    // The publish-time twin of the save-time rule in `PATCH .../draft`,
+    // stated the way `allowlistIssues` is: the route refuses the write and
+    // this reports it too, so publish, import and export all run the one
+    // parser rather than trusting the route that happened to store it.
+    for (const issue of formDomainIssues(form)) {
+      issues.push({ questionId: null, index: -1, ...issue });
     }
   }
 

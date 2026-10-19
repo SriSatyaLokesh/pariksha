@@ -477,20 +477,37 @@ describe("validateField — the one copy both halves call", () => {
     expect(validateField(field, "rao@a.b.ac.in")).toMatch(/\*\.edu\.in/);
   });
 
-  it("a run of stars in a domain glob is one wildcard, not one unbounded repeat per star", () => {
-    // `**.com` used to compile to two abutting `[^.]+`, which is the
-    // catastrophic-backtracking shape and runs in the *candidate's*
-    // browser (task 5/6 review, m2). It also made a one-character label
-    // fail a glob that says it should match.
+  it("a glob with more than one star is never compiled, so it cannot backtrack", () => {
+    // The shipped fix collapsed *adjacent* stars (`\*+` → one `[^.]+`),
+    // which left `*a*a*…*b.com` — stars separated by a literal, so none
+    // adjacent — still compiling to one abutting `[^.]+` per star. The
+    // curve is catastrophic, not polynomial: the 26-character glob
+    // `*a*a*a*a*a*a*a*a*a*a*b.com` takes 3.9 s on a 40-character host and
+    // 714 s on a 70-character one, in the *candidate's* browser, re-run
+    // per keystroke (whole-branch security review, H1). A `max_length`
+    // cap cannot absorb that — the shipped `campus_hiring` preset's 80
+    // still reaches twelve minutes. Nothing can store such an entry now
+    // (`formDomainIssues` refuses it at save and at publish); here it is
+    // refused rather than run, because a gate fails closed.
     const field = {
       id: "email",
       type: "email" as const,
       label: "Email",
-      validation: { allowed_domains: ["**.com"] },
+      validation: { allowed_domains: ["*a*a*a*a*a*a*a*b.com"] },
     };
-    expect(validateField(field, "rao@a.com")).toBeUndefined();
-    // And one star still means one label, not "anything".
-    expect(validateField(field, "rao@a.b.com")).toMatch(/\*\*\.com/);
+    // Asserted as *refused*, not as "completed quickly": a timing bound
+    // would be flaky and would also pass against a fix that merely made
+    // the backtracking slower.
+    expect(validateField(field, `rao@${"a".repeat(40)}.com`)).toMatch(/a\*a/);
+
+    // Adjacent stars are the same rule reached by the same count.
+    expect(validateField({ ...field, validation: { allowed_domains: ["**.com"] } }, "rao@a.com")).toMatch(
+      /\*\*\.com/,
+    );
+    // One star is the dialect, and still means exactly one label.
+    const ok = { ...field, validation: { allowed_domains: ["*.com"] } };
+    expect(validateField(ok, "rao@a.com")).toBeUndefined();
+    expect(validateField(ok, "rao@a.b.com")).toMatch(/\*\.com/);
   });
 
   it("a blank answer is required-or-nothing, never a format complaint", () => {

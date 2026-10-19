@@ -706,6 +706,46 @@ it("a malformed email-domain glob is refused at save", async () => {
   expect(issuesOf(body)[0]).toMatchObject({ field: "access.allow_email_domains" });
 });
 
+// Whole-branch security review, H1: the glob that is *compiled*, not the
+// one that is only compared. This is the save half; the publish half is in
+// `packages/core/test/validate.test.ts`, carried by `validateTest`.
+it("a pathological allowed_domains glob is refused at save and stores nothing", async () => {
+  const field = {
+    id: "email",
+    type: "email",
+    label: "College email",
+    validation: { allowed_domains: ["*a*a*a*a*a*a*a*b.com"] },
+  };
+  // Two layers, both asserted, because either on its own can be edited
+  // away. The schema's `pattern` admits at most one leading `*`, so the
+  // pathological glob never reaches the parser …
+  const { status, body } = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [field] } },
+  });
+  expect(status).toBe(422);
+  expect(issuesOf(body)[0]?.field).toMatch(/allowed_domains/);
+
+  const { body: after } = await draft(workspaceId, testId, authorCookie);
+  expect((after.body as { settings: Record<string, unknown> }).settings.registration_form).toBeUndefined();
+
+  // … and a glob the pattern admits but no mail server can match is
+  // refused by `invalidDomainGlob`, in its own sentence.
+  const single = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: { registration_form: { fields: [{ ...field, validation: { allowed_domains: ["in"] } }] } },
+  });
+  expect(single.status).toBe(422);
+  expect(issuesOf(single.body)[0]).toMatchObject({ field: "registration_form.fields" });
+  expect(issuesOf(single.body)[0]?.message).toMatch(/"email" allows a domain that cannot be matched/);
+
+  // The legal dialect still saves — this is a parser, not a ban on globs.
+  const ok = await patchDraft(workspaceId, testId, authorCookie, {
+    settings: {
+      registration_form: { fields: [{ ...field, validation: { allowed_domains: ["*.ac.in"] } }] },
+    },
+  });
+  expect(ok.status).toBe(200);
+});
+
 it("a refused allowlist stores nothing — the whole patch is rejected, not the bad entry", async () => {
   await patchDraft(workspaceId, testId, authorCookie, { settings: { access: { mode: "sso" } } });
   await patchDraft(workspaceId, testId, authorCookie, {

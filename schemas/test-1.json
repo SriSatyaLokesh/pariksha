@@ -170,7 +170,11 @@
         "max": { "type": ["number", "string"] },
         "integer": { "type": "boolean" },
         "decimals": { "type": "integer", "minimum": 0 },
-        "allowed_domains": { "type": "array", "items": { "type": "string" }, "description": "Glob patterns for email and url fields." },
+        "allowed_domains": {
+          "type": "array",
+          "items": { "type": "string", "maxLength": 253, "pattern": "^\\*?[A-Za-z0-9.-]+$" },
+          "description": "Glob patterns for email and url fields: a domain, or one leading * for a whole subtree (*.ac.in) — the dialect access.allow_email_domains uses. The pattern bounds the * count because this value is compiled to a live regex in the candidate's browser; invalidDomainGlob is the full rule and runs at save and at publish."
+        },
         "check_reachable": { "type": "boolean", "description": "url only: flag the value if the link does not return HTTP 200." },
         "default_country": { "type": "string", "description": "phone only: ISO 3166-1 alpha-2, e.g. IN." }
       },

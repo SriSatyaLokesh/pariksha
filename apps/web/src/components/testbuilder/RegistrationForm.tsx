@@ -145,22 +145,43 @@ export const FORM_TEMPLATES: Readonly<
 
 /** `*.edu.in` / `drive.google.com` — the glob dialect `allowed_domains`
  * uses. One `*` stands for one or more label characters, nothing else; a
- * full regex here would be organiser-authored and unbounded. */
+ * full regex here would be organiser-authored and unbounded.
+ *
+ * Three bounds, because this compiles an organiser's string to a live
+ * `RegExp` in the *candidate's* browser and Phase 6 runs the same function
+ * on the server (whole-branch security review, H1):
+ *
+ * 1. **Count the stars in the whole pattern, not the run.** The shipped
+ *    `\*+` collapse merged only *adjacent* stars; `*a*a*a*a*a*a*a*b.com`
+ *    is twenty characters, survives it untouched, and still compiles to
+ *    eight abutting `[^.]+` — 32 ms on a 44-character host, and eleven
+ *    stars did not finish in two minutes. One `*` is the dialect.
+ * 2. **`assertSafeRegex` on the compiled source**, the same gate
+ *    `validation.pattern` goes through one function below, so this path
+ *    is no longer the one construction site without it.
+ * 3. **A length cap**, because the compiled source grows with the pattern.
+ *
+ * An entry that fails any of them simply does not match. That is the
+ * opposite of the `pattern` branch below — which lets the candidate
+ * through on an organiser's bad regex — and deliberately so: a pattern is
+ * a format hint, an allowlist is a gate, and a gate fails closed. Nothing
+ * can store such an entry any more (`formDomainIssues` refuses it at save
+ * and at publish); this is for rows written before that rule existed.
+ */
 function domainAllowed(host: string, patterns: readonly string[]): boolean {
   const lower = host.toLowerCase();
   return patterns.some((pattern) => {
-    const escaped = pattern
+    if (pattern.length > 253 || (pattern.match(/\*/g) ?? []).length > 1) return false;
+    const source = `^${pattern
       .toLowerCase()
       .replace(/[.+?^${}()|[\]\\]/g, "\\$&")
-      // A run of stars is one wildcard, not one per star: `*****.com`
-      // compiling to five abutting `[^.]+` is the catastrophic-backtracking
-      // shape, `assertSafeRegex` is not applied on this path, and this runs
-      // in the *candidate's* browser at registration (task 5/6 review, m2).
-      // Collapsing the run also matches what the dialect means — one `*`
-      // stands for one or more label characters, so two in a row cannot
-      // say anything the first does not.
-      .replace(/\*+/g, "[^.]+");
-    return new RegExp(`^${escaped}$`).test(lower);
+      .replace(/\*/g, "[^.]+")}$`;
+    try {
+      assertSafeRegex(source);
+    } catch {
+      return false;
+    }
+    return new RegExp(source).test(lower);
   });
 }
 

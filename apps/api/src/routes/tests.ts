@@ -9,7 +9,13 @@
 import { Hono, type Context } from "hono";
 import { z } from "zod";
 import { Validator, type OutputUnit } from "@cfworker/json-schema";
-import { allowlistIssues, brandColourIssue, matchesFilter, type QuestionSource } from "@pariksha/core";
+import {
+  allowlistIssues,
+  brandColourIssue,
+  formDomainIssues,
+  matchesFilter,
+  type QuestionSource,
+} from "@pariksha/core";
 import {
   CANDIDATE_IMPORT_MAX_BYTES,
   convertCandidateCsv,
@@ -628,6 +634,18 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
       if (badAllowlist.length > 0) {
         throw new ApiError(422, "invalid_settings", "An allowlist entry cannot be matched.", {
           issues: badAllowlist,
+        });
+      }
+
+      // Whole-branch security review, H1. `validation.allowed_domains` is
+      // the same kind of value as the block above — a glob an organiser
+      // types that something later compiles — and it was reaching storage
+      // unparsed and then a live `RegExp` in the candidate's browser. Same
+      // parser, same save-time refusal, same sentence.
+      const badDomains = formDomainIssues(settings.registration_form);
+      if (badDomains.length > 0) {
+        throw new ApiError(422, "invalid_settings", "An allowed domain cannot be matched.", {
+          issues: badDomains,
         });
       }
 
