@@ -172,15 +172,66 @@ async function unavailable(
   code: string,
   message: string,
   details: Record<string, unknown>,
+  /**
+   * What actually threw, for the **audit row only**.
+   *
+   * Converting every throw into an `ApiError` means this path never
+   * reaches `errorEnvelope`, which is the one place a non-`ApiError` is
+   * logged with its message and stack — so without this the next genuine
+   * defect in the selection code ships as a 409 reading "tell your
+   * organiser", and the organiser is sent to fix a bank that is not
+   * broken. The audit row is same-tenant and organiser-facing, which is
+   * the right home for it; the candidate's body keeps `details` and
+   * nothing more.
+   */
+  diagnosis?: string,
 ): Promise<never> {
   await appendAudit(deps.db, test.workspaceId, {
     actor: "candidate",
     action: `attempt.${code}`,
     target: test.testVersionId,
-    detail: details,
+    detail: diagnosis === undefined ? details : { ...details, reason: diagnosis },
     now: deps.now(),
   });
   throw conflict(code, message, details);
+}
+
+/** `name: message`, from anything a `throw` can carry. */
+const diagnosisOf = (error: unknown): string =>
+  error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+
+/**
+ * Every throw out of drawing a candidate's paper, as the one 409.
+ *
+ * Two call sites — the selection and the scrub — because a stale
+ * published version breaks both: `layoutForAttempt` throws for a `fixed`
+ * or `sets` question that has been deleted, and the scrub throws for an
+ * options list that has gone since publish.
+ */
+async function staleRefusal(
+  deps: AppDeps,
+  test: PublishedTest,
+  bank: readonly Question[],
+  error: unknown,
+): Promise<never> {
+  if (error instanceof PoolTooSmallError) {
+    return unavailable(
+      deps,
+      test,
+      "pool_too_small",
+      STALE_MESSAGE,
+      { section: error.sectionId, wanted: error.wanted, available: error.available },
+      diagnosisOf(error),
+    );
+  }
+  return unavailable(
+    deps,
+    test,
+    "paper_unavailable",
+    STALE_MESSAGE,
+    { ...(missingReference(test.sections, bank) ?? {}) },
+    diagnosisOf(error),
+  );
 }
 
 const STALE_MESSAGE =
@@ -267,6 +318,36 @@ function missingReference(sections: Section[], bank: readonly Question[]): { sec
           : [];
     for (const id of named) {
       if (!known.has(id)) return { section: section.id, question: id };
+    }
+  }
+  return null;
+}
+
+/**
+ * The first selected question whose passage group the bank no longer
+ * holds — an author removed or renamed it in `groups_json` after
+ * publish.
+ *
+ * Checked rather than tolerated: a comprehension question pinned with no
+ * passage is an unanswerable question, and because the paper is pinned
+ * it would be unanswerable **permanently** for that candidate, silently,
+ * on a 201. The same shape as `missingReference` above and for the same
+ * reason — a published version goes stale the moment something it
+ * references is deleted.
+ */
+function missingGroup(
+  layout: AttemptLayout,
+  byId: Map<string, { question: Question; bankId: string }>,
+  groups: Map<string, PassageGroup>,
+): { section: string; question: string; group: string } | null {
+  for (const pinned of layout.sections) {
+    for (const id of pinned.questionIds) {
+      const held = byId.get(id);
+      const ref = held?.question.group;
+      if (held === undefined || ref === undefined) continue;
+      if (!groups.has(`${held.bankId}:${ref}`)) {
+        return { section: pinned.sectionId, question: id, group: ref };
+      }
     }
   }
   return null;
@@ -428,21 +509,13 @@ export async function startAttempt(
       ...(label === undefined ? {} : { setNo: label }),
     });
   } catch (error) {
-    if (error instanceof PoolTooSmallError) {
-      await unavailable(deps, test, "pool_too_small", STALE_MESSAGE, {
-        section: error.sectionId,
-        wanted: error.wanted,
-        available: error.available,
-      });
-    }
-    // Everything else out of the layout, and there are three sources:
-    // a deleted `fixed` or `sets` question (`findQuestion`), a set label
-    // no section carries, and an assignment with no value. Each would be
-    // a 500 on a candidate's screen; each is this 409 instead.
-    await unavailable(deps, test, "paper_unavailable", STALE_MESSAGE, {
-      ...(missingReference(test.sections, bank) ?? {}),
-    });
-    throw error; // unreachable: `unavailable` never returns
+    // Three sources besides the short pool: a deleted `fixed` or `sets`
+    // question (`findQuestion`), a set label no section carries, and an
+    // assignment with no value. Each would be a 500 on a candidate's
+    // screen; each is a 409 instead, with the thrown message on the
+    // audit row so the next real defect is diagnosable.
+    await staleRefusal(deps, test, bank, error);
+    throw error; // unreachable: `staleRefusal` never returns
   }
 
   const byId = new Map(held.map((one) => [one.id, { question: { ...one.document, id: one.id }, bankId: one.bankId }]));
@@ -455,10 +528,34 @@ export async function startAttempt(
     ? await workspaceGroups(deps.db, test.workspaceId)
     : new Map<string, PassageGroup>();
 
+  // **Inside the net too.** The scrub is the second half of drawing the
+  // paper, and a stale version breaks it the way it breaks the
+  // selection: a group that has gone would silently pin a question with
+  // no passage, and an options list that has gone throws. Both are the
+  // organiser's 409 — never a 201 nobody can fix, and never a 500.
+  const absentGroup = missingGroup(layout, byId, groups);
+  if (absentGroup !== null) {
+    await unavailable(
+      deps,
+      test,
+      "paper_unavailable",
+      STALE_MESSAGE,
+      absentGroup,
+      `the bank no longer holds passage group "${absentGroup.group}"`,
+    );
+  }
+  let paper: PaperSection[];
+  try {
+    paper = paperSections(test, layout, byId, groups);
+  } catch (error) {
+    await staleRefusal(deps, test, bank, error);
+    throw error; // unreachable: `staleRefusal` never returns
+  }
+
   const pinned: PinnedLayout = {
     ...layout,
     media: mediaKeysOf(selected),
-    paper: paperSections(test, layout, byId, groups),
+    paper,
   };
 
   const token = randomToken();
@@ -516,7 +613,11 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
    * `GET .../form` recognise a registered candidate and reissue.
    */
   routes.post("/:workspaceSlug/:testSlug/start", async (c) => {
-    const test = await openTest(deps, c);
+    // **Before `openTest`, so a caller with no credential costs no read
+    // at all.** The candidate floor the whole budget model rests on is
+    // 0, and resolving a test for somebody who cannot possibly start it
+    // is a subrequest spent on a stranger. It discloses nothing either:
+    // the 401 is the same whether the slug pair exists or not.
     const header = c.req.header("authorization") ?? "";
     const token = header.toLowerCase().startsWith("bearer ") ? header.slice(7).trim() : "";
     if (token === "") {
@@ -526,6 +627,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         "Start from the test page: this step needs the pass your registration gave you.",
       );
     }
+    const test = await openTest(deps, c);
     const payload = (await consumeAuthToken(
       deps.db,
       await registrationHash(test.testVersionId, token),

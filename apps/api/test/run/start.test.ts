@@ -124,6 +124,9 @@ const attemptRow = async (attemptId: string): Promise<Record<string, unknown>> =
 const layoutOf = async (attemptId: string): Promise<PinnedLayout> =>
   JSON.parse(String((await attemptRow(attemptId)).layout_json)) as PinnedLayout;
 
+const auditDetail = async (): Promise<Record<string, unknown>> =>
+  JSON.parse(String((await auditRows())[0]?.detail_json ?? "{}")) as Record<string, unknown>;
+
 const auditRows = (): Promise<{ action: string; detail_json: string | null }[]> =>
   deps.db.query<{ action: string; detail_json: string | null }>(
     "SELECT action, detail_json FROM audit_log WHERE actor = 'candidate'",
@@ -165,6 +168,21 @@ it("S-06: the attempt token is 256 bits, arrives as an HttpOnly cookie, and is s
   // The digest is what is stored, and it is the one the cookie hashes to.
   const expected = createHash("sha256").update(token).digest("hex");
   expect(String((await attemptRows())[0]?.token_hash)).toBe(expected);
+});
+
+it("no Authorization header is 401 before a single read — the candidate floor is 0", async () => {
+  const counting = countingDeps(deps);
+  const res = await start("paper", undefined, createApp(counting.deps));
+  expect(res.status).toBe(401);
+  const body = await res.text();
+  expect(JSON.parse(body)).toMatchObject({ error: { code: "registration_required" } });
+  // Refused above `openTest`: a caller with no credential costs nothing,
+  // which is the floor the whole candidate budget model rests on. The
+  // same 401 whether the slug pair exists or not, so nothing leaks.
+  expect(counting.counts().total).toBe(0);
+  const unknown = await start("no-such-test", undefined, createApp(counting.deps));
+  expect(unknown.status).toBe(401);
+  expect(await unknown.text()).toBe(body);
 });
 
 it("no Authorization header is 401, and a spent registration token is 410", async () => {
@@ -667,12 +685,19 @@ it("a stale published version whose pool no longer fills is a 409 naming the sec
 
   const res = await startFresh("shortpool");
   expect(res.status).toBe(409);
-  expect(await errorOf(res)).toMatchObject({
+  const refusal = await errorOf(res);
+  expect(refusal).toMatchObject({
     code: "pool_too_small",
     details: { section: "quant", wanted: 10, available: 3 },
   });
   expect(await attemptRows()).toHaveLength(0);
   expect((await auditRows()).map((row) => row.action)).toEqual(["attempt.pool_too_small"]);
+  // The thrown message, on the organiser's row and not in the
+  // candidate's body: this path never reaches `errorEnvelope`, so
+  // without it the next genuine defect in the selection code arrives as
+  // "tell your organiser" with nothing to act on.
+  expect(String((await auditDetail()).reason)).toContain("PoolTooSmallError");
+  expect(JSON.stringify(refusal)).not.toContain("PoolTooSmallError");
 });
 
 it("a fixed question deleted after publish is a 409 naming it, not a 500", async () => {
@@ -695,6 +720,8 @@ it("a fixed question deleted after publish is a 409 naming it, not a 500", async
   });
   expect(await attemptRows()).toHaveLength(0);
   expect((await auditRows()).map((row) => row.action)).toEqual(["attempt.paper_unavailable"]);
+  // And the diagnosis, which is the half a 409 alone throws away.
+  expect(String((await auditDetail()).reason)).toContain("not found in bank");
 });
 
 it("a sets question deleted after publish is the same 409, naming its section", async () => {
@@ -723,6 +750,56 @@ it("a sets question deleted after publish is the same 409, naming its section", 
     code: "paper_unavailable",
     details: { section: "verbal", question: ids[0] },
   });
+});
+
+it("a passage group removed after publish is a 409, not a question pinned with no passage", async () => {
+  // The silent, permanent failure: without the guard this is a 201 whose
+  // comprehension question carries no passage at all, and because the
+  // paper is pinned that candidate can never be given one.
+  const bankId = q["bank"] as string;
+  const before = await deps.db.query<{ groups_json: string }>(
+    "SELECT groups_json FROM question_bank WHERE id = ?",
+    [bankId],
+  );
+  await deps.db.run("UPDATE question_bank SET groups_json = ? WHERE id = ?", ["[]", bankId]);
+  try {
+    const res = await startFresh("paper");
+    expect(res.status).toBe(409);
+    expect(await errorOf(res)).toMatchObject({
+      code: "paper_unavailable",
+      details: { section: "logic", question: q["CMP-1"], group: "passage-1" },
+    });
+    expect(await attemptRows()).toHaveLength(0);
+    expect((await auditRows()).map((row) => row.action)).toEqual(["attempt.paper_unavailable"]);
+    expect(String((await auditDetail()).reason)).toContain("passage-1");
+  } finally {
+    await deps.db.run("UPDATE question_bank SET groups_json = ? WHERE id = ?", [
+      before[0]?.groups_json ?? "[]",
+      bankId,
+    ]);
+  }
+  // The control: with the group back, the same start is a 201 carrying
+  // the passage — so what refused above was the guard and not the
+  // fixture.
+  expect((await paperOf(await startFresh("paper"))).sections[0]?.questions.some((one) => one.group))
+    .toBe(true);
+});
+
+it("a selected question whose options went null after publish is a 409, not a 500", async () => {
+  // Low reachability — import and the draft route both validate — but it
+  // is the same shape as the `select.ts` defect this task found, and it
+  // is the second half of drawing the paper rather than the first.
+  const { ids } = await staleTest("noopts", (refs) => ({
+    settings: { timing: openWindow, access: code },
+    sections: [{ id: "logic", title: "Logic", source: { kind: "fixed", questions: refs } }],
+  }));
+  await deps.db.run("UPDATE question SET options_json = NULL WHERE id = ?", [ids[0]]);
+
+  const res = await startFresh("noopts");
+  expect(res.status).toBe(409);
+  expect((await errorOf(res)).code).toBe("paper_unavailable");
+  expect(await attemptRows()).toHaveLength(0);
+  expect(String((await auditDetail()).reason)).toMatch(/TypeError|Error/);
 });
 
 // --- budget -------------------------------------------------------------

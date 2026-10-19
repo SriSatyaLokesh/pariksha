@@ -388,14 +388,25 @@ describe("the access gate (Task 2)", () => {
     expect(calls).toEqual([]);
   });
 
-  it("the work is bounded: the shipped difficulty stays well under 3 s here", async () => {
+  it("the work is bounded: the shipped difficulty stays within a few expected searches", async () => {
     // Sixteen bits is what `apps/api/src/run/pow.ts` ships and what
-    // `pow.test.ts` pins. jsdom on a developer machine is not a phone, so
-    // this is a ceiling rather than the measurement — but a change that
-    // made the search an order of magnitude dearer would trip it.
-    const started = performance.now();
-    await solvePow("bounded-challenge", 16);
-    expect(performance.now() - started).toBeLessThan(3000);
+    // `pow.test.ts` pins. What is bounded here is the **search**, in
+    // digests, not the wall clock: the returned solution *is* the
+    // counter the loop reached, so this measures the algorithm rather
+    // than the machine it ran on.
+    //
+    // It was a `performance.now() < 3000` assertion until Task 5's fix
+    // round (Task 4's finding, taken here because Task 4 is closed).
+    // That is probabilistic work judged against an absolute time ceiling
+    // on a box running every other package's suite, which is the whole
+    // lesson of #161: a wall-clock assertion under variable load is not
+    // an assertion. A change that made the search an order of magnitude
+    // dearer still trips this one, and a loaded CI box no longer does.
+    const solution = Number(await solvePow("bounded-challenge", 16));
+    // The expected search is 2^16 digests; twenty times that is a
+    // ceiling a correct implementation reaches with probability e^-20,
+    // and the challenge is fixed so the number is the same every run.
+    expect(solution).toBeLessThan(20 * 2 ** 16);
   });
 
   it("the difficulty is bits, not hex characters, so raising it to 18 really costs more", async () => {
