@@ -7,8 +7,10 @@
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { addMembership, closeClient, createUser } from "@pariksha/db";
 import { validateTest } from "@pariksha/core";
+import type { StoredSection, TestDocumentBody, TestRow } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
 import { draftSchema } from "../src/routes/tests.js";
+import { buildChecklist } from "../src/publish/checklist.js";
 import testSchema from "../../../schemas/test-1.json" with { type: "json" };
 import { countingDeps } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -842,7 +844,19 @@ const DRAFT_FLOOR_TWINS: Readonly<Record<string, string>> = {
   // `slug`); the other two are presence floors that do need twins, and
   // Task 11 (#62) added both as blocking checklist rows.
   "#.required":
-    "format/name/slug live on the test row; `timing` is buildChecklist's `timing_missing` blocking row and `sections` its `no_sections` — both also enforced on import, which validates the unstripped schema",
+    "buildChecklist: format/name/slug live on the test row; `timing` is the `timing_missing` blocking row and `sections` the `no_sections` one — both also enforced on import, which validates the unstripped schema",
+  // Whole-branch security review, L2. The entry here used to claim
+  // `name`'s floor was "unreachable from here anyway, since `settings` has
+  // no `name`". The *type* has none; the *gate* did — root
+  // `additionalProperties: false` admitted it, `{"settings":{"name":""}}`
+  // saved, and it then shadowed the `test` row in both `toTestDocument`
+  // and `buildChecklist`. `draftSchema()` now deletes the two root
+  // properties outright, the way it already deleted the root `required`,
+  // so the whole subtree is removed rather than one keyword inside it.
+  "#.properties.name":
+    "UNTWINNED, deliberate: `settings` is not a whole document — `name` and `slug` live on the `test` row and are written by POST/PATCH /tests, where `z.string().min(1)` is the floor",
+  "#.properties.slug":
+    "UNTWINNED, deliberate: the same — and the route's own `SLUG` pattern is stricter than the schema's",
 
   // --- twinned ---------------------------------------------------------
   "#.$defs.access.allOf[0].then.required":
@@ -859,8 +873,6 @@ const DRAFT_FLOOR_TWINS: Readonly<Record<string, string>> = {
     "validateTest: `has no label, so a candidate using a screen reader meets an unnamed box`",
   "#.$defs.formField.properties.options.items.minLength":
     "validateTest: `has a blank option at position N`",
-  "#.properties.name.minLength":
-    "apps/api/src/routes/tests.ts, `name: z.string().min(1)` on POST and PATCH /tests — and unreachable from here anyway, since `settings` has no `name`",
 
   // --- UNTWINNED: deliberate, nothing is lost --------------------------
   "#.$defs.form.properties.fields.minItems":
@@ -869,8 +881,11 @@ const DRAFT_FLOOR_TWINS: Readonly<Record<string, string>> = {
     "UNTWINNED, deliberate: a blank tag matches no filter and is never shown to a candidate",
   "#.$defs.sourceSets.properties.sets.items.properties.set.minLength":
     "UNTWINNED, deliberate: the set label is the key of `draw`/`setPoints`, never rendered to a candidate",
+  // Whole-branch security review, L1. This read "UNTWINNED, unreachable:
+  // … only a hand-written PATCH can blank it" — and a hand-written PATCH
+  // is the route this gate guards. It now has a row.
   "#.properties.consent.properties.text.minLength":
-    "UNTWINNED, unreachable: no editor writes `consent` in Phase 5 and import runs the unstripped schema, so only a hand-written PATCH can blank it",
+    "buildChecklist: `the consent screen has no text, so a candidate would be agreeing to nothing` (consent_blank, blocking)",
 
   // --- twinned by Task 11's publish checklist --------------------------
   // UX-13's own words: "a section may be empty in Draft … the publish
@@ -895,28 +910,132 @@ it("every floor draftSchema() removes is listed, with its publish-time twin or t
   expect(removedPaths(testSchema, draftSchema()).sort()).toEqual(Object.keys(DRAFT_FLOOR_TWINS).sort());
 });
 
-it("the twinned entries are the ones validateTest actually refuses", () => {
+// Whole-branch test-honesty review, §3, and security review audit item 1:
+// the old version of the test below iterated a separate hand-written list
+// of five refusals and, for each, asserted its map entry was not
+// `UNTWINNED`. So a *sixth* twinned entry needed no proof — and only 5 of
+// the 9 `validateTest:` claims and none of the 5 `buildChecklist:` claims
+// was executed; the rest were prose inside a string literal. The brief's
+// own sentence applies: a control that can be satisfied by editing its own
+// allowlist is not a control.
+//
+// These two maps are the proofs, keyed by the same path. The test below
+// iterates `DRAFT_FLOOR_TWINS`, not these, so a new twinned entry with no
+// proof fails — and a proof for a path nobody lists fails too.
+
+/** The settings each `validateTest:` entry claims are refused at publish. */
+const VALIDATE_TEST_REFUSALS: Readonly<Record<string, Record<string, unknown>>> = {
+  "#.$defs.access.allOf[0].then.required": { access: { mode: "link_code" } },
+  "#.$defs.access.properties.access_code.minLength": { access: { mode: "link_code", access_code: "AP" } },
+  "#.$defs.release.allOf[0].then.required": { release: { when: "on_date" } },
+  "#.$defs.formField.allOf[0].then.required": {
+    registration_form: { fields: [{ id: "a", type: "radio", label: "A" }] },
+  },
+  "#.$defs.formField.properties.options.minItems": {
+    registration_form: { fields: [{ id: "a", type: "radio", label: "A", options: ["only"] }] },
+  },
+  "#.$defs.formField.properties.label.minLength": {
+    registration_form: { fields: [{ id: "a", type: "short_text", label: " " }] },
+  },
+  "#.$defs.formField.properties.options.items.minLength": {
+    registration_form: { fields: [{ id: "a", type: "radio", label: "A", options: ["yes", ""] }] },
+  },
+};
+
+/** The body each `buildChecklist:` entry claims produces a blocking row,
+ * and the row id it names. `#.required` claims two rows and so has two. */
+const CHECKLIST_PROOFS: Readonly<Record<string, { rows: string[]; body: TestDocumentBody }>> = {
+  "#.required": {
+    rows: ["timing_missing", "no_sections"],
+    body: { settings: {}, sections: [] },
+  },
+  "#.properties.sections.minItems": {
+    rows: ["no_sections"],
+    body: { settings: { timing: { duration_minutes: 30 } }, sections: [] },
+  },
+  "#.$defs.section.properties.title.minLength": {
+    rows: ["section_untitled"],
+    body: { settings: {}, sections: [fixed("s1", "  ", ["qst_1"])] },
+  },
+  "#.$defs.sourceFixed.properties.questions.minItems": {
+    rows: ["section_empty"],
+    body: { settings: {}, sections: [fixed("s1", "One", [])] },
+  },
+  "#.$defs.sourceSets.properties.sets.minItems": {
+    rows: ["section_empty"],
+    body: { settings: {}, sections: [sets("s1", "One", [])] },
+  },
+  "#.$defs.sourceSets.properties.sets.items.properties.questions.minItems": {
+    rows: ["section_empty"],
+    body: { settings: {}, sections: [sets("s1", "One", [{ set: "A", questions: [] }])] },
+  },
+  "#.properties.consent.properties.text.minLength": {
+    rows: ["consent_blank"],
+    body: { settings: { consent: { version: "v1", text: "  " } }, sections: [] },
+  },
+};
+
+function fixed(id: string, title: string, questions: string[]): StoredSection {
+  return { id, title, source: { kind: "fixed", questions } } as StoredSection;
+}
+
+function sets(id: string, title: string, entries: { set: string; questions: string[] }[]): StoredSection {
+  return { id, title, source: { kind: "sets", assignment: "round_robin", sets: entries } } as StoredSection;
+}
+
+it("every twinned entry names a rule that is executed here and really refuses", () => {
   const base = { format: "pariksha/test@1", name: "M", slug: "m", sections: [] };
-  const refusals: [string, Record<string, unknown>][] = [
-    ["#.$defs.access.properties.access_code.minLength", { access: { mode: "link_code", access_code: "AP" } }],
-    ["#.$defs.release.allOf[0].then.required", { release: { when: "on_date" } }],
-    [
-      "#.$defs.formField.properties.options.minItems",
-      { registration_form: { fields: [{ id: "a", type: "radio", label: "A", options: ["only"] }] } },
-    ],
-    [
-      "#.$defs.formField.properties.label.minLength",
-      { registration_form: { fields: [{ id: "a", type: "short_text", label: " " }] } },
-    ],
-    [
-      "#.$defs.formField.properties.options.items.minLength",
-      { registration_form: { fields: [{ id: "a", type: "radio", label: "A", options: ["yes", ""] }] } },
-    ],
-  ];
-  for (const [path, settings] of refusals) {
-    expect(DRAFT_FLOOR_TWINS[path], path).not.toMatch(/^UNTWINNED/);
-    expect(validateTest({ ...base, ...settings }, []).ok, path).toBe(false);
+  const row: TestRow = {
+    id: "tst_pin",
+    slug: "pin",
+    name: "Pin",
+    description: null,
+    shortCode: "aaaaaa",
+    status: "draft",
+    currentVersion: null,
+    reviewRequested: false,
+    tags: [],
+    createdAt: FIXED_NOW,
+    updatedAt: FIXED_NOW,
+  };
+
+  const proved: string[] = [];
+  for (const [path, claim] of Object.entries(DRAFT_FLOOR_TWINS)) {
+    if (claim.startsWith("UNTWINNED")) continue;
+
+    if (claim.startsWith("validateTest:")) {
+      const settings = VALIDATE_TEST_REFUSALS[path];
+      expect(settings, `${path} claims a validateTest twin but has no refusal here`).toBeDefined();
+      expect(validateTest({ ...base, ...settings }, []).ok, path).toBe(false);
+      proved.push(path);
+      continue;
+    }
+
+    expect(claim, path).toMatch(/^buildChecklist:/);
+    const proof = CHECKLIST_PROOFS[path];
+    expect(proof, `${path} claims a buildChecklist twin but has no fixture here`).toBeDefined();
+    if (proof === undefined) continue;
+    const got = buildChecklist({
+      test: row,
+      body: proof.body,
+      questions: [],
+      candidates: { total: 0, withoutSet: 0 },
+      now: FIXED_NOW,
+    });
+    for (const id of proof.rows) {
+      expect(
+        got.find((r) => r.id === id && r.severity === "blocking"),
+        `${path} → ${id}`,
+      ).toBeDefined();
+    }
+    proved.push(path);
   }
+
+  // Neither map may carry a proof for a path the pin does not list: a
+  // stale fixture is how a proof outlives the claim it was written for.
+  expect([...Object.keys(VALIDATE_TEST_REFUSALS), ...Object.keys(CHECKLIST_PROOFS)].sort()).toEqual(
+    proved.sort(),
+  );
 });
 
 it("a floor the gate strips still saves in Draft — the pin does not turn the list back into a save-time gate", async () => {

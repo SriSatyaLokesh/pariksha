@@ -227,8 +227,22 @@ function stripDraftFloors(node: unknown): void {
  * copy of the walk would.
  */
 export function draftSchema(): object {
-  const schema = structuredClone(testSchema) as { required?: unknown };
+  const schema = structuredClone(testSchema) as {
+    required?: unknown;
+    properties?: Record<string, unknown>;
+  };
   delete schema.required;
+  // Whole-branch security review, L2. The root `required` went because
+  // `settings` is not a whole document; `name` and `slug` go for exactly
+  // the same reason, and until they did, root `additionalProperties: false`
+  // still *admitted* them. `{"settings":{"name":""}}` saved and then
+  // shadowed the `test` row, because `toTestDocument` and `buildChecklist`
+  // both spread `settings` after the row's own name and slug — an export
+  // carrying a name different from the row, and a checklist judged against
+  // a slug nobody set. The pin's entry for this used to claim `settings`
+  // had no `name`; this is what makes that sentence true.
+  delete schema.properties?.name;
+  delete schema.properties?.slug;
   stripDraftFloors(schema);
   return schema;
 }

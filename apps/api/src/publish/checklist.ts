@@ -173,6 +173,25 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
+  // `$defs/consent.text`'s `minLength: 1`, which `draftSchema()` strips
+  // with every other emptiness floor. The pin called it "unreachable: only
+  // a hand-written PATCH can blank it" — a hand-written PATCH *is* the
+  // route the gate guards, and publish had no opinion at all, so publish
+  // was laxer than export (which runs the unstripped schema and 422s
+  // `not_exportable` over a block the builder has no editor for). S-12
+  // wants a consent screen whose text says what is collected, with the
+  // version and the time stored per candidate; `candidate.consent_version`
+  // is a live column, so a published test with blank consent text records
+  // consent to nothing (whole-branch security review, L1).
+  if (settings.consent !== undefined && settings.consent.text.trim() === "") {
+    rows.push({
+      id: "consent_blank",
+      severity: "blocking",
+      field: "consent.text",
+      message: "the consent screen has no text, so a candidate would be agreeing to nothing",
+    });
+  }
+
   for (const section of sections) {
     if (section.title.trim() === "") {
       rows.push({

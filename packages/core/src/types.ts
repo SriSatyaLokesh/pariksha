@@ -460,7 +460,23 @@ export interface Test {
   registration_form?: RegistrationFormSpec;
   release?: TestRelease;
   branding?: TestBranding;
+  consent?: TestConsent;
   sections: Section[];
+}
+
+/**
+ * S-12's consent screen. Phase 5 builds no editor for it and the block
+ * round-trips untouched, so it is modelled here only because the publish
+ * checklist now has a row for it: `draftSchema()` strips `text`'s
+ * `minLength: 1` with every other emptiness floor, and a published test
+ * with blank consent text records consent to nothing against a live
+ * `candidate.consent_version` column (whole-branch security review, L1).
+ */
+export interface TestConsent {
+  /** Stored per candidate, so a later edit is distinguishable. */
+  version: string;
+  /** Markdown shown before registration. */
+  text: string;
 }
 
 export type ResponseValue =
