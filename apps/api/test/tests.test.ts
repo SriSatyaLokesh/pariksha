@@ -2,7 +2,7 @@
 // routes.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { addMembership, closeClient, createUser } from "@pariksha/db";
+import { addMembership, closeClient, createUser, publishTestVersion } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps, mountedRoutes } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -147,7 +147,7 @@ it("T-03: the list filters by tag, searches by name and sorts, in one query", as
   expect((await tagged.json()).tests).toEqual([]);
 });
 
-it("PATCH edits a test, and locks the slug once it is published", async () => {
+it("PATCH edits a test", async () => {
   const created = await app.request(
     `/api/v1/workspaces/${workspaceId}/tests`,
     post({ name: "Midterm", slug: "midterm" }, authorCookie),
@@ -160,6 +160,43 @@ it("PATCH edits a test, and locks the slug once it is published", async () => {
   );
   expect(renamed.status).toBe(200);
   expect((await renamed.json()).slug).toBe("renamed");
+});
+
+it("PATCH locks the slug once the test is published", async () => {
+  const created = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Midterm", slug: "midterm" }, authorCookie),
+  );
+  const testId = (await created.json()).id;
+
+  await publishTestVersion(deps.db, workspaceId, {
+    testId,
+    version: 2,
+    settings: {},
+    sections: [],
+    now: FIXED_NOW,
+  });
+
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests/${testId}`,
+    patch({ slug: "renamed" }, authorCookie),
+  );
+  expect(res.status).toBe(409);
+  expect((await res.json()).error.code).toBe("slug_locked");
+});
+
+it("POST a taken slug is 409 slug_taken", async () => {
+  await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Midterm", slug: "midterm" }, authorCookie),
+  );
+
+  const res = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Midterm again", slug: "midterm" }, authorCookie),
+  );
+  expect(res.status).toBe(409);
+  expect((await res.json()).error.code).toBe("slug_taken");
 });
 
 it("AC-02: GET /t/<code> redirects to /<workspace-slug>/<test-slug> and nothing else", async () => {
