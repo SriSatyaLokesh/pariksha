@@ -56,6 +56,33 @@ export function autocompleteFor(field: FormField): string {
 
 const CHOICE_TYPES: readonly FormFieldType[] = ["dropdown", "radio", "checkbox"];
 
+/**
+ * `validation.default_country` as the dialling prefix a phone field starts
+ * from — T-16's "phone (**with country code**)", and the only thing in the
+ * product that reads `default_country` at all. The builder collected it and
+ * nobody consumed it, so the preview showed a bare `<input type="tel">` and
+ * lied about the control a candidate meets (task 5/6 review, M5).
+ *
+ * ponytail: a subset, not ISO 3166 in full, and no picker. Phase 6's
+ * country `<select>` is where the whole list belongs; a code this map does
+ * not know — including an organiser's free-typed `"INDIA"`, which the
+ * schema allows — renders no prefix at all rather than a wrong one.
+ */
+export const DIAL_CODE: Readonly<Record<string, string>> = {
+  AE: "+971", AU: "+61", BD: "+880", CA: "+1", CN: "+86", DE: "+49",
+  ES: "+34", FR: "+33", GB: "+44", ID: "+62", IN: "+91", IT: "+39",
+  JP: "+81", KE: "+254", LK: "+94", MY: "+60", NG: "+234", NP: "+977",
+  NZ: "+64", PH: "+63", PK: "+92", SA: "+966", SG: "+65", US: "+1",
+  VN: "+84", ZA: "+27",
+};
+
+/** The prefix this field's number starts with, or `undefined` when the
+ * field is not a phone or names no country this map knows. */
+export function dialCodeFor(field: FormField): string | undefined {
+  if (field.type !== "phone") return undefined;
+  return DIAL_CODE[field.validation?.default_country ?? ""];
+}
+
 /** T-18's three starting points, verbatim. `examples/reasoning-aptitude/
  * test.json`'s own `registration_form` is the worked reference these field
  * shapes follow. */
@@ -257,7 +284,15 @@ function Field({
   const controlId = useId();
   const helpId = `${controlId}-help`;
   const errorId = `${controlId}-error`;
+  const dialId = `${controlId}-dial`;
   const spec = FIELD_INPUT[field.type];
+  const dial = dialCodeFor(field);
+  // The box holds the national part; the stored value is the whole number.
+  // A value that does not start with the prefix (one typed before the
+  // organiser set `default_country`, say) is shown as it stands rather
+  // than silently re-labelled as someone else's country.
+  const typed = typeof value === "string" ? value : "";
+  const national = dial !== undefined && typed.startsWith(dial) ? typed.slice(dial.length) : typed;
   const required = field.required === true;
   const describedBy = [field.help !== undefined ? helpId : null, error !== undefined ? errorId : null]
     .filter((id): id is string => id !== null)
@@ -409,6 +444,28 @@ function Field({
             </option>
           ))}
         </select>
+      ) : dial !== undefined ? (
+        // T-16's "phone (with country code)". The prefix is shown rather
+        // than assumed, and the value the caller stores carries it — so a
+        // number typed here is complete, and the preview is the control a
+        // candidate actually meets. `maxLength` bounds the stored value, so
+        // the box is capped by what the prefix leaves.
+        <span className="registration-form__dialled">
+          <span className="registration-form__dial" id={dialId}>
+            {dial}
+          </span>
+          <input
+            {...shared}
+            aria-describedby={[dialId, describedBy].filter((id) => id !== "").join(" ")}
+            className="text-input"
+            type={spec.type}
+            value={national}
+            {...(field.validation?.max_length !== undefined && {
+              maxLength: Math.max(0, field.validation.max_length - dial.length),
+            })}
+            onChange={(event) => onChange(field.id, event.target.value === "" ? "" : dial + event.target.value)}
+          />
+        </span>
       ) : (
         <input
           {...shared}

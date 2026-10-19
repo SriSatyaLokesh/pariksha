@@ -344,6 +344,19 @@
   margin: 0;
 }
 
+/* T-16's "phone (with country code)": the field's `default_country` shown
+   as the prefix the stored number starts with, rather than assumed
+   (task 5/6 review, M5). The full country picker is Phase 6's. */
+.registration-form__dialled {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.registration-form__dialled .text-input {
+  flex: 1;
+}
+
 /* Task 6 (#58, P5.5): the url field's reachability affordance sits inline
    with its own control, like every other row in a field editor. */
 .form-builder__field .field {

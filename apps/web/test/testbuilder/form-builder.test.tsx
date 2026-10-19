@@ -23,6 +23,7 @@ import { FormBuilder } from "../../src/components/testbuilder/FormBuilder";
 import {
   FIELD_INPUT,
   FORM_TEMPLATES,
+  RegistrationForm,
   autocompleteFor,
   validateField,
 } from "../../src/components/testbuilder/RegistrationForm";
@@ -231,6 +232,64 @@ describe("FormBuilder (T-16 - T-18)", () => {
     const describedBy = group.getAttribute("aria-describedby");
     expect(describedBy).not.toBeNull();
     expect(document.getElementById(describedBy ?? "")).toHaveTextContent("This answer is required.");
+  });
+
+  // task 5/6 review, M5: `default_country` was collected by the builder and
+  // read by nobody, so the preview showed a bare `<input type="tel">` and
+  // lied about the control a candidate meets.
+  it("a phone field's default country becomes the dialling code the number starts with", () => {
+    render(<Harness />);
+    addField("phone");
+    typeInto(screen.getByLabelText(/default country/i), "in");
+
+    // The builder says what the code it just uppercased does…
+    expect(screen.getByText("A candidate's number starts with +91.")).toBeVisible();
+    // …and the preview shows it, which is the claim the shared renderer
+    // exists to make true.
+    expect(within(preview()).getByText("+91")).toBeVisible();
+    typeInto(within(preview()).getByLabelText(/^Phone/), "9876543210");
+    expect(within(preview()).getByLabelText(/^Phone/)).toHaveValue("9876543210");
+  });
+
+  it("the phone box holds the national part and the stored value holds the whole number", () => {
+    // Driven against the renderer itself because the value the *caller*
+    // stores is the half the builder's preview keeps to itself — and it is
+    // the half Phase 6 writes to a registration row.
+    const changes: [string, unknown][] = [];
+    render(
+      <RegistrationForm
+        form={{
+          fields: [{ id: "phone", type: "phone", label: "Mobile", validation: { default_country: "IN" } }],
+        }}
+        values={{ phone: "+919876543210" }}
+        errors={{}}
+        onChange={(id, value) => changes.push([id, value])}
+      />,
+    );
+
+    const box = screen.getByLabelText(/^Mobile/);
+    expect(box).toHaveValue("9876543210");
+    // The prefix is read out with the field, not just drawn beside it.
+    expect(box.getAttribute("aria-describedby")).not.toBeNull();
+    expect(document.getElementById((box.getAttribute("aria-describedby") ?? "").split(" ")[0] ?? "")).toHaveTextContent(
+      "+91",
+    );
+
+    fireEvent.change(box, { target: { value: "99887" } });
+    expect(changes).toEqual([["phone", "+9199887"]]);
+    // Clearing the box clears the answer, rather than leaving a bare
+    // prefix that would satisfy "required" on its own.
+    fireEvent.change(box, { target: { value: "" } });
+    expect(changes.at(-1)).toEqual(["phone", ""]);
+  });
+
+  it("a country code no dialling code answers to says so, and adds no prefix", () => {
+    render(<Harness />);
+    addField("phone");
+    typeInto(screen.getByLabelText(/default country/i), "india");
+
+    expect(screen.getByText(/No dialling code is known for "INDIA"/)).toBeVisible();
+    expect(within(preview()).queryByText(/^\+/)).toBeNull();
   });
 
   it("the unique flag states its effect in one line", () => {

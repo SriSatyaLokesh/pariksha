@@ -9,7 +9,7 @@ import {
 } from "@pariksha/core";
 import type { ReachResult } from "../../lib/api";
 import { ReorderableList } from "../authoring/ReorderableList";
-import { FORM_TEMPLATES, RegistrationForm, validateForm } from "./RegistrationForm";
+import { FORM_TEMPLATES, RegistrationForm, dialCodeFor, validateForm } from "./RegistrationForm";
 import { useDialogKeys } from "./useDialogKeys";
 
 // T-16 - T-18 (Task 5, #57, P5.4): the registration form builder. The
@@ -110,6 +110,16 @@ function withValidation<K extends keyof FieldValidation>(
   const { [key]: _drop, ...rest } = field.validation ?? {};
   const next: FieldValidation = value === undefined ? rest : { ...rest, [key]: value };
   return Object.keys(next).length > 0 ? { ...field, validation: next } : withKey(field, "validation", undefined);
+}
+
+/** The one sentence the "Default country" row says about the code typed
+ * into it — what it does, or that it does nothing. */
+function dialFact(dial: string | undefined, country: string | undefined): string {
+  if (dial !== undefined) return `A candidate's number starts with ${dial}.`;
+  if (country === undefined || country === "") {
+    return "A two-letter country code — IN, US, GB — puts that country's dialling code in front of the number.";
+  }
+  return `No dialling code is known for "${country}", so the number is asked for without one. Use a two-letter code — IN, US, GB.`;
 }
 
 function moveItem<T>(items: readonly T[], from: number, to: number): T[] {
@@ -479,10 +489,20 @@ function FieldEditor({
         </>
       )}
 
-      {field.type === "phone" &&
-        text("Default country", "default_country", v?.default_country ?? "", (next) =>
-          onChange((f) => withValidation(f, "default_country", next === "" ? undefined : next.toUpperCase())),
-        )}
+      {field.type === "phone" && (
+        <>
+          {text("Default country", "default_country", v?.default_country ?? "", (next) =>
+            onChange((f) => withValidation(f, "default_country", next === "" ? undefined : next.toUpperCase())),
+          )}
+          {/* What the code the organiser typed actually does, said here
+              rather than left to be discovered in the preview. The schema
+              puts no pattern on `default_country`, so "INDIA" is a legal
+              value that no dialling code answers to — saying so is the
+              difference between a field that is consumed and one that is
+              only collected (task 5/6 review, M5). */}
+          <p className="form-builder__fact">{dialFact(dialCodeFor(field), v?.default_country)}</p>
+        </>
+      )}
 
       {(field.type === "email" || field.type === "url") &&
         text("Allowed domains (comma-separated)", "allowed_domains", (v?.allowed_domains ?? []).join(", "), (next) => {
