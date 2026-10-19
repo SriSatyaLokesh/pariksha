@@ -82,6 +82,12 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used");
     },
     updateTest: async (_workspaceId, _testId, patch) => ({ ...PUBLISHED, ...patch }),
+    draft: async () => {
+      throw new Error("not used");
+    },
+    patchDraft: async () => {
+      throw new Error("not used");
+    },
     ...overrides,
   };
 }

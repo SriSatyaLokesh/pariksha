@@ -17,6 +17,8 @@ import type {
   Question,
   QuestionType,
   Role,
+  Section,
+  Test,
 } from "@pariksha/core";
 export type { Role };
 // Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
@@ -105,6 +107,48 @@ export interface TestPatch {
   description?: string;
   tags?: string[];
   reviewRequested?: boolean;
+}
+
+// Phase 5 Task 3 (#55, P5.2): the draft. Mirrors
+// `packages/db/src/repo/test-document.ts`'s own `TestSettings`/
+// `StoredSection`/`TestDocumentBody` — the same `Bank`/`BankRow`,
+// `TestSummary`/`TestWire` split every other wire type here keeps, so this
+// package never depends on `@pariksha/db`.
+/** Everything a `pariksha/test@1` document carries except `name`/`slug`
+ * (their own fields on `TestSummary`) and `sections` (its own array,
+ * below). A block Phase 5 builds no editor for — `consent`, `proctoring`,
+ * `retention` — rides along inside this type as an unlisted field exactly
+ * the way it rides through the server's own mapper: nothing here needs to
+ * name it for a `{ ...settings, access: {...} }` patch to leave it alone. */
+export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
+/** A `Section` naming `qst_`/`bnk_` row ids — what the builder works in
+ * throughout; only export (a later task) ever sees the bank file's own
+ * ids. */
+export type StoredSection = Section;
+export interface TestDocumentBody {
+  settings: TestSettings;
+  sections: StoredSection[];
+}
+/** `GET`/`PATCH .../draft`'s wire shape. `draw`/`setPoints` are UX-15/
+ * UX-16's live numbers — present on every `GET` and omitted by `PATCH`
+ * (nothing reads them off a save response; a screen that wants fresh
+ * numbers right after one re-fetches `draft()`). */
+export interface TestVersionRow {
+  id: string;
+  testId: string;
+  version: number;
+  body: TestDocumentBody;
+  publishedAt: number | null;
+  createdAt: number;
+  draw?: Record<string, { matching: number; wanted: number }>;
+  setPoints?: Record<string, { set: string; points: number }[]>;
+}
+/** `PATCH .../draft`'s body. Each named top-level block replaces whole —
+ * `settings` one level deep, `sections` as a full array — never merges
+ * below it (Review Focus item 3). */
+export interface DraftPatch {
+  settings?: Partial<TestSettings>;
+  sections?: StoredSection[];
 }
 
 export interface QuestionListFilter {
@@ -267,6 +311,11 @@ export interface ApiClient {
   createTest(workspaceId: string, input: { name: string; slug: string }): Promise<TestSummary>;
   test(workspaceId: string, testId: string): Promise<TestSummary>;
   updateTest(workspaceId: string, testId: string, patch: TestPatch): Promise<TestSummary>;
+
+  // Task 3 (#55, P5.2): the draft itself — the one pair Tasks 4 through 9
+  // all write through.
+  draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
+  patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
 }
 
 const API = "/api/v1";
@@ -517,6 +566,11 @@ export function createApiClient(): ApiClient {
 
     updateTest: (workspaceId, testId, patch) =>
       json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`, patchBody(patch)),
+
+    draft: (workspaceId, testId) => json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
+
+    patchDraft: (workspaceId, testId, patch) =>
+      json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`, patchBody(patch)),
   };
 }
 
