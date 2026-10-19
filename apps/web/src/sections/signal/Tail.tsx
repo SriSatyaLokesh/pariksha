@@ -64,7 +64,7 @@ export function SignalStatus() {
               <li key={item}>{item}</li>
             ))}
           </ul>
-          <p className="signal-fine" style={{ marginTop: "20px" }}>
+          <p className="signal-fine signal-fine--after">
             A paid platform you can buy today will do more than Pariksha does
             today, because the application is not built yet. What is built is
             the format, the schemas and the scoring engine — and you can run
@@ -89,7 +89,7 @@ export function SignalStatus() {
               candidate&apos;s screen and the results CSV it produces.
             </li>
           </ol>
-          <p className="signal-fine" style={{ margin: 0 }}>
+          <p className="signal-fine signal-fine--flush">
             <strong>What you cannot do yet:</strong> run a test.
           </p>
         </div>
@@ -155,7 +155,7 @@ export function SignalFaq() {
     >
       <p className="signal-eyebrow">Questions and answers</p>
       <h2 id="faq-heading">The nine things people ask first.</h2>
-      <div className="signal-cards" style={{ marginTop: "28px" }}>
+      <div className="signal-cards signal-cards--spaced">
         {FAQ_ITEMS.map((item) => (
           <div className="signal-card" key={item.question}>
             <h3>{item.question}</h3>
@@ -174,7 +174,7 @@ export function SignalClose() {
         <h2 id="close-heading">
           Start your question bank. It will import on day one.
         </h2>
-        <p className="signal-lede" style={{ marginTop: "18px" }}>
+        <p className="signal-lede signal-lede--after">
           The format is published and stable. Questions you write this week load
           into Pariksha when v0.1 lands — and into anything else, because the
           schemas are open.

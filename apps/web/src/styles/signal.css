@@ -882,3 +882,36 @@
     transition: none !important;
   }
 }
+
+/* ---- spacing modifiers ---------------------------------------------
+   The landing page carries no inline styles (apps/web/test/
+   no-hex-colors.test.ts bans them), so the handful of one-off margins
+   the layout needs are named here instead. */
+
+.signal-actions--hero {
+  margin-top: var(--space-2xl);
+}
+
+.signal-split--spaced {
+  margin-top: var(--space-3xl);
+}
+
+.signal-cards--spaced {
+  margin-top: var(--space-2xl);
+}
+
+.signal-lede--after {
+  margin-top: var(--space-lg);
+}
+
+.signal-fine--after {
+  margin-top: var(--space-lg);
+}
+
+.signal-fine--lead {
+  margin: 0 0 var(--space-md);
+}
+
+.signal-fine--flush {
+  margin: 0;
+}

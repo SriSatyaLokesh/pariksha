@@ -7,7 +7,7 @@
 // is the one capability that is shipped today and impossible in a form
 // tool — a pool drawing a different paper for every candidate. The markup
 // below is the complete, readable state with JavaScript off; the island at
-// src/island/signal-draw.ts upgrades it in place by its data- attributes
+// src/island/exam-demo.ts upgrades it in place by its data- attributes
 // and must never rewrite it from scratch.
 
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
@@ -74,7 +74,7 @@ export function SignalHero() {
               in your own Cloudflare account or server. Open source, Apache-2.0,
               no per-candidate fee.
             </p>
-            <div className="signal-actions" style={{ marginTop: "28px" }}>
+            <div className="signal-actions signal-actions--hero">
               <a className="signal-btn" href="#start">
                 Start your question bank
               </a>
@@ -151,7 +151,7 @@ export function SignalHero() {
                 >
                   Draw again
                 </button>
-                <span className="signal-fine" style={{ margin: 0 }}>
+                <span className="signal-fine signal-fine--flush">
                   4 of 11 drawn per candidate · seeded per attempt
                 </span>
               </div>
@@ -240,7 +240,7 @@ export function SignalTypeRail() {
         <h2 id="types-heading">
           Twelve question types. Five ways to score them.
         </h2>
-        <p className="signal-fine" style={{ margin: 0 }}>
+        <p className="signal-fine signal-fine--flush">
           Markdown, LaTeX, code blocks and images in every one. All twelve are
           implemented and unit-tested today.
         </p>

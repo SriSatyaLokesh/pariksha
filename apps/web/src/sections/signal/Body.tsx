@@ -73,7 +73,7 @@ export function SignalNotAForm() {
             <span>live</span>
           </p>
           <div className="signal-panel__body">
-            <p className="signal-fine" style={{ margin: "0 0 14px" }}>
+            <p className="signal-fine signal-fine--lead">
               Four questions drawn at random, per candidate, from everything
               tagged <code>quantitative</code> at medium difficulty.
             </p>
@@ -144,7 +144,7 @@ export function SignalIntegrity() {
       <div className="signal-wrap signal-section">
         <p className="signal-eyebrow">Integrity</p>
         <h2 id="integrity-heading">No video. No audio. No verdicts.</h2>
-        <div className="signal-split" style={{ marginTop: "30px" }}>
+        <div className="signal-split signal-split--spaced">
           <div>
             <p>
               Strict proctoring takes a 320×240 snapshot about every sixty
@@ -205,7 +205,7 @@ export function SignalIntegrity() {
                 </table>
               </div>
             </div>
-            <p className="signal-fine" style={{ marginTop: "14px" }}>
+            <p className="signal-fine signal-fine--after">
               Five tab switches, three fullscreen exits, marked high risk —{" "}
               <strong>and her result was not cancelled.</strong> A reviewer
               looked, wrote a note, and invited her to a supervised re-test.
@@ -245,7 +245,7 @@ export function SignalCost() {
     >
       <p className="signal-eyebrow">What it costs</p>
       <h2 id="cost-heading">Five hundred candidates in an hour, for nothing.</h2>
-      <p className="signal-lede" style={{ marginTop: "14px" }}>
+      <p className="signal-lede signal-lede--after">
         By arithmetic rather than by a bill. The reference deployment is
         designed to fit inside Cloudflare&apos;s free tier — and there is no
         Pariksha billing of any kind, because there is no hosted service to bill
@@ -259,7 +259,7 @@ export function SignalCost() {
           </div>
         ))}
       </div>
-      <p className="signal-fine" style={{ marginTop: "20px" }}>
+      <p className="signal-fine signal-fine--after">
         An estimate with published arithmetic. The 500-candidate figure is a
         design target; the load test that would prove it (<code>AC-29</code>) is
         a Phase 12 gate and has not been run. Free-tier limits can change — the
@@ -357,7 +357,7 @@ export function SignalCompare() {
           </tbody>
         </table>
       </div>
-      <p className="signal-fine" style={{ marginTop: "16px" }}>
+      <p className="signal-fine signal-fine--after">
         Nothing here is a benchmark. Every row is either what Pariksha does, or
         what the other two categories publish about themselves, read in October
         2026. <strong>Moodle</strong> is the nearest open-source comparison and
