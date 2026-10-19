@@ -55,7 +55,7 @@ describe("Landing", () => {
     for (const link of ctaLinks) {
       const href = link.getAttribute("href") ?? "";
       if (href.startsWith("http")) {
-        expect(href).toMatch(/^https:\/\/github\.com\/SriSatyaLokesh\/pariksha/);
+        expect(href.startsWith(REPO)).toBe(true);
       } else {
         expect(href).toBe("#start");
       }
