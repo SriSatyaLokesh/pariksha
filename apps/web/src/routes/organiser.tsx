@@ -60,7 +60,16 @@ type View =
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
   | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
-  | { kind: "bank"; actor: Actor; workspace: Workspace; bankId: string }
+  // `bankName` is absent exactly when the browser was deep-linked rather
+  // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
+  // not in `ViewParams` and no call in this component fetches one.
+  | {
+      kind: "bank";
+      actor: Actor;
+      workspace: Workspace;
+      bankId: string;
+      bankName?: string;
+    }
   | {
       kind: "question";
       actor: Actor;
@@ -242,9 +251,11 @@ export function OrganiserApp({
         />,
       );
     case "test":
-      // The builder's title is the test's name, which only the builder has
-      // fetched — so it keeps its own <h1> inside `children` and the shell
-      // renders no page header here. 6.5d lifts it.
+      // The builder fetches the test and renders `test?.name ?? "Test
+      // builder"` as its own <h1> (test.tsx), so it is the one arm that
+      // passes no `title` — a second heading above its own would be two
+      // <h1>s on one screen. 6.5d lifts it into the shell when it rebuilds
+      // that screen.
       return shell(
         "tests",
         view.actor,
@@ -269,16 +280,23 @@ export function OrganiserApp({
         <BankList
           workspaceId={view.workspace.id}
           client={client}
-          onOpenBank={(bankId) => go({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId })}
+          onOpenBank={(bankId, bankName) =>
+            go({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId, bankName })
+          }
         />,
       );
     case "bank":
-      // Same as the builder: the bank's name is the browser's own fetch.
+      // Fix round 1, finding 3: the browser renders no <h1> of its own — its
+      // document outline used to start at the <h2> over the passage groups —
+      // so the shell carries its title. `BankList` already holds the name and
+      // hands it over on the way in; a deep link has no list behind it and no
+      // name to hand over, so the heading names the surface instead. Either
+      // way the page starts at <h1>.
       return shell(
         "banks",
         view.actor,
         view.workspace,
-        {},
+        { title: view.bankName ?? "Bank", crumb: "Question banks" },
         <BankBrowser
           bankId={view.bankId}
           workspaceId={view.workspace.id}

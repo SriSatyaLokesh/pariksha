@@ -23,7 +23,10 @@ export function BankList({
 }: {
   workspaceId: string;
   client: ApiClient;
-  onOpenBank: (bankId: string) => void;
+  /** The name as well as the id: the browser's page title is the bank's
+   *  name, and this list is the only place in the app that already holds
+   *  it (fix round 1, finding 3). */
+  onOpenBank: (bankId: string, bankName: string) => void;
 }) {
   const [banks, setBanks] = useState<Bank[]>([]);
   const [name, setName] = useState("");
@@ -92,7 +95,7 @@ export function BankList({
           <ul className="bank-list">
             {banks.map((bank) => (
               <li key={bank.id}>
-                <button type="button" className="bank-list__item" onClick={() => onOpenBank(bank.id)}>
+                <button type="button" className="bank-list__item" onClick={() => onOpenBank(bank.id, bank.name)}>
                   <span className="bank-list__name">{bank.name}</span>
                   <span className="bank-list__count">{bank.questionCount} questions</span>
                 </button>

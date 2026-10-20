@@ -76,9 +76,10 @@ export function OrganiserShell({
 }: {
   current: NavKey;
   crumb?: string;
-  /** Optional while the two screens whose title is fetched data — the bank
-   *  browser and the test builder — still render their own; 6.5d and 6.5e
-   *  lift those and the page header becomes unconditional. */
+  /** Optional for exactly one screen: the test builder, whose title is the
+   *  test's name and which fetches that itself and renders its own <h1>
+   *  (`test.tsx`). Every other arm passes a title. 6.5d lifts the builder's
+   *  and this becomes required. */
   title?: string;
   lead?: string;
   actions?: ReactNode;

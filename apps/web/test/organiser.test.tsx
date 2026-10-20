@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { TestBranding } from "@pariksha/core";
@@ -13,6 +15,8 @@ import {
   type Workspace,
 } from "../src/lib/api";
 import { OrganiserApp } from "../src/routes/organiser";
+import { tokens, type TypographyName } from "../src/styles/tokens";
+import { declarations, parseRuleBodies, readResolvedCss } from "./css-chain";
 import { SignIn } from "../src/routes/signin";
 import { Setup } from "../src/routes/setup";
 
@@ -1339,6 +1343,11 @@ describe("OrganiserApp routes on state, not on a URL", () => {
 // D14: every assertion starts at `OrganiserApp` and clicks its way there. A
 // test that rendered `OrganiserShell` directly could not see whether any
 // screen is actually wrapped in it — which is the only thing this task does.
+const SHELL_CSS_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../src/styles/shell.css",
+);
+
 describe("the organiser shell (D3)", () => {
   function renderOrganiser(overrides: Partial<ApiClient> = {}) {
     return render(<OrganiserApp client={fakeClient({ me: async () => ACTOR, ...overrides })} />);
@@ -1370,11 +1379,10 @@ describe("the organiser shell (D3)", () => {
     expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
   });
 
-  // D3: "you are here" is three signals, never hue alone. Two of them are
-  // in the DOM and asserted here; the third — the heavier label — is a
-  // font-weight, which jsdom has no layout engine to compute, so it is read
-  // out of the stylesheet that ships. Asserting it nowhere would be the
-  // same as not having it.
+  // D3: "you are here" is three signals, never hue alone. Two of them are in
+  // the DOM and asserted here; the third — the heavier label — is a
+  // font-weight that jsdom has no layout engine to compute, and it is
+  // asserted against the shipped stylesheet in the test below this one.
   it("marks the current screen with aria-current and an accent bar, not with hue alone", async () => {
     renderOrganiser();
     await signedIn();
@@ -1396,6 +1404,71 @@ describe("the organiser shell (D3)", () => {
     expect(within(nav()).getByRole("button", { name: "Home" })).not.toHaveAttribute(
       "aria-current",
     );
+  });
+
+  // Signal three of three. jsdom applies no external stylesheet, so this is
+  // the one signal no amount of clicking can reach — and a comment claiming
+  // it is covered is worse than no comment (fix round 1, finding 2). Read
+  // out of the file that ships, with the parser the suite already owns, and
+  // compared against the resting weight rather than against a literal: the
+  // claim D3 makes is "heavier", not "600".
+  it("gives the current rail item a heavier label than the resting one (D3)", () => {
+    const rules = parseRuleBodies(readResolvedCss(SHELL_CSS_PATH));
+    const weightOf = (selector: string): number => {
+      const body = rules.find((rule) => rule.selector === selector)?.body;
+      expect(body, `no rule for ${selector} in shell.css`).toBeDefined();
+      const declared = declarations(body as string)
+        .find((decl) => /^font-weight\s*:/.test(decl))
+        ?.split(":")[1]
+        ?.trim();
+      expect(declared, `no font-weight on ${selector}`).toBeDefined();
+      const token = /^var\(--type-([a-z0-9-]+)-weight\)$/.exec(declared as string)?.[1];
+      return token === undefined
+        ? Number(declared)
+        : (tokens.typography[token as TypographyName].fontWeight as number);
+    };
+
+    const resting = weightOf(".shell__nav-item");
+    const here = weightOf('.shell__nav-item[aria-current="page"]');
+
+    expect(resting).toBe(400);
+    expect(here).toBeGreaterThan(resting);
+  });
+
+  // Fix round 1, finding 3. The browser renders no <h1> of its own — before
+  // this, the one organiser screen whose document outline started at <h2>.
+  it("gives the bank browser an <h1> carrying the bank's own name", async () => {
+    const bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    renderOrganiser({ listBanks: async () => [bank] });
+    await signedIn();
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Reasoning aptitude" }),
+    ).toBeVisible();
+  });
+
+  // ...and a deep link, which has no list behind it to carry a name, still
+  // starts the page at <h1> rather than at the passage-groups <h2>.
+  it("still starts the bank browser at <h1> when it is deep-linked", async () => {
+    window.history.replaceState(null, "", "/?view=bank&bank=bnk_1");
+    try {
+      renderOrganiser();
+      expect(await screen.findByRole("heading", { level: 1, name: "Bank" })).toBeVisible();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
   });
 
   it("does not render the sidebar on sign-in", async () => {

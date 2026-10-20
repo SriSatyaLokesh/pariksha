@@ -7,13 +7,47 @@
    themselves, one at a time, which is why this file paints the chrome and
    nothing inside it.
 
-   D15's two scales, used as a usage rule rather than new tokens. Inside a
-   component: 4 / 6 / 8 / 12 / 16 — space-xs, -sm, -base, -md, -lg. Between
-   the page and its edges: the -xl / -2xl / -3xl / -4xl group. A rule here
-   never mixes one scale's value into the other's job.
+   D15's two scales, used as a usage rule rather than new tokens. THE
+   MAPPING, written down because 6.5d and 6.5e must read D15 the same way
+   this file does or the phase ships two readings of one ruling:
+
+     inside a component  4 / 6 / 8 / 12 / 16  ->  --space-xs  (4px)
+                                                  --space-sm  (6px)
+                                                  --space-base (8px)
+                                                  --space-md  (12px)
+                                                  --space-lg  (16px)
+     page to its edges   20 / 28 / 36 / 56    ->  --space-xl  (24px)
+                                                  --space-2xl (32px)
+                                                  --space-3xl (40px)
+                                                  --space-4xl (64px)
+
+   The spec's page figures are 20 / 28 / 36 / 56 and the token set has no
+   literal of any of them; the spec also says the existing tokens cover both
+   ranges and that this is a usage rule, not new tokens. The -xl group is
+   therefore the page scale, 4-8px above each nominal figure, and declaring
+   four new tokens to hit the figures exactly would be a palette-style
+   decision taken in a stylesheet. A rule here never mixes one scale's value
+   into the other's job.
 
    Proportions are the prototype's: rail 236px, 56px collapsed, top bar
-   56px. */
+   56px.
+
+   HANDOFF TO 6.5d AND 6.5e, named here rather than left to be rediscovered,
+   the way theme.css names 6.5b's.
+
+   `overflow-x: auto` on every direct child of the page below 719px is what
+   delivers D3a's "the page itself never scrolls sideways" — a table wider
+   than a phone scrolls inside its own panel. The cost is real and is not a
+   bug to fix in place: overflow-x: auto computes overflow-y to auto too, so
+   each of those children becomes a block formatting context and a scroll
+   container. That CLIPS anything a child paints outside its own box at
+   narrow widths — a dropdown, a popover, a sticky table header, and already
+   a focus ring on a control flush against a panel edge. A later plan that
+   adds one of those at phone width meets this rule, and the argument it has
+   to answer is: the alternative to a clipped popover is a page that scrolls
+   sideways, which D3a refuses by name. The fix, when one is needed, is to
+   give the construct somewhere to paint (a portal, or a panel with its own
+   padding) rather than to widen the rule. */
 
 .shell {
   --shell-rail: 236px;
@@ -35,7 +69,13 @@
 
 /* ---- Top bar ----------------------------------------------------------- */
 
+/* Sticky, because D3 says *persistent*: a nav that scrolls out of view on a
+   long test list is persistent across screens and not within one, and 6.5d
+   and 6.5e build their longest scanning surfaces inside this frame. */
 .shell__bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
   grid-column: 1 / -1;
   background: var(--surface);
   border-bottom: 1px solid var(--edge);
@@ -133,11 +173,22 @@
 
 /* ---- Rail -------------------------------------------------------------- */
 
+/* The rail sticks under the bar rather than to the viewport, so the two
+   never overlap. align-self: start is what makes it stickable at all — a
+   grid item stretched to its row's full height has no room to move in, and
+   `position: sticky` on it is silently inert. Its own max-height then gives
+   a rail longer than the screen somewhere to scroll. */
 .shell__rail {
+  position: sticky;
+  inset-block-start: var(--shell-bar);
+  z-index: 1;
+  align-self: start;
+  max-height: calc(100dvh - var(--shell-bar));
   background: var(--ground-2);
   border-inline-end: 1px solid var(--edge);
   padding-block: var(--space-md);
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .shell__nav {
@@ -178,7 +229,7 @@
    rest on a colour the next ground might not have. */
 .shell__nav-bar {
   position: absolute;
-  inset-block: 6px;
+  inset-block: var(--space-sm);
   inset-inline-start: 0;
   width: 3px;
   border-radius: 0 2px 2px 0;
@@ -227,18 +278,27 @@
    on source order at equal specificity — the page kept .organiser's 16px
    inset instead of D15's page scale.
 
-   margin-inline: 0 overrides .organiser's `margin-inline: auto`. A grid item
-   with auto inline margins is NOT stretched to its track: it is sized by its
-   content and centred. With a 1400px table inside, the page measured 1080px
-   (its own max-width) in a 1044px track and the document scrolled sideways
-   at every width, 400px included — which is the failure D3a is about.
+   width: 100% is the fix for the real bug, and the reason the auto margins
+   below are now harmless. A grid item whose width is `auto` AND whose inline
+   margins are `auto` is not stretched to its track: it is shrink-to-fit,
+   sized by its content and centred. With a 1400px table inside, the page
+   measured 1080px (its own .organiser--wide max-width) in a 1044px track and
+   the document scrolled sideways at every width, 400px included — the exact
+   failure D3a is about. Declaring width: 100% makes the used width definite,
+   so shrink-to-fit never runs.
 
-   min-width: 0 then lets the item take the track instead of its content's
+   margin-inline: auto then does only what it is for: absorb the free space
+   .organiser--wide's max-width leaves once the page track passes 1080px, and
+   centre. Fix round 1, finding 1: this rule briefly said `margin-inline: 0`,
+   which stretched correctly but left 124px of dead gutter at 1440 and ~600px
+   at 1920 — above the band the first measurement pass covered.
+
+   min-width: 0 lets the item take the track instead of its content's
    min-content width. */
 .shell > .shell__page {
   min-width: 0;
   width: 100%;
-  margin-inline: 0;
+  margin-inline: auto;
   padding-block: var(--space-xl);
   padding-inline: var(--space-2xl);
 }
@@ -291,8 +351,11 @@
     display: none;
   }
 
+  /* Still the page scale, one step down: --space-xl rather than --space-2xl.
+     Reaching for --space-lg here would put a component-scale value on a
+     page-to-edge job, which this file's own header forbids. */
   .shell > .shell__page {
-    padding-inline: var(--space-lg);
+    padding-inline: var(--space-xl);
   }
 
   /* Every panel becomes its own scroll container, so a table wider than the
