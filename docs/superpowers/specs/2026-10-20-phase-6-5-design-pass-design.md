@@ -75,6 +75,18 @@ Three problems, as reported in #187, and the corrections found while measuring t
 **1,399** lines, not 1,212. And the fork is not only colour: #165 also moved display type to
 Bricolage Grotesque and body to Inter while the product kept Anek Latin and JetBrains Mono.
 
+*Pointer, not an amendment — the corrections above stand, and nothing here changes a ruling.*
+**The table's figures are not the `var()` counts the sentence above it claims** (6.5f Task 1,
+2026-10-21): every one of them reproduces exactly as `grep -o 'voltage' | wc -l` — comments, class
+names such as `.card-voltage`, and `tokens.css`'s own definitions included — and **not one**
+reproduces as a count of `var(--color-voltage*)`. By that pattern the figures are `exam.css` **13**,
+`primitives.css` **3**, `base.css` **2**, and the four grouped organiser sheets **6**. The
+difference is a word count versus a usage count, so the table still ranks the files correctly and
+its argument is unaffected. The guard added by 6.5f
+(`apps/web/test/theme.test.ts`, "voltage stays in the candidate runtime and does not spread")
+deliberately pins the **set of files** rather than any count, which is what keeps this discrepancy
+harmless in practice: a figure can drift, a surface appearing cannot.
+
 ## 2. Goals, non-goals, anti-goals
 
 ### Goals

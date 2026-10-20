@@ -257,6 +257,11 @@ Under `D1` the candidate runtime is the **sole** surface still using the vermili
 These two are the affordances a candidate navigates by. Task 3 should assert each line below is
 unchanged after the phase. Line numbers verified against `cat -n`.
 
+*(Superseded by §6.1: the sweep was closed as already satisfied, so no CSS moved and there is
+nothing left to freeze — this section is now a map for a future reader, not an open action item.
+The contrast suite already covers these pairings, and the voltage containment guard in §7.2 covers
+the family they belong to.)*
+
 ### 5.1 The question palette's current-question square
 
 **`.palette-square.has-ring`, lines 795–802:**
@@ -367,8 +372,13 @@ is pixel-identical. Only the candidate who needs 1.5 finds out, mid-attempt, whe
 a bug.
 
 It reads the stylesheet rather than measuring a render, and that is an honest ceiling rather than a
-shortcut: `apps/web`'s suite is jsdom, runs with `css: false`, and has no layout engine, so no
-render in this workspace can report a computed font size at all.
+shortcut — but the ceiling is **vitest's**, not the workspace's. `apps/web`'s vitest suite is jsdom,
+runs with `css: false`, and has no layout engine, so nothing there can report a computed font size.
+A behavioural version *is* reachable: `apps/web/e2e/measurement/density.spec.ts` is a real-browser
+Playwright harness in this same package, written for this same phase, and a test there could click
+the Large radio and read `getComputedStyle(stem).fontSize`. It costs a seeded workspace, a published
+test and a registration, which is why the invariant is asserted over the stylesheet here rather than
+exercised — a cost decision, not an impossibility.
 
 ### 7.2 The voltage containment guard — `apps/web/test/theme.test.ts`
 
@@ -382,5 +392,13 @@ It asserts the set **true today** — `exam.css` and `registration.css`, plus `a
 the sole voltage surface, but that happens as 6.5c, 6.5d and 6.5e re-ground each screen, and none
 has merged; a guard written against the end state would be **red on arrival** and would be deleted
 rather than believed. What it catches now is the invariant worth having: voltage **spreading** — a
-new stylesheet reaching for the vermilion, or one that had given it up taking it back. 6.5e shrinks
-the list; growing it is always a failure.
+new stylesheet reaching for the vermilion, or one that had given it up taking it back.
+
+**6.5c, 6.5d and 6.5e each shrink the list** — not 6.5e alone. `primitives.css`'s three uses are
+`.button-primary`'s hover and focus-visible states and `.button-primary--surface`, which is 6.5c's
+shell; `base.css`'s is the focus ring 6.5b added `--focus` for, landing on 6.5c's first screen; and
+6.5d and 6.5e both also modify `primitives.css`. So the first implementer to see this go red will
+most likely be on **6.5c or 6.5d** — naming one plan would send them looking for a break that is not
+theirs. Shrinking the list is the expected edit (delete the entry, keep the test); growing it is
+always a failure. The assertion carries that instruction as its own failure message, so it reaches
+whoever reads CI rather than only whoever reads the comment.
