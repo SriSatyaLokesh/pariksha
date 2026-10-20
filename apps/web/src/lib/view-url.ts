@@ -66,5 +66,11 @@ export function writeView(params: ViewParams): void {
     if (value) search.set(key, value);
     else search.delete(key);
   }
-  window.history.pushState(null, "", `${window.location.pathname}?${search}`);
+  // Arriving where you already are is not a navigation. Clicking Tests
+  // while on Tests is a no-op an organiser can perform five times without
+  // noticing, and five identical entries make Back look broken for five
+  // presses — the failure a persistent nav is most exposed to.
+  const next = `?${search}`;
+  if (next === window.location.search) return;
+  window.history.pushState(null, "", `${window.location.pathname}${next}`);
 }

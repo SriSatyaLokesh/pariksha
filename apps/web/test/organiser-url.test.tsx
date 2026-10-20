@@ -225,6 +225,22 @@ describe("Back and Forward (D5 — the nav makes Back a visible problem)", () =>
     await expectHome();
   });
 
+  it("does not stack a Back stop for a destination already open", async () => {
+    // Clicking Tests while on Tests is a no-op an organiser can perform
+    // five times without noticing. Five identical history entries make the
+    // Back button look broken, which is the failure `D5` is most exposed
+    // to now that the nav is persistent and always one click away.
+    render(<OrganiserApp client={fakeClient()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    await screen.findByRole("heading", { level: 1, name: "Tests" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Tests" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tests" }));
+
+    window.history.back();
+    await expectHome();
+  });
+
   it("goes forward again after a Back", async () => {
     render(<OrganiserApp client={fakeClient()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Banks" }));
