@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,6 +12,7 @@ import {
   parseRuleBodies,
   readResolvedCss,
   readThemeMap,
+  stripCssComments,
 } from "./css-chain";
 
 // Phase 6.5b Task 3 (D20, D20a). `theme.css` gives the two organiser
@@ -271,4 +272,100 @@ describe("the semantic names reach the organiser and nothing else (D1)", () => {
       );
     });
   }
+});
+
+// Phase 6.5f Task 1 (D1). The mirror of the guard above: that one keeps the
+// organiser's semantic names off the runtime, this one keeps the runtime's
+// vermilion from spreading back.
+//
+// D1 retires `voltage` from the organiser and leaves the candidate runtime
+// the sole surface still using it — which is what makes the palette square
+// and the focus ring read as singular again. But that retirement happens as
+// 6.5c, 6.5d and 6.5e re-ground each screen, and NONE OF THOSE HAS MERGED.
+// So this asserts the set that is true TODAY, not D1's end state: a guard
+// written against the end state would be red on arrival and would be
+// deleted rather than believed.
+//
+// What it still catches, which is the invariant worth having now: voltage
+// SPREADING — a new stylesheet reaching for the vermilion, or a sheet that
+// had given it up taking it back.
+//
+// 6.5c, 6.5d and 6.5e EACH shrink this list as they re-ground a surface —
+// not 6.5e alone. primitives.css's three uses are TWO different components:
+// `.button-primary:hover, .button-primary:focus-visible` (:64) and
+// `.button-primary--surface` (:77), and — a separate component —
+// `.button-secondary:hover, .button-secondary:focus-visible` (:120).
+// base.css's two are both in the global `:focus-visible` rule (:86-91), the
+// ring 6.5b added `--focus` for. 6.5d and 6.5e also modify primitives.css.
+//
+// Naming every component matters more than it looks: whoever re-grounds
+// `.button-secondary` and hits this red test must find THEIR change named
+// here, or they read "not mine" and go hunting a break that is not there.
+// That is the same failure as naming a single plan, one level down.
+//
+// The end state is the runtime's own chain (exam.css, and registration.css
+// while it stays shared with admin.css). Shrinking is the expected edit;
+// growing never is.
+//
+// Counted per SOURCE file, not over a resolved bundle: question.css and
+// registration.css are imported by both entries, so a bundle-level count
+// would blame the runtime for a sheet the organiser also loads. tokens.css
+// DEFINES the family rather than using it and so reads zero here, which is
+// correct — it is the mapping, the same exclusion contrast-usage.test.ts
+// makes.
+describe("voltage stays in the candidate runtime and does not spread (D1)", () => {
+  // Read off disk rather than listed by hand, so a NEW stylesheet that
+  // reaches for voltage cannot be invisible to this guard — the reason
+  // `organiserStylesheets()` derives its list too (d58d85b).
+  const voltageUsers = readdirSync(STYLES_DIR)
+    .filter((file) => file.endsWith(".css"))
+    .filter((file) =>
+      /var\(\s*--color-voltage/.test(
+        stripCssComments(readFileSync(resolve(STYLES_DIR, file), "utf8")),
+      ),
+    )
+    .sort();
+
+  it("is used by exactly the stylesheets that use it today", () => {
+    expect(
+      voltageUsers,
+      "the set of stylesheets using var(--color-voltage*) changed. SHRINKING is expected as 6.5c, 6.5d and 6.5e re-ground the organiser — delete the entry below and keep the test. GROWING means voltage spread to a new surface, which D1 forbids.",
+    ).toEqual(
+      [
+        // The runtime's own chain — where D1 says voltage belongs.
+        "exam.css",
+        // Shared with admin.css today; stays once the organiser drops it.
+        "registration.css",
+        // --- Below: the organiser's remaining voltage. Each line is deleted
+        // by whichever of 6.5c / 6.5d / 6.5e re-grounds that surface. ---
+        // primitives.css: `.button-primary:hover, :focus-visible` (:64),
+        // `.button-primary--surface` (:77) AND `.button-secondary:hover,
+        // :focus-visible` (:120) — two components, not one. base.css: the
+        // global `:focus-visible` ring (:86-91). The authoring and
+        // test-builder sheets carry their own selected states.
+        "authoring.css",
+        "base.css",
+        "primitives.css",
+        "testbuilder.css",
+      ].sort(),
+    );
+  });
+
+  it("is really used by the runtime, so the list above is not vacuous", () => {
+    // A typo in the regex, or a rename of the whole family, would empty
+    // the list and make the assertion above pass only by matching [] to a
+    // list that is itself wrong. exam.css is the one file D1 guarantees —
+    // and the only one, so no count floor is asserted beside it: D1's end
+    // state could legitimately reach a single file if registration.css
+    // stops being shared, and a floor of two would red for that.
+    expect(voltageUsers).toContain("exam.css");
+  });
+
+  it("the landing page gave it up and has not taken it back (D1)", () => {
+    // signal.css is the surface D1 re-grounded first. It is the one file
+    // here whose zero is already a finished state rather than a pending
+    // one, so it gets its own assertion.
+    expect(voltageUsers).not.toContain("signal.css");
+    expect(voltageUsers).not.toContain("landing.css");
+  });
 });
