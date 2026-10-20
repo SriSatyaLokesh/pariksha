@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { readResolvedCss } from "../css-chain";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
-import { Runner } from "../../src/components/exam/Runner";
+import { Runner, firstOfNextSection } from "../../src/components/exam/Runner";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 
@@ -166,6 +166,39 @@ afterEach(() => {
   delete document.documentElement.dataset.contrast;
   document.documentElement.style.fontSize = "";
   localStorage.clear();
+});
+
+// --- C-07's auto-advance target, as arithmetic ---------------------------
+
+describe("firstOfNextSection", () => {
+  it("answers the first question of the section after this one", () => {
+    // `paper` is four questions then thirteen: the first of section two
+    // is flat index 4.
+    expect(firstOfNextSection(paper, 0)).toBe(4);
+    expect(firstOfNextSection(paper, 3)).toBe(4);
+  });
+
+  it("answers null in the last section, so nothing moves off the end of the paper", () => {
+    expect(firstOfNextSection(paper, 4)).toBeNull();
+    expect(firstOfNextSection(paper, 16)).toBeNull();
+  });
+
+  it("skips an EMPTY section rather than stranding the candidate in the expired one", () => {
+    // `sectionOfIndex` emits one entry per *question*, so a section an
+    // organiser left with no questions contributes no entry at all. The
+    // old `indexOf(here + 1)` therefore answered -1 — null — even though a
+    // later section with questions in it existed, and the candidate stayed
+    // in the section whose time had just run out.
+    const withGap: AttemptPaper = {
+      ...paper,
+      sections: [
+        { id: "a", title: "A", instructions: null, timeLimitMinutes: 5, questions: [question(1)] },
+        { id: "empty", title: "Empty", instructions: null, timeLimitMinutes: 5, questions: [] },
+        { id: "c", title: "C", instructions: null, timeLimitMinutes: 5, questions: [question(2)] },
+      ],
+    };
+    expect(firstOfNextSection(withGap, 0)).toBe(1);
+  });
 });
 
 describe("the runner shell (C-04)", () => {

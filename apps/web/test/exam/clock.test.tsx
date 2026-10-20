@@ -385,7 +385,29 @@ const resumedPaper: AttemptPaper = {
   submittedAt: null,
 };
 
-function resumingClient(overrides: Partial<RunClient> = {}): RunClient {
+/** Three timed sections of two questions each, every one of them typable
+ *  — `C-07`'s auto-advance is only observable through a paper that has
+ *  somewhere to advance *to*, twice. */
+const threeSections: AttemptPaper = {
+  ...resumedPaper,
+  attemptId: "att_sections",
+  navigation: "per_section",
+  sections: [0, 1, 2].map((at) => ({
+    id: `s${String(at)}`,
+    title: `Section ${String(at + 1)}`,
+    instructions: null,
+    timeLimitMinutes: 10,
+    questions: [at * 2 + 1, at * 2 + 2].map((n) => ({
+      id: `q${String(n)}`,
+      type: "short_answer" as const,
+      prompt: `Question ${String(n)} stem`,
+      points: 1,
+      maxLength: 200,
+    })),
+  })),
+};
+
+function resumingClient(overrides: Partial<RunClient> = {}, paper = resumedPaper): RunClient {
   return {
     landing: () => Promise.reject(new Error("the runner reads no landing page")),
     access: () => Promise.reject(new Error("the runner passes no gate")),
@@ -393,7 +415,7 @@ function resumingClient(overrides: Partial<RunClient> = {}): RunClient {
     form: () => Promise.reject(new Error("the runner reads no form")),
     register: () => Promise.reject(new Error("the runner registers nobody")),
     start: () => Promise.reject(new Error("this attempt is resumed, not started")),
-    resume: () => Promise.resolve(resumedPaper),
+    resume: () => Promise.resolve(paper),
     putAnswer: () => Promise.reject(new Error("nothing is saved here")),
     ...overrides,
   };
@@ -427,6 +449,87 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     await waitFor(() => {
       expect(shown()).toBe("12:00");
     });
+  });
+
+  it("C-07: the section clock fires once per SECTION, and the chip re-anchors to the new one", async () => {
+    // Critical 2, from the app root. `useZeroOnce`'s guard is
+    // once-per-mount — right for `onZero`, where a re-anchor at zero must
+    // not submit twice (`M19`), and wrong for a section clock that
+    // legitimately expires once per section: only section one ever fired.
+    // Compounding it, `reanchor` carried `sectionRemainingMs` *downward*
+    // only and a save carried no section reading at all, so the chip read
+    // `0:00` for the rest of the paper while still counting the section
+    // the candidate had already left.
+    vi.useRealTimers();
+    // Thirty seconds, not five: large enough that a slow machine cannot
+    // tick section two down to zero on its own and turn a passing run
+    // into a lie about what fired.
+    const readings = [30_000, 0];
+    const putAnswer = vi.fn(() =>
+      Promise.resolve({
+        outcome: "accepted" as const,
+        remainingMs: 44 * MINUTE,
+        maxIndex: 0,
+        sectionRemainingMs: readings.shift() ?? 0,
+      }),
+    );
+    // Section one is already over at mount, which is what a resume into an
+    // expired section really looks like.
+    render(
+      <ExamApp client={resumingClient({ putAnswer }, { ...threeSections, sectionRemainingMs: 0 })} />,
+    );
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    // Boundary one: the candidate is moved to the first question of
+    // section two rather than left on a question every save refuses.
+    expect(await screen.findByText("Question 3 stem")).toBeVisible();
+
+    // The save re-anchors the section chip on to section two's own clock.
+    // Carried forward from the previous anchor it would still read 0:00.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
+    await waitFor(() => {
+      const [, section] = screen.getAllByRole("timer") as [HTMLElement, HTMLElement];
+      expect(shown(section)).toBe("0:30");
+    });
+
+    // Boundary two: section two runs out in its turn. A guard that never
+    // re-armed would leave the candidate here for the rest of the paper.
+    fireEvent.click(screen.getByRole("button", { name: /next question/i }));
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "Mumbai" } });
+    expect(await screen.findByText("Question 5 stem")).toBeVisible();
+  });
+
+  it("the paper's own clock still fires exactly once, however the section clock re-arms", async () => {
+    // `M19` is the other half of the same guard and must keep working:
+    // `onZero` drains the queue, the drain's own save answers
+    // `remainingMs: 0`, and a second firing is a second submission from a
+    // candidate who has already finished. The section's re-arm must not
+    // reach it.
+    const onZero = vi.fn();
+    const { rerender } = render(
+      <Clock
+        anchor={anchorFrom(0, 0)}
+        warnAtMinutes={[10, 2]}
+        onZero={onZero}
+        onSectionZero={noop}
+      />,
+    );
+    advance(1000);
+    expect(onZero).toHaveBeenCalledTimes(1);
+
+    // A fresh anchor whose SECTION reading has risen — the event that
+    // re-arms the section guard — while the paper is still at zero.
+    mono += 500;
+    rerender(
+      <Clock
+        anchor={anchorFrom(0, 30_000)}
+        warnAtMinutes={[10, 2]}
+        onZero={onZero}
+        onSectionZero={noop}
+      />,
+    );
+    advance(1000);
+    expect(onZero).toHaveBeenCalledTimes(1);
   });
 
   it("a refusal carries no reading, and the countdown is left where it was", async () => {

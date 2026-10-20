@@ -23,7 +23,7 @@ import { axe } from "jest-axe";
 import { Runner, lockedIndices, paletteStates } from "../../src/components/exam/Runner";
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
-import type { LandingPayload, RunClient } from "../../src/lib/run";
+import type { LandingPayload, QueuedSave, RunClient } from "../../src/lib/run";
 
 const NOW = 1_760_000_000_000;
 
@@ -69,6 +69,20 @@ const base: AttemptPaper = {
 };
 
 const paperWith = (over: Partial<AttemptPaper>): AttemptPaper => ({ ...base, ...over });
+
+/** The same two sections, with questions a candidate can actually type
+ *  into — which is what makes the lock reachable from the app root: the
+ *  only thing that raises `max_index` is a save. */
+const textSections: AttemptPaper["sections"] = base.sections.map((section) => ({
+  ...section,
+  questions: section.questions.map((one) => ({
+    id: one.id,
+    type: "short_answer" as const,
+    prompt: one.prompt,
+    points: 1,
+    maxLength: 200,
+  })),
+}));
 
 function renderRunner(paper: AttemptPaper, index: number, onIndex = vi.fn()) {
   return {
@@ -277,6 +291,92 @@ describe("the lock is what a candidate meets at the app's own root", () => {
     render(<ExamApp client={client(paperWith({ navigation: "free", maxIndex: 3 }))} />);
     await screen.findByRole("navigation", { name: /question palette/i });
     expect(await screen.findByText("Question 1 stem")).toBeVisible();
+  });
+
+  it("AC-15 and C-07: the rail locks as the candidate MOVES, not only as they resumed", async () => {
+    // Critical 1. `paper.maxIndex` is the reading the resume was handed,
+    // and `AttemptView` used to pass the paper straight through — so
+    // `lockedIndices` returned the same set for the whole attempt. On a
+    // fresh `linear` attempt nothing ever locked: the candidate walked to
+    // question 5, the rail still showed 1-4 open, Previous was still
+    // rendered and enabled, and the save behind it came back 403
+    // `navigation_locked`. The dead control `M32`/`M37`/`M38` exist to
+    // prevent, reintroduced one layer up — and invisible to every test
+    // that pins `maxIndex` as a fixture.
+    const putAnswer = vi.fn((save: QueuedSave) =>
+      Promise.resolve({
+        outcome: "accepted" as const,
+        remainingMs: 44 * 60_000,
+        // What the server committed to: `q2` is flat index 1.
+        maxIndex: Number(save.questionId.slice(1)) - 1,
+        sectionRemainingMs: null,
+      }),
+    );
+    const paper = paperWith({ navigation: "linear", maxIndex: 0, sections: textSections });
+    render(<ExamApp client={client(paper, { putAnswer })} />);
+    await screen.findByRole("navigation", { name: /question palette/i });
+    expect(await screen.findByText("Question 1 stem")).toBeVisible();
+
+    // Nothing is locked yet, and that is correct: `max_index` rises on a
+    // save, not on a keystroke, so the server would still accept a write
+    // at question one.
+    expect(square(1)).not.toHaveClass("has-lock");
+
+    fireEvent.click(screen.getByRole("button", { name: /next question/i }));
+    expect(await screen.findByText("Question 2 stem")).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
+    await waitFor(() => {
+      expect(putAnswer).toHaveBeenCalled();
+    });
+
+    // The server has moved the lock, so the rail does too — and Previous
+    // is gone rather than left as a button whose every save is refused.
+    await waitFor(() => {
+      expect(square(1)).toHaveClass("has-lock");
+    });
+    expect(screen.queryByRole("button", { name: /previous/i })).toBeNull();
+  });
+
+  it("a superseded save still moves the lock, because the server's progress bump did", async () => {
+    // The drift a browser-side mirror takes. The progress `UPDATE` rides
+    // the same batch as the upsert and is guarded only by `max_index < ?`,
+    // so the server raises `max_index` on a `superseded` save too. A
+    // client that advanced on `accepted` alone would be one question
+    // behind the server, which is one 403 on the candidate's next save.
+    const putAnswer = vi.fn(() =>
+      Promise.resolve({
+        outcome: "superseded" as const,
+        remainingMs: 44 * 60_000,
+        maxIndex: 1,
+        sectionRemainingMs: null,
+      }),
+    );
+    const paper = paperWith({ navigation: "linear", maxIndex: 0, sections: textSections });
+    render(<ExamApp client={client(paper, { putAnswer })} />);
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "Delhi" } });
+    await waitFor(() => {
+      expect(square(1)).toHaveClass("has-lock");
+    });
+  });
+
+  it("a refusal carries no reading, and the lock is left where it was", async () => {
+    // The other direction: a refusal says nothing about `max_index`, so
+    // nothing may move. Re-locking off an invented number would close a
+    // question the server still accepts writes to.
+    const putAnswer = vi.fn(() =>
+      Promise.resolve({ outcome: "refused" as const, message: "Not now." }),
+    );
+    const paper = paperWith({ navigation: "linear", maxIndex: 0, sections: textSections });
+    render(<ExamApp client={client(paper, { putAnswer })} />);
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "Delhi" } });
+    await waitFor(() => {
+      expect(putAnswer).toHaveBeenCalled();
+    });
+    expect(square(1)).not.toHaveClass("has-lock");
   });
 
   it("a server 403 the interface did not predict is shown, not swallowed", async () => {
