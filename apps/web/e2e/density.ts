@@ -44,7 +44,9 @@ export const PRIMARY_ROW: Record<Surface, string> = {
   // figure is right either way — but if a later screen ever puts version
   // history on a list, an unscoped selector would inflate the count and drop
   // the median height, and **both of those failures are silently permissive**.
-  testList: "main#main-content > table.testbuilder-list tbody tr",
+  // Descendant, not child: a restyle that wraps the table in a panel `<div>`
+  // is an ordinary design-pass move and must not cost 6.5c/d a false red.
+  testList: "main#main-content table.testbuilder-list tbody tr",
   bankList: "ul.bank-list > li",
   bankBrowser: "table.bank-browser__table tbody tr",
   questionPicker: "ul.picker-drawer__list > li",
@@ -101,6 +103,25 @@ export async function primaryRowHeight(page: Page, surface: Surface): Promise<nu
   });
 }
 
+/**
+ * How far down the viewport `surface`'s first primary row starts, in CSS
+ * pixels — the chrome above the list, measured.
+ *
+ * Height alone cannot see this. A restyle that leaves rows at 182px and adds
+ * 300px of sidebar and top bar above the table is invisible to both the count
+ * (already 0 on the test list) and the height, and chrome growth above a list
+ * is precisely what the shell plan does next.
+ */
+export async function primaryRowTop(page: Page, surface: Surface): Promise<number> {
+  return page.locator(PRIMARY_ROW[surface]).evaluateAll((rows) => {
+    const first = rows[0];
+    // No rows at all is not "0px of chrome" — it is a broken selector, and
+    // it has to fail the assertion rather than sail under it.
+    if (first === undefined) return Number.POSITIVE_INFINITY;
+    return Math.round(first.getBoundingClientRect().top * 100) / 100;
+  });
+}
+
 /** Sign in and navigate to `surface`, leaving the page scrolled to the top
  *  and its rows loaded. The caller seeds first. */
 export async function openSurface(page: Page, surface: Surface): Promise<void> {
@@ -122,7 +143,7 @@ export async function openSurface(page: Page, surface: Surface): Promise<void> {
   // The picker is a drawer over the builder. It is reached the only way an
   // organiser reaches it: open a test, open a section, ask to add questions,
   // and — because a `fixed` source names no bank of its own — choose one.
-  await page.locator("table.testbuilder-list tbody tr .button-link").first().click();
+  await page.locator(`${PRIMARY_ROW.testList} .button-link`).first().click();
   await expect(page.getByRole("heading", { name: "Sections" })).toBeVisible();
   await page.locator(".section-row__summary").first().click();
   await page.getByRole("button", { name: "Add questions" }).first().click();

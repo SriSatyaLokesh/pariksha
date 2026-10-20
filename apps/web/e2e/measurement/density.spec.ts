@@ -27,6 +27,7 @@ import {
   countPrimaryRows,
   openSurface,
   primaryRowHeight,
+  primaryRowTop,
   type Surface,
 } from "../density";
 
@@ -67,6 +68,27 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
   bankList: 44,
   bankBrowser: 101,
   questionPicker: 25,
+};
+
+/**
+ * How far down the viewport each surface's first primary row starts on
+ * `main`, captured in the same run as the other two.
+ *
+ * The count and the height between them still cannot see the most likely
+ * regression of the very next plan. 6.5c is the shell: a persistent sidebar
+ * and a top bar, which is chrome growth above a list, literally. A restyle
+ * that leaves the test-list row at 182px and puts another 300px above the
+ * table passes `0 >= 0` and `182 <= 182` and is a real density loss. This is
+ * the number that sees it.
+ *
+ * 846.5px on the test list today — of a 900px viewport, which is the whole
+ * story of why that surface fits zero rows.
+ */
+const BEFORE_TOP: Record<Surface, number> = {
+  testList: 846.5,
+  bankList: 458,
+  bankBrowser: 312.31,
+  questionPicker: 495.63,
 };
 
 // Comfortably more rows than any plausible redesign fits in 900px, so the
@@ -119,9 +141,23 @@ for (const surface of SURFACES) {
     expect(present, `${surface} seeded too few rows to measure`).toBeGreaterThan(visible);
 
     const height = await primaryRowHeight(page, surface);
+    const top = await primaryRowTop(page, surface);
     // This spec exists to report numbers, so it prints them.
-    console.log(`DENSITY ${surface}: ${visible} of ${present} rows fully visible, row ${height}px`);
+    console.log(
+      `DENSITY ${surface}: ${visible} of ${present} rows fully visible, row ${height}px, first row at y=${top}`,
+    );
+    // An invariant, not a bar (AG3): a row that generates no layout box is
+    // dropped by `countPrimaryRows` and filtered out of `primaryRowHeight`,
+    // while `locator().count()` still counts it as attached — so a test list
+    // of boxless rows would report `present: 40, visible: 0, height: 0` and
+    // pass `40 > 0`, `0 >= 0` and `0 <= 182`. Green forever, measuring
+    // nothing. Not hypothetical: `display: contents` on `thead`/`tbody`/`tr`
+    // is the standard way to restyle a semantic table into a CSS grid, and it
+    // generates no box. The test list is the surface most likely to get it.
+    expect(height, `${surface}'s rows generate no layout box`).toBeGreaterThan(0);
+
     expect(visible).toBeGreaterThanOrEqual(BEFORE[surface]);
     expect(height).toBeLessThanOrEqual(BEFORE_HEIGHT[surface]);
+    expect(top).toBeLessThanOrEqual(BEFORE_TOP[surface]);
   });
 }
