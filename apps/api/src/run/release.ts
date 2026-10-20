@@ -126,7 +126,15 @@ export function servedShow(
   // default for disclosure is off. `docs/test-format.md` gives `when` no
   // default, so there is no organiser choice to honour here.
   const when = release?.when ?? "never";
-  if (when === "never") return null;
+  // **An allowlist, not a blocklist.** `attempt.settings` reaches this
+  // function as an unvalidated `unknown` cast of `settings_json`, so the
+  // publish schema is the only thing between a stored value and this
+  // ladder — and `SECURITY.md` makes any way to read an answer key from a
+  // candidate session a vulnerability rather than a configuration choice.
+  // So `never` and every value the schema never minted take the same
+  // branch, and a `when` nobody anticipated degrades to "no" instead of
+  // releasing immediately.
+  if (when !== "on_submit" && when !== "on_date") return null;
   if (when === "on_date") {
     // An absent or unparseable `at` is an organiser's mistake, and the
     // safe reading of it is "not yet" — `Number.isNaN` rather than a
@@ -181,7 +189,11 @@ export function releasedResult(
     points: section.points,
     max: section.max,
   }));
-  if (show === "score_and_sections") return { ...base, sections };
+  // The same allowlist as `servedShow`'s `when`, for the same reason: the
+  // answer key is reached only by *naming* `full_review`, never by being
+  // none of the levels above it. An unrecognised `show` stops here, one
+  // level short of the key.
+  if (show !== "full_review") return { ...base, sections };
 
   return {
     ...base,

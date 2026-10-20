@@ -9,11 +9,12 @@
 
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { closeClient } from "@pariksha/db";
-import type { ResponseValue } from "@pariksha/core";
+import type { AttemptScore, Question, ResponseValue, TestRelease } from "@pariksha/core";
 import type { EmailMessage } from "../../src/email/adapter.js";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
+import { releasedResult, servedShow } from "../../src/run/release.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { DAY, seedPublishedTest } from "./fixtures.js";
 import { seedAttemptTests, startAttemptFor } from "./paper-fixtures.js";
@@ -146,6 +147,66 @@ it("an on_date release with no date at all stays shut rather than opening immedi
   // `now < at` would have opened on the very first read.
   clock = T + 400 * DAY;
   expect(await (await app.request(RESULT_PATH, { headers: { cookie } })).json()).toBeNull();
+});
+
+// --- the gate is an allowlist -------------------------------------------
+//
+// `attempt.settings` is an unvalidated `unknown` cast of `settings_json`,
+// so the publish schema is the only thing between a stored value and the
+// two ladders in `release.ts`. These two assert the ladders directly
+// rather than through the route: an off-enum value cannot be published,
+// which is exactly why nothing above this line can reach the branch it
+// would otherwise take.
+
+const SCORE: AttemptScore = {
+  perQuestion: { q1: { points: 2, max: 2, correct: true } },
+  sections: [{ sectionId: "logic", points: 2, max: 2 }],
+  total: 2,
+  max: 2,
+  percent: 100,
+  passed: true,
+  pending: [],
+};
+
+const KEYED: Question[] = [
+  {
+    id: "q1",
+    type: "single",
+    prompt: "Which?",
+    options: [{ id: "a", text: "A" }],
+    key: "a",
+    scoring: { points: 2 },
+    explanation: "Because the fixture says so.",
+  },
+];
+
+/** A `release` block carrying a value the schema never minted. */
+const odd = (block: Record<string, string>): TestRelease => block as unknown as TestRelease;
+
+it("AC-16: a `show` the schema never minted carries no answer key", () => {
+  // Before the allowlist this fell through to the `full_review` branch —
+  // the one branch that carries `correct` and `explanation`.
+  const released = releasedResult(
+    odd({ when: "on_submit", show: "everything" }),
+    SCORE,
+    KEYED,
+    {},
+    T,
+    0,
+    { logic: "Logic" },
+  );
+  expect(released).not.toBeNull();
+  expect(released).not.toHaveProperty("review");
+  expect(JSON.stringify(released)).not.toContain("Because");
+});
+
+it("AC-16: a `when` the schema never minted releases nothing at all", () => {
+  // Before the allowlist only `never` and `on_date` were stopped, so an
+  // unrecognised `when` released on submit at whatever `show` asked for.
+  expect(servedShow(odd({ when: "whenever", show: "full_review" }), 0, T)).toBeNull();
+  expect(
+    releasedResult(odd({ when: "whenever", show: "full_review" }), SCORE, KEYED, {}, T, 0),
+  ).toBeNull();
 });
 
 // --- the degrade ruling --------------------------------------------------
