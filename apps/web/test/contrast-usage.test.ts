@@ -468,6 +468,12 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // both are held to 4.5:1 — which is the point of auditing them.
   '.exam-device-report li[data-ok="false"] .exam-finding-mark': { px: 12, weight: 700 },
   '.exam-device-report li[data-ok="true"] .exam-finding-mark': { px: 12, weight: 700 },
+
+  // The urgent countdown sets colour only; size and weight come from
+  // `.exam-timer-value`'s own rule on the same element (type-timer-numeric,
+  // 20px, weight 500). 20px clears the 18.66px large-text floor, so it is
+  // held to 3:1 — the same floor the duplicated declarations resolved to.
+  ".exam-timer.timer-chip-urgent .exam-timer-value": { px: 20, weight: 500 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with

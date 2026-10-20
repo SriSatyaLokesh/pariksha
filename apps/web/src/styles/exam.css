@@ -373,10 +373,12 @@
   border-color: var(--color-flag-risk);
 }
 
+/* The one colour swap DESIGN.md allows. Size and weight are not repeated
+   here: they come from `.exam-timer-value`'s own rule on the same element,
+   and the audit reads them out of `INHERITED_SIZE_WEIGHT` rather than out
+   of a second copy that can drift. */
 .exam-timer.timer-chip-urgent .exam-timer-value {
   color: var(--color-flag-risk);
-  font-size: var(--type-timer-numeric-size);
-  font-weight: var(--type-timer-numeric-weight);
 }
 
 .exam-clock-announce {

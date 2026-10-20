@@ -11,64 +11,61 @@ import { useRef, useState, type KeyboardEvent, type RefObject } from "react";
  * state in words in its accessible name. The tests assert both, rather
  * than trusting the stylesheet.
  */
-export type PaletteState = "unanswered" | "answered" | "marked" | "current" | "locked";
+export type PaletteState = "unanswered" | "answered" | "marked";
 
 /**
- * `current` is additive rather than a sixth value of `state`, which is the
- * one place this departs from the plan's pinned shape. A single enum
- * cannot say "the question you are on, which you have also marked" — the
- * commonest thing a candidate does with the mark button — and whichever of
- * the two won, the other's carrier would vanish from the rail. `state`
- * keeps all five of its members (a caller passing `"current"` gets the
- * ring), and `Runner` instead passes the content state plus this flag.
+ * `current` and `locked` are **flags beside** `state`, not values of it.
+ *
+ * A single enum cannot say "the question you are on, which you have also
+ * marked" — the commonest thing a candidate does with the mark button —
+ * and under `linear` *every* question behind the candidate is locked, so a
+ * single-valued state would repaint the whole rail as a wall of padlocks
+ * and destroy the one thing a palette is for: knowing what you have
+ * answered. A square is legitimately answered **and** closed, and both
+ * carriers have to survive.
+ *
+ * `state` therefore holds only the three a question's *content* can be in.
+ * It used to carry `"current"` and `"locked"` as members too, for a caller
+ * that might pass them — `paletteStates` never did, nothing else ever
+ * called this, and the two arms kept three branches alive that production
+ * could not reach.
  */
 export interface PaletteQuestion {
   id: string;
   number: number;
   state: PaletteState;
   current?: boolean;
-  /**
-   * `locked` is additive for the same reason `current` is, and Task 10
-   * hit the limit from the other side.
-   *
-   * Under `linear` *every* question behind the candidate is locked, so a
-   * single-valued state would repaint the whole rail as a wall of
-   * padlocks and destroy the one thing a palette is for: knowing what you
-   * have answered. A square can legitimately be answered **and** closed
-   * — that is the normal condition of a linear paper — and both carriers
-   * have to survive. `state` keeps all five of its members.
-   */
   locked?: boolean;
 }
 
-/** The shape a greyscale reader sees. `unanswered` is the outline-only
- * default, so it has no carrier of its own to add. */
-const CARRIER: Readonly<Record<PaletteState, string>> = {
+/** The shape a greyscale reader sees — one per state and one per flag.
+ * `unanswered` is the outline-only default, so it has no carrier of its
+ * own to add. */
+const CARRIER = {
   unanswered: "",
   answered: "is-filled",
   marked: "has-notch",
   current: "has-ring",
   locked: "has-lock",
-};
+} as const;
 
 /** The rail is 240px (`DESIGN.md`) and a square is 36px, so five fit a
  * row. Up and Down move by a row; nothing here measures the DOM for it. */
 const COLUMNS = 5;
 
-const isLocked = (question: PaletteQuestion): boolean =>
-  question.locked === true || question.state === "locked";
+const isLocked = (question: PaletteQuestion): boolean => question.locked === true;
 
 function classesFor(question: PaletteQuestion): string {
-  const carriers = [CARRIER[question.state]];
+  const carriers: string[] = [CARRIER[question.state]];
   if (question.current) carriers.push(CARRIER.current);
   if (question.locked) carriers.push(CARRIER.locked);
   return ["palette-square", ...carriers.filter(Boolean)].join(" ");
 }
 
 function nameFor(question: PaletteQuestion): string {
-  const words = question.current && question.state !== "current" ? ["current"] : [];
+  const words = question.current ? ["current"] : [];
   words.push(question.state);
-  if (question.locked && question.state !== "locked") words.push("locked");
+  if (question.locked) words.push("locked");
   return `Question ${String(question.number)} (${words.join(", ")})`;
 }
 
