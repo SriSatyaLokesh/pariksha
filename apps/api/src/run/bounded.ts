@@ -41,8 +41,6 @@
 
 import { assertSafeRegex, MAX_MATCH_INPUT } from "@pariksha/core";
 
-export { MAX_MATCH_INPUT };
-
 /**
  * The bound refused: the pattern is not safe to run, will not compile, or
  * the input is longer than any pattern may be run against.
@@ -99,6 +97,14 @@ export function matchStrict(pattern: string, input: string): boolean {
  * pattern would not compile, and the candidate passes. See the header for
  * why that direction is the safe one here, the unsafe one in
  * `domainMatches`, and the wrong one for grading.
+ *
+ * **Byte-identical to Task 3's version**, which had `.test(input)` inside
+ * its own `try`. `matchStrict` now runs it outside the compile's `catch`,
+ * but the whole call still sits inside *this* `try` — so even a throw out
+ * of `RegExp.prototype.test` (which cannot happen for a string argument)
+ * lands on the same `return true`. Every refusal that passed the candidate
+ * before still passes them, which is what `bounded.test.ts`'s last case
+ * pins.
  */
 export function matchBounded(pattern: string, input: string): boolean {
   try {

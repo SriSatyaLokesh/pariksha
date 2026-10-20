@@ -14,12 +14,8 @@ import { afterAll, expect, it } from "vitest";
 import { closeClient } from "@pariksha/db";
 import { createApp } from "../../src/app.js";
 import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
-import {
-  MatchBudgetExceeded,
-  MAX_MATCH_INPUT,
-  matchBounded,
-  matchStrict,
-} from "../../src/run/bounded.js";
+import { MAX_MATCH_INPUT } from "@pariksha/core";
+import { MatchBudgetExceeded, matchBounded, matchStrict } from "../../src/run/bounded.js";
 import { testDeps } from "../deps.js";
 import { seedPublishedTest } from "./fixtures.js";
 import { seedAttemptTests, startAttemptFor } from "./paper-fixtures.js";

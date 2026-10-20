@@ -153,7 +153,7 @@ const titlesOf = (layout: PinnedLayout): Record<string, string> =>
  *  candidate saw them — which is the order a review reads in. A question
  *  the bank no longer holds is simply absent; it is also already in
  *  `blockedQuestions`, so it is reported rather than silently missing. */
-export function paperOrder(
+function paperOrder(
   layout: PinnedLayout,
   byId: ReadonlyMap<string, Question>,
 ): Question[] {

@@ -13,11 +13,15 @@
 //   * **One gate.** `resultFor` is the same function the finish page and
 //     `GET /attempt/result` call. A second copy of the `show` ladder here
 //     is exactly how a review leaks into a level that may not carry one.
-//   * **The two routes answer identically whatever is behind them.** A
+//   * **The two routes answer the same bytes whatever is behind them.** A
 //     reference that names nothing, a reference belonging to somebody
 //     else, and a right reference with the wrong address all answer
 //     `202 {"status":"sent"}` and send nothing — so neither route
-//     enumerates attempts or confirms that an address sat a test.
+//     enumerates attempts or confirms that an address sat a test. "The
+//     same bytes" and not "identically": only the real pair pays
+//     `insertAuthToken` and `email.send`, so the two differ in *time*.
+//     Inherent to the shape, and the same shape `/email-code` already
+//     has — closing it would mean doing the work on a miss too.
 //   * **Both are rate-limited before they read anything**, by the
 //     reference *and* by the address: the first bounds guessing, the
 //     second bounds using this as a mailbomb aimed at a third party.

@@ -258,8 +258,6 @@ export async function readAttemptByTokenHash(
 export interface AttemptReference {
   attemptId: string;
   workspaceId: string;
-  testId: string;
-  testVersionId: string;
   candidateId: string;
   /** The candidate's identity column — the email itself when the form's
    *  first unique field is the email (the importer does not repeat an
@@ -272,7 +270,6 @@ export interface AttemptReference {
    *  that was stamped without being scored. */
   score: unknown;
   settings: TestSettings;
-  sections: Section[];
   /** `PinnedLayout`: the paper, for the section titles a released result
    *  names and the question ids a review walks. */
   layout: unknown;
@@ -281,8 +278,6 @@ export interface AttemptReference {
 interface AttemptReferenceRow {
   id: string;
   workspace_id: string;
-  test_id: string;
-  test_version_id: string;
   candidate_id: string;
   external_id: string | null;
   form_values_json: unknown;
@@ -290,7 +285,6 @@ interface AttemptReferenceRow {
   score_json: unknown;
   layout_json: unknown;
   settings_json: unknown;
-  sections_json: unknown;
 }
 
 export async function findAttemptByReference(
@@ -298,10 +292,14 @@ export async function findAttemptByReference(
   attemptRef: string,
 ): Promise<AttemptReference | null> {
   const rows = await db.query<AttemptReferenceRow>(
-    "SELECT a.id, a.workspace_id, a.test_version_id, a.candidate_id, a.submitted_at, " +
+    // Only the columns `result.ts` reads. `test_id`, `test_version_id`
+    // and `sections_json` were on this row and nothing touched any of
+    // them — and `sections_json` is the whole section array of the test
+    // version, carried across a public route for nothing.
+    "SELECT a.id, a.workspace_id, a.candidate_id, a.submitted_at, " +
       "a.score_json, a.layout_json, " +
       "c.external_id AS external_id, c.form_values_json AS form_values_json, " +
-      "v.test_id AS test_id, v.settings_json AS settings_json, v.sections_json AS sections_json " +
+      "v.settings_json AS settings_json " +
       "FROM attempt a JOIN test_version v ON v.id = a.test_version_id " +
       "JOIN candidate c ON c.id = a.candidate_id " +
       "WHERE a.id = ?",
@@ -312,15 +310,12 @@ export async function findAttemptByReference(
   return {
     attemptId: row.id,
     workspaceId: row.workspace_id,
-    testId: row.test_id,
-    testVersionId: row.test_version_id,
     candidateId: row.candidate_id,
     externalId: row.external_id,
     formValues: db.jsonValue<Record<string, unknown>>(row.form_values_json) ?? {},
     submittedAt: row.submitted_at === null ? null : Number(row.submitted_at),
     score: row.score_json == null ? null : db.jsonValue(row.score_json),
     settings: db.jsonValue(row.settings_json),
-    sections: db.jsonValue(row.sections_json),
     layout: db.jsonValue(row.layout_json),
   };
 }
