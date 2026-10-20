@@ -459,11 +459,6 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // A number above 6 means the bank is being read per question, which is
   // the failure this line exists to catch on a 50-subrequest ceiling.
   "/api/v1/run/attempt/submit": 6,
-  // The same gate, read again. Measured at **4** on the only path that
-  // pays for all of it (`full_review` on a last attempt): the join, the
-  // attempt count, the bank and the answers. Every lesser release level
-  // costs 2, because the score is already on the row the join returned.
-  "/api/v1/run/attempt/result": 4,
   // `C-09`, the return visit. `/code` is **4**: the address limiter, its
   // sweep, the attempt lookup and the token insert — plus the message
   // itself, which is not a subrequest in this count unless `deps.http`
@@ -695,7 +690,6 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // bounded by the one row the cookie resolved, and neither takes an
   // identifier of any kind in its body.
   "POST /api/v1/run/attempt/submit": "attempt",
-  "GET /api/v1/run/attempt/result": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

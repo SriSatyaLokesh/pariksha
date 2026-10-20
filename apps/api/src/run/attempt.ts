@@ -89,7 +89,7 @@ import {
   timingOf,
 } from "./clock.js";
 import { assertReachable, indexOf, sectionStartIndexOf } from "./navigation.js";
-import { resultFor, submitAttempt, type SubmitReason } from "./submit.js";
+import { submitAttempt, type SubmitReason } from "./submit.js";
 
 /** Re-exported here because this is where the brief names it; it is
  *  declared in `middleware/attemptContext.ts`, the module that reads it. */
@@ -1083,24 +1083,6 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     // candidate's own Submit into a timeout.
     const reason: SubmitReason = timedOut(attempt, now) ? "timeout" : "manual";
     return c.json(await submitAttempt(deps, attempt, reason, now));
-  });
-
-  /**
-   * The result, again (Task 11, #75) — the same gate the finish page was
-   * handed, from the same function, so there is one release rule and not
-   * two. `null` is a complete answer: the test releases nothing, or not
-   * yet.
-   */
-  routes.get("/attempt/result", attemptContext(deps), async (c) => {
-    const attempt = c.get("attempt");
-    const now = deps.now();
-    if (attempt.submittedAt === null) {
-      throw conflict(
-        "not_submitted",
-        "This test has not been submitted yet, so there is no result to show.",
-      );
-    }
-    return c.json(await resultFor(deps, attempt, now));
   });
 
   return routes;

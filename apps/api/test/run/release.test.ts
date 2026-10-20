@@ -42,7 +42,6 @@ beforeEach(() => {
 });
 
 const SUBMIT_PATH = "/api/v1/run/attempt/submit";
-const RESULT_PATH = "/api/v1/run/attempt/result";
 const CODE_PATH = "/api/v1/run/result/code";
 const VERIFY_PATH = "/api/v1/run/result/verify";
 
@@ -85,6 +84,16 @@ async function sit(
   ).json()) as { released: Released | null };
   return { cookie: started.cookie, paper, released: body.released };
 }
+
+/** The release gate, read again on an attempt that is already submitted.
+ *  `POST /attempt/submit` is idempotent and its answer is a superset of
+ *  what `GET /attempt/result` used to return, so it is the one way back
+ *  in — which is why that route was deleted rather than kept for this
+ *  (final review, drift Important). */
+const readAgain = async (cookie: string): Promise<Released | null> =>
+  ((await (
+    await app.request(SUBMIT_PATH, { method: "POST", headers: { cookie } })
+  ).json()) as { released: Released | null }).released;
 
 // --- AC-16: the four levels ---------------------------------------------
 
@@ -130,12 +139,10 @@ it("S-10: a score_and_sections release carries no key, explanation or rubric any
 it("AC-16: on_date shows nothing before `at`, and the result after it", async () => {
   const { cookie, released } = await sit("rel-later");
   expect(released).toBeNull();
-  // The same attempt, a day later, through the result route — nothing was
-  // written in between, so the gate is the clock and not a column.
+  // The same attempt, a day later, read again — nothing was written in
+  // between, so the gate is the clock and not a column.
   clock = T + DAY + 1;
-  const res = await app.request(RESULT_PATH, { headers: { cookie } });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ show: "score_only", total: 2 });
+  expect(await readAgain(cookie)).toMatchObject({ show: "score_only", total: 2 });
 });
 
 it("an on_date release with no date at all stays shut rather than opening immediately", async () => {
@@ -146,7 +153,7 @@ it("an on_date release with no date at all stays shut rather than opening immedi
   // And still shut four hundred days later, which is what a naive
   // `now < at` would have opened on the very first read.
   clock = T + 400 * DAY;
-  expect(await (await app.request(RESULT_PATH, { headers: { cookie } })).json()).toBeNull();
+  expect(await readAgain(cookie)).toBeNull();
 });
 
 // --- the gate is an allowlist -------------------------------------------
@@ -243,23 +250,20 @@ async function candidateOf(paper: AttemptPaper): Promise<string> {
   return rows[0]!.candidate_id;
 }
 
-// --- GET /attempt/result -------------------------------------------------
+// --- the second read -----------------------------------------------------
 
-it("the result route answers the same gate the finish page was given", async () => {
-  const { cookie, released } = await sit("rel-sections");
-  const again = (await (await app.request(RESULT_PATH, { headers: { cookie } })).json()) as Released;
-  expect(again).toEqual(released);
+it("the release gate answers a second read the same way it answered the first", async () => {
+  // What `GET /attempt/result` was for. It returned a strict subset of
+  // this answer behind a second copy of the release-gate read, for no
+  // client — `exam.tsx` reloads through the idempotent submit because
+  // the attempt number and the answered counts live on the receipt
+  // alone.
+  const { cookie, released: first } = await sit("rel-sections");
+  expect(await readAgain(cookie)).toEqual(first);
 });
 
-it("the result of an attempt that has not been submitted is refused, not invented", async () => {
-  const started = await startAttemptFor(deps, app, "rel-score");
-  const res = await app.request(RESULT_PATH, { headers: { cookie: started.cookie } });
-  expect(res.status).toBe(409);
-  expect((await res.json()).error.code).toBe("not_submitted");
-});
-
-it("the result route needs the attempt cookie", async () => {
-  expect((await app.request(RESULT_PATH)).status).toBe(401);
+it("the second read needs the attempt cookie", async () => {
+  expect((await app.request(SUBMIT_PATH, { method: "POST" })).status).toBe(401);
 });
 
 // --- C-09: the return visit ---------------------------------------------
@@ -361,11 +365,8 @@ it("S-07: the guess limiter is keyed on the attempt the reference resolved to", 
 // --- the budgets ---------------------------------------------------------
 
 it("every Task 11 route spends exactly its declared budget", async () => {
-  const review = await sit("rel-review", { roll: "BUDGET" });
   const counting = countingDeps(deps);
   const counted = createApp(counting.deps);
-  expect((await counted.request(RESULT_PATH, { headers: { cookie: review.cookie } })).status).toBe(200);
-  expect(counting.counts().total, RESULT_PATH).toBe(ROUTE_BUDGETS[RESULT_PATH]);
 
   // A fresh address: `email_code_address` allows five codes per inbox per
   // ten minutes, and the C-09 tests above have spent `EMAIL`'s.

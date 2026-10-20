@@ -393,9 +393,11 @@ record(
 
 const submitARes = await app.request("/api/v1/run/attempt/submit", { method: "POST", headers: { cookie: A.cookie } });
 await recordJson("POST /api/v1/run/attempt/submit", submitARes);
-record(
-  "GET /api/v1/run/attempt/result",
-  await (await app.request("/api/v1/run/attempt/result", { headers: { cookie: A.cookie } })).clone().text(),
+// The second read is the same idempotent submit, which is the whole
+// reason `GET /attempt/result` could go: it answered a strict subset.
+await recordJson(
+  "POST /api/v1/run/attempt/submit",
+  await app.request("/api/v1/run/attempt/submit", { method: "POST", headers: { cookie: A.cookie } }),
 );
 
 const codeRes = await app.request("/api/v1/run/result/code", json({ attemptRef: A.attemptId, email: "ananya@uni.ac.in" }));
@@ -414,9 +416,9 @@ const B = await fullJourney("SNT-B", "__OTHERCANDIDATE__", "bharat@uni.ac.in");
 await answer(B.cookie, B.paper.sections[0]!.questions[0]!.id, { kind: "option", option: "a" }, 1);
 const submitBRes = await app.request("/api/v1/run/attempt/submit", { method: "POST", headers: { cookie: B.cookie } });
 await recordJson("POST /api/v1/run/attempt/submit", submitBRes);
-record(
-  "GET /api/v1/run/attempt/result",
-  await (await app.request("/api/v1/run/attempt/result", { headers: { cookie: B.cookie } })).clone().text(),
+await recordJson(
+  "POST /api/v1/run/attempt/submit",
+  await app.request("/api/v1/run/attempt/submit", { method: "POST", headers: { cookie: B.cookie } }),
 );
 
 // --- the three release variants -------------------------------------------
@@ -436,9 +438,14 @@ async function sit(slug: string, roll: string) {
   });
   const submitText = await submitRes.clone().text();
   record("POST /api/v1/run/attempt/submit", submitText);
-  const resultRes = await app.request("/api/v1/run/attempt/result", { headers: { cookie: started.cookie } });
-  const resultText = await resultRes.clone().text();
-  record("GET /api/v1/run/attempt/result", resultText);
+  // Read again through the idempotent submit — the release gate's second
+  // answer, which is where `GET /attempt/result` used to be.
+  const againRes = await app.request("/api/v1/run/attempt/submit", {
+    method: "POST",
+    headers: { cookie: started.cookie },
+  });
+  const resultText = await againRes.clone().text();
+  record("POST /api/v1/run/attempt/submit", resultText);
   return { submitText, resultText };
 }
 
@@ -474,7 +481,10 @@ it("AC-22: every candidate-reachable endpoint is covered by this scan", () => {
   // Bumped deliberately. A route `ROUTE_AUTH` later marks `attempt`,
   // `entry`, or candidate-`public` grows this number; the fixed literal is
   // what makes that growth a visible diff instead of a silent pass.
-  expect(CANDIDATE_ENDPOINTS.length).toBe(16);
+  // 16 until `GET /attempt/result` was deleted (final review, drift
+  // Important): a strict subset of `POST /attempt/submit`'s answer,
+  // behind a second release-gate read, with no client.
+  expect(CANDIDATE_ENDPOINTS.length).toBe(15);
   expect(new Set(seen.keys())).toEqual(new Set(CANDIDATE_ENDPOINTS.map(([e]) => e)));
 });
 

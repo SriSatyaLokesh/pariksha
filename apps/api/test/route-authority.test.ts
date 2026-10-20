@@ -125,9 +125,6 @@ it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", 
   ).toEqual([
     "GET /api/v1/run/attempt",
     "GET /api/v1/run/attempt/media/:key",
-    // Task 11 (#75, P6.11): the result of the attempt this cookie names,
-    // and no other.
-    "GET /api/v1/run/attempt/result",
     // Task 11 (#75, P6.11): ending it. Takes no body at all, so there is
     // nothing beside the cookie for the server to choose between.
     "POST /api/v1/run/attempt/submit",
