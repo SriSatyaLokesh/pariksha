@@ -9,7 +9,7 @@ import {
   type Workspace,
 } from "../lib/api";
 import { OrganiserShell, type NavKey } from "../components/OrganiserShell";
-import { readView, writeView, type ViewParams } from "../lib/view-url";
+import { readView, resetViewForWorkspace, writeView, type ViewParams } from "../lib/view-url";
 import { SignIn } from "./signin";
 import { Setup } from "./setup";
 import { Home } from "./home";
@@ -86,6 +86,10 @@ export function OrganiserApp({
   returnTo?: string | null | undefined;
 }) {
   const [view, setView] = useState<View>({ kind: "loading" });
+  // `D4`: the membership count is free — `boot` already fetches this list to
+  // pick `workspaces[0]`. Keeping it rather than discarding everything after
+  // the first is the whole cost of the switcher.
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 
   const boot = useCallback(async () => {
     setView({ kind: "loading" });
@@ -100,8 +104,9 @@ export function OrganiserApp({
         setView({ kind: "setup" });
         return;
       }
-      const workspaces = await client.workspaces();
-      const workspace = workspaces[0];
+      const memberships = await client.workspaces();
+      setWorkspaces(memberships);
+      const workspace = memberships[0];
       if (workspace === undefined) {
         // Signed in, setup done, but this actor belongs to nothing. Only
         // reachable if every membership was revoked between the two calls.
@@ -186,6 +191,15 @@ export function OrganiserApp({
               ? { kind: "dashboard", actor, workspace }
               : { kind: key, actor, workspace },
           );
+        }}
+        workspaces={workspaces}
+        // `D4a`: a switch lands on Home with every id-bearing parameter
+        // gone. The URL first, then the state it names — the same order
+        // `go` uses, and for the same reason: `?view=test&test=…` left in
+        // place would ask the new workspace for the old one's test.
+        onSwitchWorkspace={(next) => {
+          resetViewForWorkspace();
+          setView({ kind: "dashboard", actor, workspace: next });
         }}
         onSignOut={signOut}
         {...page}

@@ -96,3 +96,30 @@ export function writeView(params: ViewParams): void {
   if (next === new URLSearchParams(window.location.search).toString()) return;
   window.history.pushState(null, "", `${window.location.pathname}?${next}`);
 }
+
+/**
+ * A workspace switch lands on Home with every id-bearing parameter gone
+ * (spec §5, `D4a`).
+ *
+ * `?view=test&test=tst_8c21a4` carried across a switch asks workspace B for
+ * a test id belonging to workspace A — a 404 where the route checks
+ * membership and a cross-tenant read where it does not. `IDS` is the same
+ * list `readView` and `writeView` walk, so a parameter added to one is
+ * cleared by this without a second edit.
+ *
+ * `replaceState`, not the `pushState` `writeView` uses, and that is the
+ * whole reason this is not `writeView({ view: "home" })`: the entry being
+ * left names workspace A's test, and `organiser.tsx` rebuilds a view from
+ * the URL on `popstate` against whatever workspace is *current*. Pushing
+ * would leave that entry one Back press from workspace B — the same
+ * cross-tenant read by a slower route. A switch is not a place you navigate
+ * to and come back from; it replaces where you are. Entries further back
+ * still name workspace A, which this cannot reach: they are left as the
+ * ordinary history of a session, and the screens' own fetches refuse them.
+ */
+export function resetViewForWorkspace(): void {
+  const search = new URLSearchParams(window.location.search);
+  search.set("view", "home");
+  for (const key of IDS) search.delete(key);
+  window.history.replaceState(null, "", `${window.location.pathname}?${search}`);
+}

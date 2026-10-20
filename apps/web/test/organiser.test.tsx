@@ -1545,3 +1545,216 @@ describe("the organiser shell (D3)", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 6.5c Task 4 (#181, D4/D4a/D4b): the top bar always names the
+// workspace; it becomes a *switcher* only above one membership, and a switch
+// resets the view to `?view=home`.
+//
+// D4a is the half no prototype can show and the half that ships broken:
+// under D5 the view lives in the query string as `?view=test&test=tst_8c21a4`,
+// so a switch that keeps that string asks workspace B for a test id belonging
+// to workspace A. AG3: asserted by switching with a test id in the URL, never
+// by reading the reducer.
+const NORTHFIELD: Workspace = { id: "wsp_2", name: "Northfield" };
+
+const TWO_MEMBERSHIPS: Actor = {
+  ...ACTOR,
+  memberships: [
+    { workspaceId: "wsp_1", role: "owner", grants: [] },
+    { workspaceId: "wsp_2", role: "owner", grants: [] },
+  ],
+};
+
+const MIDTERM = {
+  id: "tst_8c21a4",
+  name: "Midterm",
+  slug: "midterm",
+  description: null,
+  shortCode: "ab12cd",
+  closesAt: null,
+  state: "draft" as const,
+  currentVersion: null,
+  draftVersion: 1,
+  reviewRequested: false,
+  tags: [],
+  updatedAt: 0,
+};
+
+const MIDTERM_DRAFT = {
+  id: "ver_1",
+  testId: "tst_8c21a4",
+  version: 1,
+  body: { settings: {}, sections: [] },
+  publishedAt: null,
+  createdAt: 0,
+  draw: {},
+  setPoints: {},
+  points: {},
+};
+
+describe("the workspace switcher (D4, D4a, D4b)", () => {
+  function switcher(): HTMLElement {
+    return screen.getByRole("combobox", { name: /workspace/i });
+  }
+
+  it("names the workspace and offers no switcher at one membership", async () => {
+    render(<OrganiserApp client={fakeClient({ me: async () => ACTOR })} />);
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(screen.getByText("Placement cell", { selector: ".shell__workspace" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: /workspace/i })).toBeNull();
+  });
+
+  it("becomes a switcher at two memberships", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(await screen.findByRole("combobox", { name: /workspace/i })).toBeVisible();
+    expect(switcher()).toHaveValue("wsp_1");
+  });
+
+  it("clears every id-bearing parameter when the workspace changes", async () => {
+    window.history.replaceState(null, "", "/?view=test&test=tst_8c21a4&panel=timing");
+    try {
+      render(
+        <OrganiserApp
+          client={fakeClient({
+            me: async () => TWO_MEMBERSHIPS,
+            workspaces: async () => [WORKSPACE, NORTHFIELD],
+            test: async () => MIDTERM,
+            draft: async () => MIDTERM_DRAFT,
+          })}
+        />,
+      );
+      await screen.findByRole("heading", { level: 1, name: "Midterm" });
+
+      fireEvent.change(switcher(), { target: { value: "wsp_2" } });
+
+      expect(await screen.findByRole("heading", { level: 1, name: "Northfield" })).toBeVisible();
+      expect(window.location.search).toBe("?view=home");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  // The assertion that matters: not that the URL is tidy, but that no call
+  // carrying workspace A's test id is ever sent to workspace B.
+  //
+  // Walked rather than deep-linked, so there is real history behind the
+  // builder, and the walk ends on a Back press — because the entry a switch
+  // leaves behind is itself a loaded gun. `popstate` rebuilds the view from
+  // the URL against whatever workspace is CURRENT, so an entry naming
+  // workspace A's test, one press away from workspace B, is the same
+  // cross-tenant read by a slower route.
+  it("does not request the other workspace's test after a switch, or after Back", async () => {
+    const carrying: string[] = [];
+    const record = (workspaceId: string, testId: string) => {
+      if (testId === "tst_8c21a4") carrying.push(workspaceId);
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+          tests: async () => [MIDTERM],
+          test: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return MIDTERM;
+          },
+          draft: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return MIDTERM_DRAFT;
+          },
+          versions: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return [];
+          },
+          checklist: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return [];
+          },
+          candidates: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return [];
+          },
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await screen.findByRole("heading", { level: 1, name: "Midterm" });
+    expect(carrying).not.toHaveLength(0);
+
+    fireEvent.change(switcher(), { target: { value: "wsp_2" } });
+    expect(await screen.findByRole("heading", { level: 1, name: "Northfield" })).toBeVisible();
+
+    window.history.back();
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+
+    expect(carrying.filter((id) => id !== "wsp_1")).toEqual([]);
+  });
+
+  // D4b's whole argument is that a native <select> carries an accessible
+  // name for free — so the shape that can lose it is the one worth an axe
+  // pass. The existing shell axe test renders one membership and therefore
+  // never sees this control at all.
+  it("has no axe violations with the switcher rendered", async () => {
+    const { container } = render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // D3a takes the rail out of the grid below 719px. It does not say
+  // navigation disappears — and before this task only the wordmark was wired
+  // to Home, so Banks and Tests were unreachable on a phone. The rail becomes
+  // a horizontal strip at that width: the same <nav>, the same items, the
+  // same aria-current, no second construct to keep in step. The clicking
+  // half of this is already proved above ("shows one persistent sidebar");
+  // the half jsdom cannot reach is the media query, which has no layout
+  // engine to evaluate it — so the INVARIANT is asserted instead (AG3):
+  // nothing inside the narrow block takes the nav, its items or their labels
+  // off the screen.
+  it("does not hide the Organiser nav below 719px (D3a)", () => {
+    const css = readResolvedCss(SHELL_CSS_PATH);
+    const start = css.indexOf("@media (max-width: 719px)");
+    expect(start, "shell.css has no 719px block").toBeGreaterThan(-1);
+    const open = css.indexOf("{", start);
+    let depth = 1;
+    let i = open + 1;
+    while (depth > 0 && i < css.length) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") depth--;
+      i++;
+    }
+    const narrow = parseRuleBodies(css.slice(open + 1, i - 1));
+
+    const hidden = narrow
+      .filter((rule) => /shell__(rail|nav)/.test(rule.selector))
+      .filter((rule) =>
+        declarations(rule.body).some((decl) =>
+          /^(display\s*:\s*none|visibility\s*:\s*hidden|clip\s*:\s*rect)/.test(decl),
+        ),
+      )
+      .map((rule) => rule.selector);
+
+    expect(hidden).toEqual([]);
+  });
+});

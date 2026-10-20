@@ -268,6 +268,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".shell__email": { dark: "signal-surface", light: "signal-l-surface" },
   ".shell__icon-button": { dark: "signal-surface", light: "signal-l-surface" },
   ".shell__signout": { dark: "signal-surface", light: "signal-l-surface" },
+  // Phase 6.5c Task 4 (D4/D4b): the switcher, above one membership. Both
+  // sit on the bar, which is --surface, exactly like the name they replace.
+  // The <select>'s own options are painted by the platform's picker, not by
+  // this stylesheet, so there is nothing further to score.
+  ".shell__switcher-label": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__switcher-select": { dark: "signal-surface", light: "signal-l-surface" },
   ".shell__nav-item": { dark: "signal-bg-2", light: "signal-l-bg-2" },
   // The current item's fill is --accent-wash, 12% accent over the rail's
   // own --ground-2. A 12% wash does not move the ratio enough to score

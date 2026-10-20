@@ -69,8 +69,10 @@ export function OrganiserShell({
   lead,
   actions,
   workspace,
+  workspaces,
   actor,
   onNavigate,
+  onSwitchWorkspace,
   onSignOut,
   children,
 }: {
@@ -84,8 +86,12 @@ export function OrganiserShell({
   lead?: string;
   actions?: ReactNode;
   workspace: Workspace;
+  /** Every workspace this actor is a member of — the list `OrganiserApp`
+   *  already fetches to pick `workspaces[0]`, so `D4`'s count is free. */
+  workspaces: Workspace[];
   actor: Actor;
   onNavigate: (key: NavKey) => void;
+  onSwitchWorkspace: (workspace: Workspace) => void;
   onSignOut: () => void;
   children: ReactNode;
 }) {
@@ -122,7 +128,40 @@ export function OrganiserShell({
             Pariksha
           </button>
 
-          <span className="shell__workspace">{workspace.name}</span>
+          {/* `D4`: the bar always names the workspace. It becomes a
+              *switcher* only above one membership, because most people hold
+              one and an always-no-op control is noise.
+
+              `D4b`: a native <select>, which carries the keyboard, the
+              mobile picker and an accessible name for free — a custom menu
+              is focus-management work for no gain. The visible "Workspace"
+              label IS the <label>; below 719px shell.css clips it to the
+              accessibility tree rather than removing it, so the select keeps
+              its name while Sign out stays whole. */}
+          {workspaces.length > 1 ? (
+            <div className="shell__switcher">
+              <label className="shell__switcher-label" htmlFor="shell-workspace">
+                Workspace
+              </label>
+              <select
+                id="shell-workspace"
+                className="shell__switcher-select"
+                value={workspace.id}
+                onChange={(event) => {
+                  const next = workspaces.find((item) => item.id === event.target.value);
+                  if (next !== undefined) onSwitchWorkspace(next);
+                }}
+              >
+                {workspaces.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <span className="shell__workspace">{workspace.name}</span>
+          )}
 
           <div className="shell__bar-actions">
             {/* `D20`: the ground is one attribute on <html>, per viewer.
