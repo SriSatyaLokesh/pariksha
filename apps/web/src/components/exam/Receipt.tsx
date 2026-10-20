@@ -90,6 +90,17 @@ export function Receipt({
           </dd>
         </dl>
 
+        {/* The organiser's last word (#186), on the landing page's own
+            message class — the finish page is that shell reused, so the
+            start message and this one are set the same way. Interpolated,
+            never `dangerouslySetInnerHTML`: it is free text an organiser
+            typed, and it reaches a candidate's browser. */}
+        {receipt.finishMessage !== null && (
+          <p className="exam-landing-message" data-testid="exam-finish-message">
+            {receipt.finishMessage}
+          </p>
+        )}
+
         {released && <ResultView result={released} />}
 
         {released === null && <p className="exam-finish-note">{NO_RESULT_NOTE}</p>}

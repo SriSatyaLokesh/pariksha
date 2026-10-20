@@ -118,6 +118,10 @@ export interface Receipt {
   /** "Attempt 2 of 3" — this attempt's ordinal, and what the test allows. */
   attemptNo: number;
   attemptsAllowed: number;
+  /** `branding.finish_message` off the version this attempt was pinned to,
+   *  or `null` when the organiser wrote none. Free text, so the finish page
+   *  renders it as text. */
+  finishMessage: string | null;
 }
 
 /**

@@ -684,6 +684,7 @@ const receipt: Receipt = {
   total: 2,
   attemptNo: 1,
   attemptsAllowed: 1,
+  finishMessage: null,
 };
 
 /** An answer made in time that never reached the server — in
