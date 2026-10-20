@@ -3,7 +3,7 @@ version: alpha
 name: Pariksha
 website: "https://github.com/SriSatyaLokesh/pariksha"
 description: >-
-  An open-source exam platform whose design system grounds the organiser and the marketing surface in one world — the Signal ground and its single green accent, in two measured palettes: dark (signal-*, accent #19e68c) and light (signal-l-*, accent #07744a, because #19e68c is 1.60:1 on any light ground and illegal there). Bricolage Grotesque carries display, Inter carries body, and JetBrains Mono carries every id, count, label, timer and code sample. The candidate runtime is the one place the old world survives: cream #fffbf5 and ink, hairline-ruled, with the saturated vermilion (Voltage #e24c18) reduced to exactly two jobs — the "you are here" marker in the question palette and the focus ring on an answer row. The two never appear on one screen, and that separation is what lets state-answered keep its green in the cream runtime while the accent carries positive meaning on the organiser. Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
+  An open-source exam platform whose design system grounds the organiser and the marketing surface in one world — the Signal ground and its single green accent, in two measured palettes: dark (signal-*, accent #19e68c) and light (signal-l-*, accent #07744a, because #19e68c is 1.60:1 on cream and no better on white, illegal on either). Bricolage Grotesque carries display, Inter carries body, and JetBrains Mono carries every id, count, label, timer and code sample. The candidate runtime is the one place the old world survives: cream #fffbf5 and ink, hairline-ruled, with the saturated vermilion (Voltage #e24c18) reduced to exactly two jobs — the "you are here" marker in the question palette and the focus ring on an answer row. The two never appear on one screen, and that separation is what lets state-answered keep its green in the cream runtime while the accent carries positive meaning on the organiser. Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
 
 colors:
   voltage: "#e24c18"
@@ -571,11 +571,13 @@ Three states, three colours, and every one of them legible as text at 12px — t
 
 ### Families
 
-**Anek** (Latin / Telugu / Devanagari) for everything spoken: display, headings, question stems, answer labels, body, buttons, nav. **JetBrains Mono** for everything instrumented: labels, timers, attempt references, scores, snapshot timestamps, code samples inside questions. Both SIL OFL, both self-hosted, subset per script and loaded with `font-display: swap`.
+**The ground chooses the family.** The Signal ground — the marketing site and the organiser, on either palette — takes **Bricolage Grotesque** for display, on its `opsz` axis (`{typography.signal-display-xl}`, `{typography.signal-display-lg}`), and **Inter** for body (`{typography.signal-body}`). The candidate runtime keeps **Anek** (Latin / Telugu / Devanagari) for everything spoken: display, headings, question stems, answer labels, body, buttons, nav. **JetBrains Mono** sets everything instrumented on either ground: ids, counts, labels, timers, attempt references, scores, snapshot timestamps, code samples inside questions. All SIL OFL, all self-hosted under `apps/web/public/fonts/`, subset per script and loaded with `font-display: swap`. One rule covering colour and type is a system; two unrelated rules are a coincidence.
 
-The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `sans-serif`, so a Telugu glyph in an otherwise-Latin sentence is drawn by a sibling face rather than by whatever the operating system volunteers.
+**Anek is not retired, and cannot be.** It carries Telugu and Devanagari on a skeleton shared with its Latin, which a translated test needs and Bricolage cannot do. Four families is more bytes than two, bounded because no page loads both pairs — nothing above is added and nothing is retired.
 
-**Kalam** sets the product name alone, in the hero masthead, at `{typography.wordmark-display}`. It is a handwritten weight-700 mark, not a reading face: self-hosted, SIL OFL, text-subset to the eight glyphs "Pariksha" needs. It never substitutes for Anek elsewhere — body copy, headings, buttons and the nav/footer wordmark stay on the family above.
+The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `sans-serif`, so a Telugu glyph in an otherwise-Latin sentence is drawn by a sibling face rather than by whatever the operating system volunteers. Bricolage falls back to Inter and then `sans-serif`: it is subset for Latin only and never stands in for a script it does not carry.
+
+**Kalam** sets the product name alone, in the hero masthead, at `{typography.wordmark-display}`. It is a handwritten weight-700 mark, not a reading face: self-hosted, SIL OFL, text-subset to the eight glyphs "Pariksha" needs. It never substitutes for a reading face elsewhere — body copy, headings, buttons and the nav/footer wordmark stay on the families above.
 
 ### Hierarchy
 
@@ -662,7 +664,7 @@ No 12 / 16 / 20px tier. The pill is the warmest shape in the system and it stays
 
 ### Default (light)
 
-As specified above. The only mode the marketing site ships.
+As specified above. The cream-and-ink mode, and the only one the candidate runtime ships — an attempt is cream and ink on every ground, under every setting below. It is not a statement about the rest of the product: the marketing site ships on the Signal dark ground only, and the organiser ships on both Signal grounds. See **Grounds**.
 
 ### High contrast
 
@@ -679,9 +681,17 @@ Required by the PRD (C-04) as a candidate-facing toggle, alongside font size. It
 
 Borders go to 2px, focus rings to 3px, and the voltage canvas on the start page drops to a cream canvas with a `{colors.voltage-deep}` rule. Every state keeps its non-colour carrier (fill, notch, ring, glyph), so the palette stays readable with no colour at all.
 
-### Dark
+### Grounds
 
-Deliberately deferred. A candidate-facing dark mode has to be designed against camera-lit faces and a cream watermark; doing it badly is worse than not shipping it. Admin dark mode comes with the dashboard, after v1.
+**The organiser ships on two grounds, and both are in this release.** The Signal ground is declared twice in the front matter — `signal-*` dark and `signal-l-*` light — and both generate into `tokens.css` and `tokens.ts`. A control in the top bar switches them. The choice is per-viewer, kept in `localStorage` and seeded from `prefers-color-scheme`, and the page must render correctly when that read throws.
+
+They are one design on two grounds, not two designs: every rule reads tokens, so one swap re-grounds the organiser whole. The field — the glow behind the sign-in panel and the rail — is a dark-ground device and is allowed to resolve to a near-invisible wash on the light ground. That is the ruling, not an oversight: a green bloom on a light ground is the same illegal-adjacent move the accent rule refuses, and inventing a light-mode ornament to replace it would make the two grounds two designs.
+
+Which ground is the default is still open. Until it is settled, the seed is `prefers-color-scheme` and an explicit choice wins.
+
+### Candidate dark
+
+Deliberately deferred, and separate from the grounds above. A candidate-facing dark mode has to be designed against camera-lit faces and a cream watermark; doing it badly is worse than not shipping it. The runtime stays cream and ink.
 
 ## Motion
 
