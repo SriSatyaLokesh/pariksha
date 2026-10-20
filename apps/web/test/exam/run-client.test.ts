@@ -401,12 +401,17 @@ describe("the access gate (Task 2)", () => {
     // on a box running every other package's suite, which is the whole
     // lesson of #161: a wall-clock assertion under variable load is not
     // an assertion. A change that made the search an order of magnitude
-    // dearer still trips this one, and a loaded CI box no longer does.
+    // dearer trips this one, and a loaded CI box no longer does.
     const solution = Number(await solvePow("bounded-challenge", 16));
-    // The expected search is 2^16 digests; twenty times that is a
-    // ceiling a correct implementation reaches with probability e^-20,
-    // and the challenge is fixed so the number is the same every run.
-    expect(solution).toBeLessThan(20 * 2 ** 16);
+    // The expected search is 2^16 digests. This challenge is fixed, so
+    // the number is the same every run and it is a **measured** one:
+    // 56,580. Four times the expected search is the ceiling — 262,144,
+    // which this clears with 4.6× to spare and which a search made ten
+    // times dearer (~565,800) does not. The previous bound of twenty
+    // times — 1,310,720 — was 23× the real figure, so the "an order of
+    // magnitude" the comment above claims was false of it by 2.3×.
+    expect(solution).toBe(56_580);
+    expect(solution).toBeLessThan(4 * 2 ** 16);
   });
 
   it("the difficulty is bits, not hex characters, so raising it to 18 really costs more", async () => {

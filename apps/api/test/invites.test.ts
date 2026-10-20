@@ -172,6 +172,16 @@ it("minting for an identifier that is not on the test's candidate list is 422, n
 
 it("minting twice for the same entry does not issue a second live link", async () => {
   await mintInvites(testId, ["21CS0147"], asAdmin);
+  // **The list is re-uploaded in between**, which is the whole of the
+  // assertion. `replaceCandidateList` deletes and re-inserts every
+  // unregistered row, so `21CS0147`'s `cnd_` id is a different string
+  // after this line while its `external_id` is the one the organiser
+  // chose. A dedupe keyed on the row id sees a brand-new entry and mints
+  // a second live link — and every link already emailed for this test
+  // dies the first time an organiser fixes a typo and re-uploads. Minted
+  // twice against a *stable* row (which is what this test did until the
+  // final review) the mutant behaves identically and the row is unkilled.
+  await replaceCandidateList(deps.db, workspaceId, testId, LISTED_CANDIDATES, T);
   expect((await mintInvites(testId, ["21CS0147"], asAdmin))[0]?.url).toBeUndefined();
   expect(await liveInviteCount(testId, "21CS0147")).toBe(1);
 });

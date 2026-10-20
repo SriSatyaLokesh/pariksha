@@ -4,7 +4,7 @@ import { afterAll, beforeAll, expect, it } from "vitest";
 import { sqliteClient, closeClient, type DbClient } from "../../src/client.js";
 import { migrate } from "../../src/migrate.js";
 import * as rateLimit from "../../src/repo/rate-limit.js";
-import { takeRateToken } from "../../src/repo/rate-limit.js";
+import { sweepRateLimits, takeRateToken } from "../../src/repo/rate-limit.js";
 import * as repo from "../../src/repo/index.js";
 
 const T = 1_700_000_000_000;
@@ -25,11 +25,26 @@ const functionNames = (mod: Record<string, unknown>): string[] =>
     .map(([name]) => name);
 
 it("is unscoped by design, and says so by being outside repo/index.ts", () => {
-  expect(functionNames(rateLimit)).toEqual(["takeRateToken"]);
+  expect(functionNames(rateLimit)).toEqual(["takeRateToken", "sweepRateLimits"]);
   // The barrel's rule is "every function here is scoped". A `/t/:code`
-  // miss has no workspace, so this one cannot be, and the way it stays
-  // honest is by never appearing there.
+  // miss has no workspace, so neither of these can be, and the way they
+  // stay honest is by never appearing there.
   expect(Object.keys(repo)).not.toContain("takeRateToken");
+  expect(Object.keys(repo)).not.toContain("sweepRateLimits");
+});
+
+it("sweeps closed windows and leaves open ones alone", async () => {
+  // The sweep is what keeps a bucket keyed on a digest of an address a
+  // stranger typed from growing the table one permanent row per request.
+  await takeRateToken(db, "sweep-old", MINUTE, T);
+  await takeRateToken(db, "sweep-new", MINUTE, T + MINUTE);
+  expect(await sweepRateLimits(db, T)).toBe(1);
+  const left = await db.query<{ bucket: string }>("SELECT bucket FROM rate_limit", []);
+  expect(left.map((row) => row.bucket)).toContain("sweep-new");
+  expect(left.map((row) => row.bucket)).not.toContain("sweep-old");
+  // A row the sweep deleted starts again from one, which is why `before`
+  // is never a window that is still open.
+  expect(await takeRateToken(db, "sweep-old", MINUTE, T)).toBe(1);
 });
 
 it("counts up within one window", async () => {
