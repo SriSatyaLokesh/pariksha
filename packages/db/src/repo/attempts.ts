@@ -273,19 +273,47 @@ export const upsertResponse = scoped(
  * sweeper in this phase (nothing here gets a Cron Trigger), so an attempt
  * whose candidate closed the tab is submitted the next time anything reads
  * it. Task 11's candidate-pressed submission is the same statement with a
- * different reason.
+ * different reason **and the score in the same `SET`**: that is what makes
+ * "the client at zero, the timeout materialisation and a double-click
+ * cannot produce two scores" a property of one statement rather than of
+ * the order two callers happen to run in.
+ *
+ * `score` and `flag` are optional because Task 9's materialisation stamps
+ * the end of an attempt it has not scored; omitting them leaves both
+ * columns exactly as they were.
  */
-export const submitAttempt = scoped(
-  "submitAttempt",
+export const finishAttempt = scoped(
+  "finishAttempt",
   async (
     db: DbClient,
     workspaceId: string,
-    input: { attemptId: string; submittedAt: number; reason: string },
+    input: {
+      attemptId: string;
+      submittedAt: number;
+      reason: string;
+      /** `AttemptScore`, as stored. `unknown` here because
+       *  `packages/db` does not depend on the grading engine's shape. */
+      score?: unknown;
+      /** The organiser-facing marker, when this submission raised one —
+       *  `"scoring_blocked"` for a question whose pattern the bound
+       *  refused (#129). */
+      flag?: string;
+    },
   ): Promise<{ submitted: boolean }> => {
+    const sets = ["submitted_at = ?", "submit_reason = ?"];
+    const params: unknown[] = [input.submittedAt, input.reason];
+    if (input.score !== undefined) {
+      sets.push("score_json = ?");
+      params.push(db.jsonParam(input.score));
+    }
+    if (input.flag !== undefined) {
+      sets.push("flag = ?");
+      params.push(input.flag);
+    }
     const { changes } = await db.run(
-      "UPDATE attempt SET submitted_at = ?, submit_reason = ? " +
+      `UPDATE attempt SET ${sets.join(", ")} ` +
         "WHERE workspace_id = ? AND id = ? AND submitted_at IS NULL",
-      [input.submittedAt, input.reason, workspaceId, input.attemptId],
+      [...params, workspaceId, input.attemptId],
     );
     return { submitted: changes > 0 };
   },

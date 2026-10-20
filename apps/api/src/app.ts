@@ -406,7 +406,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // Phase 6 Task 9 (#73, P6.9) moved it from 2 to **3**, exactly as this
   // line warned it would. There is no sweeper in this phase, so the first
   // read past `deadline_at + late_sync_grace_seconds` is what materialises
-  // the timeout submission (`C-07`), and that is one `submitAttempt`
+  // the timeout submission (`C-07`), and that is one `finishAttempt`
   // write. An ordinary resume inside the window still costs 2, and so
   // does every later read of the attempt it closed — the write happens
   // once, ever (`WHERE submitted_at IS NULL`). 3 is the ceiling, measured

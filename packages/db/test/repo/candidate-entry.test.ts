@@ -25,12 +25,18 @@ import {
 import * as candidateEntry from "../../src/repo/candidate-entry.js";
 import { REPO_FUNCTIONS } from "../../src/repo/guard.js";
 import * as repo from "../../src/repo/index.js";
-import { resolvePublishedTest } from "../../src/repo/candidate-entry.js";
+import { findAttemptByReference, resolvePublishedTest } from "../../src/repo/candidate-entry.js";
 
 // ADR 0006: a function belongs here only when the workspace ID is what it
 // *produces*. Both of these are handed a slug pair or a token hash and
 // nothing else, so there is no workspace for `scoped()` to check.
-const UNSCOPED_BY_DESIGN = ["resolvePublishedTest", "readAttemptByTokenHash"];
+const UNSCOPED_BY_DESIGN = [
+  "resolvePublishedTest",
+  "readAttemptByTokenHash",
+  // Task 11 (#75): the return visit holds a receipt reference and an
+  // email address, so the workspace is again what the read produces.
+  "findAttemptByReference",
+];
 
 function functionNames(module: Record<string, unknown>): string[] {
   return Object.entries(module)
@@ -207,3 +213,60 @@ it("carries the version body and the workspace branding the landing page renders
   });
   expect(resolved!.testVersionId).toMatch(/^ver_/);
 });
+
+// --- findAttemptByReference (Phase 6 Task 11, C-09) ----------------------
+//
+// The return visit. A candidate holds the reference printed on their
+// receipt and their own email address, and nothing else — no cookie, no
+// workspace, no test id — so this is the third read that *produces* a
+// workspace rather than taking one (ADR 0006).
+
+it("finds a submitted attempt by its reference alone, in one statement, with everything the gate needs", async () => {
+  const { workspaceId, testId } = await publish("alpha-recall", "recall", open);
+  const candidateId = await repo.createCandidate(db, workspaceId, {
+    testId,
+    formValues: { email: "ananya@vce.ac.in", full_name: "Ananya" },
+    consentVersion: "1",
+    now: NOW,
+  });
+  const attemptId = await repo.createAttempt(db, workspaceId, {
+    id: newId("att"),
+    candidateId,
+    testVersionId: (await resolvePublishedTest(db, "alpha-recall", "recall", NOW))!.testVersionId,
+    setNo: 0,
+    layout: { sections: [] },
+    startedAt: NOW,
+    deadlineAt: NOW + DAY,
+    tokenHash: `hash-${attemptCounter()}`,
+  });
+  await repo.finishAttempt(db, workspaceId, {
+    attemptId,
+    submittedAt: NOW + 1_000,
+    reason: "manual",
+    score: { total: 7, max: 10 },
+  });
+
+  const counting = countingClient(db);
+  const found = await findAttemptByReference(counting.db, attemptId);
+  expect(found).toMatchObject({
+    attemptId,
+    workspaceId,
+    testId,
+    candidateId,
+    submittedAt: NOW + 1_000,
+    score: { total: 7, max: 10 },
+    formValues: { email: "ananya@vce.ac.in" },
+    settings: open,
+  });
+  expect(counting.count()).toBe(1);
+});
+
+it("a reference that names nothing is null, not a throw", async () => {
+  expect(await findAttemptByReference(db, "att_000000000000")).toBeNull();
+});
+
+let attempts = 0;
+function attemptCounter(): string {
+  attempts += 1;
+  return String(attempts);
+}

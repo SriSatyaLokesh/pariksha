@@ -53,7 +53,7 @@ import {
   instant,
   listResponses,
   newId,
-  submitAttempt,
+  finishAttempt,
   upsertResponse,
   workspaceGroups,
   workspaceQuestions,
@@ -802,7 +802,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     let submittedAt = attempt.submittedAt;
     if (submittedAt === null && timedOut(attempt, now)) {
       submittedAt = attempt.deadlineAt;
-      await submitAttempt(deps.db, attempt.workspaceId, {
+      await finishAttempt(deps.db, attempt.workspaceId, {
         attemptId: attempt.attemptId,
         submittedAt,
         reason: "timeout",

@@ -247,12 +247,12 @@ describe("upsertResponse's progress bump", () => {
   });
 });
 
-// --- submitAttempt (Phase 6 Task 9) -------------------------------------
+// --- finishAttempt (Phase 6 Tasks 9 and 11) -----------------------------
 
-describe("submitAttempt", () => {
+describe("finishAttempt", () => {
   it("stamps the end of the attempt and says it did", async () => {
     expect(
-      await repo.submitAttempt(db, WORKSPACE, {
+      await repo.finishAttempt(db, WORKSPACE, {
         attemptId,
         submittedAt: 2_000,
         reason: "timeout",
@@ -269,9 +269,9 @@ describe("submitAttempt", () => {
     // The race this exists for: a candidate pressing Submit at the same
     // moment a read materialises the timeout. Whichever lands first is
     // the reason on the row, and the other must not rewrite it.
-    await repo.submitAttempt(db, WORKSPACE, { attemptId, submittedAt: 1_900, reason: "candidate" });
+    await repo.finishAttempt(db, WORKSPACE, { attemptId, submittedAt: 1_900, reason: "candidate" });
     expect(
-      await repo.submitAttempt(db, WORKSPACE, {
+      await repo.finishAttempt(db, WORKSPACE, {
         attemptId,
         submittedAt: 2_000,
         reason: "timeout",
@@ -283,5 +283,55 @@ describe("submitAttempt", () => {
       [attemptId],
     );
     expect(rows[0]).toMatchObject({ submitted_at: 1_900, submit_reason: "candidate" });
+  });
+
+  it("Task 11: the score is written in the same statement as the stamp", async () => {
+    const score = { total: 7, max: 10, pending: ["q1"] };
+    expect(
+      await repo.finishAttempt(db, WORKSPACE, {
+        attemptId,
+        submittedAt: 2_000,
+        reason: "manual",
+        score,
+        flag: "scoring_blocked",
+      }),
+    ).toEqual({ submitted: true });
+    const rows = await db.query<{ score_json: unknown; flag: string }>(
+      "SELECT score_json, flag FROM attempt WHERE id = ?",
+      [attemptId],
+    );
+    expect(db.jsonValue(rows[0]?.score_json)).toEqual(score);
+    expect(rows[0]?.flag).toBe("scoring_blocked");
+  });
+
+  it("a second submission does not overwrite the first score", async () => {
+    await repo.finishAttempt(db, WORKSPACE, {
+      attemptId,
+      submittedAt: 1_900,
+      reason: "manual",
+      score: { total: 7 },
+    });
+    expect(
+      await repo.finishAttempt(db, WORKSPACE, {
+        attemptId,
+        submittedAt: 2_000,
+        reason: "timeout",
+        score: { total: 0 },
+      }),
+    ).toEqual({ submitted: false });
+    const rows = await db.query<{ score_json: unknown }>(
+      "SELECT score_json FROM attempt WHERE id = ?",
+      [attemptId],
+    );
+    expect(db.jsonValue(rows[0]?.score_json)).toEqual({ total: 7 });
+  });
+
+  it("Task 9's stamp without a score leaves score_json null", async () => {
+    await repo.finishAttempt(db, WORKSPACE, { attemptId, submittedAt: 2_000, reason: "timeout" });
+    const rows = await db.query<{ score_json: unknown }>(
+      "SELECT score_json FROM attempt WHERE id = ?",
+      [attemptId],
+    );
+    expect(rows[0]?.score_json).toBeNull();
   });
 });

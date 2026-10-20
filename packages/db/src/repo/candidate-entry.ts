@@ -160,6 +160,12 @@ export interface AttemptRecord {
   sectionStartedAt: number | null;
   maxIndex: number;
   flag: string;
+  /** `AttemptScore`, as `finishAttempt` stored it, and `null` until an
+   *  attempt has been scored. On the record because the receipt and the
+   *  result are read through the same cookie *after* submission (Task 11):
+   *  without it, answering a second `POST /submit` or a `GET /result`
+   *  would cost a second read of a row the middleware just resolved. */
+  score: unknown;
   /** Joined from `test_version`, so the timer, the navigation rule and the
    *  grace period come back with the attempt rather than costing a read. */
   settings: unknown;
@@ -182,6 +188,7 @@ interface AttemptRecordRow {
   section_started_at: number | null;
   max_index: number;
   flag: string;
+  score_json: unknown;
   settings_json: unknown;
   sections_json: unknown;
 }
@@ -193,7 +200,7 @@ export async function readAttemptByTokenHash(
   const rows = await db.query<AttemptRecordRow>(
     "SELECT a.id, a.workspace_id, a.candidate_id, a.test_version_id, a.set_no, a.layout_json, " +
       "a.started_at, a.deadline_at, a.submitted_at, a.submit_reason, a.section_started_at, " +
-      "a.max_index, a.flag, " +
+      "a.max_index, a.flag, a.score_json, " +
       "v.test_id AS test_id, v.version AS version, v.settings_json AS settings_json, " +
       "v.sections_json AS sections_json " +
       "FROM attempt a JOIN test_version v ON v.id = a.test_version_id " +
@@ -218,7 +225,95 @@ export async function readAttemptByTokenHash(
     sectionStartedAt: row.section_started_at === null ? null : Number(row.section_started_at),
     maxIndex: Number(row.max_index),
     flag: row.flag,
+    score: row.score_json == null ? null : db.jsonValue(row.score_json),
     settings: db.jsonValue(row.settings_json),
     sections: db.jsonValue(row.sections_json),
+  };
+}
+
+/**
+ * One finished attempt, by the reference printed on its receipt (`C-09`).
+ *
+ * The third read that *produces* a workspace. A candidate coming back a
+ * week later holds two things — the `att_` reference on their receipt and
+ * their own email address — and no cookie, no workspace and no test id, so
+ * there is nothing for `scoped()` to check (ADR 0006).
+ *
+ * **The reference alone is not a credential.** It is printed on a receipt
+ * and it is guessable in the way any id is; what authorises the result is
+ * the emailed code the caller then has to hold. So this read deliberately
+ * answers the same shape for every live reference and the route it serves
+ * answers identically whether this returned a row or null — the candidate's
+ * registration answers come back with it precisely so the route can compare
+ * the address *in memory*, in constant time, rather than make the database
+ * tell two cases apart by returning rows for one of them.
+ */
+export interface AttemptReference {
+  attemptId: string;
+  workspaceId: string;
+  testId: string;
+  testVersionId: string;
+  candidateId: string;
+  /** The candidate's identity column — the email itself when the form's
+   *  first unique field is the email (the importer does not repeat an
+   *  identity value into the prefill). */
+  externalId: string | null;
+  /** `candidate.form_values_json` — where a non-identity email lives. */
+  formValues: Record<string, unknown>;
+  submittedAt: number | null;
+  /** `AttemptScore`, as `finishAttempt` stored it, or `null` on an attempt
+   *  that was stamped without being scored. */
+  score: unknown;
+  settings: TestSettings;
+  sections: Section[];
+  /** `PinnedLayout`: the paper, for the section titles a released result
+   *  names and the question ids a review walks. */
+  layout: unknown;
+}
+
+interface AttemptReferenceRow {
+  id: string;
+  workspace_id: string;
+  test_id: string;
+  test_version_id: string;
+  candidate_id: string;
+  external_id: string | null;
+  form_values_json: unknown;
+  submitted_at: number | null;
+  score_json: unknown;
+  layout_json: unknown;
+  settings_json: unknown;
+  sections_json: unknown;
+}
+
+export async function findAttemptByReference(
+  db: DbClient,
+  attemptRef: string,
+): Promise<AttemptReference | null> {
+  const rows = await db.query<AttemptReferenceRow>(
+    "SELECT a.id, a.workspace_id, a.test_version_id, a.candidate_id, a.submitted_at, " +
+      "a.score_json, a.layout_json, " +
+      "c.external_id AS external_id, c.form_values_json AS form_values_json, " +
+      "v.test_id AS test_id, v.settings_json AS settings_json, v.sections_json AS sections_json " +
+      "FROM attempt a JOIN test_version v ON v.id = a.test_version_id " +
+      "JOIN candidate c ON c.id = a.candidate_id " +
+      "WHERE a.id = ?",
+    [attemptRef],
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return {
+    attemptId: row.id,
+    workspaceId: row.workspace_id,
+    testId: row.test_id,
+    testVersionId: row.test_version_id,
+    candidateId: row.candidate_id,
+    externalId: row.external_id,
+    formValues: (db.jsonValue(row.form_values_json) ?? {}) as Record<string, unknown>,
+    submittedAt: row.submitted_at === null ? null : Number(row.submitted_at),
+    score: row.score_json == null ? null : db.jsonValue(row.score_json),
+    settings: db.jsonValue(row.settings_json),
+    sections: db.jsonValue(row.sections_json),
+    layout: db.jsonValue(row.layout_json),
   };
 }
