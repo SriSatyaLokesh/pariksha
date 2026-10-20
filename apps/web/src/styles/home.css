@@ -42,7 +42,23 @@
    green. One source of truth instead of a guard over two. */
 .shell__page:has(> .home) {
   background: var(--ground);
-  height: calc(100dvh - var(--shell-bar));
+  /* `100%` of the grid area, not `100dvh` minus a list of chrome. Fix
+     round 2: the subtraction was right while the shell was bar + page at
+     every width, and wrong the moment 6.5c Task 4 put the rail back on the
+     screen below 719px as a horizontal strip in its own grid row. The page
+     was then ~45px taller than its track, the grid grew past 100dvh, and
+     the document scrolled vertically at phone width — D21's one
+     prohibition — with Home's strip below the fold. Measured in Chrome at
+     360/400/719: `docVertical` 45 before, 0 after.
+
+     `.shell` already computes the track: its page row is `minmax(0, 1fr)`
+     under a `min-height: 100dvh` container, so the track IS the viewport
+     minus whatever chrome exists at this width. Asking the grid for it
+     cannot under-count, where a copied constant drifts the next time a row
+     is added. `min-height: 0` keeps the automatic minimum from putting the
+     content back into the track-sizing it was just taken out of. */
+  height: 100%;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -556,7 +572,7 @@
 @media (max-height: 680px) {
   .shell__page:has(> .home) {
     height: auto;
-    min-height: calc(100dvh - var(--shell-bar));
+    min-height: 100%;
     overflow: visible;
   }
 

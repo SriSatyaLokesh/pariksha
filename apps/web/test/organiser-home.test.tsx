@@ -272,16 +272,34 @@ describe("the agenda is bounded (D6a)", () => {
 });
 
 describe("Home never scrolls, and its panes do (D21)", () => {
-  it("never scrolls the page itself", async () => {
+  // Rewritten in 6.5c Task 4's fix round, because the assertion it replaces
+  // is the one that let the defect through. It asserted the TEXT
+  // `height: …100dvh`, which stayed present and became wrong: the bound
+  // read `calc(100dvh - var(--shell-bar))`, correct while the shell was bar
+  // + page at every width, and 53px short the moment Task 4 put the rail
+  // back on the screen below 719px as a strip in a third grid row. The page
+  // outgrew its track, the grid grew past 100dvh and the document scrolled
+  // vertically at phone width — D21's one prohibition — with this file
+  // green.
+  //
+  // jsdom computes no layout, so the scroll itself cannot be exercised
+  // (AG3): it was measured in Chrome instead, document overflow 45 -> 0 at
+  // 360/400/719, recorded in the task's report. What CAN be asserted here
+  // is the invariant that would have caught it — nothing sizing this page
+  // names a piece of shell chrome or does arithmetic over it. A bound that
+  // has to be re-derived every time the shell gains a row is a bound that
+  // will not be.
+  it("sizes the page from its grid track, never from a copy of the chrome", async () => {
     const { container } = await openHome();
 
     // The element the stylesheet bounds is the element Home renders.
     expect(container.querySelector(".home")).not.toBeNull();
 
-    // The bound is on the PAGE's own border box, so the gutters come out of
-    // it and nothing here restates shell.css's padding.
     const page = declaredFor(".shell__page:has(> .home)");
-    expect(page.some((decl) => /^height:.*100dvh/.test(decl))).toBe(true);
+    const sizing = page.filter((decl) => /^(height|min-height|max-height)\s*:/.test(decl));
+    expect(sizing).not.toHaveLength(0);
+    expect(sizing.filter((decl) => /--shell-|calc\(/.test(decl))).toEqual([]);
+
     expect(page).toContain("overflow: hidden");
     // And nothing reintroduces a second, duplicated bound on the child.
     expect(declaredFor(".shell__page > .home").join(";")).not.toMatch(/max-height/);
@@ -327,7 +345,7 @@ describe("Home never scrolls, and its panes do (D21)", () => {
 
     // The bound relaxes to a minimum, and the clip is lifted with it.
     const page = declaredFor(".shell__page:has(> .home)");
-    expect(page).toContain("min-height: calc(100dvh - var(--shell-bar))");
+    expect(page).toContain("min-height: 100%");
     expect(page).toContain("overflow: visible");
     // The floor becomes an explicit flex basis there: a zero basis in an
     // intrinsically-sized container makes the panes' contribution their

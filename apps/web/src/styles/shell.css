@@ -417,14 +417,26 @@
      Three items at 400px: 3 x ~100px against a 400px viewport, with
      overflow-x on the strip itself so a longer list (Phase 8's Results and
      Grading) scrolls inside the strip rather than taking the page sideways.
-     Inline padding keeps the focus ring off that scroll container's edge. */
+     Padding on both axes keeps the focus ring off that scroll container's
+     edges.
+
+     The strip does NOT stick, and the base rule's `position: sticky` is
+     inert here rather than load-bearing: a grid item's sticky constraint
+     rect is its grid area, and an `auto` row is exactly as tall as the
+     item, so there is no slack to move in. Persistence at phone width is
+     the bar's job alone — the strip scrolls away with the page, and the
+     wordmark in the bar remains the way Home. Restating the two
+     declarations here would have claimed otherwise (fix round 1). */
   .shell__rail {
-    position: sticky;
-    inset-block-start: var(--shell-bar);
     max-height: none;
     border-inline-end: 0;
     border-block-end: 1px solid var(--edge);
-    padding-block: 0;
+    /* Both axes, not just the inline one. `overflow-x: auto` computes
+       `overflow-y` to `auto` as well (this file's own header says so), so
+       the strip is a scroll container on both axes and would cut the
+       `box-shadow: 0 0 0 3px` focus ring off the top and bottom of a 44px
+       item. Fix round 1. */
+    padding-block: var(--space-xs);
     padding-inline: var(--space-base);
     overflow-x: auto;
     overflow-y: hidden;
@@ -475,6 +487,40 @@
     width: auto;
     height: 3px;
     border-radius: 2px 2px 0 0;
+  }
+
+  /* The bar's own minimum width, measured in Chrome rather than estimated
+     (fix round 1). At 320px the two-membership bar needed 333px and pushed
+     Sign out off the screen — a horizontal document scroll the
+     one-membership shape does not have, and WCAG 2.1 SC 1.4.10 Reflow is
+     measured at 320px. Three declarations recover 13px of it, and they are
+     the three that cost nothing at phone width:
+
+     the separator, whose only job is dividing the workspace name from the
+     wordmark, and whose name is clipped here anyway, so the select's own
+     border already does the dividing;
+
+     the select's inline padding, one step down the component scale;
+
+     the bar's gap, likewise one step down, which at this width separates
+     three items rather than four.
+
+     Measured after: 320/360/400 all at zero horizontal overflow with Sign
+     out whole and on screen, in both membership shapes, at 100% AND 200%
+     root font size. The 4rem floor is what buys the 200% case — 6rem
+     doubles to 192px and the bar overflows again at 320. */
+  .shell__bar {
+    gap: var(--space-base);
+  }
+
+  .shell__switcher {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+
+  .shell__switcher-select {
+    min-width: 4rem;
+    padding-inline: var(--space-xs);
   }
 
   /* D4b: the "Workspace" label is clipped to the accessibility tree, never
