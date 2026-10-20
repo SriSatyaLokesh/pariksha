@@ -11,8 +11,20 @@ import {
 } from "../src/styles/tokens";
 // Fix round 1: one `@import` resolver for the suite — this file had
 // the only correct one, and Task 7's no-animation gate grew a
-// narrower copy. Both call `test/css-chain.ts` now.
-import { readResolvedCss } from "./css-chain";
+// narrower copy. Both call `test/css-chain.ts` now. Phase 6.5b Task 3:
+// `parseRuleBodies`/`declarations` moved there for the same reason, so
+// theme.test.ts could read theme.css with this file's parser rather than a
+// second one.
+import {
+  declarations,
+  parseRuleBodies,
+  readResolvedCss,
+  readThemeMap,
+  organiserStylesheets,
+  SEMANTIC_NAMES,
+  GROUNDS,
+  type Ground,
+} from "./css-chain";
 
 // The Signal rebuild replaced landing.css's own rules with two imports —
 // primitives.css (shared with admin.css; five selectors still used by the
@@ -52,6 +64,12 @@ const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 // clears the same bar — in the phase where it matters most, because a
 // candidate under a clock cannot switch tools or come back tomorrow.
 const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
+// Phase 6.5b Task 3: the SURFACE sweep below still reads only the three
+// stylesheet entries it always has — testbuilder.css's selectors have never
+// been in it, which is a gap this task does not close — but the standing
+// guards at the foot of this file are file scans, not SURFACE walks, and
+// they read every stylesheet admin-main.tsx loads, derived from that file by
+// `organiserStylesheets()` rather than listed here (fix round 4, finding 3).
 
 // landing.css no longer carries any component's rules itself (besides the
 // five "reused unchanged" ones, §6) — it only @imports the files that do.
@@ -73,117 +91,135 @@ const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
 // (the four syntax-colour roles and the code block they live in, A3's
 // explicit requirement) — SURFACE may name one background or several, and
 // every one gets its own WCAG assertion below.
-const SURFACE: Record<string, ColorName | ColorName[]> = {
+//
+// Phase 6.5b Task 3 (D20): the organiser ships on two grounds and a control
+// in the top bar switches them, so a background is a fact about a selector
+// AND a ground. Every entry now names one per ground. This plan re-grounds
+// no screen — 6.5c, 6.5d and 6.5e do, one screen at a time — so today every
+// entry carries the same colour on both, written `both(...)`; differentiating
+// one is a matter of replacing that call with an explicit `{ dark, light }`.
+interface SurfaceEntry {
+  dark: ColorName | ColorName[];
+  light: ColorName | ColorName[];
+}
+
+/** A selector whose background is the same colour whichever ground is on. */
+function both(first: ColorName, ...rest: ColorName[]): SurfaceEntry {
+  const value = rest.length === 0 ? first : [first, ...rest];
+  return { dark: value, light: value };
+}
+
+const SURFACE: Record<string, SurfaceEntry> = {
   // ---- signal.css: ambient type ------------------------------------------
   // The whole page sits on --color-signal-bg; every surface panel, card or
   // frame sets its own --color-signal-surface, and the cost section's four
   // metric cells are the one place --color-signal-bg-2 shows.
-  ".signal": "signal-bg",
-  ":where(.signal) p": "signal-bg",
-  ":where(.signal) strong": ["signal-bg", "signal-surface"],
-  ":where(.signal) code": ["signal-bg", "signal-surface"],
-  ":where(.signal) a": "signal-bg",
+  ".signal": both("signal-bg"),
+  ":where(.signal) p": both("signal-bg"),
+  ":where(.signal) strong": both("signal-bg", "signal-surface"),
+  ":where(.signal) code": both("signal-bg", "signal-surface"),
+  ":where(.signal) a": both("signal-bg"),
 
   // ---- signal.css: fine print, eyebrows, the accent spans and icons ------
-  ".signal-fine": ["signal-bg", "signal-surface"],
-  ".signal-eyebrow": "signal-bg",
+  ".signal-fine": both("signal-bg", "signal-surface"),
+  ".signal-eyebrow": both("signal-bg"),
   // The h1's accent word and the bullet ticks (not-a-form) sit on signal-bg;
   // the type-rail cards' svg icons (same class, A3-style reuse) sit on each
   // card's own signal-surface fill.
-  ".signal-accent-word": ["signal-bg", "signal-surface"],
+  ".signal-accent-word": both("signal-bg", "signal-surface"),
 
   // ---- signal.css: actions -------------------------------------------------
   // .signal-btn sets its own background (signal-accent); .signal-btn--ghost
   // sets background: none, so the ghost CTA (hero, close) renders on the
   // ambient signal-bg behind it.
-  ".signal-btn": "signal-accent",
-  ".signal-btn--ghost": "signal-bg",
+  ".signal-btn": both("signal-accent"),
+  ".signal-btn--ghost": both("signal-bg"),
 
   // ---- signal.css: nav ----------------------------------------------------
-  ".signal-wordmark__sub": "signal-bg",
-  ".signal-nav__links a": "signal-bg",
-  ".signal-nav__links a:hover": "signal-bg",
+  ".signal-wordmark__sub": both("signal-bg"),
+  ".signal-nav__links a": both("signal-bg"),
+  ".signal-nav__links a:hover": both("signal-bg"),
 
   // ---- signal.css: hero trust list and the frame (what stands in for a
   // screenshot) --------------------------------------------------------------
-  ".signal-trust li": "signal-bg",
-  ".signal-trust li b": "signal-bg",
-  ".signal-frame__url": "signal-surface",
+  ".signal-trust li": both("signal-bg"),
+  ".signal-trust li b": both("signal-bg"),
+  ".signal-frame__url": both("signal-surface"),
 
   // ---- signal.css: chips. The hero's tag filter and the status toggle
   // both reuse this class — one on signal-surface (inside .signal-frame),
   // the other directly on the section's signal-bg. The pressed state sets
   // its own background (signal-accent) regardless of which. ----------------
-  ".signal-chip": ["signal-bg", "signal-surface"],
-  ".signal-chip:hover": ["signal-bg", "signal-surface"],
-  '.signal-chip[aria-pressed="true"]': "signal-accent",
+  ".signal-chip": both("signal-bg", "signal-surface"),
+  ".signal-chip:hover": both("signal-bg", "signal-surface"),
+  '.signal-chip[aria-pressed="true"]': both("signal-accent"),
 
   // ---- signal.css: the draw (hero frame and the not-a-form panel both
   // reuse .signal-row — both are signal-surface) ---------------------------
-  ".signal-row b": "signal-surface",
-  ".signal-row span": "signal-surface",
-  ".signal-row em": "signal-surface",
-  ".signal-ghost-btn": "signal-surface",
-  ".signal-ghost-btn:hover": "signal-surface",
+  ".signal-row b": both("signal-surface"),
+  ".signal-row span": both("signal-surface"),
+  ".signal-row em": both("signal-surface"),
+  ".signal-ghost-btn": both("signal-surface"),
+  ".signal-ghost-btn:hover": both("signal-surface"),
 
   // ---- signal.css: cards (the type rail) ---------------------------------
-  ".signal-card p": "signal-surface",
+  ".signal-card p": both("signal-surface"),
 
   // ---- signal.css: the FAQ accordion, ambient on signal-bg ---------------
   // <details name="faq"> items sit directly on the page ground; nothing
   // between them and .signal paints a surface of its own.
-  ".signal-faq__q h3": "signal-bg",
+  ".signal-faq__q h3": both("signal-bg"),
   '.signal-faq__q:hover h3, .signal-faq__item[open] > .signal-faq__q h3':
-    "signal-bg",
-  ".signal-faq__a": "signal-bg",
+    both("signal-bg"),
+  ".signal-faq__a": both("signal-bg"),
 
   // ---- signal.css: not-a-form's bullet list, ambient on signal-bg --------
-  ".signal-bullets li": "signal-bg",
-  ".signal-bullets b": "signal-bg",
+  ".signal-bullets li": both("signal-bg"),
+  ".signal-bullets b": both("signal-bg"),
 
   // ---- signal.css: panels and data (the not-a-form panel and the
   // integrity results table both sit in a .signal-panel, signal-surface) ---
-  ".signal-panel__head": "signal-surface",
-  ".signal-panel__head b": "signal-surface",
-  ".signal-table th": "signal-surface",
-  ".signal-table td": "signal-surface",
-  ".signal-table .signal-td-name": "signal-surface",
-  ".signal-table .signal-td-num": "signal-surface",
+  ".signal-panel__head": both("signal-surface"),
+  ".signal-panel__head b": both("signal-surface"),
+  ".signal-table th": both("signal-surface"),
+  ".signal-table td": both("signal-surface"),
+  ".signal-table .signal-td-name": both("signal-surface"),
+  ".signal-table .signal-td-num": both("signal-surface"),
   // flag-review/flag-risk are tuned for admin.css's light canvas and can't
   // also clear 4.5:1 on this dark surface (no single hex clears both a
   // near-white and a near-black background) — these two signal-native
   // tokens complete the pattern .signal-pill--clean already set with
   // signal-accent instead of flag-clean.
-  ".signal-pill--clean": "signal-surface",
-  ".signal-pill--review": "signal-surface",
-  ".signal-pill--risk": "signal-surface",
+  ".signal-pill--clean": both("signal-surface"),
+  ".signal-pill--review": both("signal-surface"),
+  ".signal-pill--risk": both("signal-surface"),
 
   // ---- signal.css: cost section's metric cells (signal-bg-2) -------------
-  ".signal-metric b": "signal-bg-2",
-  ".signal-metric span": "signal-bg-2",
+  ".signal-metric b": both("signal-bg-2"),
+  ".signal-metric span": both("signal-bg-2"),
 
   // ---- signal.css: the comparison table, directly on the section
   // (signal-bg, no panel wraps it) ------------------------------------------
-  ".signal-cmp th": "signal-bg",
-  ".signal-cmp th:last-child": "signal-bg",
-  ".signal-cmp td": "signal-bg",
-  ".signal-cmp td:first-child": "signal-bg",
-  ".signal-cmp td:last-child": "signal-bg",
+  ".signal-cmp th": both("signal-bg"),
+  ".signal-cmp th:last-child": both("signal-bg"),
+  ".signal-cmp td": both("signal-bg"),
+  ".signal-cmp td:first-child": both("signal-bg"),
+  ".signal-cmp td:last-child": both("signal-bg"),
 
   // ---- signal.css: status. The live/next lists sit in the left column,
   // directly on signal-bg; "what you can do today" is its own
   // signal-surface card. ----------------------------------------------------
-  ".signal-list li": "signal-bg",
+  ".signal-list li": both("signal-bg"),
   // Never actually rendered in the current markup (no <b> inside either
   // <ul class="signal-list">) — kept at the list's own surface so the rule
   // has a real assertion if a future list item adds one.
-  ".signal-list b": "signal-bg",
-  ".signal-today li": "signal-surface",
-  ".signal-today li b": "signal-surface",
+  ".signal-list b": both("signal-bg"),
+  ".signal-today li": both("signal-surface"),
+  ".signal-today li b": both("signal-surface"),
 
   // ---- signal.css: footer, directly on signal-bg (no panel wraps it) -----
-  ".signal-footer__grid h2, .signal-footer__grid h3": "signal-bg",
-  ".signal-footer__grid p": "signal-bg",
+  ".signal-footer__grid h2, .signal-footer__grid h3": both("signal-bg"),
+  ".signal-footer__grid p": both("signal-bg"),
 
   // ---- primitives.css: shared by landing.css and admin.css (P3.9) --------
   // No longer used by the landing page itself — confirmed absent from
@@ -191,11 +227,11 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // screens still render these, via ButtonPrimary/ButtonSecondary (routes/
   // dashboard.tsx, setup.tsx, signin.tsx), so they keep exactly their
   // original classification.
-  ".mono-caption": "cream",
-  ".button-primary": "cream",
-  ".button-primary:hover, .button-primary:focus-visible": "voltage-deep",
-  ".button-primary--surface": "voltage-deep",
-  ".button-secondary": "canvas",
+  ".mono-caption": both("cream"),
+  ".button-primary": both("cream"),
+  ".button-primary:hover, .button-primary:focus-visible": both("voltage-deep"),
+  ".button-primary--surface": both("voltage-deep"),
+  ".button-secondary": both("canvas"),
 
   // ---- admin.css: the organiser screens (P3.9) ---------------------------
   // The page is the body's cream; every panel is a CardHairline, which sets
@@ -204,23 +240,23 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // surfaces, hairline rules" — is the whole palette here; voltage survives
   // only on the primary action (.button-primary--surface, already above)
   // and the focus ring (base.css).
-  ".organiser__title": "cream",
-  ".organiser__lead": "cream",
-  ".organiser-bar__mark": "canvas",
-  ".organiser__notice": "canvas",
-  ".organiser__status": "canvas",
-  ".organiser-empty__title": "canvas",
-  ".organiser-empty__body": "canvas",
+  ".organiser__title": both("cream"),
+  ".organiser__lead": both("cream"),
+  ".organiser-bar__mark": both("canvas"),
+  ".organiser__notice": both("canvas"),
+  ".organiser__status": both("canvas"),
+  ".organiser-empty__title": both("canvas"),
+  ".organiser-empty__body": both("canvas"),
   // registration.css, which admin.css and exam.css both import (Phase 6
   // Task 6, #70): one renderer, so one stylesheet, read on canvas in both
   // places — the organiser's CardHairline panel fills itself with canvas,
   // and so does the candidate's `.exam-register-panel`.
-  ".field-label": "canvas",
-  ".field-help": "canvas",
-  ".field-error": "canvas",
-  ".text-input": "canvas",
-  ".registration-form__help, .registration-form__legend": "canvas",
-  ".registration-form__error": "canvas",
+  ".field-label": both("canvas"),
+  ".field-help": both("canvas"),
+  ".field-error": both("canvas"),
+  ".text-input": both("canvas"),
+  ".registration-form__help, .registration-form__legend": both("canvas"),
+  ".registration-form__error": both("canvas"),
 
   // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
   // Same palette and the same reasoning: the editor and the preview are
@@ -229,11 +265,11 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // Phase 6 Task 7 (#71): the candidate runtime now renders every prompt
   // through the same component, and the runner's ground is the page's own
   // cream rather than a card's canvas.
-  ".rendered--stem": ["canvas", "cream"],
-  ".prompt-editor__tool": "canvas",
-  ".prompt-editor__source": "canvas",
-  ".preview__heading": "canvas",
-  ".preview__toggle": "canvas",
+  ".rendered--stem": both("canvas", "cream"),
+  ".prompt-editor__tool": both("canvas"),
+  ".prompt-editor__source": both("canvas"),
+  ".preview__heading": both("canvas"),
+  ".preview__toggle": both("canvas"),
 
   // ---- authoring.css: the bank list and bank browser (P4.2) --------------
   // The list and the browser are both the page's own cream, same as the
@@ -241,12 +277,12 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // the only two elements here that fill themselves with canvas (the same
   // "card on the page" pattern CardHairline uses), so everything else reads
   // on cream.
-  ".bank-list__item": "canvas",
-  ".bank-list__count": "canvas",
-  ".bank-browser__group-label": "cream",
-  ".bank-browser__tag-chip": "canvas",
-  ".bank-browser__notice": "cream",
-  ".bank-browser__empty": "cream",
+  ".bank-list__item": both("canvas"),
+  ".bank-list__count": both("canvas"),
+  ".bank-browser__group-label": both("cream"),
+  ".bank-browser__tag-chip": both("canvas"),
+  ".bank-browser__notice": both("cream"),
+  ".bank-browser__empty": both("cream"),
 
   // ---- exam.css: the candidate runtime (Phase 6 Task 1, #65) -------------
   // DESIGN.md's two canvases. The landing hero is the full-bleed voltage
@@ -259,30 +295,30 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // declared on the <h1> (beside its own font-size) rather than on the
   // container, where a later paragraph would inherit it silently. This
   // entry is what stops that from being a comment nobody enforces.
-  ".exam-landing-hero h1": "voltage",
-  ".exam-facts dt": "cream",
-  ".exam-section-count, .exam-section-limit": "cream",
+  ".exam-landing-hero h1": both("voltage"),
+  ".exam-facts dt": both("cream"),
+  ".exam-section-count, .exam-section-limit": both("cream"),
   // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
   // not voltage — a button label is body text and gets the 4.5:1 bar.
-  ".exam-landing-actions .exam-start": "voltage-deep",
+  ".exam-landing-actions .exam-start": both("voltage-deep"),
   // The disabled state fills itself with the page's own canvas in both
   // themes (fix round 1, C1 — it used to fill itself with `hairline`,
   // which the high-contrast block swaps to `ink`).
-  ".exam-landing-actions button:disabled": "canvas",
+  ".exam-landing-actions button:disabled": both("canvas"),
   // The device report sits on the page's own cream, like everything else
   // in `.exam-landing-body`.
-  '.exam-device-report li[data-ok="false"] .exam-finding-mark': "cream",
-  '.exam-device-report li[data-ok="true"] .exam-finding-mark': "cream",
-  ".exam-landing-footer": "cream",
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': both("cream"),
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("cream"),
+  ".exam-landing-footer": both("cream"),
 
   // ---- exam.css: registration (C-02/C-03, Task 6). The alert sits on the
   // page's own cream, above the panel; everything inside the panel is on
   // the canvas it fills itself with, which is the same ground the same
   // renderer is read on in the organiser app. -----------------------------
-  ".exam-register-notice": "cream",
-  ".exam-register-status": "canvas",
-  ".exam-register-submit": "voltage-deep",
-  ".exam-register-submit:disabled, .exam-register-secondary:disabled": "canvas",
+  ".exam-register-notice": both("cream"),
+  ".exam-register-status": both("canvas"),
+  ".exam-register-submit": both("voltage-deep"),
+  ".exam-register-submit:disabled, .exam-register-secondary:disabled": both("canvas"),
 
   // ---- exam.css: the test runner (Phase 6 Task 6, #70) -------------------
   // DESIGN.md, "The clock kills the canvas": the runner is cream and ink.
@@ -296,23 +332,23 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // RAISES the ratio (hairlines to ink, cream to white, muted to
   // ink-soft). The default theme audited below is therefore the floor,
   // not an average.
-  ".exam-skip": "canvas",
-  ".exam-font-scale legend, .exam-view-choice": "cream",
-  ".exam-contrast-switch, .exam-calc-open, .exam-button, .exam-clear": "canvas",
-  '.exam-contrast-switch[aria-checked="true"]': "cream",
-  '.exam-button[aria-pressed="true"]': "canvas",
-  ".exam-button:disabled": "canvas",
-  ".exam-clear": "canvas",
-  ".exam-question-stem": "cream",
+  ".exam-skip": both("canvas"),
+  ".exam-font-scale legend, .exam-view-choice": both("cream"),
+  ".exam-contrast-switch, .exam-calc-open, .exam-button, .exam-clear": both("canvas"),
+  '.exam-contrast-switch[aria-checked="true"]': both("cream"),
+  '.exam-button[aria-pressed="true"]': both("canvas"),
+  ".exam-button:disabled": both("canvas"),
+  ".exam-clear": both("canvas"),
+  ".exam-question-stem": both("cream"),
   // The save banner (Task 8). Four state selectors, each setting its own
   // colour next to its own size and weight, on the runner bar — which
   // fills nothing, so the ground is the page's cream. The mono mark
   // inside inherits each of these and renders at 12px/700, below the
   // large-text floor, so it is held to the same 4.5:1 these are.
-  '.exam-save-banner[data-state="saving"]': "cream",
-  '.exam-save-banner[data-state="saved"]': "cream",
-  '.exam-save-banner[data-state="offline"]': "cream",
-  '.exam-save-banner[data-state="refused"]': "cream",
+  '.exam-save-banner[data-state="saving"]': both("cream"),
+  '.exam-save-banner[data-state="saved"]': both("cream"),
+  '.exam-save-banner[data-state="offline"]': both("cream"),
+  '.exam-save-banner[data-state="refused"]': both("cream"),
   // The countdown (Task 9). `.exam-timer` fills itself with cream
   // (DESIGN.md's `timer-chip`), so every colour inside it renders on
   // cream — including the urgent swap, the one colour change DESIGN.md
@@ -320,43 +356,43 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // bar, which fills nothing, so it is on the page's cream too. The mark
   // renders at 12px/700, below the large-text floor, and is held to the
   // same 4.5:1 as everything else here.
-  ".exam-timer-label": "cream",
-  ".exam-timer-value": "cream",
-  ".exam-timer-mark": "cream",
-  ".exam-timer.timer-chip-urgent .exam-timer-value": "cream",
-  ".exam-clock-announce": "cream",
-  ".exam-confirm": "canvas",
-  ".exam-confirm-danger": "canvas",
+  ".exam-timer-label": both("cream"),
+  ".exam-timer-value": both("cream"),
+  ".exam-timer-mark": both("cream"),
+  ".exam-timer.timer-chip-urgent .exam-timer-value": both("cream"),
+  ".exam-clock-announce": both("cream"),
+  ".exam-confirm": both("canvas"),
+  ".exam-confirm-danger": both("canvas"),
 
   // ---- exam.css: submitting, and the finish page (Task 11, #75) ---------
   // The one primary action in the runner fills itself with voltage-deep
   // and writes in cream; disabled it falls back to the bar's own cream
   // ground. The refusal sentence sits in the bar beside it.
-  ".exam-submit": "voltage-deep",
-  ".exam-submit:disabled": "canvas",
-  ".exam-submit-error": "cream",
+  ".exam-submit": both("voltage-deep"),
+  ".exam-submit:disabled": both("canvas"),
+  ".exam-submit-error": both("cream"),
   // The result, on the finish page's cream body. The verdict chip and
   // every review card paint their own canvas first; the table and the
   // pending note sit directly on cream.
-  ".exam-verdict": "canvas",
-  ".exam-verdict[data-passed=\"false\"]": "canvas",
-  ".exam-result-pending": "cream",
-  ".exam-result-table caption": "cream",
-  ".exam-result-table thead th": "cream",
-  ".exam-review-number": "canvas",
+  ".exam-verdict": both("canvas"),
+  ".exam-verdict[data-passed=\"false\"]": both("canvas"),
+  ".exam-result-pending": both("cream"),
+  ".exam-result-table caption": both("cream"),
+  ".exam-result-table thead th": both("cream"),
+  ".exam-review-number": both("canvas"),
   // DESIGN.md's `palette-square` family. Each variant fills itself from
   // its own state token and writes the number in cream; the default and
   // the "you are here" ring sit on the square's own canvas.
-  ".palette-square": "canvas",
-  ".palette-square.is-filled": "state-answered",
-  ".palette-square.has-notch": "state-marked",
-  ".palette-square.has-ring": "canvas",
-  ".palette-square.has-lock": "state-locked",
+  ".palette-square": both("canvas"),
+  ".palette-square.is-filled": both("state-answered"),
+  ".palette-square.has-notch": both("state-marked"),
+  ".palette-square.has-ring": both("canvas"),
+  ".palette-square.has-lock": both("state-locked"),
   // Why the locked squares are locked (Task 10). Under the rail, on the
   // page's own cream.
-  ".exam-palette-reason": "cream",
-  ".exam-calc-display": "canvas",
-  ".exam-calc-key, .exam-calc-close": "canvas",
+  ".exam-palette-reason": both("cream"),
+  ".exam-calc-display": both("canvas"),
+  ".exam-calc-key, .exam-calc-close": both("canvas"),
 
   // ---- exam.css: the answer block (Phase 6 Task 7, #71) ------------------
   // The runner's own ground is the cream base.css paints on <body>; every
@@ -364,25 +400,25 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   // inline blanks) reads on its own canvas fill, and that fill is what is
   // named here. Both grounds are re-audited under the high-contrast swap
   // by the block at the foot of this file.
-  ".exam-assertion-reason dt": "cream",
-  ".exam-options-legend": "cream",
-  ".exam-answer-status": "cream",
-  ".exam-option-row": "canvas",
+  ".exam-assertion-reason dt": both("cream"),
+  ".exam-options-legend": both("cream"),
+  ".exam-answer-status": both("cream"),
+  ".exam-option-row": both("canvas"),
   // DESIGN.md's option-row-selected fills itself with cream.
-  ".exam-option-row.is-selected": "cream",
+  ".exam-option-row.is-selected": both("cream"),
   // Disabled fills itself with the page's own canvas in BOTH themes, with
   // a dashed edge carrying the de-emphasis — the fix round 1 C1 rule.
-  ".exam-option-row:has(input:disabled)": "canvas",
-  ".exam-match-left": "canvas",
-  ".exam-match-caption": "cream",
-  ".exam-select, .exam-text-input, .exam-text-area": "canvas",
-  ".exam-select:disabled, .exam-text-input:disabled, .exam-text-area:disabled": "canvas",
-  ".exam-field-label": "cream",
-  ".exam-unit": "cream",
+  ".exam-option-row:has(input:disabled)": both("canvas"),
+  ".exam-match-left": both("canvas"),
+  ".exam-match-caption": both("cream"),
+  ".exam-select, .exam-text-input, .exam-text-area": both("canvas"),
+  ".exam-select:disabled, .exam-text-input:disabled, .exam-text-area:disabled": both("canvas"),
+  ".exam-field-label": both("cream"),
+  ".exam-unit": both("cream"),
   // The blanks are interleaved into the prompt, which sits on the page.
-  ".exam-blanks": "cream",
-  ".exam-blank-input": "canvas",
-  ".exam-blank-input:disabled": "canvas",
+  ".exam-blanks": both("cream"),
+  ".exam-blank-input": both("canvas"),
+  ".exam-blank-input:disabled": both("canvas"),
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
@@ -537,40 +573,6 @@ const WRAPPER_SELECTORS_WITH_NO_OWN_TEXT = new Set([
   ".card-hairline", // every usage wraps only child elements, never bare text
 ]);
 
-function parseRuleBodies(
-  css: string,
-): Array<{ selector: string; body: string }> {
-  const rules: Array<{ selector: string; body: string }> = [];
-  let i = 0;
-  while (i < css.length) {
-    const openIdx = css.indexOf("{", i);
-    if (openIdx === -1) break;
-    const selector = css.slice(i, openIdx).replace(/\s+/g, " ").trim();
-    let depth = 1;
-    let j = openIdx + 1;
-    while (depth > 0 && j < css.length) {
-      if (css[j] === "{") depth++;
-      else if (css[j] === "}") depth--;
-      j++;
-    }
-    const body = css.slice(openIdx + 1, j - 1);
-    if (selector.startsWith("@media")) {
-      rules.push(...parseRuleBodies(body));
-    } else if (selector && !selector.startsWith("@")) {
-      rules.push({ selector, body });
-    }
-    i = j;
-  }
-  return rules;
-}
-
-function declarations(body: string): string[] {
-  return body
-    .split(";")
-    .map((decl) => decl.trim())
-    .filter(Boolean);
-}
-
 function findDeclaration(body: string, property: string): string | null {
   const decl = declarations(body).find((d) =>
     new RegExp(`^${property}\\s*:`, "i").test(d),
@@ -583,13 +585,28 @@ const COLOR_VAR_RE = /^var\(--color-([a-z0-9-]+)\)$/i;
 const TYPE_SIZE_VAR_RE = /var\(--type-([a-z0-9-]+)-size\)/i;
 const TYPE_WEIGHT_VAR_RE = /var\(--type-([a-z0-9-]+)-weight\)/i;
 
-function parseColor(body: string): ColorName | null {
-  const value = findDeclaration(body, "color");
-  if (!value) return null;
-  const match = COLOR_VAR_RE.exec(value);
-  const name = match?.[1];
+// Phase 6.5b Task 3. theme.css maps a semantic name — `--ink`, `--accent` —
+// to a different palette token on each ground, so a rule that reads one
+// resolves to a different colour per ground and has to be scored twice.
+// Nothing in the bundle reads a semantic name yet (6.5c/d/e are what put
+// them there); this is the hook that makes the doubled sweep load-bearing
+// the day the first rule lands, instead of a second pass over this file.
+const THEME = readThemeMap();
+const SEMANTIC_VAR_RE = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i;
+
+/** `value` as a token name on `ground`, through theme.css where it applies. */
+function colorNameOf(value: string, ground: Ground): ColorName | null {
+  const semantic = SEMANTIC_VAR_RE.exec(value)?.[1];
+  const mapped = semantic === undefined ? undefined : THEME[ground][semantic];
+  const name = COLOR_VAR_RE.exec(mapped ?? value)?.[1];
   if (!name || !(name in tokens.colors)) return null;
   return name as ColorName;
+}
+
+function parseColor(body: string, ground: Ground): ColorName | null {
+  const value = findDeclaration(body, "color");
+  if (!value) return null;
+  return colorNameOf(value, ground);
 }
 
 function lengthToPx(literal: string): number | null {
@@ -649,18 +666,22 @@ interface Resolved {
   weight: number;
 }
 
-function surfacesOf(selector: string): ColorName[] {
-  const value = SURFACE[selector];
-  if (value === undefined) {
+function surfacesOf(selector: string, ground: Ground): ColorName[] {
+  const entry = SURFACE[selector];
+  // Still thrown, and still the point: a selector whose colour is set on one
+  // ground and inherited on the other has no entry here, and must fail loudly
+  // rather than be silently skipped.
+  if (entry === undefined) {
     throw new Error(`no SURFACE entry for ${selector}`);
   }
+  const value = entry[ground];
   return Array.isArray(value) ? value : [value];
 }
 
 let colorSelectors: string[];
 let ruleBodies: Map<string, string>;
 let resolutionErrors: string[];
-let resolved: Map<string, Resolved>;
+let resolved: Record<Ground, Map<string, Resolved>>;
 
 beforeAll(() => {
   // P3.9: the organiser screens are a second real stylesheet entry
@@ -692,18 +713,10 @@ ${readResolvedCss(EXAM_CSS_PATH, seen)}`;
     .map((rule) => rule.selector);
 
   resolutionErrors = [];
-  resolved = new Map();
+  resolved = { dark: new Map(), light: new Map() };
   for (const selector of colorSelectors) {
     if (WRAPPER_SELECTORS_WITH_NO_OWN_TEXT.has(selector)) continue;
     const body = ruleBodies.get(selector) ?? "";
-
-    const fg = parseColor(body);
-    if (!fg) {
-      resolutionErrors.push(
-        `${selector}: cannot parse a var(--color-*) foreground from its own color declaration`,
-      );
-      continue;
-    }
 
     if (!(selector in SURFACE)) {
       resolutionErrors.push(`${selector}: missing a SURFACE entry`);
@@ -725,7 +738,16 @@ ${readResolvedCss(EXAM_CSS_PATH, seen)}`;
     // for every selector below — none do).
     const weight = parseFontWeight(body) ?? fallback?.weight ?? 400;
 
-    resolved.set(selector, { fg, px, weight });
+    for (const ground of GROUNDS) {
+      const fg = parseColor(body, ground);
+      if (!fg) {
+        resolutionErrors.push(
+          `${selector} (${ground}): cannot parse a var(--color-*) foreground from its own color declaration`,
+        );
+        continue;
+      }
+      resolved[ground].set(selector, { fg, px, weight });
+    }
   }
 });
 
@@ -822,17 +844,35 @@ describe('exam.css with data-contrast="high" clears the same bar (C1)', () => {
       ...new Set(
         Object.keys(SURFACE)
           .filter((selector) => EXAM_SELECTORS.has(selector))
-          .flatMap((selector) => surfacesOf(selector)),
+          .flatMap((selector) => surfacesOf(selector, "dark")),
       ),
     ].filter((bg) => bg in HIGH_CONTRAST);
     expect(swappedGrounds.length).toBeGreaterThan(0);
   });
 
+  it("exam.css resolves identically on both grounds, so reading one is enough", () => {
+    // The sweep below reads the `dark` ground only. That is not a shortcut:
+    // the candidate runtime carries no `data-theme` switch — D20's two
+    // grounds are the organiser's — and exam.css reads no semantic name, so
+    // every entry it owns resolves the same either way. Asserted rather than
+    // claimed, because the day a candidate screen does read one, this is
+    // what says so.
+    const differing = [...EXAM_SELECTORS].filter((selector) => {
+      const entry = SURFACE[selector];
+      if (entry === undefined) return false;
+      return (
+        JSON.stringify(entry.dark) !== JSON.stringify(entry.light) ||
+        resolved.dark.get(selector)?.fg !== resolved.light.get(selector)?.fg
+      );
+    });
+    expect(differing).toEqual([]);
+  });
+
   for (const selector of Object.keys(SURFACE)) {
     if (!EXAM_SELECTORS.has(selector)) continue;
-    for (const bg of surfacesOf(selector)) {
+    for (const bg of surfacesOf(selector, "dark")) {
       it(`${selector} on ${bg} clears its WCAG threshold in high contrast`, () => {
-        const usage = resolved.get(selector);
+        const usage = resolved.dark.get(selector);
         expect(usage, `${selector} did not resolve`).toBeDefined();
         if (!usage) return;
         const fg = underHighContrast(usage.fg);
@@ -852,30 +892,342 @@ describe('exam.css with data-contrast="high" clears the same bar (C1)', () => {
 });
 
 describe("every colour-on-surface usage clears its real WCAG threshold", () => {
-  it("resolved at least one usage (sanity: the suite above isn't vacuous)", () => {
-    expect(resolved.size).toBeGreaterThan(0);
+  it("resolved at least one usage on each ground (sanity: not vacuous)", () => {
+    for (const ground of GROUNDS) {
+      expect(resolved[ground].size, ground).toBeGreaterThan(0);
+    }
   });
 
-  for (const selector of Object.keys(SURFACE)) {
-    for (const bg of surfacesOf(selector)) {
-      it(`${selector} on ${bg} clears its WCAG threshold`, () => {
-        const usage = resolved.get(selector);
-        // Only reachable if the resolution-errors test above is already
-        // failing; asserting here too gives a usage-level failure message.
-        expect(usage, `${selector} did not resolve`).toBeDefined();
-        if (!usage) return;
-        const threshold =
-          usage.px >= 24 || (usage.px >= 18.66 && usage.weight >= 700)
-            ? 3
-            : 4.5;
-        const ratio = contrastRatio(tokens.colors[usage.fg], tokens.colors[bg]);
+  for (const ground of GROUNDS) {
+    for (const selector of Object.keys(SURFACE)) {
+      for (const bg of surfacesOf(selector, ground)) {
+        it(`[${ground}] ${selector} on ${bg} clears its WCAG threshold`, () => {
+          const usage = resolved[ground].get(selector);
+          // Only reachable if the resolution-errors test above is already
+          // failing; asserting here too gives a usage-level failure message.
+          expect(usage, `${selector} did not resolve`).toBeDefined();
+          if (!usage) return;
+          const threshold =
+            usage.px >= 24 || (usage.px >= 18.66 && usage.weight >= 700)
+              ? 3
+              : 4.5;
+          const ratio = contrastRatio(
+            tokens.colors[usage.fg],
+            tokens.colors[bg],
+          );
+          expect(
+            ratio,
+            `${selector} on ${bg} (${ground}): ${usage.fg} on ${bg} at ${usage.px}px/${usage.weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
+          ).toBeGreaterThanOrEqual(threshold);
+        });
+      }
+    }
+  }
+});
+
+// ---------------------------------------------------------------------------
+// theme.css's own mapping, scored on each ground (Phase 6.5b Task 3).
+//
+// This plan re-grounds no screen, so every SURFACE entry above carries the
+// same colour on both grounds and the doubled sweep computes the same number
+// twice. True, and proof of nothing — exactly the AG3 shape the spec forbids.
+// What the second ground is FOR is the mapping itself: the ink, accent and
+// edge roles theme.css hands 6.5c, 6.5d and 6.5e, each scored against the
+// ground it will actually be read on.
+//
+// D1's mistake is a mapping mistake. `signal-accent #19e68c` is 1.60:1 on
+// cream — illegal as text and as a border — so a light block that reached for
+// the dark accent would hand three later plans an illegal pair and every
+// screen built on it would be wrong. This is where that is caught, before the
+// stylesheets that would make it exist.
+const THEME_INK_ROLES = ["--ink", "--ink-2", "--ink-3", "--accent", "--warn", "--risk"];
+const THEME_GROUNDS = ["--ground", "--ground-2", "--surface", "--surface-2"];
+
+/** Body-text pairs (4.5:1) and non-text pairs (3:1), as semantic names. */
+const THEME_PAIRS: Array<{ fg: string; bg: string; threshold: number }> = [
+  ...THEME_INK_ROLES.flatMap((fg) =>
+    THEME_GROUNDS.map((bg) => ({ fg, bg, threshold: 4.5 })),
+  ),
+  // A button label on the accent fill, resting and pressed. --accent-deep
+  // joined this list in fix round 2: at its original #0a8f57 the light pair
+  // measured 4.13:1 and the token was LIGHTER than the resting accent it
+  // deepens. DESIGN.md now carries #065f3c — darker than resting, 7.75:1
+  // under white — so the pair is scored like any other instead of carrying
+  // an excuse in the ledger below.
+  { fg: "--accent-ink", bg: "--accent", threshold: 4.5 },
+  { fg: "--accent-ink", bg: "--accent-deep", threshold: 4.5 },
+  // An input outline or a table rule is non-text: 3:1. --edge and --edge-2
+  // are decoration — --edge 1.31:1 on the dark ground, --edge-2 1.67:1 on
+  // the same ground and 1.54:1 on its surface — and are deliberately NOT
+  // asserted here; D1 added --edge-strong precisely because neither can
+  // carry a boundary that has to be seen.
+  ...THEME_GROUNDS.map((bg) => ({ fg: "--edge-strong", bg, threshold: 3 })),
+  // Finding 4: the focus ring is a non-text indicator, so 3:1, read against
+  // every ground a focused control can sit on. base.css still paints the
+  // ring with voltage; theme.css's header names the 6.5c override.
+  ...THEME_GROUNDS.map((bg) => ({ fg: "--focus", bg, threshold: 3 })),
+];
+
+// Every contract name THEME_PAIRS does not score, and why. The test below
+// requires each one to be in exactly one of the two lists, so a name added
+// to the contract later cannot arrive unaudited and unnoticed — it fails
+// here until someone either scores it or writes down why it is not scored.
+const UNSCORED_BY_DESIGN: Record<string, string> = {
+  // The four grounds are NOT here: they are scored above, as the `bg` of
+  // every pair, so they are already in `scored` and an excuse beside that
+  // would be the exact contradiction the third assertion now forbids. They
+  // did sit here until fix round 3 added it, and it found them on its first
+  // run — which is the whole argument for writing the assertion rather than
+  // trusting the ledger.
+  //
+  // D1: decoration. Recomputed in fix round 4, because the figures here had
+  // been one token against two grounds read as two tokens against one.
+  // --edge is 1.31:1 on the dark ground and 1.21:1 on its surface, 1.19 and
+  // 1.26 on the light; --edge-2 is 1.67 / 1.54 dark and 1.43 / 1.52 light.
+  // --edge-strong exists precisely because neither can carry a boundary that
+  // has to be seen, and IS scored, at 3:1.
+  "--edge": "decoration only; a visible boundary takes --edge-strong",
+  "--edge-2": "decoration only; a visible boundary takes --edge-strong",
+  // Translucent composites: they have no fixed resolved colour until they
+  // are composited over whatever is behind them, which this file has no
+  // cascade engine to determine. The screen that lays one down owns its
+  // pair, and 6.5c/d/e's own SURFACE entries are where that is caught.
+  "--accent-wash": "translucent; resolves only once composited",
+  "--warn-wash": "translucent; resolves only once composited",
+  "--risk-wash": "translucent; resolves only once composited",
+  "--wash": "translucent; resolves only once composited",
+  "--wash-2": "translucent; resolves only once composited",
+  "--glow": "translucent, and D20a lets it vanish on light",
+  "--glow-strong": "translucent, and D20a lets it vanish on light",
+  // --accent-deep was here, with light --accent-ink on it at 4.13:1 and a
+  // note that the fix was a palette change rather than anything this file
+  // could do. That change landed (DESIGN.md, #0a8f57 -> #065f3c), so the
+  // pair is scored above now. The ledger is one entry shorter and keeps its
+  // guard: this is what an entry leaving looks like, rather than a threshold
+  // being lowered to let it stay.
+};
+
+describe("theme.css's semantic mapping clears its thresholds on both grounds (D1, D20)", () => {
+  it("accounts for every contract name, scored or deliberately not", () => {
+    const scored = new Set(THEME_PAIRS.flatMap(({ fg, bg }) => [fg, bg]));
+    const unaccounted = SEMANTIC_NAMES.filter(
+      (name) => !scored.has(name) && !(name in UNSCORED_BY_DESIGN),
+    );
+    expect(unaccounted).toEqual([]);
+    // And nothing in the ledger that is no longer a contract name.
+    const stale = Object.keys(UNSCORED_BY_DESIGN).filter(
+      (name) => !(SEMANTIC_NAMES as readonly string[]).includes(name),
+    );
+    expect(stale).toEqual([]);
+    // Fix round 3, finding 2. The two assertions above both pass for a name
+    // that is in the ledger AND scored: `unaccounted` is empty because it is
+    // scored, `stale` is empty because it is still a contract name. So a
+    // fixed pair could keep its excuse sitting beside it and this suite would
+    // stay green — the exact failure the ledger is advertised against. The
+    // earlier report claimed the removal of --accent-deep was forced; it was
+    // manual, and that claim was wrong. This is the assertion that makes it
+    // true: a name is scored or excused, never both.
+    const excused = Object.keys(UNSCORED_BY_DESIGN).filter((name) =>
+      scored.has(name),
+    );
+    expect(excused).toEqual([]);
+  });
+
+  for (const ground of GROUNDS) {
+    for (const { fg, bg, threshold } of THEME_PAIRS) {
+      it(`[${ground}] ${fg} on ${bg} clears ${threshold}:1`, () => {
+        const fgName = colorNameOf(THEME[ground][fg] ?? "", ground);
+        const bgName = colorNameOf(THEME[ground][bg] ?? "", ground);
+        expect(fgName, `${ground} ${fg} is not a palette token`).not.toBeNull();
+        expect(bgName, `${ground} ${bg} is not a palette token`).not.toBeNull();
+        if (!fgName || !bgName) return;
+        const ratio = contrastRatio(
+          tokens.colors[fgName],
+          tokens.colors[bgName],
+        );
         expect(
           ratio,
-          `${selector} on ${bg}: ${usage.fg} on ${bg} at ${usage.px}px/${usage.weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
+          `${ground}: ${fg} (${fgName}) on ${bg} (${bgName}) is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
         ).toBeGreaterThanOrEqual(threshold);
       });
     }
   }
+});
+
+// ---------------------------------------------------------------------------
+// The two standing guards (Phase 6.5b Task 3, Steps 5).
+//
+// admin-main.tsx loads admin.css and testbuilder.css; both are organiser-only
+// (test/bundle.test.ts), and both are scanned here.
+//
+// Fix round 3, finding 3: theme.css is excluded BY SOURCE FILE, not by
+// selector text. Skipping every rule whose selector reads `:root` would also
+// skip a future `:root { --panel-accent: var(--color-signal-accent) }` in
+// admin.css — and because usagesOf resolves one level of indirection, that
+// one line would hide every downstream use of the dark accent from the guard
+// this whole phase exists to provide. Pre-seeding `seen` with theme.css is
+// what readResolvedCss's cycle guard already does for a file it has read, so
+// the file is simply absent from the text below.
+//
+// tokens.css is excluded for the same reason no-hex-colors.test.ts excludes
+// it: it IS DESIGN.md's output, so a literal there is not a colour declared
+// outside DESIGN.md. It reaches here only through base.css's own chain.
+const ORGANISER_CSS = ((seen) =>
+  organiserStylesheets()
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n"))(
+  new Set<string>([
+    resolve(STYLES_DIR, "theme.css"),
+    resolve(STYLES_DIR, "tokens.css"),
+  ]),
+);
+const VAR_REF_RE = /var\(\s*(--[a-z0-9-]+)\s*\)/gi;
+
+/**
+ * Selectors in `css` that paint `token` once every `var()` they read is
+ * resolved on `ground`. theme.css is not in `css` at all: declaring a
+ * mapping is not using it.
+ */
+function usagesOf(token: ColorName, ground: Ground, css = ORGANISER_CSS): string[] {
+  const hits: string[] = [];
+  for (const rule of parseRuleBodies(css)) {
+    for (const decl of declarations(rule.body)) {
+      for (const [, ref] of decl.matchAll(VAR_REF_RE)) {
+        if (colorNameOf(`var(${ref})`, ground) !== token) continue;
+        if (!hits.includes(rule.selector)) hits.push(rule.selector);
+      }
+    }
+  }
+  return hits;
+}
+
+// rgb()/rgba()/hsl()/hsla()/color()/lab()/lch()/oklch()/oklab() with literal
+// channel values. `color-mix(...)` does not match this pattern at all (the
+// hyphen stops the `color(` alternative), and a composite over a generated
+// token — `rgb(from var(--color-ink) r g b / .1)`, `rgb(var(--x))` — is
+// permitted by the `var(--color-*)` test below: a composite over a token is
+// not a new colour, it is a mapping. What this catches is a palette decision
+// taken in a stylesheet instead of in DESIGN.md's front matter.
+const COLOUR_FUNCTION_RE =
+  /\b(?:rgba?|hsla?|color|lab|lch|oklch|oklab)\(((?:[^()]|\([^()]*\))*)\)/gi;
+
+function nonTokenColourLiterals(css: string): string[] {
+  return [...css.matchAll(COLOUR_FUNCTION_RE)]
+    .filter((match) => !/var\(\s*--color-[a-z0-9-]+\s*\)/i.test(match[1] ?? ""))
+    .map((match) => match[0]);
+}
+
+describe("the organiser's standing colour guards (D1, §12)", () => {
+  // Fix round 4, finding 2. The accent guard below catches a rule reaching
+  // for the dark green and catches nothing if one reaches for
+  // --color-signal-surface, --color-signal-text or --color-signal-line-strong
+  // instead. Those are illegal by GROUND, not by contrast: a panel painted
+  // signal-surface stays near-black when the viewer picks light, which is the
+  // "two designs, not one design on two grounds" failure theme.css's header
+  // promises to prevent. It is also the likeliest mistake on this branch — a
+  // 6.5c implementer with signal.css open beside them copies
+  // `background: var(--color-signal-surface)` and every test here stays green.
+  //
+  // So: the stricter, simpler form. An organiser stylesheet reads NO palette
+  // token of either Signal family. Every colour it paints comes through a
+  // semantic name, which is the entire mechanism D20 rests on. theme.css is
+  // excluded by source file (it is the mapping), and base.css's voltage focus
+  // ring is untouched by this because voltage is not a signal-* token — the
+  // ring is named as a 6.5c handoff in theme.css's header instead.
+  const SIGNAL_TOKEN_RE = /var\(\s*(--color-signal-[a-z0-9-]+)\s*\)/gi;
+
+  function signalTokensIn(css: string): string[] {
+    const hits: string[] = [];
+    for (const rule of parseRuleBodies(css)) {
+      for (const decl of declarations(rule.body)) {
+        for (const [, token] of decl.matchAll(SIGNAL_TOKEN_RE)) {
+          if (token !== undefined) hits.push(`${rule.selector} { ${token} }`);
+        }
+      }
+    }
+    return hits;
+  }
+
+  it("reads no Signal palette token directly, on either ground", () => {
+    expect(signalTokensIn(ORGANISER_CSS)).toEqual([]);
+  });
+
+  it("finds the landing page's palette tokens, so the guard above is not vacuous", () => {
+    // signal.css is a dark-only page and names these tokens legitimately.
+    // Without this control, the empty result above would hold for a scanner
+    // that matched nothing at all.
+    expect(
+      signalTokensIn(readResolvedCss(LANDING_CSS_PATH)).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("never puts signal-accent on a light surface", () => {
+    // #19e68c is 1.60:1 on cream — illegal as text and as a border. A rule
+    // that reaches past --accent to the dark palette token keeps the green
+    // when the viewer switches ground; --accent does not.
+    expect(usagesOf("signal-accent", "light")).toEqual([]);
+  });
+
+  it("sees a :root rule in an organiser stylesheet, not just a class rule", () => {
+    // The blind spot fix round 3 closed. usagesOf used to skip every rule
+    // whose selector read `:root`, to avoid flagging theme.css's own
+    // mapping — which also made a `:root` block in admin.css invisible, and
+    // since usagesOf resolves one level of indirection, that one line would
+    // have hidden every downstream use of the dark accent from this guard.
+    // theme.css is excluded by SOURCE FILE now, so this is seen.
+    expect(
+      usagesOf(
+        "signal-accent",
+        "light",
+        ":root { --panel-accent: var(--color-signal-accent); }",
+      ),
+    ).toEqual([":root"]);
+  });
+
+  it("excludes theme.css by source file, and still reads everything else", () => {
+    // Both halves: the mapping's own blocks are absent (declaring is not
+    // using), and the exclusion did not empty the scan along with them.
+    const selectors = parseRuleBodies(ORGANISER_CSS).map((rule) => rule.selector);
+    expect(selectors).not.toContain(':root[data-theme="light"]');
+    expect(selectors).toContain(".organiser__title");
+  });
+
+  it("finds the landing page's own accent, so the guard above is not vacuous", () => {
+    // The positive control. signal.css is a dark-only page and uses the
+    // token legitimately; if the finder could not see it there, the empty
+    // result above would mean nothing.
+    expect(
+      usagesOf("signal-accent", "dark", readResolvedCss(LANDING_CSS_PATH))
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("declares no colour outside DESIGN.md", () => {
+    // no-hex-colors.test.ts catches a raw hex and a named keyword; this
+    // catches an rgb()/hsl()/color() literal in the organiser's bundle.
+    expect(nonTokenColourLiterals(ORGANISER_CSS)).toEqual([]);
+  });
+
+  it("catches a literal channel value and permits a composite over a token", () => {
+    // The positive control for the guard above, which would otherwise be
+    // green for a detector that matched nothing at all.
+    expect(nonTokenColourLiterals("a { color: rgb(255 0 0); }")).toEqual([
+      "rgb(255 0 0)",
+    ]);
+    expect(
+      nonTokenColourLiterals("a { color: hsl(120deg 50% 40%); }"),
+    ).toEqual(["hsl(120deg 50% 40%)"]);
+    expect(
+      nonTokenColourLiterals(
+        "a { box-shadow: 0 0 1px rgb(from var(--color-ink) r g b / 0.1); }",
+      ),
+    ).toEqual([]);
+    expect(
+      nonTokenColourLiterals(
+        "a { background: color-mix(in srgb, var(--color-signal-accent) 12%, transparent); }",
+      ),
+    ).toEqual([]);
+  });
 });
 
 // A1, extended per the file-level comment above: base.css's two
@@ -910,7 +1262,9 @@ describe("base.css: the two colour-bearing selectors outside landing.css's own i
       const body = baseBodies.get(selector);
       expect(body, `${selector} not found in base.css`).toBeDefined();
       if (!body) return;
-      const fg = parseColor(body);
+      // base.css is the shared root both grounds sit under and reads no
+      // semantic name, so the ground it is resolved on does not change it.
+      const fg = parseColor(body, "dark");
       expect(
         fg,
         `${selector}: cannot parse a var(--color-*) foreground`,

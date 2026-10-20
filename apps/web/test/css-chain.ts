@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 // One `@import` resolver for the whole test suite.
 //
@@ -38,4 +39,157 @@ export function readResolvedCss(path: string, seen: Set<string> = new Set()): st
   return raw.replace(IMPORT_RE, (_whole, file: string) =>
     readResolvedCss(resolve(dirname(path), file), seen),
   );
+}
+
+// ---------------------------------------------------------------------------
+// Rule parsing. This lived in `contrast-usage.test.ts` alone until Phase 6.5b
+// Task 3 needed the same parser for `theme.css`; it moved here rather than
+// being copied, for the same reason the `@import` resolver above did.
+
+export interface CssRule {
+  selector: string;
+  body: string;
+}
+
+export function parseRuleBodies(css: string): CssRule[] {
+  const rules: CssRule[] = [];
+  let i = 0;
+  while (i < css.length) {
+    const openIdx = css.indexOf("{", i);
+    if (openIdx === -1) break;
+    const selector = css.slice(i, openIdx).replace(/\s+/g, " ").trim();
+    let depth = 1;
+    let j = openIdx + 1;
+    while (depth > 0 && j < css.length) {
+      if (css[j] === "{") depth++;
+      else if (css[j] === "}") depth--;
+      j++;
+    }
+    const body = css.slice(openIdx + 1, j - 1);
+    if (selector.startsWith("@media")) {
+      rules.push(...parseRuleBodies(body));
+    } else if (selector && !selector.startsWith("@")) {
+      rules.push({ selector, body });
+    }
+    i = j;
+  }
+  return rules;
+}
+
+export function declarations(body: string): string[] {
+  return body
+    .split(";")
+    .map((decl) => decl.trim())
+    .filter(Boolean);
+}
+
+// ---------------------------------------------------------------------------
+// theme.css: the two grounds (D20) under one set of semantic names.
+//
+// This list is the contract between plan 6.5b and plans 6.5c, 6.5d and 6.5e —
+// those stylesheets read these names, exactly as spelled. Adding, dropping or
+// renaming one here is a change to three later plans.
+
+export const SEMANTIC_NAMES = [
+  "--ground",
+  "--ground-2",
+  "--surface",
+  "--surface-2",
+  "--edge",
+  "--edge-2",
+  "--edge-strong",
+  "--ink",
+  "--ink-2",
+  "--ink-3",
+  "--accent",
+  // Added in fix round 1, before 6.5c starts: 6.5c needs a pressed fill for
+  // the primary button, both generated tokens already exist, and adding a
+  // contract name after a consuming plan has started is a change to three
+  // plans rather than a line in a list.
+  "--accent-deep",
+  "--accent-ink",
+  "--accent-wash",
+  "--warn",
+  "--warn-wash",
+  "--risk",
+  "--risk-wash",
+  "--wash",
+  "--wash-2",
+  "--glow",
+  "--glow-strong",
+  // Added in fix round 4. base.css paints `:focus-visible` with the cream
+  // world's voltage, which is correct for the candidate runtime and wrong on
+  // a Signal surface the moment 6.5c re-grounds one — and 6.5c's own top-bar
+  // control is focusable, so it lands on its first screen. The name exists
+  // now so that override is a one-line change there rather than a contract
+  // change across three plans.
+  "--focus",
+] as const;
+
+export type SemanticName = (typeof SEMANTIC_NAMES)[number];
+
+export type Ground = "dark" | "light";
+
+export const GROUNDS: Ground[] = ["dark", "light"];
+
+/** The only two selectors allowed to assign a semantic name. */
+export const THEME_SELECTOR: Record<Ground, string> = {
+  dark: ":root",
+  light: ':root[data-theme="light"]',
+};
+
+const TEST_DIR = dirname(fileURLToPath(import.meta.url));
+
+export const THEME_CSS_PATH = resolve(TEST_DIR, "../src/styles/theme.css");
+
+const ADMIN_MAIN_PATH = resolve(TEST_DIR, "../src/admin-main.tsx");
+const STYLE_IMPORT_RE = /^import\s+["']\.\/styles\/([a-zA-Z0-9_-]+\.css)["'];?$/gm;
+
+/**
+ * Every stylesheet the organiser entry loads, read out of `admin-main.tsx`
+ * rather than listed by hand.
+ *
+ * Fix round 4, finding 3. Both guard files used to hardcode this list, and
+ * commit d58d85b exists precisely because `testbuilder.css` was missing from
+ * it — a hole that reopens silently the next time an entry grows a
+ * stylesheet. Deriving it means the guards widen with the entry.
+ */
+export function organiserStylesheets(): string[] {
+  const source = readFileSync(ADMIN_MAIN_PATH, "utf8");
+  const files = [...source.matchAll(STYLE_IMPORT_RE)].flatMap((m) =>
+    m[1] === undefined ? [] : [resolve(TEST_DIR, "../src/styles", m[1])],
+  );
+  // A guard that silently read nothing would be worse than the hardcoded
+  // list it replaces.
+  if (files.length === 0) {
+    throw new Error(`no "./styles/*.css" imports found in ${ADMIN_MAIN_PATH}`);
+  }
+  return files;
+}
+
+/**
+ * `theme.css`'s two mappings — semantic name (with its `--`) to the raw CSS
+ * value it is given on that ground. Raw, not resolved: a caller that wants a
+ * token name reads it back out, and one that wants to know a value is a
+ * `color-mix()` can see that it is.
+ */
+export function readThemeMap(
+  path: string = THEME_CSS_PATH,
+): Record<Ground, Record<string, string>> {
+  const rules = parseRuleBodies(readResolvedCss(path));
+  const map: Record<Ground, Record<string, string>> = { dark: {}, light: {} };
+  for (const ground of GROUNDS) {
+    const body = rules
+      .filter((rule) => rule.selector === THEME_SELECTOR[ground])
+      .map((rule) => rule.body)
+      .join(";");
+    for (const decl of declarations(body)) {
+      const colon = decl.indexOf(":");
+      if (colon === -1) continue;
+      const property = decl.slice(0, colon).trim();
+      if (!property.startsWith("--")) continue;
+      map[ground][property] = decl.slice(colon + 1).trim();
+    }
+  }
+  return map;
 }

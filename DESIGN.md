@@ -3,7 +3,7 @@ version: alpha
 name: Pariksha
 website: "https://github.com/SriSatyaLokesh/pariksha"
 description: >-
-  An open-source exam platform whose design system treats a single saturated vermilion (Voltage #e24c18) as a canvas rather than an accent — but only where a candidate is not under a running clock. Marketing, landing and finish pages put the full-bleed voltage block behind a 56px / weight 500 Anek Latin display headline in cream #fffbf5, with a fully-rounded cream pill CTA beneath. The moment an attempt starts, the system inverts: the test runner is cream and ink, hairline-ruled, and the voltage survives only as the "you are here" marker in the question palette and the focus ring on an answer row. JetBrains Mono carries every label, timer, attempt reference and code sample; Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
+  An open-source exam platform whose design system grounds the organiser and the marketing surface in one world — the Signal ground and its single green accent, in two measured palettes: dark (signal-*, accent #19e68c) and light (signal-l-*, accent #07744a, because #19e68c is 1.60:1 on cream and 1.65:1 on white — illegal on either). Bricolage Grotesque carries display, Inter carries body, and JetBrains Mono carries every id, count, label, timer and code sample. The candidate runtime is the one place the old world survives: cream #fffbf5 and ink, hairline-ruled, with the saturated vermilion (Voltage #e24c18) reduced to a handful of marks — the "you are here" marker in the question palette, the focus ring on an answer row or input, the proctor banner's border, and the full-bleed block on the start and finish pages. The two never appear on one screen, and that separation is what lets state-answered keep its green in the cream runtime while the accent carries positive meaning on the organiser. Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
 
 colors:
   voltage: "#e24c18"
@@ -30,6 +30,7 @@ colors:
   signal-surface-2: "#141e19"
   signal-line: "#1c2922"
   signal-line-2: "#2a3b32"
+  signal-line-strong: "#5a7465"
   signal-text: "#eaf2ed"
   signal-text-2: "#9db0a6"
   signal-text-3: "#76887f"
@@ -38,6 +39,21 @@ colors:
   signal-accent-ink: "#04140c"
   signal-flag-review: "#f59e0b"
   signal-flag-risk: "#f87171"
+  signal-l-bg: "#f5f9f7"
+  signal-l-bg-2: "#eef4f1"
+  signal-l-surface: "#ffffff"
+  signal-l-surface-2: "#eef4f1"
+  signal-l-line: "#dde7e2"
+  signal-l-line-2: "#c6d5cd"
+  signal-l-line-strong: "#73907f"
+  signal-l-text: "#0b1a13"
+  signal-l-text-2: "#3b4f46"
+  signal-l-text-3: "#5c6f66"
+  signal-l-accent: "#07744a"
+  signal-l-accent-deep: "#065f3c"
+  signal-l-accent-ink: "#ffffff"
+  signal-l-flag-review: "#8a5f00"
+  signal-l-flag-risk: "#b3261e"
   scrim: "rgba(35, 31, 29, 0.55)"
   shadow: "#231f1d"
 
@@ -453,33 +469,37 @@ Machine-readable tokens plus the reasoning behind them. Feed this file to Claude
 
 ## Overview
 
-Pariksha runs on one disciplined inversion and one hard rule that limits it.
+Pariksha runs on one ground shared from marketing through to product, one accent that cannot leave it, and one hard rule that keeps the two apart.
 
-**Voltage as canvas.** The brand colour, Voltage `{colors.voltage}` (#e24c18), is not held in reserve for a CTA fill. On the landing page, the test start page and the finish page, it _is_ the surface — a full-bleed vermilion block carrying a 56px display headline in cream `{colors.cream}` (#fffbf5, never pure white) with a fully-rounded cream pill CTA beneath. The confidence comes from one saturated field and one sentence, not from a gradient mesh or a hero illustration.
+**One ground, one accent.** The marketing site and the organiser share the Signal ground and its single green accent, in two measured palettes: dark (`{colors.signal-bg}`, accent `{colors.signal-accent}` #19e68c) and light (`{colors.signal-l-bg}`, accent `{colors.signal-l-accent}` #07744a). Both ship, and a viewer switches between them. The accent is a different green on each because it has to be: #19e68c is 1.60:1 on cream and 1.65:1 on white — illegal as text and illegal as a border — so an accent cannot cross grounds, and taking one means taking the other.
 
-**The clock kills the canvas.** The moment an attempt starts, the system inverts. The test runner is cream and ink, hairline-ruled, and the voltage survives only as the "you are here" square in the question palette and the focus ring on a selected answer row. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The marketing canvas and the exam canvas are deliberately different places.
+**Voltage survives in the runtime alone.** Voltage `{colors.voltage}` (#e24c18) is no longer a canvas anywhere the organiser can see. Inside an attempt the surface is cream `{colors.cream}` (#fffbf5, never pure white) and ink, hairline-ruled, and the vermilion is reduced to a handful of marks: the "you are here" square in the question palette, the focus ring on a selected answer row or a focused input, and the border on the proctor banner. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The start and finish pages keep the full-bleed vermilion block — a display headline in cream with a fully-rounded cream pill beneath — because they are the runtime's edges, not the organiser's.
 
-**Editorial display, monospace instrumentation.** Display is Anek Latin at weight 500 — not 700 — 56px with -1.4px tracking, closer to a magazine dek than a SaaS hero. Every label, timer, attempt reference, snapshot timestamp and code sample is JetBrains Mono. The sans speaks; the mono instruments. There is no uppercase-tracked sans label tier anywhere in the system — small-caps duty belongs entirely to `{typography.mono-sm}`.
+**The two never appear on one screen.** That separation is the hard rule, and it is what buys the rest. It lets `{colors.state-answered}` keep its green in the cream runtime while the accent carries positive meaning on the organiser: a light-legal green is 1.09:1 from `{colors.state-answered}` — the same colour to the eye — so if the two surfaces ever met, one of them would have to give up a meaning it already has.
 
-**One skeleton, three scripts.** Anek ships Latin, Telugu and Devanagari drawn on a shared skeleton, so a test translated into Telugu or Hindi keeps the same typographic voice instead of falling back to a mismatched Noto face mid-sentence. Both families are SIL OFL and self-hosted — the PRD forbids third-party scripts and fonts loaded from someone else's CDN (S-11), and that rule has no exceptions for typography.
+**Editorial display, monospace instrumentation.** The ground chooses the display face: Bricolage Grotesque on its `opsz` axis across the Signal surfaces, Anek Latin at weight 500 — not 700 — on the cream ones, both closer to a magazine dek than a SaaS hero. Inter sets Signal body copy. Every label, timer, attempt reference, snapshot timestamp and code sample on either ground is JetBrains Mono. The sans speaks; the mono instruments. There is no uppercase-tracked sans label tier anywhere in the system — small-caps duty belongs entirely to `{typography.mono-sm}`.
+
+**One skeleton, three scripts.** Anek ships Latin, Telugu and Devanagari drawn on a shared skeleton, so a test translated into Telugu or Hindi keeps the same typographic voice instead of falling back to a mismatched Noto face mid-sentence. That is why Anek cannot be retired when the organiser moves grounds, and why the family count is four rather than two. Every family is SIL OFL and self-hosted — the PRD forbids third-party scripts and fonts loaded from someone else's CDN (S-11), and that rule has no exceptions for typography.
 
 **State colour is structural, not decorative.** Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each own a token family. A palette square or a results row colours itself from that family and never borrows the brand voltage — which is why the voltage still reads as singular after a page shows forty coloured squares.
 
 **Key characteristics**
 
-- Single brand voltage `{colors.voltage}` fills marketing and transition surfaces, then withdraws to a focus ring and one palette square inside a live attempt.
-- Cream `{colors.cream}` (#fffbf5), not `#ffffff`, carries every "white" element that touches the voltage. Pure `{colors.canvas}` is the below-fold body and the inside of cards.
-- Two hairline tones, not one: `{colors.hairline}` for decoration, `{colors.hairline-strong}` for anything a candidate must perceive as an edge — input outlines, answer rows, palette squares, table rules.
-- Display weight 500 at 44–56px with tight tracking. Never 700.
+- Single green accent on the Signal ground — `{colors.signal-accent}` dark, `{colors.signal-l-accent}` light — carrying brand and positive meaning on the organiser alike. Voltage `{colors.voltage}` never leaves the candidate runtime, where it is a focus ring, one palette square, the proctor banner's border and the start/finish block.
+- Cream `{colors.cream}` (#fffbf5), not `#ffffff`, carries every "white" element that touches the voltage. Pure `{colors.canvas}` is the inside of cards on the cream surfaces.
+- Two hairline tones, not one: `{colors.hairline}` for decoration, `{colors.hairline-strong}` for anything a candidate must perceive as an edge — input outlines, answer rows, palette squares, table rules. The Signal ground splits the same way, and for the same reason: `{colors.signal-line-2}` is decorative at 1.54:1 on `{colors.signal-surface}` (1.67:1 on `{colors.signal-bg}`), so `{colors.signal-line-strong}` and `{colors.signal-l-line-strong}` carry every edge that must be seen.
+- Display weight follows the face: Anek at 500 on the cream surfaces, never 700; Bricolage Grotesque at its heavier `opsz` steps on the Signal ground. Tight tracking on both.
 - Reading line-height is 1.55–1.6, not the 1.2 a marketing display uses. A question stem is read under time pressure.
 - Binary radius: small-step 3 / 4 / 6 / 8px, plus a full pill for exactly two surfaces (primary CTA, category tab). No 12 / 16 / 20px middle tier.
 - Hairlines carry elevation; shadows appear on exactly two things — the hero CTA and a modal.
 - 8px base spacing unit, with 96px hero bands and 64px section rhythm.
-- Every pair in this file has a measured contrast ratio, and every ratio is stated. WCAG 2.1 AA is a product requirement, not an aspiration.
+- Every ratio stated in `## Colors` is measured against `{colors.cream}`, and `scripts/tokens.mjs` generates all sixteen of them into `contrastPairs` so `apps/web/test/contrast.test.ts` recomputes each one on every run — a stated number that drifts from its hexes fails the build. A row showing "—" is decorative and carries no ratio by intent. The Signal grounds are measured too, in ADR 0010 and in `apps/web/test/contrast-usage.test.ts`, but not in this file; see _Known gaps_. WCAG 2.1 AA is a product requirement, not an aspiration.
 
 ## Colors
 
 Ratios below are measured against `{colors.cream}` (#fffbf5) unless stated. AA needs **4.5:1** for text under 24px, **3:1** for text at 24px+ or 18.66px bold, and **3:1** for a UI boundary a user must see.
+
+**The Signal grounds are not in this section.** The `signal-*` and `signal-l-*` families are declared in the front matter and generated like every other token, but their ratios are measured against their own grounds rather than cream, so they are documented where that is possible: ADR 0010 carries the full measured table for both, and `apps/web/test/contrast-usage.test.ts` recomputes the semantic mapping's ink, accent and edge pairs on each ground every run. See _Known gaps_ for why they cannot be stated here yet.
 
 ### Brand
 
@@ -505,7 +525,7 @@ The cream/white difference is small enough that most people never name it and co
 
 | Token               | Hex     | On cream    | Use                                                                                                          |
 | ------------------- | ------- | ----------- | ------------------------------------------------------------------------------------------------------------ |
-| `{colors.ink}`      | #231f1d | **15.85:1** | Display below the fold, question stems, answer labels, table cells. Never pure black.                        |
+| `{colors.ink}`      | #231f1d | **15.85:1** | Display and headings on the cream surfaces, question stems, answer labels, table cells. Never pure black.     |
 | `{colors.ink-soft}` | #413c39 | **10.55:1** | Long-form running copy where ink feels heavy.                                                                |
 | `{colors.muted}`    | #6f6a66 | **5.18:1**  | Help text, captions, inactive nav, "View all" links. Still passes AA — a form's help text is not decoration. |
 
@@ -555,21 +575,23 @@ Three states, three colours, and every one of them legible as text at 12px — t
 
 ### Families
 
-**Anek** (Latin / Telugu / Devanagari) for everything spoken: display, headings, question stems, answer labels, body, buttons, nav. **JetBrains Mono** for everything instrumented: labels, timers, attempt references, scores, snapshot timestamps, code samples inside questions. Both SIL OFL, both self-hosted, subset per script and loaded with `font-display: swap`.
+**The ground chooses the family.** The Signal ground — the marketing site and the organiser, on either palette — takes **Bricolage Grotesque** for display, on its `opsz` axis (`{typography.signal-display-xl}`, `{typography.signal-display-lg}`), and **Inter** for body (`{typography.signal-body}`). The candidate runtime keeps **Anek** (Latin / Telugu / Devanagari) for everything spoken: display, headings, question stems, answer labels, body, buttons, nav. **JetBrains Mono** sets everything instrumented on either ground: ids, counts, labels, timers, attempt references, scores, snapshot timestamps, code samples inside questions. All SIL OFL, all self-hosted under `apps/web/public/fonts/`, subset per script and loaded with `font-display: swap`. One rule covering colour and type is a system; two unrelated rules are a coincidence.
 
-The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `sans-serif`, so a Telugu glyph in an otherwise-Latin sentence is drawn by a sibling face rather than by whatever the operating system volunteers.
+**Anek is not retired, and cannot be.** It carries Telugu and Devanagari on a skeleton shared with its Latin, which a translated test needs and Bricolage cannot do. Four families is more bytes than two, bounded because no page loads both pairs — nothing above is added and nothing is retired.
 
-**Kalam** sets the product name alone, in the hero masthead, at `{typography.wordmark-display}`. It is a handwritten weight-700 mark, not a reading face: self-hosted, SIL OFL, text-subset to the eight glyphs "Pariksha" needs. It never substitutes for Anek elsewhere — body copy, headings, buttons and the nav/footer wordmark stay on the family above.
+The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `sans-serif`, so a Telugu glyph in an otherwise-Latin sentence is drawn by a sibling face rather than by whatever the operating system volunteers. Bricolage falls back to Inter and then `sans-serif`: it is subset for Latin only and never stands in for a script it does not carry.
+
+**Kalam** sets the product name alone, in the hero masthead, at `{typography.wordmark-display}`. It is a handwritten weight-700 mark, not a reading face: self-hosted, SIL OFL, text-subset to the eight glyphs "Pariksha" needs. It never substitutes for a reading face elsewhere — body copy, headings, buttons and the nav/footer wordmark stay on the families above.
 
 ### Hierarchy
 
 | Token                        | Size | Weight | Line height | Tracking | Use                                                                                                         |
 | ---------------------------- | ---- | ------ | ----------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `{typography.display-xl}`    | 56px | 500    | 56px        | -1.4px   | Hero h1 on the voltage canvas; section h2 below the fold                                                    |
+| `{typography.display-xl}`    | 56px | 500    | 56px        | -1.4px   | The h1 on the start and finish pages' voltage canvas; section h2 on a cream surface                        |
 | `{typography.display-lg}`    | 44px | 500    | 46px        | -1.1px   | Split-panel headlines, finish-page confirmation                                                             |
-| `{typography.heading-md}`    | 22px | 500    | 28px        | -0.4px   | Section titles inside the admin app, test names                                                             |
+| `{typography.heading-md}`    | 22px | 500    | 28px        | -0.4px   | Section titles and test names on the cream surfaces; the Signal ground's equivalent is `{typography.signal-display-lg}` |
 | `{typography.heading-sm}`    | 18px | 500    | 24px        | -0.2px   | Card titles, form field labels                                                                              |
-| `{typography.hero-lead}`     | 24px | 400    | 34px        | -0.2px   | The hero lead sentence on the voltage canvas; 24px is the smallest size at which cream on voltage clears AA |
+| `{typography.hero-lead}`     | 24px | 400    | 34px        | -0.2px   | The start page's lead sentence on the voltage canvas; 24px is the smallest size at which cream on voltage clears AA |
 | `{typography.question-stem}` | 18px | 400    | 29px        | 0        | **The question itself.** 1.6 line-height, the loosest in the system                                         |
 | `{typography.option-label}`  | 16px | 400    | 25px        | 0        | Answer options, matching rows, ordering items                                                               |
 | `{typography.body-md}`       | 16px | 400    | 25px        | -0.04px  | Default running text                                                                                        |
@@ -579,23 +601,28 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 | `{typography.timer-numeric}` | 20px | 500    | 24px        | 0        | **Tabular numerals.** Countdowns, scores, attempt references                                                |
 | `{typography.mono-md}`       | 15px | 400    | 24px        | 0        | Code blocks inside question prompts                                                                         |
 | `{typography.mono-sm}`       | 12px | 400    | 18px        | 0.3px    | Small-caps labels, palette numbers, footnotes, badges                                                       |
+| `{typography.signal-display-xl}` | clamp(40px, 6.6vw, 82px) | 800 | 0.98 | -0.03em | **Signal ground.** Hero h1 on marketing, the largest display tier on the organiser                 |
+| `{typography.signal-display-lg}` | clamp(28px, 4vw, 52px) | 700 | 1.02 | -0.024em | **Signal ground.** Section headlines, screen titles                                                  |
+| `{typography.signal-body}`   | 17px | 400    | 1.62        | 0        | **Signal ground.** Default running text, in Inter rather than Anek                                          |
 | `{typography.wordmark-display}` | clamp(44px, 6.2vw, 94px) | 700 | 1 | -0.01em | The hero masthead's product name ("Pariksha") only — nowhere else                           |
 
 ### Principles
 
-**Display stays at 500.** 56px with -1.4px tracking is confidence through tracking and scale, not weight. Pushing to 700 turns an editorial dek into a SaaS hero and loses the whole register. `{typography.wordmark-display}` is not an exception to this: it is not display text at all but a handwritten mark standing in for a logo, so its 700 weight doesn't reopen the rule for headings or decks.
+**Anek display stays at 500.** On the cream surfaces, 56px with -1.4px tracking is confidence through tracking and scale, not weight. Pushing Anek to 700 turns an editorial dek into a SaaS hero and loses the whole register. The Signal ground reaches the same register by a different route, which is the point of giving it a different face: Bricolage Grotesque has an optical-size axis, so `{typography.signal-display-xl}` and `{typography.signal-display-lg}` ship at 800 and 700 with tighter tracking and sub-1.0 line-height, and that weight is doing work Anek's 500 does through scale alone. Neither reaches for a width axis. `{typography.wordmark-display}` is not an exception to either: it is not display text at all but a handwritten mark standing in for a logo, so its 700 weight doesn't reopen the rule for headings or decks.
 
 **Reading text is not display text.** The display tier sets line-height equal to font size (56/56). The reading tier does not: `{typography.question-stem}` runs 18/29 — a ratio of 1.6, the loosest value in the system, because a candidate reads it once, under a clock, possibly at 200% zoom. Copying the display's tight leading onto a question stem is the single easiest way to make this product feel hostile.
 
 **Numbers never jitter.** `{typography.timer-numeric}` sets `font-variant-numeric: tabular-nums`. A countdown whose digits change width every second pulls the eye away from the question — which is the one thing a timer must not do.
 
-**The mono voice does label duty.** No uppercase-tracked sans tier exists. If you reach for `letter-spacing: 0.08em; text-transform: uppercase` on Anek, you have broken the split.
+**The mono voice does label duty.** No uppercase-tracked sans tier exists on either ground. If you reach for `letter-spacing: 0.08em; text-transform: uppercase` on the body face — Anek on the cream surfaces, Inter on the Signal ones — you have broken the split. The rule is about the sans, not about which sans.
 
-**Cream on voltage has a size floor.** The Brand colour table sanctions `{colors.cream}` on `{colors.voltage}` only at 24px and above (3:1, the large-text AA threshold); under 24px it drops to 3.86:1 and fails. `{typography.hero-lead}` exists so the hero's lead sentence can sit on the voltage canvas at a legal size instead of being re-tinted — nothing smaller than 24px may set cream text on the voltage fill.
+**Cream on voltage has a size floor.** The Brand colour table sanctions `{colors.cream}` on `{colors.voltage}` only at 24px and above (3:1, the large-text AA threshold); under 24px it drops to 3.86:1 and fails. `{typography.hero-lead}` exists so the start page's lead sentence can sit on the voltage canvas at a legal size instead of being re-tinted — nothing smaller than 24px may set cream text on the voltage fill.
 
 ### Substitutes
 
-Anek is the intended family precisely because of its multi-script coverage; substituting it costs the Telugu and Devanagari skeleton match. If you must: **Inter** for Latin at 95% line-height with -0.04em display tracking, plus **Noto Sans Telugu** and **Noto Sans Devanagari** — and accept that the three scripts will no longer share a skeleton. For JetBrains Mono, **IBM Plex Mono** transfers at the same sizes.
+Anek is the intended family precisely because of its multi-script coverage; substituting it costs the Telugu and Devanagari skeleton match. If you must: **Noto Sans** for Latin at 95% line-height with -0.04em display tracking, plus **Noto Sans Telugu** and **Noto Sans Devanagari** — and accept that the three scripts will no longer share a skeleton. Inter is not the answer here even though it already ships: reaching for the Signal body face on a cream surface collapses the split the two grounds depend on.
+
+For Bricolage Grotesque, **Archivo Expanded** transfers on the same terms — a grotesque with an optical-size or weight range wide enough to hold the display register — and accept that the `opsz` axis goes with it, so display must then reach its register through weight and tracking alone. For Inter, **Source Sans 3** at the same sizes. For JetBrains Mono, **IBM Plex Mono** transfers at the same sizes.
 
 ## Layout
 
@@ -604,7 +631,7 @@ Anek is the intended family precisely because of its multi-script coverage; subs
 Base unit 8px. `{spacing.xs}` 4 · `{spacing.sm}` 6 · `{spacing.base}` 8 · `{spacing.md}` 12 · `{spacing.lg}` 16 · `{spacing.xl}` 24 · `{spacing.2xl}` 32 · `{spacing.3xl}` 40 · `{spacing.4xl}` 64 · `{spacing.5xl}` 96.
 
 - Hero band: `{spacing.5xl}` (96px) vertical.
-- Section rhythm below the fold: `{spacing.4xl}` (64px).
+- Section rhythm between bands: `{spacing.4xl}` (64px).
 - `{component.card-hairline}` interior: `{spacing.xl}` (24px). `{component.card-voltage}`: `{spacing.3xl}` (40px) — the emphasis block breathes more.
 - Answer rows: `{spacing.md}` (12px) between rows, `{spacing.lg}` (16px) horizontal padding inside one.
 - Form fields: `{spacing.xl}` (24px) between fields, `{spacing.sm}` (6px) between a label and its input, `{spacing.xs}` (4px) between an input and its help or error line.
@@ -624,8 +651,8 @@ Marketing pages alternate generous and dense bands: hero generous, feature strip
 
 Hairlines carry depth; shadows are nearly absent.
 
-- **Flat, no shadow:** every band, card, feature cell, answer row, palette square, table — about 99% of surfaces. Depth comes from surface contrast (cream over voltage, white over cream) and from `{colors.hairline-strong}`.
-- **CTA:** `{component.button-primary}` carries `0 2px 4px rgba(35,31,29,0.08)` — the single lifted element on a marketing page.
+- **Flat, no shadow:** every band, card, feature cell, answer row, palette square, table — about 99% of surfaces. Depth comes from surface contrast and from the edge tokens: cream over voltage and white over cream with `{colors.hairline-strong}` on the cream surfaces; the Signal ground does the same job with its own surface steps and `{colors.signal-line-strong}` / `{colors.signal-l-line-strong}`.
+- **CTA:** `{component.button-primary}` carries `0 2px 4px rgba(35,31,29,0.08)` — the single lifted element on the cream surfaces.
 - **Modal:** `{component.violation-modal}` carries `0 8px 32px rgba(35,31,29,0.18)` over `{component.modal-scrim}`. A violation warning must read as being in front of the test, not beside it.
 
 Nothing else gets a shadow. No hover lifts, no card elevation on focus.
@@ -637,16 +664,16 @@ Binary: small-step everywhere, full pill for two surfaces.
 - `{rounded.xs}` 3px — inputs, small chips.
 - `{rounded.sm}` 4px — palette squares, dropdowns, popovers.
 - `{rounded.md}` 6px — answer rows, secondary buttons, timer chip, banners.
-- `{rounded.lg}` 8px — cards, the voltage split panel, modals.
+- `{rounded.lg}` 8px — cards, modals, and the superseded `{component.card-voltage}`.
 - `{rounded.full}` — `{component.button-primary}` and `{component.category-tab}` only, plus integrity badges.
 
 No 12 / 16 / 20px tier. The pill is the warmest shape in the system and it stays scarce, so it keeps meaning "press this".
 
 ## Modes
 
-### Default (light)
+### Default (cream and ink)
 
-As specified above. The only mode the marketing site ships.
+As specified above. The cream-and-ink mode, and the only one the candidate runtime ships — an attempt is cream and ink on every ground, under every setting below. It is not a statement about the rest of the product: the marketing site ships on the Signal dark ground only, and the organiser ships on both Signal grounds. See **Signal grounds**.
 
 ### High contrast
 
@@ -663,9 +690,17 @@ Required by the PRD (C-04) as a candidate-facing toggle, alongside font size. It
 
 Borders go to 2px, focus rings to 3px, and the voltage canvas on the start page drops to a cream canvas with a `{colors.voltage-deep}` rule. Every state keeps its non-colour carrier (fill, notch, ring, glyph), so the palette stays readable with no colour at all.
 
-### Dark
+### Signal grounds (dark and light)
 
-Deliberately deferred. A candidate-facing dark mode has to be designed against camera-lit faces and a cream watermark; doing it badly is worse than not shipping it. Admin dark mode comes with the dashboard, after v1.
+**The organiser ships on two grounds, and both are in this release.** The Signal ground is declared twice in the front matter — `signal-*` dark and `signal-l-*` light — and both generate into `tokens.css` and `tokens.ts`. A control in the top bar switches them. The choice is per-viewer, kept in `localStorage` and seeded from `prefers-color-scheme`, and the page must render correctly when that read throws.
+
+They are one design on two grounds, not two designs: every rule reads tokens, so one swap re-grounds the organiser whole. The field — the glow behind the sign-in panel and the rail — is a dark-ground device and is allowed to resolve to a near-invisible wash on the light ground. That is the ruling, not an oversight: a green bloom on a light ground is the same illegal-adjacent move the accent rule refuses, and inventing a light-mode ornament to replace it would make the two grounds two designs.
+
+Which ground is the default is still open. Until it is settled, the seed is `prefers-color-scheme` and an explicit choice wins.
+
+### Candidate dark
+
+Deliberately deferred, and separate from the grounds above. A candidate-facing dark mode has to be designed against camera-lit faces and a cream watermark; doing it badly is worse than not shipping it. The runtime stays cream and ink.
 
 ## Motion
 
@@ -677,13 +712,15 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 ## Components
 
-### Marketing and transition surfaces
+### Cream surfaces: start, finish and shared
 
-**`hero-section`** — Full-bleed `{colors.voltage}` canvas, 96×24px padding, square corners. Holds the h1 in cream, one lead sentence, and the cream pill CTA. Used on the landing page, the test start page and the finish page — never behind a running attempt.
+Every component below is a cream-surface component. The marketing site left this set when it moved to the Signal ground, and the organiser is following it; what these now serve is the candidate's path — the start page, the registration form, the runner and the finish page — plus the cream screens still waiting their turn. The Signal ground's own components are not inventoried here.
+
+**`hero-section`** — Full-bleed `{colors.voltage}` canvas, 96×24px padding, square corners. Holds the h1 in cream, one lead sentence, and the cream pill CTA. Used on the test start page and the finish page — never behind a running attempt, and never on the Signal ground.
 
 **`hero-heading`** — Cream on voltage at `{typography.display-xl}`. At 56px the 3.86:1 ratio clears AA for large text; this is the only place cream-on-voltage is legal.
 
-**`section-heading`** — The same display token in `{colors.ink}` on white, below the fold.
+**`section-heading`** — The same display token in `{colors.ink}` on white, for a section below the canvas band.
 
 **`body-paragraph`** / **`body-paragraph-muted`** — Workhorse running text in ink and muted.
 
@@ -703,9 +740,9 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 **`card-hairline`** — White, 1px `{colors.hairline}`, 8px radius, 24px padding, no shadow.
 
-**`card-voltage`** — Voltage fill, cream text, 8px radius, 40px padding. The in-body emphasis block, usually half of a 50/50 split beside a `{component.card-hairline}`. One per page, at most.
+**`card-voltage`** — Voltage fill, cream text, 8px radius, 40px padding. The in-body emphasis block, usually half of a 50/50 split beside a `{component.card-hairline}`. **Superseded.** It was a marketing-page device, and the marketing site left the cream ground; no surviving cream surface uses it, because the start and finish pages carry the full-bleed `{component.hero-section}` instead. Kept as the record of its spec, not as a component to reach for — and never on the Signal ground.
 
-**`category-tab`** / **`category-tab-active`** — Pill tabs, 36px. Inactive is white with a `{colors.hairline-strong}` border; active takes the voltage fill with cream text. Used for question-type filters in the bank browser and section tabs in results.
+**`category-tab`** / **`category-tab-active`** — Pill tabs, 36px. Its users — question-type filters in the bank browser, section tabs in results — are organiser screens, so this control belongs to the Signal ground: the active tab takes the accent fill (`{colors.signal-accent}` dark, `{colors.signal-l-accent}` light) with `{colors.signal-accent-ink}` / `{colors.signal-l-accent-ink}` text, and the inactive tab a `{colors.signal-line-strong}` / `{colors.signal-l-line-strong}` border. The voltage does not travel with it. The cream spec — white fill, `{colors.hairline-strong}` border, voltage fill when active — holds only until each screen moves.
 
 **`feature-cell`** — White, 32×24px padding, separated by 1px `{colors.hairline}` rules. A `{typography.mono-sm}` label, a `{typography.heading-sm}` title, one or two lines of body.
 
@@ -759,9 +796,11 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 ## Do's and don'ts
 
-**Do** give the voltage the whole canvas on marketing, start and finish pages. Holding it back for a button misses the one move this system has.
+**Do** give the voltage the whole canvas on the start and finish pages. Holding it back for a button misses the one move this system has — and those two pages are the only canvas it has left.
 
-**Do** take the voltage _away_ the moment the clock starts. The test runner is cream, ink and hairlines, with voltage only on the current-question ring, the input focus ring and the proctor banner.
+**Don't** let the accent and the voltage meet. `{colors.signal-accent}` and `{colors.signal-l-accent}` belong to the Signal ground and never touch a cream surface; `{colors.voltage}` belongs to the candidate runtime and never touches the Signal ground. An accent cannot cross grounds — #19e68c is 1.60:1 on cream — and the separation is also what lets `{colors.state-answered}` keep its green in the runtime while the accent means something positive on the organiser.
+
+**Do** take the voltage _away_ the moment the clock starts. The test runner is cream, ink and hairlines, with voltage only on the current-question ring, the focus ring on an input or a selected answer row, and the proctor banner's border.
 
 **Do** use `{colors.cream}`, never `#ffffff`, for any white that touches the voltage.
 
@@ -771,7 +810,7 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 **Do** let JetBrains Mono carry every label, number and reference. There is no uppercase sans label tier to reach for.
 
-**Don't** set display headlines at 700. The system sits at 500 with tight tracking.
+**Don't** set an Anek display headline at 700. On the cream surfaces the system sits at 500 with tight tracking. The Signal ground's display face is Bricolage Grotesque, whose shipped steps are heavier on purpose — do not carry either face's weight across to the other.
 
 **Don't** reuse the display's 1.0 line-height on reading text. Question stems run 1.6, body 1.55.
 
@@ -789,7 +828,10 @@ Deliberately deferred. A candidate-facing dark mode has to be designed against c
 
 ## Known gaps
 
-- **Dark mode.** Deferred by decision, not oversight. See _Modes_.
+- **Candidate dark mode.** Deferred by decision, not oversight — the organiser ships both Signal grounds, and only the cream runtime's dark mode is outstanding. See _Modes_.
+- **High contrast on the Signal grounds.** `C-04`'s swap table is specified for the cream surfaces only. What the organiser's two grounds do under a high-contrast setting is undesigned, and is a question for a later phase rather than this one.
+- **Measured ratios for the Signal grounds, stated in this file.** The thirty `signal-*` and `signal-l-*` tokens have no row in `## Colors`, and the blocker is the generator, not an oversight: `scripts/tokens.mjs` hardcodes the background every stated ratio is scored against (`parseContrastPairs`: `const bg = colors.cream`) and reads only a fixed list of six headings (`CONTRAST_SECTIONS`: Brand, Text, Hairline, Attempt state, Integrity state, Data). A Signal row is therefore either never parsed, if it sits outside those six, or parsed against cream, which is not the comparison being made. Teaching `parseTableRows` a per-row background — a column, or a `### …` heading that names its own ground — is what unblocks it; until then the measured tables live in ADR 0010 and the assertions in `apps/web/test/contrast-usage.test.ts`, and duplicating them here would add a fourth copy that nothing machine-checks.
+- **Signal-ground components.** `## Components` inventories the cream surfaces only. The Signal ground's components live in `signal.css` and are not written down here; the organiser's move gives them a home, and that inventory is a later pass.
 - **Charts.** The four-series data palette is specified; axis treatment, grid-line weight, tooltip surface and the item-analysis chart types (distribution, discrimination scatter, option pick rates) are not yet designed.
 - **Live monitor.** The 15-second-refresh proctor table needs a specification for how a row changes without stealing focus from the proctor's current action. Not yet written.
 - **Snapshot timeline.** The review screen's snapshot strip — thumbnail size, flagged-frame treatment, scrub behaviour — is unspecified.

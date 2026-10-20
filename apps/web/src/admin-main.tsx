@@ -5,6 +5,16 @@ import "./styles/admin.css";
 import "./styles/testbuilder.css";
 import { OrganiserApp } from "./routes/organiser";
 import { createApiClient } from "./lib/api";
+import { readGround } from "./lib/ground";
+
+// Before anything renders, and before the #root check below, so even the
+// failure path is on the viewer's ground: D20's switch is one attribute on
+// <html> that theme.css keys both palettes off. Reading it here rather than
+// on mount is what stops the page flashing the wrong ground.
+//
+// The attribute, not writeGround: a seeded ground is not a choice, and
+// storing it on first visit would freeze the viewer's OS preference.
+document.documentElement.dataset.theme = readGround();
 
 const container = document.getElementById("root");
 if (!container) {

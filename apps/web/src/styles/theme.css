@@ -1,0 +1,133 @@
+/* The organiser's two grounds, under one set of names.
+
+   Phase 6.5b Task 3, spec D20: the light Signal palette ships beside the
+   dark one and a control in the top bar switches them. D1: an accent cannot
+   cross grounds — signal-accent is 1.60:1 on cream — so taking the landing
+   page's accent means taking its ground, and the light ground gets its own
+   accent instead.
+
+   Every organiser rule from 6.5c onwards reads the names below and never a
+   var(--color-signal*) token directly. That is the whole mechanism: one
+   data-theme attribute on <html> re-grounds nine screens, because this file
+   is the only place either palette is named.
+
+   :root carries the dark mapping and :root[data-theme="light"] the light
+   one. No other block may set these (apps/web/test/theme.test.ts).
+
+   Every value here is a generated token or a composite over one. The
+   translucent names use the repo's one alpha idiom,
+   rgb(from var(--color-NAME) r g b / a) — the same form base.css,
+   primitives.css, signal.css and exam.css already use. This file is the
+   contract three later plans read before writing their own CSS, so it
+   teaches that form and no other.
+
+   The washes are the one mapping that is not a straight rename. A wash is
+   alpha over the ground's own ink, so the dark ground's wash is light and
+   the light ground's is dark — a light wash on a light ground is invisible.
+   They are derived here rather than declared in DESIGN.md's front matter,
+   because a wash is a mapping, not a palette decision. DESIGN.md's front
+   matter carries fifteen signal-l-* colours and that is the complete light
+   palette; nothing here adds a sixteenth.
+
+   HANDOFFS TO 6.5c, none of them shippable in this plan, which changes no
+   screen. Named here rather than left to be rediscovered.
+
+   1. The focus ring. base.css paints :focus-visible with var(--color-voltage),
+      which is right for the cream candidate runtime and wrong on a Signal
+      surface. 6.5c overrides :focus-visible { outline-color: var(--focus) }
+      on the organiser root; base.css's voltage ring stays as it is. --focus
+      is the accent on both grounds and clears the 3:1 a non-text indicator
+      needs with room (12.01:1 dark, 5.48:1 light, against each ground).
+   2. The first paint. admin.html loads its module from the end of <body>, so
+      a light-preferring viewer can see a dark frame before readGround() runs.
+      Not reachable today — no organiser rule reads a name below, so nothing
+      re-grounds — and the usual fix, an inline <head> script, would restate
+      readGround's seed rule in raw JS and give the contract two sources of
+      truth. 6.5c owns the control and owns this decision.
+   3. --ground-2 and --surface-2 are the same colour on the light ground
+      (both #eef4f1) and differ on dark. A surface-2 card on a ground-2 band
+      reads on dark and vanishes on light, so previewing that pairing in
+      light will not show an implementer the choice they actually made.
+      Inherited from the plan's token table, not a defect of this file.
+
+   D20a — the field is a dark-ground device and is allowed to disappear. On
+   the light ground --glow and --glow-strong resolve to a near-invisible
+   wash. That is the ruling, not an oversight: a green bloom on cream is the
+   same illegal-adjacent move D1 refused, and inventing a light-mode
+   ornament to replace it would make the two grounds two designs. */
+
+:root {
+  --ground: var(--color-signal-bg);
+  --ground-2: var(--color-signal-bg-2);
+  --surface: var(--color-signal-surface);
+  --surface-2: var(--color-signal-surface-2);
+
+  /* --edge and --edge-2 are decoration. --edge is 1.31:1 on the ground and
+     1.21:1 on the surface; --edge-2 is 1.67:1 and 1.54:1. An input outline
+     or a table rule needs 3:1 and takes --edge-strong (3.88:1 on the ground,
+     3.58:1 on the surface; 3.28 / 3.49 on light) — the token D1 added for
+     exactly that. */
+  --edge: var(--color-signal-line);
+  --edge-2: var(--color-signal-line-2);
+  --edge-strong: var(--color-signal-line-strong);
+
+  --ink: var(--color-signal-text);
+  --ink-2: var(--color-signal-text-2);
+  --ink-3: var(--color-signal-text-3);
+
+  /* --accent-deep is the pressed and hover fill under the resting --accent,
+     and is darker than it on both grounds. --accent-ink on it is scored by
+     contrast-usage.test.ts like any other pair: 6.21:1 dark, 7.75:1 light. */
+  --accent: var(--color-signal-accent);
+  --accent-deep: var(--color-signal-accent-deep);
+  --accent-ink: var(--color-signal-accent-ink);
+  --accent-wash: rgb(from var(--color-signal-accent) r g b / 0.12);
+  --focus: var(--color-signal-accent);
+
+  --warn: var(--color-signal-flag-review);
+  --warn-wash: rgb(from var(--color-signal-flag-review) r g b / 0.14);
+  --risk: var(--color-signal-flag-risk);
+  --risk-wash: rgb(from var(--color-signal-flag-risk) r g b / 0.14);
+
+  --wash: rgb(from var(--color-signal-text) r g b / 0.06);
+  --wash-2: rgb(from var(--color-signal-text) r g b / 0.12);
+
+  --glow: rgb(from var(--color-signal-accent) r g b / 0.18);
+  --glow-strong: rgb(from var(--color-signal-accent) r g b / 0.34);
+}
+
+:root[data-theme="light"] {
+  --ground: var(--color-signal-l-bg);
+  --ground-2: var(--color-signal-l-bg-2);
+  --surface: var(--color-signal-l-surface);
+  --surface-2: var(--color-signal-l-surface-2);
+
+  --edge: var(--color-signal-l-line);
+  --edge-2: var(--color-signal-l-line-2);
+  --edge-strong: var(--color-signal-l-line-strong);
+
+  --ink: var(--color-signal-l-text);
+  --ink-2: var(--color-signal-l-text-2);
+  --ink-3: var(--color-signal-l-text-3);
+
+  --accent: var(--color-signal-l-accent);
+  --accent-deep: var(--color-signal-l-accent-deep);
+  --accent-ink: var(--color-signal-l-accent-ink);
+  --accent-wash: rgb(from var(--color-signal-l-accent) r g b / 0.12);
+  --focus: var(--color-signal-l-accent);
+
+  --warn: var(--color-signal-l-flag-review);
+  --warn-wash: rgb(from var(--color-signal-l-flag-review) r g b / 0.14);
+  --risk: var(--color-signal-l-flag-risk);
+  --risk-wash: rgb(from var(--color-signal-l-flag-risk) r g b / 0.14);
+
+  /* Dark ink over a light ground — the inverse of the pair above, and the
+     reason this block is not a copy of the one above with a prefix. */
+  --wash: rgb(from var(--color-signal-l-text) r g b / 0.06);
+  --wash-2: rgb(from var(--color-signal-l-text) r g b / 0.12);
+
+  /* D20a. No louder than the ambient wash, which is what "allowed to
+     disappear" means in a number. */
+  --glow: rgb(from var(--color-signal-l-accent) r g b / 0.03);
+  --glow-strong: rgb(from var(--color-signal-l-accent) r g b / 0.05);
+}
