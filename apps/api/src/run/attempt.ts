@@ -88,7 +88,7 @@ import {
   timedOut,
   timingOf,
 } from "./clock.js";
-import { indexOf, sectionIndexOf } from "./navigation.js";
+import { assertReachable, indexOf, sectionIndexOf } from "./navigation.js";
 
 /** Re-exported here because this is where the brief names it; it is
  *  declared in `middleware/attemptContext.ts`, the module that reads it. */
@@ -875,6 +875,16 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     // names the next one. Before the navigation rule, for the same reason
     // the deadline is: time is the more urgent truth.
     assertSectionOpen(attempt, target, now);
+
+    // `AC-15`, asserted against this route and not against the function it
+    // calls: the attack is a candidate scripting a `PUT` at an earlier
+    // question after the interface stopped offering it.
+    assertReachable(
+      attempt.layout,
+      timingOf(attempt.settings).navigation ?? TIMING_DEFAULTS.navigation,
+      attempt.maxIndex,
+      questionId,
+    );
 
     // The one write, and — only when the candidate has actually moved
     // forward — the progress bump riding the **same** `db.batch`, which

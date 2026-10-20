@@ -12,6 +12,8 @@
 // the write path alone, which is exactly where `AC-15`'s "either through
 // the interface or through the API" bites.
 
+import { ApiError } from "../errors.js";
+import type { NavigationMode } from "@pariksha/core";
 import type { PinnedLayout } from "./attempt.js";
 
 /** Presentation order across sections; the index into this is
@@ -37,4 +39,37 @@ export function sectionIndexOf(layout: PinnedLayout, flatIndex: number): number 
     if (flatIndex < seen) return at;
   }
   return Math.max(0, layout.sections.length - 1);
+}
+
+/** The sentence each mode refuses with. Named, because `C-02` says a
+ *  refusal must say what would help and "403" would not. */
+const RULE: Readonly<Record<Exclude<NavigationMode, "free">, string>> = {
+  linear: "This test does not allow going back to an earlier question.",
+  per_section:
+    "This test does not allow going back to a section you have already left.",
+};
+
+/**
+ * Throws 403 `navigation_locked`, naming the rule — **never a 404**.
+ *
+ * A question outside the paper is the 404 (`S-10`'s one body, in the route
+ * before this is reached); a question on the paper that this candidate may
+ * not write to right now is this. The two are deliberately distinguishable:
+ * the first would otherwise disclose which questions exist, and the second
+ * is a rule the candidate was told about on the landing page.
+ */
+export function assertReachable(
+  layout: PinnedLayout,
+  mode: NavigationMode,
+  maxIndex: number,
+  questionId: string,
+): void {
+  if (mode === "free") return;
+  const target = indexOf(layout, questionId);
+  const behind =
+    mode === "linear"
+      ? target < maxIndex
+      : sectionIndexOf(layout, target) < sectionIndexOf(layout, maxIndex);
+  if (!behind) return;
+  throw new ApiError(403, "navigation_locked", RULE[mode]);
 }
