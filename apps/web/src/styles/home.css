@@ -149,10 +149,20 @@
    content, and a pane that refuses to shrink pushes the strip off screen —
    which is D21's failure mode, not its layout. */
 .home__panes {
+  /* THE FLOOR, and the one number the two layouts below both derive from.
+     144px per pane is a title (25px), the pane's own padding (24px) and
+     about two 40px rows — the point at which a pane is still usable rather
+     than a sliver. */
+  --home-pane-floor: 9rem;
+  /* What the floor comes to in THIS layout — one row of panes here, two
+     stacked below 719px. The release block at the foot of this file reads
+     this one name and so needs no layout branch of its own. */
+  --home-panes-floor: var(--home-pane-floor);
+
   display: grid;
   grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
   gap: var(--space-md);
-  min-height: 0;
+  min-height: var(--home-panes-floor);
   flex: 1;
 }
 
@@ -509,5 +519,64 @@
   .home__panes {
     grid-template-columns: minmax(0, 1fr);
     grid-auto-rows: minmax(0, 1fr);
+    /* Two panes now, one above the other, so the floor is twice the one
+       above plus the gap between them — derived here rather than restated,
+       the same lesson as the page bound. */
+    --home-panes-floor: calc((2 * var(--home-pane-floor)) + var(--space-md));
+  }
+}
+
+/* ---- WCAG reflow beats D21 below this height --------------------------- */
+
+/* D21 says Home never scrolls, and it does not — at every viewport where
+   that is physically possible. Below about 660px of viewport height the
+   fixed parts (bar, page gutters, crumb/title/lead, and a strip that wraps
+   to three rows at phone width) plus the pane floor above no longer fit,
+   and `overflow: hidden` would then CLIP the panes rather than merely
+   crowd them. Clipped content is unreachable content: WCAG 2.1 SC 1.4.10
+   Reflow is specified at 320x256 CSS px and counts loss of content as a
+   failure, and this phase lands before Phase 12's WCAG 2.1 AA audit.
+
+   So reachability beats never-scrolls: the bound becomes a `min-height`,
+   `.home` is content-sized, and the page scrolls past the viewport when it
+   has to. D21's intent is unchanged above this line and is honoured as far
+   down as it can be — the panes still scroll inside themselves, and the
+   strip is still reachable, by scrolling to it rather than by clipping it
+   away.
+
+   680px is measured, not guessed: at 400px wide the narrow, stacked layout
+   with a three-row strip still clipped by 4px at 667px of viewport height
+   and cleared at 700px, so the switch sits above the crossover rather than
+   on it. On a short but WIDE viewport the `min-height` keeps the page
+   filling the screen, so nothing scrolls and no dead space opens below the
+   strip.
+
+   This is a RULING (fix round 2), not a stray value. Do not delete it
+   without replacing the reflow guarantee it carries. */
+@media (max-height: 680px) {
+  .shell__page:has(> .home) {
+    height: auto;
+    min-height: calc(100dvh - var(--shell-bar));
+    overflow: visible;
+  }
+
+  /* `1 1 auto`, not `1`: `flex: 1` is a ZERO basis, and a zero basis in an
+     intrinsically-sized container makes the item's contribution its whole
+     content (CSS Flexbox §9.9.1). That is how, on the first attempt here,
+     the panes stopped being scroll containers, the entire list laid out,
+     and the page became one 3600px scroll with the strip at the bottom of
+     it. Measured, not supposed. */
+  .shell__page > .home {
+    flex: 1 1 auto;
+    overflow: visible;
+  }
+
+  /* The floor as an explicit BASIS, for the same reason: it makes the
+     panes' contribution the floor rather than their content, so the page
+     is chrome + floor + strip. `flex-grow: 1` still hands them any room
+     the page's `min-height` leaves over, so a short but wide viewport
+     fills instead of opening dead ground under the strip. */
+  .home__panes {
+    flex: 1 1 var(--home-panes-floor);
   }
 }

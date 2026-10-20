@@ -303,6 +303,38 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     expect(rules).toContain("overflow: hidden");
   });
 
+  // Fix round 2's ruling: reachability beats never-scrolls. Below about
+  // 680px of viewport height the fixed parts plus the pane floor no longer
+  // fit, and `overflow: hidden` would CLIP the panes rather than crowd
+  // them — clipped content is unreachable content, which WCAG 2.1 SC 1.4.10
+  // Reflow counts as a failure at 320x256. Guarded so a later plan
+  // tightening the bound cannot silently reintroduce the clip.
+  it("floors the panes so they cannot be squeezed to a sliver", async () => {
+    await openHome();
+
+    const panes = declaredFor(".home__panes");
+    expect(panes).toContain("--home-pane-floor: 9rem");
+    // One name the release rule reads, set per layout, so the stacked case
+    // needs no branch of its own.
+    expect(panes).toContain("min-height: var(--home-panes-floor)");
+    expect(panes).toContain(
+      "--home-panes-floor: calc((2 * var(--home-pane-floor)) + var(--space-md))",
+    );
+  });
+
+  it("lets the page scroll past the floor rather than clipping it", async () => {
+    await openHome();
+
+    // The bound relaxes to a minimum, and the clip is lifted with it.
+    const page = declaredFor(".shell__page:has(> .home)");
+    expect(page).toContain("min-height: calc(100dvh - var(--shell-bar))");
+    expect(page).toContain("overflow: visible");
+    // The floor becomes an explicit flex basis there: a zero basis in an
+    // intrinsically-sized container makes the panes' contribution their
+    // whole content, which turns the page into one long list.
+    expect(declaredFor(".home__panes")).toContain("flex: 1 1 var(--home-panes-floor)");
+  });
+
   // The three fixes a browser probe found. jsdom cannot see any of them, so
   // without these a later edit restores the regression with the suite green.
   it("keeps the row action out of the flow, so it costs a row no width", async () => {
