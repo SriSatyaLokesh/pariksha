@@ -145,6 +145,7 @@ const landing: LandingPayload = {
   latestStartAt: null,
   timezone: "Asia/Kolkata",
   branding: { logo: null, logoAlt: null, primaryColour: null, footerText: null, startMessage: null },
+  candidateList: false,
   serverNow: NOW,
 };
 

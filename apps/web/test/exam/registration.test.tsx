@@ -48,6 +48,7 @@ const landingFixture: LandingPayload = {
   latestStartAt: null,
   timezone: "Asia/Kolkata",
   branding: { logo: null, logoAlt: null, primaryColour: null, footerText: null, startMessage: null },
+  candidateList: false,
   serverNow: NOW,
 };
 
@@ -190,9 +191,21 @@ it("the gate sends what the candidate filled in and nothing else", async () => {
   expect(Object.keys(sent ?? {})).toEqual(["code"]);
 });
 
+// --- T-21: the identifier a listed test requires --------------------------
+//
+// The field was labelled "Roll number or ID", helped "Only if your
+// organiser gave you one", and left optional — while the server's
+// `listEntry` refused a blank one with `code_wrong`, the same bytes a
+// wrong access code gets. So a listed candidate who followed the UI's own
+// wording could not get in, and was told their correct access code was
+// wrong. `candidateList` is what the gate needs to stop guessing.
+
+/** A test whose organiser uploaded a candidate list. */
+const listed: LandingPayload = { ...landingFixture, candidateList: true };
+
 it("T-21: a candidate list identity is typed at the gate and travels with the code", async () => {
   const access = vi.fn(() => Promise.resolve({ entryToken: "ent_1" }));
-  const client = clientFor({ access, form: vi.fn(() => Promise.resolve(formPayload)) });
+  const client = clientFor({ access, form: vi.fn(() => Promise.resolve(formPayload)) }, listed);
   await reachRegistration(client);
 
   type(/access code/i, "OPENSESAME");
@@ -201,6 +214,63 @@ it("T-21: a candidate list identity is typed at the gate and travels with the co
   await screen.findByLabelText(/full name/i);
 
   expect(access).toHaveBeenCalledWith({ code: "OPENSESAME", identifier: "21CS0147" });
+});
+
+it("T-21: on a listed test the identifier is announced required, not merely drawn that way", async () => {
+  const client = clientFor({}, listed);
+  await reachRegistration(client);
+
+  const field = screen.getByLabelText(/roll number or ID/i);
+  expect(field).toHaveAttribute("aria-required", "true");
+  // WCAG 2.5.3: the marker is inside the <label>, so the accessible name
+  // is the visible label and a superset of it rather than a second string
+  // a voice user cannot say.
+  // The accessible-name computation collapses the space before the
+  // marker; the point is that the marker is *in* the name.
+  expect(field).toHaveAccessibleName("Roll number or ID*");
+  // And the help text says what the field is for, instead of the "only
+  // if your organiser gave you one" that made it look skippable.
+  expect(screen.getByText(/admits only the candidates its organiser listed/i)).toBeVisible();
+});
+
+it("T-21: a blank identifier is refused here, not sent to come back as 'wrong code'", async () => {
+  const access = vi.fn(() => Promise.resolve({ entryToken: "ent_1" }));
+  const client = clientFor({ access }, listed);
+  await reachRegistration(client);
+
+  type(/access code/i, "OPENSESAME");
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+  // Nothing was sent, so nothing can come back as `code_wrong` over a
+  // code that is perfectly correct.
+  expect(access).not.toHaveBeenCalled();
+  const field = screen.getByLabelText(/roll number or ID/i);
+  expect(field).toHaveAttribute("aria-invalid", "true");
+  expect(screen.getByText(/roll number or ID your organiser listed you under/i)).toBeVisible();
+  // WCAG 3.3.1: the caret is put in the field that was refused.
+  expect(field).toHaveFocus();
+
+  // And typing clears it, rather than leaving a stale ⚠ under a field the
+  // candidate has just filled in.
+  fireEvent.change(field, { target: { value: "21CS0147" } });
+  expect(field).not.toHaveAttribute("aria-invalid");
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  expect(access).toHaveBeenCalledWith({ code: "OPENSESAME", identifier: "21CS0147" });
+});
+
+it("T-21: a test with no candidate list does not show the field at all", async () => {
+  // Not shown-and-optional: an optional field on a gate is one more thing
+  // to read under a clock, and the server ignores an identifier it never
+  // asked for anyway.
+  const access = vi.fn(() => Promise.resolve({ entryToken: "ent_1" }));
+  const client = clientFor({ access, form: vi.fn(() => Promise.resolve(formPayload)) });
+  await reachRegistration(client);
+
+  expect(screen.queryByLabelText(/roll number or ID/i)).toBeNull();
+  type(/access code/i, "OPENSESAME");
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  await screen.findByLabelText(/full name/i);
+  expect(access).toHaveBeenCalledWith({ code: "OPENSESAME" });
 });
 
 // --- the four modes ------------------------------------------------------
@@ -505,12 +575,25 @@ it("the submit is disabled and the wait is announced for the whole round trip", 
 // --- accessibility -------------------------------------------------------
 
 it("the gate has no axe violations, at 100% and at 200% zoom", async () => {
-  const { container } = await reachRegistration(clientFor({}));
+  // The listed fixture: strictly more markup than the unlisted gate — the
+  // required identifier on top of the access code — so this audits both.
+  const { container } = await reachRegistration(clientFor({}, listed));
   // Not vacuous: axe over an empty container passes, so the thing being
   // audited is asserted present first.
   expect(within(container).getByLabelText(/access code/i)).toBeVisible();
+  expect(within(container).getByLabelText(/roll number or ID/i)).toBeVisible();
   expect(await axe(container)).toHaveNoViolations();
   document.documentElement.style.fontSize = "32px";
+  expect(await axe(container)).toHaveNoViolations();
+
+  // And the refused state, which is markup of its own: `aria-invalid`, a
+  // second `aria-describedby` target and a `role="alert"` line.
+  document.documentElement.style.fontSize = "";
+  fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+  expect(within(container).getByLabelText(/roll number or ID/i)).toHaveAttribute(
+    "aria-invalid",
+    "true",
+  );
   expect(await axe(container)).toHaveNoViolations();
 });
 
@@ -534,7 +617,9 @@ it("WCAG 2.5.3: the submit's accessible name is a superset of its visible label"
 });
 
 it("every control on the gate is a focusable native control in reading order", async () => {
-  await reachRegistration(clientFor({}));
+  // The listed fixture, so both gate fields are on the screen: the access
+  // code and the identifier `candidateList` makes required.
+  await reachRegistration(clientFor({}, listed));
   const gate = screen.getByRole("button", { name: /continue/i }).closest("form");
   const controls = within(gate as HTMLElement).getAllByRole("textbox");
   expect(controls.map((control) => control.tagName)).toEqual(["INPUT", "INPUT"]);

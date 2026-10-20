@@ -40,6 +40,12 @@ export function tokenFromUrl(name: string, search: string = window.location.sear
  *  `invite_only` test opened without the link. */
 const NO_INVITE = "Open the invite link your organiser sent you.";
 
+/** The courtesy copy of `listEntry`'s own rule. The server still decides;
+ *  this saves a candidate a round trip that would come back as
+ *  `code_wrong` — the same bytes a wrong access code gets, so without it
+ *  the refusal says their correct code is the thing that is wrong. */
+const IDENTIFIER_REQUIRED = "Enter the roll number or ID your organiser listed you under.";
+
 /** Which legs the gate shows. The server decides whether what was sent was
  *  enough (`S-10` keeps a refusal from saying which half was wrong); this
  *  only decides what to put in front of the candidate. */
@@ -70,7 +76,18 @@ export function ExamRegistration({
   const [email, setEmail] = useState("");
   const [otp, setOtp] = useState("");
   const [identifier, setIdentifier] = useState("");
+  const [identifierError, setIdentifierError] = useState<string | null>(null);
   const [emailed, setEmailed] = useState(false);
+
+  /**
+   * `T-21`: a test whose organiser uploaded a candidate list admits only
+   * identities on it, and the identifier is typed at the gate because the
+   * gate runs before the form is shown. Required when the test says so,
+   * absent when it does not — never the optional middle, which is what
+   * locked a listed candidate out of their own exam: the UI called the
+   * field optional and `listEntry` refused the blank with `code_wrong`.
+   */
+  const needsIdentifier = test.candidateList && (mode === "link_code" || mode === "email_code");
 
   // --- the screen -------------------------------------------------------
   const [stage, setStage] = useState<
@@ -192,6 +209,16 @@ export function ExamRegistration({
 
   function submitGate(event: FormEvent): void {
     event.preventDefault();
+    // The one thing this screen may decide for itself, because the test
+    // told it: an identifier this test requires and the candidate left
+    // blank. Everything below is still the server's call.
+    if (needsIdentifier && identifier.trim() === "") {
+      setIdentifierError(IDENTIFIER_REQUIRED);
+      // Same effect the form's refusal uses, so WCAG 3.3.1's "focus the
+      // first invalid field" holds on the gate too.
+      setRefusedAt((seq) => seq + 1);
+      return;
+    }
     // Only what the candidate filled in. Which of these was needed is the
     // server's decision, not this file's.
     const input: AccessRequest = {};
@@ -344,22 +371,18 @@ export function ExamRegistration({
               </>
             )}
 
-            {/* `T-21`: a test whose organiser uploaded a candidate list
-                admits only identities on it, and the identifier is typed at
-                the gate because the gate runs before the form is shown.
-                ponytail: offered rather than required, because
-                `LandingPayload` does not say whether this test has a list
-                and `S-10` forbids the gate from telling anyone. The server
-                ignores an identifier it never asked for. Upgrade path: a
-                `candidateList: boolean` on the landing payload, and this
-                field renders only when it is true. */}
-            {(mode === "link_code" || mode === "email_code") && (
+            {needsIdentifier && (
               <TextField
                 id="exam-access-identifier"
                 label="Roll number or ID"
-                help="Only if your organiser gave you one for this test."
+                required
+                help="This test admits only the candidates its organiser listed. Use the identifier they listed you under."
                 value={identifier}
-                onChange={setIdentifier}
+                error={identifierError ?? undefined}
+                onChange={(next) => {
+                  setIdentifier(next);
+                  setIdentifierError(null);
+                }}
                 autoComplete="off"
               />
             )}

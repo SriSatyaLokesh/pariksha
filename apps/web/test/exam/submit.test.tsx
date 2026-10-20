@@ -113,6 +113,7 @@ const landing: LandingPayload = {
     footerText: null,
     startMessage: null,
   },
+  candidateList: false,
   serverNow: NOW,
 };
 

@@ -37,6 +37,7 @@ const landingFixture: LandingPayload = {
     footerText: "Alpha Corp · Hyderabad",
     startMessage: "Read every instruction before you begin.",
   },
+  candidateList: false,
   serverNow: NOW,
 };
 

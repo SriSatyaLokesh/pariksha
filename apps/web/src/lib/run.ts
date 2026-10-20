@@ -46,6 +46,20 @@ export interface LandingPayload {
     startMessage: string | null;
   };
   /**
+   * Whether this test identifies its candidates by an uploaded list
+   * (`T-21`). When it does, the gate **requires** the roll number or ID,
+   * because `listEntry` refuses a blank one with `code_wrong` — the same
+   * bytes as a wrong access code, so a listed candidate who left it blank
+   * was told their correct code was wrong. When it does not, the field is
+   * not shown at all rather than offered as optional.
+   *
+   * **Not an `S-10` disclosure.** `S-10` protects a *person*: whether a
+   * given identifier is on the list. This is a property of the test,
+   * identical for every visitor holding the link, and a candidate has to
+   * know it to comply.
+   */
+  candidateList: boolean;
+  /**
    * The server's own reading of the clock when it answered. Every countdown
    * is a delta from this plus `performance.now()`, never from `Date.now()`
    * (Review Focus 4) — Task 9 builds the clock; this is where its anchor
