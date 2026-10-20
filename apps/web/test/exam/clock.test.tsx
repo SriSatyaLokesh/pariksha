@@ -17,7 +17,7 @@
 // this file moved on purpose.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -26,6 +26,7 @@ import { Clock, anchorFrom, formatRemaining, reanchor } from "../../src/componen
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
 import type { RunClient } from "../../src/lib/run";
+import { SAVE_DEBOUNCE_MS } from "../../src/lib/queue";
 
 const MINUTE = 60_000;
 const STYLES = dirname(fileURLToPath(import.meta.url));
@@ -58,6 +59,35 @@ function advance(ms: number): void {
     vi.advanceTimersByTime(ms);
   });
 }
+
+/**
+ * Settle the app on **this file's clock**: flush the microtasks a promise
+ * is waiting on, and run `ms` of the timers the save queue schedules.
+ *
+ * The tests below that drive `ExamApp` used to hand the clock back with
+ * `vi.useRealTimers()` and wait on `findBy*`/`waitFor`. That is a race,
+ * and a losing one: @testing-library's `asyncUtilTimeout` is **1 s**, a
+ * far tighter bar than this package's 10 s `testTimeout`, and the step
+ * being waited on contains the queue's own 800 ms `SAVE_DEBOUNCE_MS`
+ * window. Two hundred milliseconds of margin is not a test, it is a coin
+ * toss that a loaded run loses — measured failing in every loaded run of
+ * the full gate and passing in every run of this file alone.
+ *
+ * So no wall-clock anywhere: the debounce is *advanced*, not waited for,
+ * and every query below is a synchronous `getBy*`. Same shape as
+ * `autosave.test.tsx`'s `C-05`. `mono` deliberately does not move, so the
+ * countdown reads the server's number rather than one a slow machine
+ * ticked down on its own.
+ */
+async function settle(ms = 0): Promise<void> {
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(ms);
+  });
+}
+
+/** One edit's worth of the save queue: the debounce window and the
+ *  response that re-anchors the clock behind it. */
+const saved = (): Promise<void> => settle(SAVE_DEBOUNCE_MS + 50);
 
 const timers = (): HTMLElement[] => screen.getAllByRole("timer");
 const total = (): HTMLElement => timers()[0] as HTMLElement;
@@ -429,9 +459,9 @@ function resumingClient(overrides: Partial<RunClient> = {}, paper = resumedPaper
 
 describe("the clock is on the runner a candidate actually reaches", () => {
   it("resuming an attempt shows both clocks, reading the server's own numbers", async () => {
-    vi.useRealTimers();
     render(<ExamApp client={resumingClient()} />);
-    await screen.findByRole("navigation", { name: /question palette/i });
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
 
     const [whole, section] = screen.getAllByRole("timer") as [HTMLElement, HTMLElement];
     expect(shown(whole)).toBe("45:00");
@@ -439,22 +469,18 @@ describe("the clock is on the runner a candidate actually reaches", () => {
   });
 
   it("a save re-anchors the countdown from the server's reading, not the browser's", async () => {
-    vi.useRealTimers();
     const putAnswer = vi.fn().mockResolvedValue({ outcome: "accepted", remainingMs: 12 * MINUTE });
     render(<ExamApp client={resumingClient({ putAnswer })} />);
-    await screen.findByRole("navigation", { name: /question palette/i });
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
 
     // One real answer, through the real queue, through the real
     // transport — this is the wiring Task 8's `remainingMs` exists for,
     // and nothing else in the suite would notice it missing.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
-    // SAVE_DEBOUNCE_MS is 800, so the window has to be allowed to close.
-    await waitFor(() => {
-      expect(putAnswer).toHaveBeenCalled();
-    });
-    await waitFor(() => {
-      expect(shown()).toBe("12:00");
-    });
+    await saved();
+    expect(putAnswer).toHaveBeenCalled();
+    expect(shown()).toBe("12:00");
   });
 
   it("C-07: the section clock fires once per SECTION, and the chip re-anchors to the new one", async () => {
@@ -466,10 +492,9 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     // only and a save carried no section reading at all, so the chip read
     // `0:00` for the rest of the paper while still counting the section
     // the candidate had already left.
-    vi.useRealTimers();
-    // Thirty seconds, not five: large enough that a slow machine cannot
-    // tick section two down to zero on its own and turn a passing run
-    // into a lie about what fired.
+    // Thirty seconds: the chip must read the section's own number back,
+    // and `mono` never moves here, so what is asserted is what the server
+    // sent rather than whatever a slow machine ticked it down to.
     const readings = [30_000, 0];
     const putAnswer = vi.fn(() =>
       Promise.resolve({
@@ -484,25 +509,27 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     render(
       <ExamApp client={resumingClient({ putAnswer }, { ...threeSections, sectionRemainingMs: 0 })} />,
     );
-    await screen.findByRole("navigation", { name: /question palette/i });
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
 
     // Boundary one: the candidate is moved to the first question of
     // section two rather than left on a question every save refuses.
-    expect(await screen.findByText("Question 3 stem")).toBeVisible();
+    expect(screen.getByText("Question 3 stem")).toBeVisible();
 
     // The save re-anchors the section chip on to section two's own clock.
     // Carried forward from the previous anchor it would still read 0:00.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
-    await waitFor(() => {
-      const [, section] = screen.getAllByRole("timer") as [HTMLElement, HTMLElement];
-      expect(shown(section)).toBe("0:30");
-    });
+    await saved();
+    const [, section] = screen.getAllByRole("timer") as [HTMLElement, HTMLElement];
+    expect(shown(section)).toBe("0:30");
 
     // Boundary two: section two runs out in its turn. A guard that never
     // re-armed would leave the candidate here for the rest of the paper.
     fireEvent.click(screen.getByRole("button", { name: /next question/i }));
-    fireEvent.change(await screen.findByRole("textbox"), { target: { value: "Mumbai" } });
-    expect(await screen.findByText("Question 5 stem")).toBeVisible();
+    await settle();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Mumbai" } });
+    await saved();
+    expect(screen.getByText("Question 5 stem")).toBeVisible();
   });
 
   it("C-07: a section with NO time limit does not disarm every section after it", async () => {
@@ -513,7 +540,6 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     // the untimed section ever auto-advanced. A candidate on a
     // timed → untimed → timed paper sat on a question every save refused
     // for the rest of the attempt.
-    vi.useRealTimers();
     // Section two is untimed, so its save reports `null`; section three's
     // reports a clock the server already has at zero.
     const readings: (number | null)[] = [null, 0];
@@ -530,32 +556,33 @@ describe("the clock is on the runner a candidate actually reaches", () => {
         client={resumingClient({ putAnswer }, { ...mixedSections, sectionRemainingMs: 0 })}
       />,
     );
-    await screen.findByRole("navigation", { name: /question palette/i });
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
 
     // Boundary one, out of timed section one — the half that already
     // worked.
-    expect(await screen.findByText("Question 3 stem")).toBeVisible();
+    expect(screen.getByText("Question 3 stem")).toBeVisible();
 
     // A save inside the untimed section: there is no section chip to
     // show, and nothing auto-advances out of it, which is correct.
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
-    await waitFor(() => {
-      expect(putAnswer).toHaveBeenCalledTimes(1);
-    });
-    await waitFor(() => {
-      expect(screen.getAllByRole("timer")).toHaveLength(1);
-    });
+    await saved();
+    expect(putAnswer).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByRole("timer")).toHaveLength(1);
     expect(screen.getByText("Question 3 stem")).toBeVisible();
 
     // The candidate walks out of it themselves, into timed section three.
     fireEvent.click(screen.getByRole("button", { name: /next question/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /next question/i }));
-    expect(await screen.findByText("Question 5 stem")).toBeVisible();
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: /next question/i }));
+    await settle();
+    expect(screen.getByText("Question 5 stem")).toBeVisible();
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Mumbai" } });
+    await saved();
 
     // Boundary two, across the untimed section. Latched, this never
     // happens and the candidate stays on question 5.
-    expect(await screen.findByText("Question 7 stem")).toBeVisible();
+    expect(screen.getByText("Question 7 stem")).toBeVisible();
   });
 
   it("the paper's own clock still fires exactly once, however the section clock re-arms", async () => {
@@ -592,20 +619,19 @@ describe("the clock is on the runner a candidate actually reaches", () => {
   });
 
   it("a refusal carries no reading, and the countdown is left where it was", async () => {
-    vi.useRealTimers();
     // Task 8 deviation 4: `remainingMs` is **absent** on a refusal. The
     // clock must not re-anchor to an invented zero.
     const putAnswer = vi
       .fn()
       .mockResolvedValue({ outcome: "refused", message: "Your time for this test is up." });
     render(<ExamApp client={resumingClient({ putAnswer })} />);
-    await screen.findByRole("navigation", { name: /question palette/i });
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
 
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
-    await waitFor(() => {
-      expect(putAnswer).toHaveBeenCalled();
-    });
+    await saved();
+    expect(putAnswer).toHaveBeenCalled();
     expect(shown()).toBe("45:00");
-    expect(await screen.findByRole("alert")).toHaveTextContent(/time for this test is up/i);
+    expect(screen.getByRole("alert")).toHaveTextContent(/time for this test is up/i);
   });
 });
