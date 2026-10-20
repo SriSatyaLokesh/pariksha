@@ -317,19 +317,70 @@ mechanism:
 
 ---
 
-## 6. Unsure — recorded rather than guessed
+## 6. Disposition
 
-1. **Whether `D8` should be re-ruled, or simply recorded as satisfied.** The finding is factual; the
-   decision — amend §7, or close it with no diff — is the owner's, not this task's. This note takes
-   no position beyond "do not invent a sweep to justify the ruling".
-2. **The nine redeclared sizes.** Lines 648, 655, 667, 675 restate `button-md` that line 637 already
-   sets; lines 769, 776, 800, 808 restate `mono-sm` that line 760 already sets; line 1121 restates
-   `body-md` from 1106. Harmless redundancy, and possibly deliberate — restating the size next to
-   the state's weight or colour change keeps the rule readable in isolation. It could equally be
-   tidied to nine fewer declarations with **no rendered change**. That is a cleanup, not a `D8`
-   sweep, and it is outside "change no CSS", so it is flagged and not done. I am not certain which
-   the author intended, and line 800 is inside an untouchable rule either way.
-3. **Whether `signal.css`'s 33 real literals change the phase's shape.** `D8` puts `signal.css` out
-   of scope explicitly ("the landing is not in #187's scope list"). This note does not pursue it.
-   But it is the file the sweep's premise actually describes, and if the phase wants a type-scale
-   sweep to exist, that is where one is available. Owner's call.
+### 6.1 `D8` is closed as already satisfied
+
+Ruled 2026-10-21 on this evidence: **6.5f performs no sweep.** `G6` — the runtime's type is on the
+scale — was met before the phase began. §7 of the spec carries a one-line pointer recording it
+("Pointer, not an amendment"), zero deletions, no ruling text changed. The branch ships this note,
+the two guards in §7 below, and that pointer.
+
+### 6.2 The nine redeclared sizes stay exactly as they are
+
+Lines 648, 655, 667, 675 restate `button-md` that line 637 already sets; lines 769, 776, 800, 808
+restate `mono-sm` that line 760 already sets; line 1121 restates `body-md` from 1106. Each is
+harmless, and may well be deliberate — restating the size next to a state's weight or colour change
+keeps the rule readable on its own. It could equally be tidied away for **no rendered change**.
+
+**Observed and deliberately untouched.** The reason is the one governing this whole file: nobody can
+tell from the source which it is, and *no test would catch a mistake made while tidying a runtime
+declaration*. Freezing the geometry under conditions exactly like this is what `D8` is for. Line 800
+is inside an untouchable rule in any case (§5.1).
+
+### 6.3 Still open, and not pursued here
+
+**`signal.css`'s 33 real literals.** `D8` puts `signal.css` out of scope explicitly ("the landing is
+not in #187's scope list"), so this note goes no further than the count it needed to diagnose the
+miscount. But it is the file the sweep's premise actually describes, and it is where a type-scale
+sweep is genuinely available. Owner's call, not this phase's.
+
+---
+
+## 7. The two guards this finding left behind
+
+No CSS changed. What changed is that two invariants nobody was asserting now are.
+
+### 7.1 The `--exam-font-scale` guard — `apps/web/test/exam/runner.test.tsx`
+
+Asserts that `.exam-runner` and `.exam-question` each multiply their `font-size` by
+`var(--exam-font-scale)` **and** that the multiplied base is still a `var(--type-*-size)` step. It
+asserts the *invariant* — the candidate's text-size control reaches the body text and the stem, off
+a scale token — not the literal text of lines 393 and 680, so those rules may be renamed, rewritten
+or moved as long as the control still arrives.
+
+**Why it had to exist.** Verified by mutation: flattening line 393 to a bare
+`var(--type-body-md-size)` — precisely what a sweep or a tidy-up does, since the `calc()` is the odd
+shape on the page — **failed nothing in the suite before this guard existed**. The radios still set
+`data-font-scale`, the existing attribute tests still passed, and at the default scale of 1 the page
+is pixel-identical. Only the candidate who needs 1.5 finds out, mid-attempt, when they cannot report
+a bug.
+
+It reads the stylesheet rather than measuring a render, and that is an honest ceiling rather than a
+shortcut: `apps/web`'s suite is jsdom, runs with `css: false`, and has no layout engine, so no
+render in this workspace can report a computed font size at all.
+
+### 7.2 The voltage containment guard — `apps/web/test/theme.test.ts`
+
+Asserts the set of stylesheets whose own text uses `var(--color-voltage*)`, counted **per source
+file** — question.css and registration.css are shared by both entries, so a resolved-bundle count
+would blame the runtime for a sheet the organiser also loads. The file list is read off disk, not
+written by hand, so a new stylesheet reaching for voltage cannot be invisible to it.
+
+It asserts the set **true today** — `exam.css` and `registration.css`, plus `authoring.css`,
+`base.css`, `primitives.css` and `testbuilder.css` — not `D1`'s end state. `D1` leaves the runtime
+the sole voltage surface, but that happens as 6.5c, 6.5d and 6.5e re-ground each screen, and none
+has merged; a guard written against the end state would be **red on arrival** and would be deleted
+rather than believed. What it catches now is the invariant worth having: voltage **spreading** — a
+new stylesheet reaching for the vermilion, or one that had given it up taking it back. 6.5e shrinks
+the list; growing it is always a failure.
