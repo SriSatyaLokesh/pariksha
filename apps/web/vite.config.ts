@@ -1,9 +1,38 @@
+import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import { configDefaults, defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * How many test files this package runs at once (#161's second half).
+ *
+ * Vitest's default is `availableParallelism()`, and for *this* package
+ * that default is not merely wasteful, it is **strictly dominated** —
+ * measured over the whole suite on a 22-core box:
+ *
+ * | workers | wall  | failures |
+ * | ------- | ----- | -------- |
+ * | 22 (default) | 84 s | 27 |
+ * | 8       | 37 s  | 0 (of this class) |
+ * | 4       | 50 s  | 0 |
+ *
+ * Twenty-two workers is both slower *and* flakier than four. Each one is
+ * an isolated fork paying ~2.66 s of spawn plus a fresh jsdom, and fifty
+ * files means fifty of them: past a handful they stop computing and start
+ * queueing. The box reads ~91% idle and 7 GB free while a **synchronous**
+ * 174 ms test takes over ten seconds, which is what queueing looks like
+ * from the outside and why "add cores" has never helped.
+ *
+ * `Math.min` and not a percentage: the ceiling is a property of this
+ * suite, not of the host, so it must be a no-op on anything smaller than
+ * itself. A two-core CI runner was never above the knee and is not
+ * slowed down to prove a point; a big developer box stops sabotaging
+ * itself. Same shape in both places, nothing tuned to one machine.
+ */
+const maxWorkers = Math.min(availableParallelism(), 4);
 
 /**
  * The session cookie is HttpOnly, `SameSite=Lax`, `Secure` and path `/`
@@ -47,6 +76,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./test/setup.ts"],
     css: false,
+    maxWorkers,
     // jsdom warm-up plus React's first mount plus the first jest-dom/jest-axe
     // matcher are all charged to whichever test renders first in a file:
     // measured at 5-80x the median of every later test in the same file
@@ -65,6 +95,21 @@ export default defineConfig({
     // each run (#161). The fix is in the root `test` script: turbo now runs
     // the package test tasks one at a time, so each vitest instance gets the
     // whole machine its pool is sized for, and the tick stays nominal.
+    //
+    // That fix capped *packages* in flight, not workers inside one, and the
+    // package has since grown to fifty files. Re-measured with a probe
+    // running inside a loaded worker, the tick is **not** what stretches any
+    // more: hops cost 14-19 ms against 15.2 ms idle, CPU and React mounts
+    // are nominal, and the host is 91% idle. What stretches is the queue in
+    // front of fifty isolated forks — see `maxWorkers` above, which is the
+    // same fix one level down.
+    //
+    // The 15.6 ms floor itself is removable and this bar could fall a long
+    // way further: a self-rescheduling `setImmediate` keeps Node's loop off
+    // the OS tick and takes a zero-delay hop from 15.24 ms to 1.06 ms, which
+    // took the axe tests here from 620-1611 ms to 31-307 ms. It belongs in
+    // `test/setup.ts` and only alongside the worker cap -- churning in
+    // twenty-two forks at once is worse than the disease (130 s, 40 failed).
     //
     // With that in place the slowest single test in this package measured
     // 2.63 / 3.13 / 2.65 s over three consecutive runs, so 10 s is ~3.2x of
