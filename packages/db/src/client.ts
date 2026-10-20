@@ -43,8 +43,20 @@ interface RawOps {
    * group commits or none of it does. `upsertQuestions`
    * (packages/db/src/repo/banks.ts) is the first caller: N single-row writes
    * costs ~2N subrequests, one `batch()` costs one no matter how big N gets.
+   *
+   * **Returns one `{ changes }` per statement, in order** (Phase 6 Task 10).
+   * D1 already answers a `D1Result` per statement and the other two drivers
+   * answer a row count per statement; dropping it used to be free because
+   * every caller wrote blind. `upsertResponse` is the first that cannot:
+   * its upsert is conditional on `excluded.client_seq`, so whether the row
+   * moved is the difference between the wire words `accepted` and
+   * `superseded` — and `max_index` has to rise in the *same* subrequest or
+   * the hot path's pinned budget of 2 becomes 3. Reporting what the batch
+   * did is what lets both be true at once.
    */
-  batch(statements: readonly { sql: string; params?: unknown[] }[]): Promise<void>;
+  batch(
+    statements: readonly { sql: string; params?: unknown[] }[],
+  ): Promise<{ changes: number }[]>;
   /**
    * Encode a value bound for a JSON column. SQLite stores JSON as text and
    * Postgres as jsonb, so the two drivers want different things — the one
@@ -92,11 +104,10 @@ export function sqliteClient(path: string): DbClient {
     // actually using.
     batch: (statements) => {
       try {
-        const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) => {
-          for (const s of stmts) sqlite.prepare(s.sql).run(...(s.params ?? []));
-        });
-        run(statements);
-        return Promise.resolve();
+        const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) =>
+          stmts.map((s) => ({ changes: sqlite.prepare(s.sql).run(...(s.params ?? [])).changes })),
+        );
+        return Promise.resolve(run(statements));
       } catch (err) {
         return Promise.reject(err instanceof Error ? err : new Error(String(err)));
       }
@@ -140,7 +151,10 @@ export function d1Client(binding: D1Database): DbClient {
     // statement. D1 runs a batch inside an implicit transaction and rejects
     // the whole thing if any statement fails.
     batch: async (statements) => {
-      await binding.batch(statements.map((s) => binding.prepare(s.sql).bind(...(s.params ?? []))));
+      const results = await binding.batch(
+        statements.map((s) => binding.prepare(s.sql).bind(...(s.params ?? []))),
+      );
+      return results.map((result) => ({ changes: result.meta.changes ?? 0 }));
     },
     jsonParam: (value) => JSON.stringify(value),
     jsonValue: parseJsonText,
@@ -173,11 +187,14 @@ export function pgClient(url: string): DbClient {
     // rolls back on a rejected one — the transaction-scoped `tx`, not the
     // outer `sql`, is what every statement in the batch must run through.
     batch: async (statements) => {
+      const counts: { changes: number }[] = [];
       await sql.begin(async (tx) => {
         for (const s of statements) {
-          await tx.unsafe(toNumberedPlaceholders(s.sql), (s.params ?? []) as never[]);
+          const result = await tx.unsafe(toNumberedPlaceholders(s.sql), (s.params ?? []) as never[]);
+          counts.push({ changes: result.count });
         }
       });
+      return counts;
     },
     // postgres.js serialises a JS value into jsonb; handing it a JSON string
     // would store the string itself, quotes and all.

@@ -264,6 +264,80 @@ export async function seedAttemptTests(deps: AppDeps, workspaceId: string): Prom
     },
   });
 
+  // Tasks 9 and 10. Three siblings of `alpha/paper`, each differing in
+  // exactly one timing field, so a navigation or clock assertion can only
+  // be passing because of the field it names.
+  //
+  // Two *fixed* sections, unshuffled, so a test can name "the last
+  // question of section one" and "the first of section two" by position
+  // rather than by searching the returned paper — and so the flat index
+  // the server locks on is the index the fixture wrote.
+  const twoSections = (limits: (number | null)[]) =>
+    [
+      ["logic", "Logic", ["LOG-001", "LOG-002", "LOG-003"]],
+      ["quant", "Quant", ["QNT-001", "QNT-002", "QNT-003"]],
+    ].map(([id, title, refs], at) => ({
+      id: id as string,
+      title: title as string,
+      shuffle_questions: false,
+      ...(limits[at] === null || limits[at] === undefined
+        ? {}
+        : { time_limit_minutes: limits[at] as number }),
+      source: {
+        kind: "fixed" as const,
+        questions: (refs as string[]).map((ref) => q[ref] as string),
+      },
+    }));
+
+  // `T-13`'s middle mode: free inside the section you are in, locked once
+  // you have left it. Both sections are timed, so "the second section's
+  // clock runs from its own stamp" is a real assertion rather than a null.
+  await seedTest(deps, workspaceId, {
+    name: "Per section",
+    slug: "per-section",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "per_section" },
+        access: gated,
+        registration_form: PAPER_FORM,
+      },
+      sections: twoSections([15, 10]),
+    },
+  });
+
+  // The control: the same paper with nothing locked at all. Untimed
+  // sections, so a navigation assertion can only fail for a navigation
+  // reason.
+  await seedTest(deps, workspaceId, {
+    name: "Free nav",
+    slug: "free-nav",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "free" },
+        access: gated,
+        registration_form: PAPER_FORM,
+      },
+      sections: twoSections([null, null]),
+    },
+  });
+
+  // `AC-13`: the grace comes from the **version**, not from a constant.
+  // Twice the default, so a save 45 s late is refused on `alpha/paper`
+  // and accepted here — which no hard-coded 30 can produce. No section
+  // limit, so the only clock in play is the paper's own.
+  await seedTest(deps, workspaceId, {
+    name: "Sixty second grace",
+    slug: "grace60",
+    body: {
+      settings: {
+        timing: { ...paperTiming, late_sync_grace_seconds: 60 },
+        access: gated,
+        registration_form: PAPER_FORM,
+      },
+      sections: twoSections([null, null]),
+    },
+  });
+
   // A test with **no** `timing` block at all, so what the paper carries
   // is the server's own defaults (reconciliation row 8: they live only in
   // the builder UI, and `Test.timing` is optional by design).

@@ -176,15 +176,33 @@ export const upsertResponse = scoped(
       value: unknown;
       clientSeq: number;
       savedAt: number;
+      /**
+       * Phase 6 Tasks 9 and 10: how far the candidate has now got.
+       *
+       * Only ever supplied when the target is *ahead* of `max_index`, which
+       * is the uncommon case — re-editing an answer in place, the common
+       * one, supplies nothing and stays a single statement. When it is
+       * supplied the progress update rides the **same** `db.batch` as the
+       * upsert, which D1 counts as one subrequest, so the answer route's
+       * pinned budget of 2 does not move.
+       *
+       * `sectionStartedAt` is set only when this save is the first to reach
+       * a *later* section; `section_started_at` is the one thing a
+       * per-section deadline cannot be derived from, and re-stamping it on
+       * every save inside a section would hand the candidate an unlimited
+       * section.
+       */
+      advance?: { maxIndex: number; sectionStartedAt?: number };
     },
   ): Promise<{ stored: boolean }> => {
-    const { changes } = await db.run(
-      "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
+    const upsert = {
+      sql:
+        "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT (attempt_id, question_id) DO UPDATE SET " +
         "value_json = excluded.value_json, saved_at = excluded.saved_at, client_seq = excluded.client_seq " +
         "WHERE excluded.client_seq > response.client_seq",
-      [
+      params: [
         newId("rsp"),
         workspaceId,
         input.attemptId,
@@ -195,8 +213,61 @@ export const upsertResponse = scoped(
         null,
         null,
       ],
+    };
+
+    const advance = input.advance;
+    if (!advance) {
+      const { changes } = await db.run(upsert.sql, upsert.params);
+      return { stored: changes > 0 };
+    }
+
+    // `AND max_index < ?` is what makes "max_index never falls" a property
+    // of the statement rather than of the caller reading first: two saves
+    // racing from two tabs cannot reopen a question the lock has passed.
+    const stamp = advance.sectionStartedAt !== undefined;
+    const [response] = await db.batch([
+      upsert,
+      {
+        sql:
+          `UPDATE attempt SET max_index = ?${stamp ? ", section_started_at = ?" : ""} ` +
+          "WHERE workspace_id = ? AND id = ? AND max_index < ?",
+        params: [
+          advance.maxIndex,
+          ...(stamp ? [advance.sectionStartedAt] : []),
+          workspaceId,
+          input.attemptId,
+          advance.maxIndex,
+        ],
+      },
+    ]);
+    return { stored: (response?.changes ?? 0) > 0 };
+  },
+);
+
+/**
+ * Stamps the end of an attempt. `WHERE submitted_at IS NULL` so the first
+ * writer wins: a candidate pressing Submit at the same moment the server
+ * materialises a timeout must not have their reason overwritten.
+ *
+ * Phase 6 Task 9 mints it for `submit_reason = "timeout"` — there is no
+ * sweeper in this phase (nothing here gets a Cron Trigger), so an attempt
+ * whose candidate closed the tab is submitted the next time anything reads
+ * it. Task 11's candidate-pressed submission is the same statement with a
+ * different reason.
+ */
+export const submitAttempt = scoped(
+  "submitAttempt",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; submittedAt: number; reason: string },
+  ): Promise<{ submitted: boolean }> => {
+    const { changes } = await db.run(
+      "UPDATE attempt SET submitted_at = ?, submit_reason = ? " +
+        "WHERE workspace_id = ? AND id = ? AND submitted_at IS NULL",
+      [input.submittedAt, input.reason, workspaceId, input.attemptId],
     );
-    return { stored: changes > 0 };
+    return { submitted: changes > 0 };
   },
 );
 

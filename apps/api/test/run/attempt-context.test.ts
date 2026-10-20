@@ -309,7 +309,18 @@ it("the resume spends its declared budget: the one join and the answers", async 
   expect(res.status).toBe(200);
   expect(Object.keys((await paperOf(res)).responses).length).toBeGreaterThan(1);
   // Flat in the number of answers, which is what the number is for.
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/attempt"] as number);
+  //
+  // **2, not the declared 3.** Task 9 (#73) raised the declared number
+  // because the first read past `deadline_at + late_sync_grace_seconds`
+  // materialises the timeout submission (`C-07`), and a budget names the
+  // most expensive path through its route. An ordinary resume inside the
+  // window — this one — still spends the join and `listResponses` and
+  // nothing else; the 3 is pinned on the path that really costs it, in
+  // `test/run/clock.test.ts`.
+  expect(counting.counts().total).toBe(2);
+  expect(counting.counts().total).toBeLessThanOrEqual(
+    ROUTE_BUDGETS["/api/v1/run/attempt"] as number,
+  );
 });
 
 it("a 401 resume spends at most the lookup", async () => {

@@ -53,6 +53,7 @@ import {
   instant,
   listResponses,
   newId,
+  submitAttempt,
   upsertResponse,
   workspaceGroups,
   workspaceQuestions,
@@ -69,7 +70,6 @@ import {
   type ResponseValue,
   type Section,
   type SetAssignment,
-  type TestTiming,
 } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
@@ -78,6 +78,17 @@ import { ATTEMPT_COOKIE, attemptContext } from "../middleware/attemptContext.js"
 import { openTest, REGISTRATION_KIND, refuse, registrationHash } from "./entry.js";
 import { forCandidate, mediaKeysOf, type CandidateQuestion } from "./scrub.js";
 import { EXT_MEDIA_TYPE } from "../routes/media.js";
+import {
+  assertSectionOpen,
+  assertWritable,
+  clockOf,
+  currentSectionIndex,
+  graceMsOf,
+  TIMING_DEFAULTS,
+  timedOut,
+  timingOf,
+} from "./clock.js";
+import { indexOf, sectionIndexOf } from "./navigation.js";
 
 /** Re-exported here because this is where the brief names it; it is
  *  declared in `middleware/attemptContext.ts`, the module that reads it. */
@@ -153,13 +164,6 @@ const answerRequest = z.object({
   clientSeq: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 
-/** Reconciliation row 8: `timing` is optional on `Test` and these
- *  defaults live only in the builder UI, so the server applies its own —
- *  the same `??` shape `landingPayload` uses, stated at each use rather
- *  than through a module nothing else would import. */
-const DEFAULT_WARN_AT = [10, 2];
-const DEFAULT_GRACE_SECONDS = 30;
-
 export interface PaperSection {
   id: string;
   title: string;
@@ -227,12 +231,6 @@ export interface AttemptPaper {
 interface Proctoring {
   overrides?: { allow_calculator?: boolean };
 }
-
-const timingOf = (settings: unknown): Partial<TestTiming> =>
-  (settings as { timing?: Partial<TestTiming> }).timing ?? {};
-
-const graceMsOf = (settings: unknown): number =>
-  (timingOf(settings).late_sync_grace_seconds ?? DEFAULT_GRACE_SECONDS) * 1000;
 
 const allowCalculator = (settings: unknown): boolean =>
   (settings as { proctoring?: Proctoring }).proctoring?.overrides?.allow_calculator ?? false;
@@ -469,17 +467,6 @@ function paperSections(
 
 // --- the paper, from a row ---------------------------------------------
 
-/** Which section a flat question index falls in, and where that section
- *  starts. One walk, so `linear` and `per_section` read the same number. */
-function sectionAt(sections: PaperSection[], index: number): PaperSection | undefined {
-  let seen = 0;
-  for (const section of sections) {
-    seen += section.questions.length;
-    if (index < seen) return section;
-  }
-  return sections[sections.length - 1];
-}
-
 export function paperFrom(input: {
   attemptId: string;
   layout: PinnedLayout;
@@ -494,23 +481,22 @@ export function paperFrom(input: {
   now: number;
 }): AttemptPaper {
   const timing = timingOf(input.settings);
-  const current = sectionAt(input.layout.paper, input.maxIndex);
-  const limit = current?.timeLimitMinutes ?? null;
+  // The same `clockOf` every write is judged by, so the number the browser
+  // anchors its countdown on and the number that decides whether an answer
+  // is in time cannot drift apart (`AC-13`).
+  const clock = clockOf(input, input.now);
   return {
     attemptId: input.attemptId,
     sections: input.layout.paper,
     ...(input.layout.setNo === undefined ? {} : { setNo: input.layout.setNo }),
     responses: input.responses,
     clientSeq: input.clientSeq,
-    navigation: timing.navigation ?? "free",
+    navigation: timing.navigation ?? TIMING_DEFAULTS.navigation,
     maxIndex: input.maxIndex,
-    remainingMs: Math.max(0, input.deadlineAt - input.now),
-    sectionRemainingMs:
-      limit === null
-        ? null
-        : Math.max(0, (input.sectionStartedAt ?? input.startedAt) + limit * 60_000 - input.now),
-    warnAtMinutes: timing.warn_at_minutes ?? DEFAULT_WARN_AT,
-    lateSyncGraceSeconds: timing.late_sync_grace_seconds ?? DEFAULT_GRACE_SECONDS,
+    remainingMs: clock.remainingMs,
+    sectionRemainingMs: clock.sectionRemainingMs,
+    warnAtMinutes: [...(timing.warn_at_minutes ?? TIMING_DEFAULTS.warn_at_minutes)],
+    lateSyncGraceSeconds: graceMsOf(input.settings) / 1000,
     allowCalculator: allowCalculator(input.settings),
     serverNow: input.now,
     submittedAt: input.submittedAt,
@@ -551,7 +537,7 @@ export async function startAttempt(
       "You already have this test open. Open it in the browser you started it in; a different device needs a proctor to unlock it.",
     );
   }
-  const allowed = timing.attempts_allowed ?? 1;
+  const allowed = timing.attempts_allowed ?? TIMING_DEFAULTS.attempts_allowed;
   if (attempts.count >= allowed) {
     throw conflict(
       "attempts_exhausted",
@@ -762,6 +748,37 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
    */
   routes.get("/attempt", attemptContext(deps), async (c) => {
     const attempt = c.get("attempt");
+    const now = deps.now();
+
+    /**
+     * `C-07`, the half with no client in it: **the first request past the
+     * deadline submits the attempt.**
+     *
+     * There is no sweeper in this phase — nothing here gets a Cron Trigger
+     * — so a candidate who closes the tab and never comes back leaves an
+     * attempt that is submitted when it is next read. Whichever of the
+     * browser at zero and this happens first wins, and the other is a
+     * no-op (`WHERE submitted_at IS NULL`).
+     *
+     * **Past the grace, not past the deadline.** A resume at
+     * `deadline + 20 s` with a 30-second grace must *not* materialise the
+     * timeout: the queue is about to drain answers that were made in time,
+     * and every one of them would take a 409 against an attempt this read
+     * had just closed. That is the ordering bug this condition exists to
+     * avoid, and it is why the stamp is `deadline_at` itself rather than
+     * `now` — the attempt ended when the clock ran out, not when somebody
+     * next looked at it.
+     */
+    let submittedAt = attempt.submittedAt;
+    if (submittedAt === null && timedOut(attempt, now)) {
+      submittedAt = attempt.deadlineAt;
+      await submitAttempt(deps.db, attempt.workspaceId, {
+        attemptId: attempt.attemptId,
+        submittedAt,
+        reason: "timeout",
+      });
+    }
+
     const rows = await listResponses(deps.db, attempt.workspaceId, attempt.attemptId);
     const responses: Record<string, ResponseValue | null> = {};
     for (const row of rows) responses[row.questionId] = row.value as ResponseValue | null;
@@ -776,11 +793,11 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         settings: attempt.settings,
         startedAt: attempt.startedAt,
         deadlineAt: attempt.deadlineAt,
-        submittedAt: attempt.submittedAt,
+        submittedAt,
         sectionStartedAt: attempt.sectionStartedAt,
         maxIndex: attempt.maxIndex,
         responses,
-        now: deps.now(),
+        now,
       }),
     );
   });
@@ -829,38 +846,68 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     const { questionId, value, clientSeq } = parsed.data;
     const now = deps.now();
 
-    // Time first, then the paper — the order Task 9 and Task 10 extend:
-    // a candidate whose attempt is over should be told that, not told
-    // their question does not exist.
+    // Time, then the paper, then navigation — in that order, because a
+    // candidate whose attempt is over should be told *that*, not told
+    // their question does not exist or that they are out of order.
     if (attempt.submittedAt !== null) {
       throw conflict(
         "already_submitted",
         "You have already submitted this test, so this answer was not saved.",
       );
     }
+    // `AC-13`'s server half, and the only clock a write is judged by:
+    // `deadline_at + late_sync_grace_seconds`, never the test's window.
+    // `deriveState(...) === "open"` gates ENTRY only — re-checking it here
+    // would refuse exactly the late offline saves `AC-14` exists to
+    // deliver, on any test whose `closes_at` is tight.
+    assertWritable(attempt, now);
+
     // Membership in the pinned layout, in memory, off the row the cookie
     // already resolved — the same reading the media route authorises by,
     // and the same single 404 body every refusal in this runtime answers
-    // with (`S-10`).
-    const onPaper = attempt.layout.sections.some((section) =>
-      section.questionIds.includes(questionId),
-    );
-    if (!onPaper) throw new ApiError(404, "not_found", "No such resource.");
+    // with (`S-10`). `-1` is "not on this paper"; a question that *is* on
+    // the paper but is behind the lock is the 403 below, deliberately
+    // distinguishable.
+    const target = indexOf(attempt.layout, questionId);
+    if (target < 0) throw new ApiError(404, "not_found", "No such resource.");
 
+    // `C-07`: a section whose time has ended refuses a write into it and
+    // names the next one. Before the navigation rule, for the same reason
+    // the deadline is: time is the more urgent truth.
+    assertSectionOpen(attempt, target, now);
+
+    // The one write, and — only when the candidate has actually moved
+    // forward — the progress bump riding the **same** `db.batch`, which
+    // D1 counts as one subrequest. Re-editing an answer in place, the
+    // common case by far, issues no second statement at all.
+    const movedOn = target > attempt.maxIndex;
+    const enteringLater =
+      movedOn && sectionIndexOf(attempt.layout, target) > currentSectionIndex(attempt);
     const { stored } = await upsertResponse(deps.db, attempt.workspaceId, {
       attemptId: attempt.attemptId,
       questionId,
       value,
       clientSeq,
       savedAt: now,
+      ...(movedOn
+        ? {
+            advance: {
+              maxIndex: target,
+              // Stamped once per section, by `max_index < ?` in the same
+              // statement: the second save inside a section finds the
+              // column already past it and changes nothing.
+              ...(enteringLater ? { sectionStartedAt: now } : {}),
+            },
+          }
+        : {}),
     });
 
     return c.json({
       outcome: stored ? "accepted" : "superseded",
       // `AC-13`'s anchor on the hottest path there is: the countdown
       // re-anchors from every save, so a tab that slept for an hour is
-      // corrected by the next keystroke rather than by a reload (Task 9).
-      remainingMs: Math.max(0, attempt.deadlineAt - now),
+      // corrected by the next keystroke rather than by a reload.
+      remainingMs: clockOf(attempt, now).remainingMs,
     });
   });
 

@@ -402,9 +402,17 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `GET /attempt`: the one join `readAttemptByTokenHash` is, plus
   // `listResponses`. The paper is not rebuilt — it is the column
   // `/start` pinned — so this number is flat in the size of the paper.
-  // **Task 9 will make this route materialise a late submission**; when
-  // it does, this is the line that moves and it must be re-measured.
-  "/api/v1/run/attempt": 2,
+  //
+  // Phase 6 Task 9 (#73, P6.9) moved it from 2 to **3**, exactly as this
+  // line warned it would. There is no sweeper in this phase, so the first
+  // read past `deadline_at + late_sync_grace_seconds` is what materialises
+  // the timeout submission (`C-07`), and that is one `submitAttempt`
+  // write. An ordinary resume inside the window still costs 2, and so
+  // does every later read of the attempt it closed — the write happens
+  // once, ever (`WHERE submitted_at IS NULL`). 3 is the ceiling, measured
+  // on exactly that path in `test/run/clock.test.ts`, under the same "pin
+  // the most expensive path" rule every number above follows.
+  "/api/v1/run/attempt": 3,
   // Phase 6 Task 8 (#72, P6.8): saving one answer — the hot path, and the
   // one route in this product a candidate calls hundreds of times.
   // Measured at **2** in `test/run/answer.test.ts`: the attempt join the
@@ -413,10 +421,18 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // most one R2 call — so it is pinned with `toBe` rather than bounded,
   // and the membership check that refuses a question outside the pinned
   // paper costs nothing, because `layout.sections` is already in memory
-  // on the row that join returned. Task 9's deadline check and Task 10's
-  // navigation check are both pure functions over that same row, so this
-  // number must not move when they land; `advanceMaxIndex` rides in a
-  // `db.batch` with the upsert, which `countingDeps` counts as one.
+  // on the row that join returned.
+  //
+  // **Still 2 with Tasks 9 and 10 on it**, re-measured with both in place
+  // (`test/run/clock.test.ts` and `test/run/navigation.test.ts` each pin
+  // it again, on the path that moves `max_index` *and* stamps
+  // `section_started_at`). `assertWritable`, `assertSectionOpen` and
+  // `assertReachable` are pure over the row the join already returned, and
+  // the progress bump rides the **same** `db.batch` as the upsert, which
+  // D1 and `countingDeps` both count as one subrequest. That batch is also
+  // why `DbClient.batch` reports `{ changes }` per statement: without it
+  // the conditional upsert could not still say whether the row moved, and
+  // `accepted` and `superseded` would collapse into each other.
   "/api/v1/run/attempt/answer": 2,
   // Phase 6 Task 7 (#71, P6.7): one image off the candidate's own paper.
   // Measured at **2** in `test/run/media.test.ts` — the attempt join the

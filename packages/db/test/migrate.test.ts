@@ -166,6 +166,29 @@ describe("sqlite", () => {
     expect(rows.map((r) => r.ref_id)).toEqual(["BA-01", "BA-02"]);
   });
 
+  // Phase 6 Task 10 (#74): the batch reports what each statement did, in
+  // order. `upsertResponse` is the caller that cannot do without it — its
+  // upsert is conditional on `excluded.client_seq`, so whether the row
+  // moved is the difference between answering the candidate `accepted` and
+  // answering them `superseded`, and `max_index` has to rise in the *same*
+  // subrequest or the hot path's pinned budget of 2 becomes 3.
+  it("batch says how many rows each statement changed, in order", async () => {
+    const changes = await db.batch([
+      questionInsert("qst_batch_c", "ws_changes", "bnk_changes", "BC-01"),
+      // Matches nothing: a workspace with no rows in it.
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["BC-02", "ws_nobody"],
+      },
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["BC-03", "ws_changes"],
+      },
+    ]);
+
+    expect(changes.map((one) => one.changes)).toEqual([1, 0, 1]);
+  });
+
   it("batch rolls back the whole group when one statement violates a constraint", async () => {
     // The same `(bank_id, ref_id)` unique index `migrate.test.ts` already
     // exercises on a single `run()` — here two statements in one `batch()`,
