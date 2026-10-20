@@ -62,6 +62,10 @@ export async function seedWorkspace(
 ): Promise<SeedResult> {
   await signInApi(request);
   const workspaceId = await workspace(request);
+  // A test slug is unique per workspace, so two seeds in one run would
+  // collide on `assessment-01` and the second would 409. One short token
+  // per call keeps repeat seeding (6.5e, 6.5f) from needing to know that.
+  const run = Math.random().toString(36).slice(2, 7);
 
   const bankIds: string[] = [];
   for (let i = 0; i < counts.banks; i += 1) {
@@ -100,7 +104,7 @@ export async function seedWorkspace(
   const testIds = await inBatches(counts.tests, async (i) => {
     const testId = await created(request, `/api/v1/workspaces/${workspaceId}/tests`, {
       name: `${TOPICS[i % TOPICS.length]} assessment ${pad(i + 1)}`,
-      slug: `assessment-${pad(i + 1)}`,
+      slug: `assessment-${run}-${pad(i + 1)}`,
     });
     if (sectionQuestions.length > 0) {
       await ok(request, "patch", `/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`, {
