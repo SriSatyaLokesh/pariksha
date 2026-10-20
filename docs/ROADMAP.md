@@ -3,11 +3,11 @@
 | | |
 | --- | --- |
 | **Status** | Active |
-| **Last updated** | 2026-10-17 |
+| **Last updated** | 2026-10-21 |
 | **Implements** | [PRD.md](PRD.md) |
 | **Design system** | [DESIGN.md](../DESIGN.md) |
 
-The [PRD roadmap](PRD.md#roadmap) sets four *product* milestones — v0.1 pilot-ready, v0.2 teams and security, v0.3 all question types and grading, v1.0 public release. This document is the *build* order underneath them: twelve phases, each one shipping working, testable software, with the gate that has to pass before the next phase starts.
+The [PRD roadmap](PRD.md#roadmap) sets four *product* milestones — v0.1 pilot-ready, v0.2 teams and security, v0.3 all question types and grading, v1.0 public release. This document is the *build* order underneath them: twelve phases, each one shipping working, testable software, with the gate that has to pass before the next phase starts — plus **Phase 6.5**, a design pass inserted between 6 and 7 that ships no new capability. It is a deviation from the original twelve and is recorded as one under [decisions that extend the PRD](#decisions-that-extend-the-prd).
 
 Read this with the PRD. Where the two disagree, the PRD wins on *what* and this file wins on *when*.
 
@@ -34,7 +34,8 @@ per-phase sections below describe the *plan*, this table describes the *state*.
 | 3 — Organiser auth, roles, first run and landing page | **Done** | Design tokens, the web shell, design-system components and the landing page ([#136](https://github.com/SriSatyaLokesh/pariksha/pull/136)); the permission matrix, sessions, memberships and the audit log ([#145](https://github.com/SriSatyaLokesh/pariksha/pull/145), [#155](https://github.com/SriSatyaLokesh/pariksha/issues/155)); OIDC and magic-link sign-in ([#153](https://github.com/SriSatyaLokesh/pariksha/issues/153)); the first-run wizard, end to end ([#157](https://github.com/SriSatyaLokesh/pariksha/issues/157), [#158](https://github.com/SriSatyaLokesh/pariksha/issues/158)); and a deployed Cloudflare Worker, D1 database and R2 bucket behind an idempotent setup script ([#163](https://github.com/SriSatyaLokesh/pariksha/issues/163)) | The setup script is merged but has not yet run against a live account: the deploy token is missing the D1 and R2 grants `setup.mjs` needs ([#164](https://github.com/SriSatyaLokesh/pariksha/issues/164), [what is needed from the operator](#what-is-needed-from-the-operator)) |
 | 4 — Question banks and authoring | **Done** | Bank CRUD and the bank browser; an editor with live preview for all 12 question types; passage groups ([#50](https://github.com/SriSatyaLokesh/pariksha/issues/50)); whole-bank import — Pariksha JSON, CSV and Moodle GIFT, all-or-nothing with a line-by-line report ([#51](https://github.com/SriSatyaLokesh/pariksha/issues/51), [#52](https://github.com/SriSatyaLokesh/pariksha/issues/52)); and whole-bank/single-question JSON export (JSON only — CSV/GIFT export was not built), round-tripped against import field for field across all 12 types ([#53](https://github.com/SriSatyaLokesh/pariksha/issues/53)) — `apps/api/test/export/round-trip.test.ts` is the proof, checked as set equality rather than array order | `AC-05` is met, with two caveats this row keeps rather than only the task report: **(1)** bank-level question order is not preserved by storage (a pre-existing property of `listQuestions`/`writeImportedBank`, not changed by this task) — the round-trip test accordingly proves every question round-trips with no loss, not that the exported array's order matches the order a document declared its questions in; **(2)** `AC-07`'s keyboard reordering shipped in full but its drag-and-drop half is deferred (buttons-first — see the Phase 4 plan's "Known deferrals"). This phase's work is complete on `phase-4/bank-crud-and-browser` but **has not merged to `main` yet** — unlike every other Done row above, there is no PR number to cite here. Phase 5, the test builder, can start once it does |
 | 5 — Test builder and lifecycle | **Done** | Tests with a `tst_` ID, slug, short link and inline-SVG QR code, and the one public unguarded route `GET /t/:code` ([#54](https://github.com/SriSatyaLokesh/pariksha/issues/54)); sections drawing from fixed lists, random pools and sets, with the live draw and points balance the builder shows ([#55](https://github.com/SriSatyaLokesh/pariksha/issues/55), [#56](https://github.com/SriSatyaLokesh/pariksha/issues/56)); the registration form builder across all eleven field types with T-19's server-side reachability check ([#57](https://github.com/SriSatyaLokesh/pariksha/issues/57), [#58](https://github.com/SriSatyaLokesh/pariksha/issues/58)); timing, navigation and attempt policy ([#59](https://github.com/SriSatyaLokesh/pariksha/issues/59)); access modes, allowlists and candidate-list ingest ([#60](https://github.com/SriSatyaLokesh/pariksha/issues/60)); result release and branding with the contrast gate ([#61](https://github.com/SriSatyaLokesh/pariksha/issues/61)); the Draft → Scheduled → Open → Closed → Archived lifecycle with numbered frozen versions, where publishing stamps the draft head and opens N+1 ([#62](https://github.com/SriSatyaLokesh/pariksha/issues/62)); clone, whole-test export and all-or-nothing import ([#63](https://github.com/SriSatyaLokesh/pariksha/issues/63)); and one publish checklist — `GET …/checklist` and `POST …/publish` compute the same rows from the same function, blocking and advisory ([#64](https://github.com/SriSatyaLokesh/pariksha/issues/64)). ADR 0007 records the review-comment model ([#148](https://github.com/SriSatyaLokesh/pariksha/issues/148)) | `AC-02`, `AC-03`, `AC-04`, `AC-09`, `AC-10` and `AC-11` are met — `AC-11`'s "a refresh keeps each order" waits for Phase 6, which owns attempts. Deferred, and recorded in the phase plan's own "Known deferrals" so they are not rediscovered as bugs: the reviewers panel, per-question comments and approvals (only `review_requested` and the "In review" badge ship, so `UX-10` is partly met); the phone field's country picker (the dialling code ships, the `<select>` does not); pointer drag for reordering, as in Phase 4; invite links, which Phase 6 mints against the list this phase ingests; and editors for `consent`, `proctoring` and `retention`, which belong to Phases 6, 7 and 8 and ride through import, clone and export untouched |
-| 6 — Candidate runtime | **In review** | The candidate landing page and all four access modes ([#65](https://github.com/SriSatyaLokesh/pariksha/issues/65), [#66](https://github.com/SriSatyaLokesh/pariksha/issues/66)); invite minting, consent and server-side registration ([#67](https://github.com/SriSatyaLokesh/pariksha/issues/67)); the same-origin proof of work that stands in for a CAPTCHA, and the rate limiter behind it ([#68](https://github.com/SriSatyaLokesh/pariksha/issues/68)); attempt creation with a pinned version, layout and scrubbed paper ([#69](https://github.com/SriSatyaLokesh/pariksha/issues/69)); the runner, all twelve answer blocks and the candidate media route ([#70](https://github.com/SriSatyaLokesh/pariksha/issues/70), [#71](https://github.com/SriSatyaLokesh/pariksha/issues/71)); the offline save queue and the idempotent server upsert ([#72](https://github.com/SriSatyaLokesh/pariksha/issues/72)); the server-authoritative clock and the three navigation modes ([#73](https://github.com/SriSatyaLokesh/pariksha/issues/73), [#74](https://github.com/SriSatyaLokesh/pariksha/issues/74)); submission, automatic scoring, the receipt and the release gate — including `C-09`'s emailed result code ([#75](https://github.com/SriSatyaLokesh/pariksha/issues/75)); and Task 12, candidate response scrubbing (`AC-22`, [#76](https://github.com/SriSatyaLokesh/pariksha/issues/76)) — `apps/api/test/run/scrub-scan.test.ts` replays a sentinel fixture across every endpoint `ROUTE_AUTH` marks `attempt`, `entry` or candidate-`public`, derived mechanically from that table rather than hand-written, and confirms `forCandidate` and `releasedResult` (built in Task 5 and Task 11) are already complete field-by-field allowlists — no key, explanation, rubric, model answer, accepted pattern or another candidate's data rides any candidate response in any state, and `full_review` carries them only once genuinely released. **[#129](https://github.com/SriSatyaLokesh/pariksha/issues/129) closed here rather than in Phase 1**: it asked for a server-side execution bound where grading actually runs, and Phase 6 is the first phase where grading runs at all — `apps/api/src/run/bounded.ts` caps the input, re-runs `assertSafeRegex` at execution time, and reports a refusal so one unrunnable pattern costs one **pending** question and an organiser-facing flag instead of a candidate's marks | All twelve tasks are implemented, but **this phase is not Done and `main` is untouched**: the work sits on `phase-6/candidate-runtime` behind **draft [PR #173](https://github.com/SriSatyaLokesh/pariksha/pull/173)**, Task 11's review found three Criticals — an auto-submit at zero that no test reached, a reload that returned a submitted candidate to a live paper, and `C-09`'s return visit, which had no browser surface at all — all three fixed on this branch and now driven from `ExamApp`; the whole-branch review is running against this commit. **Deferred, recorded so they are not rediscovered as bugs:** `C-10`'s proctor broadcast (Phase 8 owns the sender), `T-19`'s `check_reachable` candidate side (SSRF plus a 10 ms CPU ceiling; the toggle ships disabled with copy naming the phase), `T-24` translations (Phase 12), `branding.logo` (unservable to a candidate without its own branding-scoped route — never `layout.media`, which is the authorisation set for the paper), the phone field's country picker, no scheduled auto-submit sweep, and no `rate_limit` row expiry until Phase 8's retention job. `AC-11`'s deferred half — "a refresh keeps each order" — is closed here. Issues [#65](https://github.com/SriSatyaLokesh/pariksha/issues/65)–[#76](https://github.com/SriSatyaLokesh/pariksha/issues/76) stay open until it merges. Phase 7 owns proctoring and the live monitor; its first task should re-check `ROUTE_AUTH`'s coverage test before adding a route |
+| 6 — Candidate runtime | **Done** | The candidate landing page and all four access modes ([#65](https://github.com/SriSatyaLokesh/pariksha/issues/65), [#66](https://github.com/SriSatyaLokesh/pariksha/issues/66)); invite minting, consent and server-side registration ([#67](https://github.com/SriSatyaLokesh/pariksha/issues/67)); the same-origin proof of work that stands in for a CAPTCHA, and the rate limiter behind it ([#68](https://github.com/SriSatyaLokesh/pariksha/issues/68)); attempt creation with a pinned version, layout and scrubbed paper ([#69](https://github.com/SriSatyaLokesh/pariksha/issues/69)); the runner, all twelve answer blocks and the candidate media route ([#70](https://github.com/SriSatyaLokesh/pariksha/issues/70), [#71](https://github.com/SriSatyaLokesh/pariksha/issues/71)); the offline save queue and the idempotent server upsert ([#72](https://github.com/SriSatyaLokesh/pariksha/issues/72)); the server-authoritative clock and the three navigation modes ([#73](https://github.com/SriSatyaLokesh/pariksha/issues/73), [#74](https://github.com/SriSatyaLokesh/pariksha/issues/74)); submission, automatic scoring, the receipt and the release gate — including `C-09`'s emailed result code ([#75](https://github.com/SriSatyaLokesh/pariksha/issues/75)); and Task 12, candidate response scrubbing (`AC-22`, [#76](https://github.com/SriSatyaLokesh/pariksha/issues/76)) — `apps/api/test/run/scrub-scan.test.ts` replays a sentinel fixture across every endpoint `ROUTE_AUTH` marks `attempt`, `entry` or candidate-`public`, derived mechanically from that table rather than hand-written, and confirms `forCandidate` and `releasedResult` (built in Task 5 and Task 11) are already complete field-by-field allowlists — no key, explanation, rubric, model answer, accepted pattern or another candidate's data rides any candidate response in any state, and `full_review` carries them only once genuinely released. **[#129](https://github.com/SriSatyaLokesh/pariksha/issues/129) closed here rather than in Phase 1**: it asked for a server-side execution bound where grading actually runs, and Phase 6 is the first phase where grading runs at all — `apps/api/src/run/bounded.ts` caps the input, re-runs `assertSafeRegex` at execution time, and reports a refusal so one unrunnable pattern costs one **pending** question and an organiser-facing flag instead of a candidate's marks | All twelve tasks are implemented, but **this phase is not Done and `main` is untouched**: the work sits on `phase-6/candidate-runtime` behind **draft [PR #173](https://github.com/SriSatyaLokesh/pariksha/pull/173)**, Task 11's review found three Criticals — an auto-submit at zero that no test reached, a reload that returned a submitted candidate to a live paper, and `C-09`'s return visit, which had no browser surface at all — all three fixed on this branch and now driven from `ExamApp`; the whole-branch review is running against this commit. **Deferred, recorded so they are not rediscovered as bugs:** `C-10`'s proctor broadcast (Phase 8 owns the sender), `T-19`'s `check_reachable` candidate side (SSRF plus a 10 ms CPU ceiling; the toggle ships disabled with copy naming the phase), `T-24` translations (Phase 12), `branding.logo` (unservable to a candidate without its own branding-scoped route — never `layout.media`, which is the authorisation set for the paper), the phone field's country picker, no scheduled auto-submit sweep, and no `rate_limit` row expiry until Phase 8's retention job. `AC-11`'s deferred half — "a refresh keeps each order" — is closed here. Phase 7 owns proctoring and the live monitor; its first task should re-check `ROUTE_AUTH`'s coverage test before adding a route. **Merged as [#173](https://github.com/SriSatyaLokesh/pariksha/pull/173) and deployed** — the two defects this row's review did not catch are [#186](https://github.com/SriSatyaLokesh/pariksha/issues/186) (`branding.finish_message` has a writer and no reader) and [#179](https://github.com/SriSatyaLokesh/pariksha/issues/179) (a test with no duration can be published), both owned by Phase 6.5 |
+| 6.5 — The design pass | **Planned** | Nothing yet. The design is locked ([spec](superpowers/specs/2026-10-20-phase-6-5-design-pass-design.md), 21 rulings) and both throwaway prototypes are approved; six plans are written and locked ([index](superpowers/plans/2026-10-20-phase-6-5-README.md)) | Execution starts with 6.5a and 6.5b, which are independent of each other and of everything else. **6.5a must finish before 6.5c, d or e**, because `D13`'s density before-figures are captured on `main` and the first restyling commit invalidates them |
 | 7–12 | Not started | — | Planned in detail when their turn comes |
 
 **The landing page is independent of the API** — it is static output with no backend call,
@@ -105,6 +106,39 @@ gone, `git log` plus the closed issues are the record.
 
 **PRD.** `C-01` through `C-09`. `C-10`, the proctor broadcast, is deferred to Phase 8, which owns
 the sender.
+
+### Phase 6.5 — The design pass
+
+**Not in the original twelve.** See [decisions that extend the PRD](#decisions-that-extend-the-prd).
+
+**Delivers.** No new capability. One written rule for which accent applies where, recorded as
+[ADR 0010](adr/0010-the-organiser-moves-to-the-signal-ground.md); the organiser re-grounded onto the
+Signal palette in **both** a dark and a light mode with a per-viewer switch; a persistent organiser
+shell — sidebar, top bar, shared page chrome — across all twelve screens; the test builder's
+information architecture changed so what is required is visible from the first minute rather than at
+the publish gate; the two reported UX defects; and the candidate runtime's type-scale sweep with its
+geometry frozen.
+
+**Gate.** Every existing suite green on **both** grounds, including `contrast-usage.test.ts` and the
+35 `axe` files; and a committed Playwright density spec showing no scanning surface lost a row
+against figures captured on `main`.
+
+**Issues.** [#187](https://github.com/SriSatyaLokesh/pariksha/issues/187), folding in
+[#181](https://github.com/SriSatyaLokesh/pariksha/issues/181),
+[#186](https://github.com/SriSatyaLokesh/pariksha/issues/186) and
+[#179](https://github.com/SriSatyaLokesh/pariksha/issues/179).
+
+**Why here and not later.** Every screen the product will have for a while now exists — twelve
+organiser screens from Phases 4 and 5, and the candidate runtime from Phase 6. That is the first
+moment a redesign can be done **once**, against the real thing, and the last cheap moment: Phase 7
+adds proctoring UI, Phase 8 adds the monitor, the grading queue and analytics, and every screen added
+before the redesign is a screen redesigned twice. It must also land **before** Phase 12's WCAG 2.1 AA
+audit, or that audit is invalidated by the work that follows it.
+
+**Carried out as new work, not silently dropped.** Section-order shuffling (needs a
+`pariksha/test@1` field, a format bump and an ADR); the review panel (ADR 0007's deferred half —
+there is no code behind screen 10); the readiness meter in the test list (waits for a Phase 8
+aggregate); and `branding.logo`, still unread on the candidate side.
 
 ### Phase 7 — Proctoring
 
@@ -188,7 +222,33 @@ Phases 9 and 10 are off the critical path. Phase 9 needs only banks (Phase 4) an
 
 ## Decisions that extend the PRD
 
-Four items in this roadmap are not in the PRD. Each is recorded here as a decision, with what it costs. Each needs its own ADR before its phase starts.
+Five items in this roadmap are not in the PRD. Each is recorded here as a decision, with what it costs. Each needs its own ADR before its phase starts.
+
+### A design pass between Phases 6 and 7 (Phase 6.5)
+
+The PRD's roadmap has twelve build phases and no redesign among them; the original ordering assumed
+the design system laid down in Phase 3 would hold to v1.0. It did not. Issue
+[#187](https://github.com/SriSatyaLokesh/pariksha/issues/187) reports three problems that are one
+problem: `DESIGN.md` describes a single saturated vermilion as the identity, while #165 rebuilt the
+landing page on a green accent and added the token *beside* voltage with **no document recording
+which is intended**; the organiser side is 196 lines of `admin.css` across twelve screens with no
+persistent navigation; and test creation is one 1,080px column of always-mounted panels with the
+publish checklist arriving last.
+
+**What it costs.** A phase that ships no new capability, inserted before Phase 7. The honest size is
+larger than "a restyle": re-grounding every organiser `SURFACE` entry in `contrast-usage.test.ts`
+**twice**, once per ground; a seeding harness and a browser spec that must land before the first
+restyling commit; and a multi-thousand-line migration of component-level tests to reachability.
+
+**What it buys.** The fork is closed by one written rule instead of by precedent, and it is closed at
+the last moment where twelve screens is the whole surface rather than twenty.
+
+**Numbering.** It is 6.5 rather than 7 so the twelve PRD-aligned phase numbers keep meaning the same
+things they mean in the PRD, in every issue title and in every milestone already open.
+
+Recorded as **ADR 0010**, written before implementation starts. The design itself is locked in
+[`docs/superpowers/specs/2026-10-20-phase-6-5-design-pass-design.md`](superpowers/specs/2026-10-20-phase-6-5-design-pass-design.md),
+with 21 addressed rulings so a reviewer can reject one line rather than argue with a redesign.
 
 ### Public demo instance (Phase 10)
 
@@ -234,7 +294,7 @@ These are the planner's calls, not the PRD's. They are listed so they can be ove
 
 ## Plan documents
 
-Detailed, task-by-task implementation plans live in [`docs/superpowers/plans/`](superpowers/plans/). Phases 1 to 4 are planned in full. Phases 5 to 12 are scoped above and planned in detail when their turn comes, because a plan written against code that does not exist yet is rewritten before it is read.
+Detailed, task-by-task implementation plans live in [`docs/superpowers/plans/`](superpowers/plans/). Phases 1 to 6.5 are planned in full. Phases 7 to 12 are scoped above and planned in detail when their turn comes, because a plan written against code that does not exist yet is rewritten before it is read.
 
 | Phase | Plan |
 | --- | --- |
@@ -242,6 +302,9 @@ Detailed, task-by-task implementation plans live in [`docs/superpowers/plans/`](
 | 2 | [`2026-10-16-phase-2-data-and-api-platform.md`](superpowers/plans/2026-10-16-phase-2-data-and-api-platform.md) |
 | 3 | [`2026-10-16-phase-3-auth-roles-and-landing.md`](superpowers/plans/2026-10-16-phase-3-auth-roles-and-landing.md), with [`2026-10-17-phase-3-landing-acceptance.md`](superpowers/plans/2026-10-17-phase-3-landing-acceptance.md) |
 | 4 | [`2026-10-18-phase-4-question-banks-and-authoring.md`](superpowers/plans/2026-10-18-phase-4-question-banks-and-authoring.md) |
+| 5 | [`2026-10-19-phase-5-test-builder.md`](superpowers/plans/2026-10-19-phase-5-test-builder.md) |
+| 6 | [`2026-10-19-phase-6-candidate-runtime.md`](superpowers/plans/2026-10-19-phase-6-candidate-runtime.md) |
+| 6.5 | **Six plans** — [index](superpowers/plans/2026-10-20-phase-6-5-README.md): [a defects and measurement](superpowers/plans/2026-10-20-phase-6-5a-defects-and-measurement.md), [b the ground](superpowers/plans/2026-10-20-phase-6-5b-the-ground.md), [c the shell](superpowers/plans/2026-10-20-phase-6-5c-the-shell.md), [d the builder](superpowers/plans/2026-10-20-phase-6-5d-the-builder.md), [e the screens](superpowers/plans/2026-10-20-phase-6-5e-the-screens.md), [f the runtime](superpowers/plans/2026-10-20-phase-6-5f-the-runtime.md). Six because the spec covers six independently shippable subsystems; one plan would be a transcript |
 
 ## What is needed from the operator
 
