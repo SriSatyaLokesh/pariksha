@@ -369,11 +369,16 @@ const withPassage: CandidateQuestion = {
   group: { id: "g1", passage: PASSAGE_SRC },
 };
 
+/** The base `shown()` prefixes every `media.src` with — `MEDIA_BASE` in
+ *  `apps/api/src/run/attempt.ts`, repeated here because the browser never
+ *  imports from the server. */
+const MEDIA_BASE = "/api/v1/run/attempt/media/";
+
 const withMedia: CandidateQuestion = {
   ...fixture("single"),
   media: [
-    { kind: "image", src: "/api/v1/run/attempt/media/media/w1/abc.png", alt: "A circuit diagram" },
-    { kind: "image", src: "/api/v1/run/attempt/media/media/w1/def.png", alt: "Its truth table" },
+    { kind: "image", src: `${MEDIA_BASE}abc.png`, alt: "A circuit diagram" },
+    { kind: "image", src: `${MEDIA_BASE}def.png`, alt: "Its truth table" },
   ],
 };
 
@@ -401,10 +406,14 @@ describe("the passage and the question's media", () => {
 
   it("the src is used verbatim: nothing here builds a media URL", () => {
     render(<Harness question={withMedia} />);
-    expect(screen.getByRole("img", { name: "A circuit diagram" })).toHaveAttribute(
-      "src",
-      "/api/v1/run/attempt/media/media/w1/abc.png",
-    );
+    const src = screen.getByRole("img", { name: "A circuit diagram" }).getAttribute("src");
+    expect(src).toBe(`${MEDIA_BASE}abc.png`);
+    // And the fixture is a URL the server can really answer. The route is
+    // `GET /api/v1/run/attempt/media/:key` — **one** path parameter — and
+    // `shown()` builds it as the base plus the bare storage key, so a key
+    // with a slash in it names a route that does not exist. This suite
+    // asserted `media/w1/abc.png` for a round and proved nothing.
+    expect((src ?? "").slice(MEDIA_BASE.length)).not.toContain("/");
   });
 
   it("a passage and media have no axe violations, at 100% and at 200% zoom", async () => {
@@ -438,7 +447,7 @@ describe("reachability: the passage and the media, from the root", () => {
     });
     expect(screen.getByRole("img", { name: "A map of France" })).toHaveAttribute(
       "src",
-      "/api/v1/run/attempt/media/media/w1/map.png",
+      `${MEDIA_BASE}map.png`,
     );
   });
 

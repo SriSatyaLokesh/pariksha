@@ -35,11 +35,19 @@ export const examPaper: AttemptPaper = {
           // verbatim — the scrubber rewrote it to the attempt-scoped
           // route when the layout was pinned, and nothing on this side
           // builds a media URL.
+          //
+          // **One segment after the base, because that is all the route
+          // has.** `GET /api/v1/run/attempt/media/:key` takes a single
+          // path parameter and `shown()` builds it as `MEDIA_BASE + the
+          // bare storage key` (`run/scrub.ts`); the workspace lives in
+          // the storage path, never in the URL. A fixture carrying
+          // `media/w1/...` asserted a URL the server cannot produce, so
+          // the assertions below proved nothing about the real path.
           group: { id: "geo", passage: "A short *passage* about European capitals." },
           media: [
             {
               kind: "image",
-              src: "/api/v1/run/attempt/media/media/w1/map.png",
+              src: "/api/v1/run/attempt/media/map.png",
               alt: "A map of France",
             },
           ],
