@@ -51,10 +51,9 @@
   --ink-2: var(--color-signal-text-2);
   --ink-3: var(--color-signal-text-3);
 
-  /* --accent-deep is the pressed and hover fill under the resting --accent.
-     Its ink pairing is NOT audited by contrast-usage.test.ts and the reason
-     is written down there: on the light ground --accent-ink on
-     --accent-deep measures 4.13:1, under the 4.5:1 a button label needs. */
+  /* --accent-deep is the pressed and hover fill under the resting --accent,
+     and is darker than it on both grounds. --accent-ink on it is scored by
+     contrast-usage.test.ts like any other pair: 6.21:1 dark, 7.75:1 light. */
   --accent: var(--color-signal-accent);
   --accent-deep: var(--color-signal-accent-deep);
   --accent-ink: var(--color-signal-accent-ink);

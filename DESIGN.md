@@ -50,7 +50,7 @@ colors:
   signal-l-text-2: "#3b4f46"
   signal-l-text-3: "#5c6f66"
   signal-l-accent: "#07744a"
-  signal-l-accent-deep: "#0a8f57"
+  signal-l-accent-deep: "#065f3c"
   signal-l-accent-ink: "#ffffff"
   signal-l-flag-review: "#8a5f00"
   signal-l-flag-risk: "#b3261e"

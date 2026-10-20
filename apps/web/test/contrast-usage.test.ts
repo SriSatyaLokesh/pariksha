@@ -949,8 +949,14 @@ const THEME_PAIRS: Array<{ fg: string; bg: string; threshold: number }> = [
   ...THEME_INK_ROLES.flatMap((fg) =>
     THEME_GROUNDS.map((bg) => ({ fg, bg, threshold: 4.5 })),
   ),
-  // A button label on the accent fill.
+  // A button label on the accent fill, resting and pressed. --accent-deep
+  // joined this list in fix round 2: at its original #0a8f57 the light pair
+  // measured 4.13:1 and the token was LIGHTER than the resting accent it
+  // deepens. DESIGN.md now carries #065f3c — darker than resting, 7.75:1
+  // under white — so the pair is scored like any other instead of carrying
+  // an excuse in the ledger below.
   { fg: "--accent-ink", bg: "--accent", threshold: 4.5 },
+  { fg: "--accent-ink", bg: "--accent-deep", threshold: 4.5 },
   // An input outline or a table rule is non-text: 3:1. --edge and --edge-2
   // are decoration (1.67:1 and 1.54:1 on the dark ground) and are
   // deliberately NOT asserted here — D1 added --edge-strong precisely
@@ -984,16 +990,12 @@ const UNSCORED_BY_DESIGN: Record<string, string> = {
   "--wash-2": "translucent; resolves only once composited",
   "--glow": "translucent, and D20a lets it vanish on light",
   "--glow-strong": "translucent, and D20a lets it vanish on light",
-  // MEASURED AND UNRESOLVED, flagged to the controller in the task report.
-  // --accent-ink on --accent-deep is 6.21:1 on the dark ground and 4.13:1
-  // on the light one, under the 4.5:1 a button label needs. Scoring it here
-  // would put this suite red; lowering the bar to make it green is the one
-  // thing AG2 forbids. So the pair is named, not scored, and the fix is a
-  // palette change in DESIGN.md (a darker signal-l-accent-deep) rather than
-  // anything this file can do. 6.5c must not put --accent-ink on
-  // --accent-deep on the light ground until that lands.
-  "--accent-deep":
-    "light --accent-ink on it is 4.13:1, under 4.5 — palette fix needed, see task-3-report.md",
+  // --accent-deep was here, with light --accent-ink on it at 4.13:1 and a
+  // note that the fix was a palette change rather than anything this file
+  // could do. That change landed (DESIGN.md, #0a8f57 -> #065f3c), so the
+  // pair is scored above now. The ledger is one entry shorter and keeps its
+  // guard: this is what an entry leaving looks like, rather than a threshold
+  // being lowered to let it stay.
 };
 
 describe("theme.css's semantic mapping clears its thresholds on both grounds (D1, D20)", () => {
