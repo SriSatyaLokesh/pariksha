@@ -183,19 +183,15 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
       field: "sections",
       message: "this test has no sections, so there is nothing for a candidate to answer",
     });
-  } else if (sections.every(drawsNothing)) {
-    // The other half of #179: sections exist, so `no_sections` stays quiet,
-    // but between them they put nothing in front of a candidate. Each one
-    // also gets its own `section_empty` below; this is the test-level
-    // statement of the same fact, and the row an organiser needs when the
-    // answer is "add a question somewhere", not "fix section 3".
-    rows.push({
-      id: "no_questions",
-      severity: "blocking",
-      field: "sections",
-      message: "every section is empty, so there is nothing for a candidate to answer",
-    });
   }
+  // #179's other half — a test whose sections exist but hold no questions —
+  // gets no row of its own. `section_empty` below already fires on every
+  // section that draws nothing, in each of the three source shapes, so a
+  // test where *every* section is empty is refused once per section and the
+  // organiser is told which ones. A second test-level row for the same
+  // cause would put two red lights in the builder's rail (6.5d) for one
+  // defect. The shape is covered in `apps/api/test/lifecycle.test.ts`, at
+  // the gate, rather than by a row here.
 
   // `$defs/consent.text`'s `minLength: 1`, which `draftSchema()` strips
   // with every other emptiness floor. The pin called it "unreachable: only
