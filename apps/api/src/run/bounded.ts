@@ -4,9 +4,9 @@
 // because a bound needs a host a pure leaf package does not have. The
 // browser passes nothing and gets `RegExp.test`; the server passes this.
 //
-// **It returns a boolean and never throws**, which is the whole contract.
-// Three parties can be at fault when a pattern does not run, and only one
-// of them is the candidate:
+// **`matchBounded` returns a boolean and never throws**, which is the
+// whole contract of the *registration* half. Three parties can be at fault
+// when a pattern does not run, and only one of them is the candidate:
 //
 //   * the *organiser* wrote an unsafe or unparseable pattern — their
 //     defect, surfaced to them by `unsatisfiableValidation` in the builder
@@ -21,16 +21,45 @@
 //   * nobody — the pattern simply did not match, and the candidate is told
 //     the organiser's `pattern_message`.
 //
-// An earlier plan had this throw `MatchBudgetExceeded` and the route
-// answer 422. Reversed: it punished the candidate for the author's regex,
-// and it put a throw on a path where a missed `catch` is a 500.
+// An earlier plan had the *registration* path throw `MatchBudgetExceeded`
+// and the route answer 422. Reversed: it punished the candidate for the
+// author's regex, and it put a throw on a path where a missed `catch` is
+// a 500.
 //
-// Task 11 reuses this seam for grading, where the same reasoning holds for
-// the same reason.
+// Task 11 reuses this seam for grading — **the bound, not the policy.**
+// The two surfaces want opposite fallbacks and both are right:
+//
+//   * registration refuses nothing, for the three reasons above.
+//   * grading refuses to *guess*. Passing would award full marks to every
+//     candidate on a question nobody could grade; failing would score them
+//     zero for a pattern somebody else typed. So the question goes
+//     **pending** and is flagged for the organiser — which needs the bound
+//     to say out loud that it refused, rather than return a verdict.
+//
+// So the bound is written once and the policy belongs to the caller: one
+// helper with two faces, rather than two helpers that drift apart.
 
 import { assertSafeRegex, MAX_MATCH_INPUT } from "@pariksha/core";
 
 export { MAX_MATCH_INPUT };
+
+/**
+ * The bound refused: the pattern is not safe to run, will not compile, or
+ * the input is longer than any pattern may be run against.
+ *
+ * It carries the pattern because the organiser is the only person who can
+ * fix it, and the audit row this becomes is read in their workspace — never
+ * in the candidate's response body (`S-10`).
+ */
+export class MatchBudgetExceeded extends Error {
+  readonly pattern: string;
+
+  constructor(pattern: string, reason: string) {
+    super(`regex budget exceeded: ${reason}`);
+    this.name = "MatchBudgetExceeded";
+    this.pattern = pattern;
+  }
+}
 
 /**
  * Runs `pattern` against `input` under both halves of the bound: the
@@ -39,15 +68,41 @@ export { MAX_MATCH_INPUT };
  * the damage if the grammar gate ever has a bug, because backtracking cost
  * grows with input length whatever the pattern is).
  *
- * Either bound refused, or the pattern would not compile: `true`. See the
- * header for why that direction is the safe one here and the unsafe one in
- * `domainMatches`.
+ * **Re-run here, at execution time**, rather than trusting the
+ * authoring-time pass: a pattern can reach this having been stored before
+ * that check existed, imported from another instance, or admitted through
+ * a gap since closed.
+ *
+ * Throws `MatchBudgetExceeded` when either half refuses, so a caller that
+ * must not invent a verdict can tell "did not match" from "could not be
+ * run". `matchBounded` is the caller that may.
  */
-export function matchBounded(pattern: string, input: string): boolean {
-  if (input.length > MAX_MATCH_INPUT) return true;
+export function matchStrict(pattern: string, input: string): boolean {
+  if (input.length > MAX_MATCH_INPUT) {
+    throw new MatchBudgetExceeded(
+      pattern,
+      `input is ${String(input.length)} characters, over the ${String(MAX_MATCH_INPUT)} cap`,
+    );
+  }
+  let compiled: RegExp;
   try {
     assertSafeRegex(pattern);
-    return new RegExp(pattern).test(input);
+    compiled = new RegExp(pattern);
+  } catch (error) {
+    throw new MatchBudgetExceeded(pattern, error instanceof Error ? error.message : String(error));
+  }
+  return compiled.test(input);
+}
+
+/**
+ * The registration policy over that bound: either half refused, or the
+ * pattern would not compile, and the candidate passes. See the header for
+ * why that direction is the safe one here, the unsafe one in
+ * `domainMatches`, and the wrong one for grading.
+ */
+export function matchBounded(pattern: string, input: string): boolean {
+  try {
+    return matchStrict(pattern, input);
   } catch {
     return true;
   }
