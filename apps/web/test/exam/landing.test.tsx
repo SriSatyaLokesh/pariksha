@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { ExamApp, REGISTRATION_TOKEN_KEY, deviceReport } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
+import { RESULT_STUB } from "./run-client-stub";
 
 // C-01, over the candidate app's own root. Nothing here renders
 // `ExamLanding` directly: the pre-submit checklist's first item is that a
@@ -59,6 +60,7 @@ function clientFor(payload: LandingPayload | Error): RunClient {
     // one must answer. `null` is "no attempt in this browser", which is
     // exactly the state every test in this file is in.
     resume: () => Promise.resolve(null),
+    ...RESULT_STUB,
     putAnswer: () => Promise.reject(new Error("the landing screen saves nothing")),
   };
 }

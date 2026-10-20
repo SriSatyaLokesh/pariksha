@@ -14,6 +14,7 @@ import {
   type RegistrationPayload,
   type RunClient,
 } from "../../src/lib/run";
+import { RESULT_STUB } from "./run-client-stub";
 
 // C-02 and C-03, over the candidate app's own root.
 //
@@ -93,6 +94,7 @@ function clientFor(answers: Partial<RunClient> = {}, landing: LandingPayload = l
     form: refuse("form"),
     register: refuse("register"),
     start: refuse("start"),
+    ...RESULT_STUB,
     putAnswer: refuse("save"),
     ...answers,
   } as RunClient;

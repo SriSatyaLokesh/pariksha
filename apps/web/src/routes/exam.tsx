@@ -13,10 +13,18 @@
 // exam-taker under a clock downloads only what they are about to use.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { AttemptPaper, CandidateQuestion, LandingPayload, RunClient } from "../lib/run";
+import type {
+  AttemptPaper,
+  CandidateQuestion,
+  LandingPayload,
+  Receipt as ReceiptPayload,
+  ReleasedResult,
+  RunClient,
+} from "../lib/run";
 import {
   Runner,
   firstOfNextSection,
+  flatQuestions,
   lockedIndices,
   readMarked,
   writeMarked,
@@ -26,6 +34,8 @@ import { SaveBanner } from "../components/exam/SaveBanner";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
+import { SubmitDialog } from "../components/exam/SubmitDialog";
+import { Receipt } from "../components/exam/Receipt";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -263,7 +273,8 @@ type View =
   | { kind: "error"; message: string }
   | { kind: "landing"; test: LandingPayload }
   | { kind: "register"; test: LandingPayload }
-  | { kind: "attempt"; paper: AttemptPaper };
+  | { kind: "attempt"; paper: AttemptPaper }
+  | { kind: "finished"; receipt: ReceiptPayload; released: ReleasedResult | null };
 
 /**
  * Where the registration step hands `/start` its single-use token.
@@ -300,7 +311,18 @@ export function writeRegistrationToken(token: string): void {
   }
 }
 
-function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient }) {
+function AttemptView({
+  paper,
+  client,
+  onFinished,
+}: {
+  paper: AttemptPaper;
+  client: RunClient;
+  /** Where the finish page comes from. The submission is owned here, not
+   *  in `Runner`, because it is the thing that ends the attempt and
+   *  `Runner` is a layout. */
+  onFinished: (answer: { receipt: ReceiptPayload; released: ReleasedResult | null }) => void;
+}) {
   /**
    * The first question this candidate may still write to.
    *
@@ -459,6 +481,38 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
     });
   };
 
+  /** Open, in flight, or neither. One piece of state rather than two
+   *  booleans: "confirming and submitting at the same time" is not a
+   *  state this screen has, and two booleans would let it exist. */
+  const [submitting, setSubmitting] = useState<"idle" | "confirming" | "sending">("idle");
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  /**
+   * **Drain, then submit.** The queue may be holding answers the candidate
+   * made in time; submitting first would close the attempt and every one
+   * of them would come back a 409. Being a moment late costs nothing and
+   * being early costs answers (`AC-14`).
+   *
+   * A refusal leaves the dialog open with a sentence in it, because a
+   * candidate whose submission failed must be able to press again — the
+   * server's own idempotence is what makes pressing again safe.
+   */
+  const finish = useCallback(async () => {
+    setSubmitting("sending");
+    setSubmitError(null);
+    try {
+      await queue.drain();
+      onFinished(await client.submit());
+    } catch (error) {
+      setSubmitting("confirming");
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : "Your test could not be submitted. Check your connection and try again.",
+      );
+    }
+  }, [client, onFinished, queue]);
+
   return (
     <Runner
       paper={{ ...paper, responses, maxIndex }}
@@ -485,11 +539,11 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
             // server's next request happens first, so being a moment late
             // here costs nothing and being early costs answers.
             //
-            // ponytail: the `submit()` after the drain is Task 11's — the
-            // route does not exist yet. Until it does, the server's own
-            // materialisation on the next read is what closes the attempt
-            // (`GET /run/attempt`), so nothing is lost by the gap.
-            void queue.drain();
+            // Task 11: the drain, then the submission the drain was for.
+            // Whichever of this and the server's own materialisation gets
+            // there first wins; the other is a no-op, because
+            // `finishAttempt` writes only `WHERE submitted_at IS NULL`.
+            void finish();
           }}
           onSectionZero={() => {
             // `C-07` on the client: when the section's clock runs out the
@@ -501,6 +555,47 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
         />
       }
       bannerSlot={<SaveBanner state={saveState} />}
+      submitSlot={
+        <>
+          <button
+            type="button"
+            className="exam-submit"
+            // WCAG 2.5.3: the accessible name is a superset of the
+            // visible label. "Submit" is what the eye wants; a
+            // screen-reader user arriving from a button list needs to
+            // hear what it ends.
+            aria-label="Submit test and finish"
+            disabled={submitting === "sending"}
+            onClick={() => {
+              setSubmitting("confirming");
+            }}
+          >
+            Submit test
+          </button>
+          {submitting !== "idle" && (
+            <SubmitDialog
+              unanswered={
+                flatQuestions(paper).filter((question) => (responses[question.id] ?? null) === null)
+                  .length
+              }
+              marked={marked.size}
+              total={flatQuestions(paper).length}
+              pending={submitting === "sending"}
+              onConfirm={() => {
+                void finish();
+              }}
+              onCancel={() => {
+                setSubmitting("idle");
+              }}
+            />
+          )}
+          {submitError !== null && (
+            <p className="exam-submit-error" role="alert">
+              {submitError}
+            </p>
+          )}
+        </>
+      }
     />
   );
 }
@@ -573,8 +668,19 @@ export function ExamApp({ client }: { client: RunClient }) {
       </main>
     );
   }
+  if (view.kind === "finished") {
+    return <Receipt receipt={view.receipt} released={view.released} />;
+  }
   if (view.kind === "attempt") {
-    return <AttemptView paper={view.paper} client={client} />;
+    return (
+      <AttemptView
+        paper={view.paper}
+        client={client}
+        onFinished={({ receipt, released }) => {
+          setView({ kind: "finished", receipt, released });
+        }}
+      />
+    );
   }
   if (view.kind === "register") {
     return (

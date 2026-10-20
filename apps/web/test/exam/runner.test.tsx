@@ -10,6 +10,7 @@ import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import { Runner, firstOfNextSection } from "../../src/components/exam/Runner";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
+import { RESULT_STUB } from "./run-client-stub";
 
 // C-04, the runner shell. Task 7 brings the answer blocks, Task 8 the save
 // banner and Task 9 the clock; this task owns everything around them, so
@@ -89,6 +90,7 @@ function props(overrides: Partial<Props> = {}): Props {
     questionSlot: (q: CandidateQuestion) => <p>{q.prompt}</p>,
     clockSlot: <span>44:59 left</span>,
     bannerSlot: <span>Saved</span>,
+    submitSlot: <button type="button">Submit test</button>,
     ...overrides,
   };
 }
@@ -569,6 +571,7 @@ function clientWithStart(): RunClient {
     // drains once something mounts it. No attempt in this browser is the
     // ordinary first visit, and `null` is what the client answers with.
     resume: () => Promise.resolve(null),
+    ...RESULT_STUB,
     putAnswer: () => Promise.reject(new Error("the runner shell saves nothing")),
   };
 }

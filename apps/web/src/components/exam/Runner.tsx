@@ -155,6 +155,7 @@ export function Runner({
   questionSlot,
   clockSlot,
   bannerSlot,
+  submitSlot,
 }: {
   paper: AttemptPaper;
   index: number;
@@ -165,6 +166,10 @@ export function Runner({
   questionSlot: (question: CandidateQuestion) => ReactElement;
   clockSlot: ReactElement;
   bannerSlot: ReactElement;
+  /** The one irreversible control in the runtime (Task 11). A slot, like
+   *  the clock and the banner beside it, because what pressing it does
+   *  belongs to whoever owns the attempt and not to the layout. */
+  submitSlot: ReactElement;
 }) {
   const questions = useMemo(() => flatQuestions(paper), [paper]);
   const view = useViewPreferences();
@@ -216,6 +221,10 @@ export function Runner({
             Calculator
           </button>
         )}
+        {/* Last in the bar and pushed to its end: the one primary action
+            on the screen, as far from Next and Clear as the row allows,
+            because it cannot be undone. */}
+        <div className="exam-runner-finish">{submitSlot}</div>
       </header>
 
       <main className="exam-question" aria-label={`Question ${String(number)}`}>

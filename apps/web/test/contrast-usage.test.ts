@@ -327,6 +327,23 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".exam-clock-announce": "cream",
   ".exam-confirm": "canvas",
   ".exam-confirm-danger": "canvas",
+
+  // ---- exam.css: submitting, and the finish page (Task 11, #75) ---------
+  // The one primary action in the runner fills itself with voltage-deep
+  // and writes in cream; disabled it falls back to the bar's own cream
+  // ground. The refusal sentence sits in the bar beside it.
+  ".exam-submit": "voltage-deep",
+  ".exam-submit:disabled": "canvas",
+  ".exam-submit-error": "cream",
+  // The result, on the finish page's cream body. The verdict chip and
+  // every review card paint their own canvas first; the table and the
+  // pending note sit directly on cream.
+  ".exam-verdict": "canvas",
+  ".exam-verdict[data-passed=\"false\"]": "canvas",
+  ".exam-result-pending": "cream",
+  ".exam-result-table caption": "cream",
+  ".exam-result-table thead th": "cream",
+  ".exam-review-number": "canvas",
   // DESIGN.md's `palette-square` family. Each variant fills itself from
   // its own state token and writes the number in cream; the default and
   // the "you are here" ring sit on the square's own canvas.
@@ -495,6 +512,22 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // 20px, weight 500). 20px clears the 18.66px large-text floor, so it is
   // held to 3:1 — the same floor the duplicated declarations resolved to.
   ".exam-timer.timer-chip-urgent .exam-timer-value": { px: 20, weight: 500 },
+
+  // ---- exam.css, Task 11 (#75): submitting and the finish page -----------
+  // The disabled Submit button is the same <button> as `.exam-submit`,
+  // whose own rule sets type-button-md (16px, weight 500).
+  ".exam-submit:disabled": { px: 16, weight: 500 },
+  // The refusal sentence and the pending note are bare <p> elements with
+  // no size of their own, so they render at the runner's own body size —
+  // type-body-md, 16px, weight 400. The runner's `--exam-font-scale` only
+  // ever makes that larger, so 16px is the conservative case.
+  ".exam-submit-error": { px: 16, weight: 400 },
+  ".exam-result-pending": { px: 16, weight: 400 },
+  // The verdict chip declares its own weight (600) and no size: it sits in
+  // the finish page's body text, 16px.
+  ".exam-verdict": { px: 16, weight: 600 },
+  // The failing variant is the same element; only the colour changes.
+  ".exam-verdict[data-passed=\"false\"]": { px: 16, weight: 600 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with

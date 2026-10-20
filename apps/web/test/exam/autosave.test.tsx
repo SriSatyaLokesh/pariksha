@@ -21,6 +21,7 @@ import { SAVE_DEBOUNCE_MS, queueStorageKey, type SaveState } from "../../src/lib
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
 import type { LandingPayload, QueuedSave, RunClient, SaveOutcome } from "../../src/lib/run";
+import { RESULT_STUB } from "./run-client-stub";
 
 const NOW = 1_760_000_000_000;
 
@@ -197,6 +198,7 @@ function clientThatSaves(): { client: RunClient; saved: Saved } {
     landing: () => Promise.resolve(landing),
     resume: () => Promise.resolve(null),
     start: () => Promise.resolve(paper),
+    ...RESULT_STUB,
     putAnswer: (save) => {
       saved.calls.push(save);
       return Promise.resolve({

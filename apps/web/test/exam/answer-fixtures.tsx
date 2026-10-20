@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
+import { RESULT_STUB } from "./run-client-stub";
 
 // The pre-submit checklist's first item, shared by the three answer test
 // files: anything added to a screen needs a test that starts at the app
@@ -168,6 +169,7 @@ export function client(): RunClient {
     // `null` is the ordinary first visit; `putAnswer` rejects, because
     // these fixtures drive the answer blocks directly.
     resume: () => Promise.resolve(null),
+    ...RESULT_STUB,
     putAnswer: () => Promise.reject(new Error("the answer fixtures save nothing")),
   };
 }

@@ -1210,3 +1210,190 @@
   border-radius: var(--rounded-md);
   background: var(--color-canvas);
 }
+
+/* ---- submitting, and the finish page (Task 11, #75) -------------------- */
+
+/* The one primary action in the runner, pushed to the end of the bar and
+   as far from Next and Clear as the row allows: it cannot be undone.
+   Voltage-deep rather than voltage, because cream on voltage is 3.86:1
+   and a 15px button label is not a display headline. */
+.exam-runner-finish {
+  margin-left: auto;
+}
+
+.exam-submit {
+  min-height: 44px;
+  padding: 0 24px;
+  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border-radius: var(--rounded-md);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+.exam-submit:disabled {
+  border-color: var(--color-hairline-strong);
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+/* The dialog itself reuses `.exam-confirm`'s danger frame — one
+   confirmation treatment in this runtime, not two. It is positioned over
+   the bar rather than inside it so a wrapping header cannot push the
+   paper down while the candidate is reading the counts. */
+.exam-submit-confirm {
+  position: absolute;
+  right: 32px;
+  z-index: 20;
+  width: min(420px, calc(100vw - 64px));
+  margin-top: 8px;
+  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.exam-submit-heading {
+  margin: 0 0 8px;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-submit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.exam-submit-status:empty {
+  margin: 0;
+}
+
+.exam-submit-error {
+  margin: 8px 0 0;
+  color: var(--color-flag-risk);
+}
+
+/* The finish page: the landing page's own shell, because DESIGN.md makes
+   them the two bookends of the same day. Nothing new is needed for the
+   hero, the body or the facts list — only what a result adds. */
+.exam-receipt-ref {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  user-select: all;
+}
+
+.exam-finish-note {
+  max-width: 64ch;
+  margin: 24px 0 0;
+}
+
+.exam-result {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-hairline-strong);
+}
+
+/* Tabular figures: a score and its maximum sit next to each other and
+   must not shift width between one candidate's screen and the next. */
+.exam-score {
+  margin: 0 0 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-score-value {
+  font-family: var(--type-display-lg-family);
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line-height);
+}
+
+/* The word is the carrier, the mark is what a greyscale reader sees, and
+   the colour is the third signal — never the first (DESIGN.md). */
+.exam-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-flag-clean);
+  font-weight: 600;
+}
+
+.exam-verdict[data-passed="false"] {
+  color: var(--color-flag-review);
+}
+
+.exam-result-pending {
+  max-width: 64ch;
+  margin: 0 0 24px;
+  color: var(--color-ink-soft);
+}
+
+.exam-result-table {
+  width: 100%;
+  margin: 0 0 24px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-result-table caption {
+  margin-bottom: 8px;
+  text-align: left;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exam-result-table th,
+.exam-result-table td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  text-align: left;
+}
+
+.exam-result-table thead th {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exam-review {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.exam-review-item {
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-review-number {
+  margin: 0 0 12px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exam-review-explanation {
+  margin-top: 8px;
+  max-width: 64ch;
+}

@@ -24,6 +24,7 @@ import { Runner, lockedIndices, paletteStates } from "../../src/components/exam/
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, QueuedSave, RunClient } from "../../src/lib/run";
+import { RESULT_STUB } from "./run-client-stub";
 
 const NOW = 1_760_000_000_000;
 
@@ -98,6 +99,7 @@ function renderRunner(paper: AttemptPaper, index: number, onIndex = vi.fn()) {
         questionSlot={(q) => <p>{q.prompt}</p>}
         clockSlot={<span>44:59 left</span>}
         bannerSlot={<span>Saved</span>}
+        submitSlot={<button type="button">Submit test</button>}
       />,
     ),
   };
@@ -267,6 +269,7 @@ function client(paper: AttemptPaper, overrides: Partial<RunClient> = {}): RunCli
     requestEmailCode: () => Promise.reject(new Error("the runner sends no code")),
     form: () => Promise.reject(new Error("the runner reads no form")),
     register: () => Promise.reject(new Error("the runner registers nobody")),
+    ...RESULT_STUB,
     putAnswer: () => Promise.reject(new Error("nothing is saved here")),
     ...overrides,
   };

@@ -90,6 +90,54 @@ export interface RegistrationPayload {
   registrationToken?: string;
 }
 
+/**
+ * `C-08`'s finish page (Task 11). The receipt carries **no score**: the
+ * score, if the organiser released one, is the separate `ReleasedResult`
+ * the server's own gate assembled.
+ */
+export interface Receipt {
+  attemptId: string;
+  submittedAt: number;
+  answered: number;
+  unanswered: number;
+  total: number;
+  /** "Attempt 2 of 3" — this attempt's ordinal, and what the test allows. */
+  attemptNo: number;
+  attemptsAllowed: number;
+}
+
+/**
+ * One attempt's result, **exactly as much of it as the candidate may see**
+ * (`AC-16`).
+ *
+ * The optional keys are optional on the wire, not in the renderer: a
+ * `score_only` release arrives with no `sections` key at all and a
+ * `score_and_sections` release with no `review` key. Nothing in this
+ * bundle decides that — `releasedResult` on the server does, and the
+ * browser has no way to ask for more than it was sent. `show` says which
+ * level was actually served, which is not always the one the organiser
+ * configured: `full_review` degrades while the candidate still has an
+ * attempt left.
+ */
+export interface ReleasedResult {
+  show: "score_only" | "score_and_sections" | "full_review";
+  total: number;
+  max: number;
+  percent: number;
+  /** `null` when the test sets no pass mark — not `false`. */
+  passed: boolean | null;
+  /** Questions still waiting on a person, so the score may yet rise. */
+  pending: string[];
+  sections?: { sectionId: string; title: string; points: number; max: number }[];
+  review?: {
+    questionId: string;
+    yourAnswer: unknown;
+    correct: unknown;
+    explanation: string | null;
+    points: number;
+  }[];
+}
+
 /** Widened by Tasks 2, 3, 5, 8 and 11. */
 export interface RunClient {
   landing(): Promise<LandingPayload>;
@@ -165,6 +213,32 @@ export interface RunClient {
    * one: the progress bump rides the same statement guarded only by
    * `max_index < ?`, so it happens on a `superseded` save too.
    */
+  /**
+   * End the attempt (Task 11, `C-08`). Takes nothing: the cookie is the
+   * credential and the scope, and there is no field a candidate could
+   * send that the server should believe.
+   *
+   * Idempotent on the server — a second call answers the first call's
+   * receipt rather than scoring again — so a double press, and the
+   * browser's own auto-submit at zero racing the candidate's, both end in
+   * one score and one audit row.
+   */
+  submit(): Promise<{ receipt: Receipt; released: ReleasedResult | null }>;
+  /**
+   * The same gate again, for a finish page that was reloaded. `null` is a
+   * complete answer: this test releases nothing, or not yet.
+   */
+  result(): Promise<ReleasedResult | null>;
+  /**
+   * `C-09`'s return visit, a week later with no cookie left. Resolves on
+   * 202 and tells the caller nothing else — an unknown reference and the
+   * wrong address answer identically, because anything else would say
+   * whether an address sat a test.
+   */
+  requestResultCode(attemptRef: string, email: string): Promise<void>;
+  /** Spends the emailed code. 410 (`RunError`, `code_expired`) once it has
+   *  been used or has lapsed. */
+  verifyResultCode(attemptRef: string, email: string, code: string): Promise<ReleasedResult | null>;
   putAnswer(save: QueuedSave): Promise<{
     outcome: SaveOutcome;
     message?: string;
@@ -440,6 +514,27 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
         throw error;
       }
     },
+    submit: async () =>
+      (await post<{ receipt: Receipt; released: ReleasedResult | null }>(
+        "/api/v1/run/attempt/submit",
+        undefined,
+      )) as { receipt: Receipt; released: ReleasedResult | null },
+    // `send` rather than `get`: a released `null` is a real answer and
+    // `get`'s cast would be a lie about it, which is the one place in this
+    // client where "nothing" and "not yet" have to stay the same thing.
+    result: async () =>
+      (await send<ReleasedResult | null>("/api/v1/run/attempt/result", {
+        headers: { accept: "application/json" },
+      })) ?? null,
+    requestResultCode: async (attemptRef, email) => {
+      await post("/api/v1/run/result/code", { attemptRef, email });
+    },
+    verifyResultCode: async (attemptRef, email, code) =>
+      (await post<ReleasedResult | null>("/api/v1/run/result/verify", {
+        attemptRef,
+        email,
+        code,
+      })) ?? null,
     putAnswer: async (save) => {
       try {
         const body = await send<{

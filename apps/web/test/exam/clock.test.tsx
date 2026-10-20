@@ -27,6 +27,7 @@ import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
 import type { RunClient } from "../../src/lib/run";
 import { SAVE_DEBOUNCE_MS } from "../../src/lib/queue";
+import { RESULT_STUB } from "./run-client-stub";
 
 const MINUTE = 60_000;
 const STYLES = dirname(fileURLToPath(import.meta.url));
@@ -453,6 +454,7 @@ function resumingClient(overrides: Partial<RunClient> = {}, paper = resumedPaper
     start: () => Promise.reject(new Error("this attempt is resumed, not started")),
     resume: () => Promise.resolve(paper),
     putAnswer: () => Promise.reject(new Error("nothing is saved here")),
+    ...RESULT_STUB,
     ...overrides,
   };
 }
