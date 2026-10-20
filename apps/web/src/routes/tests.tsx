@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSummary } from "../lib/api";
 import { ImportDialog } from "../components/authoring/ImportDialog";
 import { CardHairline } from "../components/CardHairline";
-import { MonoCaption } from "../components/MonoCaption";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
 

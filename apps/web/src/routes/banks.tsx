@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, type ApiClient, type Bank } from "../lib/api";
 import { CardHairline } from "../components/CardHairline";
-import { MonoCaption } from "../components/MonoCaption";
 import { TextField } from "../components/TextField";
 
 // Screen 1 of the bank-first flow (docs/design.md, Flow 1): the bank list.

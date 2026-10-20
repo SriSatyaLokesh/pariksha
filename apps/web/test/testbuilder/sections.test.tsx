@@ -21,10 +21,6 @@ import {
 import { SectionList } from "../../src/components/testbuilder/SectionList";
 import { OrganiserApp } from "../../src/routes/organiser";
 
-function noop(): void {
-  /* no-op */
-}
-
 const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
 
 /** The one row the test list shows, so the walk below has something to click. */

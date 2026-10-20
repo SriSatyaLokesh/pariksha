@@ -1,7 +1,6 @@
 import { useState } from "react";
 import type { Question } from "@pariksha/core";
 import type { ApiClient } from "../lib/api";
-import { MonoCaption } from "../components/MonoCaption";
 import { QuestionEditor } from "../components/authoring/QuestionEditor";
 
 // The page shell around QuestionEditor, the same thin wrapping bank.tsx and
@@ -22,7 +21,6 @@ export function QuestionScreen({
   onSaved: (question: Question) => void;
 }) {
   const [justSaved, setJustSaved] = useState(false);
-  const title = initial ? "Edit question" : "New question";
 
   return (
     <>

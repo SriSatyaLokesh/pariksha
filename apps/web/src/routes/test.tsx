@@ -13,7 +13,6 @@ import {
   type TestVersionRow,
   type TestVersionSummary,
 } from "../lib/api";
-import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
 import { TimingPanel } from "../components/testbuilder/TimingPanel";

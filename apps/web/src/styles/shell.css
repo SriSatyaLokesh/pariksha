@@ -218,11 +218,27 @@
 
 /* ---- Page -------------------------------------------------------------- */
 
-/* min-width: 0 is load-bearing, not tidiness: without it a grid item's
-   automatic minimum size is its content, so one wide table would push the
-   whole page track past the viewport and scroll the screen sideways. */
-.shell__page {
+/* Measured in a browser, not assumed. Three things here are load-bearing and
+   two of them were wrong on the first pass:
+
+   `.shell > .shell__page` rather than `.shell__page`, because admin.css's
+   .organiser rules are imported AFTER this file (an @import must precede
+   every rule, so shell.css cannot simply come last) and would otherwise win
+   on source order at equal specificity — the page kept .organiser's 16px
+   inset instead of D15's page scale.
+
+   margin-inline: 0 overrides .organiser's `margin-inline: auto`. A grid item
+   with auto inline margins is NOT stretched to its track: it is sized by its
+   content and centred. With a 1400px table inside, the page measured 1080px
+   (its own max-width) in a 1044px track and the document scrolled sideways
+   at every width, 400px included — which is the failure D3a is about.
+
+   min-width: 0 then lets the item take the track instead of its content's
+   min-content width. */
+.shell > .shell__page {
   min-width: 0;
+  width: 100%;
+  margin-inline: 0;
   padding-block: var(--space-xl);
   padding-inline: var(--space-2xl);
 }
@@ -275,7 +291,7 @@
     display: none;
   }
 
-  .shell__page {
+  .shell > .shell__page {
     padding-inline: var(--space-lg);
   }
 

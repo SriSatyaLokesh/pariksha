@@ -30,7 +30,7 @@ const ICONS: Record<string, string[]> = {
   moon: ["M16 11.8A6.6 6.6 0 0 1 8.2 4a6.6 6.6 0 1 0 7.8 7.8Z"],
 };
 
-function Icon({ name }: { name: keyof typeof ICONS | string }) {
+function Icon({ name }: { name: string }) {
   return (
     <svg
       className="shell__icon"
