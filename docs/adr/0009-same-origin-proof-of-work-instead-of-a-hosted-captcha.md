@@ -171,11 +171,17 @@ disable its control and show `REGISTER_PENDING_MESSAGE` for the duration.
    press harmless, but a control that looks dead for several seconds before a
    timed exam is its own defect. This, not a Web Worker, is what the
    measurement calls for.
-2. **Measure the solve on a real phone before the first live unproctored
-   test** — the numbers above are a desktop measurement and an extrapolation.
-   If a phone is far worse than four times slower, lower `POW_DIFFICULTY_BITS`
-   rather than contorting the implementation: per the paragraph above, the work
-   factor is not what is holding the line.
+2. ~~**Measure the solve on a real phone before the first live unproctored
+   test**~~ — **done, 2026-10-20.** Satya registered on a real handset against
+   the deployed Worker and the whole press-to-start step took **about one
+   second**, against a desktop p90 of 1.0 s and the 3-4x extrapolation that
+   put the tail past 2 s. The extrapolation was pessimistic; `POW_DIFFICULTY_BITS`
+   stays at 16 and the pending line stays as the remedy for a slow device. One
+   handset is not a device matrix, so a budget phone on a poor connection is
+   still unmeasured — but the number that worried this ADR is settled, and the
+   recorded guidance holds: if a phone is ever far worse, lower the bits rather
+   than contorting the implementation, because the work factor is not what is
+   holding the line.
 3. **If a real deployment is overrun despite the rate limits,** the answer is
    the buckets, not the bits — tighten `test_register`, and only then revisit
    this record.
