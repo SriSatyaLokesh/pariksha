@@ -156,7 +156,19 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
   // The root `required` floors, which `draftSchema()` drops wholesale
   // because `settings` is not a whole document. Import runs the unstripped
   // schema and so still refuses both; publish had nothing at all.
-  if (settings.timing === undefined) {
+  //
+  // #179 asks the row about the duration rather than about the block: a
+  // `timing` that is present and says nothing, or says zero, is the same
+  // 0-minute test to a candidate (`run.ts` reads `duration_minutes ?? 0`).
+  // Those two shapes do not in fact reach here today — `draftSchema()`
+  // drops only the *root* `required`, so `$defs/timing`'s own
+  // `required: ["duration_minutes"]` and its `minimum: 1` both survive into
+  // the save-time validator and the draft route refuses the body outright
+  // (`apps/api/test/lifecycle.test.ts` asserts that refusal). The row is
+  // written against the duration anyway because this is the gate: it judges
+  // a *stored* body and must not depend on which writer produced it, which
+  // is the same reason `mapIssue`'s fallback is blocking.
+  if ((settings.timing?.duration_minutes ?? 0) < 1) {
     rows.push({
       id: "timing_missing",
       severity: "blocking",
@@ -170,6 +182,18 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
       severity: "blocking",
       field: "sections",
       message: "this test has no sections, so there is nothing for a candidate to answer",
+    });
+  } else if (sections.every(drawsNothing)) {
+    // The other half of #179: sections exist, so `no_sections` stays quiet,
+    // but between them they put nothing in front of a candidate. Each one
+    // also gets its own `section_empty` below; this is the test-level
+    // statement of the same fact, and the row an organiser needs when the
+    // answer is "add a question somewhere", not "fix section 3".
+    rows.push({
+      id: "no_questions",
+      severity: "blocking",
+      field: "sections",
+      message: "every section is empty, so there is nothing for a candidate to answer",
     });
   }
 

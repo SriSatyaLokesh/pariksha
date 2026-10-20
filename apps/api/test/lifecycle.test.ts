@@ -99,11 +99,11 @@ beforeEach(async () => {
   });
 });
 
+const patchDraft = (patch: unknown): Promise<Response> =>
+  app.request(`/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`, send("PATCH", authorCookie, patch));
+
 async function saveDraft(patch: unknown): Promise<Response> {
-  const res = await app.request(
-    `/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`,
-    send("PATCH", authorCookie, patch),
-  );
+  const res = await patchDraft(patch);
   expect(res.status, await res.clone().text()).toBe(200);
   return res;
 }
@@ -115,9 +115,28 @@ async function publish(cookie = adminCookie): Promise<{ status: number; body: Re
   return { status: res.status, body: await res.json() };
 }
 
+/** The ids of whichever envelope carries the rows — `GET …/checklist`
+ * returns them at the top level, the 422 nests them under `error.details`.
+ * One reader, so a test can say the same thing about the screen and the
+ * gate. */
 function rowIds(body: Record<string, unknown>): string[] {
-  const details = (body.error as { details: { rows: { id: string }[] } }).details;
-  return details.rows.map((r) => r.id);
+  const rows =
+    (body.rows as { id: string }[] | undefined) ??
+    (body.error as { details: { rows: { id: string }[] } }).details.rows;
+  return rows.map((r) => r.id);
+}
+
+/** The fields a 422 from the draft route names, which is the other shape
+ * an error body comes in here. */
+function issueFields(body: Record<string, unknown>): string[] {
+  const details = (body.error as { details: { issues: { field: string }[] } }).details;
+  return details.issues.map((i) => i.field);
+}
+
+async function getChecklist(id = testId): Promise<Record<string, unknown>> {
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${id}/checklist`, get(authorCookie));
+  expect(res.status, await res.clone().text()).toBe(200);
+  return await res.json();
 }
 
 async function versionCount(): Promise<number> {
@@ -269,8 +288,12 @@ it.each([
 // have demanded `timing`, and until this row existed nothing anywhere
 // caught it. A test published with no duration gives every candidate
 // unlimited time.
-it("a test that never got a timing block is refused at publish", async () => {
-  const other = (
+/** A second test that never got a timing block, with `sections` saved onto
+ * it. The only route to a draft whose `settings.timing` is absent: a PATCH
+ * cannot remove a key it does not name, and every other shape of missing
+ * duration is refused at save (see the #179 block below). */
+async function testWithoutTiming(sections: unknown): Promise<string> {
+  const id = (
     await (
       await app.request(
         `/api/v1/workspaces/${workspaceId}/tests`,
@@ -279,16 +302,69 @@ it("a test that never got a timing block is refused at publish", async () => {
     ).json()
   ).id;
   const saved = await app.request(
-    `/api/v1/workspaces/${workspaceId}/tests/${other}/draft`,
-    send("PATCH", authorCookie, {
-      sections: [{ id: "s1", title: "Section one", source: { kind: "fixed", questions: [questionId] } }],
-    }),
+    `/api/v1/workspaces/${workspaceId}/tests/${id}/draft`,
+    send("PATCH", authorCookie, { sections }),
   );
-  expect(saved.status).toBe(200);
+  expect(saved.status, await saved.clone().text()).toBe(200);
+  return id;
+}
+
+it("a test that never got a timing block is refused at publish", async () => {
+  const other = await testWithoutTiming([
+    { id: "s1", title: "Section one", source: { kind: "fixed", questions: [questionId] } },
+  ]);
 
   const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${other}/publish`, post({}, adminCookie));
   expect(res.status).toBe(422);
   expect(rowIds(await res.json())).toContain("timing_missing");
+});
+
+// #179 — a test with no duration cannot be published.
+//
+// Three shapes of "no duration" exist in the type: `timing` absent (above),
+// `timing` present and empty, and `duration_minutes: 0`. The last two never
+// reach the gate: `draftSchema()` drops only the *root* `required`, so
+// `$defs/timing`'s own `required: ["duration_minutes"]` and its
+// `minimum: 1` both survive into the save-time validator and the draft
+// route refuses the body outright. These two assert that — the invariant
+// is that such a draft never becomes a published version, and the earliest
+// refusal is the strongest form of it. `buildChecklist` carries the same
+// rule anyway, because the gate judges a *stored* body and is the one
+// place that must not depend on which writer produced it.
+
+it("refuses to publish a draft whose timing object carries no duration", async () => {
+  const res = await patchDraft({ settings: { timing: {} } });
+  expect(res.status, await res.clone().text()).toBe(422);
+  expect(issueFields(await res.json())).toContain("timing.duration_minutes");
+});
+
+it("refuses to publish a draft whose duration is explicitly zero", async () => {
+  const res = await patchDraft({ settings: { timing: { duration_minutes: 0 } } });
+  expect(res.status, await res.clone().text()).toBe(422);
+  expect(issueFields(await res.json())).toContain("timing.duration_minutes");
+});
+
+it("still publishes a draft with a positive duration", async () => {
+  expect((await publish()).status).toBe(200);
+});
+
+it("refuses to publish when every section is empty", async () => {
+  await saveDraft({ sections: [{ id: "s1", title: "A", source: { kind: "fixed", questions: [] } }] });
+  const { status, body } = await publish();
+  expect(status).toBe(422);
+  expect(rowIds(body)).toContain("no_questions");
+  expect(await versionCount()).toBe(0);
+});
+
+it("reports both rows on GET .../checklist as well as at the gate", async () => {
+  const other = await testWithoutTiming([{ id: "s1", title: "A", source: { kind: "fixed", questions: [] } }]);
+  expect(rowIds(await getChecklist(other))).toEqual(
+    expect.arrayContaining(["timing_missing", "no_questions"]),
+  );
+
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${other}/publish`, post({}, adminCookie));
+  expect(res.status).toBe(422);
+  expect(rowIds(await res.json())).toEqual(expect.arrayContaining(["timing_missing", "no_questions"]));
 });
 
 it("every refusing row names a field a screen can navigate to", async () => {
