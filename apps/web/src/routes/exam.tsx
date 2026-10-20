@@ -12,7 +12,7 @@
 // bundle budget is 300 KB gzipped (PRD non-functional table) and an
 // exam-taker under a clock downloads only what they are about to use.
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AttemptPaper,
   CandidateQuestion,
@@ -528,14 +528,33 @@ function AttemptView({
    * at zero: a refusal there must leave the sentence and nothing else,
    * because re-opening "Submit this test?" asks a candidate whose time has
    * run out to confirm something they did not do.
+   *
+   * **One at a time.** Both buttons go `disabled` the moment `submitting`
+   * becomes `"sending"`, but the clock is not a button: a candidate who
+   * presses Submit and Finish in the last second of the attempt is inside
+   * `queue.drain()` — an unsent answer, a retry, an offline window — when
+   * `onZero` fires, and a second submission starts underneath the first.
+   * The server is idempotent, so no answer is lost; the browser is not —
+   * `onFinished` swaps the view twice, and whichever call loses the race
+   * paints "could not be submitted" over a receipt that arrived. A ref,
+   * not `submitting`: this callback closes over the render that made it,
+   * so the state it can read is always the stale one.
    */
+  const finishing = useRef(false);
   const finish = useCallback(async (auto = false) => {
+    if (finishing.current) return;
+    finishing.current = true;
     setSubmitting("sending");
     setSubmitError(null);
     try {
       await queue.drain();
       onFinished(await client.submit());
     } catch (error) {
+      // Only on the way out: a candidate whose submission was refused must
+      // be able to press again, which is safe because `finishAttempt`
+      // writes only `WHERE submitted_at IS NULL`. The success path never
+      // clears it — the view is gone.
+      finishing.current = false;
       setSubmitting(auto ? "idle" : "confirming");
       setSubmitError(
         error instanceof Error

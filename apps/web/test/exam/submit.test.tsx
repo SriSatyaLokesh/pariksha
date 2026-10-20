@@ -265,6 +265,38 @@ it("AC-14: the queue is drained before the attempt is closed, never after", asyn
   expect(order).toEqual(["save", "submit"]);
 });
 
+it("while the submission is in flight the confirmation says so and takes no second press", async () => {
+  // `pending` was passed to `SubmitDialog` and observed by nothing —
+  // exactly the shape of the `onZero` defect this phase already shipped.
+  // What it buys is the only thing between a candidate on a slow
+  // connection and pressing Submit and Finish three more times.
+  let release = (): void => undefined;
+  const submit = vi.fn(
+    () =>
+      new Promise<{ receipt: Receipt; released: null }>((resolve) => {
+        release = () => {
+          resolve({ receipt, released: null });
+        };
+      }),
+  );
+  await openTheDialog(client({ submit }));
+  await click(screen.getByRole("button", { name: /submit and finish/i }));
+
+  const dialog = screen.getByRole("dialog", { name: /submit this test/i });
+  expect(within(dialog).getByRole("button", { name: /submit and finish/i })).toBeDisabled();
+  expect(within(dialog).getByRole("button", { name: /keep working/i })).toBeDisabled();
+  // The non-visual half: a screen-reader user hears that something is
+  // happening rather than meeting two controls that stopped answering.
+  expect(dialog).toHaveTextContent(/submitting your test/i);
+
+  await act(async () => {
+    release();
+    await Promise.resolve();
+  });
+  expect(await screen.findByRole("heading", { name: /submitted/i })).toBeVisible();
+  expect(submit).toHaveBeenCalledTimes(1);
+});
+
 it("a refused submission leaves the candidate able to press again, with a reason", async () => {
   const submit = vi
     .fn<RunClient["submit"]>()

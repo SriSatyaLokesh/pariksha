@@ -623,6 +623,33 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     expect(onZero).toHaveBeenCalledTimes(1);
   });
 
+  it("the paper's own warning marks reach the clock, not a default somebody hard-coded", async () => {
+    // `warnAtMinutes` is argued at length on `<Clock>` directly and was
+    // reached from the root by nothing: `exam.tsx`'s
+    // `warnAtMinutes={paper.warnAtMinutes}` could be any literal and the
+    // whole suite still passed. That is the same class of defect as the
+    // three this phase has already shipped.
+    //
+    // Seven, which is not a mark any fixture or default uses, so the
+    // sentence below can only have come from this paper.
+    const paper = { ...resumedPaper, warnAtMinutes: [7], sectionRemainingMs: null };
+    render(<ExamApp client={resumingClient({}, paper)} />);
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
+
+    const announce = screen.getByRole("status", { name: /time warnings/i });
+    expect(announce).toHaveTextContent("");
+    expect(total()).toHaveAttribute("data-warn", "0");
+
+    // Past the mark: 45 minutes anchored, 38 minutes of monotonic time.
+    advance(38 * MINUTE);
+    expect(total()).toHaveAttribute("data-warn", "1");
+    expect(announce).toHaveTextContent("7 minutes remaining.");
+    // One mark configured, so passing it is also the single colour swap
+    // `DESIGN.md` allows.
+    expect(total().className).toContain("timer-chip-urgent");
+  });
+
   it("a refusal carries no reading, and the countdown is left where it was", async () => {
     // Task 8 deviation 4: `remainingMs` is **absent** on a refusal. The
     // clock must not re-anchor to an invented zero.
@@ -717,5 +744,48 @@ describe("C-07: the countdown reaching zero ends the attempt", () => {
     expect(submit).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(screen.getByRole("alert")).toHaveTextContent(/network dropped/i);
+  });
+
+  it("zero arriving on top of a submission the candidate started submits once, not twice", async () => {
+    // Both Submit buttons go `disabled` the moment `submitting` becomes
+    // `"sending"`, so a double *click* is not reachable — but the clock is
+    // not a button. A candidate who presses Submit and Finish in the last
+    // seconds is still inside `queue.drain()`/`client.submit()` when
+    // `onZero` fires, and without the guard a second submission starts
+    // underneath the first: `onFinished` swaps the view twice, and
+    // whichever call loses the race paints "could not be submitted" over a
+    // receipt that had already arrived.
+    let release = (): void => undefined;
+    const submit = vi.fn(
+      () =>
+        new Promise<{ receipt: Receipt; released: null }>((resolve) => {
+          release = () => {
+            resolve({ receipt, released: null });
+          };
+        }),
+    );
+    // Two minutes left, so nothing fires until this test moves the clock.
+    const paper = { ...resumedPaper, remainingMs: 2 * MINUTE, sectionRemainingMs: null };
+    render(<ExamApp client={resumingClient({ submit }, paper)} />);
+    await settle();
+    screen.getByRole("navigation", { name: /question palette/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /submit test/i }));
+    await settle();
+    fireEvent.click(screen.getByRole("button", { name: /submit and finish/i }));
+    await settle();
+    expect(submit).toHaveBeenCalledTimes(1);
+
+    // The clock runs out while that first submission is still in flight.
+    advance(2 * MINUTE + 1000);
+    await settle();
+    expect(submit).toHaveBeenCalledTimes(1);
+
+    // And the one submission still finishes the attempt normally.
+    await act(async () => {
+      release();
+      await Promise.resolve();
+    });
+    expect(screen.getByRole("heading", { name: /submitted/i })).toBeVisible();
   });
 });
