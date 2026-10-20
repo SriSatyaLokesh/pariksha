@@ -71,11 +71,21 @@ function filterFromSearch(search: string): UrlFilter {
   };
 }
 
+/** Built on top of the query string rather than in place of it: `D5` put
+ *  the view itself there (`?view=tests`), and a fresh `URLSearchParams`
+ *  here would drop it — and `?returnTo=` with it — on the first keystroke
+ *  in Search. This screen owns three parameters and touches only those. */
 function searchFromFilter(filter: UrlFilter): string {
-  const params = new URLSearchParams();
-  if (filter.status) params.set("status", filter.status);
-  if (filter.search) params.set("search", filter.search);
-  if (filter.sort !== "name") params.set("sort", filter.sort);
+  const params = new URLSearchParams(window.location.search);
+  const owned: [string, string][] = [
+    ["status", filter.status],
+    ["search", filter.search],
+    ["sort", filter.sort === "name" ? "" : filter.sort],
+  ];
+  for (const [key, value] of owned) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }

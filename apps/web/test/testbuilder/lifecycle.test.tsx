@@ -279,8 +279,15 @@ describe("closing and archiving", () => {
   });
 
   it("Archive is offered only once the test is closed — Archived follows Closed", async () => {
-    await openBuilder(fakeClient({ test: async () => openTest }));
+    const open = await openBuilder(fakeClient({ test: async () => openTest }));
     expect(screen.queryByRole("button", { name: /^archive$/i })).toBeNull();
+
+    // Two whole apps in one test: the first has to go, and so does the URL
+    // it navigated to — `D5` put the open test in the query string, so a
+    // second `render` left to inherit `?view=test&test=tst_1` would boot
+    // straight back into the builder and never pass through Home.
+    open.unmount();
+    window.history.replaceState(null, "", "/");
 
     const closed: TestSummary = { ...openTest, state: "closed" };
     await openBuilder(fakeClient({ test: async () => closed }));

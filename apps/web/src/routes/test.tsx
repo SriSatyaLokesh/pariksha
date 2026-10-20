@@ -23,20 +23,13 @@ import { VersionBanner, VersionHistory } from "../components/testbuilder/Version
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
 import { useDialogKeys } from "../components/useDialogKeys";
+import { readView, writeView } from "../lib/view-url";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
 // checklist and version-banner panels are later tasks' own components,
 // mounted into this same shell when they land, the same way `SectionList`
 // is mounted here now.
-
-/** The open section lives in the URL (`?section=<id>`), so a reload or a
- * shared link returns to it — read fresh on every render's first paint and
- * on `popstate` (the browser's own Back/Forward), the same convention
- * `TestList`'s own filter already follows. */
-function sectionFromUrl(): string | null {
-  return new URLSearchParams(window.location.search).get("section");
-}
 
 /** What `createTest` seeds a draft with, and what the panel edits when the
  * draft has no `timing` yet — `duration_minutes` is the one member
@@ -105,7 +98,13 @@ export function TestBuilder({
   const [candidates, setCandidates] = useState<readonly CandidateRow[]>([]);
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
+  // The open section lives in the URL (`?section=<id>`), so a reload or a
+  // shared link returns to it — read on first paint and on `popstate`
+  // through `readView`, which is the organiser's one query-string parser
+  // (`D5`). This screen used to carry its own two-line copy of it.
+  const [openSectionId, setOpenSectionId] = useState<string | null>(
+    () => readView(window.location.search).section ?? null,
+  );
   // Task 5 (#57, P5.4): a whole `DraftPatch` rather than a sections array —
   // the registration form is a `settings` block and saves through the same
   // debounce, the same in-flight guard and the same one route. Each panel
@@ -151,18 +150,24 @@ export function TestBuilder({
   }, [load]);
 
   useEffect(() => {
-    const onPopState = () => setOpenSectionId(sectionFromUrl());
+    const onPopState = () =>
+      setOpenSectionId(readView(window.location.search).section ?? null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // Written through `writeView` as well, so `?section=` has one owner
+  // rather than a reader here and a writer there (`D5`; 6.5e takes this
+  // over). It pushes where this used to replace: an opened section is a
+  // place, and Back closing it is the behaviour the `popstate` listener
+  // above already implements — before this, Back from an open section left
+  // the builder outright and the section stayed open on the way back.
   function openSection(id: string | null): void {
     setOpenSectionId(id);
-    const params = new URLSearchParams(window.location.search);
-    if (id) params.set("section", id);
-    else params.delete("section");
-    const qs = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    const params = readView(window.location.search);
+    if (id) params.section = id;
+    else delete params.section;
+    writeView(params);
   }
 
   // Fix round (task 3 review, I4): a keystroke in a section's title or

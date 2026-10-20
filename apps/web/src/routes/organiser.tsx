@@ -9,6 +9,7 @@ import {
   type Workspace,
 } from "../lib/api";
 import { OrganiserShell, type NavKey } from "../components/OrganiserShell";
+import { readView, writeView, type ViewParams } from "../lib/view-url";
 import { SignIn } from "./signin";
 import { Setup } from "./setup";
 import { Dashboard } from "./dashboard";
@@ -20,10 +21,12 @@ import { TestBuilder } from "./test";
 
 // Routing, without a router.
 //
-// No router library is installed, and none is added: which screen a
-// visitor sees is not a property of the URL, it is a property of API
-// answers and, once signed in, of the one piece of state this component
-// owns itself — which bank, and which question, an Author opened.
+// No router library is installed, and none is added. Which screen a visitor
+// sees is first a property of API answers — signed in? set up? a member of
+// anything? — and only then, once those say "yes", a property of the URL:
+// `?view=tests&test=tst_8c21a4`, read on first paint and on `popstate` and
+// written by every navigation (spec §5, `D5`; `lib/view-url.ts` is the one
+// parser).
 //
 //   GET /setup/status → needed?        GET /me → signed in?
 //   ────────────────────────────────────────────────────────────
@@ -43,9 +46,10 @@ import { TestBuilder } from "./test";
 // a path — rather than reaching for a router to wire up the surface that
 // nine tasks built and no Author could open.
 //
-// The URL does carry one thing: `?returnTo=`, which survives the round trip
-// through the identity provider and is validated by lib/api's safeReturnTo
-// before it is ever put in a link.
+// The URL also carries `?returnTo=`, which survives the round trip through
+// the identity provider and is validated by lib/api's safeReturnTo before it
+// is ever put in a link. `readView` does not touch it and `writeView`
+// preserves it.
 
 type View =
   | { kind: "loading" }
@@ -99,7 +103,13 @@ export function OrganiserApp({
         });
         return;
       }
-      setView({ kind: "dashboard", actor, workspace });
+      // `D5`: the first paint obeys the URL. `boot` is also what a sign-out
+      // and a completed first run re-run, and in both of those the URL is
+      // still whatever the last navigation left — which is the right answer
+      // for a reload and a harmless one for the rest, since every view it
+      // can name belongs to this actor's workspace or is refused by the
+      // screen's own fetch.
+      setView(fromUrl(actor, workspace));
     } catch (cause) {
       setView({
         kind: "error",
@@ -114,6 +124,28 @@ export function OrganiserApp({
   useEffect(() => {
     void boot();
   }, [boot]);
+
+  // Back and Forward. `D5`'s whole argument is that a persistent nav makes
+  // the browser's own Back button a visible problem, so the history entry
+  // every navigation pushes has to be honoured on the way back as well as
+  // on the way in. The actor and the workspace come from whatever view is
+  // current — a functional update rather than a dependency, so the listener
+  // is registered once and can never read a stale pair.
+  useEffect(() => {
+    const onPopState = () =>
+      setView((previous) =>
+        "actor" in previous ? fromUrl(previous.actor, previous.workspace) : previous,
+      );
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  /** Navigate: the URL first, then the state it names. */
+  const go = useCallback((next: View) => {
+    const params = paramsOf(next);
+    if (params !== null) writeView(params);
+    setView(next);
+  }, []);
 
   const signOut = useCallback(() => {
     void client.signOut().finally(() => void boot());
@@ -140,7 +172,7 @@ export function OrganiserApp({
         actor={actor}
         workspace={workspace}
         onNavigate={(key) => {
-          setView(
+          go(
             key === "home"
               ? { kind: "dashboard", actor, workspace }
               : { kind: key, actor, workspace },
@@ -193,8 +225,8 @@ export function OrganiserApp({
         // chrome; `Dashboard` no longer has a header to put it in.
         { title: view.workspace.name, crumb: roleCrumb(view.actor, view.workspace) },
         <Dashboard
-          onOpenBanks={() => setView({ kind: "banks", actor: view.actor, workspace: view.workspace })}
-          onOpenTests={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
+          onOpenBanks={() => go({ kind: "banks", actor: view.actor, workspace: view.workspace })}
+          onOpenTests={() => go({ kind: "tests", actor: view.actor, workspace: view.workspace })}
         />,
       );
     case "tests":
@@ -206,7 +238,7 @@ export function OrganiserApp({
         <TestList
           workspaceId={view.workspace.id}
           client={client}
-          onOpenTest={(testId) => setView({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
+          onOpenTest={(testId) => go({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
         />,
       );
     case "test":
@@ -237,7 +269,7 @@ export function OrganiserApp({
         <BankList
           workspaceId={view.workspace.id}
           client={client}
-          onOpenBank={(bankId) => setView({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId })}
+          onOpenBank={(bankId) => go({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId })}
         />,
       );
     case "bank":
@@ -252,10 +284,10 @@ export function OrganiserApp({
           workspaceId={view.workspace.id}
           client={client}
           onNewQuestion={() =>
-            setView({ kind: "question", actor: view.actor, workspace: view.workspace, bankId: view.bankId })
+            go({ kind: "question", actor: view.actor, workspace: view.workspace, bankId: view.bankId })
           }
           onEditQuestion={(question: QuestionSummary) =>
-            setView({
+            go({
               kind: "question",
               actor: view.actor,
               workspace: view.workspace,
@@ -288,6 +320,67 @@ export function OrganiserApp({
           onSaved={() => undefined}
         />,
       );
+  }
+}
+
+/**
+ * The view the current URL names (`D5`).
+ *
+ * An id in a query string is a claim anyone can type, so a view that needs
+ * one and does not have it is **not** rendered: `?view=test` with no `test=`
+ * lands on Home rather than mounting a builder around an empty id, which is
+ * the "shell wrapped around nothing" this ruling exists to prevent. A view
+ * naming an id this actor cannot reach is the screen's own fetch to refuse —
+ * it is the only side that knows — and it refuses with an error in place of
+ * the screen.
+ *
+ * `?view=question` restores the editor's *bank*, not the question: which
+ * question was open is not in `ViewParams`, so a reloaded link opens a new
+ * one. Back from the editor returns to the bank, which is the entry the
+ * navigation pushed.
+ */
+function fromUrl(actor: Actor, workspace: Workspace): View {
+  const params = readView(window.location.search);
+  const home: View = { kind: "dashboard", actor, workspace };
+  switch (params.view) {
+    case "banks":
+    case "tests":
+      return { kind: params.view, actor, workspace };
+    case "test":
+      return params.test === undefined
+        ? home
+        : { kind: "test", actor, workspace, testId: params.test };
+    case "bank":
+      return params.bank === undefined
+        ? home
+        : { kind: "bank", actor, workspace, bankId: params.bank };
+    case "question":
+      return params.bank === undefined
+        ? home
+        : { kind: "question", actor, workspace, bankId: params.bank };
+    case "home":
+      return home;
+  }
+}
+
+/** …and back again. `null` for the four views that are not a place — the
+ *  boot, an error, sign-in and the first-run wizard are states of the
+ *  instance, not destinations, and none of them is navigated *to*. */
+function paramsOf(view: View): ViewParams | null {
+  switch (view.kind) {
+    case "dashboard":
+      return { view: "home" };
+    case "banks":
+    case "tests":
+      return { view: view.kind };
+    case "test":
+      return { view: "test", test: view.testId };
+    case "bank":
+      return { view: "bank", bank: view.bankId };
+    case "question":
+      return { view: "question", bank: view.bankId };
+    default:
+      return null;
   }
 }
 

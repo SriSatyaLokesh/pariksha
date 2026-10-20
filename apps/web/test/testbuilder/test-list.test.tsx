@@ -248,7 +248,12 @@ describe("TestList", () => {
     // The back button: the browser moves the location back and fires
     // `popstate` — dispatched here rather than relying on jsdom's own
     // `history.back()` timing, so this is a direct test of the listener.
-    window.history.pushState(null, "", "/");
+    //
+    // `?view=tests` and not `/`: the entry behind the filter is the list
+    // itself, which `D5` now names in the query string. Going back to a
+    // bare `/` is going back to Home, and Home has no Search field to
+    // assert the clearing of.
+    window.history.pushState(null, "", "/?view=tests");
     window.dispatchEvent(new PopStateEvent("popstate"));
 
     await waitFor(() => expect(screen.getByLabelText(/^search$/i)).toHaveValue(""));

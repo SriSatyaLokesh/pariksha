@@ -603,6 +603,17 @@ async function openBuilder(client: ApiClient) {
   return view;
 }
 
+/** The same screen, reached the other way an organiser reaches it: a URL
+ *  typed, bookmarked or reloaded. `D5` made that a first-class entry — the
+ *  app still boots from `OrganiserApp`, it just reads where to land from
+ *  the query string instead of from a click. */
+async function reloadIntoBuilder(search: string, client: ApiClient) {
+  window.history.replaceState(null, "", search);
+  const view = render(<OrganiserApp client={client} />);
+  await screen.findByRole("heading", { level: 1, name: "Midterm" });
+  return view;
+}
+
 describe("TestBuilder (the open section lives in the URL)", () => {
   it("the open section is in the URL, so a reload returns to it", async () => {
     const section: Section = { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } };
@@ -636,20 +647,27 @@ describe("TestBuilder (the open section lives in the URL)", () => {
         }));
 
     fireEvent.click(await screen.findByRole("button", { name: /^Quantitative aptitude ·/i }));
-    expect(window.location.search).toBe("?section=quant");
+    // The whole query string also carries `?view=test&test=tst_1` now
+    // (`D5`), so this asserts the parameter this screen owns rather than
+    // the string every screen shares.
+    expect(new URLSearchParams(window.location.search).get("section")).toBe("quant");
   });
 
   it("fix round (task 3 review, I10): a reload with ?section= already in the URL opens that section", async () => {
-    // The test above only asserts the *write* — `sectionFromUrl()`'s own
-    // initial read (`useState(() => sectionFromUrl())`) was never driven.
-    // Changing that initializer to `useState<string | null>(null)` would
-    // leave the suite green without this mount: the URL already carries
+    // The test above only asserts the *write* — the initial read
+    // (`useState(() => readView(...).section)`) was never driven. Changing
+    // that initializer to `useState<string | null>(null)` would leave the
+    // suite green without this mount: the URL already carries
     // `?section=quant` before `TestBuilder` ever renders, simulating the
     // reload #55's own acceptance box describes.
+    //
+    // It is a reload now rather than a walk: under `D5` a navigation
+    // rewrites the whole view, so clicking Tests on the way in is exactly
+    // what clears a stale `?section=` — which is the behaviour wanted, and
+    // means this test has to arrive the way the reload it describes does.
     const section: Section = { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } };
-    window.history.replaceState(null, "", "/?section=quant");
 
-    await openBuilder(fakeClient({
+    await reloadIntoBuilder("/?view=test&test=tst_1&section=quant", fakeClient({
           test: async () => ({
             id: "tst_1",
             name: "Midterm",
