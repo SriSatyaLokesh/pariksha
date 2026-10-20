@@ -54,3 +54,7 @@ scratch/
 # Superpowers scratch: brainstorm servers, prototypes and SDD ledgers are
 # local to the machine that ran them.
 .superpowers/
+
+# Phase 6.5 prototypes (D11) — throwaway HTML the owner approves before any
+# implementer starts. Local only, never committed, never an Artifact.
+.prototypes/
