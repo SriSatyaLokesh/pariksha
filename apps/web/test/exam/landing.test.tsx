@@ -122,20 +122,23 @@ it("the start button is enabled only while the test is open", async () => {
   expect(screen.getByRole("button", { name: /start/i })).toBeEnabled();
 });
 
-it("Start without a registration token says so rather than minting an attempt", async () => {
+it("Start without a registration token opens registration rather than minting an attempt", async () => {
   // The merge's one real hazard: the screens were built against a
   // zero-argument `start()`, and `RunClient & Partial<PaperClient>` kept
-  // `client.start()` compiling while calling the real
-  // `start(undefined)` — a 4xx on the first live run, caught by nothing.
-  // The token now comes from `sessionStorage`, and there is none here.
+  // `client.start()` compiling while calling the real `start(undefined)` —
+  // a 4xx on the first live run, caught by nothing. The token comes from
+  // `sessionStorage`, and there is none here — so Start is now the way IN
+  // to registration (Task 6) rather than a dead end.
   sessionStorage.removeItem(REGISTRATION_TOKEN_KEY);
   await mount();
   fireEvent.click(screen.getByRole("button", { name: /start/i }));
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Register for this test before starting it.",
-  );
-  // `clientFor`'s `start` rejects with its own message, so a guard that
-  // let the call through would fail on the text above.
+  // `clientFor`'s `start` rejects with its own message, so a Start that
+  // minted an attempt fails on the heading below rather than passing.
+  expect(
+    await screen.findByRole("heading", { level: 1, name: /register for aptitude/i }),
+  ).toBeVisible();
+  expect(screen.getByLabelText(/access code/i)).toBeVisible();
+  expect(screen.queryByRole("button", { name: /^start$/i })).toBeNull();
 });
 
 it("a closed test says so instead of offering a start button that refuses", async () => {
