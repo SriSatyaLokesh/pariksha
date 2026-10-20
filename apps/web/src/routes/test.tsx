@@ -13,7 +13,6 @@ import {
   type TestVersionRow,
   type TestVersionSummary,
 } from "../lib/api";
-import { OrganiserHeader } from "../components/OrganiserHeader";
 import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
@@ -65,15 +64,11 @@ export function TestBuilder({
   testId,
   client,
   actor,
-  onSignOut,
-  onBack,
 }: {
   workspaceId: string;
   testId: string;
   client: ApiClient;
   actor: Actor;
-  onSignOut: () => void;
-  onBack: () => void;
 }) {
   // T-23: only an owner holds `workspace.settings`, and the workspace half
   // of the branding panel is read-only without it. The server refuses
@@ -349,13 +344,7 @@ export function TestBuilder({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <OrganiserHeader email={actor.email} onSignOut={onSignOut} onBack={onBack} backLabel="Back to tests" />
-
-      <main id="main-content" className="organiser organiser--wide">
-        <MonoCaption>Test builder</MonoCaption>
+      <div className="organiser__panel">
         <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
 
         {test !== null && (
@@ -520,7 +509,7 @@ export function TestBuilder({
             checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
           />
         )}
-      </main>
+      </div>
     </>
   );
 }

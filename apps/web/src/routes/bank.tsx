@@ -2,7 +2,6 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { QUESTION_TYPES, type ImportIssue, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { MonoCaption } from "../components/MonoCaption";
-import { OrganiserHeader } from "../components/OrganiserHeader";
 import { GroupEditor } from "../components/authoring/GroupEditor";
 import { ImportDialog } from "../components/authoring/ImportDialog";
 
@@ -86,18 +85,12 @@ export function BankBrowser({
   bankId,
   workspaceId,
   client,
-  actorEmail,
-  onSignOut,
-  onBack,
   onNewQuestion,
   onEditQuestion,
 }: {
   bankId: string;
   workspaceId: string;
   client: ApiClient;
-  actorEmail: string;
-  onSignOut: () => void;
-  onBack: () => void;
   onNewQuestion: () => void;
   onEditQuestion: (question: QuestionSummary) => void;
 }) {
@@ -252,11 +245,7 @@ export function BankBrowser({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <OrganiserHeader email={actorEmail} onSignOut={onSignOut} onBack={onBack} backLabel="Back to banks" />
-      <div id="main-content" className="bank-browser">
+      <div className="bank-browser">
       <nav className="bank-browser__rail" aria-label="Filters">
         <MonoCaption>Filters</MonoCaption>
 

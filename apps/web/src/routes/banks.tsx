@@ -2,7 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ApiError, type ApiClient, type Bank } from "../lib/api";
 import { CardHairline } from "../components/CardHairline";
 import { MonoCaption } from "../components/MonoCaption";
-import { OrganiserHeader } from "../components/OrganiserHeader";
 import { TextField } from "../components/TextField";
 
 // Screen 1 of the bank-first flow (docs/design.md, Flow 1): the bank list.
@@ -21,16 +20,10 @@ const MAX_NAME = 200;
 export function BankList({
   workspaceId,
   client,
-  actorEmail,
-  onSignOut,
-  onBack,
   onOpenBank,
 }: {
   workspaceId: string;
   client: ApiClient;
-  actorEmail: string;
-  onSignOut: () => void;
-  onBack: () => void;
   onOpenBank: (bankId: string) => void;
 }) {
   const [banks, setBanks] = useState<Bank[]>([]);
@@ -74,15 +67,6 @@ export function BankList({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <OrganiserHeader email={actorEmail} onSignOut={onSignOut} onBack={onBack} backLabel="Back to dashboard" />
-
-      <main id="main-content" className="organiser organiser--wide">
-        <MonoCaption>Question banks</MonoCaption>
-        <h1 className="organiser__title">Banks</h1>
-
         <CardHairline className="organiser__panel">
           <form className="organiser-form" onSubmit={(event) => void onSubmit(event)} noValidate>
             <TextField
@@ -117,7 +101,6 @@ export function BankList({
             ))}
           </ul>
         )}
-      </main>
     </>
   );
 }

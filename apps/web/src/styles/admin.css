@@ -29,6 +29,10 @@
 @import "./primitives.css";
 @import "./authoring.css";
 @import "./registration.css";
+/* Phase 6.5c Task 1 (D3): the organiser's one piece of chrome. Last in the
+   chain so its rules win over the placeholder page styling above, which
+   6.5e retires. */
+@import "./shell.css";
 
 /* ---- Page ------------------------------------------------------------- */
 

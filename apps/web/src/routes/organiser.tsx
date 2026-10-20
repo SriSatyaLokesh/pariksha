@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Question } from "@pariksha/core";
 import {
   ApiError,
@@ -8,6 +8,7 @@ import {
   type SetupStatus,
   type Workspace,
 } from "../lib/api";
+import { OrganiserShell, type NavKey } from "../components/OrganiserShell";
 import { SignIn } from "./signin";
 import { Setup } from "./setup";
 import { Dashboard } from "./dashboard";
@@ -118,6 +119,41 @@ export function OrganiserApp({
     void client.signOut().finally(() => void boot());
   }, [client, boot]);
 
+  // The chrome, once (`D3`). Each `case` arm below decides WHAT renders; the
+  // shell decides where, and carries the nav, the workspace, the person and
+  // the way out that every screen used to render for itself.
+  //
+  // `loading`, `error`, `signin` and `setup` are deliberately outside it: a
+  // sidebar offering Banks and Tests to a visitor who has not signed in — or
+  // to an instance that has no workspace yet — is a nav with nothing behind
+  // it, which is the lie `admin.css:99-101` refused.
+  function shell(
+    current: NavKey,
+    actor: Actor,
+    workspace: Workspace,
+    page: { title?: string; crumb?: string },
+    children: ReactNode,
+  ) {
+    return (
+      <OrganiserShell
+        current={current}
+        actor={actor}
+        workspace={workspace}
+        onNavigate={(key) => {
+          setView(
+            key === "home"
+              ? { kind: "dashboard", actor, workspace }
+              : { kind: key, actor, workspace },
+          );
+        }}
+        onSignOut={signOut}
+        {...page}
+      >
+        {children}
+      </OrganiserShell>
+    );
+  }
+
   switch (view.kind) {
     case "loading":
       return (
@@ -147,28 +183,41 @@ export function OrganiserApp({
     case "setup":
       return <Setup client={client} onComplete={() => void boot()} />;
     case "dashboard":
-      return (
+      return shell(
+        "home",
+        view.actor,
+        view.workspace,
+        // UX-11, as the dashboard has always carried it: the role you hold
+        // is stated on arrival rather than discovered when an action is
+        // refused. It moves to the shell's crumb with the rest of the
+        // chrome; `Dashboard` no longer has a header to put it in.
+        { title: view.workspace.name, crumb: roleCrumb(view.actor, view.workspace) },
         <Dashboard
-          actor={view.actor}
-          workspace={view.workspace}
-          onSignOut={signOut}
           onOpenBanks={() => setView({ kind: "banks", actor: view.actor, workspace: view.workspace })}
           onOpenTests={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
-        />
+        />,
       );
     case "tests":
-      return (
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        { title: "Tests", crumb: "Tests" },
         <TestList
           workspaceId={view.workspace.id}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "dashboard", actor: view.actor, workspace: view.workspace })}
           onOpenTest={(testId) => setView({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
-        />
+        />,
       );
     case "test":
-      return (
+      // The builder's title is the test's name, which only the builder has
+      // fetched — so it keeps its own <h1> inside `children` and the shell
+      // renders no page header here. 6.5d lifts it.
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        {},
         <TestBuilder
           workspaceId={view.workspace.id}
           testId={view.testId}
@@ -177,30 +226,31 @@ export function OrganiserApp({
           // is readable by every member and writable only by an owner, so
           // the builder needs the membership to know which it is showing.
           actor={view.actor}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
-        />
+        />,
       );
     case "banks":
-      return (
+      return shell(
+        "banks",
+        view.actor,
+        view.workspace,
+        { title: "Banks", crumb: "Question banks" },
         <BankList
           workspaceId={view.workspace.id}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "dashboard", actor: view.actor, workspace: view.workspace })}
           onOpenBank={(bankId) => setView({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId })}
-        />
+        />,
       );
     case "bank":
-      return (
+      // Same as the builder: the bank's name is the browser's own fetch.
+      return shell(
+        "banks",
+        view.actor,
+        view.workspace,
+        {},
         <BankBrowser
           bankId={view.bankId}
           workspaceId={view.workspace.id}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "banks", actor: view.actor, workspace: view.workspace })}
           onNewQuestion={() =>
             setView({ kind: "question", actor: view.actor, workspace: view.workspace, bankId: view.bankId })
           }
@@ -213,26 +263,38 @@ export function OrganiserApp({
               initial: question.document,
             })
           }
-        />
+        />,
       );
     case "question":
-      return (
+      return shell(
+        "banks",
+        view.actor,
+        view.workspace,
+        {
+          title: view.initial ? "Edit question" : "New question",
+          crumb: view.initial ? "Edit question" : "New question",
+        },
         <QuestionScreen
           workspaceId={view.workspace.id}
           bankId={view.bankId}
           initial={view.initial}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId: view.bankId })}
           // Stays on this screen after a save (`QuestionScreen`'s own
           // "Saved." status announces it) rather than navigating away —
-          // `onBack` above is the deliberate, explicit way out. A caller
-          // that wanted to know a save happened would be given one here;
+          // the rail is the deliberate, explicit way out. A caller that
+          // wanted to know a save happened would be given one here;
           // `BankBrowser` re-fetches its own list on mount, which going
-          // "Back to bank" already triggers.
+          // back to the bank already triggers.
           onSaved={() => undefined}
-        />
+        />,
       );
   }
+}
+
+/** The role this actor holds here, stated rather than discovered (UX-11). */
+function roleCrumb(actor: Actor, workspace: Workspace): string {
+  const role = actor.memberships.find(
+    (membership) => membership.workspaceId === workspace.id,
+  )?.role;
+  return role === undefined ? "Workspace" : `Workspace · ${role}`;
 }

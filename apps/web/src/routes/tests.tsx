@@ -3,7 +3,6 @@ import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSum
 import { ImportDialog } from "../components/authoring/ImportDialog";
 import { CardHairline } from "../components/CardHairline";
 import { MonoCaption } from "../components/MonoCaption";
-import { OrganiserHeader } from "../components/OrganiserHeader";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
 
@@ -114,16 +113,10 @@ const NAME_MAX = 200;
 export function TestList({
   workspaceId,
   client,
-  actorEmail,
-  onSignOut,
-  onBack,
   onOpenTest,
 }: {
   workspaceId: string;
   client: ApiClient;
-  actorEmail: string;
-  onSignOut: () => void;
-  onBack: () => void;
   /** Task 3 (#55, P5.2): a test's name opens its builder (Screen 7 onward),
    * the same `onOpenBank` pattern `BankList` already follows. */
   onOpenTest: (testId: string) => void;
@@ -310,14 +303,6 @@ export function TestList({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <OrganiserHeader email={actorEmail} onSignOut={onSignOut} onBack={onBack} backLabel="Back to dashboard" />
-
-      <main id="main-content" className="organiser organiser--wide">
-        <MonoCaption>Tests</MonoCaption>
-        <h1 className="organiser__title">Tests</h1>
 
         {error !== undefined && (
           <p className="organiser__notice" role="alert">
@@ -536,7 +521,6 @@ export function TestList({
             </tbody>
           </table>
         )}
-      </main>
     </>
   );
 }

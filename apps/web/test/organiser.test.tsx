@@ -15,7 +15,6 @@ import {
 import { OrganiserApp } from "../src/routes/organiser";
 import { SignIn } from "../src/routes/signin";
 import { Setup } from "../src/routes/setup";
-import { Dashboard } from "../src/routes/dashboard";
 
 const GOOGLE: IdentityProvider = {
   id: "google",
@@ -351,35 +350,29 @@ describe("Setup (the first-run wizard)", () => {
   });
 });
 
-describe("Dashboard", () => {
-  it("names the workspace and offers a way into tests and banks", () => {
-    render(
-      <Dashboard
-        actor={ACTOR}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+// D14: Home is reached the way an organiser reaches it — by signing in —
+// rather than by rendering `Dashboard` with five props. Phase 6.5c Task 1
+// moved the workspace name, the role crumb and sign-out out of this screen
+// and into the shell, and a test that rendered the screen alone could not
+// tell whether anything still carries them.
+describe("Home (the dashboard, inside the shell)", () => {
+  function renderHome(actor: Actor = ACTOR) {
+    return render(<OrganiserApp client={fakeClient({ me: async () => actor })} />);
+  }
+
+  it("names the workspace and offers a way into tests and banks", async () => {
+    renderHome();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Placement cell" }),
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /tests/i })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: /^tests$/i })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: /question banks/i })).toBeInTheDocument();
   });
 
-  it("offers exactly one next action out of the empty state", () => {
-    render(
-      <Dashboard
-        actor={ACTOR}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+  it("offers exactly one next action out of the empty state", async () => {
+    renderHome();
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
 
     expect(
       screen.getByRole("button", { name: /create your first test/i }),
@@ -387,45 +380,31 @@ describe("Dashboard", () => {
   });
 
   // docs/design.md UX-11: the publish boundary is shown, not discovered —
-  // the role you hold is stated on the dashboard rather than found at the
-  // moment an action is refused.
-  it("states the role the signed-in actor holds in this workspace", () => {
-    render(
-      <Dashboard
-        actor={{
-          ...ACTOR,
-          memberships: [{ workspaceId: "wsp_1", role: "author", grants: [] }],
-        }}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+  // the role you hold is stated on arrival rather than found at the moment
+  // an action is refused. It is the shell's crumb now, which is how every
+  // screen gets it rather than only this one.
+  it("states the role the signed-in actor holds in this workspace", async () => {
+    renderHome({
+      ...ACTOR,
+      memberships: [{ workspaceId: "wsp_1", role: "author", grants: [] }],
+    });
 
-    expect(screen.getByText("Workspace · author")).toBeInTheDocument();
+    expect(await screen.findByText("Workspace · author")).toBeInTheDocument();
   });
 
   it("signs out through the client", async () => {
-    const onSignOut = vi.fn();
-    render(
-      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} onOpenTests={() => undefined} />,
-    );
+    const signOut = vi.fn(async () => undefined);
+    render(<OrganiserApp client={fakeClient({ me: async () => ACTOR, signOut })} />);
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
 
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
-    expect(onSignOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
   });
 
   it("has no axe violations", async () => {
-    const { container } = render(
-      <Dashboard
-        actor={ACTOR}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+    const { container } = renderHome();
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
     expect(await axe(container)).toHaveNoViolations();
   });
 });
