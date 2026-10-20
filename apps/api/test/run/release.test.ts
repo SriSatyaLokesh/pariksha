@@ -365,9 +365,6 @@ it("S-07: the guess limiter is keyed on the attempt the reference resolved to", 
 // --- the budgets ---------------------------------------------------------
 
 it("every Task 11 route spends exactly its declared budget", async () => {
-  const counting = countingDeps(deps);
-  const counted = createApp(counting.deps);
-
   // A fresh address: `email_code_address` allows five codes per inbox per
   // ten minutes, and the C-09 tests above have spent `EMAIL`'s.
   const budgetEmail = "budget@vce.ac.in";
