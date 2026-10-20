@@ -88,6 +88,21 @@ it("db.batch() against the real D1 binding commits as one unit and rolls back wh
   );
   expect(committed.map((r) => r.ref_id)).toEqual(["D1-01", "D1-02"]);
 
+  // Phase 6 Task 10: and it says what each statement changed, in order.
+  // `upsertResponse` decides `accepted` against `superseded` out of this
+  // number — and `d1Client` now throws rather than defaulting an absent
+  // `meta.changes` to 0, so this is where the claim that D1 really reports
+  // it is proved against the engine instead of against the documentation.
+  const changes = await db.batch([
+    insert("qst_d1_c", "bnk_d1changes", "D1-C1"),
+    { sql: "UPDATE question SET ref_id = ? WHERE bank_id = ?", params: ["D1-C2", "bnk_d1nobody"] },
+    { sql: "UPDATE question SET ref_id = ? WHERE bank_id = ?", params: ["D1-C3", "bnk_d1changes"] },
+  ]);
+  expect(changes.map((one) => one.changes)).toEqual([1, 0, 1]);
+  // And the single-statement path, which `upsertResponse` takes whenever
+  // the candidate re-edits an answer in place.
+  expect((await db.run("UPDATE question SET ref_id = ? WHERE bank_id = ?", ["D1-C4", "bnk_d1nobody"])).changes).toBe(0);
+
   await expect(
     db.batch([
       insert("qst_d1_rb_a", "bnk_d1rollback", "D1-RB"),

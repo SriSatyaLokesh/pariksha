@@ -155,10 +155,19 @@ const attemptRow = async (): Promise<{ max_index: number; section_started_at: nu
   return rows[0] as { max_index: number; section_started_at: number | null };
 };
 
+/** A progress bump that enters no section. Section one begins at flat
+ *  index 0 and `max_index < 0` is never true, so the statement's `CASE`
+ *  leaves `section_started_at` alone however often this is sent. */
+const advanceTo = (maxIndex: number) => ({
+  maxIndex,
+  sectionStartsAt: 0,
+  sectionStartedAt: 0,
+});
+
 describe("upsertResponse's progress bump", () => {
   it("raises max_index in the same call, and still reports whether the row moved", async () => {
     expect(
-      await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: { maxIndex: 4 } }),
+      await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: advanceTo(4) }),
     ).toEqual({ stored: true });
     expect((await attemptRow()).max_index).toBe(4);
   });
@@ -166,7 +175,7 @@ describe("upsertResponse's progress bump", () => {
   it("a superseded save inside the batch is still reported as superseded", async () => {
     await repo.upsertResponse(db, WORKSPACE, answer(9, "latest"));
     expect(
-      await repo.upsertResponse(db, WORKSPACE, { ...answer(4, "stale"), advance: { maxIndex: 4 } }),
+      await repo.upsertResponse(db, WORKSPACE, { ...answer(4, "stale"), advance: advanceTo(4) }),
     ).toEqual({ stored: false });
     expect(
       await repo.readResponse(db, WORKSPACE, attemptId, QUESTION),
@@ -174,35 +183,58 @@ describe("upsertResponse's progress bump", () => {
   });
 
   it("max_index never falls, even when a concurrent save asks it to", async () => {
-    await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: { maxIndex: 7 } });
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: advanceTo(7) });
     // The second tab read `max_index` before the first one's batch
     // committed, so it asks for a number that is now behind. The
     // statement's own `max_index < ?` is what refuses it.
-    await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: { maxIndex: 3 } });
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: advanceTo(3) });
     expect((await attemptRow()).max_index).toBe(7);
   });
 
-  it("section_started_at is stamped only when it is asked for, and only on the way up", async () => {
+  // **The statement decides the stamp, not the caller.** `enteringLater`
+  // used to be worked out in JS from the request's own `max_index` while
+  // the statement guarded only `max_index < ?`. Two tabs that both read
+  // `max_index = 0` and target different indices in the same later section
+  // each pass that guard in commit order, and the second re-stamps
+  // `section_started_at` with its own `now` — which hands the candidate a
+  // second full section clock. The guard that cannot lose that race is
+  // `max_index < sectionStartsAt`, against the committed row.
+  it("section_started_at is stamped by the save that ENTERS the section, and by no other", async () => {
+    // Section two begins at flat index 3. This save enters it.
     await repo.upsertResponse(db, WORKSPACE, {
       ...answer(1, "a"),
-      advance: { maxIndex: 4, sectionStartedAt: 5_000 },
+      advance: { maxIndex: 5, sectionStartsAt: 3, sectionStartedAt: 5_000 },
     });
-    expect(await attemptRow()).toMatchObject({ max_index: 4, section_started_at: 5_000 });
-
-    // A save further on that does not enter a section asks for no stamp.
-    await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: { maxIndex: 5 } });
     expect(await attemptRow()).toMatchObject({ max_index: 5, section_started_at: 5_000 });
 
-    // And one that is behind changes neither, stamp included.
+    // The racing tab: it read `max_index = 0` too, so it also believes it
+    // is entering section two, and its own `max_index < 7` passes. The
+    // committed row is already past the section's start, so the stamp
+    // stands. A caller-side decision would have written 9_000 here.
+    await repo.upsertResponse(db, WORKSPACE, {
+      ...answer(2, "b"),
+      advance: { maxIndex: 7, sectionStartsAt: 3, sectionStartedAt: 9_000 },
+    });
+    expect(await attemptRow()).toMatchObject({ max_index: 7, section_started_at: 5_000 });
+
+    // A save that is behind changes neither column, stamp included.
     await repo.upsertResponse(db, WORKSPACE, {
       ...answer(3, "c"),
-      advance: { maxIndex: 2, sectionStartedAt: 9_000 },
+      advance: { maxIndex: 2, sectionStartsAt: 0, sectionStartedAt: 11_000 },
     });
-    expect(await attemptRow()).toMatchObject({ max_index: 5, section_started_at: 5_000 });
+    expect(await attemptRow()).toMatchObject({ max_index: 7, section_started_at: 5_000 });
+  });
+
+  it("the first section is never stamped: its clock runs from started_at", async () => {
+    await repo.upsertResponse(db, WORKSPACE, {
+      ...answer(1, "a"),
+      advance: { maxIndex: 2, sectionStartsAt: 0, sectionStartedAt: 5_000 },
+    });
+    expect(await attemptRow()).toMatchObject({ max_index: 2, section_started_at: null });
   });
 
   it("a save with no advance leaves the progress columns alone", async () => {
-    await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: { maxIndex: 4 } });
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: advanceTo(4) });
     await repo.upsertResponse(db, WORKSPACE, answer(2, "b"));
     expect((await attemptRow()).max_index).toBe(4);
   });

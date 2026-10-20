@@ -244,6 +244,27 @@ describePostgres("postgres", () => {
     expect(rows.map((r) => r.ref_id)).toEqual(["PGBA-01", "PGBA-02"]);
   });
 
+  // The same contract as the sqlite block above, on the dialect whose
+  // driver reports a `count` rather than a `changes`: `upsertResponse`
+  // answers `accepted` against `superseded` out of this number, so a
+  // dialect that reported it wrongly would lose a candidate's answer
+  // quietly rather than loudly.
+  it("batch says how many rows each statement changed, in order", async () => {
+    const changes = await db.batch([
+      questionInsert("qst_pgchanges", "ws_pgchanges", "bnk_pgchanges", "PGC-01"),
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["PGC-02", "ws_pgnobody"],
+      },
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["PGC-03", "ws_pgchanges"],
+      },
+    ]);
+
+    expect(changes.map((one) => one.changes)).toEqual([1, 0, 1]);
+  });
+
   it("batch rolls back the whole group when one statement violates a constraint", async () => {
     await expect(
       db.batch([
