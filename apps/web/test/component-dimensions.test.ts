@@ -138,7 +138,6 @@ function effectiveBoxHeight(body: string): number {
 // @import chain — landing.css still imports it, so the rendered landing
 // stylesheet is byte-for-byte the same set of declarations.
 const primitivesCss = readCss("primitives.css");
-const adminCss = readCss("admin.css");
 // Phase 6 Task 6 (#70): `.text-input` and the field trio moved out of
 // admin.css into registration.css, which both the organiser entry and the
 // candidate entry import — the candidate registration screen renders the

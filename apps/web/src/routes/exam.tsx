@@ -25,6 +25,7 @@ import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
+import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -261,16 +262,17 @@ type View =
   | { kind: "loading" }
   | { kind: "error"; message: string }
   | { kind: "landing"; test: LandingPayload }
+  | { kind: "register"; test: LandingPayload }
   | { kind: "attempt"; paper: AttemptPaper };
 
 /**
  * Where the registration step hands `/start` its single-use token.
  *
  * `POST .../register` answers `{ registrationToken }`; `POST .../start`
- * spends it and mints the attempt. The registration screen that writes
- * this key is the next candidate-side task, so today only the read half
- * exists — and a Start pressed without one says so rather than calling
- * `start(undefined)`, which is exactly the runtime hole the merge closed.
+ * spends it and mints the attempt. `ExamRegistration` writes it and Start
+ * reads it, so a Start pressed without one is not an error any more: it is
+ * a candidate who has not registered yet, and the registration screen is
+ * where they go.
  *
  * `sessionStorage`, not memory alone: a reload between registering and
  * pressing Start must not cost the candidate their place, and the token
@@ -283,6 +285,18 @@ export function readRegistrationToken(): string | null {
     return sessionStorage.getItem(REGISTRATION_TOKEN_KEY);
   } catch {
     return null;
+  }
+}
+
+/** The write half. A browser with storage disabled still starts its attempt
+ *  — the token is handed straight to `/start` in the same tick — it just
+ *  does not survive a reload, which is the one thing this key buys. */
+export function writeRegistrationToken(token: string): void {
+  try {
+    sessionStorage.setItem(REGISTRATION_TOKEN_KEY, token);
+  } catch {
+    /* Private mode, or storage refused. Not worth a sentence to a
+       candidate: nothing they can do about it, and nothing breaks now. */
   }
 }
 
@@ -494,6 +508,26 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
 export function ExamApp({ client }: { client: RunClient }) {
   const [view, setView] = useState<View>({ kind: "loading" });
 
+  /**
+   * Spend the registration token. Both callers pass one they have just
+   * read or just been handed, so there is no branch here for not having
+   * one — `/start` is the only thing that mints an attempt.
+   */
+  const startWith = useCallback(
+    async (registrationToken: string) => {
+      setView({ kind: "loading" });
+      try {
+        setView({ kind: "attempt", paper: await client.start(registrationToken) });
+      } catch (error) {
+        setView({
+          kind: "error",
+          message: error instanceof Error ? error.message : "This test could not be started.",
+        });
+      }
+    },
+    [client],
+  );
+
   const boot = useCallback(async () => {
     try {
       // `C-06`: closing the browser and reopening it resumes the same
@@ -507,7 +541,11 @@ export function ExamApp({ client }: { client: RunClient }) {
         setView({ kind: "attempt", paper: resumed });
         return;
       }
-      setView({ kind: "landing", test: await client.landing() });
+      const test = await client.landing();
+      // The SSO callback redirects back here carrying its entry token, so
+      // a candidate who has just signed in is already past the gate and
+      // should not have to press Start to be told so.
+      setView({ kind: tokenFromUrl("entry") === null ? "landing" : "register", test });
     } catch (error) {
       setView({
         kind: "error",
@@ -538,25 +576,34 @@ export function ExamApp({ client }: { client: RunClient }) {
   if (view.kind === "attempt") {
     return <AttemptView paper={view.paper} client={client} />;
   }
+  if (view.kind === "register") {
+    return (
+      <ExamRegistration
+        test={view.test}
+        client={client}
+        entry={tokenFromUrl("entry")}
+        onRegistered={(registrationToken) => {
+          // Stored first, started second: a reload between the two must
+          // not cost the candidate the token they just paid a proof of
+          // work for.
+          writeRegistrationToken(registrationToken);
+          void startWith(registrationToken);
+        }}
+      />
+    );
+  }
   return (
     <ExamLanding
       test={view.test}
       onStart={() => {
+        // The registration screen is where a candidate without a token
+        // goes — C-03's whole flow hangs off this branch.
         const registrationToken = readRegistrationToken();
         if (registrationToken === null) {
-          setView({ kind: "error", message: "Register for this test before starting it." });
+          setView({ kind: "register", test: view.test });
           return;
         }
-        void (async () => {
-          try {
-            setView({ kind: "attempt", paper: await client.start(registrationToken) });
-          } catch (error) {
-            setView({
-              kind: "error",
-              message: error instanceof Error ? error.message : "This test could not be started.",
-            });
-          }
-        })();
+        void startWith(registrationToken);
       }}
     />
   );

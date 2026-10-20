@@ -213,6 +213,148 @@
   color: var(--color-muted);
 }
 
+/* ---- Registration (C-02, C-03) ---------------------------------------
+
+   The screen between Start and the paper: the access gate, the consent
+   block and the one registration renderer, whose own rules are in
+   registration.css. Cream page, one canvas panel, one voltage-deep pill —
+   the same three facts the landing page states, so the candidate does not
+   meet a new product between pressing Start and answering question one.
+
+   Nothing animates. */
+
+.exam-register {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.exam-register h1 {
+  margin: 0 0 24px;
+  font-family: var(--type-display-lg-family);
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line-height);
+  letter-spacing: var(--type-display-lg-letter-spacing);
+}
+
+/* The one live region on the screen, present and empty from first render.
+   The ⚠ in the markup is the non-colour carrier; with no notice to show it
+   has no box of its own, so an empty alert is not an empty bordered card. */
+.exam-register-notice {
+  margin: 0 0 16px;
+  max-width: 64ch;
+  color: var(--color-flag-risk);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+}
+
+/* Canvas, which is what makes registration.css's `field-label`,
+   `text-input` and `registration-form__*` read on the same ground here as
+   they do inside the organiser's CardHairline. */
+.exam-register-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 6px;
+  background: var(--color-canvas);
+}
+
+.exam-register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.exam-register-form h2 {
+  margin: 0;
+  max-width: 54ch;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+.exam-register-form .field,
+.exam-register-form .registration-form {
+  width: 100%;
+}
+
+.exam-consent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.exam-consent h2 {
+  margin: 0;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+/* The pending line and the "a code is on its way" line. Muted, because
+   neither is a refusal — the refusals are all in the alert above. */
+.exam-register-status {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* DESIGN.md's pill CTA, as on the landing page: voltage-deep rather than
+   voltage, because a cream label on `voltage` is 3.86:1 and a button label
+   is body text. An <a> wears it in the `sso` mode, where continuing is a
+   real navigation. */
+.exam-register-submit,
+.exam-register-secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 999px;
+  background: var(--color-canvas);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+}
+
+.exam-register-submit {
+  border-color: var(--color-voltage-deep);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+}
+
+/* The same de-emphasis the landing page's disabled Start carries, and for
+   the same reason: a dashed edge and `muted` survive greyscale and a high
+   contrast swap, where a lighter fill did not. */
+.exam-register-submit:disabled,
+.exam-register-secondary:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: var(--color-hairline-strong);
+  background: var(--color-canvas);
+  color: var(--color-muted);
+}
+
 .exam-loading,
 .exam-error {
   max-width: 760px;

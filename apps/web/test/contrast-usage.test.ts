@@ -275,6 +275,15 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   '.exam-device-report li[data-ok="true"] .exam-finding-mark': "cream",
   ".exam-landing-footer": "cream",
 
+  // ---- exam.css: registration (C-02/C-03, Task 6). The alert sits on the
+  // page's own cream, above the panel; everything inside the panel is on
+  // the canvas it fills itself with, which is the same ground the same
+  // renderer is read on in the organiser app. -----------------------------
+  ".exam-register-notice": "cream",
+  ".exam-register-status": "canvas",
+  ".exam-register-submit": "voltage-deep",
+  ".exam-register-submit:disabled, .exam-register-secondary:disabled": "canvas",
+
   // ---- exam.css: the test runner (Phase 6 Task 6, #70) -------------------
   // DESIGN.md, "The clock kills the canvas": the runner is cream and ink.
   // The page's own ground is the cream base.css paints on <body>; a
@@ -474,6 +483,12 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // both are held to 4.5:1 — which is the point of auditing them.
   '.exam-device-report li[data-ok="false"] .exam-finding-mark': { px: 12, weight: 700 },
   '.exam-device-report li[data-ok="true"] .exam-finding-mark': { px: 12, weight: 700 },
+
+  // The registration pill and its disabled state set colour only; size and
+  // weight come from the `.exam-register-submit, .exam-register-secondary`
+  // rule on the same element (type-button-md, 16px, weight 500).
+  ".exam-register-submit": { px: 16, weight: 500 },
+  ".exam-register-submit:disabled, .exam-register-secondary:disabled": { px: 16, weight: 500 },
 
   // The urgent countdown sets colour only; size and weight come from
   // `.exam-timer-value`'s own rule on the same element (type-timer-numeric,
