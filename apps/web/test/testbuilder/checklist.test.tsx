@@ -5,15 +5,22 @@
 //
 // The reachability half (Publish opens this dialog at all, from the app's
 // own entry point) lives in lifecycle.test.tsx; this file is the dialog's
-// own behaviour, driven through `TestBuilder` so the wiring — which rows it
+// own behaviour, driven through the real builder so the wiring — which rows it
 // is given, what Go to does, what Re-run re-reads — is the real one.
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 
-import type { ApiClient, Actor, ChecklistRow, TestSummary, TestVersionRow } from "../../src/lib/api";
-import { TestBuilder } from "../../src/routes/test";
+import type {
+  ApiClient,
+  Actor,
+  ChecklistRow,
+  TestSummary,
+  TestVersionRow,
+  Workspace,
+} from "../../src/lib/api";
+import { OrganiserApp } from "../../src/routes/organiser";
 
 const ACTOR: Actor = {
   userId: "usr_1",
@@ -74,7 +81,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
-    workspaces: async () => [],
+    workspaces: async () => [WORKSPACE],
     completeSetup: async () => ({ id: "wsp_1", name: "W" }),
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
@@ -139,21 +146,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   };
 }
 
-function noop(): void {
-  /* no-op */
-}
+const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
 
+// D14: Home -> Tests -> the builder -> Publish. `TestBuilder` used to be
+// rendered here with six props, two of which Phase 6.5c Task 1 deleted with
+// `OrganiserHeader`; the walk is the same one `lifecycle.test.tsx` already
+// uses.
 async function openChecklist(client: ApiClient): Promise<{ container: HTMLElement; opener: HTMLElement }> {
-  const { container } = render(
-    <TestBuilder
-      workspaceId="wsp_1"
-      testId="tst_1"
-      client={client}
-      actor={ACTOR}
-      onSignOut={noop}
-      onBack={noop}
-    />,
-  );
+  const { container } = render(<OrganiserApp client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
   await screen.findByRole("heading", { level: 1, name: "Midterm" });
   const opener = screen.getByRole("button", { name: /^publish$/i });
   opener.focus();

@@ -2,8 +2,27 @@ import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import type { SingleQuestion } from "@pariksha/core";
 
-import type { ApiClient } from "../../src/lib/api";
-import { QuestionScreen } from "../../src/routes/question";
+import type { Actor, ApiClient, Bank, Workspace } from "../../src/lib/api";
+import { OrganiserApp } from "../../src/routes/organiser";
+
+const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
+
+const ACTOR: Actor = {
+  userId: "usr_1",
+  email: "author@example.edu",
+  memberships: [{ workspaceId: "wsp_1", role: "owner", grants: [] }],
+};
+
+const BANK: Bank = {
+  id: "bnk_1",
+  name: "SQL basics",
+  description: null,
+  license: null,
+  tags: [],
+  questionCount: 1,
+  createdAt: 0,
+  updatedAt: 0,
+};
 
 const SINGLE: SingleQuestion = {
   id: "Q1",
@@ -19,16 +38,28 @@ const SINGLE: SingleQuestion = {
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     setupStatus: async () => ({ needed: false, providers: [] }),
-    me: async () => null,
-    workspaces: async () => [],
+    me: async () => ACTOR,
+    workspaces: async () => [WORKSPACE],
     completeSetup: async () => ({ id: "wsp_1", name: "W" }),
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
-    listBanks: async () => [],
+    listBanks: async () => [BANK],
     createBank: async () => {
       throw new Error("not used");
     },
-    listQuestions: async () => ({ questions: [] }),
+    listQuestions: async () => ({
+      questions: [
+        {
+          id: "qst_1",
+          bankId: "bnk_1",
+          refId: SINGLE.id,
+          document: SINGLE,
+          points: 1,
+          usedInTests: 0,
+          updatedAt: 0,
+        },
+      ],
+    }),
     deleteQuestion: async () => undefined,
     saveQuestion: async (_workspaceId, bankId, doc) => ({
       id: "qst_1",
@@ -110,20 +141,23 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 // Fix round (whole-branch review, M4): `justSaved` used to be set `true` on
 // save and never reset — "Saved." stayed on screen, asserting the opposite
 // of the truth, through every later edit.
+
+// D14: Home -> Banks -> the bank -> the editor, the only route an Author
+// has. This file rendered `QuestionScreen` with eight props, three of which
+// Phase 6.5c Task 1 deleted; rendering it alone could never have shown that
+// the editor is reachable at all.
+async function openEditor(client: ApiClient = fakeClient()) {
+  const view = render(<OrganiserApp client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Banks" }));
+  fireEvent.click(await screen.findByRole("button", { name: /SQL basics/ }));
+  fireEvent.click(await screen.findByRole("button", { name: /^edit question:/i }));
+  await screen.findByRole("heading", { level: 1, name: "Edit question" });
+  return view;
+}
+
 describe("QuestionScreen's 'Saved.' status", () => {
   it("appears after a save and clears on the next edit", async () => {
-    render(
-      <QuestionScreen
-        workspaceId="wsp_1"
-        bankId="bnk_1"
-        initial={SINGLE}
-        client={fakeClient()}
-        actorEmail="author@example.edu"
-        onSignOut={() => undefined}
-        onBack={() => undefined}
-        onSaved={() => undefined}
-      />,
-    );
+    await openEditor(fakeClient());
 
     expect(screen.queryByText("Saved.")).not.toBeInTheDocument();
 
@@ -137,18 +171,7 @@ describe("QuestionScreen's 'Saved.' status", () => {
   });
 
   it("does not clear on its own just because the editor re-rendered after the save", async () => {
-    render(
-      <QuestionScreen
-        workspaceId="wsp_1"
-        bankId="bnk_1"
-        initial={SINGLE}
-        client={fakeClient()}
-        actorEmail="author@example.edu"
-        onSignOut={() => undefined}
-        onBack={() => undefined}
-        onSaved={() => undefined}
-      />,
-    );
+    await openEditor(fakeClient());
 
     fireEvent.click(await screen.findByRole("button", { name: /^save$/i }));
     const saved = await screen.findByText("Saved.");

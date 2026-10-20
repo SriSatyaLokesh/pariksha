@@ -8,13 +8,39 @@ import { render, screen, within, fireEvent, waitFor } from "@testing-library/rea
 import { axe } from "jest-axe";
 import type { Section } from "@pariksha/core";
 
-import { ApiError, type ApiClient, type Bank, type QuestionSummary, type StoredSection, type TestVersionRow } from "../../src/lib/api";
+import {
+  ApiError,
+  type ApiClient,
+  type Bank,
+  type QuestionSummary,
+  type StoredSection,
+  type TestSummary,
+  type TestVersionRow,
+  type Workspace,
+} from "../../src/lib/api";
 import { SectionList } from "../../src/components/testbuilder/SectionList";
-import { TestBuilder } from "../../src/routes/test";
+import { OrganiserApp } from "../../src/routes/organiser";
 
 function noop(): void {
   /* no-op */
 }
+
+const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
+
+/** The one row the test list shows, so the walk below has something to click. */
+const TEST_ROW: TestSummary = {
+  id: "tst_1",
+  name: "Midterm",
+  slug: "midterm",
+  description: null,
+  shortCode: "ab12cd",
+  state: "draft",
+  currentVersion: null,
+  draftVersion: 1,
+  reviewRequested: false,
+  tags: [],
+  updatedAt: 0,
+};
 
 /** Task 10: `TestBuilder` takes the whole actor now, because T-23's
  * workspace branding is readable by every member and writable only by an
@@ -28,8 +54,8 @@ const ACTOR = {
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     setupStatus: async () => ({ needed: false, providers: [] }),
-    me: async () => null,
-    workspaces: async () => [],
+    me: async () => ACTOR,
+    workspaces: async () => [WORKSPACE],
     completeSetup: async () => ({ id: "wsp_1", name: "W" }),
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
@@ -56,7 +82,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportQuestion: async () => {
       throw new Error("not used");
     },
-    tests: async () => [],
+    tests: async () => [TEST_ROW],
     createTest: async () => {
       throw new Error("not used");
     },
@@ -569,19 +595,24 @@ describe("SectionList", () => {
   });
 });
 
+
+// D14: Home -> Tests -> the builder, the only route an organiser has. The
+// three renders below used to mount `TestBuilder` directly with six props,
+// two of which Phase 6.5c Task 1 deleted with `OrganiserHeader`.
+async function openBuilder(client: ApiClient) {
+  const view = render(<OrganiserApp client={client} />);
+  fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+  await screen.findByRole("heading", { level: 1, name: "Midterm" });
+  return view;
+}
+
 describe("TestBuilder (the open section lives in the URL)", () => {
   it("the open section is in the URL, so a reload returns to it", async () => {
     const section: Section = { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } };
     window.history.replaceState(null, "", "/");
 
-    render(
-      <TestBuilder
-        workspaceId="wsp_1"
-        testId="tst_1"
-        actor={ACTOR}
-        onSignOut={noop}
-        onBack={noop}
-        client={fakeClient({
+    await openBuilder(fakeClient({
           test: async () => ({
             id: "tst_1",
             name: "Midterm",
@@ -606,9 +637,7 @@ describe("TestBuilder (the open section lives in the URL)", () => {
             setPoints: {},
             points: {},
           }),
-        })}
-      />,
-    );
+        }));
 
     fireEvent.click(await screen.findByRole("button", { name: /^Quantitative aptitude ·/i }));
     expect(window.location.search).toBe("?section=quant");
@@ -624,14 +653,7 @@ describe("TestBuilder (the open section lives in the URL)", () => {
     const section: Section = { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } };
     window.history.replaceState(null, "", "/?section=quant");
 
-    render(
-      <TestBuilder
-        workspaceId="wsp_1"
-        testId="tst_1"
-        actor={ACTOR}
-        onSignOut={noop}
-        onBack={noop}
-        client={fakeClient({
+    await openBuilder(fakeClient({
           test: async () => ({
             id: "tst_1",
             name: "Midterm",
@@ -656,9 +678,7 @@ describe("TestBuilder (the open section lives in the URL)", () => {
             setPoints: {},
             points: {},
           }),
-        })}
-      />,
-    );
+        }));
 
     // Open only when the section was already expanded — the editor's own
     // "Delete section" button only renders inside the open section.
@@ -697,16 +717,7 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
   }
 
   function renderBuilder(client: Partial<ApiClient>) {
-    return render(
-      <TestBuilder
-        workspaceId="wsp_1"
-        testId="tst_1"
-        actor={ACTOR}
-        onSignOut={noop}
-        onBack={noop}
-        client={fakeClient({ test: async () => BASE_TEST, ...client })}
-      />,
-    );
+    return openBuilder(fakeClient({ test: async () => BASE_TEST, ...client }));
   }
 
   it("collapses rapid edits into one PATCH, not one per keystroke", async () => {
@@ -714,7 +725,7 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
     const patchDraft = vi.fn(async (_ws: string, _id: string, patch: { sections?: StoredSection[] }) =>
       baseDraft(patch.sections ?? []),
     );
-    renderBuilder({ draft: async () => baseDraft([section]), patchDraft });
+    await renderBuilder({ draft: async () => baseDraft([section]), patchDraft });
 
     const add = await screen.findByRole("button", { name: /add section/i });
     fireEvent.click(add);
@@ -730,7 +741,7 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
 
   it("a failed save surfaces an error", async () => {
     const section: Section = { id: "s1", title: "One", source: { kind: "fixed", questions: [] } };
-    renderBuilder({
+    await renderBuilder({
       draft: async () => baseDraft([section]),
       patchDraft: async () => {
         throw new ApiError(500, "server_error", "The draft could not be saved.");
@@ -750,7 +761,7 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
           resolvers.push(resolve);
         }),
     );
-    renderBuilder({ draft: async () => baseDraft([section]), patchDraft });
+    await renderBuilder({ draft: async () => baseDraft([section]), patchDraft });
 
     const add = await screen.findByRole("button", { name: /add section/i });
     fireEvent.click(add);
@@ -797,7 +808,7 @@ describe("TestBuilder (debounced, sequenced save — task 3 review, I4)", () => 
       reads += 1;
       return { ...baseDraft([section]), draw: { quant: { matching: reads === 1 ? 14 : 11, wanted: 10 } } };
     });
-    renderBuilder({
+    await renderBuilder({
       draft: draftFn,
       patchDraft: async (_ws: string, _id: string, patch: { sections?: StoredSection[] }) =>
         baseDraft(patch.sections ?? []),
