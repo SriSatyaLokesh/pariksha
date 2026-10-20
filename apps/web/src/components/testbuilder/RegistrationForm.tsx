@@ -87,10 +87,11 @@ const CHOICE_TYPES: readonly FormFieldType[] = ["dropdown", "radio", "checkbox"]
  * nobody consumed it, so the preview showed a bare `<input type="tel">` and
  * lied about the control a candidate meets (task 5/6 review, M5).
  *
- * ponytail: a subset, not ISO 3166 in full, and no picker. Phase 6's
- * country `<select>` is where the whole list belongs; a code this map does
- * not know — including an organiser's free-typed `"INDIA"`, which the
- * schema allows — renders no prefix at all rather than a wrong one.
+ * ponytail: a subset, not ISO 3166 in full, and no picker. A country
+ * `<select>` carrying the whole list is where it belongs when something
+ * asks for one — no phase has yet; a code this map does not know —
+ * including an organiser's free-typed `"INDIA"`, which the schema allows —
+ * renders no prefix at all rather than a wrong one.
  */
 export const DIAL_CODE: Readonly<Record<string, string>> = {
   AE: "+971", AU: "+61", BD: "+880", CA: "+1", CN: "+86", DE: "+49",
@@ -344,11 +345,11 @@ function Field({
           <Marker required={required} />
         </label>
         {/* `link_target` is either `"consent"` — the test's own consent
-            text, which lives on the candidate screen Phase 6 builds — or a
-            URL. Only the URL form can be a link from here; the other is the
-            words on their own until that screen exists.
-            ponytail: an in-page link to the consent block, once Phase 6
-            renders one above this form. */}
+            text, which `components/exam/Registration.tsx` now renders above
+            this form — or a URL. Only the URL form can be a link from here;
+            the other stays the words on their own, because this same
+            component is the builder's preview, where there is no consent
+            block to link to and a dangling `#` would be worse than none. */}
         {field.link_text !== undefined &&
           (field.link_target !== undefined && /^https?:\/\//.test(field.link_target) ? (
             <a href={field.link_target} target="_blank" rel="noreferrer noopener">

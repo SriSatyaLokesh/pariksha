@@ -387,6 +387,18 @@ function AttemptView({
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
   /**
+   * `AC-13`'s anchor, and **Review Focus 4**.
+   *
+   * The server's own reading of how much time is left, stamped with the
+   * `performance.now()` at which it arrived. Nothing here ever stores an
+   * absolute deadline, so there is no expression anywhere that a change
+   * to the system clock could move — see `components/exam/Clock.tsx`.
+   */
+  const [anchor, setAnchor] = useState<ClockAnchor>(() =>
+    anchorFrom(paper.remainingMs, paper.sectionRemainingMs),
+  );
+
+  /**
    * One queue for this attempt (Task 8).
    *
    * **Seeded from `paper.clientSeq`**, the highest sequence the server
@@ -400,18 +412,6 @@ function AttemptView({
    * view, and calling it in an effect's cleanup would kill the queue on
    * mount under `StrictMode`, which is how this page really runs.
    */
-  /**
-   * `AC-13`'s anchor, and **Review Focus 4**.
-   *
-   * The server's own reading of how much time is left, stamped with the
-   * `performance.now()` at which it arrived. Nothing here ever stores an
-   * absolute deadline, so there is no expression anywhere that a change
-   * to the system clock could move — see `components/exam/Clock.tsx`.
-   */
-  const [anchor, setAnchor] = useState<ClockAnchor>(() =>
-    anchorFrom(paper.remainingMs, paper.sectionRemainingMs),
-  );
-
   const queue = useMemo(
     () =>
       createSaveQueue(

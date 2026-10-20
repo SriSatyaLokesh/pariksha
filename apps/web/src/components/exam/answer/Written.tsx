@@ -1,20 +1,8 @@
 import { useId, useMemo } from "react";
 import { placeholderIds } from "@pariksha/core";
-import type { CandidateQuestion } from "../../../lib/paper";
 import { useRenderedMarkdown } from "../../authoring/RenderedHtml";
 import { MAX_LENGTH_CEILING, numberFieldValue } from "../../answer-common";
 import type { AnswerProps } from "./props";
-
-/**
- * The four written types: `fill_blank`, `numeric`, `short_answer` and
- * `long_answer`.
- */
-
-export const WRITTEN_TYPES = ["fill_blank", "numeric", "short_answer", "long_answer"] as const;
-
-export function isWrittenQuestion(question: CandidateQuestion): boolean {
-  return (WRITTEN_TYPES as readonly string[]).includes(question.type);
-}
 
 /**
  * U+2063 INVISIBLE SEPARATOR, by code point rather than as a literal in

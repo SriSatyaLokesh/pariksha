@@ -66,8 +66,11 @@ export interface SaveQueue {
   pending(): readonly QueuedSave[];
   subscribe(listener: (state: SaveState) => void): () => void;
   /** Drops the `online` and `visibilitychange` listeners and any pending
-   *  timer. The attempt view calls it when it unmounts; without it a
-   *  second attempt in one tab would have two queues racing on one key. */
+   *  timer. **Nothing in the application calls it** — the attempt view's
+   *  queue lives exactly as long as the view, and closing it in an
+   *  effect's cleanup would kill it on mount under `StrictMode`
+   *  (`routes/exam.tsx`). It exists for the tests, which make dozens of
+   *  queues and must not leave a listener behind on each. */
   close(): void;
 }
 
