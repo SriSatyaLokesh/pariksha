@@ -448,7 +448,16 @@ describe("the runner shell (C-04)", () => {
   // render can measure a computed size (AG3's preference for exercising
   // over asserting does not survive contact with jsdom).
   describe("the candidate's text-size control reaches the text (D8)", () => {
-    /** Selectors whose own `font-size` is multiplied by `--exam-font-scale`. */
+    /**
+     * Selectors whose own `font-size` is multiplied by `--exam-font-scale`,
+     * each mapped to the value that does it.
+     *
+     * A rule's selector is split on `,` so a declaration that moves into a
+     * selector group — `.exam-runner, .exam-dialog { … }` — still registers
+     * under `.exam-runner`. Without that, grouping two rules that both keep
+     * the scale would fail this guard, which is a false red on a change
+     * that broke nothing.
+     */
     function scaledBy(css: string): Map<string, string> {
       const hits = new Map<string, string>();
       for (const rule of parseRuleBodies(css)) {
@@ -457,7 +466,9 @@ describe("the runner shell (C-04)", () => {
           if (colon === -1 || decl.slice(0, colon).trim() !== "font-size") continue;
           const value = decl.slice(colon + 1);
           if (value.includes("*") && /var\(\s*--exam-font-scale/.test(value)) {
-            hits.set(rule.selector, value.trim());
+            for (const selector of rule.selector.split(",")) {
+              hits.set(selector.trim(), value.trim());
+            }
           }
         }
       }
@@ -481,7 +492,12 @@ describe("the runner shell (C-04)", () => {
       it(`${selector} scales a type-scale step, not a literal`, () => {
         // D8's other half: the scaled base stays a token, so the sweep and
         // the control cannot be traded off against each other.
-        expect(scaled.get(selector) ?? "").toMatch(/var\(\s*--type-[a-z-]+-size\s*\)/);
+        // `[a-z0-9-]`, not `[a-z-]`: a future step named `--type-h2-size`
+        // would otherwise read as "not a token" and red for no reason.
+        expect(
+          scaled.get(selector) ?? "",
+          `${selector} still scales, but no longer off a --type-*-size step — D8's half of the invariant`,
+        ).toMatch(/var\(\s*--type-[a-z0-9-]+-size\s*\)/);
       });
     }
 

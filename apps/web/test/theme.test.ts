@@ -288,9 +288,19 @@ describe("the semantic names reach the organiser and nothing else (D1)", () => {
 //
 // What it still catches, which is the invariant worth having now: voltage
 // SPREADING — a new stylesheet reaching for the vermilion, or a sheet that
-// had given it up taking it back. 6.5e tightens this list to the runtime's
-// own chain (exam.css, and registration.css while it stays shared with
-// admin.css); shrinking it then is the expected edit, growing it never is.
+// had given it up taking it back.
+//
+// 6.5c, 6.5d and 6.5e EACH shrink this list as they re-ground a surface —
+// not 6.5e alone. primitives.css's three uses are `.button-primary`'s hover
+// and focus-visible states and `.button-primary--surface`, which is 6.5c's
+// shell; base.css's is the focus ring 6.5b added `--focus` for, and it
+// lands on 6.5c's first screen; 6.5d and 6.5e both also modify
+// primitives.css. So the first implementer to see this go red will most
+// likely be on 6.5c or 6.5d: if this comment named one plan, they would
+// read "not mine" and go looking for a break that is not there. The end
+// state is the runtime's own chain (exam.css, and registration.css while it
+// stays shared with admin.css). Shrinking is the expected edit; growing
+// never is.
 //
 // Counted per SOURCE file, not over a resolved bundle: question.css and
 // registration.css are imported by both entries, so a bundle-level count
@@ -312,28 +322,37 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
     .sort();
 
   it("is used by exactly the stylesheets that use it today", () => {
-    expect(voltageUsers).toEqual([
-      // The runtime's own chain — where D1 says voltage belongs.
-      "exam.css",
-      // Shared with admin.css today; stays once the organiser drops it.
-      "registration.css",
-      // --- Below: the organiser's remaining voltage, retired by 6.5e. ---
-      // The focus ring (base.css) and the organiser's primary button and
-      // selected-card border (primitives.css) are the shared chrome; the
-      // authoring and test-builder sheets carry their own selected states.
-      "authoring.css",
-      "base.css",
-      "primitives.css",
-      "testbuilder.css",
-    ].sort());
+    expect(
+      voltageUsers,
+      "the set of stylesheets using var(--color-voltage*) changed. SHRINKING is expected as 6.5c, 6.5d and 6.5e re-ground the organiser — delete the entry below and keep the test. GROWING means voltage spread to a new surface, which D1 forbids.",
+    ).toEqual(
+      [
+        // The runtime's own chain — where D1 says voltage belongs.
+        "exam.css",
+        // Shared with admin.css today; stays once the organiser drops it.
+        "registration.css",
+        // --- Below: the organiser's remaining voltage. Each line is deleted
+        // by whichever of 6.5c / 6.5d / 6.5e re-grounds that surface. ---
+        // primitives.css: `.button-primary` hover/focus-visible and
+        // `.button-primary--surface` — 6.5c's shell. base.css: the focus
+        // ring 6.5b added `--focus` for, on 6.5c's first screen. The
+        // authoring and test-builder sheets carry their own selected states.
+        "authoring.css",
+        "base.css",
+        "primitives.css",
+        "testbuilder.css",
+      ].sort(),
+    );
   });
 
   it("is really used by the runtime, so the list above is not vacuous", () => {
     // A typo in the regex, or a rename of the whole family, would empty
     // the list and make the assertion above pass only by matching [] to a
-    // list that is itself wrong. exam.css is the one file D1 guarantees.
+    // list that is itself wrong. exam.css is the one file D1 guarantees —
+    // and the only one, so no count floor is asserted beside it: D1's end
+    // state could legitimately reach a single file if registration.css
+    // stops being shared, and a floor of two would red for that.
     expect(voltageUsers).toContain("exam.css");
-    expect(voltageUsers.length).toBeGreaterThan(1);
   });
 
   it("the landing page gave it up and has not taken it back (D1)", () => {
