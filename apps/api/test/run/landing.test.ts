@@ -101,6 +101,20 @@ it("S-10: the landing payload names no question, key, code or internal id", asyn
   }
 });
 
+it("T-21: the landing payload says the test identifies candidates by ID, and never who", async () => {
+  // The gate's form labels the identifier optional and `listEntry`
+  // refuses a blank one with `code_wrong` — the same bytes as a wrong
+  // access code. A listed candidate following the UI's own wording was
+  // told their correct code was wrong, so the browser has to know which
+  // form to render.
+  expect(await json("/api/v1/run/alpha/listed")).toMatchObject({ candidateList: true });
+  expect(await json("/api/v1/run/alpha/aptitude")).toMatchObject({ candidateList: false });
+  // A boolean about the test, not a word about a person: the uploaded
+  // file name and every identifier on it stay server-side (`S-10`).
+  const text = await (await app.request("/api/v1/run/alpha/listed")).text();
+  for (const leak of ["list.csv", "21CS0147", "ananya"]) expect(text, leak).not.toContain(leak);
+});
+
 it("a pool section reports its requested count without reading the bank", async () => {
   const counting = countingDeps(deps);
   const body = (await (await createApp(counting.deps).request("/api/v1/run/alpha/pooled")).json()) as {

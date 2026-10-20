@@ -75,6 +75,19 @@ export interface LandingPayload {
   rules: string | null;
   proctoring: ProctoringProfile;
   accessMode: AccessMode;
+  /**
+   * Whether the organiser uploaded a candidate list — so the gate's own
+   * form can make the identifier required instead of labelling it
+   * optional and then refusing a blank one with `code_wrong`, which is
+   * the byte-identical answer to a wrong access code (`T-21`).
+   *
+   * **Not an `S-10` disclosure.** `S-10` is about never revealing
+   * anything about a *person* — whether some identifier is on the list.
+   * This is a property of the test, identical for every visitor holding
+   * the link and already implied by the field the form shows; a
+   * candidate who cannot see it cannot comply with it.
+   */
+  candidateList: boolean;
   /** The derived state, never the stored column (reconciliation row 12). */
   state: PublishedTest["state"];
   opensAt: number | null;
@@ -148,6 +161,8 @@ function landingPayload(test: PublishedTest, now: number): LandingPayload {
     proctoring: proctoring?.profile ?? "off",
     // No `access` block at all still renders a gate; which one Task 2 owns.
     accessMode: test.settings.access?.mode ?? "link_code",
+    // The boolean, never the file name the organiser uploaded.
+    candidateList: Boolean(test.settings.access?.candidate_list),
     state: test.state,
     opensAt: instant(timing.opens_at),
     closesAt,
