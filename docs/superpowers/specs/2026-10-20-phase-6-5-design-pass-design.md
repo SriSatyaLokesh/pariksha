@@ -365,7 +365,10 @@ vermilion family, which makes the palette square and the focus ring read as sing
 > *Pointer, not an amendment — the ruling above stands as written.* **The `#179` premise was
 > disproved by measurement** (6.5a Task 1, 2026-10-21): neither shape is reachable through any API
 > write path, and **the `questionCount`-summing-to-0 row named above was deliberately not shipped** —
-> every empty section is already refused, so a second row would duplicate a refusal. See
+> a `fixed` or `sets` section with no questions is already refused by `section_empty` and a
+> zero-count `pool` is refused at save, so the row would duplicate a refusal. (A `pool` matching
+> fewer questions than its `count` is *not* refused — that is `pool_short`, advisory — and a row on
+> the shape above would not have closed it either.) See
 > `apps/api/src/publish/checklist.ts`'s `timing_missing` and `#179's other half` notes, which carry
 > the reasoning for both, and commit `dd75d32`.
 >

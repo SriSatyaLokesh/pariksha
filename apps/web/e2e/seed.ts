@@ -72,6 +72,10 @@ export async function seedWorkspace(
   seedCall += 1;
   const run = String(seedCall).padStart(2, "0");
 
+  // Bank order is not stable between runs: these go out a few at a time and
+  // `listBanks` sorts on `created_at` with no secondary key. Nothing measured
+  // reads it — the bank list counts rows and the browser opens whichever is
+  // first — so it is recorded rather than fixed.
   const bankIds = await inBatches(counts.banks, (i) =>
     created(request, `/api/v1/workspaces/${workspaceId}/banks`, {
       name: `Bank ${pad(i + 1)} — ${TOPICS[i % TOPICS.length]}`,
@@ -83,12 +87,20 @@ export async function seedWorkspace(
   //
   // Not a shortcut around the routes — import is a shipped organiser feature
   // (`POST .../banks/:bankId/import`, the same endpoint the import dialog
-  // calls) and it writes through `upsertQuestion` exactly as the per-question
-  // route does, so the rows are identical. It is about volume: a 40x40 seed
-  // is 1,600 round trips the per-question way, and every one of them crosses
+  // calls). It does **not** share the per-question route's write: that one
+  // calls `upsertQuestion`, while import goes through `writeImportedBank` ->
+  // `questionInsertStatements`, which exists precisely to replace that loop.
+  // The two produce byte-identical rows — same mapping, same columns, same
+  // values — which is why the figures are the same either way, verified
+  // rather than assumed. It is about volume: a 40x40 seed is 1,600 round
+  // trips the per-question way, and every one of them crosses
   // `vite preview`'s proxy to the API. At that rate the proxy intermittently
-  // answered **502** mid-seed on Windows. 40 requests do not. The measured
-  // figures are the same either way — verified, not assumed.
+  // answered **502** mid-seed on Windows. 40 requests do not.
+  //
+  // One ceiling comes with it: `questionsPerBank` is now capped at
+  // `IMPORT_MAX_QUESTIONS` (500), enforced per request and therefore per
+  // bank. Harmless at 40; a caller asking for more gets a 413 where the
+  // per-question path would have worked.
   await inBatches(counts.banks, (i) =>
     ok(request, "post", `/api/v1/workspaces/${workspaceId}/banks/${bankIds[i]}/import`, {
       format: "pariksha/bank@1",

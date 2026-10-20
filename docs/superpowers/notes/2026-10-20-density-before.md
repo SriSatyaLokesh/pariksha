@@ -186,10 +186,14 @@ seeded prompt is one line at 1440px.
   that is a finding.
 - Seeding the questions any way other than through `seedWorkspace`. It fills
   each bank with **one whole-bank import** (`POST .../banks/:bankId/import`,
-  the endpoint the import dialog calls) rather than 40 per-question POSTs —
-  the rows are identical, both paths land in `upsertQuestion`, and this was
-  verified rather than assumed, but 1,600 round trips through `vite preview`'s
-  proxy made the harness answer 502 mid-seed on Windows and 40 do not.
+  the endpoint the import dialog calls) rather than 40 per-question POSTs.
+  The two write paths differ — the per-question route calls `upsertQuestion`,
+  import goes through `writeImportedBank` -> `questionInsertStatements` — but
+  they produce byte-identical rows, which is why the figures match, verified
+  rather than assumed. 1,600 round trips through `vite preview`'s proxy made
+  the harness answer 502 mid-seed on Windows; 40 do not. Note the ceiling the
+  route brings: `questionsPerBank` is capped at `IMPORT_MAX_QUESTIONS` (500)
+  per bank.
 
 ## One structural note for whoever edits the harness
 
