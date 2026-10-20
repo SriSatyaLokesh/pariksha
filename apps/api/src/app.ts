@@ -581,9 +581,9 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
  * - **`workspace`** — `requires()` or `requireMember()`: a signed-in actor
  *   with a membership in the workspace `:id` names. Exactly the key set of
  *   `ROUTE_ACTIONS`, asserted as such.
- * - **`attempt`** — the candidate's 256-bit attempt token (`S-06`). None
- *   yet; Task 5 mounts the first and registers `attemptContext` so
- *   `routeAuthorities` can read it back off the live table.
+ * - **`attempt`** — the candidate's 256-bit attempt token (`S-06`), read
+ *   back off the live table through the `attemptContext` middleware the
+ *   routes below register.
  * - **`entry`** — the single-use `run_entry` token the access gate mints,
  *   presented as `Authorization: Bearer`. A fifth value rather than
  *   `public`, because these routes answer **401** to a caller who sends
