@@ -56,6 +56,26 @@ describe("readGround", () => {
 
   it("returns dark and does not throw when localStorage throws", () => {
     stubStorageToThrow();
+    // Stated, not inherited: this test asserts the storage path, so the OS
+    // preference it falls through to has to be pinned here rather than left
+    // to whatever jsdom or a neighbouring test happens to leave behind.
+    prefersLight(false);
+
+    expect(readGround()).toBe("dark");
+  });
+
+  // The point of narrowing the try (fix round 1). Storage being unavailable
+  // and what the viewer prefers are independent facts: a private window
+  // still gets seeded. One wide catch returns "dark" here and this fails.
+  it("still seeds from prefers-color-scheme when localStorage throws", () => {
+    stubStorageToThrow();
+    prefersLight(true);
+
+    expect(readGround()).toBe("light");
+  });
+
+  it("returns dark and does not throw when matchMedia is absent", () => {
+    vi.stubGlobal("matchMedia", undefined);
 
     expect(readGround()).toBe("dark");
   });
