@@ -138,7 +138,18 @@ function effectiveBoxHeight(body: string): number {
 // @import chain — landing.css still imports it, so the rendered landing
 // stylesheet is byte-for-byte the same set of declarations.
 const primitivesCss = readCss("primitives.css");
-const adminCss = readCss("admin.css");
+// Phase 6 Task 6 (#70): `.text-input` and the field trio moved out of
+// admin.css into registration.css, which both the organiser entry and the
+// candidate entry import — the candidate registration screen renders the
+// same form. Same rules, same assertions, read from where they now live.
+const registrationCss = readCss("registration.css");
+// P6.6 (#70): the candidate runtime's own stylesheet, and the one
+// DESIGN.md component this phase builds — `palette-square`, which
+// `DESIGN.md:344-350` already pins at 36px / `{rounded.sm}`. T30 exists
+// because `.top-nav__inner` drifted from DESIGN.md with nothing to catch
+// it; hand-writing 36px beside the guard built to measure it is the same
+// drift one commit earlier.
+const examCss = readCss("exam.css");
 
 describe("component dimensions match tokens.components (T30)", () => {
   it('.button-primary height matches tokens.components["button-primary"].height', () => {
@@ -188,27 +199,141 @@ describe("component dimensions match tokens.components (T30)", () => {
   // `line-height` is declared that would push the content box past the
   // stated 44px — which is also the A10 hit-area floor.
   it('.text-input height matches tokens.components["text-input"].height', () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(resolveSpacing(declaration(body, "height"))).toBe(
       tokens.components["text-input"].height,
     );
   });
 
   it('.text-input padding matches tokens.components["text-input"].padding', () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(resolveSpacing(declaration(body, "padding"))).toBe(
       tokens.components["text-input"].padding,
     );
   });
 
   it('.text-input border-radius matches tokens.components["text-input"].rounded', () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(declaration(body, "border-radius")).toBe("var(--rounded-xs)");
     expect(tokens.rounded.xs).toBe(tokens.components["text-input"].rounded);
   });
 
   it(".text-input declares no line-height that would break its stated 44px box", () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(tryDeclaration(body, "line-height")).toBeNull();
+  });
+
+  // ---- palette-square (P6.6, #70) ---------------------------------------
+
+  it('.palette-square height matches tokens.components["palette-square"].height', () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(resolveSpacing(declaration(body, "height"))).toBe(
+      tokens.components["palette-square"].height,
+    );
+  });
+
+  it(".palette-square is square: its width equals its stated height", () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(resolveSpacing(declaration(body, "width"))).toBe(
+      tokens.components["palette-square"].height,
+    );
+  });
+
+  it('.palette-square border-radius matches tokens.components["palette-square"].rounded', () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(declaration(body, "border-radius")).toBe("var(--rounded-sm)");
+    expect(tokens.rounded.sm).toBe(tokens.components["palette-square"].rounded);
+  });
+
+  it('.palette-square font-size matches tokens.components["palette-square"].typography', () => {
+    const body = ruleBody(examCss, ".palette-square ");
+    expect(declaration(body, "font-size")).toBe("var(--type-mono-sm-size)");
+    expect(tokens.typography["mono-sm"].fontSize).toBe(
+      tokens.components["palette-square"].typography.fontSize,
+    );
+  });
+
+  // DESIGN.md gives each variant the same 36px box, so none of them may
+  // redeclare a height of its own — the thing D5 caught on
+  // `.button-secondary`, where two declarations disagreed and neither was
+  // what rendered.
+  it("no palette-square variant redeclares a height that could drift from the base rule", () => {
+    for (const variant of ["is-filled", "has-notch", "has-ring", "has-lock"]) {
+      const body = ruleBody(examCss, `.palette-square.${variant}`);
+      expect(tryDeclaration(body, "height"), variant).toBeNull();
+      expect(tryDeclaration(body, "width"), variant).toBeNull();
+    }
+    // The three DESIGN.md names behind those classes carry the same box.
+    for (const name of [
+      "palette-square-answered",
+      "palette-square-marked",
+      "palette-square-current",
+    ] as const) {
+      expect(tokens.components[name].height).toBe(
+        tokens.components["palette-square"].height,
+      );
+    }
+  });
+
+  // ---- option-row (P6.7, #71) -------------------------------------------
+  //
+  // DESIGN.md: "White, 1px hairline-strong, 6px radius, 14x16px padding.
+  // The entire row is the hit target, not just the radio or checkbox.
+  // Minimum height 48px." Four of those five facts are in
+  // tokens.components; the 48px floor is prose only, so it is asserted
+  // against the literal DESIGN.md states.
+
+  it('.exam-option-row padding matches tokens.components["option-row"].padding', () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    expect(resolveSpacing(declaration(body, "padding"))).toBe(
+      tokens.components["option-row"].padding,
+    );
+  });
+
+  it('.exam-option-row border-radius matches tokens.components["option-row"].rounded', () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    expect(declaration(body, "border-radius")).toBe("var(--rounded-md)");
+    expect(tokens.rounded.md).toBe(tokens.components["option-row"].rounded);
+  });
+
+  it('.exam-option-row typography matches tokens.components["option-row"]', () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    const typography = tokens.components["option-row"].typography;
+    expect(declaration(body, "font-size")).toBe("var(--type-option-label-size)");
+    expect(declaration(body, "line-height")).toBe("var(--type-option-label-line-height)");
+    expect(tokens.typography["option-label"].fontSize).toBe(typography.fontSize);
+    expect(tokens.typography["option-label"].lineHeight).toBe(typography.lineHeight);
+  });
+
+  it(".exam-option-row clears DESIGN.md's 48px minimum hit target", () => {
+    const body = ruleBody(examCss, ".exam-option-row ");
+    expect(toPx(declaration(body, "min-height"))).toBeGreaterThanOrEqual(48);
+    // The whole row, not the control: a flex row with the padding above
+    // is the hit target only because the element itself is the label.
+    expect(declaration(body, "display")).toBe("flex");
+  });
+
+  // The selected variant is a different FILL and a different EDGE, never
+  // a different box — D5's failure mode, and the reason a candidate's
+  // layout must not shift when they answer ("a layout that shifts between
+  // questions reads as the page reloading").
+  it("the selected and disabled variants redeclare no box of their own", () => {
+    for (const selector of [
+      ".exam-option-row.is-selected",
+      ".exam-option-row:has(input:disabled)",
+    ]) {
+      const body = ruleBody(examCss, selector);
+      expect(tryDeclaration(body, "min-height"), selector).toBeNull();
+      expect(tryDeclaration(body, "height"), selector).toBeNull();
+      expect(tryDeclaration(body, "padding"), selector).toBeNull();
+    }
+    // The selected row's 2px border is DESIGN.md's own, and it is drawn
+    // inside the same box because the base rule already reserves an edge.
+    expect(
+      declaration(ruleBody(examCss, ".exam-option-row.is-selected"), "border-width"),
+    ).toBe("2px");
+    expect(tokens.components["option-row-selected"].padding).toBe(
+      tokens.components["option-row"].padding,
+    );
   });
 });

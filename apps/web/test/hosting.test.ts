@@ -86,6 +86,75 @@ describe("admin.html", () => {
   });
 });
 
+// Phase 6 Task 1 (#65, P6.1): the candidate runtime's own entry. A test's
+// landing page carries an organiser's branding and a real candidate's
+// window; it is not marketing and must not be indexed, the same reason
+// admin.html is not.
+describe("exam.html", () => {
+  it("carries a noindex, nofollow robots meta tag", () => {
+    const exam = readFileSync(resolve(ROOT, "exam.html"), "utf8");
+    expect(exam).toMatch(/<meta\s+name="robots"\s+content="noindex,\s*nofollow"/);
+  });
+
+  it("is a Rollup input of its own, separate from the landing page's island", () => {
+    const input = viteConfig.build?.rollupOptions?.input as Record<string, string>;
+    expect(Object.keys(input).sort()).toEqual(["admin", "exam", "index", "island"]);
+    expect(input.exam).toMatch(/exam\.html$/);
+    // The island is the landing page's exam *demo*, not the candidate
+    // runtime — two different entries that read alike.
+    expect(input.island).not.toMatch(/exam\.html$/);
+  });
+
+  it("gets an X-Robots-Tag: noindex block in _headers, as admin.html does", () => {
+    const headers = readFileSync(resolve(ROOT, "public/_headers"), "utf8");
+    const blockStart = headers.indexOf("/exam.html");
+    expect(blockStart).toBeGreaterThan(-1);
+    const nextBlock = headers.indexOf("\n/", blockStart + 1);
+    const block = headers.slice(blockStart, nextBlock === -1 ? undefined : nextBlock);
+    expect(block).toMatch(/X-Robots-Tag:\s*noindex/);
+  });
+});
+
+// T-02's candidate URL is `/<workspace-slug>/<test-slug>` — a path with no
+// file behind it, so without a rewrite the asset router answers every
+// candidate link with dist/404.html. `_headers` cannot express a rewrite
+// (it sets headers), so the rule lives in `_redirects`, which Workers
+// parses out of the same deployed asset directory. These tests exist for
+// the ordering: the fallback matches ANY two-segment path, so a rule added
+// below it would be dead and an asset prefix not claimed above it would be
+// swallowed.
+describe("_redirects", () => {
+  const redirects = readFileSync(resolve(ROOT, "public/_redirects"), "utf8");
+  const rules = redirects
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && !line.startsWith("#"));
+
+  it("rewrites the candidate slug pair onto exam.html with a 200, never a redirect", () => {
+    // 200 and not 301/302: the address bar has to keep the slug pair,
+    // because src/exam-main.tsx reads it to know which test to ask about.
+    expect(rules).toContain("/:workspaceSlug/:testSlug  /exam.html  200");
+  });
+
+  it("puts the catch-all fallback last, so nothing below it is dead", () => {
+    expect(rules.at(-1)).toMatch(/^\/:workspaceSlug\/:testSlug\b/);
+  });
+
+  it("claims every two-segment asset prefix above the fallback", () => {
+    // /assets/index-abc123.js and /fonts/anek.woff2 are two-segment paths
+    // and would otherwise match the fallback and serve the exam shell.
+    const fallbackAt = rules.findIndex((rule) => rule.startsWith("/:workspaceSlug"));
+    const above = rules.slice(0, fallbackAt).join("\n");
+    for (const prefix of ["/assets/*", "/fonts/*"]) {
+      expect(above, prefix).toContain(prefix);
+    }
+  });
+
+  it("never points at a third-party origin (S-11), as _headers does not", () => {
+    expect(redirects).not.toMatch(/https?:\/\//);
+  });
+});
+
 // The site and the API ship as one Worker (see the header of the config
 // itself), so its configuration no longer lives in this package — but these
 // are still the web app's hosting guarantees, and they are still asserted
@@ -117,9 +186,24 @@ describe("deploy/cloudflare/wrangler.toml", () => {
   });
 
   // T11 / SEO-4: a bogus URL must 404, never serve the landing page with a
-  // soft-404 HTTP 200.
-  it("serves dist/404.html on a miss, never the single-page-application fallback", () => {
+  // soft-404 HTTP 200. `not_found_handling = "404-page"` is what keeps that
+  // true for every path the asset router does not match.
+  //
+  // Phase 6 Task 1 (#65) narrowed the claim, so this test's name narrowed
+  // with it. There IS now one rewrite, and exactly one: `_redirects` maps a
+  // TWO-SEGMENT path onto `exam.html` with a 200, because T-02's candidate
+  // URL `/<workspace-slug>/<test-slug>` has no file behind it. That is a
+  // deliberate, bounded exception — never a blanket
+  // `not_found_handling = "single-page-application"`, which would turn
+  // every miss at every depth into a page. One-segment and three-segment
+  // misses still get `dist/404.html`, which is what this line pins; the
+  // `_redirects` describe block above pins the exception's shape and
+  // ordering. Its accepted cost — a two-segment path naming no real test
+  // answers 200 with the exam shell, mitigated by `noindex` on both the
+  // meta tag and the header — is recorded in ADR 0008.
+  it("serves dist/404.html on a miss, and never turns the whole site into a SPA", () => {
     expect(scalar("not_found_handling")).toBe("404-page");
+    expect(toml).not.toContain("single-page-application");
   });
 
   // SEO-7: once a custom domain is added, the workers.dev and preview URLs
@@ -150,6 +234,8 @@ describe("the public directory reaches the build", () => {
   it("is copied into dist, so _headers is deployed rather than only committed", () => {
     expect(publicDir).toBe("public");
     expect(existsSync(inPublicDir("_headers"))).toBe(true);
+    // Same reasoning, and the candidate URL is unreachable without it.
+    expect(existsSync(inPublicDir("_redirects"))).toBe(true);
   });
 
   it("carries every font face the stylesheet asks for", () => {

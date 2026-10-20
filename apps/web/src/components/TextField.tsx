@@ -15,11 +15,17 @@ import type { Ref } from "react";
 //   - the help text is there before anything is wrong, and stays.
 //   - the error carries a ⚠ glyph, so it never depends on colour, and
 //     `role="alert"` so a screen reader hears it when it appears.
+//
+// `required` carries the same marker `RegistrationForm`'s `Marker` does —
+// the `*` inside the <label>, so the accessible name is a superset of the
+// visible one (WCAG 2.5.3) — plus `aria-required`, so it is announced as
+// required rather than merely drawn that way.
 export function TextField({
   id,
   label,
   help,
   error,
+  required = false,
   value,
   onChange,
   type = "text",
@@ -30,6 +36,7 @@ export function TextField({
   label: string;
   help: string;
   error?: string | undefined;
+  required?: boolean;
   value: string;
   onChange: (value: string) => void;
   type?: "text" | "email";
@@ -42,6 +49,7 @@ export function TextField({
     <div className="field">
       <label className="field-label" htmlFor={id}>
         {label}
+        {required && <span className="registration-form__required"> *</span>}
       </label>
       <input
         className="text-input"
@@ -52,6 +60,7 @@ export function TextField({
         autoComplete={autoComplete}
         aria-describedby={error ? `${helpId} ${errorId}` : helpId}
         aria-invalid={error ? "true" : undefined}
+        {...(required && { "aria-required": true as const })}
         onChange={(event) => onChange(event.target.value)}
       />
       <p className="field-help" id={helpId}>

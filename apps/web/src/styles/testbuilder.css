@@ -298,22 +298,18 @@
   letter-spacing: var(--type-mono-sm-letter-spacing);
 }
 
-.form-builder__flag,
-.registration-form__choice {
+.form-builder__flag {
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
 }
 
-.form-builder__fact,
-.registration-form__help,
-.registration-form__legend {
+.form-builder__fact {
   margin: 0;
   color: var(--color-muted);
 }
 
-.form-builder__risk,
-.registration-form__error {
+.form-builder__risk {
   margin: 0;
   display: flex;
   align-items: baseline;
@@ -324,37 +320,6 @@
 .form-builder__preview {
   border: 1px solid var(--color-hairline);
   padding: var(--space-md);
-}
-
-.registration-form,
-.registration-form__field,
-.registration-form__group {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.registration-form__group {
-  border: 0;
-  margin: 0;
-  padding: 0;
-}
-
-.registration-form__title {
-  margin: 0;
-}
-
-/* T-16's "phone (with country code)": the field's `default_country` shown
-   as the prefix the stored number starts with, rather than assumed
-   (task 5/6 review, M5). The full country picker is Phase 6's. */
-.registration-form__dialled {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-xs);
-}
-
-.registration-form__dialled .text-input {
-  flex: 1;
 }
 
 /* Task 6 (#58, P5.5): the url field's reachability affordance sits inline

@@ -1,6 +1,5 @@
 import { useId, useRef } from "react";
 import type {
-  AssertionReasonKey,
   AssertionReasonQuestion,
   MultipleQuestion,
   QuestionOption,
@@ -9,6 +8,7 @@ import type {
   TrueFalseQuestion,
 } from "@pariksha/core";
 import { ReorderableList } from "../ReorderableList";
+import { ASSERTION_REASON_OPTIONS } from "../../answer-common";
 
 export type ChoiceQuestion =
   | SingleQuestion
@@ -287,13 +287,6 @@ function TrueFalseAnswer({
     </fieldset>
   );
 }
-
-const ASSERTION_REASON_OPTIONS: { value: AssertionReasonKey; label: string }[] = [
-  { value: "both_true_explains", label: "Both true, and the reason explains the assertion" },
-  { value: "both_true_not_explains", label: "Both true, but the reason does not explain the assertion" },
-  { value: "a_true_r_false", label: "The assertion is true and the reason is false" },
-  { value: "a_false_r_true", label: "The assertion is false and the reason is true" },
-];
 
 function AssertionReasonAnswer({
   question,

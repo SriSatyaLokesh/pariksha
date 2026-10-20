@@ -11,7 +11,7 @@
     "build": "pnpm tokens && turbo run build",
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
-    "test": "turbo run test && pnpm vitest run scripts",
+    "test": "turbo run test --concurrency=1 && pnpm vitest run scripts",
     "test:changed": "vitest run --changed",
     "test:pkg": "turbo run test --filter",
     "tokens": "node scripts/tokens.mjs",

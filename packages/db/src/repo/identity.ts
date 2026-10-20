@@ -150,6 +150,32 @@ export async function consumeAuthToken(
   return first === undefined ? null : db.jsonValue(first.payload_json);
 }
 
+/**
+ * The same row, read without spending it.
+ *
+ * Phase 6's `run_entry` token is minted by the access gate and consumed by
+ * the registration write (Task 3) in the batch that creates the candidate —
+ * so between the two there is a reader that must not be a consumer, and a
+ * caller that used `consumeAuthToken` to look would burn the token on a
+ * page refresh. Expiry stays in the WHERE clause for the same reason it is
+ * there: a reader cannot forget to check it, and expired is
+ * indistinguishable from never-issued.
+ */
+export async function readAuthToken(
+  db: DbClient,
+  tokenHash: string,
+  kind: string,
+  now: number,
+): Promise<unknown> {
+  const rows = await db.query<{ payload_json: unknown }>(
+    "SELECT payload_json FROM auth_token WHERE token_hash = ? AND kind = ? " +
+      "AND used_at IS NULL AND expires_at > ?",
+    [tokenHash, kind, now],
+  );
+  const first = rows[0];
+  return first === undefined ? null : db.jsonValue(first.payload_json);
+}
+
 export async function insertSession(
   db: DbClient,
   input: {

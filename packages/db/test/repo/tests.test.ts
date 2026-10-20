@@ -431,6 +431,7 @@ describe("listVersions / setTestStatus", () => {
     const candidate = await repo.createCandidate(db, ws, { testId: created.id, formValues: {} });
     for (const n of [1, 2]) {
       await repo.createAttempt(db, ws, {
+        id: newId("att"),
         candidateId: candidate,
         testVersionId: published!.id,
         setNo: n,

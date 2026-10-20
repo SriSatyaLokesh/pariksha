@@ -43,6 +43,10 @@ export interface CandidateRow {
   formValues: Record<string, unknown>;
   source: CandidateSource;
   consentVersion: string | null;
+  /** `candidate.consent_at`: when this person accepted the consent text,
+   *  and therefore **the** definition of registered. Null for a list row
+   *  nobody has claimed yet. */
+  registeredAt: number | null;
   createdAt: number;
 }
 
@@ -60,10 +64,12 @@ interface CandidateRecord {
   source: string;
   form_values_json: unknown;
   consent_version: string | null;
+  consent_at: number | null;
   created_at: number;
 }
 
-const COLUMNS = "id, test_id, external_id, set_label, source, form_values_json, consent_version, created_at";
+const COLUMNS =
+  "id, test_id, external_id, set_label, source, form_values_json, consent_version, consent_at, created_at";
 
 const toCandidateRow = (db: DbClient, row: CandidateRecord): CandidateRow => ({
   id: row.id,
@@ -71,10 +77,12 @@ const toCandidateRow = (db: DbClient, row: CandidateRecord): CandidateRow => ({
   externalId: row.external_id,
   setLabel: row.set_label,
   formValues: row.form_values_json == null ? {} : db.jsonValue(row.form_values_json),
-  // Cast: a plain text column with exactly two writers, both in this
-  // repository — `replaceCandidateList` below and `createCandidate`.
+  // Cast: a plain text column with three writers, all in this repository
+  // — `replaceCandidateList` below, `registerCandidate` (repo/run.ts) and
+  // `createCandidate` (repo/attempts.ts).
   source: row.source as CandidateSource,
   consentVersion: row.consent_version,
+  registeredAt: row.consent_at == null ? null : Number(row.consent_at),
   createdAt: Number(row.created_at),
 });
 
@@ -116,6 +124,21 @@ export const getCandidateByExternalId = scoped(
   },
 );
 
+/** The same row by its own id — what Phase 6's registration reads to tell
+ *  "this list row is free" from "someone has already registered on it"
+ *  before it writes anything (`consent_at`, exposed as `registeredAt`). */
+export const getCandidateById = scoped(
+  "getCandidateById",
+  async (db: DbClient, workspaceId: string, testId: string, candidateId: string): Promise<CandidateRow | null> => {
+    const rows = await db.query<CandidateRecord>(
+      `SELECT ${COLUMNS} FROM candidate WHERE workspace_id = ? AND test_id = ? AND id = ?`,
+      [workspaceId, testId, candidateId],
+    );
+    const row = rows[0];
+    return row === undefined ? null : toCandidateRow(db, row);
+  },
+);
+
 /**
  * The two numbers Task 13's `candidate_list_empty` and `candidate_no_set`
  * advisory rows are about, in one query — the checklist is computed
@@ -138,11 +161,36 @@ export const countCandidates = scoped(
 );
 
 /**
- * Replaces the whole uploaded list for this test, in one `db.batch` — one
- * `DELETE … WHERE source = 'list'` plus the inserts, so it is a single
- * subrequest on D1 however many rows the file had, and a half-replaced
- * list cannot exist. A row a candidate wrote for themselves
- * (`source: "registration"`) is never touched.
+ * Replaces the uploaded list for this test, in one `db.batch` — so it is a
+ * single subrequest on D1 however many rows the file had, and a
+ * half-replaced list cannot exist.
+ *
+ * **Replace means "replace what nobody has claimed".** The delete is
+ * `source = 'list' AND consent_at IS NULL` and the inserts are
+ * `ON CONFLICT (test_id, external_id) DO NOTHING`, which is the property
+ * `AccessPanel.tsx` already promises ("Candidates who have already
+ * registered are kept") and the only one of the three candidate fixes that
+ * loses nothing:
+ *
+ *   * a registered candidate's typed `form_values_json`, their consent and
+ *     the row `attempt.candidate_id` points at are untouched — a widened
+ *     delete would orphan every running attempt;
+ *   * their `set_label` is untouched, so the row cannot disagree with the
+ *     `set_no` their attempt already pinned — `DO UPDATE` would rewrite
+ *     it mid-window;
+ *   * an unregistered row absent from the new file is gone, so "replace"
+ *     still means replace for everyone it can.
+ *
+ * The one thing this deliberately cannot do is move a registered-but-not-
+ * started candidate to another set. That is a proctor action (`R-02`), not
+ * an upload side effect.
+ *
+ * ponytail: `imported` stays the file's own row count, not the number of
+ * rows actually written — `db.batch` reports no row counts in any dialect
+ * and a second statement to find out would cost the import route a
+ * subrequest for a number nothing reads. Upgrade path, when an organiser
+ * needs "N already registered, kept as they are": count the intersection
+ * before the batch.
  */
 export const replaceCandidateList = scoped(
   "replaceCandidateList",
@@ -155,13 +203,17 @@ export const replaceCandidateList = scoped(
   ): Promise<{ imported: number }> => {
     await db.batch([
       {
-        sql: "DELETE FROM candidate WHERE workspace_id = ? AND test_id = ? AND source = ?",
+        sql:
+          "DELETE FROM candidate WHERE workspace_id = ? AND test_id = ? AND source = ? " +
+          "AND consent_at IS NULL",
         params: [workspaceId, testId, "list"],
       },
       ...rows.map((row) => ({
         sql:
           "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, " +
-          "form_values_json, consent_version, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)",
+          "form_values_json, consent_version, consent_at, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL, ?) " +
+          "ON CONFLICT (test_id, external_id) DO NOTHING",
         params: [
           newId("cnd"),
           workspaceId,

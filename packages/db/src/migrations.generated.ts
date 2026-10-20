@@ -118,6 +118,20 @@ export const sqliteMigrations: Migration[] = [
     "CREATE INDEX `candidate_test_idx` ON `candidate` (`test_id`);",
     "CREATE UNIQUE INDEX `candidate_test_external_uq` ON `candidate` (`test_id`,`external_id`);",
   ] },
+  { name: "0006_candid_registration.sql", statements: [
+    "-- Phase 6 Task 3 (#67, P6.3): consent capture, unique registration fields\n-- and the rate-limit window.\n--\n-- `candidate.consent_at` is the moment the candidate accepted (`S-12`), and\n-- is also the definition of *registered* now that a registration fills the\n-- matched `source = 'list'` row in place rather than inserting beside it —\n-- see the comment on the table in `src/schema/columns.ts`.\n--\n-- `candidate_unique` is `T-17`'s \"a second registration with the same value\n-- is refused\": a JSON column cannot carry a portable unique index, so the\n-- claim is a row, and the value is a SHA-256 of the normalised value so the\n-- table does not become a second plaintext copy of every candidate's email\n-- (`S-15`).\n--\n-- `rate_limit` is untenanted, like `auth_token`: the `/t/:code` miss bucket\n-- is a six-character code with no workspace behind it.\n--\n-- Hand-written rather than taken from `drizzle-kit generate` verbatim, for\n-- the reason 0004 and 0005 record: SQLite refuses `ALTER TABLE … ADD … NOT\n-- NULL` without a literal DEFAULT. Every column added here is nullable, so\n-- no table rebuild is needed this time.\n--\n-- No PRAGMA foreign_keys: D1 ignores it silently and\n-- `no-d1-hostile-sql.test.ts` refuses it.\nALTER TABLE `candidate` ADD `consent_at` integer;",
+    "CREATE TABLE `candidate_unique` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`test_id` text NOT NULL,\n\t`candidate_id` text NOT NULL,\n\t`field_id` text NOT NULL,\n\t`value_hash` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+    "CREATE INDEX `candidate_unique_workspace_idx` ON `candidate_unique` (`workspace_id`);",
+    "CREATE INDEX `candidate_unique_test_idx` ON `candidate_unique` (`test_id`);",
+    "CREATE INDEX `candidate_unique_candidate_idx` ON `candidate_unique` (`candidate_id`);",
+    "CREATE UNIQUE INDEX `candidate_unique_value_uq` ON `candidate_unique` (`test_id`,`field_id`,`value_hash`);",
+    "CREATE TABLE `rate_limit` (\n\t`bucket` text PRIMARY KEY NOT NULL,\n\t`window_start` integer NOT NULL,\n\t`count` integer NOT NULL\n);",
+    "CREATE INDEX `rate_limit_window_idx` ON `rate_limit` (`window_start`);",
+  ] },
+  { name: "0007_attempt_progress.sql", statements: [
+    "-- Phase 6 Task 5 (#69, P6.5): the two columns an attempt needs to carry a\n-- candidate's progress, and only two.\n--\n-- `max_index` is the furthest flat question index reached. It carries both\n-- navigation rules at once -- `linear` refuses a target below it, and the\n-- current section is the one that index falls in -- so section locking needs\n-- no column of its own. `section_started_at` is what a per-section deadline\n-- is measured from.\n--\n-- Hand-written rather than taken from `drizzle-kit generate` verbatim, for\n-- the reason 0004, 0005 and 0006 record: SQLite refuses `ALTER TABLE ... ADD\n-- ... NOT NULL` unless a literal DEFAULT comes with it. `DEFAULT 0` is that\n-- literal, and it is also the right value for every attempt already in\n-- flight -- an attempt written before this migration has reached no index it\n-- can prove, so the safest reading is the first question.\n--\n-- No PRAGMA foreign_keys: D1 ignores it silently and\n-- `no-d1-hostile-sql.test.ts` refuses it.\nALTER TABLE `attempt` ADD `max_index` integer DEFAULT 0 NOT NULL;",
+    "ALTER TABLE `attempt` ADD `section_started_at` integer;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -217,5 +231,19 @@ export const pgMigrations: Migration[] = [
     "ALTER TABLE \"candidate\" ALTER COLUMN \"source\" SET NOT NULL;",
     "ALTER TABLE \"candidate\" ALTER COLUMN \"consent_version\" DROP NOT NULL;",
     "CREATE UNIQUE INDEX \"candidate_test_external_uq\" ON \"candidate\" USING btree (\"test_id\",\"external_id\");",
+  ] },
+  { name: "0006_candid_registration.sql", statements: [
+    "-- Phase 6 Task 3 (#67, P6.3): the sqlite/0006_candid_registration.sql\n-- sibling. Every column added is nullable or on a new table, so there is no\n-- backfill-then-promote step here.\nALTER TABLE \"candidate\" ADD COLUMN \"consent_at\" bigint;",
+    "CREATE TABLE \"candidate_unique\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"workspace_id\" text NOT NULL,\n\t\"test_id\" text NOT NULL,\n\t\"candidate_id\" text NOT NULL,\n\t\"field_id\" text NOT NULL,\n\t\"value_hash\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
+    "CREATE INDEX \"candidate_unique_workspace_idx\" ON \"candidate_unique\" USING btree (\"workspace_id\");",
+    "CREATE INDEX \"candidate_unique_test_idx\" ON \"candidate_unique\" USING btree (\"test_id\");",
+    "CREATE INDEX \"candidate_unique_candidate_idx\" ON \"candidate_unique\" USING btree (\"candidate_id\");",
+    "CREATE UNIQUE INDEX \"candidate_unique_value_uq\" ON \"candidate_unique\" USING btree (\"test_id\",\"field_id\",\"value_hash\");",
+    "CREATE TABLE \"rate_limit\" (\n\t\"bucket\" text PRIMARY KEY NOT NULL,\n\t\"window_start\" bigint NOT NULL,\n\t\"count\" integer NOT NULL\n);",
+    "CREATE INDEX \"rate_limit_window_idx\" ON \"rate_limit\" USING btree (\"window_start\");",
+  ] },
+  { name: "0007_attempt_progress.sql", statements: [
+    "-- Phase 6 Task 5 (#69, P6.5): the sqlite/0007_attempt_progress.sql sibling.\n-- Postgres needs no DEFAULT to add a NOT NULL column to a populated table,\n-- but it carries the same one so the two dialects agree on what an attempt\n-- written before this migration has reached.\nALTER TABLE \"attempt\" ADD COLUMN \"max_index\" integer DEFAULT 0 NOT NULL;",
+    "ALTER TABLE \"attempt\" ADD COLUMN \"section_started_at\" bigint;",
   ] },
 ];

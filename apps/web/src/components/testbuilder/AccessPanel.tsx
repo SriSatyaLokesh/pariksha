@@ -8,7 +8,7 @@ import {
   type TestAccess,
 } from "@pariksha/core";
 import type { CandidateImportReport, CandidateRow } from "../../lib/api";
-import { useDialogKeys } from "./useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 // T-20, T-21 (Task 8, #60, P5.7): how a candidate gets in, and who is let
 // through once they are.

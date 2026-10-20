@@ -1,0 +1,1399 @@
+/* The candidate runtime's stylesheet.
+
+   DESIGN.md, "Voltage as canvas" and "The clock kills the canvas": the
+   landing and finish pages carry the full-bleed vermilion block with a
+   cream display headline; the moment an attempt starts the system inverts
+   to cream and ink, hairline-ruled. This file holds both, and Task 1 builds
+   the first half.
+
+   Cream on voltage is 3.86:1 — legal for a 56px display headline and
+   illegal for anything smaller, which is why the hero carries only the
+   headline and the lede at display sizes and every fact below it sits on
+   cream. `contrast-usage.test.ts` audits this file and will say so.
+
+   No colour literal anywhere: every value is a token var(), and the one
+   legal alpha form is rgb(from var(--color-NAME) r g b / a).
+
+   Nothing here animates. A candidate sits inside these screens under a
+   running clock, often already nervous (DESIGN.md). */
+
+@import "./question.css";
+@import "./registration.css";
+
+.exam-landing {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* DESIGN.md's `card-voltage`: the one saturated field, carrying the
+   headline and NOTHING else.
+
+   The colour is declared on the headline rather than on the field, on
+   purpose. Cream on voltage is 3.86:1, which clears the 3:1 bar for text
+   at 24px or more and fails the 4.5:1 bar for everything smaller — so a
+   `color` on the container would silently licence any later paragraph
+   dropped inside it. Declared on the one selector that also declares the
+   56px size, the two facts cannot drift apart. */
+.exam-landing-hero {
+  background: var(--color-voltage);
+  padding: 64px 32px;
+}
+
+.exam-landing-hero h1 {
+  margin: 0;
+  color: var(--color-cream);
+  font-family: var(--type-display-xl-family);
+  font-size: var(--type-display-xl-size);
+  font-weight: var(--type-display-xl-weight);
+  line-height: var(--type-display-xl-line-height);
+  letter-spacing: var(--type-display-xl-letter-spacing);
+}
+
+/* On cream, below the field — at 22px it would be 3.86:1 against voltage,
+   which is illegal at reading size. */
+.exam-landing-lede {
+  margin: 0 0 24px;
+  max-width: 54ch;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+.exam-landing-body {
+  flex: 1;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* Every out-of-window state says why in words. The border is the
+   non-colour carrier: colour is never the only thing that says a test is
+   shut (DESIGN.md). */
+.exam-notice {
+  margin: 0 0 24px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-left-width: 6px;
+  border-radius: 6px;
+  background: var(--color-canvas);
+}
+
+.exam-landing-message {
+  margin: 0 0 24px;
+  max-width: 64ch;
+}
+
+.exam-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 24px;
+  margin: 0 0 32px;
+}
+
+.exam-facts dt {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-muted);
+}
+
+.exam-facts dd {
+  margin: 0;
+}
+
+.exam-landing-sections ul,
+.exam-device-report ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.exam-landing-sections li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.exam-section-title {
+  flex: 1;
+  min-width: 12ch;
+}
+
+.exam-section-count,
+.exam-section-limit {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
+.exam-landing-rules p {
+  max-width: 64ch;
+}
+
+.exam-landing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 32px 0;
+}
+
+.exam-landing-actions button {
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 999px;
+  background: var(--color-canvas);
+  font: inherit;
+  cursor: pointer;
+}
+
+/* DESIGN.md: the cream pill CTA. Voltage-deep rather than voltage, because
+   a cream label on `voltage` is 3.86:1 and a button label is body text. */
+.exam-landing-actions .exam-start {
+  border-color: var(--color-voltage-deep);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+}
+
+/* Fix round 1, C1. This used to fill itself with `hairline` and write an
+   `ink-soft` label on it. `hairline` is one of the tokens the
+   high-contrast block below swaps — to `ink` — and a swapped BACKGROUND
+   inverts a pair that a swapped foreground could only ever improve: the
+   two measured 1.47:1 with high contrast on. A disabled control still has
+   to be readable, so the ground is the page's own canvas in both themes
+   and the de-emphasis is carried by `muted` (5.34:1 default, 11.0:1 high
+   contrast) plus a dashed edge — a carrier that survives greyscale, which
+   a lighter fill never did. */
+.exam-landing-actions button:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: var(--color-hairline-strong);
+  background: var(--color-canvas);
+  color: var(--color-muted);
+}
+
+.exam-device-report li {
+  display: flex;
+  gap: 12px;
+  padding: 8px 0;
+}
+
+/* The non-colour carrier for every finding: the mark is read before the
+   colour is, and a candidate who cannot see the difference still can. */
+.exam-finding-mark {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-finding-label {
+  min-width: 9ch;
+  font-weight: 500;
+}
+
+.exam-device-report li[data-ok="false"] .exam-finding-mark {
+  color: var(--color-flag-risk);
+}
+
+.exam-device-report li[data-ok="true"] .exam-finding-mark {
+  color: var(--color-state-answered);
+}
+
+.exam-landing-footer {
+  padding: 24px 32px;
+  border-top: 1px solid var(--color-hairline);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
+/* ---- Registration (C-02, C-03) ---------------------------------------
+
+   The screen between Start and the paper: the access gate, the consent
+   block and the one registration renderer, whose own rules are in
+   registration.css. Cream page, one canvas panel, one voltage-deep pill —
+   the same three facts the landing page states, so the candidate does not
+   meet a new product between pressing Start and answering question one.
+
+   Nothing animates. */
+
+.exam-register {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.exam-register h1 {
+  margin: 0 0 24px;
+  font-family: var(--type-display-lg-family);
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line-height);
+  letter-spacing: var(--type-display-lg-letter-spacing);
+}
+
+/* The one live region on the screen, present and empty from first render.
+   The ⚠ in the markup is the non-colour carrier; with no notice to show it
+   has no box of its own, so an empty alert is not an empty bordered card. */
+.exam-register-notice {
+  margin: 0 0 16px;
+  max-width: 64ch;
+  color: var(--color-flag-risk);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+}
+
+/* Canvas, which is what makes registration.css's `field-label`,
+   `text-input` and `registration-form__*` read on the same ground here as
+   they do inside the organiser's CardHairline. */
+.exam-register-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 24px;
+  border: 1px solid var(--color-hairline);
+  border-radius: 6px;
+  background: var(--color-canvas);
+}
+
+.exam-register-form {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.exam-register-form h2 {
+  margin: 0;
+  max-width: 54ch;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+.exam-register-form .field,
+.exam-register-form .registration-form {
+  width: 100%;
+}
+
+.exam-consent {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--color-hairline);
+}
+
+.exam-consent h2 {
+  margin: 0;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+/* The pending line and the "a code is on its way" line. Muted, because
+   neither is a refusal — the refusals are all in the alert above. */
+.exam-register-status {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* DESIGN.md's pill CTA, as on the landing page: voltage-deep rather than
+   voltage, because a cream label on `voltage` is 3.86:1 and a button label
+   is body text. An <a> wears it in the `sso` mode, where continuing is a
+   real navigation. */
+.exam-register-submit,
+.exam-register-secondary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 24px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 999px;
+  background: var(--color-canvas);
+  text-decoration: none;
+  cursor: pointer;
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+}
+
+.exam-register-submit {
+  border-color: var(--color-voltage-deep);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+}
+
+/* The same de-emphasis the landing page's disabled Start carries, and for
+   the same reason: a dashed edge and `muted` survive greyscale and a high
+   contrast swap, where a lighter fill did not. */
+.exam-register-submit:disabled,
+.exam-register-secondary:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  border-color: var(--color-hairline-strong);
+  background: var(--color-canvas);
+  color: var(--color-muted);
+}
+
+.exam-loading,
+.exam-error {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+/* ========================================================================
+   The test runner (C-04, Task 6).
+
+   DESIGN.md, "The clock kills the canvas": the moment an attempt starts
+   the system inverts. Cream and ink, hairline-ruled, and the voltage
+   survives only as the "you are here" square in the palette and the focus
+   ring. The question column is 1fr capped at 680px, the palette rail is a
+   fixed 240px, and below 1024px there is no layout at all because P-01
+   blocks the device before a candidate gets here.
+
+   Nothing below animates, and the rule is enforced: runner.test.tsx reads
+   this file and fails on any transition, animation or @keyframes. The
+   plan's own version of that check walked the rendered DOM, which under
+   `css: false` reports the initial value whatever is written here.
+   ===================================================================== */
+
+.exam-runner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  grid-template-rows: auto 1fr;
+  gap: 24px;
+  align-items: start;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 32px;
+  /* The one place the text-size control acts: everything in the runner
+     inherits from here, so no component measures a font size and no
+     component branches on the setting. */
+  font-size: calc(var(--type-body-md-size) * var(--exam-font-scale, 1));
+  line-height: var(--type-body-md-line-height);
+}
+
+:root[data-font-scale="1.25"] {
+  --exam-font-scale: 1.25;
+}
+
+:root[data-font-scale="1.5"] {
+  --exam-font-scale: 1.5;
+}
+
+/* DESIGN.md's high-contrast column, as a token swap: the markup is the
+   same in both themes, so no component knows which one is on. ink itself
+   is already 14.6:1 on canvas and has no darker token to swap to; every
+   other row of that table is here. */
+:root[data-contrast="high"] {
+  --color-hairline: var(--color-ink);
+  --color-hairline-strong: var(--color-ink);
+  --color-muted: var(--color-ink-soft);
+  --color-cream: var(--color-canvas);
+  --color-voltage: var(--color-voltage-deep);
+  --exam-edge: 2px;
+  --exam-ring: 3px;
+}
+
+.exam-runner-bar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-hairline-strong);
+}
+
+/* A skip control, visible the moment it has focus and out of the way
+   otherwise. `clip-path` rather than `display: none`, which would take it
+   out of the tab order and defeat the point. */
+.exam-skip {
+  position: absolute;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  clip-path: inset(50%);
+}
+
+.exam-skip:focus-visible {
+  position: static;
+  clip-path: none;
+}
+
+.exam-runner-clock,
+.exam-runner-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The countdown (AC-13, Task 9) — DESIGN.md's `timer-chip`.
+
+   Cream fill, hairline-strong border, tabular figures, and ONE swap to
+   `timer-chip-urgent` at the last warning mark. Nothing here pulses,
+   flashes or animates: DESIGN.md's "the timer never animates" is not a
+   preference, it is what keeps a candidate from reading motion under a
+   clock as lag or as a reload.
+
+   Colour is the third carrier, never the first: the digits themselves are
+   the primary signal, the mark is what a greyscale reader sees change at
+   each warning, and the sentence in `.exam-clock-announce` is what a
+   screen reader hears. */
+.exam-clocks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.exam-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+}
+
+.exam-timer-label {
+  color: var(--color-ink-soft);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+}
+
+/* DESIGN.md, "Numbers never jitter": a countdown whose digits change
+   width every second pulls the eye away from the question, which is the
+   one thing a timer must not do. */
+.exam-timer-value {
+  color: var(--color-ink);
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-timer-numeric-size);
+  font-weight: var(--type-timer-numeric-weight);
+  font-variant-numeric: var(--type-timer-numeric-font-variant-numeric);
+  line-height: var(--type-timer-numeric-line-height);
+}
+
+/* The non-colour carrier: one mark per warning passed. 12px bold is below
+   the 18.66px large-text floor, so it is held to 4.5:1. */
+.exam-timer-mark {
+  color: var(--color-flag-risk);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-timer.timer-chip-urgent {
+  border-color: var(--color-flag-risk);
+}
+
+/* The one colour swap DESIGN.md allows. Size and weight are not repeated
+   here: they come from `.exam-timer-value`'s own rule on the same element,
+   and the audit reads them out of `INHERITED_SIZE_WEIGHT` rather than out
+   of a second copy that can drift. */
+.exam-timer.timer-chip-urgent .exam-timer-value {
+  color: var(--color-flag-risk);
+}
+
+.exam-clock-announce {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+/* The save banner (C-05, Task 8).
+
+   Four states, and each one carries a word AND a mono mark, so the
+   colour below is the third carrier rather than the only one
+   (DESIGN.md: "Colour is never the only carrier here"). The colour is
+   declared on the state selector together with the size and the weight
+   it renders at, so `contrast-usage.test.ts` audits the real pair and
+   the two facts cannot drift apart.
+
+   Nothing animates — no spinner on "Saving". A candidate who thinks the
+   page moved thinks their answer went with it. */
+.exam-save-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
+  margin: 0;
+}
+
+.exam-save-status {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+/* The same mono mark the device report uses, and for the same reason:
+   it is read before the colour is. 12px bold still sits below the
+   18.66px large-text floor, so it is held to 4.5:1 on the colour its
+   state rule sets. */
+.exam-save-mark {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-save-banner[data-state="saving"] {
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-save-banner[data-state="saved"] {
+  color: var(--color-state-answered);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-save-banner[data-state="offline"] {
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-save-banner[data-state="refused"] {
+  color: var(--color-flag-risk);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-view-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+}
+
+.exam-font-scale {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0;
+  padding: 6px 12px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+}
+
+.exam-font-scale legend,
+.exam-view-choice {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+.exam-view-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+}
+
+.exam-contrast-switch,
+.exam-calc-open,
+.exam-button,
+.exam-clear {
+  min-height: 44px;
+  padding: 0 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+/* The switch's own non-colour carrier: a screen reader hears aria-checked,
+   and an eye that cannot separate two fills reads the weight. */
+.exam-contrast-switch[aria-checked="true"] {
+  border-color: var(--color-ink);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: var(--type-button-md-size);
+  font-weight: 700;
+}
+
+.exam-button[aria-pressed="true"] {
+  border-color: var(--color-state-marked);
+  color: var(--color-state-marked);
+  font-size: var(--type-button-md-size);
+  font-weight: 700;
+}
+
+/* Fix round 1, C1 — the same inversion as the landing page's disabled
+   button above, and the one a candidate meets first: `Previous` is
+   disabled on question 1 of every paper. */
+.exam-button:disabled {
+  cursor: not-allowed;
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-button-md-size);
+}
+
+/* DESIGN.md's `button-danger`: white fill, flag-risk label and border,
+   always paired with a confirmation naming what is about to happen. */
+.exam-clear {
+  border-color: var(--color-flag-risk);
+  color: var(--color-flag-risk);
+  font-size: var(--type-button-md-size);
+}
+
+.exam-question {
+  max-width: 680px;
+  font-size: calc(var(--type-question-stem-size) * var(--exam-font-scale, 1));
+  line-height: var(--type-question-stem-line-height);
+}
+
+.exam-question-stem {
+  margin: 0 0 24px;
+  color: var(--color-ink);
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  font-weight: var(--type-question-stem-weight);
+}
+
+.exam-question-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-hairline);
+}
+
+.exam-confirm {
+  margin-top: 24px;
+  padding: 16px;
+  border: var(--exam-edge, 1px) solid var(--color-flag-risk);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+}
+
+.exam-confirm-danger {
+  min-height: 44px;
+  margin-right: 12px;
+  padding: 0 16px;
+  border: var(--exam-edge, 1px) solid var(--color-flag-risk);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-flag-risk);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+/* ---- the palette rail -------------------------------------------------- */
+
+.exam-palette {
+  position: sticky;
+  top: 24px;
+  width: 240px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+}
+
+.exam-palette-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 36px);
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* DESIGN.md's `palette-square`: 36px, 4px radius, mono-sm number.
+   Every state carries a shape as well as a colour — the fill, the corner
+   notch, the ring, the lock glyph — because colour is never the only
+   carrier here. */
+.palette-square {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  line-height: var(--type-mono-sm-line-height);
+  cursor: pointer;
+}
+
+.palette-square.is-filled {
+  border-color: var(--color-state-answered);
+  background: var(--color-state-answered);
+  color: var(--color-cream);
+  font-size: var(--type-mono-sm-size);
+}
+
+.palette-square.has-notch {
+  border-color: var(--color-state-marked);
+  background: var(--color-state-marked);
+  color: var(--color-cream);
+  font-size: var(--type-mono-sm-size);
+}
+
+/* The corner notch — the carrier a greyscale reader sees. A triangle cut
+   out of the top-right corner, drawn in the page's own ground so it reads
+   as missing material rather than as a second colour. */
+.palette-square.has-notch::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--color-canvas);
+  clip-path: polygon(100% 0, 0 0, 100% 100%);
+  content: "";
+}
+
+/* The "you are here" square: the one place the voltage survives inside a
+   live attempt. The ring is the carrier, not the colour. */
+.palette-square.has-ring {
+  border-width: var(--exam-ring, 2px);
+  border-color: var(--color-voltage);
+  background: var(--color-canvas);
+  color: var(--color-voltage-deep);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.palette-square.has-lock {
+  border-color: var(--color-state-locked);
+  background: var(--color-state-locked);
+  color: var(--color-cream);
+  font-size: var(--type-mono-sm-size);
+  cursor: not-allowed;
+}
+
+/* The lock glyph. No screen reader reads a ::after, and the square's
+   accessible name already says "locked"; this is for the eye. */
+.palette-square.has-lock::after {
+  position: absolute;
+  right: 3px;
+  bottom: 1px;
+  width: 7px;
+  height: 5px;
+  border: 1px solid var(--color-cream);
+  border-radius: 1px;
+  content: "";
+}
+
+/* Why the locked squares are locked (T-13, Task 10). Visible, not
+   screen-reader-only: a sighted candidate who finds a square that will
+   not open needs the same sentence, and needs it without hovering
+   anything. Referenced by every locked square's `aria-describedby`. */
+.exam-palette-reason {
+  margin: 12px 0 0;
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+/* ---- the calculator ---------------------------------------------------- */
+
+.exam-calculator {
+  position: fixed;
+  right: 32px;
+  bottom: 32px;
+  width: 240px;
+  padding: 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-lg);
+  background: var(--color-cream);
+  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.exam-calc-display {
+  display: block;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-timer-numeric-size);
+  font-variant-numeric: var(--type-timer-numeric-font-variant-numeric);
+  text-align: right;
+}
+
+.exam-calc-keys {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.exam-calc-key,
+.exam-calc-close {
+  min-height: 44px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+  cursor: pointer;
+}
+
+.exam-calc-equals {
+  grid-row: span 2;
+}
+
+.exam-calc-close {
+  width: 100%;
+  margin-top: 8px;
+}
+
+/* DESIGN.md: focus rings are 2px, 3px in high contrast, and never removed.
+   A candidate driving this screen from the keyboard has to be able to see
+   where they are. */
+.exam-runner :focus-visible {
+  outline: var(--exam-ring, 2px) solid var(--color-voltage-deep);
+  outline-offset: 2px;
+}
+
+/* ---- The answer block (Task 7, #71) ------------------------------------
+
+   One tempo for the whole attempt (DESIGN.md, "Rhythm"): every type uses
+   the same 24px stack and the same option-row box, so moving between a
+   `single` and an `ordering` question does not read as a page reload.
+
+   Nothing here animates. Every state carries a second, non-colour
+   carrier: a filled control plus a 2px edge for a chosen option, a
+   dashed edge for a disabled one, a solid leading bar for a drop
+   target. */
+
+.exam-answer {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0 0 24px;
+  padding: 0;
+  border: 0;
+}
+
+.exam-prompt {
+  margin: 0;
+}
+
+.exam-media {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-md);
+}
+
+.exam-passage {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-assertion-reason {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 8px 16px;
+  margin: 0;
+  padding: 16px;
+  border-inline-start: 3px solid var(--color-hairline-strong);
+}
+
+.exam-assertion-reason dt {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.exam-assertion-reason dd {
+  margin: 0;
+}
+
+.exam-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.exam-options-legend {
+  padding: 0 0 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* The live region behind the select_k counter and the remaining-character
+   count. Visible, not screen-reader-only: a sighted candidate under a
+   clock needs the same fact, and a greyed-out checkbox explains nothing
+   on its own. */
+.exam-answer-status {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+/* DESIGN.md's `option-row`, pinned against tokens.components by
+   component-dimensions.test.ts: white, 1px hairline-strong, 6px radius,
+   14px 16px padding, minimum height 48px, and THE ENTIRE ROW IS THE HIT
+   TARGET — which is why this is a label wrapping the control rather than
+   a control with a label beside it. */
+.exam-option-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  padding: 14px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  font-weight: var(--type-option-label-weight);
+  line-height: var(--type-option-label-line-height);
+  cursor: pointer;
+}
+
+/* DESIGN.md's `option-row-selected`: cream fill, 2px voltage border, PLUS
+   the filled control. Two carriers, so the choice survives a colour-blind
+   reading and a greyscale print. */
+.exam-option-row.is-selected {
+  border-width: 2px;
+  border-color: var(--color-voltage);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: var(--type-option-label-size);
+  font-weight: 500;
+}
+
+/* A locked option (select_k at its limit) and a read-only attempt. The
+   fill stays the page's own canvas in BOTH themes: the high-contrast
+   block swaps hairline to ink, and a lighter fill under an unchanged
+   label is exactly what inverted a pair in Task 6 (fix round 1, C1). The
+   dashed edge is the non-colour carrier a lighter fill never was. */
+.exam-option-row:has(input:disabled) {
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-option-label-size);
+  cursor: not-allowed;
+}
+
+.exam-option-text {
+  flex: 1;
+}
+
+.exam-matching {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.exam-match-row {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  min-height: 48px;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-match-left {
+  flex: 1;
+  color: var(--color-ink);
+  font-family: var(--type-option-label-family);
+  font-size: var(--type-option-label-size);
+  line-height: var(--type-option-label-line-height);
+}
+
+.exam-match-grid {
+  border-collapse: collapse;
+}
+
+.exam-match-caption {
+  padding-bottom: 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-align: start;
+  text-transform: uppercase;
+}
+
+.exam-match-grid th,
+.exam-match-grid td {
+  min-width: 48px;
+  height: 48px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-hairline-strong);
+  text-align: start;
+}
+
+/* The drop-position indicator for AC-07's drag half. A bar on the leading
+   edge rather than a fill: it has to read against every row state the
+   list can be in, and in greyscale. */
+.reorderable-list__item.is-drop-target {
+  border-inline-start: 4px solid var(--color-voltage);
+}
+
+.exam-select,
+.exam-text-input,
+.exam-text-area {
+  min-height: 48px;
+  padding: 12px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+}
+
+.exam-text-area {
+  width: 100%;
+  resize: vertical;
+}
+
+.exam-select:disabled,
+.exam-text-input:disabled,
+.exam-text-area:disabled {
+  border-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-body-md-size);
+  cursor: not-allowed;
+}
+
+.exam-field-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.exam-numeric,
+.exam-written {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-numeric {
+  align-items: start;
+}
+
+.exam-unit {
+  color: var(--color-muted);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+}
+
+/* The blanks are interleaved into the rendered prompt, so the prompt's
+   own block elements have to lie down in the line: the paragraph
+   markdown-it wraps each block in would otherwise break every blank onto
+   a row of its own. The loose line-height is what keeps the fields from
+   colliding with the line above. */
+.exam-blanks {
+  color: var(--color-ink);
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  line-height: 2.2;
+}
+
+.exam-blanks p {
+  display: inline;
+  margin: 0;
+}
+
+.exam-blank-input {
+  min-width: 10ch;
+  min-height: 44px;
+  padding: 4px 12px;
+  border: 0;
+  border-bottom: 2px solid var(--color-hairline-strong);
+  border-radius: 0;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+}
+
+.exam-blank-input:disabled {
+  border-bottom-style: dashed;
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  font-size: var(--type-body-md-size);
+  cursor: not-allowed;
+}
+
+/* Fix round 1, C1: a read-only ordering answer is the order the
+   candidate left, with no affordance at all — no draggable row, no move
+   buttons, nothing in the tab order that does nothing. */
+.exam-ordering-readonly {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-ordering-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding-inline-start: 24px;
+}
+
+.exam-ordering-list li {
+  padding: 8px 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+/* ---- submitting, and the finish page (Task 11, #75) -------------------- */
+
+/* The one primary action in the runner, pushed to the end of the bar and
+   as far from Next and Clear as the row allows: it cannot be undone.
+   Voltage-deep rather than voltage, because cream on voltage is 3.86:1
+   and a 15px button label is not a display headline. */
+.exam-runner-finish {
+  margin-left: auto;
+}
+
+.exam-submit {
+  min-height: 44px;
+  padding: 0 24px;
+  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border-radius: var(--rounded-md);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+.exam-submit:disabled {
+  border-color: var(--color-hairline-strong);
+  background: var(--color-canvas);
+  color: var(--color-muted);
+  cursor: not-allowed;
+}
+
+/* The dialog itself reuses `.exam-confirm`'s danger frame — one
+   confirmation treatment in this runtime, not two. It is positioned over
+   the bar rather than inside it so a wrapping header cannot push the
+   paper down while the candidate is reading the counts. */
+.exam-submit-confirm {
+  position: absolute;
+  right: 32px;
+  z-index: 20;
+  width: min(420px, calc(100vw - 64px));
+  margin-top: 8px;
+  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.exam-submit-heading {
+  margin: 0 0 8px;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-submit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.exam-submit-status:empty {
+  margin: 0;
+}
+
+.exam-submit-error {
+  margin: 8px 0 0;
+  color: var(--color-flag-risk);
+}
+
+/* The finish page: the landing page's own shell, because DESIGN.md makes
+   them the two bookends of the same day. Nothing new is needed for the
+   hero, the body or the facts list — only what a result adds. */
+.exam-receipt-ref {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  user-select: all;
+}
+
+.exam-finish-note {
+  max-width: 64ch;
+  margin: 24px 0 0;
+}
+
+.exam-result {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-hairline-strong);
+}
+
+/* Tabular figures: a score and its maximum sit next to each other and
+   must not shift width between one candidate's screen and the next. */
+.exam-score {
+  margin: 0 0 16px;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-score-value {
+  font-family: var(--type-display-lg-family);
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line-height);
+}
+
+/* The word is the carrier, the mark is what a greyscale reader sees, and
+   the colour is the third signal — never the first (DESIGN.md). */
+.exam-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 8px 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-flag-clean);
+  font-weight: 600;
+}
+
+.exam-verdict[data-passed="false"] {
+  color: var(--color-flag-review);
+}
+
+.exam-result-pending {
+  max-width: 64ch;
+  margin: 0 0 24px;
+  color: var(--color-ink-soft);
+}
+
+.exam-result-table {
+  width: 100%;
+  margin: 0 0 24px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.exam-result-table caption {
+  margin-bottom: 8px;
+  text-align: left;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exam-result-table th,
+.exam-result-table td {
+  padding: 8px 16px 8px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  text-align: left;
+}
+
+.exam-result-table thead th {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exam-review {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin: 0;
+  padding-inline-start: 0;
+  list-style: none;
+}
+
+.exam-review-item {
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-review-number {
+  margin: 0 0 12px;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.exam-review-explanation {
+  margin-top: 8px;
+  max-width: 64ch;
+}

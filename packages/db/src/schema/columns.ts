@@ -274,10 +274,25 @@ export const TABLE_MANIFEST: TableSpec[] = [
   // value of the test's first `unique: true` registration field, which is
   // what Phase 6 mints an invite against and matches a registration to;
   // `set_label` is T-09's set *name* ("A"), never `attempt.set_no`, which
-  // is an integer; `source` says who wrote the row, so a re-upload can
-  // replace the list without touching anyone who has already registered.
-  // `consent_version` was `NOT NULL` from Phase 2 and is now nullable: a
-  // listed candidate has not consented yet, and null is exactly that.
+  // is an integer.
+  //
+  // **`source` is the provenance of the row, not whether anyone has
+  // registered** (Phase 6 Task 3, #67). It was both until Phase 6: a
+  // registration now *fills the matched `"list"` row in place* — the
+  // `(test_id, external_id)` unique below makes a second row impossible,
+  // and `set_label` has to survive registration or `assignSet` loses the
+  // `listValue` it draws a candidate's set from. A `"registration"` row is
+  // written only when nothing on the list matched.
+  //
+  // **Registered is therefore `consent_at IS NOT NULL`**, and that is the
+  // whole reason that column exists. `consent_version` cannot carry it: it
+  // is nullable (a listed candidate has not consented yet), but a list row
+  // could in principle be uploaded with one, while `consent_at` has
+  // exactly one writer. The three populations an organiser asks about:
+  //
+  //   listed, never registered   source = 'list'         AND consent_at IS NULL
+  //   listed, registered         source = 'list'         AND consent_at IS NOT NULL
+  //   self-registered, unlisted  source = 'registration'
   //
   // **No token column, deliberately.** `POST /tests/{id}/invites`, the
   // single-use signed token, its hash and its expiry are Phase 6's — the
@@ -294,10 +309,68 @@ export const TABLE_MANIFEST: TableSpec[] = [
       text("source"),
       json("form_values_json"),
       text("consent_version", { null: true }),
+      // `S-12`: the version *and* the moment, so a later edit to the
+      // consent text stays distinguishable from a candidate who accepted
+      // the earlier one. `created_at` cannot stand in — on a list row it
+      // is the upload's time, not the candidate's.
+      ts("consent_at", { null: true }),
       ts("created_at"),
     ],
     indexes: [["workspace_id"], ["test_id"]],
     uniques: [["test_id", "external_id"]],
+  },
+  // `T-17`'s "a second registration with the same value is refused", as a
+  // table (Phase 6 Task 3, #67).
+  //
+  // `candidate.form_values_json` is a JSON column and neither dialect
+  // offers a portable unique index into one, so the claim is its own row.
+  // The value is a **SHA-256 of the normalised value**
+  // (`normaliseUniqueValue`, @pariksha/core) rather than the value itself,
+  // so the table that stops a repeated email does not become a second
+  // plaintext copy of every candidate's email beside the encryptable one
+  // (`S-15`).
+  //
+  // Every claim is written in the same `db.batch` as the candidate, so a
+  // duplicate rolls the whole registration back — `AC-12`'s refusal with
+  // no half-written candidate behind it.
+  {
+    name: "candidate_unique",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("test_id"),
+      text("candidate_id"),
+      // The registration field's own id, so a 409 can name the field.
+      text("field_id"),
+      text("value_hash"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["test_id"], ["candidate_id"]],
+    uniques: [["test_id", "field_id", "value_hash"]],
+  },
+  // `S-07`'s volume defence (Phase 6 Task 3, #67): one fixed window per
+  // bucket, counted in one statement.
+  //
+  // **`tenant: false`, like `auth_token` and for the same reason.** The
+  // `/t/:code` miss bucket is a six-character code and no workspace, and a
+  // sentinel workspace id would be a lie in the one column `S-09` audits.
+  // Every bucket string embeds a globally unique id (a `ver_`, a digest),
+  // so the primary key above is the whole key.
+  //
+  // **Count misses, never successes.** 500 candidates opening the one link
+  // they were given in the same minute is the expected load, not an
+  // attack: a bucket that counted them would lock out 489 people on the
+  // first live test. `LIMITS` (apps/api/src/run/limit.ts) sizes each.
+  {
+    name: "rate_limit",
+    tenant: false,
+    columns: [
+      text("bucket", { pk: true }),
+      ts("window_start"),
+      int("count"),
+    ],
+    indexes: [["window_start"]],
+    uniques: [],
   },
   {
     name: "attempt",
@@ -315,6 +388,20 @@ export const TABLE_MANIFEST: TableSpec[] = [
       json("score_json", { null: true }),
       text("flag"),
       text("token_hash"),
+      // Phase 6 Task 5 (#69, P6.5). Two columns, and only two.
+      //
+      // `max_index` is the furthest flat question index this candidate has
+      // reached, counted across sections in the pinned order. It carries
+      // **both** navigation rules, which is why `per_section` needs no
+      // second column: `linear` refuses a target below it, and the current
+      // section is the one that index falls in. `NOT NULL DEFAULT 0`, which
+      // is the one shape SQLite's `ALTER TABLE … ADD COLUMN` accepts for a
+      // NOT NULL column.
+      //
+      // `section_started_at` is what a per-section deadline is measured
+      // from, and is null until the candidate enters a timed section.
+      int("max_index"),
+      ts("section_started_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
     uniques: [["token_hash"]],

@@ -70,6 +70,16 @@ interface StatePayload {
   codeVerifier: string;
   nonce: string;
   returnTo: string;
+  /**
+   * The `redirect_uri` this flow actually sent, when it is not the
+   * provider's configured one. Phase 6's candidate SSO leg comes back to
+   * `/api/v1/run/<workspace>/<test>/sso/callback` rather than to the
+   * organiser's callback, and RFC 6749 requires the token exchange to
+   * repeat the same value — so it is stored with the state rather than
+   * recomputed, which is also what stops a callback minted for one test
+   * being exchanged against another's.
+   */
+  redirectUri?: string;
 }
 
 /**
@@ -85,6 +95,9 @@ export async function authorizationUrl(
   providerId: string,
   returnTo: string,
   http: Fetch = globalThis.fetch,
+  /** Overrides the provider's configured callback. Only the candidate SSO
+   *  leg passes one; it must also be registered at the provider. */
+  redirectUri?: string,
 ): Promise<{ url: string; stateId: string }> {
   const provider = configured(deps, providerId);
   const { discovery } = await load(provider, http);
@@ -102,6 +115,7 @@ export async function authorizationUrl(
     // never hold a target the callback would then have to be trusted to
     // re-check.
     returnTo: safeReturnTo(returnTo),
+    ...(redirectUri === undefined ? {} : { redirectUri }),
   };
   await insertAuthToken(deps.db, {
     tokenHash: await sha256Hex(state),
@@ -115,7 +129,7 @@ export async function authorizationUrl(
   for (const [key, value] of Object.entries({
     response_type: "code",
     client_id: provider.clientId,
-    redirect_uri: provider.redirectUri,
+    redirect_uri: redirectUri ?? provider.redirectUri,
     scope: provider.scopes.join(" "),
     state,
     nonce,
@@ -128,12 +142,22 @@ export async function authorizationUrl(
   return { url: url.toString(), stateId: state };
 }
 
-export async function handleCallback(
+/**
+ * Discovery, the state round trip, PKCE, the token exchange and ID-token
+ * verification — everything up to, and not including, the account.
+ *
+ * Split out for Phase 6 (ADR 0005: "Nothing in this decision gives a
+ * candidate a user row"). The candidate SSO leg needs every property this
+ * performs and none of what `handleCallback` does after it, and a second
+ * copy of a PKCE flow is a second place for `email_verified` to be
+ * forgotten.
+ */
+export async function verifiedCallback(
   deps: AppDeps,
   providerId: string,
   params: { code: string; state: string },
   http: Fetch = globalThis.fetch,
-): Promise<{ userId: string; email: string; returnTo: string }> {
+): Promise<{ email: string; returnTo: string }> {
   const provider = configured(deps, providerId);
 
   const stored = asStatePayload(
@@ -159,6 +183,7 @@ export async function handleCallback(
   const idToken = await exchange(http, discovery.token_endpoint, provider, {
     code: params.code,
     codeVerifier: stored.codeVerifier,
+    redirectUri: stored.redirectUri ?? provider.redirectUri,
   });
 
   const { payload: claims } = await jwtVerify(idToken, jwks, {
@@ -201,7 +226,19 @@ export async function handleCallback(
     );
   }
 
-  const email = claims.email.trim().toLowerCase();
+  return { email: claims.email.trim().toLowerCase(), returnTo: stored.returnTo };
+}
+
+/** The organiser leg: the verified address, and then the account it names.
+ *  The candidate leg stops at `verifiedCallback` and mints a `run_entry`
+ *  token instead. */
+export async function handleCallback(
+  deps: AppDeps,
+  providerId: string,
+  params: { code: string; state: string },
+  http: Fetch = globalThis.fetch,
+): Promise<{ userId: string; email: string; returnTo: string }> {
+  const { email, returnTo } = await verifiedCallback(deps, providerId, params, http);
   const userId =
     (await findUserByEmail(deps.db, email)) ??
     (await createUser(deps.db, {
@@ -216,7 +253,7 @@ export async function handleCallback(
   // to land on the same row, so a second identity key would be a
   // `provider_identity` table — worth it when someone actually reports a
   // renamed address, not before.
-  return { userId, email, returnTo: stored.returnTo };
+  return { userId, email, returnTo };
 }
 
 /**
@@ -276,7 +313,7 @@ async function exchange(
   http: Fetch,
   tokenEndpoint: string,
   provider: OidcProvider,
-  input: { code: string; codeVerifier: string },
+  input: { code: string; codeVerifier: string; redirectUri: string },
 ): Promise<string> {
   const response = await http(tokenEndpoint, {
     method: "POST",
@@ -287,7 +324,7 @@ async function exchange(
     body: new URLSearchParams({
       grant_type: "authorization_code",
       code: input.code,
-      redirect_uri: provider.redirectUri,
+      redirect_uri: input.redirectUri,
       client_id: provider.clientId,
       client_secret: provider.clientSecret,
       code_verifier: input.codeVerifier,

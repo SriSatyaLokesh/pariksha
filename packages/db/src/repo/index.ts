@@ -12,3 +12,7 @@ export * from "./attempts.js";
 export * from "./audit.js";
 export * from "./banks.js";
 export * from "./candidates.js";
+// Phase 6 (#66): the candidate runtime's scoped reads and writes. Its
+// `INVITE_KIND` string rides along — the rule above is about functions,
+// and `scoping.test.ts` enumerates only those.
+export * from "./run.js";

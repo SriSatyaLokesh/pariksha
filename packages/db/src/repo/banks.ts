@@ -900,6 +900,38 @@ export interface WorkspaceQuestion {
   document: Question;
 }
 
+/**
+ * Every passage group in the workspace, keyed by the bank that owns it —
+ * one statement, no join, and read only when a selected question actually
+ * carries a `group`.
+ *
+ * Phase 6 Task 5 (#69, P6.5): a comprehension question whose passage is
+ * missing is an unanswerable question, and the passage lives on
+ * `question_bank.groups_json` rather than on the question row. `group_ref`
+ * is unique only within its bank, which is why the key is the pair.
+ *
+ * ponytail: the whole workspace's groups, like `workspaceQuestions` beside
+ * it. A `groups_json` blob is a handful of passages per bank; narrowing it
+ * to the banks of the selected questions is a `WHERE id IN (...)` away if
+ * one ever holds hundreds.
+ */
+export const workspaceGroups = scoped(
+  "workspaceGroups",
+  async (db: DbClient, workspaceId: string): Promise<Map<string, PassageGroup>> => {
+    const rows = await db.query<{ id: string; groups_json: unknown }>(
+      "SELECT id, groups_json FROM question_bank WHERE workspace_id = ? AND groups_json IS NOT NULL",
+      [workspaceId],
+    );
+    const groups = new Map<string, PassageGroup>();
+    for (const row of rows) {
+      for (const group of db.jsonValue<PassageGroup[]>(row.groups_json)) {
+        groups.set(`${row.id}:${group.id}`, group);
+      }
+    }
+    return groups;
+  },
+);
+
 export const workspaceQuestions = scoped(
   "workspaceQuestions",
   async (db: DbClient, workspaceId: string): Promise<WorkspaceQuestion[]> => {

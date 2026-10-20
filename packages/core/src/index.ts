@@ -77,3 +77,11 @@ export { assertSafeRegex, MAX_REGEX_LENGTH } from "./grade/text.js";
 // and the pure `can()` that the API's route guard and the web interface both
 // answer with, so neither can drift from the table.
 export * from "./permissions.js";
+
+// T-17 / AC-12's registration rules (Phase 6 Task 3, #67). The one copy:
+// the builder's preview, the candidate's own form and the server's 422 all
+// call `validateRegistration`, so the sentence a candidate reads in the
+// browser is the sentence the server would have answered with. The regex
+// matcher is injected because a bounded one needs a host this pure package
+// does not have (#129).
+export * from "./registration.js";

@@ -10,6 +10,7 @@ import type { StorageAdapter } from "@pariksha/storage";
 import type { Action } from "@pariksha/core";
 import type { AppEnv } from "./env.js";
 import type { Actor } from "./auth/session.js";
+import type { AttemptContextVar } from "./middleware/attemptContext.js";
 import { securityHeaders } from "./middleware/security.js";
 import { logging } from "./middleware/logging.js";
 import { errorEnvelope, notFoundEnvelope } from "./middleware/errorEnvelope.js";
@@ -24,6 +25,9 @@ import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
+import { runRoutes } from "./routes/run.js";
+import { inviteRoutes } from "./routes/invites.js";
+import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
   db: DbClient;
@@ -41,10 +45,26 @@ export interface AppDeps {
    * both targets.
    */
   http?: typeof globalThis.fetch;
+  /**
+   * Injected only so a test can read what was sent. Left unset everywhere
+   * else, where `emailSender(env)` is the right answer — the same shape
+   * `http` has, and for the same reason: the access gate's six-digit code
+   * exists nowhere but in the message, so a route test that could not see
+   * the message could not assert on it.
+   */
+  email?: EmailSender;
 }
 
 export type AppBindings = {
-  Variables: RequestIdVariables & { actor: Actor | null };
+  Variables: RequestIdVariables & {
+    actor: Actor | null;
+    /**
+     * Phase 6 Task 5 (#69): the attempt the candidate's cookie names,
+     * set by `attemptContext`. Present only on routes that mount it —
+     * which is exactly the `attempt` authority in `ROUTE_AUTH`.
+     */
+    attempt: AttemptContextVar;
+  };
 };
 
 /**
@@ -296,7 +316,166 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
   // place (`apps/api/src/middleware/authenticate.ts`).
-  "/t/:code": 1,
+  // Phase 6 Task 4 (#68, P6.4): **2 on the expensive path**, which is a
+  // miss — `resolveShortCode` (1) plus the one `takeRateToken` statement
+  // the `short_link` bucket costs (1). A code that resolves still spends
+  // exactly 1, because the limiter counts misses only.
+  "/t/:code": 2,
+
+  // Phase 6 Task 1 (#65, P6.1): the candidate landing page. Measured
+  // (`test/run/landing.test.ts`'s own "measures the real subrequest cost"
+  // test), not estimated: one statement, `resolvePublishedTest`, joining
+  // the workspace, the test and the version it points at. **The
+  // authentication floor of 2 does not apply to a candidate route** —
+  // `authenticate` calls `readSession` only when a signed session cookie is
+  // present and a candidate carries none, so the floor here is 0 and the
+  // whole cost is the route's own read. Flat in section and question count:
+  // the counts come from `sections_json` and the bank is never touched,
+  // which is also what keeps a question's ID out of the payload (S-10).
+  "/api/v1/run/:workspaceSlug/:testSlug": 1,
+
+  // Phase 6 Task 2 (#66, P6.2): the access gate. Measured
+  // (`test/run/access.test.ts`'s own budget tests), not estimated, and
+  // each is the most expensive path through its route.
+  //
+  // `/access`: `resolvePublishedTest`, the candidate-list read, the mode's
+  // own single-use consume, and the entry-token insert. Only `email_code`
+  // behind a candidate list pays all four, which is what the measurement
+  // drives. The authentication floor of 2 does not apply here — a
+  // candidate sends no session cookie, so `authenticate` never reads one.
+  "/api/v1/run/:workspaceSlug/:testSlug/access": 4,
+  // Resolve, the two `S-07` rate tokens (per test version and per
+  // address digest), the sweep that the address bucket pays for, and one
+  // insert — **5** since the final review's Important 2; it was 4 since
+  // Task 4's fix round (#68, C-1) and 2 while the route was unlimited.
+  // Sending the message is still not a D1, R2 or `deps.http` call. A
+  // refusal costs 2 to 4, because the limiters are charged before the
+  // write.
+  "/api/v1/run/:workspaceSlug/:testSlug/email-code": 5,
+  // Resolve and the state insert, plus discovery and JWKS on a cold
+  // isolate (`oidc.ts` caches both for the isolate's lifetime, so a warm
+  // one spends 2).
+  "/api/v1/run/:workspaceSlug/:testSlug/sso/start": 4,
+  // Resolve, consume the state, exchange the code, read the candidate
+  // list, insert the entry token — plus the same cold pair.
+  "/api/v1/run/:workspaceSlug/:testSlug/sso/callback": 7,
+
+  // Phase 6 Task 3 (#67, P6.3): consent and registration. Measured in
+  // `test/run/registration.test.ts`, each on the path that pays the most.
+  //
+  // `/form`: resolve, read the entry token, read the list row the gate
+  // bound it to. A candidate already registered pays one more for the
+  // replacement registration token, which is the number declared.
+  "/api/v1/run/:workspaceSlug/:testSlug/form": 4,
+  // `/register`: resolve, read the entry token, the `test_register`
+  // limiter, the list-row read, and **one** batch carrying the entry
+  // token's consume, the candidate write, every unique claim and the
+  // registration token — flat in the number of unique fields, which is
+  // what the batch is for. Two paths pay a sixth and no path pays a
+  // seventh: a refusal reads `candidate_unique` once to name the field
+  // that was taken, and `T-14` re-entry reissues a registration token
+  // instead of reading it. The two never coincide, because re-entry on a
+  // listed test is answered at `/form` before the batch is built.
+  "/api/v1/run/:workspaceSlug/:testSlug/register": 6,
+
+  // Phase 6 Task 4 (#68, P6.4): the proof-of-work challenge (ADR 0009).
+  // Measured at **2** — `openTest` (1) and the entry-token read (1) — and
+  // the challenge itself costs nothing at all, because it is a digest of
+  // the token the caller already presented rather than a row this route
+  // mints. That is the whole reason the challenge is derived from the
+  // entry token instead of stored: 500 candidates asking for one cost 500
+  // reads of a token they already hold, and no writes.
+  "/api/v1/run/:workspaceSlug/:testSlug/challenge": 2,
+
+  // Phase 6 Task 5 (#69, P6.5): minting the attempt, and resuming it.
+  // Both measured in `test/run/start.test.ts` and
+  // `test/run/attempt-context.test.ts`.
+  //
+  // `/start` on its most expensive path — a test whose `sets` section
+  // draws `from_candidate_list` with a null label, so the candidate row
+  // is read *and* the round-robin index is, and whose paper carries a
+  // passage group: `openTest` (1), the registration token's single-use
+  // consume (1), `countAttemptsForCandidate` (1), the candidate row (1),
+  // `countAttemptsForVersion` (1), `workspaceQuestions` (1),
+  // `workspaceGroups` (1) and the insert (1). The bank is read **once**,
+  // never once per question, which is the number this budget exists to
+  // pin. A stale-version refusal costs less and writes one audit row.
+  "/api/v1/run/:workspaceSlug/:testSlug/start": 8,
+  // `GET /attempt`: the one join `readAttemptByTokenHash` is, plus
+  // `listResponses`. The paper is not rebuilt — it is the column
+  // `/start` pinned — so this number is flat in the size of the paper.
+  //
+  // Phase 6 Task 9 (#73, P6.9) moved it from 2 to **3**, exactly as this
+  // line warned it would. There is no sweeper in this phase, so the first
+  // read past `deadline_at + late_sync_grace_seconds` is what materialises
+  // the timeout submission (`C-07`), and that is one `finishAttempt`
+  // write. An ordinary resume inside the window still costs 2, and so
+  // does every later read of the attempt it closed — the write happens
+  // once, ever (`WHERE submitted_at IS NULL`). 3 is the ceiling, measured
+  // on exactly that path in `test/run/clock.test.ts`, under the same "pin
+  // the most expensive path" rule every number above follows.
+  "/api/v1/run/attempt": 3,
+  // Phase 6 Task 8 (#72, P6.8): saving one answer — the hot path, and the
+  // one route in this product a candidate calls hundreds of times.
+  // Measured at **2** in `test/run/answer.test.ts`: the attempt join the
+  // cookie resolves through (one read) and `upsertResponse` (one write).
+  // That is exactly the PRD's non-functional row — one D1 write plus at
+  // most one R2 call — so it is pinned with `toBe` rather than bounded,
+  // and the membership check that refuses a question outside the pinned
+  // paper costs nothing, because `layout.sections` is already in memory
+  // on the row that join returned.
+  //
+  // **Still 2 with Tasks 9 and 10 on it**, re-measured with both in place
+  // (`test/run/clock.test.ts` and `test/run/navigation.test.ts` each pin
+  // it again, on the path that moves `max_index` *and* stamps
+  // `section_started_at`). `assertWritable`, `assertSectionOpen` and
+  // `assertReachable` are pure over the row the join already returned, and
+  // the progress bump rides the **same** `db.batch` as the upsert, which
+  // D1 and `countingDeps` both count as one subrequest. That batch is also
+  // why `DbClient.batch` reports `{ changes }` per statement: without it
+  // the conditional upsert could not still say whether the row moved, and
+  // `accepted` and `superseded` would collapse into each other.
+  "/api/v1/run/attempt/answer": 2,
+  // Phase 6 Task 7 (#71, P6.7): one image off the candidate's own paper.
+  // Measured at **2** in `test/run/media.test.ts` — the attempt join the
+  // cookie resolves through, and the one object read. The authorisation
+  // itself costs nothing: it is an `includes` over `layout.media`,
+  // already in memory on the row that join returned. A number above 2
+  // here would mean the route had gone looking at the workspace
+  // instead, which is precisely the reading it exists not to take.
+  "/api/v1/run/attempt/media/:key": 2,
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **6**
+  // in `test/run/submit.test.ts`, on the path that actually scores: the
+  // attempt join the cookie resolves through, the answers, the
+  // candidate's attempt count (which is what prints "Attempt 2 of 3" and
+  // what the `full_review` degrade is judged by), the workspace's bank
+  // read **once** for the whole paper, the one `finishAttempt` write, and
+  // the audit row. A second press writes nothing — the row the cookie
+  // resolved already carries the score and the stamp — but it is not
+  // free: it still pays the join, the answers and the attempt count, so
+  // **3**, and **4** at `full_review` where the bank is read again for
+  // the key. Both measured in the same file.
+  //
+  // A number above 6 means the bank is being read per question, which is
+  // the failure this line exists to catch on a 50-subrequest ceiling.
+  "/api/v1/run/attempt/submit": 6,
+  // `C-09`, the return visit. `/code` is **4**: the address limiter, its
+  // sweep, the attempt lookup and the token insert — plus the message
+  // itself, which is not a subrequest in this count unless `deps.http`
+  // is wired. The reference is no longer a bucket of its own (final
+  // review, Important 2), so the count is what it was. `/verify` is
+  // **6**: the lookup, the limiter on the attempt it resolved, the
+  // single-use consume, the candidate's attempt count, and — at
+  // `full_review` only — the bank and the candidate's own answers. A
+  // `score_only` verification costs 4.
+  "/api/v1/run/result/code": 4,
+  "/api/v1/run/result/verify": 6,
+
+  // The one organiser route of this phase: authentication (2), the test
+  // and its slugs (1), the candidate list (1), the already-invited set
+  // (1), one `batch` however long the list is (1), and the audit row (1).
+  // Flat in the list's size, which `test/invites.test.ts` measures at 200.
+  "/api/v1/workspaces/:id/tests/:testId/invites": 7,
 };
 
 /**
@@ -374,8 +553,206 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/import": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
+
+  // Phase 6 Task 2 (#66, P6.2). The invite is a credential for a row on
+  // the candidate list, so it is the same permission that uploaded the
+  // list — an Author who built the test holds `tests.edit` and not this.
+  "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
+};
+
+/**
+ * Which authority admits a caller to each mounted endpoint — the third
+ * registry beside `ROUTE_BUDGETS` and `ROUTE_ACTIONS`, and the one Phase 6
+ * exists to add (ADR 0008, Review Focus 1).
+ *
+ * `GUARDS` says *which action*, this says *which authority*, and
+ * `ROUTE_BUDGETS` says *what it may spend*. The gap this closes is that
+ * `routeGuards(app)` is built from the `GUARDS` WeakMap, so a route mounted
+ * with **no** guard at all contributes nothing to it and asserts nothing:
+ * before Phase 6 that was visible by reading `createApp`, and after Phase 6
+ * — which mounts a dozen deliberately unguarded candidate routes — it is
+ * not. Here a missing endpoint is a missing key, and a missing key fails
+ * `test/route-authority.test.ts`.
+ *
+ * The four values, each a real distinction in who is admitted:
+ *
+ * - **`workspace`** — `requires()` or `requireMember()`: a signed-in actor
+ *   with a membership in the workspace `:id` names. Exactly the key set of
+ *   `ROUTE_ACTIONS`, asserted as such.
+ * - **`attempt`** — the candidate's 256-bit attempt token (`S-06`), read
+ *   back off the live table through the `attemptContext` middleware the
+ *   routes below register.
+ * - **`entry`** — the single-use `run_entry` token the access gate mints,
+ *   presented as `Authorization: Bearer`. A fifth value rather than
+ *   `public`, because these routes answer **401** to a caller who sends
+ *   nothing and `public` is asserted by a probe that forbids exactly
+ *   that. Calling them public would have been the registry lying in the
+ *   one place it exists to tell the truth. Like `actor` it carries no
+ *   middleware to read back — the check is `entryClaim` inside the
+ *   handler — so it is held to a literal allowlist *and* a probe that
+ *   asserts the 401 is real.
+ * - **`actor`** — a signed-in user and nothing more. These name no
+ *   workspace in the path, so there is no membership for `guard()` to read
+ *   (it throws when `:id` is absent); `actorOr401` is the whole gate.
+ * - **`public`** — no credential of any kind. Asserted **by literal value**
+ *   in the test, so widening the set is a diff a human reviewer sees rather
+ *   than a line that blends into a table of forty.
+ *
+ * Every task that mounts a route adds its line here in the same commit.
+ */
+export type RouteAuthority = "workspace" | "attempt" | "entry" | "actor" | "public";
+
+export const ROUTE_AUTH: Record<string, RouteAuthority> = {
+  // --- public: no credential at all ------------------------------------
+  "GET /api/v1/health": "public",
+  // Sign-in's own front door. `magic-link` answers identically for a known
+  // and an unknown address by design (`authorization.test.ts`), and the two
+  // OIDC legs are redirects a provider drives.
+  "POST /api/v1/auth/magic-link": "public",
+  "GET /api/v1/auth/:provider/start": "public",
+  "GET /api/v1/auth/:provider/callback": "public",
+  // Signing out requires nothing: the handler clears the cookie and revokes
+  // whatever session the cookie named, and answers 204 to a caller who has
+  // none (`routes/auth.ts`, no `actorOr401`). Its sibling
+  // `signout-everywhere` *does* need an actor, which is why they differ
+  // here despite sharing a prefix — read the guard, not the path.
+  "POST /api/v1/auth/signout": "public",
+  // The first-run wizard asks this before any workspace or account exists.
+  "GET /api/v1/setup/status": "public",
+  // Phase 5 Task 2 (#54): T-02's short link. Refuses a draft, so the
+  // (workspace slug, test slug) pair of an unpublished test is not
+  // disclosed. Not in the plan's original six-entry literal because it was
+  // mounted after that literal was written.
+  "GET /t/:code": "public",
+  // Phase 6 Task 1 (#65, P6.1): the candidate landing page. The first
+  // deliberately public route of the candidate runtime; the access gate
+  // that follows it is Task 2's.
+  "GET /api/v1/run/:workspaceSlug/:testSlug": "public",
+  // Phase 6 Task 2 (#66, P6.2): the access gate. Public by necessity —
+  // passing it is how a candidate obtains their first credential, so
+  // requiring one would be circular. What stands in for a guard is the
+  // gate itself: the four modes, the three allowlists checked ahead of
+  // them, and Task 3's rate limiter.
+  "POST /api/v1/run/:workspaceSlug/:testSlug/access": "public",
+  "POST /api/v1/run/:workspaceSlug/:testSlug/email-code": "public",
+  "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start": "public",
+  "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback": "public",
+  // Phase 6 Task 11 (#75, P6.11): `C-09`'s return visit. Public by
+  // necessity — the attempt cookie is an hour past the deadline and the
+  // candidate is back a week later, so there is no credential left to
+  // require. What stands in for one is the emailed code: both routes
+  // answer the same bytes whatever is behind them, so neither
+  // enumerates attempts, and both are rate-limited by the reference and
+  // by the address before they read anything.
+  "POST /api/v1/run/result/code": "public",
+  "POST /api/v1/run/result/verify": "public",
+
+  // --- entry: the single-use run_entry token, as a Bearer header --------
+  // Phase 6 Task 3 (#67, P6.3). Not `public`: both answer 401 without a
+  // token, which is the one thing a `public` route may never do.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/form": "entry",
+  "POST /api/v1/run/:workspaceSlug/:testSlug/register": "entry",
+  // Phase 6 Task 4 (#68, P6.4). `entry` for the same reason and with
+  // more force than its two neighbours: the challenge **is** a digest of
+  // the entry token, so a caller with no token has nothing to be issued.
+  "GET /api/v1/run/:workspaceSlug/:testSlug/challenge": "entry",
+
+  // Phase 6 Task 5 (#69, P6.5). `/start` is the last `entry`-shaped
+  // route of the runtime: it answers 401 to a caller with no
+  // `Authorization: Bearer`, and what it takes is the single-use
+  // `run_registration` token `POST .../register` answered with.
+  "POST /api/v1/run/:workspaceSlug/:testSlug/start": "entry",
+
+  // --- attempt: the 256-bit attempt token, as an HttpOnly cookie --------
+  // Phase 6 Task 5 (#69, P6.5). The only authority with middleware of
+  // its own besides `workspace`, so `routeAuthorities()` reads this back
+  // off the live route table: declaring it over a route that mounts no
+  // `attemptContext` fails, and mounting one without declaring it fails
+  // too.
+  "GET /api/v1/run/attempt": "attempt",
+  // Phase 6 Task 8 (#72, P6.8): saving one answer. `attempt` is the scope
+  // as well as the credential — the question must be on the paper
+  // `/start` pinned on this very row, so a candidate cannot write an
+  // answer against a question they were never given even inside their
+  // own workspace.
+  "PUT /api/v1/run/attempt/answer": "attempt",
+  // Phase 6 Task 7 (#71, P6.7): the images on the candidate's own paper.
+  // `attempt` is not merely the credential here, it is the *scope*: what
+  // the route serves is bounded by `layout.media` on the very row the
+  // cookie resolved, not by the workspace that row names. Its organiser
+  // sibling `GET /api/v1/workspaces/:id/media/:key` keeps `banks.edit`
+  // and is untouched (standing decision 4).
+  "GET /api/v1/run/attempt/media/:key": "attempt",
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt and reading its
+  // result. `attempt` is the scope as well as the credential — both are
+  // bounded by the one row the cookie resolved, and neither takes an
+  // identifier of any kind in its body.
+  "POST /api/v1/run/attempt/submit": "attempt",
+
+  // --- actor: signed in, but naming no workspace ------------------------
+  "POST /api/v1/auth/signout-everywhere": "actor",
+  "GET /api/v1/me": "actor",
+  "POST /api/v1/setup/complete": "actor",
+  // The actor's own workspaces: a list scoped to the caller cannot name
+  // another tenant's, and a create has no workspace to belong to yet.
+  "GET /api/v1/workspaces": "actor",
+  "POST /api/v1/workspaces": "actor",
+
+  // --- workspace: membership in the workspace `:id` names ---------------
+  // Exactly `Object.keys(ROUTE_ACTIONS)`, which the suite asserts rather
+  // than trusting this comment. Kept as its own listing instead of being
+  // spread from that object, because a spread would make the two agree by
+  // construction and assert nothing.
+  "GET /api/v1/workspaces/:id": "workspace",
+  "PATCH /api/v1/workspaces/:id": "workspace",
+  "GET /api/v1/workspaces/:id/members": "workspace",
+  "POST /api/v1/workspaces/:id/members": "workspace",
+  "DELETE /api/v1/workspaces/:id/members": "workspace",
+  "GET /api/v1/workspaces/:id/banks": "workspace",
+  "POST /api/v1/workspaces/:id/banks": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId": "workspace",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId": "workspace",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId": "workspace",
+  "GET /api/v1/workspaces/:id/tags": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "workspace",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "workspace",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/media": "workspace",
+  // Standing decision 4: this keeps `banks.edit` and is **not** relaxed for
+  // a candidate. Task 7 mounts a separate attempt-authority media route
+  // whose authorisation is membership in the attempt's pinned
+  // `layout_json.media`, not the attempt's workspace.
+  "GET /api/v1/workspaces/:id/media/:key": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/groups": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/groups": "workspace",
+  "PATCH /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "workspace",
+  "DELETE /api/v1/workspaces/:id/banks/:bankId/groups/:groupId": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/import": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/export": "workspace",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "workspace",
+  "GET /api/v1/workspaces/:id/tests": "workspace",
+  "POST /api/v1/workspaces/:id/tests": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId": "workspace",
+  "PATCH /api/v1/workspaces/:id/tests/:testId": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/draft": "workspace",
+  "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/check-url": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/publish": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/close": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/archive": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/versions": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/checklist": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/clone": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export": "workspace",
+  "POST /api/v1/workspaces/:id/tests/import": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/candidates": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
+  // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
+  "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -411,6 +788,12 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // precedent). `apps/api/src/index.ts` has its own matching change so this
   // path reaches the Worker instead of the asset router.
   app.get("/t/:code", shortlinkRoute(deps));
+  // Phase 6: the candidate runtime, the third request authority. Mounted
+  // after every `/api/v1/workspaces` route and before nothing — its prefix
+  // cannot collide with theirs — and deliberately carrying no guard. What
+  // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
+  app.route("/api/v1/workspaces", inviteRoutes(deps));
+  app.route("/api/v1/run", runRoutes(deps));
 
   return app;
 }

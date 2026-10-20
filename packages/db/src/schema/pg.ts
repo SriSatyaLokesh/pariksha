@@ -202,6 +202,7 @@ export const candidate = pgTable(
     source: text("source").notNull(),
     formValuesJson: jsonb("form_values_json").notNull(),
     consentVersion: text("consent_version"),
+    consentAt: bigint("consent_at", { mode: "number" }),
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [
@@ -209,6 +210,35 @@ export const candidate = pgTable(
     index("candidate_test_idx").on(t.testId),
     uniqueIndex("candidate_test_external_uq").on(t.testId, t.externalId),
   ],
+);
+
+export const candidateUnique = pgTable(
+  "candidate_unique",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    testId: text("test_id").notNull(),
+    candidateId: text("candidate_id").notNull(),
+    fieldId: text("field_id").notNull(),
+    valueHash: text("value_hash").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    index("candidate_unique_workspace_idx").on(t.workspaceId),
+    index("candidate_unique_test_idx").on(t.testId),
+    index("candidate_unique_candidate_idx").on(t.candidateId),
+    uniqueIndex("candidate_unique_value_uq").on(t.testId, t.fieldId, t.valueHash),
+  ],
+);
+
+export const rateLimit = pgTable(
+  "rate_limit",
+  {
+    bucket: text("bucket").primaryKey(),
+    windowStart: bigint("window_start", { mode: "number" }).notNull(),
+    count: integer("count").notNull(),
+  },
+  (t) => [index("rate_limit_window_idx").on(t.windowStart)],
 );
 
 export const attempt = pgTable(
@@ -227,6 +257,8 @@ export const attempt = pgTable(
     scoreJson: jsonb("score_json"),
     flag: text("flag").notNull(),
     tokenHash: text("token_hash").notNull(),
+    maxIndex: integer("max_index").notNull(),
+    sectionStartedAt: bigint("section_started_at", { mode: "number" }),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

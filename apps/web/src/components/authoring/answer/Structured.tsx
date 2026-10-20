@@ -6,6 +6,7 @@ import type {
   Question,
 } from "@pariksha/core";
 import { ReorderableList } from "../ReorderableList";
+import { reordered } from "../../answer-common";
 
 export type StructuredQuestion = MatchingQuestion | MultiMatchingQuestion | OrderingQuestion;
 
@@ -13,13 +14,6 @@ export const STRUCTURED_TYPES = ["matching", "multi_matching", "ordering"] as co
 
 export function isStructuredQuestion(question: { type: string }): question is StructuredQuestion {
   return (STRUCTURED_TYPES as readonly string[]).includes(question.type);
-}
-
-function reordered<T>(items: readonly T[], from: number, to: number): T[] {
-  const next = [...items];
-  const [moved] = next.splice(from, 1);
-  next.splice(to, 0, moved!);
-  return next;
 }
 
 function nextDefaultText(existing: readonly string[], noun: string): string {

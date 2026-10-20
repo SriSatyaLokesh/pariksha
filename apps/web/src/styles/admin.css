@@ -12,13 +12,16 @@
    base.css's focus ring, and nowhere else.
 
    Everything shaped like a button or a card comes from primitives.css.
-   What is genuinely new here is DESIGN.md's registration-form trio —
-   field-label, field-help, field-error — and the text input they wrap.
+   DESIGN.md's registration-form trio — field-label, field-help,
+   field-error — and the text input they wrap moved to registration.css in
+   Phase 6 Task 6, because the candidate's registration screen renders the
+   same form and must not reach into the organiser stylesheet for it.
 
    No colour literal: every colour is a token var(). */
 
 @import "./primitives.css";
 @import "./authoring.css";
+@import "./registration.css";
 
 /* ---- Page ------------------------------------------------------------- */
 
@@ -157,83 +160,6 @@
   letter-spacing: var(--type-body-md-letter-spacing);
   margin: 0;
   max-width: 60ch;
-}
-
-/* ---- The registration-form trio (DESIGN.md §"Registration form") ------ */
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-sm);
-}
-
-.field-label {
-  color: var(--color-ink);
-  font-family: var(--type-heading-sm-family);
-  font-size: var(--type-heading-sm-size);
-  font-weight: var(--type-heading-sm-weight);
-  line-height: var(--type-heading-sm-line-height);
-  letter-spacing: var(--type-heading-sm-letter-spacing);
-}
-
-/* "Says what the field wants before it is wrong." */
-.field-help {
-  color: var(--color-muted);
-  font-family: var(--type-body-sm-family);
-  font-size: var(--type-body-sm-size);
-  font-weight: var(--type-body-sm-weight);
-  line-height: var(--type-body-sm-line-height);
-  letter-spacing: var(--type-body-sm-letter-spacing);
-  margin: 0;
-}
-
-/* Prefixed with a ⚠ glyph in the markup so the error never depends on
-   colour alone. */
-.field-error {
-  color: var(--color-flag-risk);
-  font-family: var(--type-body-sm-family);
-  font-size: var(--type-body-sm-size);
-  font-weight: var(--type-body-sm-weight);
-  line-height: var(--type-body-sm-line-height);
-  letter-spacing: var(--type-body-sm-letter-spacing);
-  margin: 0;
-  display: flex;
-  gap: var(--space-xs);
-}
-
-/* DESIGN.md states both a height (44px, which is also the A10 hit-area
-   floor) and a padding for `text-input`. With the global border-box those
-   two agree, so both are declared and T30 checks both — and no
-   `line-height` is declared on top of them, which is what would push the
-   content box past the stated 44px. */
-.text-input {
-  background: var(--color-canvas);
-  color: var(--color-ink);
-  font-family: var(--type-body-md-family);
-  font-size: var(--type-body-md-size);
-  font-weight: var(--type-body-md-weight);
-  letter-spacing: var(--type-body-md-letter-spacing);
-  border: 1px solid var(--color-hairline-strong);
-  border-radius: var(--rounded-xs);
-  padding: 10px var(--space-md);
-  height: 44px;
-  width: 100%;
-}
-
-/* DESIGN.md's `text-input-focus` is "border swaps to voltage at 2px plus a
-   3px voltage ring at 25% alpha". base.css's global :focus-visible already
-   paints exactly that ring, so the only thing left here is the border —
-   recoloured rather than thickened, because growing it to 2px would reflow
-   the field by a pixel on focus. */
-.text-input:focus-visible {
-  border-color: var(--color-voltage);
-}
-
-/* `text-input-error`. Paired with .field-error in the markup; never the
-   only signal. */
-.text-input[aria-invalid="true"] {
-  border-color: var(--color-flag-risk);
-  border-width: 2px;
 }
 
 /* ---- Provider list ---------------------------------------------------- */

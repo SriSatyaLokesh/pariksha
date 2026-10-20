@@ -299,14 +299,19 @@ describe("the Phase 5 columns (Task 2, #54)", () => {
           imported: 1,
         });
 
-        // Two rows with the same identity in *one* file. The unique index
-        // is what refuses this; the converter's duplicate check reports it
-        // with a line number before it ever gets here, and this is the
-        // floor under that.
-        const twice = async (): Promise<void> => {
-          await replaceCandidateList(client, ws, one.id, [LISTED, LISTED], 0);
-        };
-        await expect(twice()).rejects.toThrow(/unique|constraint/i);
+        // Two rows with the same identity in *one* file. Phase 6 Task 3
+        // made the insert `ON CONFLICT DO NOTHING` so a re-upload cannot
+        // destroy a registered candidate, which means the index no longer
+        // *refuses* an in-file duplicate — it absorbs it. The organiser is
+        // still told: `convertCandidateCsv` reports a duplicate identity
+        // with the line number of its first occurrence and the route
+        // writes nothing when it does. What the storage floor guarantees
+        // now is that the identity exists exactly once however many times
+        // the file named it.
+        await replaceCandidateList(client, ws, one.id, [LISTED, LISTED], 0);
+        expect(
+          await client.all("SELECT id FROM candidate WHERE test_id = '" + one.id + "'"),
+        ).toHaveLength(1);
       } finally {
         closeClient(client);
       }

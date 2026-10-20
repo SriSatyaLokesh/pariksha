@@ -11,3 +11,5 @@ Short records of significant decisions: the context, what was decided, and the c
 | [0005](0005-organiser-auth-before-the-candidate-runtime.md) | Organiser auth, workspaces and roles before the candidate runtime | Accepted |
 | [0006](0006-identity-reads-sit-outside-the-workspace-guard.md) | Identity reads sit outside the workspace guard, not inside an exemption list | Accepted |
 | [0007](0007-review-comments-on-a-draft-test.md) | Review comments on a draft test | Accepted |
+| [0008](0008-candidate-runtime-is-a-third-request-authority.md) | The candidate runtime is a third request authority | Accepted |
+| [0009](0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md) | A same-origin proof of work instead of a hosted captcha | Accepted |

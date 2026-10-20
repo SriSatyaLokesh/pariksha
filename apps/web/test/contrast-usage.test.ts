@@ -2,7 +2,6 @@ import { describe, it, expect, beforeAll } from "vitest";
 // Phase 5 moved contrastRatio into core so the brand-colour gate on the two
 // write paths and this stylesheet audit cannot disagree (Task 10, 240aa68).
 import { contrastRatio } from "@pariksha/core";
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
 import {
@@ -10,6 +9,10 @@ import {
   type ColorName,
   type TypographyName,
 } from "../src/styles/tokens";
+// Fix round 1: one `@import` resolver for the suite — this file had
+// the only correct one, and Task 7's no-animation gate grew a
+// narrower copy. Both call `test/css-chain.ts` now.
+import { readResolvedCss } from "./css-chain";
 
 // The Signal rebuild replaced landing.css's own rules with two imports —
 // primitives.css (shared with admin.css; five selectors still used by the
@@ -44,6 +47,11 @@ const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
 const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
+// Phase 6 Task 1 (#65): the candidate runtime is a third stylesheet entry
+// (exam.css, loaded only by src/exam-main.tsx) and every colour it declares
+// clears the same bar — in the phase where it matters most, because a
+// candidate under a clock cannot switch tools or come back tomorrow.
+const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
 
 // landing.css no longer carries any component's rules itself (besides the
 // five "reused unchanged" ones, §6) — it only @imports the files that do.
@@ -61,21 +69,6 @@ const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 // text, `body` and `.skip-link`, and both are checked directly, by the same
 // WCAG formula, in the "base.css" describe block below. That closes the gap
 // a plain exclusion comment would otherwise leave undocumented.
-const IMPORT_RE = /@import\s+["']\.\/([a-zA-Z0-9_-]+\.css)["'];?/g;
-
-function stripComments(css: string): string {
-  return css.replace(/\/\*[\s\S]*?\*\//g, "");
-}
-
-function readResolvedCss(path: string, seen: Set<string> = new Set()): string {
-  if (seen.has(path)) return ""; // guard against an accidental import cycle
-  seen.add(path);
-  const raw = stripComments(readFileSync(path, "utf8"));
-  return raw.replace(IMPORT_RE, (_whole, file: string) =>
-    readResolvedCss(resolve(dirname(path), file), seen),
-  );
-}
-
 // A selector's declared colour can render on more than one real background
 // (the four syntax-colour roles and the code block they live in, A3's
 // explicit requirement) — SURFACE may name one background or several, and
@@ -218,16 +211,25 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".organiser__status": "canvas",
   ".organiser-empty__title": "canvas",
   ".organiser-empty__body": "canvas",
+  // registration.css, which admin.css and exam.css both import (Phase 6
+  // Task 6, #70): one renderer, so one stylesheet, read on canvas in both
+  // places — the organiser's CardHairline panel fills itself with canvas,
+  // and so does the candidate's `.exam-register-panel`.
   ".field-label": "canvas",
   ".field-help": "canvas",
   ".field-error": "canvas",
   ".text-input": "canvas",
+  ".registration-form__help, .registration-form__legend": "canvas",
+  ".registration-form__error": "canvas",
 
   // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
   // Same palette and the same reasoning: the editor and the preview are
   // panels on the body's cream, each filling itself with canvas, so every
   // colour authoring.css sets is read on canvas.
-  ".rendered--stem": "canvas",
+  // Phase 6 Task 7 (#71): the candidate runtime now renders every prompt
+  // through the same component, and the runner's ground is the page's own
+  // cream rather than a card's canvas.
+  ".rendered--stem": ["canvas", "cream"],
   ".prompt-editor__tool": "canvas",
   ".prompt-editor__source": "canvas",
   ".preview__heading": "canvas",
@@ -245,6 +247,142 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".bank-browser__tag-chip": "canvas",
   ".bank-browser__notice": "cream",
   ".bank-browser__empty": "cream",
+
+  // ---- exam.css: the candidate runtime (Phase 6 Task 1, #65) -------------
+  // DESIGN.md's two canvases. The landing hero is the full-bleed voltage
+  // field; everything below it is the cream-and-ink page `base.css` sets on
+  // `body`, because `.exam-landing-body` fills nothing of its own.
+  //
+  // Cream on voltage is 3.86:1 — it clears the 3:1 large-text bar at the
+  // hero's 56px and fails the 4.5:1 bar at any reading size, which is why
+  // the hero carries the headline and nothing else and why the `color` is
+  // declared on the <h1> (beside its own font-size) rather than on the
+  // container, where a later paragraph would inherit it silently. This
+  // entry is what stops that from being a comment nobody enforces.
+  ".exam-landing-hero h1": "voltage",
+  ".exam-facts dt": "cream",
+  ".exam-section-count, .exam-section-limit": "cream",
+  // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
+  // not voltage — a button label is body text and gets the 4.5:1 bar.
+  ".exam-landing-actions .exam-start": "voltage-deep",
+  // The disabled state fills itself with the page's own canvas in both
+  // themes (fix round 1, C1 — it used to fill itself with `hairline`,
+  // which the high-contrast block swaps to `ink`).
+  ".exam-landing-actions button:disabled": "canvas",
+  // The device report sits on the page's own cream, like everything else
+  // in `.exam-landing-body`.
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': "cream",
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': "cream",
+  ".exam-landing-footer": "cream",
+
+  // ---- exam.css: registration (C-02/C-03, Task 6). The alert sits on the
+  // page's own cream, above the panel; everything inside the panel is on
+  // the canvas it fills itself with, which is the same ground the same
+  // renderer is read on in the organiser app. -----------------------------
+  ".exam-register-notice": "cream",
+  ".exam-register-status": "canvas",
+  ".exam-register-submit": "voltage-deep",
+  ".exam-register-submit:disabled, .exam-register-secondary:disabled": "canvas",
+
+  // ---- exam.css: the test runner (Phase 6 Task 6, #70) -------------------
+  // DESIGN.md, "The clock kills the canvas": the runner is cream and ink.
+  // The page's own ground is the cream base.css paints on <body>; a
+  // control that fills itself (every button, the palette squares, the
+  // calculator) reads on its own fill instead, and that fill is what is
+  // named here.
+  //
+  // The high-contrast swap in the same file redefines five of these
+  // tokens on `:root[data-contrast="high"]`, and every one of those swaps
+  // RAISES the ratio (hairlines to ink, cream to white, muted to
+  // ink-soft). The default theme audited below is therefore the floor,
+  // not an average.
+  ".exam-skip": "canvas",
+  ".exam-font-scale legend, .exam-view-choice": "cream",
+  ".exam-contrast-switch, .exam-calc-open, .exam-button, .exam-clear": "canvas",
+  '.exam-contrast-switch[aria-checked="true"]': "cream",
+  '.exam-button[aria-pressed="true"]': "canvas",
+  ".exam-button:disabled": "canvas",
+  ".exam-clear": "canvas",
+  ".exam-question-stem": "cream",
+  // The save banner (Task 8). Four state selectors, each setting its own
+  // colour next to its own size and weight, on the runner bar — which
+  // fills nothing, so the ground is the page's cream. The mono mark
+  // inside inherits each of these and renders at 12px/700, below the
+  // large-text floor, so it is held to the same 4.5:1 these are.
+  '.exam-save-banner[data-state="saving"]': "cream",
+  '.exam-save-banner[data-state="saved"]': "cream",
+  '.exam-save-banner[data-state="offline"]': "cream",
+  '.exam-save-banner[data-state="refused"]': "cream",
+  // The countdown (Task 9). `.exam-timer` fills itself with cream
+  // (DESIGN.md's `timer-chip`), so every colour inside it renders on
+  // cream — including the urgent swap, the one colour change DESIGN.md
+  // allows a timer to make. `.exam-clock-announce` sits on the runner
+  // bar, which fills nothing, so it is on the page's cream too. The mark
+  // renders at 12px/700, below the large-text floor, and is held to the
+  // same 4.5:1 as everything else here.
+  ".exam-timer-label": "cream",
+  ".exam-timer-value": "cream",
+  ".exam-timer-mark": "cream",
+  ".exam-timer.timer-chip-urgent .exam-timer-value": "cream",
+  ".exam-clock-announce": "cream",
+  ".exam-confirm": "canvas",
+  ".exam-confirm-danger": "canvas",
+
+  // ---- exam.css: submitting, and the finish page (Task 11, #75) ---------
+  // The one primary action in the runner fills itself with voltage-deep
+  // and writes in cream; disabled it falls back to the bar's own cream
+  // ground. The refusal sentence sits in the bar beside it.
+  ".exam-submit": "voltage-deep",
+  ".exam-submit:disabled": "canvas",
+  ".exam-submit-error": "cream",
+  // The result, on the finish page's cream body. The verdict chip and
+  // every review card paint their own canvas first; the table and the
+  // pending note sit directly on cream.
+  ".exam-verdict": "canvas",
+  ".exam-verdict[data-passed=\"false\"]": "canvas",
+  ".exam-result-pending": "cream",
+  ".exam-result-table caption": "cream",
+  ".exam-result-table thead th": "cream",
+  ".exam-review-number": "canvas",
+  // DESIGN.md's `palette-square` family. Each variant fills itself from
+  // its own state token and writes the number in cream; the default and
+  // the "you are here" ring sit on the square's own canvas.
+  ".palette-square": "canvas",
+  ".palette-square.is-filled": "state-answered",
+  ".palette-square.has-notch": "state-marked",
+  ".palette-square.has-ring": "canvas",
+  ".palette-square.has-lock": "state-locked",
+  // Why the locked squares are locked (Task 10). Under the rail, on the
+  // page's own cream.
+  ".exam-palette-reason": "cream",
+  ".exam-calc-display": "canvas",
+  ".exam-calc-key, .exam-calc-close": "canvas",
+
+  // ---- exam.css: the answer block (Phase 6 Task 7, #71) ------------------
+  // The runner's own ground is the cream base.css paints on <body>; every
+  // control that fills itself (option rows, selects, text fields, the
+  // inline blanks) reads on its own canvas fill, and that fill is what is
+  // named here. Both grounds are re-audited under the high-contrast swap
+  // by the block at the foot of this file.
+  ".exam-assertion-reason dt": "cream",
+  ".exam-options-legend": "cream",
+  ".exam-answer-status": "cream",
+  ".exam-option-row": "canvas",
+  // DESIGN.md's option-row-selected fills itself with cream.
+  ".exam-option-row.is-selected": "cream",
+  // Disabled fills itself with the page's own canvas in BOTH themes, with
+  // a dashed edge carrying the de-emphasis — the fix round 1 C1 rule.
+  ".exam-option-row:has(input:disabled)": "canvas",
+  ".exam-match-left": "canvas",
+  ".exam-match-caption": "cream",
+  ".exam-select, .exam-text-input, .exam-text-area": "canvas",
+  ".exam-select:disabled, .exam-text-input:disabled, .exam-text-area:disabled": "canvas",
+  ".exam-field-label": "cream",
+  ".exam-unit": "cream",
+  // The blanks are interleaved into the prompt, which sits on the page.
+  ".exam-blanks": "cream",
+  ".exam-blank-input": "canvas",
+  ".exam-blank-input:disabled": "canvas",
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not
@@ -348,6 +486,48 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // svg icons (no font-size of their own) — 16px is the smallest real icon
   // (the bullet ticks), the conservative case.
   ".signal-accent-word": { px: 16, weight: 400 },
+
+  // ---- exam.css (Phase 6, the candidate runtime) --------------------------
+  // The pill CTA and its disabled state are the same <button> as
+  // `.exam-landing-actions button`, whose `font: inherit` resolves to the
+  // body text base.css sets (type-body-md, 16px/400). `font: inherit` is a
+  // shorthand this parser cannot read, so the size is supplied here.
+  ".exam-landing-actions .exam-start": { px: 16, weight: 400 },
+  ".exam-landing-actions button:disabled": { px: 16, weight: 400 },
+  // The two device-report marks set colour only; size and weight both come
+  // from the shared `.exam-finding-mark` base rule (type-mono-sm, 12px,
+  // weight 700). 12px bold is still below the 18.66px large-text floor, so
+  // both are held to 4.5:1 — which is the point of auditing them.
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': { px: 12, weight: 700 },
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': { px: 12, weight: 700 },
+
+  // The registration pill and its disabled state set colour only; size and
+  // weight come from the `.exam-register-submit, .exam-register-secondary`
+  // rule on the same element (type-button-md, 16px, weight 500).
+  ".exam-register-submit": { px: 16, weight: 500 },
+  ".exam-register-submit:disabled, .exam-register-secondary:disabled": { px: 16, weight: 500 },
+
+  // The urgent countdown sets colour only; size and weight come from
+  // `.exam-timer-value`'s own rule on the same element (type-timer-numeric,
+  // 20px, weight 500). 20px clears the 18.66px large-text floor, so it is
+  // held to 3:1 — the same floor the duplicated declarations resolved to.
+  ".exam-timer.timer-chip-urgent .exam-timer-value": { px: 20, weight: 500 },
+
+  // ---- exam.css, Task 11 (#75): submitting and the finish page -----------
+  // The disabled Submit button is the same <button> as `.exam-submit`,
+  // whose own rule sets type-button-md (16px, weight 500).
+  ".exam-submit:disabled": { px: 16, weight: 500 },
+  // The refusal sentence and the pending note are bare <p> elements with
+  // no size of their own, so they render at the runner's own body size —
+  // type-body-md, 16px, weight 400. The runner's `--exam-font-scale` only
+  // ever makes that larger, so 16px is the conservative case.
+  ".exam-submit-error": { px: 16, weight: 400 },
+  ".exam-result-pending": { px: 16, weight: 400 },
+  // The verdict chip declares its own weight (600) and no size: it sits in
+  // the finish page's body text, 16px.
+  ".exam-verdict": { px: 16, weight: 600 },
+  // The failing variant is the same element; only the colour changes.
+  ".exam-verdict[data-passed=\"false\"]": { px: 16, weight: 600 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with
@@ -487,12 +667,13 @@ beforeAll(() => {
   // (admin.css, loaded only by src/admin-main.tsx) and every colour it
   // declares has to clear the same bar. One shared `seen` set so
   // primitives.css — imported by both entries — is read exactly once.
+  // P6.1 (#65): exam.css is a third entry, loaded only by
+  // src/exam-main.tsx, and joins the same sweep. It imports nothing, so the
+  // shared `seen` set is unaffected by it.
   const seen = new Set<string>();
   const css = `${readResolvedCss(LANDING_CSS_PATH, seen)}
-${readResolvedCss(
-    ADMIN_CSS_PATH,
-    seen,
-  )}`;
+${readResolvedCss(ADMIN_CSS_PATH, seen)}
+${readResolvedCss(EXAM_CSS_PATH, seen)}`;
   const rules = parseRuleBodies(css);
   // A selector can appear more than once (e.g. a base rule plus its
   // declarations re-opened inside a @media block for a reflow or reduced-
@@ -570,6 +751,104 @@ describe("every selector's fg/size/weight resolves cleanly from its own CSS", ()
   it("has no selector that fails to resolve (fails loudly, never skips)", () => {
     expect(resolutionErrors).toEqual([]);
   });
+});
+
+// ---------------------------------------------------------------------------
+// The high-contrast cascade (Phase 6 Task 6, fix round 1, C1)
+//
+// `exam.css` carries a `:root[data-contrast="high"]` block that redefines
+// five `--color-*` tokens, and `ViewControls` sets that attribute on
+// <html>. Everything above audits the DEFAULT cascade only, so for a while
+// the report claimed the default was "the floor, not an average" on the
+// grounds that every swap raises contrast. That is true of a swapped
+// FOREGROUND against a fixed ground and false of a swapped BACKGROUND:
+// `hairline` -> `ink` under an `ink-soft` label measured 1.47:1, on the
+// `Previous` button that is disabled on question 1 of every paper.
+//
+// So the swap is read out of the stylesheet itself — never hand-typed,
+// which would drift — and every exam.css usage is audited a second time
+// with both halves of the pair mapped through it. The attribute is
+// document-global and survives the runner unmounting, so the landing
+// selectors in the same file are in scope too.
+const examRules = parseRuleBodies(readResolvedCss(EXAM_CSS_PATH));
+const EXAM_SELECTORS = new Set(examRules.map((rule) => rule.selector));
+const HIGH_CONTRAST_SELECTOR = ':root[data-contrast="high"]';
+const CUSTOM_COLOR_PROPERTY_RE = /^--color-([a-z0-9-]+)$/i;
+
+function parseHighContrastSwap(): Partial<Record<ColorName, ColorName>> {
+  const body = examRules.find(
+    (rule) => rule.selector === HIGH_CONTRAST_SELECTOR,
+  )?.body;
+  if (body === undefined) {
+    throw new Error(`exam.css declares no ${HIGH_CONTRAST_SELECTOR} rule`);
+  }
+  const swap: Partial<Record<ColorName, ColorName>> = {};
+  for (const decl of declarations(body)) {
+    const colon = decl.indexOf(":");
+    if (colon === -1) continue;
+    const property = CUSTOM_COLOR_PROPERTY_RE.exec(decl.slice(0, colon).trim());
+    const from = property?.[1];
+    if (!from) continue; // --exam-edge / --exam-ring, not colours
+    const to = COLOR_VAR_RE.exec(decl.slice(colon + 1).trim())?.[1];
+    if (!from || !to || !(from in tokens.colors) || !(to in tokens.colors)) {
+      throw new Error(
+        `${HIGH_CONTRAST_SELECTOR} maps --color-${String(from)} to something that is not a token var(--color-*)`,
+      );
+    }
+    swap[from as ColorName] = to as ColorName;
+  }
+  return swap;
+}
+
+const HIGH_CONTRAST = parseHighContrastSwap();
+
+function underHighContrast(name: ColorName): ColorName {
+  return HIGH_CONTRAST[name] ?? name;
+}
+
+describe('exam.css with data-contrast="high" clears the same bar (C1)', () => {
+  it("reads a real swap out of the stylesheet, so the sweep below is not vacuous", () => {
+    expect(Object.keys(HIGH_CONTRAST).length).toBeGreaterThanOrEqual(5);
+    expect(HIGH_CONTRAST.hairline).toBe("ink");
+    expect(HIGH_CONTRAST["hairline-strong"]).toBe("ink");
+  });
+
+  it("swaps at least one token exam.css uses as a BACKGROUND, which is the whole point", () => {
+    // A swapped foreground can only raise the ratio against a fixed
+    // ground; only a swapped ground can invert a pair. If no exam.css
+    // surface is ever swapped, every assertion below duplicates one
+    // already made and this file would be auditing nothing new.
+    const swappedGrounds = [
+      ...new Set(
+        Object.keys(SURFACE)
+          .filter((selector) => EXAM_SELECTORS.has(selector))
+          .flatMap((selector) => surfacesOf(selector)),
+      ),
+    ].filter((bg) => bg in HIGH_CONTRAST);
+    expect(swappedGrounds.length).toBeGreaterThan(0);
+  });
+
+  for (const selector of Object.keys(SURFACE)) {
+    if (!EXAM_SELECTORS.has(selector)) continue;
+    for (const bg of surfacesOf(selector)) {
+      it(`${selector} on ${bg} clears its WCAG threshold in high contrast`, () => {
+        const usage = resolved.get(selector);
+        expect(usage, `${selector} did not resolve`).toBeDefined();
+        if (!usage) return;
+        const fg = underHighContrast(usage.fg);
+        const ground = underHighContrast(bg);
+        const threshold =
+          usage.px >= 24 || (usage.px >= 18.66 && usage.weight >= 700)
+            ? 3
+            : 4.5;
+        const ratio = contrastRatio(tokens.colors[fg], tokens.colors[ground]);
+        expect(
+          ratio,
+          `${selector} in high contrast: ${fg} on ${ground} at ${usage.px}px/${usage.weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
+        ).toBeGreaterThanOrEqual(threshold);
+      });
+    }
+  }
 });
 
 describe("every colour-on-surface usage clears its real WCAG threshold", () => {

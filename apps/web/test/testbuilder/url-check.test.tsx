@@ -66,10 +66,19 @@ function tryLink(url = "https://example.com/cv.pdf"): void {
 }
 
 describe("the url field's reachability affordance (T-19)", () => {
-  it("the flag states what the check does and what it does not do", () => {
+  it("the flag says the check is not built yet, and cannot be ticked", () => {
+    // T-19 is deferred: fetching an organiser-chosen URL on the
+    // registration path is an SSRF surface inside a 10 ms CPU budget, and
+    // Phase 6 has nowhere to show the flag it would raise. The switch is
+    // disabled with copy naming the phase rather than removed, because a
+    // switch that silently does nothing is worse than an absent one — an
+    // organiser would tick it and believe links were being checked.
     renderBuilder(answering({ state: "reachable", status: 200, checkedAt: CHECKED_AT }));
-    expect(screen.getByRole("checkbox", { name: /check the link is reachable/i })).toBeChecked();
-    expect(screen.getByText(/never refused, and nothing is blocked/i)).toBeVisible();
+    const flag = screen.getByRole("checkbox", { name: /check the link is reachable/i });
+    expect(flag).toBeChecked();
+    expect(flag).toBeDisabled();
+    expect(screen.getByText(/not built yet/i)).toBeVisible();
+    expect(screen.getByText(/never refused, and nothing blocked/i)).toBeVisible();
   });
 
   it("the three states are text plus glyph, and unverified never reads as invalid", async () => {

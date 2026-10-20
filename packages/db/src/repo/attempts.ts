@@ -58,6 +58,13 @@ export const createAttempt = scoped(
     db: DbClient,
     workspaceId: string,
     input: {
+      /**
+       * Minted by the caller, not here (Phase 6 Task 5). `/start` seeds
+       * `layoutForAttempt` with this id, so the shuffle is reproducible
+       * from the row and nothing else has to store a seed — which it
+       * could not be if the id first existed inside this function.
+       */
+      id: string;
       candidateId: string;
       testVersionId: string;
       setNo: number;
@@ -67,12 +74,11 @@ export const createAttempt = scoped(
       tokenHash: string;
     },
   ): Promise<string> => {
-    const id = newId("att");
     await db.run(
-      "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, submit_reason, score_json, flag, token_hash) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, section_started_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       [
-        id,
+        input.id,
         workspaceId,
         input.candidateId,
         input.testVersionId,
@@ -88,9 +94,14 @@ export const createAttempt = scoped(
         null,
         "clean",
         input.tokenHash,
+        // The first question, and nothing entered yet: a per-section
+        // clock starts when the candidate reaches a timed section, not
+        // when the paper is minted.
+        0,
+        null,
       ],
     );
-    return id;
+    return input.id;
   },
 );
 
@@ -165,15 +176,39 @@ export const upsertResponse = scoped(
       value: unknown;
       clientSeq: number;
       savedAt: number;
+      /**
+       * Phase 6 Tasks 9 and 10: how far the candidate has now got.
+       *
+       * Only ever supplied when the target is *ahead* of `max_index`, which
+       * is the uncommon case — re-editing an answer in place, the common
+       * one, supplies nothing and stays a single statement. When it is
+       * supplied the progress update rides the **same** `db.batch` as the
+       * upsert, which D1 counts as one subrequest, so the answer route's
+       * pinned budget of 2 does not move.
+       *
+       * **The statement decides whether to stamp `section_started_at`, not
+       * the caller.** `section_started_at` is the one thing a per-section
+       * deadline cannot be derived from, and re-stamping it on every save
+       * inside a section would hand the candidate an unlimited section — so
+       * the stamp is conditional on `max_index < sectionStartsAt`, the flat
+       * index that the target's section begins at, evaluated against the
+       * **committed** row. A caller deciding it in JS from its own read
+       * loses the race: two tabs that both read `max_index = 0` and target
+       * different indices in the same later section (A→5, B→7) each satisfy
+       * `max_index < maxIndex`, and the second would re-stamp the column
+       * with its own `now` and extend the section's clock.
+       */
+      advance?: { maxIndex: number; sectionStartsAt: number; sectionStartedAt: number };
     },
-  ): Promise<{ stored: boolean }> => {
-    const { changes } = await db.run(
-      "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
+  ): Promise<{ stored: boolean; advanced?: boolean }> => {
+    const upsert = {
+      sql:
+        "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) " +
         "ON CONFLICT (attempt_id, question_id) DO UPDATE SET " +
         "value_json = excluded.value_json, saved_at = excluded.saved_at, client_seq = excluded.client_seq " +
         "WHERE excluded.client_seq > response.client_seq",
-      [
+      params: [
         newId("rsp"),
         workspaceId,
         input.attemptId,
@@ -184,8 +219,103 @@ export const upsertResponse = scoped(
         null,
         null,
       ],
+    };
+
+    const advance = input.advance;
+    if (!advance) {
+      const { changes } = await db.run(upsert.sql, upsert.params);
+      return { stored: changes > 0 };
+    }
+
+    // `AND max_index < ?` is what makes "max_index never falls" a property
+    // of the statement rather than of the caller reading first: two saves
+    // racing from two tabs cannot reopen a question the lock has passed.
+    const [response, progress] = await db.batch([
+      upsert,
+      {
+        sql:
+          "UPDATE attempt SET max_index = ?, " +
+          "section_started_at = CASE WHEN max_index < ? THEN ? ELSE section_started_at END " +
+          "WHERE workspace_id = ? AND id = ? AND max_index < ?",
+        params: [
+          advance.maxIndex,
+          advance.sectionStartsAt,
+          advance.sectionStartedAt,
+          workspaceId,
+          input.attemptId,
+          advance.maxIndex,
+        ],
+      },
+    ]);
+    if (response === undefined || progress === undefined) {
+      throw new Error("batch() answered no result for the response upsert");
+    }
+    /**
+     * `advanced` is the **progress statement's own** outcome, returned only
+     * when an advance was asked for. It is not a tidier `stored`: the two
+     * statements are guarded by different things, so a save can store and
+     * not advance (another tab already committed a higher `max_index`, so
+     * `max_index < ?` no-ops) or advance and not store (a stale
+     * `client_seq`). A caller that reports `max_index` back to the browser
+     * off its own pre-read row reports a number the row may not hold —
+     * see `attempt.ts`.
+     */
+    return { stored: response.changes > 0, advanced: progress.changes > 0 };
+  },
+);
+
+/**
+ * Stamps the end of an attempt. `WHERE submitted_at IS NULL` so the first
+ * writer wins: a candidate pressing Submit at the same moment the server
+ * materialises a timeout must not have their reason overwritten.
+ *
+ * Phase 6 Task 9 mints it for `submit_reason = "timeout"` — there is no
+ * sweeper in this phase (nothing here gets a Cron Trigger), so an attempt
+ * whose candidate closed the tab is submitted the next time anything reads
+ * it. Task 11's candidate-pressed submission is the same statement with a
+ * different reason **and the score in the same `SET`**: that is what makes
+ * "the client at zero, the timeout materialisation and a double-click
+ * cannot produce two scores" a property of one statement rather than of
+ * the order two callers happen to run in.
+ *
+ * `score` and `flag` are optional because Task 9's materialisation stamps
+ * the end of an attempt it has not scored; omitting them leaves both
+ * columns exactly as they were.
+ */
+export const finishAttempt = scoped(
+  "finishAttempt",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: {
+      attemptId: string;
+      submittedAt: number;
+      reason: string;
+      /** `AttemptScore`, as stored. `unknown` here because
+       *  `packages/db` does not depend on the grading engine's shape. */
+      score?: unknown;
+      /** The organiser-facing marker, when this submission raised one —
+       *  `"scoring_blocked"` for a question whose pattern the bound
+       *  refused (#129). */
+      flag?: string;
+    },
+  ): Promise<{ submitted: boolean }> => {
+    const sets = ["submitted_at = ?", "submit_reason = ?"];
+    const params: unknown[] = [input.submittedAt, input.reason];
+    if (input.score !== undefined) {
+      sets.push("score_json = ?");
+      params.push(db.jsonParam(input.score));
+    }
+    if (input.flag !== undefined) {
+      sets.push("flag = ?");
+      params.push(input.flag);
+    }
+    const { changes } = await db.run(
+      `UPDATE attempt SET ${sets.join(", ")} ` +
+        "WHERE workspace_id = ? AND id = ? AND submitted_at IS NULL",
+      [...params, workspaceId, input.attemptId],
     );
-    return { stored: changes > 0 };
+    return { submitted: changes > 0 };
   },
 );
 

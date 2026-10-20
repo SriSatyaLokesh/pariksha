@@ -1,0 +1,124 @@
+[
+  {
+    "id": "SNT-SINGLE",
+    "type": "single",
+    "prompt": "Sentinel single-choice question.",
+    "options": [
+      { "id": "a", "text": "First option" },
+      { "id": "b", "text": "Second option" }
+    ],
+    "key": "a",
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_SINGLE__",
+    "media": [{ "kind": "image", "src": "sentinel-diagram.png", "alt": "Diagram" }]
+  },
+  {
+    "id": "SNT-MULTIPLE",
+    "type": "multiple",
+    "prompt": "Sentinel multiple-choice question.",
+    "options": [
+      { "id": "a", "text": "First option" },
+      { "id": "b", "text": "Second option" }
+    ],
+    "key": ["a", "b"],
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_MULTIPLE__"
+  },
+  {
+    "id": "SNT-SELECTK",
+    "type": "select_k",
+    "prompt": "Sentinel select-k question.",
+    "options": [
+      { "id": "a", "text": "First option" },
+      { "id": "b", "text": "Second option" },
+      { "id": "c", "text": "Third option" }
+    ],
+    "k": 2,
+    "key": ["a", "b"],
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_SELECTK__"
+  },
+  {
+    "id": "SNT-TRUEFALSE",
+    "type": "true_false",
+    "prompt": "Sentinel true/false question.",
+    "key": true,
+    "scoring": { "points": 1 },
+    "explanation": "__EXPL_TRUEFALSE__"
+  },
+  {
+    "id": "SNT-ASSERTION",
+    "type": "assertion_reason",
+    "prompt": "Sentinel assertion-reason question.",
+    "assertion": "The sentinel assertion.",
+    "reason": "The sentinel reason.",
+    "key": "both_true_explains",
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_ASSERTION__"
+  },
+  {
+    "id": "SNT-MATCHING",
+    "type": "matching",
+    "prompt": "Sentinel matching question.",
+    "left": ["L1", "L2"],
+    "right": ["R1", "R2"],
+    "key": { "L1": "R1", "L2": "R2" },
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_MATCHING__"
+  },
+  {
+    "id": "SNT-MULTIMATCHING",
+    "type": "multi_matching",
+    "prompt": "Sentinel multi-matching question.",
+    "left": ["L1"],
+    "right": ["R1", "R2"],
+    "key": { "L1": ["R1", "R2"] },
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_MULTIMATCH__"
+  },
+  {
+    "id": "SNT-ORDERING",
+    "type": "ordering",
+    "prompt": "Sentinel ordering question.",
+    "items": ["step one", "step two", "step three"],
+    "scoring": { "points": 2 },
+    "explanation": "__EXPL_ORDERING__"
+  },
+  {
+    "id": "SNT-FILLBLANK",
+    "type": "fill_blank",
+    "prompt": "Sentinel fill-in-the-blank: ___.",
+    "blanks": [{ "id": "b1", "accepted": ["__ACCEPT_FILLBLANK__"], "match": "case_insensitive" }],
+    "scoring": { "points": 1 },
+    "explanation": "__EXPL_FILLBLANK__"
+  },
+  {
+    "id": "SNT-NUMERIC",
+    "type": "numeric",
+    "prompt": "Sentinel numeric question.",
+    "unit": "kg",
+    "key": { "value": 42, "tolerance": 0.5 },
+    "scoring": { "points": 1 },
+    "explanation": "__EXPL_NUMERIC__"
+  },
+  {
+    "id": "SNT-SHORT",
+    "type": "short_answer",
+    "prompt": "Sentinel short-answer question.",
+    "max_length": 200,
+    "model_answer": "__MODELANS_SHORT__",
+    "rubric": [{ "level": "full", "points": 3, "description": "__RUBRIC_SHORT__" }],
+    "scoring": { "points": 3 },
+    "explanation": "__EXPL_SHORT__"
+  },
+  {
+    "id": "SNT-LONG",
+    "type": "long_answer",
+    "prompt": "Sentinel long-answer question.",
+    "max_length": 2000,
+    "rubric": [{ "level": "full", "points": 5, "description": "__RUBRIC_LONG__" }],
+    "model_answer": "__MODELANS_LONG__",
+    "scoring": { "points": 5 },
+    "explanation": "__EXPL_LONG__"
+  }
+]

@@ -1,5 +1,5 @@
 import type { ChecklistRow } from "../../lib/api";
-import { useDialogKeys } from "./useDialogKeys";
+import { useDialogKeys } from "../useDialogKeys";
 
 // Screen 11 (docs/design.md's screen inventory) — `UX-17`: "a publish
 // checklist, not a publish button".

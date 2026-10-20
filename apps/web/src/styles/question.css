@@ -1,0 +1,165 @@
+/* The parts of a question that BOTH sides render: the HTML the shared
+   renderer produces, the reorderable list, and the small tool button its
+   move controls wear.
+
+   Phase 6 Task 7 (#71) split these out of authoring.css. The candidate
+   runtime renders every prompt through `RenderedHtml` and its `ordering`
+   input through `ReorderableList`, so it needs exactly this much of the
+   authoring stylesheet and none of the rest — importing the whole file
+   would put the bank browser and the prompt editor into the candidate's
+   bundle, and into the high-contrast audit, for nothing.
+
+   Imported by authoring.css (and so by admin.css) and by exam.css. No
+   colour literal: every value is a token var() from tokens.css. */
+
+/* ---- Rendered question content ---------------------------------------- */
+
+/* Everything here styles HTML that `renderMarkdown` produced in the same
+   tick, from Markdown. There is no stored HTML and no allowlist. */
+.rendered > :first-child {
+  margin-block-start: 0;
+}
+
+.rendered > :last-child {
+  margin-block-end: 0;
+}
+
+.rendered--stem {
+  font-family: var(--type-question-stem-family);
+  font-size: var(--type-question-stem-size);
+  font-weight: var(--type-question-stem-weight);
+  line-height: var(--type-question-stem-line-height);
+  letter-spacing: var(--type-question-stem-letter-spacing);
+  color: var(--color-ink);
+}
+
+.rendered code {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.rendered pre {
+  overflow-x: auto;
+  padding: var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+  background-color: var(--color-cream);
+}
+
+.rendered table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+
+.rendered th,
+.rendered td {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline);
+  text-align: start;
+}
+
+.rendered blockquote {
+  margin-inline: 0;
+  padding-inline-start: var(--space-md);
+  border-inline-start: 2px solid var(--color-hairline-strong);
+}
+
+.rendered img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* KaTeX emits MathML and nothing else, so there is no katex.css to vendor
+   and no woff2 faces to self-host under S-11 — only the inherited font. */
+.rendered math {
+  font-size: inherit;
+}
+
+.prompt-editor__tool {
+  padding: var(--space-xs) var(--space-sm);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  cursor: pointer;
+}
+
+/* No colour declared anywhere in this block: every piece of text here
+   inherits the page's own ink-on-cream/canvas from base.css's `body` rule,
+   already checked by contrast-usage.test.ts, so none of these selectors
+   needs its own SURFACE entry. */
+
+.reorderable-list {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.reorderable-list__legend {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* Visually present (not visually-hidden): the move controls already carry
+   the same words as a tooltip would, so the live region doubles as a
+   lightweight on-screen status line rather than a screen-reader-only one. */
+.reorderable-list__announcement {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.reorderable-list__items {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.reorderable-list__item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-sm);
+}
+
+.reorderable-list__controls {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.reorderable-list__move {
+  min-width: 2.25rem;
+}
+
+.reorderable-list__position {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.reorderable-list__position input {
+  width: 4rem;
+}
+
+.reorderable-list__content {
+  flex: 1;
+  min-width: 0;
+}
+

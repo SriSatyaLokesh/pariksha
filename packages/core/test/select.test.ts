@@ -257,6 +257,26 @@ describe("layoutForAttempt (AC-11)", () => {
     }
   });
 
+  it("a question whose `options` key is present but undefined is skipped, not shuffled", () => {
+    // The shape `toQuestionDocument` (@pariksha/db) really produces: one
+    // object literal for every type, so a `short_answer` carries an
+    // `options` key whose value is `undefined`. Under an `"options" in
+    // question` test that question reached `shuffleOptions(undefined)`
+    // and threw — a 500 at `/start` for any paper mixing a choice
+    // question with one that has no choices.
+    const written = { ...single("Q6"), type: "short_answer", options: undefined, key: undefined };
+    const mixed = [single("Q1"), written as unknown as Question];
+    const layout = layoutForAttempt({
+      sections: [
+        { id: "sec1", title: "Section 1", source: { kind: "fixed", questions: ["Q1", "Q6"] } },
+      ],
+      bank: mixed,
+      seed: "candidate-a",
+    });
+    expect(Object.keys(layout.sections[0]?.optionOrder ?? {})).toEqual(["Q1"]);
+    expect(layout.sections[0]?.questionIds.sort()).toEqual(["Q1", "Q6"]);
+  });
+
   it("carries setNo through when provided", () => {
     const setsSections: Section[] = [
       {

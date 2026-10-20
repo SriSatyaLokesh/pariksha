@@ -166,6 +166,29 @@ describe("sqlite", () => {
     expect(rows.map((r) => r.ref_id)).toEqual(["BA-01", "BA-02"]);
   });
 
+  // Phase 6 Task 10 (#74): the batch reports what each statement did, in
+  // order. `upsertResponse` is the caller that cannot do without it — its
+  // upsert is conditional on `excluded.client_seq`, so whether the row
+  // moved is the difference between answering the candidate `accepted` and
+  // answering them `superseded`, and `max_index` has to rise in the *same*
+  // subrequest or the hot path's pinned budget of 2 becomes 3.
+  it("batch says how many rows each statement changed, in order", async () => {
+    const changes = await db.batch([
+      questionInsert("qst_batch_c", "ws_changes", "bnk_changes", "BC-01"),
+      // Matches nothing: a workspace with no rows in it.
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["BC-02", "ws_nobody"],
+      },
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["BC-03", "ws_changes"],
+      },
+    ]);
+
+    expect(changes.map((one) => one.changes)).toEqual([1, 0, 1]);
+  });
+
   it("batch rolls back the whole group when one statement violates a constraint", async () => {
     // The same `(bank_id, ref_id)` unique index `migrate.test.ts` already
     // exercises on a single `run()` — here two statements in one `batch()`,
@@ -219,6 +242,27 @@ describePostgres("postgres", () => {
       "select ref_id from question where workspace_id = 'ws_pgbatch' order by ref_id",
     );
     expect(rows.map((r) => r.ref_id)).toEqual(["PGBA-01", "PGBA-02"]);
+  });
+
+  // The same contract as the sqlite block above, on the dialect whose
+  // driver reports a `count` rather than a `changes`: `upsertResponse`
+  // answers `accepted` against `superseded` out of this number, so a
+  // dialect that reported it wrongly would lose a candidate's answer
+  // quietly rather than loudly.
+  it("batch says how many rows each statement changed, in order", async () => {
+    const changes = await db.batch([
+      questionInsert("qst_pgchanges", "ws_pgchanges", "bnk_pgchanges", "PGC-01"),
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["PGC-02", "ws_pgnobody"],
+      },
+      {
+        sql: "update question set ref_id = ? where workspace_id = ?",
+        params: ["PGC-03", "ws_pgchanges"],
+      },
+    ]);
+
+    expect(changes.map((one) => one.changes)).toEqual([1, 0, 1]);
   });
 
   it("batch rolls back the whole group when one statement violates a constraint", async () => {

@@ -43,8 +43,20 @@ interface RawOps {
    * group commits or none of it does. `upsertQuestions`
    * (packages/db/src/repo/banks.ts) is the first caller: N single-row writes
    * costs ~2N subrequests, one `batch()` costs one no matter how big N gets.
+   *
+   * **Returns one `{ changes }` per statement, in order** (Phase 6 Task 10).
+   * D1 already answers a `D1Result` per statement and the other two drivers
+   * answer a row count per statement; dropping it used to be free because
+   * every caller wrote blind. `upsertResponse` is the first that cannot:
+   * its upsert is conditional on `excluded.client_seq`, so whether the row
+   * moved is the difference between the wire words `accepted` and
+   * `superseded` — and `max_index` has to rise in the *same* subrequest or
+   * the hot path's pinned budget of 2 becomes 3. Reporting what the batch
+   * did is what lets both be true at once.
    */
-  batch(statements: readonly { sql: string; params?: unknown[] }[]): Promise<void>;
+  batch(
+    statements: readonly { sql: string; params?: unknown[] }[],
+  ): Promise<{ changes: number }[]>;
   /**
    * Encode a value bound for a JSON column. SQLite stores JSON as text and
    * Postgres as jsonb, so the two drivers want different things — the one
@@ -92,11 +104,10 @@ export function sqliteClient(path: string): DbClient {
     // actually using.
     batch: (statements) => {
       try {
-        const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) => {
-          for (const s of stmts) sqlite.prepare(s.sql).run(...(s.params ?? []));
-        });
-        run(statements);
-        return Promise.resolve();
+        const run = sqlite.transaction((stmts: readonly { sql: string; params?: unknown[] }[]) =>
+          stmts.map((s) => ({ changes: sqlite.prepare(s.sql).run(...(s.params ?? [])).changes })),
+        );
+        return Promise.resolve(run(statements));
       } catch (err) {
         return Promise.reject(err instanceof Error ? err : new Error(String(err)));
       }
@@ -108,6 +119,27 @@ export function sqliteClient(path: string): DbClient {
       return Promise.resolve();
     },
   };
+}
+
+/**
+ * What D1 says each statement changed — **surfaced, never defaulted.**
+ *
+ * Cloudflare documents `changes` on `D1Result` for both `run()` and
+ * `batch()` (developers.cloudflare.com/d1/worker-api/return-object), so a
+ * `?? 0` here is defensive code that can only ever lie, and it lies in the
+ * one direction that loses work: `changes > 0` is how `upsertResponse`
+ * decides `accepted` against `superseded` (and Task 8's queue **drops** a
+ * `superseded`), how first-writer-wins submission is decided, and how every
+ * `deleted:` in `banks.ts` and `tests.ts` is answered. `?? 1` is worse, for
+ * the same three reasons pointing the other way. If the field is ever
+ * genuinely absent that is a D1 contract change, and it has to arrive as a
+ * 500 somebody reads rather than as a silently wrong word on the wire.
+ */
+function d1Changes(meta: { changes?: number }): number {
+  if (typeof meta.changes !== "number") {
+    throw new Error("D1 returned a result with no `changes`; refusing to guess what it wrote.");
+  }
+  return meta.changes;
 }
 
 /** Cloudflare Workers. The binding comes from the Worker's env. */
@@ -134,13 +166,16 @@ export function d1Client(binding: D1Database): DbClient {
         .prepare(sql)
         .bind(...params)
         .run();
-      return { changes: meta.changes ?? 0 };
+      return { changes: d1Changes(meta) };
     },
     // One `binding.batch()` call — one subrequest — carrying every prepared
     // statement. D1 runs a batch inside an implicit transaction and rejects
     // the whole thing if any statement fails.
     batch: async (statements) => {
-      await binding.batch(statements.map((s) => binding.prepare(s.sql).bind(...(s.params ?? []))));
+      const results = await binding.batch(
+        statements.map((s) => binding.prepare(s.sql).bind(...(s.params ?? []))),
+      );
+      return results.map((result) => ({ changes: d1Changes(result.meta) }));
     },
     jsonParam: (value) => JSON.stringify(value),
     jsonValue: parseJsonText,
@@ -173,11 +208,14 @@ export function pgClient(url: string): DbClient {
     // rolls back on a rejected one — the transaction-scoped `tx`, not the
     // outer `sql`, is what every statement in the batch must run through.
     batch: async (statements) => {
+      const counts: { changes: number }[] = [];
       await sql.begin(async (tx) => {
         for (const s of statements) {
-          await tx.unsafe(toNumberedPlaceholders(s.sql), (s.params ?? []) as never[]);
+          const result = await tx.unsafe(toNumberedPlaceholders(s.sql), (s.params ?? []) as never[]);
+          counts.push({ changes: result.count });
         }
       });
+      return counts;
     },
     // postgres.js serialises a JS value into jsonb; handing it a JSON string
     // would store the string itself, quotes and all.
