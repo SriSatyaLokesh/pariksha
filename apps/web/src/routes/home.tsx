@@ -64,7 +64,16 @@ const SETS: {
     label: "Closing",
     tone: "risk",
     horizon: null,
-    holds: (test, now) => closingAt(test) !== null && (closingAt(test) as number) > now,
+    // The state, not the timestamp alone. `closeTest`/`archiveTest` go
+    // through `setTestStatus`, which writes `status` and nothing else, so
+    // the published `closes_at` survives an early close — a test the server
+    // already calls `closed` arrives with `closesAt` still in the future.
+    // Without this gate Home renders it under Closing with a risk dot and
+    // tells an organiser a test is closing that is already shut.
+    holds: (test, now) =>
+      (test.state === "open" || test.state === "scheduled") &&
+      closingAt(test) !== null &&
+      (closingAt(test) as number) > now,
   },
   {
     key: "review",
@@ -148,11 +157,27 @@ interface Row {
   horizon: Horizon;
 }
 
+/**
+ * The sets a test is in — the ONE place that decides, so a row in Recently
+ * edited marks under the same pill its agenda row does.
+ *
+ * `listTests` applies no status filter unless it is passed one and `D6`
+ * forbids Home passing one, so an archived test arrives like any other. It
+ * belongs on nobody's agenda: archiving an abandoned draft is exactly how
+ * an organiser clears it, and a Home that then re-nags about it under
+ * "Never published / Whenever you like" forever has made archiving useless.
+ * One predicate, not a second call — `state` is already on the wire.
+ */
+function setsFor(test: TestSummary, now: number): typeof SETS {
+  if (test.state === "archived") return [];
+  return SETS.filter((set) => set.holds(test, now));
+}
+
 /** Every reason a test is on the agenda — a test in two sets is two rows,
  *  so a pill's count and the rows it marks are the same number. */
 function agendaRows(tests: TestSummary[], now: number): Row[] {
   return tests.flatMap((test) =>
-    SETS.filter((set) => set.holds(test, now)).map((set) => {
+    setsFor(test, now).map((set) => {
       const at = set.key === "closing" ? closingAt(test) : null;
       return {
         key: `${set.key}-${test.id}`,
@@ -252,6 +277,16 @@ export function Home({
   // on a page that is already waiting for its boot are not a latency
   // problem worth a `Promise.all`'s error handling.
   useEffect(() => {
+    // Cleared first, because this effect re-runs on a workspace SWITCH and
+    // `OrganiserApp` renders Home without a key: without this the previous
+    // workspace's agenda, figures and marking stay on screen under the new
+    // workspace's name until the two reads land.
+    setTests(null);
+    setQuestions(0);
+    setSelected(null);
+    setStatus("");
+    setError(null);
+
     let live = true;
     void (async () => {
       try {
@@ -262,7 +297,11 @@ export function Home({
         setTests(rows);
         setQuestions(banks.reduce((total, bank) => total + bank.questionCount, 0));
       } catch {
-        if (live) setError("Pariksha could not load this workspace. Reload to try again.");
+        if (!live) return;
+        setError("Pariksha could not load this workspace. Reload to try again.");
+        // Out of "loading" as well as into "error": without this both panes
+        // read "Loading…" under the alert, for ever.
+        setTests([]);
       }
     })();
     return () => {
@@ -294,16 +333,19 @@ export function Home({
     selected === null ? undefined : set === selected ? "on" : "off";
 
   const recent = [...(tests ?? [])].sort((a, b) => b.updatedAt - a.updatedAt);
-  /** The sets a test belongs to, so a row in Recently edited marks under
-   *  the same pill its agenda row does. */
-  const setsOf = (test: TestSummary): SetKey[] =>
-    SETS.filter((set) => set.holds(test, now)).map((set) => set.key);
 
   /** One place decides what is selected and what the live region says. */
   function select(next: SetKey | null, label = "", count = 0) {
     setSelected(next);
+    // Tests, not rows. A pill counts AGENDA rows, and marking also reaches
+    // the Recently edited pane — so "1 row marked" was announced while two
+    // rows carried data-marked="on", and a horizon past SHOWN_PER_HORIZON
+    // counts rows the agenda has collapsed and cannot mark. Within one set
+    // a row is a test, so the count is exact when it is said that way.
     setStatus(
-      next === null ? "Selection cleared." : `${label}: ${count} row${count === 1 ? "" : "s"} marked.`,
+      next === null
+        ? "Selection cleared."
+        : `${label}: ${count} test${count === 1 ? "" : "s"} marked.`,
     );
   }
 
@@ -398,8 +440,8 @@ export function Home({
             ) : (
               <ul className="home__rows">
                 {recent.map((test) => {
-                  const sets = setsOf(test);
-                  const first = SETS.find((set) => set.key === sets[0]);
+                  const sets = setsFor(test, now);
+                  const first = sets[0];
                   return (
                     <RowLine
                       key={test.id}
@@ -408,7 +450,11 @@ export function Home({
                       subject={test.name}
                       reason={test.state}
                       marked={
-                        selected === null ? undefined : sets.includes(selected) ? "on" : "off"
+                        selected === null
+                          ? undefined
+                          : sets.some((set) => set.key === selected)
+                            ? "on"
+                            : "off"
                       }
                       onOpen={() => onOpenTest(test.id)}
                     />

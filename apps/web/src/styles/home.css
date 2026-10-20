@@ -29,8 +29,21 @@
 
 /* ---- The page Home sits in -------------------------------------------- */
 
+/* D21: Home never scrolls. The bound is on the PAGE, not on the child —
+   the page's own padding then comes out of its own border box, so this rule
+   needs to know only the bar's height and nothing about the gutters.
+
+   It said `max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)))`
+   on `.home` until fix round 1. That was correct only because
+   `.shell > .shell__page` happens to declare `padding-block: var(--space-xl)`,
+   with nothing holding the two equal: when 6.5e re-grounds the page track,
+   a change to that padding would silently push Home past the viewport and
+   scroll the document — the one thing D21 forbids — with the whole suite
+   green. One source of truth instead of a guard over two. */
 .shell__page:has(> .home) {
   background: var(--ground);
+  height: calc(100dvh - var(--shell-bar));
+  overflow: hidden;
 }
 
 /* And the frame around it. shell.css deliberately paints no background on
@@ -45,24 +58,25 @@
   background: var(--ground-2);
 }
 
-/* D21: Home never scrolls. The bar is 56px (--shell-bar, declared on .shell
-   and inherited here) and the page adds --space-xl above and below, so
-   100dvh minus those three is exactly the room .home may take. Stated as
-   arithmetic over shell.css's own two constants rather than as a magic
-   number, and it holds at 400px too: D3a changes padding-inline below 719px
-   and leaves padding-block alone.
+/* Fills the box the rule above bounds, and never more: `flex: 1` takes the
+   page's content height and `min-height: 0` is the first link in the chain
+   that lets the two scroll areas inside actually shrink (a flex item's
+   default min-height is auto, which is its content). The other two links
+   are on `.home__panes` and `.home__scroll` below.
 
-   overflow: hidden is also what answers shell.css's documented BFC hazard.
-   Below 719px that file gives every direct child of the page
-   `overflow-x: auto`, which would make .home its own scroll container — a
-   page inside the page, which is the exact thing D21 forbids. The selector
-   is `.shell__page > .home` (0,2,0) so it beats `.shell__page > *` (0,1,0)
-   on specificity rather than on import order. */
+   `overflow: hidden` stays here, and not only on the page: it is what
+   answers shell.css's documented BFC hazard. Below 719px that file gives
+   every direct child of the page `overflow-x: auto`, which would make
+   `.home` its own scroll container — a page inside the page, the exact
+   thing D21 forbids. The selector is `.shell__page > .home` (0,2,0) so it
+   beats `.shell__page > *` (0,1,0) on specificity rather than on import
+   order. */
 .shell__page > .home {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -328,6 +342,16 @@
 .home__row:hover .home__row-action,
 .home__row-action:focus-visible {
   opacity: 1;
+}
+
+/* Hover is the state that reveals the button, and the row under it is
+   --surface plus a translucent --wash. An opaque --surface fill therefore
+   read as a hard-edged rectangle one step off its own row. The wash is
+   layered as a background IMAGE rather than as an inset box-shadow so it
+   cannot out-specify `.home :focus-visible`'s ring on a row that is both
+   hovered and focused. */
+.home__row:hover .home__row-action {
+  background-image: linear-gradient(var(--wash), var(--wash));
 }
 
 /* ---- Marking, not filtering (D21) -------------------------------------- */

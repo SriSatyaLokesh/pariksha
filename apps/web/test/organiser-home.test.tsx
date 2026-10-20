@@ -278,9 +278,53 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     // The element the stylesheet bounds is the element Home renders.
     expect(container.querySelector(".home")).not.toBeNull();
 
+    // The bound is on the PAGE's own border box, so the gutters come out of
+    // it and nothing here restates shell.css's padding.
+    const page = declaredFor(".shell__page:has(> .home)");
+    expect(page.some((decl) => /^height:.*100dvh/.test(decl))).toBe(true);
+    expect(page).toContain("overflow: hidden");
+    // And nothing reintroduces a second, duplicated bound on the child.
+    expect(declaredFor(".shell__page > .home").join(";")).not.toMatch(/max-height/);
+  });
+
+  it("lets the page's height reach the panes", async () => {
+    await openHome();
+
+    // The first link in the min-height chain: without `flex: 1` the child
+    // is content-sized inside a clipped page, and without `min-height: 0`
+    // the scroll areas below can never shrink, which pushes the strip off
+    // screen rather than scrolling a pane.
     const rules = declaredFor(".shell__page > .home");
+    expect(rules).toContain("flex: 1");
+    expect(rules).toContain("min-height: 0");
+    // Kept on the child too: shell.css gives every direct child of the page
+    // `overflow-x: auto` below 719px, which would otherwise make `.home`
+    // its own scroll container.
     expect(rules).toContain("overflow: hidden");
-    expect(rules.some((decl) => /^max-height:.*100dvh/.test(decl))).toBe(true);
+  });
+
+  // The three fixes a browser probe found. jsdom cannot see any of them, so
+  // without these a later edit restores the regression with the suite green.
+  it("keeps the row action out of the flow, so it costs a row no width", async () => {
+    await openHome();
+
+    expect(declaredFor(".home__row-action")).toContain("position: absolute");
+  });
+
+  it("makes the reason give way before the subject does", async () => {
+    await openHome();
+
+    expect(declaredFor(".home__row-reason")).toContain("flex: 0 4 auto");
+  });
+
+  it("paints the shell frame Home sits in, not only the page", async () => {
+    await openHome();
+
+    // The rail is `align-self: start`, so the grid cell below it shows
+    // `.shell`'s own background — a cream wedge under the nav without this.
+    expect(declaredFor(".shell:has(> .shell__page > .home)")).toContain(
+      "background: var(--ground-2)",
+    );
   });
 
   it("scrolls the two panes inside themselves instead", async () => {
@@ -392,7 +436,10 @@ describe("the strip selects rather than reads out (D21, D21b)", () => {
     await openHome({ tests: async () => mixed });
 
     fireEvent.click(screen.getByRole("button", { name: "Closing, 1" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Closing: 1 row marked.");
+    // Tests, not rows: the pill counts agenda rows and the marking also
+    // reaches the second pane, so "rows" was a number that matched nothing
+    // on screen.
+    expect(screen.getByRole("status")).toHaveTextContent("Closing: 1 test marked.");
 
     fireEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(screen.getByRole("status")).toHaveTextContent("Selection cleared.");
@@ -436,6 +483,69 @@ describe("the agenda survives the times it is given (D6b)", () => {
     expect(screen.queryByText("This week")).toBeNull();
     expect(subjectsIn(recent())).toEqual(["No window", "Already shut", "Unparseable"]);
     expect(screen.getByRole("button", { name: "Closing, 0" })).toBeDisabled();
+  });
+});
+
+describe("a test that is over is not on the agenda (D6b)", () => {
+  // `listTests` applies no status filter unless it is passed one, and `D6`
+  // forbids Home passing one — so both of these arrive on the wire like any
+  // other test, and both were on the agenda before fix round 1.
+  const over = [
+    // Archiving an abandoned draft is how an organiser clears it. This one
+    // sat under "Never published / Whenever you like" for ever.
+    aTest({ id: "binned", name: "Abandoned sketch", state: "archived", currentVersion: null }),
+    // `closeTest` goes through `setTestStatus`, which writes `status` and
+    // nothing else — so the published `closes_at` outlives an early close
+    // and this arrives as closed with a future `closesAt`. Home put it
+    // under Closing, with a risk dot, saying a shut test was about to shut.
+    aTest({
+      id: "shut-early",
+      name: "Pulled mock",
+      state: "closed",
+      closesAt: NOW + 2 * HOUR,
+    }),
+  ];
+
+  it("leaves an archived draft and an early-closed test off it", async () => {
+    const { container } = await openHome({ tests: async () => over });
+
+    expect(container.querySelectorAll(".home__row-subject")).toHaveLength(2);
+    expect(agenda().querySelectorAll(".home__row")).toHaveLength(0);
+    expect(within(agenda()).getByText("Nothing needs you right now.")).toBeVisible();
+    // Both are still in Recently edited — nothing is hidden, they are only
+    // not things that need you.
+    expect(subjectsIn(recent())).toEqual(["Abandoned sketch", "Pulled mock"]);
+  });
+
+  it("counts nothing on any pill, so none of them is live", async () => {
+    await openHome({ tests: async () => over });
+
+    for (const label of [
+      "Closing",
+      "Awaiting review",
+      "Changes since publish",
+      "Never published",
+    ]) {
+      expect(screen.getByRole("button", { name: `${label}, 0` })).toBeDisabled();
+    }
+  });
+});
+
+describe("a load that fails says so once (and stops saying Loading)", () => {
+  it("replaces the loading state with the alert rather than showing both", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          tests: async () => {
+            throw new Error("offline");
+          },
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not load/i);
+    await waitFor(() => expect(screen.queryByText("Loading…")).toBeNull());
   });
 });
 
