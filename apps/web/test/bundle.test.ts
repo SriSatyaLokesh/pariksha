@@ -298,10 +298,32 @@ describe("the candidate runtime's exam entry (#65, P6.1)", () => {
     }
   });
 
-  it("the exam entry cannot reach the test builder or the QR generator", () => {
-    const modules = staticModules(entryChunks, "exam").join("\n");
-    expect(modules).not.toContain("qrcode-generator");
-    expect(modules).not.toMatch(/src[\\/]components[\\/]testbuilder/);
+  // Phase 6 Task 6 (#70): an ALLOWLIST, for the same reason the authoring
+  // one below is an allowlist. `RegistrationForm.tsx` is **the one
+  // registration renderer** (ADR 0004's shape, and the component's own
+  // header): the builder's preview and the candidate's registration screen
+  // mount the same module, which is what stops the preview drifting from
+  // what a candidate actually meets. Every other module under
+  // src/components/testbuilder is organiser-only until somebody
+  // deliberately adds it here, which is a line a reviewer sees.
+  it("no test-builder module but the shared renderer reaches the exam entry", () => {
+    const SHARED = ["RegistrationForm.tsx"];
+    const modules = staticModules(entryChunks, "exam");
+    const leaked = modules
+      .filter((id) => /src[\\/]components[\\/]testbuilder[\\/]/.test(id))
+      .filter((id) => !SHARED.some((name) => id.includes(name)));
+    expect(leaked).toEqual([]);
+    expect(modules.join("\n")).not.toContain("qrcode-generator");
+  });
+
+  // The positive control for the allowlist: the shared renderer IS
+  // reached, so "no builder code at all" would be a different and wrong
+  // guard — a candidate screen that hand-rolled its own form would sail
+  // straight through it.
+  it("the exam entry does reach the one registration renderer", () => {
+    expect(staticModules(entryChunks, "exam").join("\n")).toMatch(
+      /src[\\/]components[\\/]testbuilder[\\/]RegistrationForm/,
+    );
   });
 
   // Phase 6 Task 7 (#71). The candidate side legitimately shares three
