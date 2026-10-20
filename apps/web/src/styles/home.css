@@ -33,6 +33,18 @@
   background: var(--ground);
 }
 
+/* And the frame around it. shell.css deliberately paints no background on
+   `.shell` itself — near-black behind a cream screen's near-black ink — and
+   the rail is `align-self: start`, so the grid cell BELOW the rail shows
+   whatever `.shell` has. Against a cream page that was invisible; against
+   Home's ground it is a cream wedge under the nav, which a browser probe
+   caught and jsdom structurally cannot. --ground-2 is the rail's own fill,
+   so the column reads as one surface. Scoped to Home for the same reason
+   the rule above is: every other screen is still cream until 6.5e. */
+.shell:has(> .shell__page > .home) {
+  background: var(--ground-2);
+}
+
 /* D21: Home never scrolls. The bar is 56px (--shell-bar, declared on .shell
    and inherited here) and the page adds --space-xl above and below, so
    100dvh minus those three is exactly the room .home may take. Stated as
@@ -200,6 +212,7 @@
    The subject takes the free space and ellipsises; nothing wraps, so the
    row is the same height whatever it holds. */
 .home__row {
+  position: relative;
   display: flex;
   align-items: center;
   gap: var(--space-base);
@@ -249,6 +262,7 @@
 }
 
 .home__row-subject {
+  min-width: 0;
   color: var(--ink);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
@@ -264,7 +278,17 @@
    opacity 0.8 measures 3.54:1 on the dark surface and 3.52:1 on the light
    one, which clears the 3:1 the recession is bounded by but not the 4.5:1
    DESIGN.md asks of body text. --ink-2 clears both (5.51 / 5.07). */
+/* Gives way four times faster than the subject does. Both have `nowrap`
+   from the row, so without this the reason's min-content width is its whole
+   text and the subject absorbs every pixel of the squeeze — at 400px that
+   left the subject reading "Place…", which a browser probe caught. The
+   reason is a fixed four-word vocabulary and survives an ellipsis; a test's
+   name does not. */
 .home__row-reason {
+  flex: 0 4 auto;
+  min-width: 6ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--ink-2);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
@@ -274,14 +298,20 @@
 }
 
 /* D21a: the reveal is opacity ALONE, never visibility, so the button stays
-   tabbable and tabbing onto one reveals it. */
+   tabbable and tabbing onto one reveals it.
+
+   Out of the flow, at the row's end. In the flow it reserved ~68px of every
+   row for a control that is invisible until you reach for it, and at 400px
+   that was the difference between a readable subject and "Place…" — a
+   browser probe caught it. It fills with --surface so the revealed button
+   never sits on top of the text it covers, and it is inside the row's own
+   box, so D21a's "a row action can never be clipped" still holds. */
 .home__row-action {
-  /* The action sits at the row's end; the subject and the reason share what
-     is left of the line, and the subject is the half that ellipsises. */
-  margin-inline-start: auto;
+  position: absolute;
+  inset-inline-end: var(--space-base);
   flex: none;
   opacity: 0;
-  background: none;
+  background: var(--surface);
   border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-xs);
   padding-inline: var(--space-base);
