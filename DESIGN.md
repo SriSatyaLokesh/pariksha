@@ -3,7 +3,7 @@ version: alpha
 name: Pariksha
 website: "https://github.com/SriSatyaLokesh/pariksha"
 description: >-
-  An open-source exam platform whose design system treats a single saturated vermilion (Voltage #e24c18) as a canvas rather than an accent — but only where a candidate is not under a running clock. Marketing, landing and finish pages put the full-bleed voltage block behind a 56px / weight 500 Anek Latin display headline in cream #fffbf5, with a fully-rounded cream pill CTA beneath. The moment an attempt starts, the system inverts: the test runner is cream and ink, hairline-ruled, and the voltage survives only as the "you are here" marker in the question palette and the focus ring on an answer row. JetBrains Mono carries every label, timer, attempt reference and code sample; Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
+  An open-source exam platform whose design system grounds the organiser and the marketing surface in one world — the Signal ground and its single green accent, in two measured palettes: dark (signal-*, accent #19e68c) and light (signal-l-*, accent #07744a, because #19e68c is 1.60:1 on any light ground and illegal there). Bricolage Grotesque carries display, Inter carries body, and JetBrains Mono carries every id, count, label, timer and code sample. The candidate runtime is the one place the old world survives: cream #fffbf5 and ink, hairline-ruled, with the saturated vermilion (Voltage #e24c18) reduced to exactly two jobs — the "you are here" marker in the question palette and the focus ring on an answer row. The two never appear on one screen, and that separation is what lets state-answered keep its green in the cream runtime while the accent carries positive meaning on the organiser. Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
 
 colors:
   voltage: "#e24c18"
@@ -30,6 +30,7 @@ colors:
   signal-surface-2: "#141e19"
   signal-line: "#1c2922"
   signal-line-2: "#2a3b32"
+  signal-line-strong: "#5a7465"
   signal-text: "#eaf2ed"
   signal-text-2: "#9db0a6"
   signal-text-3: "#76887f"
@@ -38,6 +39,21 @@ colors:
   signal-accent-ink: "#04140c"
   signal-flag-review: "#f59e0b"
   signal-flag-risk: "#f87171"
+  signal-l-bg: "#f5f9f7"
+  signal-l-bg-2: "#eef4f1"
+  signal-l-surface: "#ffffff"
+  signal-l-surface-2: "#eef4f1"
+  signal-l-line: "#dde7e2"
+  signal-l-line-2: "#c6d5cd"
+  signal-l-line-strong: "#73907f"
+  signal-l-text: "#0b1a13"
+  signal-l-text-2: "#3b4f46"
+  signal-l-text-3: "#5c6f66"
+  signal-l-accent: "#07744a"
+  signal-l-accent-deep: "#0a8f57"
+  signal-l-accent-ink: "#ffffff"
+  signal-l-flag-review: "#8a5f00"
+  signal-l-flag-risk: "#b3261e"
   scrim: "rgba(35, 31, 29, 0.55)"
   shadow: "#231f1d"
 
