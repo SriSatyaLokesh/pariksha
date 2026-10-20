@@ -3,6 +3,7 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   GROUNDS,
+  type Ground,
   SEMANTIC_NAMES,
   THEME_SELECTOR,
   declarations,
@@ -50,13 +51,20 @@ function selectorsAssigning(names: readonly string[], css: string): string[] {
 
 /** The custom properties a raw value reads, e.g. `--color-signal-accent`. */
 function referencedTokens(value: string): string[] {
-  return [...value.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].map((m) => m[1]);
+  return [...value.matchAll(/var\(\s*(--[a-z0-9-]+)/gi)].flatMap((m) =>
+    m[1] === undefined ? [] : [m[1]],
+  );
+}
+
+/** What `theme.css` gives `name` on `ground`; "" if it gives it nothing. */
+function valueOf(ground: Ground, name: string): string {
+  return theme[ground][name] ?? "";
 }
 
 /** The one mix percentage in a `color-mix()` value, or null. */
 function mixPercent(value: string): number | null {
   const match = /(\d+(?:\.\d+)?)%/.exec(value);
-  return match ? Number(match[1]) : null;
+  return match?.[1] === undefined ? null : Number(match[1]);
 }
 
 describe("theme.css names both grounds (D20)", () => {
@@ -126,10 +134,10 @@ describe("neither ground can reach into the other's palette (D1)", () => {
 
   it("reads a real mapping, so the two assertions above are not vacuous", () => {
     expect(SEMANTIC_NAMES.length).toBeGreaterThan(0);
-    expect(referencedTokens(theme.dark["--accent"])).toEqual([
+    expect(referencedTokens(valueOf("dark", "--accent"))).toEqual([
       "--color-signal-accent",
     ]);
-    expect(referencedTokens(theme.light["--accent"])).toEqual([
+    expect(referencedTokens(valueOf("light", "--accent"))).toEqual([
       "--color-signal-l-accent",
     ]);
   });
@@ -141,18 +149,18 @@ describe("the field is a dark-ground device and is allowed to disappear (D20a)",
   // two designs. So: on dark the glow is louder than the ambient wash; on
   // light it is no louder.
   it("the glow outweighs the ambient wash on dark", () => {
-    expect(mixPercent(theme.dark["--glow"]) ?? 0).toBeGreaterThan(
-      mixPercent(theme.dark["--wash"]) ?? 0,
+    expect(mixPercent(valueOf("dark", "--glow")) ?? 0).toBeGreaterThan(
+      mixPercent(valueOf("dark", "--wash")) ?? 0,
     );
-    expect(mixPercent(theme.dark["--glow-strong"]) ?? 0).toBeGreaterThan(
-      mixPercent(theme.dark["--glow"]) ?? 0,
+    expect(mixPercent(valueOf("dark", "--glow-strong")) ?? 0).toBeGreaterThan(
+      mixPercent(valueOf("dark", "--glow")) ?? 0,
     );
   });
 
   it("the glow is no louder than the ambient wash on light", () => {
     for (const name of ["--glow", "--glow-strong"]) {
-      expect(mixPercent(theme.light[name]) ?? Infinity, name).toBeLessThanOrEqual(
-        mixPercent(theme.light["--wash"]) ?? 0,
+      expect(mixPercent(valueOf("light", name)) ?? Infinity, name).toBeLessThanOrEqual(
+        mixPercent(valueOf("light", "--wash")) ?? 0,
       );
     }
   });
