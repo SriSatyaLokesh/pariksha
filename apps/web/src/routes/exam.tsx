@@ -14,10 +14,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AttemptPaper, CandidateQuestion, LandingPayload, RunClient } from "../lib/run";
-import { Runner, readMarked, writeMarked } from "../components/exam/Runner";
+import { Runner, firstOfNextSection, readMarked, writeMarked } from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
 import { createSaveQueue, type SaveState } from "../lib/queue";
+import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -298,8 +299,39 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
    * view, and calling it in an effect's cleanup would kill the queue on
    * mount under `StrictMode`, which is how this page really runs.
    */
+  /**
+   * `AC-13`'s anchor, and **Review Focus 4**.
+   *
+   * The server's own reading of how much time is left, stamped with the
+   * `performance.now()` at which it arrived. Nothing here ever stores an
+   * absolute deadline, so there is no expression anywhere that a change
+   * to the system clock could move — see `components/exam/Clock.tsx`.
+   */
+  const [anchor, setAnchor] = useState<ClockAnchor>(() =>
+    anchorFrom(paper.remainingMs, paper.sectionRemainingMs),
+  );
+
   const queue = useMemo(
-    () => createSaveQueue(paper.attemptId, (save) => client.putAnswer(save), undefined, paper.clientSeq),
+    () =>
+      createSaveQueue(
+        paper.attemptId,
+        async (save) => {
+          const answer = await client.putAnswer(save);
+          // Every save re-anchors the countdown, which is why the route
+          // carries `remainingMs` at all: a tab that slept for an hour is
+          // corrected by the next keystroke rather than by a reload. It
+          // is **absent on a refusal** (Task 8's deviation 4) — the
+          // server answered no reading, and re-anchoring to an invented
+          // zero would be worse than not re-anchoring.
+          if (answer.remainingMs !== undefined) {
+            const reading = answer.remainingMs;
+            setAnchor((previous) => reanchor(previous, reading));
+          }
+          return answer;
+        },
+        undefined,
+        paper.clientSeq,
+      ),
     [paper.attemptId, paper.clientSeq, client],
   );
 
@@ -385,9 +417,33 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
         save(questionId, null);
       }}
       questionSlot={questionSlot}
-      // Task 9's clock. Empty rather than faked: a placeholder countdown
-      // is the one lie this screen must not tell.
-      clockSlot={<></>}
+      clockSlot={
+        <Clock
+          anchor={anchor}
+          warnAtMinutes={paper.warnAtMinutes}
+          onZero={() => {
+            // **Drain before submitting.** The queue may be holding
+            // answers the candidate made in time; submitting first would
+            // close the attempt and every one of them would come back a
+            // 409. `C-07`'s auto-submit is whichever of this and the
+            // server's next request happens first, so being a moment late
+            // here costs nothing and being early costs answers.
+            //
+            // ponytail: the `submit()` after the drain is Task 11's — the
+            // route does not exist yet. Until it does, the server's own
+            // materialisation on the next read is what closes the attempt
+            // (`GET /run/attempt`), so nothing is lost by the gap.
+            void queue.drain();
+          }}
+          onSectionZero={() => {
+            // `C-07` on the client: when the section's clock runs out the
+            // candidate is moved to the first question of the next one.
+            // The server's half is the refusal that names it.
+            const next = firstOfNextSection(paper, index);
+            if (next !== null) setIndex(next);
+          }}
+        />
+      }
       bannerSlot={<SaveBanner state={saveState} />}
     />
   );

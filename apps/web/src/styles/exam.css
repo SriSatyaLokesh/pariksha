@@ -311,6 +311,81 @@
   gap: 8px;
 }
 
+/* The countdown (AC-13, Task 9) — DESIGN.md's `timer-chip`.
+
+   Cream fill, hairline-strong border, tabular figures, and ONE swap to
+   `timer-chip-urgent` at the last warning mark. Nothing here pulses,
+   flashes or animates: DESIGN.md's "the timer never animates" is not a
+   preference, it is what keeps a candidate from reading motion under a
+   clock as lag or as a reload.
+
+   Colour is the third carrier, never the first: the digits themselves are
+   the primary signal, the mark is what a greyscale reader sees change at
+   each warning, and the sentence in `.exam-clock-announce` is what a
+   screen reader hears. */
+.exam-clocks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.exam-timer {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+}
+
+.exam-timer-label {
+  color: var(--color-ink-soft);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+}
+
+/* DESIGN.md, "Numbers never jitter": a countdown whose digits change
+   width every second pulls the eye away from the question, which is the
+   one thing a timer must not do. */
+.exam-timer-value {
+  color: var(--color-ink);
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-timer-numeric-size);
+  font-weight: var(--type-timer-numeric-weight);
+  font-variant-numeric: var(--type-timer-numeric-font-variant-numeric);
+  line-height: var(--type-timer-numeric-line-height);
+}
+
+/* The non-colour carrier: one mark per warning passed. 12px bold is below
+   the 18.66px large-text floor, so it is held to 4.5:1. */
+.exam-timer-mark {
+  color: var(--color-flag-risk);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-timer.timer-chip-urgent {
+  border-color: var(--color-flag-risk);
+}
+
+.exam-timer.timer-chip-urgent .exam-timer-value {
+  color: var(--color-flag-risk);
+  font-size: var(--type-timer-numeric-size);
+  font-weight: var(--type-timer-numeric-weight);
+}
+
+.exam-clock-announce {
+  margin: 0;
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
 /* The save banner (C-05, Task 8).
 
    Four states, and each one carries a word AND a mono mark, so the

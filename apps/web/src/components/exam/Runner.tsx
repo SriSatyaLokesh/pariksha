@@ -25,6 +25,24 @@ export function flatQuestions(paper: AttemptPaper): CandidateQuestion[] {
   return paper.sections.flatMap((section) => section.questions);
 }
 
+/**
+ * Which section each flat index falls in, as one array — the browser's
+ * copy of the server's `sectionIndexOf`, over the same pinned order.
+ */
+export function sectionOfIndex(paper: AttemptPaper): number[] {
+  return paper.sections.flatMap((section, at) => section.questions.map(() => at));
+}
+
+/**
+ * The first question of the section after the one `index` is in, or null
+ * when there is no next section. `C-07`'s auto-advance target.
+ */
+export function firstOfNextSection(paper: AttemptPaper, index: number): number | null {
+  const sections = sectionOfIndex(paper);
+  const next = sections.indexOf((sections[index] ?? 0) + 1);
+  return next === -1 ? null : next;
+}
+
 function stateOf(
   question: CandidateQuestion,
   at: number,

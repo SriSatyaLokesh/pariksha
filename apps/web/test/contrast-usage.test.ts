@@ -298,6 +298,18 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   '.exam-save-banner[data-state="saved"]': "cream",
   '.exam-save-banner[data-state="offline"]': "cream",
   '.exam-save-banner[data-state="refused"]': "cream",
+  // The countdown (Task 9). `.exam-timer` fills itself with cream
+  // (DESIGN.md's `timer-chip`), so every colour inside it renders on
+  // cream — including the urgent swap, the one colour change DESIGN.md
+  // allows a timer to make. `.exam-clock-announce` sits on the runner
+  // bar, which fills nothing, so it is on the page's cream too. The mark
+  // renders at 12px/700, below the large-text floor, and is held to the
+  // same 4.5:1 as everything else here.
+  ".exam-timer-label": "cream",
+  ".exam-timer-value": "cream",
+  ".exam-timer-mark": "cream",
+  ".exam-timer.timer-chip-urgent .exam-timer-value": "cream",
+  ".exam-clock-announce": "cream",
   ".exam-confirm": "canvas",
   ".exam-confirm-danger": "canvas",
   // DESIGN.md's `palette-square` family. Each variant fills itself from
