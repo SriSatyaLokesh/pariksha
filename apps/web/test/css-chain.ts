@@ -102,6 +102,11 @@ export const SEMANTIC_NAMES = [
   "--ink-2",
   "--ink-3",
   "--accent",
+  // Added in fix round 1, before 6.5c starts: 6.5c needs a pressed fill for
+  // the primary button, both generated tokens already exist, and adding a
+  // contract name after a consuming plan has started is a change to three
+  // plans rather than a line in a list.
+  "--accent-deep",
   "--accent-ink",
   "--accent-wash",
   "--warn",

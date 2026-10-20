@@ -61,9 +61,9 @@ function valueOf(ground: Ground, name: string): string {
   return theme[ground][name] ?? "";
 }
 
-/** The one mix percentage in a `color-mix()` value, or null. */
-function mixPercent(value: string): number | null {
-  const match = /(\d+(?:\.\d+)?)%/.exec(value);
+/** The alpha of a `rgb(from … r g b / a)` composite, or null. */
+function alphaOf(value: string): number | null {
+  const match = /\/\s*([0-9.]+)\s*\)\s*$/.exec(value);
   return match?.[1] === undefined ? null : Number(match[1]);
 }
 
@@ -96,10 +96,15 @@ describe("theme.css names both grounds (D20)", () => {
   });
 
   it("maps every semantic name to a generated token, never to a literal", () => {
+    // A plain token, or a composite over one in the repo's single alpha
+    // idiom — `rgb(from var(--color-NAME) r g b / a)`, the form base.css,
+    // primitives.css, signal.css and exam.css already use. `color-mix()` is
+    // legal CSS and passes the colour-literal gate, but a second idiom in
+    // the file three later plans read teaches the wrong pattern three times.
     for (const ground of GROUNDS) {
       for (const [name, value] of Object.entries(theme[ground])) {
         expect(value, `${ground} ${name}`).toMatch(
-          /^var\(--color-|^color-mix\(|^rgb\(var\(/,
+          /^var\(--color-|^rgb\(from var\(--color-|^rgb\(var\(/,
         );
       }
     }
@@ -149,18 +154,18 @@ describe("the field is a dark-ground device and is allowed to disappear (D20a)",
   // two designs. So: on dark the glow is louder than the ambient wash; on
   // light it is no louder.
   it("the glow outweighs the ambient wash on dark", () => {
-    expect(mixPercent(valueOf("dark", "--glow")) ?? 0).toBeGreaterThan(
-      mixPercent(valueOf("dark", "--wash")) ?? 0,
+    expect(alphaOf(valueOf("dark", "--glow")) ?? 0).toBeGreaterThan(
+      alphaOf(valueOf("dark", "--wash")) ?? 0,
     );
-    expect(mixPercent(valueOf("dark", "--glow-strong")) ?? 0).toBeGreaterThan(
-      mixPercent(valueOf("dark", "--glow")) ?? 0,
+    expect(alphaOf(valueOf("dark", "--glow-strong")) ?? 0).toBeGreaterThan(
+      alphaOf(valueOf("dark", "--glow")) ?? 0,
     );
   });
 
   it("the glow is no louder than the ambient wash on light", () => {
     for (const name of ["--glow", "--glow-strong"]) {
-      expect(mixPercent(valueOf("light", name)) ?? Infinity, name).toBeLessThanOrEqual(
-        mixPercent(valueOf("light", "--wash")) ?? 0,
+      expect(alphaOf(valueOf("light", name)) ?? Infinity, name).toBeLessThanOrEqual(
+        alphaOf(valueOf("light", "--wash")) ?? 0,
       );
     }
   });

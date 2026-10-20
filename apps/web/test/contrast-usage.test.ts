@@ -20,6 +20,7 @@ import {
   parseRuleBodies,
   readResolvedCss,
   readThemeMap,
+  SEMANTIC_NAMES,
   GROUNDS,
   THEME_SELECTOR,
   type Ground,
@@ -957,7 +958,58 @@ const THEME_PAIRS: Array<{ fg: string; bg: string; threshold: number }> = [
   ...THEME_GROUNDS.map((bg) => ({ fg: "--edge-strong", bg, threshold: 3 })),
 ];
 
+// Every contract name THEME_PAIRS does not score, and why. The test below
+// requires each one to be in exactly one of the two lists, so a name added
+// to the contract later cannot arrive unaudited and unnoticed — it fails
+// here until someone either scores it or writes down why it is not scored.
+const UNSCORED_BY_DESIGN: Record<string, string> = {
+  // Grounds, not foregrounds: every pair above is already read ON them.
+  "--ground": "a ground, scored as the bg of every pair above",
+  "--ground-2": "a ground, scored as the bg of every pair above",
+  "--surface": "a ground, scored as the bg of every pair above",
+  "--surface-2": "a ground, scored as the bg of every pair above",
+  // D1: decoration, 1.67:1 and 1.54:1 on the dark ground, 1.43:1 and 1.37:1
+  // on the light. --edge-strong exists precisely because these two cannot
+  // carry a boundary that has to be seen, and IS scored, at 3:1.
+  "--edge": "decoration only; a visible boundary takes --edge-strong",
+  "--edge-2": "decoration only; a visible boundary takes --edge-strong",
+  // Translucent composites: they have no fixed resolved colour until they
+  // are composited over whatever is behind them, which this file has no
+  // cascade engine to determine. The screen that lays one down owns its
+  // pair, and 6.5c/d/e's own SURFACE entries are where that is caught.
+  "--accent-wash": "translucent; resolves only once composited",
+  "--warn-wash": "translucent; resolves only once composited",
+  "--risk-wash": "translucent; resolves only once composited",
+  "--wash": "translucent; resolves only once composited",
+  "--wash-2": "translucent; resolves only once composited",
+  "--glow": "translucent, and D20a lets it vanish on light",
+  "--glow-strong": "translucent, and D20a lets it vanish on light",
+  // MEASURED AND UNRESOLVED, flagged to the controller in the task report.
+  // --accent-ink on --accent-deep is 6.21:1 on the dark ground and 4.13:1
+  // on the light one, under the 4.5:1 a button label needs. Scoring it here
+  // would put this suite red; lowering the bar to make it green is the one
+  // thing AG2 forbids. So the pair is named, not scored, and the fix is a
+  // palette change in DESIGN.md (a darker signal-l-accent-deep) rather than
+  // anything this file can do. 6.5c must not put --accent-ink on
+  // --accent-deep on the light ground until that lands.
+  "--accent-deep":
+    "light --accent-ink on it is 4.13:1, under 4.5 — palette fix needed, see task-3-report.md",
+};
+
 describe("theme.css's semantic mapping clears its thresholds on both grounds (D1, D20)", () => {
+  it("accounts for every contract name, scored or deliberately not", () => {
+    const scored = new Set(THEME_PAIRS.flatMap(({ fg, bg }) => [fg, bg]));
+    const unaccounted = SEMANTIC_NAMES.filter(
+      (name) => !scored.has(name) && !(name in UNSCORED_BY_DESIGN),
+    );
+    expect(unaccounted).toEqual([]);
+    // And nothing in the ledger that is no longer a contract name.
+    const stale = Object.keys(UNSCORED_BY_DESIGN).filter(
+      (name) => !(SEMANTIC_NAMES as readonly string[]).includes(name),
+    );
+    expect(stale).toEqual([]);
+  });
+
   for (const ground of GROUNDS) {
     for (const { fg, bg, threshold } of THEME_PAIRS) {
       it(`[${ground}] ${fg} on ${bg} clears ${threshold}:1`, () => {
