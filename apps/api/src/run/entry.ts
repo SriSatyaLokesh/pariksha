@@ -80,9 +80,13 @@ export const registrationHash = (testVersionId: string, token: string): Promise<
 export interface EntryClaim {
   testVersionId: string;
   workspaceId: string;
-  /** Present when the mode verified one: `email_code` and `sso` always,
-   *  `invite_only` when the list row's prefill carried one. */
-  email?: string;
+  // **No verified address here, deliberately.** One was carried and read
+  // nowhere, and an unread field beside `listRef` is how the laundering
+  // at `/access` survived review: the `email_code` leg wrote down the
+  // address it had proved and bound `listRef` to the string the caller
+  // typed. What a mode verifies is now spent *in that leg*, on resolving
+  // the row, rather than stored for a later reader who never came — and
+  // one address less sits in `auth_token.payload_json` for 30 minutes.
   /** The `candidate` row (`source: "list"`) this entry is already bound
    *  to, when the mode knew it. Task 3 reconciles the registration with
    *  that row rather than inserting beside it. */

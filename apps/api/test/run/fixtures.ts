@@ -260,6 +260,22 @@ export const INVITED_CANDIDATES: NewCandidate[] = [
   { externalId: "21CS0151", setLabel: "A", formValues: { full_name: "Esha" } },
 ];
 
+/** A form whose identity field is the email — what a listed `email_code`
+ *  or `sso` test needs, because the verified address is the only value
+ *  those gates hold. */
+export const EMAIL_IDENTITY_FORM = {
+  fields: [
+    { id: "email", type: "email" as const, label: "College email address", unique: true },
+    { id: "full_name", type: "short_text" as const, label: "Full name" },
+  ],
+};
+
+/** Two listed addresses on `gauntlet`: one to be, and one to try to be. */
+export const GAUNTLET_CANDIDATES: NewCandidate[] = [
+  { externalId: "ananya@vce.ac.in", setLabel: "A", formValues: { full_name: "Ananya" } },
+  { externalId: "mallory@vce.ac.in", setLabel: "B", formValues: { full_name: "Mallory" } },
+];
+
 const openWindow = {
   duration_minutes: 30,
   opens_at: iso(FIXED_NOW - DAY),
@@ -391,6 +407,12 @@ export async function seedAccessModeTests(deps: AppDeps, workspaceId: string): P
   // Every gate at once — a domain rule, a candidate list and a mode whose
   // own gate consumes a token. It is the only combination that spends the
   // declared `/access` budget, so it is what the budget is measured on.
+  //
+  // **Its list is keyed on the email**, like `sso-listed`'s and for the
+  // same reason: `email_code` checks `T-21` against the address the code
+  // proved, so a roll-number list in this mode names nobody the gate
+  // holds. Two rows, because the laundering test needs a second listed
+  // candidate to try to be.
   const gauntlet = await seedTest(deps, workspaceId, {
     name: "Gauntlet",
     slug: "gauntlet",
@@ -402,12 +424,12 @@ export async function seedAccessModeTests(deps: AppDeps, workspaceId: string): P
           candidate_list: "list.csv",
           allow_email_domains: ["*.ac.in"],
         },
-        registration_form: LISTED_FORM,
+        registration_form: EMAIL_IDENTITY_FORM,
       },
       sections: oneSection,
     },
   });
-  await replaceCandidateList(deps.db, workspaceId, gauntlet, LISTED_CANDIDATES, FIXED_NOW);
+  await replaceCandidateList(deps.db, workspaceId, gauntlet, GAUNTLET_CANDIDATES, FIXED_NOW);
 }
 
 // --- Task 3 (#67, P6.3): consent and registration ----------------------

@@ -18,6 +18,7 @@ import {
   addMembership,
   closeClient,
   createUser,
+  getCandidateByExternalId,
   listTests,
   resolvePublishedTest,
 } from "@pariksha/db";
@@ -313,10 +314,13 @@ it("invite_only: a link minted for one test is not even tried at another, let al
 it("invite_only: the entry token an invite yields carries the list row it was minted for", async () => {
   const url = await mintOne("21CS0150");
   const { entryToken } = (await (await redeem(url)).json()) as { entryToken: string };
-  expect(await readEntryToken(deps, await versionOf("invited"), entryToken)).toMatchObject({
-    listRef: expect.stringMatching(/^cnd_/),
-    email: "deepa@vce.ac.in",
-  });
+  const claim = await readEntryToken(deps, await versionOf("invited"), entryToken);
+  expect(claim).toMatchObject({ listRef: expect.stringMatching(/^cnd_/) });
+  // The row, and **only** the row. `21CS0150`'s prefill carries
+  // `deepa@vce.ac.in`, which the claim used to copy and nothing ever read
+  // back — the unread field beside `listRef` that let the `email_code`
+  // leg prove one identity and bind another (final review, Critical 1).
+  expect(claim).not.toHaveProperty("email");
 });
 
 // --- T-21: the candidate list ------------------------------------------
@@ -370,18 +374,22 @@ it("email_code: six digits, emailed, 10-minute expiry, never stored in the clear
   expect((await post("/api/v1/run/alpha/otp/access", { email: "a@b.ac.in", otp: code })).status).toBe(401);
 });
 
-it("email_code: the right code inside the window yields an entry token carrying the address", async () => {
+it("email_code: the right code inside the window yields an entry token, and it carries no address", async () => {
   await post("/api/v1/run/alpha/otp/email-code", { email: "A@B.ac.in" });
   const code = sentCode();
   clock = T + EMAIL_CODE_TTL_MS - 1;
+  // Lower-cased on both sides, so a code sent to `A@B.ac.in` is
+  // redeemable at `a@b.ac.in`.
   const res = await post("/api/v1/run/alpha/otp/access", { email: "a@b.ac.in", otp: code });
   expect(res.status).toBe(200);
   const { entryToken } = (await res.json()) as { entryToken: string };
-  // Lower-cased on both sides, so a code sent to `A@B.ac.in` is redeemable
-  // at `a@b.ac.in` and the entry claim carries one spelling of it.
-  expect(await readEntryToken(deps, await versionOf("otp"), entryToken)).toMatchObject({
-    email: "a@b.ac.in",
-  });
+  const claim = await readEntryToken(deps, await versionOf("otp"), entryToken);
+  // What the mode verified is spent on resolving the list row inside the
+  // leg (there is none here), never written down for a reader who never
+  // came — so no address sits in `auth_token.payload_json` for 30
+  // minutes.
+  expect(claim).toMatchObject({ workspaceId: expect.stringMatching(/^wsp_/) });
+  expect(claim).not.toHaveProperty("email");
 });
 
 it("T2-I-2: a code issued to a padded address is redeemable, not dead on arrival", async () => {
@@ -429,6 +437,73 @@ it("email_code: an address outside the domain rule is refused before anything is
     message: expect.stringContaining("*.ac.in"),
   });
   expect(sent).toHaveLength(0);
+});
+
+// --- T-21 under email_code: the verified address is the identity -------
+
+/** A `gauntlet` list row's id, by the address it is keyed on. */
+const rowOf = async (externalId: string): Promise<string> =>
+  (await getCandidateByExternalId(deps.db, workspaceId, idOf("gauntlet"), externalId))?.id ?? "";
+
+/** A code at `email`, redeemed on `gauntlet` with whatever else is sent. */
+async function redeemOnGauntlet(email: string, body: Body = {}): Promise<Response> {
+  await post("/api/v1/run/alpha/gauntlet/email-code", { email });
+  return post("/api/v1/run/alpha/gauntlet/access", { email, otp: sentCode(), ...body });
+}
+
+it("Critical 1: a code at your own inbox does not admit you as another listed candidate", async () => {
+  // The whole attack in three lines: Mallory is listed, asks for a code
+  // at her own address, and types Ananya's identifier at the gate. The
+  // binding this replaces — `listEntry(deps, test, input.identifier)`
+  // computed before the mode switch — answered 200 with Ananya's row in
+  // the claim, from which `/form` reissues Ananya's registration token
+  // and `/start` mints an attempt as her.
+  const stolen = await redeemOnGauntlet("mallory@vce.ac.in", { identifier: "ananya@vce.ac.in" });
+  expect(stolen.status).toBe(403);
+  expect(await stolen.json()).toMatchObject({ error: { code: REFUSALS.code_wrong.code } });
+
+  // And the honest redemption binds the row the *address* names.
+  const mine = await redeemOnGauntlet("mallory@vce.ac.in");
+  expect(mine.status).toBe(200);
+  const { entryToken } = (await mine.json()) as { entryToken: string };
+  const claim = await readEntryToken(deps, await versionOf("gauntlet"), entryToken);
+  expect(claim?.listRef).toBe(await rowOf("mallory@vce.ac.in"));
+  expect(claim?.listRef).not.toBe(await rowOf("ananya@vce.ac.in"));
+});
+
+it("T-21: an address absent from the list is refused like a wrong code, in the same bytes as a mismatch", async () => {
+  // `:334`'s assertion for the mode that verifies an address. Both
+  // refusals are `code_wrong` byte for byte: one says "you are not on
+  // this list" and the other "that is not you", and a gate that told
+  // them apart would enumerate the organiser's list to anyone holding a
+  // code at any address the domain rule allows.
+  const offList = await redeemOnGauntlet("stranger@vce.ac.in");
+  const mismatch = await redeemOnGauntlet("mallory@vce.ac.in", { identifier: "ananya@vce.ac.in" });
+  expect(offList.status).toBe(403);
+  expect(await offList.text()).toBe(await mismatch.text());
+});
+
+it("T-21: the list is checked after the code is spent, so a stranger learns nothing without one", async () => {
+  // A wrong code answers `code_expired` (401) and an off-list address
+  // answers `code_wrong` (403) — so checking the list *before* the
+  // redemption would make the pair a membership oracle for a caller who
+  // holds no code at all. It is checked after, and this is what pins
+  // the order.
+  await post("/api/v1/run/alpha/gauntlet/email-code", { email: "stranger@vce.ac.in" });
+  const guess = await post("/api/v1/run/alpha/gauntlet/access", {
+    email: "stranger@vce.ac.in",
+    otp: "000000",
+  });
+  expect(guess.status).toBe(401);
+  expect(await guess.json()).toMatchObject({ error: { code: REFUSALS.code_expired.code } });
+});
+
+it("T-21: a blank identifier is what the gate's own form calls it — optional", async () => {
+  // `email_code` reads the address, so the field `Registration.tsx`
+  // labels optional really is optional here; `link_code` is the mode
+  // that cannot do without it, which is what `candidateList` on the
+  // landing payload is for.
+  expect((await redeemOnGauntlet("ananya@vce.ac.in", { identifier: "" })).status).toBe(200);
 });
 
 // --- sso ---------------------------------------------------------------
@@ -482,7 +557,7 @@ it("sso: a verified address inside the domain rule gets an entry token, no user 
   expect(back.pathname).toBe("/alpha/sso");
   expect(
     await readEntryToken(deps, await versionOf("sso"), back.searchParams.get("entry") ?? ""),
-  ).toMatchObject({ email: "s@college.ac.in" });
+  ).toMatchObject({ testVersionId: await versionOf("sso") });
 });
 
 it("sso: an address outside allow_email_domains is refused and the rule is named", async () => {
@@ -740,10 +815,13 @@ it("measures the real subrequest cost of /access at its heaviest", async () => {
   const otp = sentCode();
   expect(
     await measure(() =>
+      // With an identifier typed, so the measurement covers the
+      // mismatch comparison too — which is why it is a comparison of
+      // normalised keys and not a second list read.
       asJson("/api/v1/run/alpha/gauntlet/access", {
         email: "ananya@vce.ac.in",
         otp,
-        identifier: "21CS0147",
+        identifier: "ananya@vce.ac.in",
       }),
     ),
   ).toBe(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/access"]);

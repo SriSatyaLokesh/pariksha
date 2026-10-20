@@ -29,9 +29,10 @@ export interface InvitePayload {
   /** The `candidate` row the invite was minted for — `source = "list"`. */
   candidateId: string;
   externalId: string;
-  /** Resolved at mint time out of `form_values_json`, so the gate does not
-   *  re-read the list row to put it in the entry claim. */
-  email: string | null;
+  // No address: the gate put one in the entry claim and nothing ever read
+  // it back (Phase 6 final review, Critical 1). `MintedInvite.email` is
+  // the live one — it is what the organiser's response addresses the link
+  // to, and it is resolved from the list row at mint time.
 }
 
 /**

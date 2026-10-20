@@ -242,16 +242,25 @@ function checkDomain(access: TestAccess | undefined, email: string | undefined):
  * typed at the door, and a roll number keeps the case the organiser
  * chose. Four normalisations that drift is how `T-21` refuses a listed
  * person on test day.
+ *
+ * `email_code` and `sso` call this with the **verified address**, so on a
+ * listed test in either mode the form's first `unique` field has to be
+ * the email one — there is no other value the gate holds. A roll-number
+ * list under those modes matches nobody, which is a publish-time
+ * misconfiguration rather than a runtime branch.
  */
+function identityKey(test: PublishedTest, value: string | undefined): string {
+  const field = identityField(test.settings.registration_form);
+  return field === null ? (value ?? "").trim() : normaliseUniqueValue(field, value ?? "");
+}
+
 async function listEntry(
   deps: AppDeps,
   test: PublishedTest,
   identifier: string | undefined,
 ): Promise<{ id: string } | null> {
   if (!test.settings.access?.candidate_list) return null;
-  const field = identityField(test.settings.registration_form);
-  const typed =
-    field === null ? (identifier ?? "").trim() : normaliseUniqueValue(field, identifier ?? "");
+  const typed = identityKey(test, identifier);
   if (typed === "") throw refuse("code_wrong");
   const entry = await getCandidateByExternalId(deps.db, test.workspaceId, test.testId, typed);
   if (!entry) throw refuse("code_wrong");
@@ -362,9 +371,13 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     // The three allowlists, before the mode's own gate.
     checkNetwork(c, access);
     checkDomain(access, input.email);
-    // `invite_only` is the exception: an invite is only ever minted for a
-    // list row, so the token already proves what the identifier would.
-    const entry = mode === "invite_only" ? null : await listEntry(deps, test, input.identifier);
+    // **When a mode verifies an identity, the list row is resolved from
+    // that identity and never from the body.** `link_code` is the only
+    // mode that verifies nothing about a person — a room code is all it
+    // has — so it is the only one that may read the typed identifier.
+    // The other three bind the row inside their own leg: from the
+    // invite's payload, and from the address the mode proved.
+    const entry = mode === "link_code" ? await listEntry(deps, test, input.identifier) : null;
 
     const claim: EntryClaim = { testVersionId: test.testVersionId, workspaceId: test.workspaceId };
     if (entry) claim.listRef = entry.id;
@@ -407,7 +420,6 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
         // before the token is consumed.
         if (!invited) throw refuse("code_wrong");
         claim.listRef = invited.id;
-        if (payload.email !== null) claim.email = payload.email;
         break;
       }
       case "email_code": {
@@ -421,7 +433,29 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
           code: input.otp.trim(),
         });
         if (!spent) throw refuse("code_expired");
-        claim.email = email;
+        // `T-21`, from the address the code just proved — the `sso` leg's
+        // rule, and for the same reason. Reading `input.identifier` here
+        // instead admitted anyone holding a code at their own inbox as
+        // any listed candidate they could name.
+        //
+        // **After the redemption, never before.** A list check on the
+        // typed address would answer `code_wrong` where a wrong code
+        // answers `code_expired`, and that difference is a membership
+        // oracle over the organiser's list to a caller holding no code
+        // at all.
+        //
+        // A typed identifier is not the identity, so it is not looked up
+        // — but one naming a different row is a mismatch, refused with
+        // the same bytes as every other refusal (`S-10`). Compared as
+        // normalised keys rather than as a second lookup, so the route
+        // still spends what its budget says. A blank one is what the
+        // gate's own form calls optional: ignored, not refused.
+        const listed = await listEntry(deps, test, email);
+        if (listed) {
+          const typed = identityKey(test, input.identifier);
+          if (typed !== "" && typed !== identityKey(test, email)) throw refuse("code_wrong");
+          claim.listRef = listed.id;
+        }
         break;
       }
       case "sso":
@@ -542,7 +576,6 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     const claim: EntryClaim = {
       testVersionId: test.testVersionId,
       workspaceId: test.workspaceId,
-      email,
     };
     if (entry) claim.listRef = entry.id;
     const token = await issueEntryToken(deps, claim);

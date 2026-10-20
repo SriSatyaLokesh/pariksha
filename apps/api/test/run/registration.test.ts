@@ -750,13 +750,20 @@ it("the access gate's budget is unchanged by the limiter, because a success is n
   const spent = await measure(async (request) => {
     const res = await request(
       "/api/v1/run/alpha/gauntlet/access",
-      json({ email: "ananya@vce.ac.in", otp: "000000", identifier: "21CS0147" }),
+      json({ email: "ananya@vce.ac.in", otp: "000000", identifier: "ananya@vce.ac.in" }),
     );
     // A wrong OTP, so this one *is* charged — the measurement that
     // matters is the success below.
     expect(res.status).toBe(401);
   });
-  expect(spent).toBe(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/access"]);
+  // Three: resolve the test, spend the code, charge the bucket. One less
+  // than the declared budget, because a code that does not redeem never
+  // reaches the candidate-list read — `T-21` is checked against the
+  // address the code proves, so there is nothing to check until it has.
+  // The success path is measured against the budget itself in
+  // `access.test.ts`.
+  expect(spent).toBe(3);
+  expect(spent).toBeLessThan(ROUTE_BUDGETS["/api/v1/run/:workspaceSlug/:testSlug/access"]);
 });
 
 // --- helpers that need a session ---------------------------------------

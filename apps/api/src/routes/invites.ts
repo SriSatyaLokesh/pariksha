@@ -129,7 +129,6 @@ export function inviteRoutes(deps: AppDeps): Hono<AppBindings> {
         testId,
         candidateId: entry.id,
         externalId: entry.externalId ?? "",
-        email: invite.email,
       };
       writes.push({
         sql:
