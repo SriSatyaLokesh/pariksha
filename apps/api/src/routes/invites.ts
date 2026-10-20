@@ -33,7 +33,7 @@ import type { RegistrationFormSpec } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { randomToken } from "../auth/tokens.js";
-import { identityField } from "../import/candidates.js";
+import { emailOf, identityField } from "../import/candidates.js";
 import { inviteHash } from "../run/entry.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 
@@ -68,22 +68,6 @@ const mintRequest = z.object({
   /** Absent or empty means every entry on the list. */
   identifiers: z.array(z.string().min(1).max(200)).max(5000).optional(),
 });
-
-/**
- * The address an invite would be sent to, for one list entry.
- *
- * The identity column is not repeated into the prefill by the importer, so
- * when the email field *is* the identity field the value lives in
- * `external_id` and nowhere else — which is the common case, because the
- * worked example's first unique field is `email`.
- */
-function emailOf(entry: CandidateRow, form: RegistrationFormSpec | undefined): string | null {
-  const field = form?.fields.find((candidate) => candidate.type === "email");
-  if (!field) return null;
-  if (field.id === identityField(form)?.id) return entry.externalId;
-  const value = entry.formValues[field.id];
-  return typeof value === "string" && value !== "" ? value : null;
-}
 
 export function inviteRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();

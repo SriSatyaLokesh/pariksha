@@ -21,6 +21,10 @@ import type { DbClient } from "../client.js";
 import type { Section } from "@pariksha/core";
 import { deriveState, type TestSettings, type TestState } from "./test-document.js";
 
+/** First path segments of `/api/v1/run/...` that are routes, not
+ *  workspace slugs. */
+const RESERVED_RUN_SEGMENTS = new Set(["attempt", "result"]);
+
 export interface PublishedTest {
   workspaceId: string;
   testId: string;
@@ -75,14 +79,17 @@ export async function resolvePublishedTest(
   testSlug: string,
   now: number,
 ): Promise<PublishedTest | null> {
-  // `/api/v1/run/attempt/...` (Task 5 onward) and
-  // `/api/v1/run/:workspaceSlug/:testSlug` both match three segments. Hono
-  // prefers a static segment to a parameter, so the collision does not
-  // arise there — but a workspace whose slug really is "attempt" would make
-  // every candidate URL under it indistinguishable from an attempt route to
-  // anyone reading a log, so it is refused here too, before the query, at
-  // the cost of nothing.
-  if (workspaceSlug === "attempt") return null;
+  // `/api/v1/run/attempt/...` (Task 5 onward), `/api/v1/run/result/...`
+  // (Task 11) and `/api/v1/run/:workspaceSlug/:testSlug` all match three
+  // segments. Hono prefers a static segment to a parameter, so the
+  // collision does not arise there — but a workspace whose slug really is
+  // one of these would make every candidate URL under it
+  // indistinguishable from a runtime route to anyone reading a log, so
+  // each is refused here too, before the query, at the cost of nothing.
+  //
+  // A set rather than a comparison, so the next static first segment is
+  // one word here and not a second `if` somebody forgets.
+  if (RESERVED_RUN_SEGMENTS.has(workspaceSlug)) return null;
 
   const rows = await db.query<PublishedTestRecord>(
     "SELECT w.id AS workspace_id, w.branding_json AS workspace_branding, " +

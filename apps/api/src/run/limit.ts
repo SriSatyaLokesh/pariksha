@@ -52,6 +52,11 @@ import type { AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { EMAIL_CODE_TTL_MS, refuse } from "./entry.js";
 
+/** `RESULT_CODE_TTL_MS`, restated rather than imported: `run/result.ts`
+ *  imports this module, so taking the constant from there would be a
+ *  cycle. The two are asserted equal in `test/run/release.test.ts`. */
+const RESULT_CODE_WINDOW_MS = 10 * 60_000;
+
 export const LIMITS = {
   /** Refused access attempts, per test version, per minute. */
   test_access: { limit: 300, windowMs: 60_000 },
@@ -68,6 +73,14 @@ export const LIMITS = {
    *  because this is the number that stands between a stranger and
    *  someone else's inbox. */
   email_code_address: { limit: 5, windowMs: EMAIL_CODE_TTL_MS },
+  /** Result codes asked for or verified against one attempt reference,
+   *  per ten minutes — the code's own TTL, so the window is the lifetime
+   *  of what it protects. Keyed on the **reference**, which is what a
+   *  guesser would sweep; the address half of the same route reuses
+   *  `email_code_address`, because it is the same inbox being protected
+   *  from the same thing. Twenty is generous for a candidate who
+   *  mistypes a code twice and asks again. */
+  result_code: { limit: 20, windowMs: RESULT_CODE_WINDOW_MS },
   /** Short codes that resolved to nothing — **instance-wide**, not per
    *  code, per minute. See the header: a sweep never repeats a code. */
   short_link: { limit: 300, windowMs: 60_000 },

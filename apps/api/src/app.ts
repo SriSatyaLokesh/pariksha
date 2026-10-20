@@ -442,6 +442,32 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // here would mean the route had gone looking at the workspace
   // instead, which is precisely the reading it exists not to take.
   "/api/v1/run/attempt/media/:key": 2,
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **6**
+  // in `test/run/submit.test.ts`, on the path that actually scores: the
+  // attempt join the cookie resolves through, the answers, the
+  // candidate's attempt count (which is what prints "Attempt 2 of 3" and
+  // what the `full_review` degrade is judged by), the workspace's bank
+  // read **once** for the whole paper, the one `finishAttempt` write, and
+  // the audit row. A second press costs 1 — the join — because the row it
+  // resolves already carries the score and nothing is written again.
+  //
+  // A number above 6 means the bank is being read per question, which is
+  // the failure this line exists to catch on a 50-subrequest ceiling.
+  "/api/v1/run/attempt/submit": 6,
+  // The same gate, read again. Measured at **4** on the only path that
+  // pays for all of it (`full_review` on a last attempt): the join, the
+  // attempt count, the bank and the answers. Every lesser release level
+  // costs 2, because the score is already on the row the join returned.
+  "/api/v1/run/attempt/result": 4,
+  // `C-09`, the return visit. `/code` is **4**: the reference limiter,
+  // the address limiter, the attempt lookup and the token insert — plus
+  // the message itself, which is not a subrequest in this count unless
+  // `deps.http` is wired. `/verify` is **6**: the limiter, the single-use
+  // consume, the lookup, the candidate's attempt count, and — at
+  // `full_review` only — the bank and the candidate's own answers. A
+  // `score_only` verification costs 4.
+  "/api/v1/run/result/code": 4,
+  "/api/v1/run/result/verify": 6,
 
   // The one organiser route of this phase: authentication (2), the test
   // and its slugs (1), the candidate list (1), the already-invited set
@@ -611,6 +637,15 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/run/:workspaceSlug/:testSlug/email-code": "public",
   "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start": "public",
   "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback": "public",
+  // Phase 6 Task 11 (#75, P6.11): `C-09`'s return visit. Public by
+  // necessity — the attempt cookie is an hour past the deadline and the
+  // candidate is back a week later, so there is no credential left to
+  // require. What stands in for one is the emailed code: both routes
+  // answer the same bytes whatever is behind them, so neither
+  // enumerates attempts, and both are rate-limited by the reference and
+  // by the address before they read anything.
+  "POST /api/v1/run/result/code": "public",
+  "POST /api/v1/run/result/verify": "public",
 
   // --- entry: the single-use run_entry token, as a Bearer header --------
   // Phase 6 Task 3 (#67, P6.3). Not `public`: both answer 401 without a
@@ -648,6 +683,12 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // sibling `GET /api/v1/workspaces/:id/media/:key` keeps `banks.edit`
   // and is untouched (standing decision 4).
   "GET /api/v1/run/attempt/media/:key": "attempt",
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt and reading its
+  // result. `attempt` is the scope as well as the credential — both are
+  // bounded by the one row the cookie resolved, and neither takes an
+  // identifier of any kind in its body.
+  "POST /api/v1/run/attempt/submit": "attempt",
+  "GET /api/v1/run/attempt/result": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

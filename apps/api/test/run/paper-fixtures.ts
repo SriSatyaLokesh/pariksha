@@ -6,7 +6,21 @@
 // kept in their own file so the suites that do not need a bank keep
 // paying nothing for one.
 
-import { createBank, replaceCandidateList, upsertGroup, upsertQuestions } from "@pariksha/db";
+import {
+  createBank,
+  createCandidate,
+  insertAuthToken,
+  newId,
+  replaceCandidateList,
+  resolvePublishedTest,
+  upsertGroup,
+  upsertQuestions,
+} from "@pariksha/db";
+import {
+  REGISTRATION_KIND,
+  REGISTRATION_TTL_MS,
+  registrationHash,
+} from "../../src/run/entry.js";
 import type { Question, SetAssignment, SingleQuestion } from "@pariksha/core";
 import type { AppDeps } from "../../src/app.js";
 import { FIXED_NOW } from "../deps.js";
@@ -74,6 +88,18 @@ export async function seedBank(deps: AppDeps, workspaceId: string): Promise<Ques
       prompt: "The capital is ___.",
       blanks: [{ id: "b1", accepted: ["Delhi", "New Delhi"], match: "case_insensitive" }],
       scoring: { points: 1 },
+    },
+    {
+      // #129's grading surface: an author's catastrophically backtracking
+      // pattern, stored before `assertSafeRegex` blocked it. `matchBlank`
+      // scores it a non-match; Task 11 scores the *question* pending and
+      // flags it, because nobody can grade it and the candidate did not
+      // write it.
+      id: "BLK-001",
+      type: "fill_blank",
+      prompt: "Type anything: ___.",
+      blanks: [{ id: "b1", accepted: ["(a|a)+$"], match: "regex" }],
+      scoring: { points: 2 },
     },
     {
       id: "CMP-1",
@@ -393,8 +419,175 @@ export async function seedAttemptTests(deps: AppDeps, workspaceId: string): Prom
     },
   });
 
+  await seedResultTests(deps, workspaceId, q);
   return q;
 }
+
+// --- Task 11 (#75, P6.11): submission, the receipt and the release gate -
+
+/** A two-question paper: one auto-scored choice worth 2 and one manual
+ *  short answer worth 3, so `total`, `max` and `pending` are all
+ *  non-trivial and a manual type is proved pending rather than zero. */
+const scored = (q: QuestionIds) => [
+  {
+    id: "logic",
+    title: "Logic",
+    shuffle_questions: false,
+    source: {
+      kind: "fixed" as const,
+      questions: [q["LOG-001"] as string, q["LOG-003"] as string],
+    },
+  },
+  {
+    id: "quant",
+    title: "Quant",
+    shuffle_questions: false,
+    source: { kind: "fixed" as const, questions: [q["QNT-001"] as string] },
+  },
+];
+
+/** `C-09` checks a returning candidate against the address they
+ *  registered with, and `emailOf` reads it out of the form — so the
+ *  result fixtures need a form that actually has an email field.
+ *  `PAPER_FORM` deliberately does not, which is what keeps Task 5's
+ *  assertions about a roll-number identity honest. */
+export const RESULT_FORM = {
+  fields: [
+    { id: "roll", type: "short_text" as const, label: "Roll number", required: true, unique: true },
+    { id: "email", type: "email" as const, label: "College email address" },
+  ],
+};
+
+/** The release settings each case needs, one published test per case —
+ *  `release.when` and `release.show` are version settings, so they cannot
+ *  be varied on one test without republishing it mid-suite. */
+const RELEASES: { slug: string; release: Record<string, unknown>; attempts?: number }[] = [
+  { slug: "rel-never", release: { when: "never" } },
+  { slug: "rel-score", release: { when: "on_submit", show: "score_only" } },
+  { slug: "rel-sections", release: { when: "on_submit", show: "score_and_sections" } },
+  { slug: "rel-review", release: { when: "on_submit", show: "full_review" } },
+  // The same `full_review`, on a test that allows three attempts: the
+  // degrade ruling, and the control for it is `rel-review` above.
+  { slug: "rel-review-3", release: { when: "on_submit", show: "full_review" }, attempts: 3 },
+  { slug: "rel-later", release: { when: "on_date", at: iso(FIXED_NOW + DAY), show: "score_only" } },
+  { slug: "rel-undated", release: { when: "on_date", show: "score_only" } },
+];
+
+export async function seedResultTests(
+  deps: AppDeps,
+  workspaceId: string,
+  q: QuestionIds,
+): Promise<void> {
+  for (const one of RELEASES) {
+    await seedTest(deps, workspaceId, {
+      name: one.slug,
+      slug: one.slug,
+      body: {
+        settings: {
+          timing: {
+            ...paperTiming,
+            navigation: "free",
+            ...(one.attempts === undefined ? {} : { attempts_allowed: one.attempts }),
+          },
+          access: gated,
+          registration_form: RESULT_FORM,
+          scoring: { pass_mark_percent: 50 },
+          release: one.release,
+        },
+        sections: scored(q),
+      },
+    });
+  }
+
+  // `T-14`'s receipt line, "Attempt 2 of 3": three attempts, no cooldown,
+  // and a paper short enough to sit three times in one suite.
+  await seedTest(deps, workspaceId, {
+    name: "Thrice",
+    slug: "thrice",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "free", attempts_allowed: 3 },
+        access: gated,
+        registration_form: RESULT_FORM,
+        scoring: { pass_mark_percent: 50 },
+        release: { when: "on_submit", show: "score_only" },
+      },
+      sections: scored(q),
+    },
+  });
+
+  // #129: the same paper with the un-runnable blank on it.
+  await seedTest(deps, workspaceId, {
+    name: "Bad regex",
+    slug: "badregex",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "free" },
+        access: gated,
+        registration_form: PAPER_FORM,
+        release: { when: "on_submit", show: "score_and_sections" },
+      },
+      sections: [
+        {
+          id: "logic",
+          title: "Logic",
+          shuffle_questions: false,
+          source: {
+            kind: "fixed" as const,
+            questions: [q["BLK-001"] as string, q["LOG-001"] as string],
+          },
+        },
+      ],
+    },
+  });
+}
+
+/**
+ * Start one attempt on `alpha/<slug>`, through the real route, and hand
+ * back the cookie every later request rides on.
+ *
+ * The three suites that came before this one each grew their own copy of
+ * these twenty lines; this is the shared one, and the next suite that
+ * needs it should take this rather than make a fourth.
+ */
+export async function startAttemptFor(
+  deps: AppDeps,
+  app: { request: (path: string, init?: RequestInit) => Promise<Response> },
+  slug: string,
+  options: { roll?: string; candidateId?: string; now?: number } = {},
+): Promise<{ cookie: string; paper: unknown; candidateId: string; status: number }> {
+  const now = options.now ?? deps.now();
+  const test = await resolvePublishedTest(deps.db, "alpha", slug, now);
+  if (!test) throw new Error(`no published test at alpha/${slug}`);
+  const candidateId =
+    options.candidateId ??
+    (await createCandidate(deps.db, test.workspaceId, {
+      testId: test.testId,
+      formValues: { roll: options.roll ?? `R${String(++startSerial)}` },
+      consentVersion: "2026-10-01",
+      now: FIXED_NOW,
+    }));
+  const token = `reg-${String(++startSerial)}-${newId("cnd")}`;
+  await insertAuthToken(deps.db, {
+    tokenHash: await registrationHash(test.testVersionId, token),
+    kind: REGISTRATION_KIND,
+    payload: { workspaceId: test.workspaceId, testVersionId: test.testVersionId, candidateId },
+    now,
+    expiresAt: now + REGISTRATION_TTL_MS,
+  });
+  const res = await app.request(`/api/v1/run/alpha/${slug}/start`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  return {
+    status: res.status,
+    cookie: (res.headers.get("set-cookie") ?? "").split(";")[0] ?? "",
+    paper: res.status === 201 ? await res.json() : null,
+    candidateId,
+  };
+}
+
+let startSerial = 0;
 
 /** One question of every type, with every answer-bearing field set, so
  *  the scrubber's allowlist is proved through the route for all twelve

@@ -6,17 +6,23 @@
 // become a stranger's refusal at the door (Task 3's ruling, and the
 // reversal recorded in `run/bounded.ts`'s header).
 //
-// Grading takes the other policy, and that half is asserted through the
-// submit route in `submit.test.ts`: a question whose pattern the bound
-// refuses is **pending and flagged**, never a zero the candidate owns.
+// Grading takes the other policy, and that half is asserted below through
+// the submit route: a question whose pattern the bound refuses is
+// **pending and flagged**, never a zero the candidate owns.
 
-import { expect, it } from "vitest";
+import { afterAll, expect, it } from "vitest";
+import { closeClient } from "@pariksha/db";
+import { createApp } from "../../src/app.js";
+import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
 import {
   MatchBudgetExceeded,
   MAX_MATCH_INPUT,
   matchBounded,
   matchStrict,
 } from "../../src/run/bounded.js";
+import { testDeps } from "../deps.js";
+import { seedPublishedTest } from "./fixtures.js";
+import { seedAttemptTests, startAttemptFor } from "./paper-fixtures.js";
 
 it("#129: matchStrict caps input length before it runs the pattern", () => {
   expect(() => matchStrict("^a*$", "a".repeat(MAX_MATCH_INPUT + 1))).toThrow(MatchBudgetExceeded);
@@ -55,4 +61,103 @@ it("matchBounded never throws, and a refusal passes the candidate", () => {
   expect(matchBounded("(a+)+$", "aaaa")).toBe(true);
   expect(matchBounded("([a-", "aaaa")).toBe(true);
   expect(matchBounded("^a*$", "a".repeat(MAX_MATCH_INPUT + 1))).toBe(true);
+});
+
+// --- the grading surface, through the route ------------------------------
+//
+// #129's acceptance criteria: a catastrophic pattern an organiser typed
+// must not block answering, saving or submitting, and the question it sits
+// on must be **flagged for the organiser** rather than silently scored
+// zero against a candidate who did not write it.
+
+const { deps } = await testDeps();
+const app = createApp(deps);
+const workspaceId = await seedPublishedTest(deps);
+await seedAttemptTests(deps, workspaceId);
+
+afterAll(() => closeClient(deps.db));
+
+it("#129: a catastrophic pattern does not block answering, saving or submitting", async () => {
+  const started = await startAttemptFor(deps, app, "badregex");
+  expect(started.status).toBe(201);
+  const paper = started.paper as AttemptPaper;
+  const blank = paper.sections[0]?.questions[0];
+  expect(blank?.type).toBe("fill_blank");
+
+  // Thirty characters against `(a|a)+$` is 2^30 backtracks if it ever
+  // runs. The save, and then the submission, both answer in time.
+  const save = await app.request(ANSWER_PATH, {
+    method: "PUT",
+    headers: { cookie: started.cookie, "content-type": "application/json" },
+    body: JSON.stringify({
+      questionId: blank?.id,
+      value: { kind: "blanks", values: { b1: "a".repeat(30) } },
+      clientSeq: 1,
+    }),
+  });
+  expect(save.status).toBe(200);
+
+  const res = await app.request("/api/v1/run/attempt/submit", {
+    method: "POST",
+    headers: { cookie: started.cookie },
+  });
+  expect(res.status).toBe(200);
+  expect((await res.json()).receipt.attemptId).toBe(paper.attemptId);
+});
+
+it("#129: the affected question is flagged for the organiser, not silently scored zero", async () => {
+  const started = await startAttemptFor(deps, app, "badregex");
+  const paper = started.paper as AttemptPaper;
+  const blank = paper.sections[0]?.questions[0];
+  await app.request("/api/v1/run/attempt/submit", {
+    method: "POST",
+    headers: { cookie: started.cookie },
+  });
+
+  const rows = await deps.db.query<{ score_json: unknown; flag: string }>(
+    "SELECT score_json, flag FROM attempt WHERE id = ?",
+    [paper.attemptId],
+  );
+  const score = deps.db.jsonValue(rows[0]?.score_json) as { pending: string[] };
+  expect(score.pending).toContain(blank?.id);
+  expect(rows[0]?.flag).toBe("scoring_blocked");
+
+  const audit = await deps.db.query<{ action: string; detail_json: unknown }>(
+    "SELECT action, detail_json FROM audit_log WHERE target = ? ORDER BY id",
+    [paper.attemptId],
+  );
+  expect(audit.map((row) => row.action)).toContain("attempt.scoring_blocked");
+  // The pattern is named on the audit row, because the organiser is the
+  // only person who can fix it — and it is in their workspace, not in the
+  // candidate's response body (`S-10`).
+  const blocked = audit.find((row) => row.action === "attempt.scoring_blocked");
+  expect(JSON.stringify(deps.db.jsonValue(blocked?.detail_json))).toContain("(a|a)+$");
+});
+
+it("#129: the sound question on the same paper still scores", async () => {
+  const started = await startAttemptFor(deps, app, "badregex");
+  const paper = started.paper as AttemptPaper;
+  const choice = paper.sections[0]?.questions[1];
+  await app.request(ANSWER_PATH, {
+    method: "PUT",
+    headers: { cookie: started.cookie, "content-type": "application/json" },
+    body: JSON.stringify({ questionId: choice?.id, value: { kind: "option", option: "a" }, clientSeq: 1 }),
+  });
+  const body = (await (
+    await app.request("/api/v1/run/attempt/submit", {
+      method: "POST",
+      headers: { cookie: started.cookie },
+    })
+  ).json()) as { released: { total: number; max: number } };
+  // The choice question is worth 2 and is right; the blank is worth 2 and
+  // is pending, so it costs its points but still counts towards `max`.
+  expect(body.released).toMatchObject({ total: 2, max: 4 });
+});
+
+it("#129's second surface is unchanged: a registration pattern still lets the candidate through", async () => {
+  // The other policy over the same bound (`run/bounded.ts`'s header): an
+  // author's unsafe pattern must never become a stranger's refusal at the
+  // door. Asserted here so a future change to `matchStrict` that leaked
+  // into `matchBounded` fails in the file that owns the bound.
+  expect(matchBounded("(a+)+$", "a".repeat(40))).toBe(true);
 });

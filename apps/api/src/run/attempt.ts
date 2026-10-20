@@ -89,6 +89,7 @@ import {
   timingOf,
 } from "./clock.js";
 import { assertReachable, indexOf, sectionStartIndexOf } from "./navigation.js";
+import { resultFor, submitAttempt, type SubmitReason } from "./submit.js";
 
 /** Re-exported here because this is where the brief names it; it is
  *  declared in `middleware/attemptContext.ts`, the module that reads it. */
@@ -1056,6 +1057,50 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
       "Content-Type": contentType,
       "Cache-Control": "private, max-age=31536000, immutable",
     });
+  });
+
+  /**
+   * Ending the attempt (Task 11, #75) — `C-08`.
+   *
+   * **Takes no body.** There is nothing a candidate could send that this
+   * handler should believe: the answers are already rows, the paper is
+   * already a column, and the only question is whether the attempt is
+   * over. A `reason` in a request body would let a candidate claim their
+   * own timeout.
+   *
+   * **The window is not re-checked.** `deriveState` gates entry only. A
+   * candidate who started in time submits after `closes_at` the same way
+   * they save inside the late-sync grace (`AC-14`); the only clock here
+   * is the attempt's own deadline, and even that refuses nothing — past
+   * it, the submission is recorded as the `timeout` it was.
+   */
+  routes.post("/attempt/submit", attemptContext(deps), async (c) => {
+    const attempt = c.get("attempt");
+    const now = deps.now();
+    // Whichever of the candidate's press and the clock got here first is
+    // what this is called. `timedOut` already folds in the grace, so an
+    // answer still draining out of the offline queue has not turned the
+    // candidate's own Submit into a timeout.
+    const reason: SubmitReason = timedOut(attempt, now) ? "timeout" : "manual";
+    return c.json(await submitAttempt(deps, attempt, reason, now));
+  });
+
+  /**
+   * The result, again (Task 11, #75) — the same gate the finish page was
+   * handed, from the same function, so there is one release rule and not
+   * two. `null` is a complete answer: the test releases nothing, or not
+   * yet.
+   */
+  routes.get("/attempt/result", attemptContext(deps), async (c) => {
+    const attempt = c.get("attempt");
+    const now = deps.now();
+    if (attempt.submittedAt === null) {
+      throw conflict(
+        "not_submitted",
+        "This test has not been submitted yet, so there is no result to show.",
+      );
+    }
+    return c.json(await resultFor(deps, attempt, now));
   });
 
   return routes;

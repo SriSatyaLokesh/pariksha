@@ -48,6 +48,32 @@ export function identityField(form: RegistrationFormSpec | undefined): FormField
   return form?.fields.find((field) => field.unique === true) ?? null;
 }
 
+/**
+ * The address a candidate would be written to, for one list or
+ * registration row.
+ *
+ * The identity column is not repeated into the prefill by the importer, so
+ * when the email field *is* the identity field the value lives in
+ * `external_id` and nowhere else — which is the common case, because the
+ * worked example's first unique field is `email`.
+ *
+ * It lives here rather than beside either caller because there are now
+ * two: the invite route, which sends a link to it, and `C-09`'s result
+ * code, which checks a returning candidate against it. Two copies of
+ * "where does the email live" is how one of them ends up looking in the
+ * prefill for a value the importer never wrote there.
+ */
+export function emailOf(
+  entry: { externalId: string | null; formValues: Record<string, unknown> },
+  form: RegistrationFormSpec | undefined,
+): string | null {
+  const field = form?.fields.find((candidate) => candidate.type === "email");
+  if (!field) return null;
+  if (field.id === identityField(form)?.id) return entry.externalId;
+  const value = entry.formValues[field.id];
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
 const issue = (line: number, field: string, message: string): PositionedIssue => ({
   questionId: null,
   index: -1,

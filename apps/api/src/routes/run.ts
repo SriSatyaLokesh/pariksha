@@ -57,6 +57,7 @@ import { limitMisses, limitOrThrow } from "../run/limit.js";
 import { sha256Hex } from "../auth/tokens.js";
 import { registrationRoutes } from "../run/registration.js";
 import { attemptRoutes } from "../run/attempt.js";
+import { resultRoutes } from "../run/result.js";
 import { clientIp, emailInDomains, ipInRanges } from "../run/net.js";
 import { identityField } from "../import/candidates.js";
 
@@ -303,6 +304,24 @@ function ssoTest(test: PublishedTest): TestAccess {
 export function runRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
+  // **Mounted before the slug-pair routes below, and that is
+  // load-bearing.** Hono runs every handler whose path matches, in
+  // registration order, so `GET /attempt/result` would otherwise be
+  // answered by `GET /:workspaceSlug/:testSlug` — two segments match two
+  // segments, and the landing handler throws its 404 before the static
+  // route is ever reached. `GET /attempt` escapes that only by being one
+  // segment. `resolvePublishedTest` refuses both of these first segments
+  // as workspace slugs as well, so the two can never be confused even by
+  // someone reading a log.
+
+  // Task 5 (#69, P6.5): minting the attempt, resuming it, saving an
+  // answer, the paper's images, and Task 11's submission and result.
+  routes.route("/", attemptRoutes(deps));
+
+  // Task 11 (#75, P6.11): `C-09`'s return visit, with no credential at
+  // all — the attempt cookie is long gone by the time it is used.
+  routes.route("/", resultRoutes(deps));
+
   // C-01 in one read. Consent is deliberately not here: it arrives after
   // the access gate (Task 3).
   routes.get("/:workspaceSlug/:testSlug", async (c) => {
@@ -535,13 +554,6 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
   // Task 3 (#67, P6.3): consent and registration, behind the entry token
   // the four modes above all end in.
   routes.route("/", registrationRoutes(deps));
-
-  // Task 5 (#69, P6.5): minting the attempt and resuming it. `GET
-  // /attempt` is a static first segment, which Hono prefers to the
-  // `:workspaceSlug` parameter beside it — and `resolvePublishedTest`
-  // refuses the slug "attempt" outright, so the two can never be
-  // confused even by someone reading a log.
-  routes.route("/", attemptRoutes(deps));
 
   return routes;
 }

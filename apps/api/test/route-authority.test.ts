@@ -83,6 +83,13 @@ it("the public set is a literal allowlist, so widening it is a visible diff", ()
     "POST /api/v1/auth/signout",
     "POST /api/v1/run/:workspaceSlug/:testSlug/access",
     "POST /api/v1/run/:workspaceSlug/:testSlug/email-code",
+    // Task 11 (#75, P6.11): `C-09`'s return visit. The attempt cookie is
+    // an hour past the deadline and the candidate is back a week later,
+    // so there is no credential left to require — the emailed code is
+    // what opens the result, and both routes answer identically whatever
+    // is behind them.
+    "POST /api/v1/run/result/code",
+    "POST /api/v1/run/result/verify",
   ]); // every later task that adds one edits this literal
 });
 
@@ -118,6 +125,12 @@ it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", 
   ).toEqual([
     "GET /api/v1/run/attempt",
     "GET /api/v1/run/attempt/media/:key",
+    // Task 11 (#75, P6.11): the result of the attempt this cookie names,
+    // and no other.
+    "GET /api/v1/run/attempt/result",
+    // Task 11 (#75, P6.11): ending it. Takes no body at all, so there is
+    // nothing beside the cookie for the server to choose between.
+    "POST /api/v1/run/attempt/submit",
     // Task 8 (#72, P6.8): the save path. The attempt token is the scope
     // as well as the credential — the question must be on the paper this
     // very row pinned.
