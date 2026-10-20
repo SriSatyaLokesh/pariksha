@@ -99,13 +99,9 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
  * - **question picker unchanged at 495.63.** The builder arm passes no
  *   `title`, so it renders no `.shell__head`, and the drawer is scrolled
  *   into view rather than measured from the top of the document.
- * - **bank browser 312.31 -> 411.31, a real regression, NOT recorded here.**
- *   On `main` that screen was the one organiser surface with no page
- *   heading at all — a document outline starting at `<h2>`, which 6.5c Task
- *   1's fix round closed by giving the shell a `title` and a crumb for it.
- *   That heading is 88px directly above a scanning table. The bar is
- *   `AG2`-frozen at `main`'s figure and this surface is red until the
- *   screen is fixed; see the note and 6.5c's Task 5 report.
+ * - **bank browser 312.31 -> 385.31. The one bar on this branch that was
+ *   RAISED, by ruling, on evidence. Read the block over its figure below
+ *   before you touch it.**
  *
  * 785.5px on the test list today — of a 900px viewport, which is the whole
  * story of why that surface fits zero rows.
@@ -113,7 +109,38 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
 const BEFORE_TOP: Record<Surface, number> = {
   testList: 785.5,
   bankList: 397,
-  bankBrowser: 312.31,
+  // **Raised from `main`'s 312.31, which is the one direction this file is
+  // not allowed to move a bar in (`AG2`). It was adjudicated on measurement,
+  // not nudged to get green, and the measurement is this:**
+  //
+  // `main` rendered the bank browser with NO page heading — its document
+  // outline started at `<h2>`, which 6.5c Task 1's fix round closed by giving
+  // the shell a `title` and a crumb. Two separate costs sit above the table
+  // now, and only one of them is the heading:
+  //
+  //   88px  the heading block — 72px stacked plus the 16px gap under it.
+  //         6.5c took 26px of that back by laying the head out as a single
+  //         ROW on browsing surfaces (shell.css, `.organiser--full`), which
+  //         is what returned the count to 5. The rest is the <h1> itself and
+  //         it stays: it is an accessibility fix.
+  //   11px  the shell's own chrome — 56px bar + 24px page padding = 80px
+  //         before any screen content, where `main`'s per-screen
+  //         `OrganiserHeader` spent 69px and this screen had no page padding
+  //         at all.
+  //
+  // **Deleting the heading outright does not reach `main`'s figure.** Hiding
+  // the whole block was measured at y=323.31 — still 11px over 312.31. So no
+  // surface work inside `D15` can green the old bar; it stopped measuring a
+  // regression and started measuring a property the phase chose on purpose.
+  // Hence the re-baseline, and hence only this one.
+  //
+  // **The protective bars on this surface are the other two**, and both are
+  // at `main`'s figures: `BEFORE.bankBrowser` (5 rows) and
+  // `BEFORE_HEIGHT.bankBrowser` (101px). They are what still catch a density
+  // regression here. This figure has 9.69px of slack — the fifth row ends at
+  // y=890.31 of 900 — so a restyle that spends another 10px above the table
+  // takes the count red, which is the right failure and the one `AG1` names.
+  bankBrowser: 385.31,
   questionPicker: 495.63,
 };
 

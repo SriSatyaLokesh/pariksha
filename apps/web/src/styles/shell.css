@@ -369,6 +369,37 @@
   padding-block-start: var(--space-base);
 }
 
+/* On a browsing surface the head stops stacking (`D18`, `AG1`).
+   `.organiser--full` is the page that declared itself one, and a screen whose
+   whole point is width should not spend 88px of height announcing itself.
+
+   A LAYOUT change, not a spacing one: every token here is the one the column
+   already used, turned along the other axis, because `D15` is a usage rule
+   over existing values and inventing a number to hit a gate is the vice `AG2`
+   names. The crumb, the <h1> and any actions share one line, and
+   `flex-wrap` puts them back on their own lines when the line runs out, so
+   `D3a`'s narrow widths keep the stacked shape.
+
+   Measured: the head is 72px stacked (crumb 18 + gap 8 + <h1> 46) and 46px in
+   a row, which is the whole of the 16.31px the bank browser's fifth row
+   needed, and 9.69px over. `baseline` rather than `center` so the mono crumb
+   sits on the heading's own baseline instead of floating against its cap
+   height. */
+.organiser--full > .shell__head {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+/* Actions go to the end of that line rather than keeping the vertical inset
+   they need under a stacked title. No organiser arm passes `actions` with
+   `wide` today; without this the first one that does would re-stack the head
+   and quietly undo the row above. */
+.organiser--full > .shell__head > .shell__head-actions {
+  margin-inline-start: auto;
+  padding-block-start: 0;
+}
+
 /* The focus ring, deferred to this plan by theme.css's header. base.css
    paints :focus-visible with voltage, which is right for the candidate
    runtime on cream and illegal on a Signal surface. Scoped to the bar and
