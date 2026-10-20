@@ -142,7 +142,14 @@
    hit target is met across the group — label plus select — rather than by
    the box alone, which is the same trade .shell__signout already makes. */
 .shell__switcher-select {
-  min-width: 0;
+  /* A floor and a ceiling, because this is the one control in the bar whose
+     width is a stranger's data. Without the floor flexbox shrinks it to
+     nothing at 400px and the switcher stops being usable; without the
+     ceiling a 60-character workspace name takes the room Sign out needs,
+     which is the failure D4b's narrow pass already found once. The email
+     beside it carries its own ellipsis and absorbs what is left. */
+  min-width: 6rem;
+  max-width: 12rem;
   height: 36px;
   padding-inline: var(--space-base);
   background: none;
