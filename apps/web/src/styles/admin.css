@@ -108,41 +108,6 @@
   margin: 0;
 }
 
-/* ---- Dashboard bar ---------------------------------------------------- */
-
-/* The same canvas-plus-hairline construction as the landing page's top nav,
-   without its link list: the organiser side has nowhere else to navigate
-   to yet, and inventing a nav for three screens would be a nav that lies. */
-.organiser-bar {
-  background: var(--color-canvas);
-  border-bottom: 1px solid var(--color-hairline);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding-block: var(--space-md);
-  padding-inline: var(--space-2xl);
-  min-height: 64px;
-}
-
-.organiser-bar__mark {
-  color: var(--color-ink);
-  font-family: var(--type-heading-md-family);
-  font-size: var(--type-heading-md-size);
-  font-weight: var(--type-heading-md-weight);
-  line-height: var(--type-heading-md-line-height);
-  letter-spacing: var(--type-heading-md-letter-spacing);
-  margin: 0;
-}
-
-.organiser-bar__actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-}
-
 /* ---- Empty state ------------------------------------------------------ */
 
 .organiser-empty {

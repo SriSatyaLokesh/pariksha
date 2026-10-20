@@ -242,7 +242,6 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // and the focus ring (base.css).
   ".organiser__title": both("cream"),
   ".organiser__lead": both("cream"),
-  ".organiser-bar__mark": both("canvas"),
   ".organiser__notice": both("canvas"),
   ".organiser__status": both("canvas"),
   ".organiser-empty__title": both("canvas"),
@@ -257,6 +256,26 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".text-input": both("canvas"),
   ".registration-form__help, .registration-form__legend": both("canvas"),
   ".registration-form__error": both("canvas"),
+
+  // ---- shell.css: the organiser's chrome (Phase 6.5c Task 1, D3) --------
+  // The first rules in the organiser bundle to read theme.css's semantic
+  // names, so the first entries here that differ by ground. The bar is
+  // --surface and the rail is --ground-2; the page between them is still
+  // the cream canvas admin.css gives it, which is why every screen's own
+  // selectors above are unchanged — 6.5d and 6.5e move those.
+  ".shell__mark": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__workspace": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__email": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__icon-button": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__signout": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__nav-item": { dark: "signal-bg-2", light: "signal-l-bg-2" },
+  // The current item's fill is --accent-wash, 12% accent over the rail's
+  // own --ground-2. A 12% wash does not move the ratio enough to score
+  // against, and the ground beneath it is the honest worst case.
+  '.shell__nav-item[aria-current="page"]': {
+    dark: "signal-bg-2",
+    light: "signal-l-bg-2",
+  },
 
   // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
   // Same palette and the same reasoning: the editor and the preview are

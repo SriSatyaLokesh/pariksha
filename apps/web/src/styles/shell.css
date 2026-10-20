@@ -107,6 +107,12 @@
   border-radius: var(--rounded-xs);
   cursor: pointer;
   color: var(--ink-2);
+  /* The label inside is visually hidden, so this size paints nothing — it
+     is declared because the contrast audit resolves a selector's own
+     font-size rather than guessing one, and a glyph is held to the same
+     bar as the text it stands in for. */
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
 }
 
 .shell__signout {
