@@ -94,8 +94,11 @@ export function Receipt({
             message class — the finish page is that shell reused, so the
             start message and this one are set the same way. Interpolated,
             never `dangerouslySetInnerHTML`: it is free text an organiser
-            typed, and it reaches a candidate's browser. */}
-        {receipt.finishMessage !== null && (
+            typed, and it reaches a candidate's browser. Truthy rather than
+            `!== null`, which is `exam.tsx`'s own guard on the start
+            message: an imported document may carry "", and an empty
+            paragraph is a gap nobody wrote. */}
+        {receipt.finishMessage && (
           <p className="exam-landing-message" data-testid="exam-finish-message">
             {receipt.finishMessage}
           </p>

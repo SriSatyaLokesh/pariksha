@@ -357,6 +357,14 @@ it("shows no empty message block when the organiser set none", async () => {
   expect(screen.getByText(/results for this test are not shown here/i)).toBeVisible();
 });
 
+it("treats an empty message as no message, the way the start message does", async () => {
+  // The builder deletes the key rather than storing "" (`withMessage`), but
+  // an imported `pariksha/test@1` document can carry one — and an empty
+  // paragraph between the facts and the note is a gap nobody wrote.
+  await finishMessaged("");
+  expect(screen.queryByTestId("exam-finish-message")).toBeNull();
+});
+
 it("renders the message as text, never as markup", async () => {
   // Organiser-authored free text landing on a candidate's screen. The
   // payload is an `onerror` that fires the moment the element is parsed
