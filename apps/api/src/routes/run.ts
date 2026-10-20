@@ -313,6 +313,13 @@ const candidatePath = (c: Context<AppBindings>): string =>
  * `?provider=`. `TestAccess` has no provider field, so there is nothing on
  * the test to read, and every instance this ships to has one. The upgrade
  * when one has two is a field in `access`, not a change here.
+ *
+ * **And on an instance with two it is load-bearing, not cosmetic.** The
+ * verified address is this gate's identity (`listEntry` below), so a
+ * caller choosing the provider chooses which issuer gets to assert it —
+ * the same shape as the `email_code` laundering the final review found,
+ * one level up. A second provider must land together with the `access`
+ * field that pins which one a test accepts.
  */
 const providerFor = (deps: AppDeps, c: Context<AppBindings>): string =>
   c.req.query("provider") ?? deps.env.oidcProviders?.[0]?.id ?? "";
@@ -596,6 +603,15 @@ export function runRoutes(deps: AppDeps): Hono<AppBindings> {
     const token = await issueEntryToken(deps, claim);
     // Back to the test the candidate started from, carrying the token —
     // and carrying no cookie, which is the whole point.
+    //
+    // In the query string, judged and kept (final review, minor): it is
+    // single-use, dead in 30 minutes, and `Referrer-Policy: no-referrer`
+    // (both `_headers` and `middleware/security.ts`) keeps it off every
+    // onward request. What it does land in is an edge access log in
+    // front of the static site, where a 30-minute replay window needs
+    // the log *and* a candidate who has not yet reached `/register`. A
+    // fragment would not, and is the upgrade — but it is a change on the
+    // browser side of this redirect, which this wave does not own.
     return c.redirect(`${candidatePath(c)}?entry=${token}`, 302);
   });
 

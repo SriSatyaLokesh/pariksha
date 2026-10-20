@@ -159,7 +159,11 @@ const SENTINEL_FORM = {
 };
 const SENTINEL_LIST: NewCandidate[] = [
   { externalId: "SNT-A", setLabel: null, formValues: {} },
-  { externalId: "SNT-B", setLabel: null, formValues: {} },
+  // Every one of B's identity values is a sentinel, not just their name:
+  // a leak of another candidate's roll number or registered address is
+  // exactly the leak this control exists to catch, and until the final
+  // review only `full_name` carried a string the scan could see.
+  { externalId: "__OTHERROLL__", setLabel: null, formValues: {} },
 ];
 
 // `full`: every type, a candidate list of two, linear navigation (so a
@@ -412,7 +416,7 @@ record(
 
 // --- candidate B: the cross-candidate control -----------------------------
 
-const B = await fullJourney("SNT-B", "__OTHERCANDIDATE__", "bharat@uni.ac.in");
+const B = await fullJourney("__OTHERROLL__", "__OTHERCANDIDATE__", "__OTHEREMAIL__@uni.ac.in");
 await answer(B.cookie, B.paper.sections[0]!.questions[0]!.id, { kind: "option", option: "a" }, 1);
 const submitBRes = await app.request("/api/v1/run/attempt/submit", { method: "POST", headers: { cookie: B.cookie } });
 await recordJson("POST /api/v1/run/attempt/submit", submitBRes);
@@ -538,14 +542,18 @@ it("a candidate's own attempt and candidate ids are present; another candidate's
   expect(mine).toContain(A.attemptId);
   expect(mine).not.toContain(B.attemptId);
   expect(mine).not.toContain(B.candidateId);
-  expect(mine).not.toContain("__OTHERCANDIDATE__");
+  for (const sentinel of ["__OTHERCANDIDATE__", "__OTHERROLL__", "__OTHEREMAIL__"]) {
+    expect(mine, sentinel).not.toContain(sentinel);
+  }
 });
 
 it("the access code and the full registration form values never ride a response", () => {
   for (const bodies of seen.values()) {
     for (const body of bodies) {
       expect(body).not.toContain("__ACCESS_CODE__");
-      expect(body).not.toContain("__OTHERCANDIDATE__");
+      for (const sentinel of ["__OTHERCANDIDATE__", "__OTHERROLL__", "__OTHEREMAIL__"]) {
+        expect(body, sentinel).not.toContain(sentinel);
+      }
     }
   }
 });

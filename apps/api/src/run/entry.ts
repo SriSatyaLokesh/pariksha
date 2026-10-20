@@ -5,8 +5,9 @@
 // proofs of four different things, and the whole point of this module is
 // that they stop being four as soon as they succeed: each mints a
 // single-use `run_entry` token carrying the test version and, where the
-// mode knows it, a verified email. Task 3 then has exactly one thing to
-// check, and the four gates do not each grow their own session concept.
+// mode resolved one, the candidate-list row. Task 3 then has exactly one
+// thing to check, and the four gates do not each grow their own session
+// concept.
 //
 // The token is an `auth_token` row because `consumeAuthToken` is already
 // the race-free single-use primitive all four need — one `UPDATE … WHERE
@@ -209,28 +210,18 @@ export async function issueEntryToken(deps: AppDeps, claim: EntryClaim): Promise
   return token;
 }
 
-/** Reads without consuming. Task 3 consumes it in the same batch as the
- *  write, so a refreshed registration page does not burn the token. */
+/** Reads without consuming. Task 3 consumes it **inside the same batch**
+ *  as the registration write (`registerCandidate` takes the hash and the
+ *  kind), so a refreshed registration page does not burn the token and a
+ *  failed write does not spend it either — which is why there is no
+ *  `consumeEntryToken` beside this: the one that existed had no caller,
+ *  and a second way to spend an entry token is a second posture. */
 export async function readEntryToken(
   deps: AppDeps,
   testVersionId: string,
   token: string,
 ): Promise<EntryClaim | null> {
   const raw = await readAuthToken(
-    deps.db,
-    await entryHash(testVersionId, token),
-    ENTRY_KIND,
-    deps.now(),
-  );
-  return asClaim(raw, testVersionId);
-}
-
-export async function consumeEntryToken(
-  deps: AppDeps,
-  testVersionId: string,
-  token: string,
-): Promise<EntryClaim | null> {
-  const raw = await consumeAuthToken(
     deps.db,
     await entryHash(testVersionId, token),
     ENTRY_KIND,
