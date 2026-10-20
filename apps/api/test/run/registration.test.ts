@@ -609,6 +609,37 @@ async function fillBucket(kind: keyof typeof LIMITS, key: string): Promise<void>
   ]);
 }
 
+it("S-07: a POST that carries no proof of work does not cost the bucket a token", async () => {
+  // The order the limiter is charged in *is* the defence. Charged above
+  // `verifyPow` — where it was — a bucket token cost one bare POST with
+  // no body and no solution, and since `/access` never charges a success
+  // while `readEntryToken` does not consume, one reusable entry token
+  // and ~1000 empty posts answered every real candidate 429 for the rest
+  // of the five-minute window.
+  const bucket = `test_register:${await versionOf("signup")}`;
+  const count = async (): Promise<number> =>
+    Number(
+      (
+        await deps.db.query<{ count: number }>("SELECT count FROM rate_limit WHERE bucket = ?", [
+          bucket,
+        ])
+      )[0]?.count ?? 0,
+    );
+  const token = await gate("signup");
+
+  // An empty body: no solution, so `bot_check_failed` and no token spent.
+  expect((await post(`/api/v1/run/alpha/signup/register`, {}, token)).status).toBe(403);
+  expect(
+    (await post(`/api/v1/run/alpha/signup/register`, { values: VALID, solution: "0" }, token))
+      .status,
+  ).toBe(403);
+  expect(await count()).toBe(0);
+
+  // And a registration that does the work is charged exactly once.
+  expect((await register("signup", token, VALID)).status).toBe(201);
+  expect(await count()).toBe(1);
+});
+
 it("S-07: registrations past the window's ceiling are refused", async () => {
   await fillBucket("test_register", await versionOf("signup"));
   const res = await register("signup", await gate("signup"), VALID);

@@ -197,18 +197,14 @@ export function registrationRoutes(deps: AppDeps): Hono<AppBindings> {
   });
 
   /**
-   * The server's decision. The order is: read the entry token, charge the
-   * volume limit, check the proof of work, validate, hash the unique
+   * The server's decision. The order is: read the entry token, check the
+   * proof of work, charge the volume limit, validate, hash the unique
    * values, then **one** `db.batch` so a `UNIQUE` violation rolls the
    * whole registration back.
    */
   routes.post("/:workspaceSlug/:testSlug/register", async (c) => {
     const test = await openTest(deps, c);
     const { token, claim } = await entryClaim(deps, c, test);
-    // Charged on every registration, not only on refusals: a registration
-    // *is* the volume. Sized at twice the PRD's capacity row, so the
-    // cohort it protects cannot reach it.
-    await limitOrThrow(deps, "test_register", test.testVersionId);
 
     const parsed = registerRequest.safeParse(await c.req.json().catch(() => ({})));
     if (!parsed.success) {
@@ -220,6 +216,18 @@ export function registrationRoutes(deps: AppDeps): Hono<AppBindings> {
     // the challenge is a digest of the token already in hand — so the
     // route's measured budget is what it was without it.
     if (!(await verifyPow(token, parsed.data.solution))) throw refuse("bot_check_failed");
+    // Charged on every registration, not only on refusals: a registration
+    // *is* the volume. Sized at twice the PRD's capacity row, so the
+    // cohort it protects cannot reach it.
+    //
+    // **Below the proof of work, and that is the whole of the defence.**
+    // Charged above it, a bucket token cost one bare POST with no body
+    // and no solution — and `/access` never charges a success while
+    // `readEntryToken` does not consume, so one reusable entry token and
+    // ~1000 empty posts emptied the five-minute bucket and answered
+    // every real candidate 429 for the rest of the window. The proof of
+    // work bounds nothing it is charged after.
+    await limitOrThrow(deps, "test_register", test.testVersionId);
     // The per-instance opt-in, and a no-op on an instance that configured
     // no provider — which is every default one (`AC-01`).
     if (
