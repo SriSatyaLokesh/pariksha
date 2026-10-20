@@ -33,6 +33,10 @@
    chain so its rules win over the placeholder page styling above, which
    6.5e retires. */
 @import "./shell.css";
+/* Phase 6.5c Task 3 (D6): Home, the one screen this plan builds rather than
+   inherits. After shell.css because it grounds the page track the shell
+   leaves cream for every other screen. */
+@import "./home.css";
 
 /* ---- Page ------------------------------------------------------------- */
 

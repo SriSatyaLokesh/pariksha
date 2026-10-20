@@ -1,0 +1,459 @@
+/* Home: the agenda and the strip at its foot (spec §5, D6/D6a; §11, D21,
+   D21b, D15).
+
+   GROUND. This is the first SCREEN on the Signal ground, not only the first
+   chrome. shell.css grounds the bar and the rail and deliberately leaves the
+   page cream, because 6.5d and 6.5e re-ground the screens that already
+   exist. Home does not already exist — it is built here, and building a new
+   screen in the cream world only to rewrite it two plans later is work done
+   twice. So every colour below is one of theme.css's semantic names, and the
+   page track Home sits in takes --ground with it.
+
+   `.shell__page:has(> .home)` is how that happens, rather than a modifier
+   prop threaded through OrganiserShell: the page's own padding is outside
+   .home's box, so painting .home alone would leave a dark block inside a
+   cream gutter — two grounds on one screen. One selector, no component
+   change, and 6.5e deletes it when the page itself moves.
+
+   Home therefore passes NO title or crumb to the shell and renders its own
+   <h1> and role crumb inside .home, the way the test builder's arm already
+   does: .shell__head's heading is admin.css's cream-world ink and would be
+   illegal here.
+
+   D15's two scales, read exactly as shell.css's header writes them:
+     inside a component  --space-xs (4) / -sm (6) / -base (8) / -md (12) / -lg (16)
+     page to its edges   --space-xl (24) / -2xl (32) / -3xl (40) / -4xl (64)
+   No rule here mixes one scale's value into the other's job.
+
+   No colour literal, no --color-signal* token, no new colour. */
+
+/* ---- The page Home sits in -------------------------------------------- */
+
+.shell__page:has(> .home) {
+  background: var(--ground);
+}
+
+/* D21: Home never scrolls. The bar is 56px (--shell-bar, declared on .shell
+   and inherited here) and the page adds --space-xl above and below, so
+   100dvh minus those three is exactly the room .home may take. Stated as
+   arithmetic over shell.css's own two constants rather than as a magic
+   number, and it holds at 400px too: D3a changes padding-inline below 719px
+   and leaves padding-block alone.
+
+   overflow: hidden is also what answers shell.css's documented BFC hazard.
+   Below 719px that file gives every direct child of the page
+   `overflow-x: auto`, which would make .home its own scroll container — a
+   page inside the page, which is the exact thing D21 forbids. The selector
+   is `.shell__page > .home` (0,2,0) so it beats `.shell__page > *` (0,1,0)
+   on specificity rather than on import order. */
+.shell__page > .home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+  overflow: hidden;
+}
+
+/* The ring, scoped the way shell.css scopes its own: --focus is the Signal
+   accent, which D1 measures at 1.60:1 on cream, so it may only be widened
+   to a surface that is actually on this ground. Home is. */
+.home :focus-visible {
+  outline-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+/* ---- Page lead --------------------------------------------------------- */
+
+.home__crumb {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* Clamped so the title never eats a 375px screen; the floor (28px) is what
+   the contrast gate measures. */
+.home__title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--type-display-lg-family);
+  font-weight: var(--type-display-lg-weight);
+  font-size: clamp(1.75rem, 1.3rem + 2.5vw, var(--type-display-lg-size));
+  line-height: 1.1;
+  letter-spacing: var(--type-display-lg-letter-spacing);
+}
+
+/* D21's page lead: the two scale figures. Not pills — a pill that counts a
+   set with no rows on this page would be dead on click. */
+.home__lead {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--ink-2);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+}
+
+.home__figure {
+  color: var(--ink);
+  font-size: var(--type-body-md-size);
+  font-weight: 600;
+  /* Tabular figures: the two counts sit beside each other and must not jump
+     a pixel when one of them changes. */
+  font-variant-numeric: tabular-nums;
+}
+
+.home__sep {
+  color: var(--ink-3);
+  font-size: var(--type-body-md-size);
+  padding-inline: var(--space-base);
+}
+
+/* ---- The two panes ----------------------------------------------------- */
+
+/* min-height: 0 on both the row and the panes is what lets the scroll areas
+   inside shrink: a flex item's default min-height is auto, which is its
+   content, and a pane that refuses to shrink pushes the strip off screen —
+   which is D21's failure mode, not its layout. */
+.home__panes {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-md);
+  min-height: 0;
+  flex: 1;
+}
+
+.home__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-md);
+}
+
+.home__pane-title {
+  margin: 0 0 var(--space-base);
+  color: var(--ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+}
+
+/* The only thing on this screen that scrolls. */
+.home__scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ---- Groups ------------------------------------------------------------ */
+
+.home__group + .home__group {
+  margin-block-start: var(--space-md);
+}
+
+.home__group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-base);
+  margin: 0 0 var(--space-xs);
+}
+
+.home__group-name,
+.home__group-count {
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* Reserved so a one-digit and a two-digit count leave the header the same
+   width — the shape is identical at four items and at forty. */
+.home__group-count {
+  min-width: 2ch;
+}
+
+.home__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- One row ----------------------------------------------------------- */
+
+/* 40px, single line, in this order: time, urgency, subject, reason, action.
+   The subject takes the free space and ellipsises; nothing wraps, so the
+   row is the same height whatever it holds. */
+.home__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-base);
+  height: 40px;
+  padding-inline: var(--space-base);
+  border-radius: var(--rounded-sm);
+  white-space: nowrap;
+}
+
+.home__row:hover {
+  background: var(--wash);
+}
+
+.home__row-time {
+  flex: none;
+  min-width: 6ch;
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  font-variant-numeric: tabular-nums;
+}
+
+/* D21b: a round dot, not a rail. A straight 3px bar inside a 9999px capsule
+   puts the component's only square edge 12px from its roundest one, so the
+   strip below and this list use one construct. */
+.home__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--rounded-full);
+  background: var(--ink-3);
+}
+
+.home__dot[data-tone="risk"] {
+  background: var(--risk);
+}
+
+.home__dot[data-tone="warn"] {
+  background: var(--warn);
+}
+
+.home__dot[data-tone="accent"] {
+  background: var(--accent);
+}
+
+.home__row-subject {
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Muted, on the same line as the subject — --ink-2 rather than --ink-3
+   because this text has to stay legal while its row is receded: --ink-3 at
+   opacity 0.8 measures 3.54:1 on the dark surface and 3.52:1 on the light
+   one, which clears the 3:1 the recession is bounded by but not the 4.5:1
+   DESIGN.md asks of body text. --ink-2 clears both (5.51 / 5.07). */
+.home__row-reason {
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* D21a: the reveal is opacity ALONE, never visibility, so the button stays
+   tabbable and tabbing onto one reveals it. */
+.home__row-action {
+  /* The action sits at the row's end; the subject and the reason share what
+     is left of the line, and the subject is the half that ellipsises. */
+  margin-inline-start: auto;
+  flex: none;
+  opacity: 0;
+  background: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
+  padding-inline: var(--space-base);
+  height: 28px;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.home__row:hover .home__row-action,
+.home__row-action:focus-visible {
+  opacity: 1;
+}
+
+/* ---- Marking, not filtering (D21) -------------------------------------- */
+
+/* Nothing moves, nothing is hidden. A marked row keeps full ink and takes
+   its pill's tone as a hairline ring; an unmatched one recedes to 0.8 AND
+   NO FURTHER, because past that its secondary text drops under the 3:1
+   DESIGN.md requires. The ring is not the only signal — the receded rows
+   and the live region say the same thing without hue. */
+.home__row[data-marked="on"] {
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+
+.home__row[data-marked="on"][data-tone="risk"] {
+  box-shadow: inset 0 0 0 1px var(--risk);
+}
+
+.home__row[data-marked="on"][data-tone="warn"] {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.home__row[data-marked="on"][data-tone="accent"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.home__row[data-marked="off"] {
+  opacity: 0.8;
+}
+
+/* ---- Empty states ------------------------------------------------------ */
+
+.home__empty,
+.home__more {
+  margin: var(--space-base) 0 0;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.home__empty-action {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--accent);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* ---- The strip (D21, D21b) --------------------------------------------- */
+
+/* Always on screen: it is a control, and a control that scrolls away is a
+   control an organiser has to go looking for. */
+.home__strip {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-base);
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-base) var(--space-md);
+}
+
+.home__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-base);
+  min-height: 36px;
+  padding-inline: var(--space-md);
+  background: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-full);
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* Pressed is three signals, never hue alone: the fill, the heavier label and
+   aria-pressed on the button itself. */
+.home__pill[aria-pressed="true"] {
+  background: var(--wash);
+  color: var(--ink);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+}
+
+.home__pill:disabled {
+  cursor: default;
+  color: var(--ink-3);
+  font-size: var(--type-body-sm-size);
+}
+
+.home__pill-count {
+  color: var(--ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 600;
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  font-variant-numeric: tabular-nums;
+}
+
+.home__pill:disabled .home__pill-count {
+  color: var(--ink-3);
+  font-size: var(--type-mono-sm-size);
+}
+
+.home__clear {
+  margin-inline-start: auto;
+  min-height: 36px;
+  padding-inline: var(--space-md);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* Not opacity: a disabled control dimmed below 3:1 is a control nobody can
+   read to learn why it is disabled. --ink-3 is legal on both grounds. */
+.home__clear:disabled {
+  cursor: default;
+  color: var(--ink-3);
+  font-size: var(--type-body-sm-size);
+}
+
+/* ---- D3a: one column below 719px --------------------------------------- */
+
+/* The panes stack, both still scroll inside themselves, and the strip is
+   still the last thing on screen. The agenda comes first because it is the
+   thing that says what to do next.
+
+   Nothing inside a row is hidden at this width. The reason is the only TEXT
+   that says which set a row is in — dropping it would leave the dot's hue
+   doing that alone, which DESIGN.md's "never colour alone" forbids. The
+   subject ellipsises instead. */
+@media (max-width: 719px) {
+  .home__panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
+  }
+}

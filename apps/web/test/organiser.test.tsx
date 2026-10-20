@@ -364,14 +364,18 @@ describe("Home (the dashboard, inside the shell)", () => {
     return render(<OrganiserApp client={fakeClient({ me: async () => actor })} />);
   }
 
-  it("names the workspace and offers a way into tests and banks", async () => {
+  // Phase 6.5c Task 3 (`D6`/`D6a`): the two look-alike cards are gone and
+  // the screen is an agenda. The ways into Banks and Tests are the shell's
+  // rail, which is how twelve screens have them rather than one.
+  it("names the workspace and leads with the two scale figures", async () => {
     renderHome();
 
     expect(
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /^tests$/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /question banks/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "What needs you" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recently edited" })).toBeInTheDocument();
+    expect(screen.getByTestId("home-lead")).toHaveTextContent("0 tests");
   });
 
   it("offers exactly one next action out of the empty state", async () => {
@@ -379,7 +383,7 @@ describe("Home (the dashboard, inside the shell)", () => {
     await screen.findByRole("heading", { level: 1, name: "Placement cell" });
 
     expect(
-      screen.getByRole("button", { name: /create your first test/i }),
+      await screen.findByRole("button", { name: /create your first test/i }),
     ).toBeEnabled();
   });
 
@@ -533,7 +537,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Question banks" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Banks" }));
     fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
     fireEvent.click(await screen.findByRole("button", { name: "New question" }));
 
@@ -559,7 +563,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeInTheDocument();
   });
@@ -623,7 +627,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Midterm" })).toBeInTheDocument();
@@ -687,7 +691,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
     fireEvent.click(await screen.findByRole("button", { name: /^Reasoning ·/i }));
 
@@ -745,7 +749,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Registration form" })).toBeInTheDocument();
@@ -832,7 +836,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     fireEvent.change(await screen.findByLabelText(/try a link/i), {
@@ -893,7 +897,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Timing and attempts" })).toBeInTheDocument();
@@ -952,7 +956,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Who can take this test" })).toBeInTheDocument();
@@ -1009,7 +1013,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
     await screen.findByRole("heading", { name: "Who can take this test" });
 
@@ -1096,7 +1100,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
@@ -1171,7 +1175,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
@@ -1245,7 +1249,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "When candidates see their result" })).toBeInTheDocument();
@@ -1335,7 +1339,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Branding" })).toBeInTheDocument();

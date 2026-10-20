@@ -12,7 +12,7 @@ import { OrganiserShell, type NavKey } from "../components/OrganiserShell";
 import { readView, writeView, type ViewParams } from "../lib/view-url";
 import { SignIn } from "./signin";
 import { Setup } from "./setup";
-import { Dashboard } from "./dashboard";
+import { Home } from "./home";
 import { BankList } from "./banks";
 import { BankBrowser } from "./bank";
 import { QuestionScreen } from "./question";
@@ -224,17 +224,25 @@ export function OrganiserApp({
     case "setup":
       return <Setup client={client} onComplete={() => void boot()} />;
     case "dashboard":
+      // The second arm that passes no `title`/`crumb`, and for the same
+      // reason as the builder: `D6` rebuilt this screen on the Signal
+      // ground (`home.css`), and `.shell__head` writes its heading in
+      // admin.css's cream-world ink. Home renders its own <h1> and its own
+      // role crumb — UX-11's "the role you hold is stated on arrival" is
+      // still on the screen, one element lower. 6.5e lifts both back into
+      // the shell when the page itself moves.
       return shell(
         "home",
         view.actor,
         view.workspace,
-        // UX-11, as the dashboard has always carried it: the role you hold
-        // is stated on arrival rather than discovered when an action is
-        // refused. It moves to the shell's crumb with the rest of the
-        // chrome; `Dashboard` no longer has a header to put it in.
-        { title: view.workspace.name, crumb: roleCrumb(view.actor, view.workspace) },
-        <Dashboard
-          onOpenBanks={() => go({ kind: "banks", actor: view.actor, workspace: view.workspace })}
+        {},
+        <Home
+          client={client}
+          workspace={view.workspace}
+          actor={view.actor}
+          onOpenTest={(testId) =>
+            go({ kind: "test", actor: view.actor, workspace: view.workspace, testId })
+          }
           onOpenTests={() => go({ kind: "tests", actor: view.actor, workspace: view.workspace })}
         />,
       );
@@ -412,10 +420,3 @@ function paramsOf(view: View): ViewParams | null {
   }
 }
 
-/** The role this actor holds here, stated rather than discovered (UX-11). */
-function roleCrumb(actor: Actor, workspace: Workspace): string {
-  const role = actor.memberships.find(
-    (membership) => membership.workspaceId === workspace.id,
-  )?.role;
-  return role === undefined ? "Workspace" : `Workspace · ${role}`;
-}

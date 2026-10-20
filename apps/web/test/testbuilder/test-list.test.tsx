@@ -370,7 +370,14 @@ describe("TestList", () => {
   // is found by id rather than `getByLabelText`, which would throw on two
   // matches once a row is on screen.
   it("the create form's happy path creates a test and reloads the list", async () => {
-    const tests = vi.fn().mockResolvedValueOnce([]).mockResolvedValueOnce([PUBLISHED]);
+    // Three reads, not two: `renderList` walks through Home (`D14`), and
+    // Home's own agenda calls `tests()` before the list ever mounts
+    // (`D6` — it is one of the two reads Home is allowed).
+    const tests = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([PUBLISHED]);
     const createTest = vi.fn(async () => PUBLISHED);
     const { container } = await renderList(fakeClient({ tests, createTest }));
     await screen.findByText(/no tests yet/i);

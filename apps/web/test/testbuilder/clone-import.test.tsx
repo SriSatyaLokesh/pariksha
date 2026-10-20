@@ -116,7 +116,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 
 async function openList(client: ApiClient): Promise<{ container: HTMLElement }> {
   const view = render(<OrganiserApp client={client} />);
-  fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
   await screen.findByRole("heading", { level: 1, name: "Tests" });
   await screen.findByText("Midterm");
   return { container: view.container };

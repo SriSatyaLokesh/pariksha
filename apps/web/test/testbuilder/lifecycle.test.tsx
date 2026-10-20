@@ -121,7 +121,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 /** Dashboard -> Tests -> the builder, the only route an organiser has. */
 async function openBuilder(client: ApiClient): Promise<ReturnType<typeof render>> {
   const view = render(<OrganiserApp client={client} />);
-  fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
   fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
   await screen.findByRole("heading", { level: 1, name: "Midterm" });
   return view;
@@ -132,7 +132,7 @@ describe("the builder's lifecycle header", () => {
     const open: TestSummary = { ...TEST_ROW, state: "open", currentVersion: 1, draftVersion: 2 };
     render(<OrganiserApp client={fakeClient({ tests: async () => [open], test: async () => open })} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     const row = (await screen.findByText("Midterm")).closest("tr") as HTMLElement;
     expect(within(row).getByText("Open")).toBeVisible();
     expect(row.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
