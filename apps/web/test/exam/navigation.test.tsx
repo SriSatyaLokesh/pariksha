@@ -192,7 +192,9 @@ describe("AC-15: the palette draws the lock", () => {
 
     const locked = square(1);
     expect(locked).toHaveAttribute("aria-disabled", "true");
-    expect(locked).toHaveAccessibleDescription(/section is closed/i);
+    // The sentence is `@pariksha/core`'s — the same one the server's 403
+    // carries, now that the two are not written out twice by hand.
+    expect(locked).toHaveAccessibleDescription(/going back to a section you have already left/i);
 
     // Genuinely inert, not merely styled: this is the finding two
     // consecutive UI tasks produced.

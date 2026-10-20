@@ -364,6 +364,25 @@ export const NAVIGATION_CONSEQUENCE: Readonly<Record<NavigationMode, string>> = 
   per_section: "Free inside a section; a section is locked once the candidate leaves it.",
 };
 
+/**
+ * What the server refuses a locked question with, and what the browser
+ * tells a candidate a locked square means. One sentence per mode,
+ * **here**, because the two had been written out by hand on both sides
+ * and had already drifted on `per_section` — the browser's copy had
+ * grown a "This section is closed." the server's never had, so the same
+ * rule had two wordings depending on which half of the product said it.
+ * That is the drift `CONSENT_REQUIRED_MESSAGE` was moved here to stop.
+ *
+ * `free` has no entry because nothing is ever locked under it, and an
+ * entry would be a sentence no code path can reach.
+ */
+export const NAVIGATION_LOCKED_MESSAGE: Readonly<
+  Record<Exclude<NavigationMode, "free">, string>
+> = {
+  linear: "This test does not allow going back to an earlier question.",
+  per_section: "This test does not allow going back to a section you have already left.",
+};
+
 export type AccessMode = "link_code" | "invite_only" | "email_code" | "sso";
 
 export interface TestAccess {

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type ReactElement } from "react";
+import { NAVIGATION_LOCKED_MESSAGE } from "@pariksha/core";
 import type { AttemptPaper, CandidateQuestion } from "../../lib/paper";
 import { Palette, type PaletteQuestion, type PaletteState } from "./Palette";
 import { ViewControls, useViewPreferences } from "./ViewControls";
@@ -88,11 +89,13 @@ export function lockedIndices(paper: AttemptPaper): ReadonlySet<number> {
 }
 
 /** Why, in the test's own words — `C-02`: a refusal names the thing that
- *  helps. `undefined` on a `free` paper, where nothing is locked. */
+ *  helps. `undefined` on a `free` paper, where nothing is locked.
+ *
+ *  The sentence is `@pariksha/core`'s, not a second copy: written out by
+ *  hand here it had already drifted from the server's 403 on
+ *  `per_section`. */
 export function lockedReasonFor(paper: AttemptPaper): string | undefined {
-  if (paper.navigation === "linear") return "This test does not allow going back to an earlier question.";
-  if (paper.navigation === "per_section") return "This section is closed. This test does not allow going back to a section you have already left.";
-  return undefined;
+  return paper.navigation === "free" ? undefined : NAVIGATION_LOCKED_MESSAGE[paper.navigation];
 }
 
 /**

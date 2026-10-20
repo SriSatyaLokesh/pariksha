@@ -13,7 +13,7 @@
 // the interface or through the API" bites.
 
 import { ApiError } from "../errors.js";
-import type { NavigationMode } from "@pariksha/core";
+import { NAVIGATION_LOCKED_MESSAGE, type NavigationMode } from "@pariksha/core";
 import type { PinnedLayout } from "./attempt.js";
 
 /** Presentation order across sections; the index into this is
@@ -60,14 +60,6 @@ export const sectionStartIndexOf = (layout: PinnedLayout, flatIndex: number): nu
     .slice(0, sectionIndexOf(layout, flatIndex))
     .reduce((sum, section) => sum + section.questionIds.length, 0);
 
-/** The sentence each mode refuses with. Named, because `C-02` says a
- *  refusal must say what would help and "403" would not. */
-const RULE: Readonly<Record<Exclude<NavigationMode, "free">, string>> = {
-  linear: "This test does not allow going back to an earlier question.",
-  per_section:
-    "This test does not allow going back to a section you have already left.",
-};
-
 /**
  * Throws 403 `navigation_locked`, naming the rule — **never a 404**.
  *
@@ -90,5 +82,5 @@ export function assertReachable(
       ? target < maxIndex
       : sectionIndexOf(layout, target) < sectionIndexOf(layout, maxIndex);
   if (!behind) return;
-  throw new ApiError(403, "navigation_locked", RULE[mode]);
+  throw new ApiError(403, "navigation_locked", NAVIGATION_LOCKED_MESSAGE[mode]);
 }
