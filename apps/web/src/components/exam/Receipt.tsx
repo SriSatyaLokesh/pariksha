@@ -13,8 +13,15 @@
 // because there is none to show and a blank "—" where a mark should be is
 // a worse thing to hand someone who has just finished an exam.
 
+import { useEffect, useRef } from "react";
 import type { Receipt as ReceiptPayload, ReleasedResult } from "../../lib/run";
 import { ResultView } from "./ResultView";
+
+/** What a candidate is told when there is no result to show — here rather
+ *  than in two files, because `ResultCode`'s return visit lands on exactly
+ *  the same answer a week later. */
+export const NO_RESULT_NOTE =
+  "Results for this test are not shown here. Your organiser will tell you when and where to expect them.";
 
 /** The candidate's own timezone, not the test's: this is the moment *they*
  *  pressed Submit, and they will quote it to their organiser from the
@@ -34,10 +41,27 @@ export function Receipt({
   receipt: ReceiptPayload;
   released: ReleasedResult | null;
 }) {
+  /**
+   * The finish page is a view swap, and a view swap moves no focus and
+   * announces nothing: `useDialogKeys`' cleanup hands focus back to a
+   * Submit button that has just unmounted, so it lands on `<body>`. A
+   * candidate who has just ended a timed exam hears silence — and the axe
+   * test cannot see it, because nothing here is invalid.
+   *
+   * So the heading takes the focus, the way `PublishChecklist` does, and
+   * is read out as the new screen.
+   */
+  const heading = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    heading.current?.focus();
+  }, []);
+
   return (
     <div className="exam-landing exam-finish">
       <header className="exam-landing-hero">
-        <h1>Submitted</h1>
+        <h1 ref={heading} tabIndex={-1}>
+          Submitted
+        </h1>
       </header>
 
       <main className="exam-landing-body">
@@ -68,12 +92,7 @@ export function Receipt({
 
         {released && <ResultView result={released} />}
 
-        {released === null && (
-          <p className="exam-finish-note">
-            Results for this test are not shown here. Your organiser will tell you when and where to
-            expect them.
-          </p>
-        )}
+        {released === null && <p className="exam-finish-note">{NO_RESULT_NOTE}</p>}
       </main>
     </div>
   );

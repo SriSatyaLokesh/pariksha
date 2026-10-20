@@ -202,10 +202,14 @@ it("every control is a focusable native button, in the order a candidate meets t
   // candidate reads — check the device, then start.
   await mount();
   const buttons = screen.getAllByRole("button");
-  expect(buttons.map((b) => b.tagName)).toEqual(["BUTTON", "BUTTON"]);
+  expect(buttons.map((b) => b.tagName)).toEqual(["BUTTON", "BUTTON", "BUTTON"]);
   for (const button of buttons) expect(button).not.toHaveAttribute("tabindex");
   expect(buttons[0]).toHaveAccessibleName(/check my device/i);
   expect(buttons[1]).toHaveAccessibleName(/start/i);
+  // `C-09`'s way back in, after Start rather than before it: a candidate
+  // who has come to sit the test meets that first, and one who has
+  // already sat it is reading rather than racing.
+  expect(buttons[2]).toHaveAccessibleName(/see my result/i);
   buttons[0]?.focus();
   expect(buttons[0]).toHaveFocus();
 });

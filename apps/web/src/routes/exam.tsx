@@ -36,6 +36,7 @@ import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exa
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
 import { SubmitDialog } from "../components/exam/SubmitDialog";
 import { Receipt } from "../components/exam/Receipt";
+import { ResultCode } from "../components/exam/ResultCode";
 
 // --- "Check my device" (C-01) -------------------------------------------
 
@@ -138,7 +139,18 @@ function formatInstant(at: number, timezone: string): string {
   }
 }
 
-export function ExamLanding({ test, onStart }: { test: LandingPayload; onStart?: () => void }) {
+export function ExamLanding({
+  test,
+  onStart,
+  onResult,
+}: {
+  test: LandingPayload;
+  onStart?: () => void;
+  /** `C-09`'s way in. The landing page is the only address a candidate
+   *  keeps — the one on their invitation — so the return visit a week
+   *  later starts here, on a test that has usually closed by then. */
+  onResult?: () => void;
+}) {
   const [report, setReport] = useState<ReturnType<typeof deviceReport> | null>(null);
   const notice = STATE_NOTICE[test.state];
 
@@ -235,6 +247,19 @@ export function ExamLanding({ test, onStart }: { test: LandingPayload; onStart?:
           >
             Start
           </button>
+          {/* WCAG 2.5.3 again: the name is a superset of the label, and
+              the label is what a candidate who has already sat this test
+              is looking for. */}
+          {onResult && (
+            <button
+              type="button"
+              className="exam-register-secondary"
+              aria-label={`See my result for ${test.name}`}
+              onClick={onResult}
+            >
+              See my result
+            </button>
+          )}
         </div>
 
         {/* Present from first render rather than inserted with its content:
@@ -274,6 +299,8 @@ type View =
   | { kind: "landing"; test: LandingPayload }
   | { kind: "register"; test: LandingPayload }
   | { kind: "attempt"; paper: AttemptPaper }
+  /** `C-09`: no cookie, no attempt, just a reference and an address. */
+  | { kind: "result-code"; test: LandingPayload }
   | { kind: "finished"; receipt: ReceiptPayload; released: ReleasedResult | null };
 
 /**
@@ -709,6 +736,16 @@ export function ExamApp({ client }: { client: RunClient }) {
       />
     );
   }
+  if (view.kind === "result-code") {
+    return (
+      <ResultCode
+        client={client}
+        onBack={() => {
+          setView({ kind: "landing", test: view.test });
+        }}
+      />
+    );
+  }
   if (view.kind === "register") {
     return (
       <ExamRegistration
@@ -728,6 +765,9 @@ export function ExamApp({ client }: { client: RunClient }) {
   return (
     <ExamLanding
       test={view.test}
+      onResult={() => {
+        setView({ kind: "result-code", test: view.test });
+      }}
       onStart={() => {
         // The registration screen is where a candidate without a token
         // goes — C-03's whole flow hangs off this branch.
