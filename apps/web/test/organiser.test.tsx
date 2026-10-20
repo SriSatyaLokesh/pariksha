@@ -1351,3 +1351,129 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     expect(screen.getByLabelText(/start message/i)).toBeEnabled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// Phase 6.5c Task 1 (#181, D3): the chrome is hoisted out of the eleven
+// `case` arms into one shell, so there is one sidebar for the whole
+// organiser instead of twelve copies of `OrganiserHeader`.
+//
+// D14: every assertion starts at `OrganiserApp` and clicks its way there. A
+// test that rendered `OrganiserShell` directly could not see whether any
+// screen is actually wrapped in it — which is the only thing this task does.
+describe("the organiser shell (D3)", () => {
+  function renderOrganiser(overrides: Partial<ApiClient> = {}) {
+    return render(<OrganiserApp client={fakeClient({ me: async () => ACTOR, ...overrides })} />);
+  }
+
+  /** Home has painted — the point every walk below starts from. */
+  function signedIn(): Promise<HTMLElement> {
+    return screen.findByRole("heading", { level: 1, name: "Placement cell" });
+  }
+
+  function nav(): HTMLElement {
+    return screen.getByRole("navigation", { name: "Organiser" });
+  }
+
+  it("shows one persistent sidebar across Home, Banks and Tests", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Banks" })).toBeVisible();
+    expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Tests" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+    expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Home" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Placement cell" })).toBeVisible();
+    expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
+  });
+
+  // D3: "you are here" is three signals, never hue alone. Two of them are
+  // in the DOM and asserted here; the third — the heavier label — is a
+  // font-weight, which jsdom has no layout engine to compute, so it is read
+  // out of the stylesheet that ships. Asserting it nowhere would be the
+  // same as not having it.
+  it("marks the current screen with aria-current and an accent bar, not with hue alone", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    const home = within(nav()).getByRole("button", { name: "Home" });
+    const banks = within(nav()).getByRole("button", { name: "Banks" });
+
+    expect(home).toHaveAttribute("aria-current", "page");
+    expect(banks).not.toHaveAttribute("aria-current");
+    expect(home.querySelector(".shell__nav-bar")).not.toBeNull();
+    expect(banks.querySelector(".shell__nav-bar")).toBeNull();
+
+    fireEvent.click(banks);
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    expect(within(nav()).getByRole("button", { name: "Banks" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav()).getByRole("button", { name: "Home" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  it("does not render the sidebar on sign-in", async () => {
+    render(<OrganiserApp client={fakeClient({ me: async () => null })} />);
+
+    await screen.findByRole("heading", { level: 1, name: /sign in/i });
+    expect(screen.queryByRole("navigation", { name: "Organiser" })).toBeNull();
+  });
+
+  it("does not render the sidebar during the first-run wizard", async () => {
+    renderOrganiser({ setupStatus: async () => ({ needed: true, providers: [GOOGLE] }) });
+
+    await screen.findByLabelText(/workspace name/i);
+    expect(screen.queryByRole("navigation", { name: "Organiser" })).toBeNull();
+  });
+
+  it("omits Results and Grading entirely", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    expect(screen.queryByRole("button", { name: /results|grading/i })).toBeNull();
+  });
+
+  it("collapses the rail to icons and back, keeping every destination reachable", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    const toggle = screen.getByRole("button", { name: /navigation/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // Collapsed is icons-only to the eye, never to a screen reader: the
+    // destinations keep their names and stay clickable.
+    fireEvent.click(within(nav()).getByRole("button", { name: "Tests" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("carries the workspace, the signed-in address and sign-out in the top bar", async () => {
+    const signOut = vi.fn(async () => undefined);
+    renderOrganiser({ signOut });
+    await signedIn();
+
+    expect(screen.getByText("Placement cell", { selector: ".shell__workspace" })).toBeVisible();
+    expect(screen.getByText(ACTOR.email)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("has no axe violations with a screen inside the shell", async () => {
+    const { container } = renderOrganiser();
+    await signedIn();
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
