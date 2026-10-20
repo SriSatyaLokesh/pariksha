@@ -72,7 +72,7 @@ for (const surface of SURFACES) {
     // the geometry was never consulted and the figure below is noise.
     expect(present, `${surface} seeded too few rows to measure`).toBeGreaterThan(visible);
 
-    // eslint-disable-next-line no-console -- this spec exists to report a number
+    // This spec exists to report a number, so it prints one.
     console.log(`DENSITY ${surface}: ${visible} of ${present} rows fully visible at 1440x900`);
     expect(visible).toBeGreaterThanOrEqual(BEFORE[surface]);
   });
