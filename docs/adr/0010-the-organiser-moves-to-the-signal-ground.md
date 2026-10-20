@@ -72,8 +72,10 @@ unrelated jobs.
 reader asked to tell them apart could not. The accent itself carries positive
 meaning on the organiser; `state-answered` stays in the candidate runtime on
 cream, where the two never appear on one screen. On the dark ground every
-structural token fails anyway — `state-answered` 3.4:1, `state-marked` 3.2:1,
-`flag-risk` 2.8:1, `data-blue` 3.7:1 — and none is needed, because test state
+structural token fails anyway — on `signal-surface`, `state-answered` 3.40:1,
+`state-marked` 3.21:1, `flag-risk` 2.79:1, `data-blue` 3.68:1 (3.69 / 3.49 /
+3.03 / 3.99 against `signal-bg`, still short of the 4.5:1 a label needs) —
+and none is needed, because test state
 carries no hue today (`.test-state` is a glyph plus a label on inherited ink)
 and does not gain one here.
 

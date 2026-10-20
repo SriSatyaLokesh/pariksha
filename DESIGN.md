@@ -669,9 +669,9 @@ No 12 / 16 / 20px tier. The pill is the warmest shape in the system and it stays
 
 ## Modes
 
-### Default (light)
+### Default (cream and ink)
 
-As specified above. The cream-and-ink mode, and the only one the candidate runtime ships — an attempt is cream and ink on every ground, under every setting below. It is not a statement about the rest of the product: the marketing site ships on the Signal dark ground only, and the organiser ships on both Signal grounds. See **Grounds**.
+As specified above. The cream-and-ink mode, and the only one the candidate runtime ships — an attempt is cream and ink on every ground, under every setting below. It is not a statement about the rest of the product: the marketing site ships on the Signal dark ground only, and the organiser ships on both Signal grounds. See **Signal grounds**.
 
 ### High contrast
 
@@ -688,7 +688,7 @@ Required by the PRD (C-04) as a candidate-facing toggle, alongside font size. It
 
 Borders go to 2px, focus rings to 3px, and the voltage canvas on the start page drops to a cream canvas with a `{colors.voltage-deep}` rule. Every state keeps its non-colour carrier (fill, notch, ring, glyph), so the palette stays readable with no colour at all.
 
-### Grounds
+### Signal grounds (dark and light)
 
 **The organiser ships on two grounds, and both are in this release.** The Signal ground is declared twice in the front matter — `signal-*` dark and `signal-l-*` light — and both generate into `tokens.css` and `tokens.ts`. A control in the top bar switches them. The choice is per-viewer, kept in `localStorage` and seeded from `prefers-color-scheme`, and the page must render correctly when that read throws.
 
@@ -828,6 +828,7 @@ Every component below is a cream-surface component. The marketing site left this
 
 - **Candidate dark mode.** Deferred by decision, not oversight — the organiser ships both Signal grounds, and only the cream runtime's dark mode is outstanding. See _Modes_.
 - **High contrast on the Signal grounds.** `C-04`'s swap table is specified for the cream surfaces only. What the organiser's two grounds do under a high-contrast setting is undesigned, and is a question for a later phase rather than this one.
+- **Measured ratios for the Signal grounds.** `## Colors` documents the cream world only: its ratios are "measured against `{colors.cream}` unless stated", and the thirty `signal-*` and `signal-l-*` tokens have no row there. They are measured — in ADR 0010, and `apps/web/test/contrast-usage.test.ts` recomputes the mapping's ink, accent and edge pairs on both grounds every run — but not in this file, and not by `contrast.test.ts`, whose pairs `scripts/tokens.mjs` scores against cream by construction. Giving them rows here needs the generator to learn a per-row background first.
 - **Signal-ground components.** `## Components` inventories the cream surfaces only. The Signal ground's components live in `signal.css` and are not written down here; the organiser's move gives them a home, and that inventory is a later pass.
 - **Charts.** The four-series data palette is specified; axis treatment, grid-line weight, tooltip surface and the item-analysis chart types (distribution, discrimination scatter, option pick rates) are not yet designed.
 - **Live monitor.** The 15-second-refresh proctor table needs a specification for how a row changes without stealing focus from the proctor's current action. Not yet written.
