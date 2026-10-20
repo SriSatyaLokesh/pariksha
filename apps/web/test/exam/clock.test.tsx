@@ -385,18 +385,19 @@ const resumedPaper: AttemptPaper = {
   submittedAt: null,
 };
 
-/** Three timed sections of two questions each, every one of them typable
- *  — `C-07`'s auto-advance is only observable through a paper that has
- *  somewhere to advance *to*, twice. */
-const threeSections: AttemptPaper = {
+/** A `per_section` paper of two typable questions per section, one
+ *  section per entry in `limits` — `C-07`'s auto-advance is only
+ *  observable through a paper that has somewhere to advance *to*, twice,
+ *  and `null` is a section with no `time_limit_minutes` at all. */
+const sectionedPaper = (attemptId: string, limits: readonly (number | null)[]): AttemptPaper => ({
   ...resumedPaper,
-  attemptId: "att_sections",
+  attemptId,
   navigation: "per_section",
-  sections: [0, 1, 2].map((at) => ({
+  sections: limits.map((timeLimitMinutes, at) => ({
     id: `s${String(at)}`,
     title: `Section ${String(at + 1)}`,
     instructions: null,
-    timeLimitMinutes: 10,
+    timeLimitMinutes,
     questions: [at * 2 + 1, at * 2 + 2].map((n) => ({
       id: `q${String(n)}`,
       type: "short_answer" as const,
@@ -405,7 +406,12 @@ const threeSections: AttemptPaper = {
       maxLength: 200,
     })),
   })),
-};
+});
+
+const threeSections = sectionedPaper("att_sections", [10, 10, 10]);
+/** Timed → **untimed** → timed. `time_limit_minutes` is per section and
+ *  optional, so this is a paper an organiser can really publish. */
+const mixedSections = sectionedPaper("att_mixed", [10, null, 10, 10]);
 
 function resumingClient(overrides: Partial<RunClient> = {}, paper = resumedPaper): RunClient {
   return {
@@ -497,6 +503,59 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     fireEvent.click(screen.getByRole("button", { name: /next question/i }));
     fireEvent.change(await screen.findByRole("textbox"), { target: { value: "Mumbai" } });
     expect(await screen.findByText("Question 5 stem")).toBeVisible();
+  });
+
+  it("C-07: a section with NO time limit does not disarm every section after it", async () => {
+    // Critical 2 one section further on. The re-arm held the last
+    // anchored reading and required it to be non-null, so an untimed
+    // section stored `null` and every later rise failed the comparison:
+    // `fired` stayed latched from the first boundary and nothing after
+    // the untimed section ever auto-advanced. A candidate on a
+    // timed → untimed → timed paper sat on a question every save refused
+    // for the rest of the attempt.
+    vi.useRealTimers();
+    // Section two is untimed, so its save reports `null`; section three's
+    // reports a clock the server already has at zero.
+    const readings: (number | null)[] = [null, 0];
+    const putAnswer = vi.fn(() =>
+      Promise.resolve({
+        outcome: "accepted" as const,
+        remainingMs: 44 * MINUTE,
+        maxIndex: 0,
+        sectionRemainingMs: readings.shift() ?? null,
+      }),
+    );
+    render(
+      <ExamApp
+        client={resumingClient({ putAnswer }, { ...mixedSections, sectionRemainingMs: 0 })}
+      />,
+    );
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    // Boundary one, out of timed section one — the half that already
+    // worked.
+    expect(await screen.findByText("Question 3 stem")).toBeVisible();
+
+    // A save inside the untimed section: there is no section chip to
+    // show, and nothing auto-advances out of it, which is correct.
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Delhi" } });
+    await waitFor(() => {
+      expect(putAnswer).toHaveBeenCalledTimes(1);
+    });
+    await waitFor(() => {
+      expect(screen.getAllByRole("timer")).toHaveLength(1);
+    });
+    expect(screen.getByText("Question 3 stem")).toBeVisible();
+
+    // The candidate walks out of it themselves, into timed section three.
+    fireEvent.click(screen.getByRole("button", { name: /next question/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /next question/i }));
+    expect(await screen.findByText("Question 5 stem")).toBeVisible();
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Mumbai" } });
+
+    // Boundary two, across the untimed section. Latched, this never
+    // happens and the candidate stays on question 5.
+    expect(await screen.findByText("Question 7 stem")).toBeVisible();
   });
 
   it("the paper's own clock still fires exactly once, however the section clock re-arms", async () => {

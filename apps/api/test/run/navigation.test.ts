@@ -214,6 +214,33 @@ it("per_section: free inside the current section, refused for a section already 
   expect((await errorOf(back)).message).toMatch(/section you have already left/i);
 });
 
+it("per_section: an earlier section stays a 403 even once the candidate's OWN section has expired", async () => {
+  // The one combination the earlier-section rule's scoping to `free`
+  // changed, and which nothing pinned either way. **403
+  // `navigation_locked` is the intended code**: the clock's refusal is
+  // temporary and names somewhere to go, while "this test does not allow
+  // going back" is permanent and is the sentence the candidate read on
+  // the landing page. A 409 `section_over` here would promise that some
+  // later moment makes this write land, and none does.
+  const sat = await start("per-section");
+  // Into section two, which stamps its own ten-minute clock…
+  clock = T + 5 * 60_000;
+  expect((await putOn(sat, { questionId: sat.flat[3] as string, clientSeq: 1 })).status).toBe(200);
+  // …and past it, grace included. The candidate's own section is now over.
+  clock = T + 16 * 60_000;
+
+  const back = await putOn(sat, { questionId: sat.flat[0] as string, clientSeq: 2 });
+  expect(back.status).toBe(403);
+  expect(await errorOf(back)).toMatchObject({ code: "navigation_locked" });
+
+  // "Time outranks navigation" still holds where it is about: the section
+  // the candidate is actually IN answers the clock's 409 at the same
+  // instant.
+  const here = await putOn(sat, { questionId: sat.flat[4] as string, clientSeq: 3 });
+  expect(here.status).toBe(409);
+  expect((await errorOf(here)).code).toBe("section_over");
+});
+
 it("per_section: every question of the section the candidate is in stays writable", async () => {
   const sat = await start("per-section");
   for (const [at, questionId] of sat.flat.slice(0, 3).entries()) {

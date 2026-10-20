@@ -340,10 +340,11 @@ it("C-07: a write to a section whose time has ended is refused and names the nex
   const refused = await put({ clientSeq: 4 });
 
   expect(refused.status).toBe(409);
-  expect(await errorOf(refused)).toMatchObject({
-    code: "section_over",
-    details: { nextSection: "quant" },
-  });
+  const error = await errorOf(refused);
+  expect(error).toMatchObject({ code: "section_over", details: { nextSection: "quant" } });
+  // This one really is the clock: the candidate's own section ran out
+  // under them.
+  expect(error.message).toMatch(/time for .* is up/i);
 });
 
 it("free navigation plus a section limit still refuses a write back into the expired section", async () => {
@@ -367,10 +368,14 @@ it("free navigation plus a section limit still refuses a write back into the exp
   clock = T + 6 * MINUTE;
   const refused = await put({ questionId: flat[0] as string, clientSeq: 2 }, free.cookie);
   expect(refused.status).toBe(409);
-  expect(await errorOf(refused)).toMatchObject({
-    code: "section_over",
-    details: { nextSection: "quant" },
-  });
+  const error = await errorOf(refused);
+  expect(error).toMatchObject({ code: "section_over", details: { nextSection: "quant" } });
+  // And the sentence is **true**: section one is closed by having been
+  // left, not by its own clock — its fifteen minutes had six to run. A
+  // candidate told "Time for Section A is up" here would be reading a
+  // statement about a clock that had not expired.
+  expect(error.message).toMatch(/you have moved on from/i);
+  expect(error.message).not.toMatch(/is up/i);
 
   // And the candidate's own section is untouched by the new rule: a write
   // inside section two, inside its ten minutes, still lands.
@@ -636,4 +641,65 @@ it("a superseded save that also moves max_index is reported as superseded, not a
   expect(late.status).toBe(200);
   expect(((await late.json()) as { outcome: string }).outcome).toBe("superseded");
   expect((await resume(sectioned.cookie)).responses[flat[3] as string]).toEqual(chose("b"));
+});
+
+it("a save whose progress statement lost the race answers no maxIndex at all", async () => {
+  // Critical 1 re-sited to the server. `movedOn` and everything the
+  // response projects from it are computed off the row as read at the top
+  // of the handler; the progress `UPDATE` is guarded by `max_index < ?`
+  // against the **committed** row. A tab that commits in between makes
+  // that statement a no-op, and a response that still answered
+  // `maxIndex: target` would hand the browser a number *below* what the
+  // row holds — and the browser assigns it, so the rail unlocks questions
+  // this same server then 403s.
+  //
+  // The handler cannot learn the committed value without a read, and this
+  // route is pinned at two subrequests, so it omits both fields: the
+  // browser keeps its own reading, which is a lower bound and never an
+  // over-report, and the next `GET /run/attempt` corrects it.
+  clock = T;
+  const sectioned = await start("per-section");
+  const flat = sectioned.paper.sections.flatMap((section) => section.questions.map((one) => one.id));
+
+  // The other tab, committing between this request's read and its batch.
+  // Written as a wrapper because two real requests race
+  // nondeterministically, and the window this is about is a few lines
+  // wide.
+  let raced = false;
+  const racing: typeof deps = {
+    ...deps,
+    db: {
+      ...deps.db,
+      batch: async (statements) => {
+        if (!raced) {
+          raced = true;
+          await deps.db.run("UPDATE attempt SET max_index = 5 WHERE id = ?", [
+            sectioned.paper.attemptId,
+          ]);
+        }
+        return deps.db.batch(statements);
+      },
+    },
+  };
+
+  clock = T + 2 * MINUTE;
+  const res = await put(
+    { questionId: flat[3] as string, clientSeq: 1 },
+    sectioned.cookie,
+    createApp(racing),
+  );
+
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as Record<string, unknown>;
+  // The answer itself landed, and the paper's own countdown is not
+  // `max_index`'s business, so it is still answered.
+  expect(body).toMatchObject({ outcome: "accepted", remainingMs: 43 * MINUTE });
+  // These two are the ones the statement did not commit to.
+  expect(body).not.toHaveProperty("maxIndex");
+  expect(body).not.toHaveProperty("sectionRemainingMs");
+
+  // What the row actually holds is the other tab's, above the target and
+  // never below it — and the next read is what hands it to the browser.
+  expect((await attemptRow(sectioned.paper.attemptId)).max_index).toBe(5);
+  expect((await resume(sectioned.cookie)).maxIndex).toBe(5);
 });

@@ -168,7 +168,7 @@ describe("upsertResponse's progress bump", () => {
   it("raises max_index in the same call, and still reports whether the row moved", async () => {
     expect(
       await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: advanceTo(4) }),
-    ).toEqual({ stored: true });
+    ).toEqual({ stored: true, advanced: true });
     expect((await attemptRow()).max_index).toBe(4);
   });
 
@@ -176,7 +176,9 @@ describe("upsertResponse's progress bump", () => {
     await repo.upsertResponse(db, WORKSPACE, answer(9, "latest"));
     expect(
       await repo.upsertResponse(db, WORKSPACE, { ...answer(4, "stale"), advance: advanceTo(4) }),
-    ).toEqual({ stored: false });
+      // The two statements are guarded by different things: this one
+      // stored nothing and still advanced the row.
+    ).toEqual({ stored: false, advanced: true });
     expect(
       await repo.readResponse(db, WORKSPACE, attemptId, QUESTION),
     ).toMatchObject({ value: "latest", clientSeq: 9 });
@@ -186,8 +188,13 @@ describe("upsertResponse's progress bump", () => {
     await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: advanceTo(7) });
     // The second tab read `max_index` before the first one's batch
     // committed, so it asks for a number that is now behind. The
-    // statement's own `max_index < ?` is what refuses it.
-    await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: advanceTo(3) });
+    // statement's own `max_index < ?` is what refuses it — and
+    // `advanced: false` is how the caller learns that it did, which is
+    // the only thing standing between a route and a response that
+    // reports a `max_index` the row does not hold.
+    expect(
+      await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: advanceTo(3) }),
+    ).toEqual({ stored: true, advanced: false });
     expect((await attemptRow()).max_index).toBe(7);
   });
 
