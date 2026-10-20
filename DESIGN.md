@@ -3,7 +3,7 @@ version: alpha
 name: Pariksha
 website: "https://github.com/SriSatyaLokesh/pariksha"
 description: >-
-  An open-source exam platform whose design system grounds the organiser and the marketing surface in one world — the Signal ground and its single green accent, in two measured palettes: dark (signal-*, accent #19e68c) and light (signal-l-*, accent #07744a, because #19e68c is 1.60:1 on cream and no better on white, illegal on either). Bricolage Grotesque carries display, Inter carries body, and JetBrains Mono carries every id, count, label, timer and code sample. The candidate runtime is the one place the old world survives: cream #fffbf5 and ink, hairline-ruled, with the saturated vermilion (Voltage #e24c18) reduced to exactly two jobs — the "you are here" marker in the question palette and the focus ring on an answer row. The two never appear on one screen, and that separation is what lets state-answered keep its green in the cream runtime while the accent carries positive meaning on the organiser. Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
+  An open-source exam platform whose design system grounds the organiser and the marketing surface in one world — the Signal ground and its single green accent, in two measured palettes: dark (signal-*, accent #19e68c) and light (signal-l-*, accent #07744a, because #19e68c is 1.60:1 on cream and 1.65:1 on white — illegal on either). Bricolage Grotesque carries display, Inter carries body, and JetBrains Mono carries every id, count, label, timer and code sample. The candidate runtime is the one place the old world survives: cream #fffbf5 and ink, hairline-ruled, with the saturated vermilion (Voltage #e24c18) reduced to a handful of marks — the "you are here" marker in the question palette, the focus ring on an answer row or input, the proctor banner's border, and the full-bleed block on the start and finish pages. The two never appear on one screen, and that separation is what lets state-answered keep its green in the cream runtime while the accent carries positive meaning on the organiser. Anek ships Latin, Telugu and Devanagari on one skeleton, so a translated test keeps the same typographic voice. Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each get their own structural colour token family, letting a palette square or a results row self-colour without ever reaching for the brand voltage.
 
 colors:
   voltage: "#e24c18"
@@ -471,9 +471,9 @@ Machine-readable tokens plus the reasoning behind them. Feed this file to Claude
 
 Pariksha runs on one ground shared from marketing through to product, one accent that cannot leave it, and one hard rule that keeps the two apart.
 
-**One ground, one accent.** The marketing site and the organiser share the Signal ground and its single green accent, in two measured palettes: dark (`{colors.signal-bg}`, accent `{colors.signal-accent}` #19e68c) and light (`{colors.signal-l-bg}`, accent `{colors.signal-l-accent}` #07744a). Both ship, and a viewer switches between them. The accent is a different green on each because it has to be: #19e68c is 1.60:1 on cream and no better on white — illegal as text and illegal as a border — so an accent cannot cross grounds, and taking one means taking the other.
+**One ground, one accent.** The marketing site and the organiser share the Signal ground and its single green accent, in two measured palettes: dark (`{colors.signal-bg}`, accent `{colors.signal-accent}` #19e68c) and light (`{colors.signal-l-bg}`, accent `{colors.signal-l-accent}` #07744a). Both ship, and a viewer switches between them. The accent is a different green on each because it has to be: #19e68c is 1.60:1 on cream and 1.65:1 on white — illegal as text and illegal as a border — so an accent cannot cross grounds, and taking one means taking the other.
 
-**Voltage survives in the runtime alone.** Voltage `{colors.voltage}` (#e24c18) is no longer a canvas anywhere the organiser can see. Inside an attempt the surface is cream `{colors.cream}` (#fffbf5, never pure white) and ink, hairline-ruled, and the vermilion is reduced to exactly two jobs: the "you are here" square in the question palette and the focus ring on a selected answer row. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The start and finish pages keep the full-bleed vermilion block — a display headline in cream with a fully-rounded cream pill beneath — because they are the runtime's edges, not the organiser's.
+**Voltage survives in the runtime alone.** Voltage `{colors.voltage}` (#e24c18) is no longer a canvas anywhere the organiser can see. Inside an attempt the surface is cream `{colors.cream}` (#fffbf5, never pure white) and ink, hairline-ruled, and the vermilion is reduced to a handful of marks: the "you are here" square in the question palette, the focus ring on a selected answer row or a focused input, and the border on the proctor banner. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The start and finish pages keep the full-bleed vermilion block — a display headline in cream with a fully-rounded cream pill beneath — because they are the runtime's edges, not the organiser's.
 
 **The two never appear on one screen.** That separation is the hard rule, and it is what buys the rest. It lets `{colors.state-answered}` keep its green in the cream runtime while the accent carries positive meaning on the organiser: a light-legal green is 1.09:1 from `{colors.state-answered}` — the same colour to the eye — so if the two surfaces ever met, one of them would have to give up a meaning it already has.
 
@@ -485,9 +485,9 @@ Pariksha runs on one ground shared from marketing through to product, one accent
 
 **Key characteristics**
 
-- Single green accent on the Signal ground — `{colors.signal-accent}` dark, `{colors.signal-l-accent}` light — carrying brand and positive meaning on the organiser alike. Voltage `{colors.voltage}` never leaves the candidate runtime, where it is a focus ring, one palette square and the start/finish block.
+- Single green accent on the Signal ground — `{colors.signal-accent}` dark, `{colors.signal-l-accent}` light — carrying brand and positive meaning on the organiser alike. Voltage `{colors.voltage}` never leaves the candidate runtime, where it is a focus ring, one palette square, the proctor banner's border and the start/finish block.
 - Cream `{colors.cream}` (#fffbf5), not `#ffffff`, carries every "white" element that touches the voltage. Pure `{colors.canvas}` is the inside of cards on the cream surfaces.
-- Two hairline tones, not one: `{colors.hairline}` for decoration, `{colors.hairline-strong}` for anything a candidate must perceive as an edge — input outlines, answer rows, palette squares, table rules. The Signal ground splits the same way, and for the same reason: `{colors.signal-line-2}` is decorative at 1.54:1, so `{colors.signal-line-strong}` and `{colors.signal-l-line-strong}` carry every edge that must be seen.
+- Two hairline tones, not one: `{colors.hairline}` for decoration, `{colors.hairline-strong}` for anything a candidate must perceive as an edge — input outlines, answer rows, palette squares, table rules. The Signal ground splits the same way, and for the same reason: `{colors.signal-line-2}` is decorative at 1.54:1 on `{colors.signal-surface}` (1.67:1 on `{colors.signal-bg}`), so `{colors.signal-line-strong}` and `{colors.signal-l-line-strong}` carry every edge that must be seen.
 - Display weight follows the face: Anek at 500 on the cream surfaces, never 700; Bricolage Grotesque at its heavier `opsz` steps on the Signal ground. Tight tracking on both.
 - Reading line-height is 1.55–1.6, not the 1.2 a marketing display uses. A question stem is read under time pressure.
 - Binary radius: small-step 3 / 4 / 6 / 8px, plus a full pill for exactly two surfaces (primary CTA, category tab). No 12 / 16 / 20px middle tier.
@@ -662,7 +662,7 @@ Binary: small-step everywhere, full pill for two surfaces.
 - `{rounded.xs}` 3px — inputs, small chips.
 - `{rounded.sm}` 4px — palette squares, dropdowns, popovers.
 - `{rounded.md}` 6px — answer rows, secondary buttons, timer chip, banners.
-- `{rounded.lg}` 8px — cards, the voltage split panel, modals.
+- `{rounded.lg}` 8px — cards, modals, and the superseded `{component.card-voltage}`.
 - `{rounded.full}` — `{component.button-primary}` and `{component.category-tab}` only, plus integrity badges.
 
 No 12 / 16 / 20px tier. The pill is the warmest shape in the system and it stays scarce, so it keeps meaning "press this".
@@ -738,9 +738,9 @@ Every component below is a cream-surface component. The marketing site left this
 
 **`card-hairline`** — White, 1px `{colors.hairline}`, 8px radius, 24px padding, no shadow.
 
-**`card-voltage`** — Voltage fill, cream text, 8px radius, 40px padding. The in-body emphasis block, usually half of a 50/50 split beside a `{component.card-hairline}`. One per page, at most.
+**`card-voltage`** — Voltage fill, cream text, 8px radius, 40px padding. The in-body emphasis block, usually half of a 50/50 split beside a `{component.card-hairline}`. **Superseded.** It was a marketing-page device, and the marketing site left the cream ground; no surviving cream surface uses it, because the start and finish pages carry the full-bleed `{component.hero-section}` instead. Kept as the record of its spec, not as a component to reach for — and never on the Signal ground.
 
-**`category-tab`** / **`category-tab-active`** — Pill tabs, 36px. Inactive is white with a `{colors.hairline-strong}` border; active takes the voltage fill with cream text. Used for question-type filters in the bank browser and section tabs in results.
+**`category-tab`** / **`category-tab-active`** — Pill tabs, 36px. Its users — question-type filters in the bank browser, section tabs in results — are organiser screens, so this control belongs to the Signal ground: the active tab takes the accent fill (`{colors.signal-accent}` dark, `{colors.signal-l-accent}` light) with `{colors.signal-accent-ink}` / `{colors.signal-l-accent-ink}` text, and the inactive tab a `{colors.signal-line-strong}` / `{colors.signal-l-line-strong}` border. The voltage does not travel with it. The cream spec — white fill, `{colors.hairline-strong}` border, voltage fill when active — holds only until each screen moves.
 
 **`feature-cell`** — White, 32×24px padding, separated by 1px `{colors.hairline}` rules. A `{typography.mono-sm}` label, a `{typography.heading-sm}` title, one or two lines of body.
 
@@ -798,7 +798,7 @@ Every component below is a cream-surface component. The marketing site left this
 
 **Don't** let the accent and the voltage meet. `{colors.signal-accent}` and `{colors.signal-l-accent}` belong to the Signal ground and never touch a cream surface; `{colors.voltage}` belongs to the candidate runtime and never touches the Signal ground. An accent cannot cross grounds — #19e68c is 1.60:1 on cream — and the separation is also what lets `{colors.state-answered}` keep its green in the runtime while the accent means something positive on the organiser.
 
-**Do** take the voltage _away_ the moment the clock starts. The test runner is cream, ink and hairlines, with voltage only on the current-question ring, the input focus ring and the proctor banner.
+**Do** take the voltage _away_ the moment the clock starts. The test runner is cream, ink and hairlines, with voltage only on the current-question ring, the focus ring on an input or a selected answer row, and the proctor banner's border.
 
 **Do** use `{colors.cream}`, never `#ffffff`, for any white that touches the voltage.
 
