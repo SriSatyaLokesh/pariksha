@@ -1475,6 +1475,50 @@ describe("the organiser shell (D3)", () => {
     ).toBeVisible();
   });
 
+  // `D18`: "Bank browser opens with the rail collapsed. Browsing is where the
+  // page wants width; the toggle still restores it." Both halves, because
+  // neither works alone — `AG1`'s density gate measured the rail collapse as
+  // worth exactly nothing while the page was still clamped at 1080px (the
+  // grid track goes 1204px -> 1384px and both are over the clamp), and the
+  // row stayed wrapped at 145px against `main`'s 101px.
+  //
+  // The clamp half is asserted as an invariant rather than exercised (`AG3`):
+  // jsdom has no layout, so the width this buys is measured by
+  // `e2e/measurement/density.spec.ts` in a real browser instead.
+  it("opens the bank browser unclamped and with the rail collapsed", async () => {
+    const bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    renderOrganiser({ listBanks: async () => [bank] });
+    await signedIn();
+
+    const toggle = screen.getByRole("button", { name: /navigation/i });
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector("#main-content")).toHaveClass("organiser--wide");
+
+    fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
+    await screen.findByRole("heading", { level: 1, name: "Reasoning aptitude" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelector("#main-content")).toHaveClass("organiser--full");
+    expect(document.querySelector("#main-content")).not.toHaveClass("organiser--wide");
+
+    // Leaving puts both back: the collapse is this screen's default, not a
+    // state the reader is left holding.
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector("#main-content")).toHaveClass("organiser--wide");
+  });
+
   // ...and a deep link, which has no list behind it to carry a name, still
   // starts the page at <h1> rather than at the passage-groups <h2>.
   it("still starts the bank browser at <h1> when it is deep-linked", async () => {

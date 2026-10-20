@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { MonoCaption } from "./MonoCaption";
 import type { Actor, Workspace } from "../lib/api";
 import { readGround, writeGround, type Ground } from "../lib/ground";
@@ -68,6 +68,7 @@ export function OrganiserShell({
   title,
   lead,
   actions,
+  wide = false,
   workspace,
   workspaces,
   actor,
@@ -85,6 +86,20 @@ export function OrganiserShell({
   title?: string;
   lead?: string;
   actions?: ReactNode;
+  /** `D18`, one ruling with two halves: "Bank browser opens with the rail
+   *  collapsed. Browsing is where the page wants width; the toggle still
+   *  restores it." One flag, because both halves buy the same thing — the
+   *  page drops `.organiser--wide`'s 1080px clamp AND the rail opens
+   *  collapsed.
+   *
+   *  Not cosmetic, and not guessed: `AG1`'s gate measured the bank browser
+   *  at 3 rows of 145px where `main` had 5 of 101px, because that screen was
+   *  the one organiser surface rendered OUTSIDE `.organiser--wide` and Task 1
+   *  wrapped every arm in the same clamped <main>. `.bank-browser__main` went
+   *  1183px -> 772px and the prompt wrapped. Collapsing the rail alone
+   *  recovers nothing — 1204px and 1384px are both over the clamp — so the
+   *  two halves only work together. */
+  wide?: boolean;
   workspace: Workspace;
   /** Every workspace this actor is a member of — the list `OrganiserApp`
    *  already fetches to pick `workspaces[0]`, so `D4`'s count is free. */
@@ -95,8 +110,18 @@ export function OrganiserShell({
   onSignOut: () => void;
   children: ReactNode;
 }) {
-  const [railOpen, setRailOpen] = useState(true);
+  const [railOpen, setRailOpen] = useState(!wide);
   const [ground, setGround] = useState<Ground>(readGround);
+
+  // `OrganiserApp` renders ONE shell for every screen, so the initial state
+  // above only ever runs once — arriving at a browsing surface from the bank
+  // list would otherwise keep the rail open. Keyed on `wide` rather than on
+  // the screen, so a second bank does not re-collapse a rail the reader just
+  // restored, which is the half of `D18` that says "the toggle still
+  // restores it".
+  useEffect(() => {
+    setRailOpen(!wide);
+  }, [wide]);
 
   const hasHead =
     crumb !== undefined || title !== undefined || lead !== undefined || actions !== undefined;
@@ -216,7 +241,10 @@ export function OrganiserShell({
           </ul>
         </nav>
 
-        <main id="main-content" className="organiser organiser--wide shell__page">
+        <main
+          id="main-content"
+          className={`organiser ${wide ? "organiser--full" : "organiser--wide"} shell__page`}
+        >
           {hasHead && (
             <div className="shell__head">
               {crumb !== undefined && <MonoCaption>{crumb}</MonoCaption>}

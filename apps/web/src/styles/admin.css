@@ -58,6 +58,16 @@
   max-width: 1080px;
 }
 
+/* `D18`: "Browsing is where the page wants width." The bank browser was the
+   one organiser screen rendered outside `.organiser--wide` until 6.5c's shell
+   wrapped every arm in the same <main>; this is its opt-out. `AG1`'s density
+   gate is what caught the clamp — `.bank-browser__main` measured 1183px on
+   `main` and 772px inside the shell, which wrapped every prompt and took the
+   row from 101px to 145px. 6.5e keeps it when it restyles that screen. */
+.organiser--full {
+  max-width: none;
+}
+
 /* Clamped so the title never eats a 375px screen; the floor (28px) is what
    the contrast gate measures. */
 .organiser__title {

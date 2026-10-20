@@ -177,7 +177,7 @@ export function OrganiserApp({
     current: NavKey,
     actor: Actor,
     workspace: Workspace,
-    page: { title?: string; crumb?: string },
+    page: { title?: string; crumb?: string; wide?: boolean },
     children: ReactNode,
   ) {
     return (
@@ -318,7 +318,11 @@ export function OrganiserApp({
         "banks",
         view.actor,
         view.workspace,
-        { title: view.bankName ?? "Bank", crumb: "Question banks" },
+        // `wide`: `D18` — browsing is where the page wants width, so this arm
+        // drops the 1080px clamp and opens with the rail collapsed. It is
+        // the only arm that asks; every other organiser screen was already
+        // inside `.organiser--wide` before the shell existed.
+        { title: view.bankName ?? "Bank", crumb: "Question banks", wide: true },
         <BankBrowser
           bankId={view.bankId}
           workspaceId={view.workspace.id}
