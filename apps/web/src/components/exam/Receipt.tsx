@@ -98,6 +98,13 @@ export function Receipt({
             `!== null`, which is `exam.tsx`'s own guard on the start
             message: an imported document may carry "", and an empty
             paragraph is a gap nobody wrote. */}
+        {/* The only `data-testid` in `apps/web/src`, and deliberate: through a
+            restyle phase a testid is the stable hook a class name is not —
+            a test that selects on `.exam-landing-message` breaks the moment
+            that class is renamed, which is exactly what 6.5b-6.5e do. Copy
+            this precedent where a test needs to find an element that carries
+            no role or accessible name; prefer a role or a name wherever one
+            exists, because those are what a candidate actually has. */}
         {receipt.finishMessage && (
           <p className="exam-landing-message" data-testid="exam-finish-message">
             {receipt.finishMessage}

@@ -62,24 +62,40 @@ restyling commit exists, which is what D13 requires of them.
 
 ## The figures
 
-| surface | primary row | fully visible | of | row height |
-| --- | --- | --- | --- | --- |
-| test list | `table.testbuilder-list tbody tr` | **0** | 40 | **182px** |
-| bank list | `ul.bank-list > li` | **8** | 40 | **44px** |
-| bank browser | `table.bank-browser__table tbody tr` | **5** | 40 | **101px** |
-| question picker | `ul.picker-drawer__list > li` | **8** | 40 | **25px** |
+| surface | primary row | fully visible | of | row height | first row at |
+| --- | --- | --- | --- | --- | --- |
+| test list | `main#main-content table.testbuilder-list tbody tr` | **0** | 40 | **182px** | **y = 846.5** |
+| bank list | `ul.bank-list > li` | **8** | 40 | **44px** | **y = 458** |
+| bank browser | `table.bank-browser__table tbody tr` | **5** | 40 | **101px** | **y = 312.31** |
+| question picker | `ul.picker-drawer__list > li` | **8** | 40 | **25px** | **y = 495.63** |
 
 Stable: identical across repeated runs of the whole suite. No range to record.
 
-**Both columns are gates**, and the height column is the one with teeth today.
+**All three columns are gates**, and the count is the weakest of them today.
 A count floor of 0 — which is what `main`'s test list honestly measures — passes
 for every conceivable implementation, including one that renders nothing at all;
 that is a guard with nothing behind it, and it sits on the most important
-scanning surface in the product. Row height is the variable that *caused* the
-zero, it has a real before-value on all four surfaces, and it goes red the
-moment a restyle makes a row taller. Proven, not assumed: adding
-`padding-block: 16px` to `.testbuilder-list td` took the row from 182px to 202px
-and the gate failed — while the count assertion stayed green at 0.
+scanning surface in the product. The other two are what give it teeth:
+
+- **Row height** is the variable that *caused* the zero. Proven, not assumed:
+  adding `padding-block: 16px` to `.testbuilder-list td` took the row from
+  182px to 202px and the gate failed — while the count assertion stayed green
+  at 0.
+- **First row at y** is the chrome above the list, measured. Height alone
+  cannot see a restyle that leaves rows at 182px and puts another 300px of
+  sidebar and top bar above the table, and chrome growth above a list is
+  literally what the shell plan does next. On the test list this number is
+  **846.5 of a 900px viewport**, which is the whole story of why that surface
+  fits zero rows.
+
+And one invariant that is not a figure at all: **the row height must be greater
+than zero**. `countPrimaryRows` drops a row with no layout box, `primaryRowHeight`
+filters it out and falls back to 0, and `locator().count()` counts it anyway
+because it is attached — so a test list of boxless rows would report
+`present: 40, visible: 0, height: 0` and pass every bar above. `display: contents`
+on `thead`/`tbody`/`tr` is the standard way to restyle a semantic table into a
+CSS grid and generates no box, so this is a live risk on exactly the surface
+where it would pass silently.
 
 Height is the **median over every matched row** — all 40, not only the ones
 above the fold — so one wrapped prompt or one long name does not stand for the
@@ -132,7 +148,8 @@ is why that constant exists.
 
 `seedWorkspace(request, { banks: 40, questionsPerBank: 40, tests: 40 })`,
 created entirely over the HTTP API the organiser itself calls — never by
-writing rows. 40 is comfortably more than any plausible redesign fits in
+writing rows: banks one at a time, questions by whole-bank import, tests
+created, drafted and published. 40 is comfortably more than any plausible redesign fits in
 900px, so the count measures the viewport and not the fixture. The spec
 asserts `present > visible` on every surface for exactly that reason: a count
 equal to the rows present would mean the geometry was never consulted.
@@ -163,9 +180,16 @@ seeded prompt is one line at 1440px.
 - Seeding a draft/published mix, or any other counts, without re-measuring —
   a published row is the taller shape and these figures assume every test is
   published.
-- Raising `BEFORE`, or raising `BEFORE_HEIGHT`, without re-measuring — or
-  lowering either to make a restyle pass. AG2: never make a gate green by
-  moving a bar. If the height assertion goes red, that is a finding.
+- Raising `BEFORE`, or raising `BEFORE_HEIGHT` or `BEFORE_TOP`, without
+  re-measuring — or lowering `BEFORE` to make a restyle pass. AG2: never make
+  a gate green by moving a bar. If the height or offset assertion goes red,
+  that is a finding.
+- Seeding the questions any way other than through `seedWorkspace`. It fills
+  each bank with **one whole-bank import** (`POST .../banks/:bankId/import`,
+  the endpoint the import dialog calls) rather than 40 per-question POSTs —
+  the rows are identical, both paths land in `upsertQuestion`, and this was
+  verified rather than assumed, but 1,600 round trips through `vite preview`'s
+  proxy made the harness answer 502 mid-seed on Windows and 40 do not.
 
 ## One structural note for whoever edits the harness
 

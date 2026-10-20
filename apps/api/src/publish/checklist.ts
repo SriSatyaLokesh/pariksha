@@ -185,10 +185,23 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
     });
   }
   // #179's other half — a test whose sections exist but hold no questions —
-  // gets no row of its own. `section_empty` below already fires on every
-  // section that draws nothing, in each of the three source shapes, so a
-  // test where *every* section is empty is refused once per section and the
-  // organiser is told which ones. A second test-level row for the same
+  // gets no row of its own, and the §8 plan's `no_questions` row was
+  // deliberately dropped rather than shipped. Every empty section is already
+  // refused:
+  //
+  //   - `fixed` and `sets`: by `section_empty` below, which `drawsNothing`
+  //     answers for both shapes.
+  //   - `pool`: **not** by `section_empty` — `drawsNothing` returns a
+  //     hardcoded `false` for a pool. Two other mechanisms cover it, and
+  //     this is the only record of which: `sourcePool.count`'s `minimum: 1`
+  //     in `schemas/test-1.json`, which `draftSchema()` does not strip, so
+  //     the draft route refuses a zero-count pool at save time; and
+  //     `validateTest`'s issue on `source.count`, which `mapIssue` turns
+  //     into a **blocking** row by its own fallback, since `ISSUE_ROWS` maps
+  //     `source.count` only to the advisory `pool_short`.
+  //
+  // So a test where *every* section is empty is refused once per section and
+  // the organiser is told which ones. A second test-level row for the same
   // cause would put two red lights in the builder's rail (6.5d) for one
   // defect. The shape is covered in `apps/api/test/lifecycle.test.ts`, at
   // the gate, rather than by a row here.
