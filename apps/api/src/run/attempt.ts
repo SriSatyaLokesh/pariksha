@@ -70,6 +70,7 @@ import {
   type ResponseValue,
   type Section,
   type SetAssignment,
+  type TestTiming,
 } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
@@ -82,13 +83,12 @@ import {
   assertSectionOpen,
   assertWritable,
   clockOf,
-  currentSectionIndex,
   graceMsOf,
   TIMING_DEFAULTS,
   timedOut,
   timingOf,
 } from "./clock.js";
-import { assertReachable, indexOf, sectionIndexOf } from "./navigation.js";
+import { assertReachable, indexOf, sectionStartIndexOf } from "./navigation.js";
 
 /** Re-exported here because this is where the brief names it; it is
  *  declared in `middleware/attemptContext.ts`, the module that reads it. */
@@ -316,6 +316,31 @@ async function staleRefusal(
 const STALE_MESSAGE =
   "This paper cannot be prepared right now. Tell your organiser, then try again — nothing you have done is lost.";
 
+/**
+ * How long one attempt lasts — **or a refusal**, never a guess.
+ *
+ * `duration_minutes` is the one field `schemas/test-1.json` makes required
+ * inside `timing`, and `buildChecklist` already refuses a publish with no
+ * `timing` block at all as blocking. But `Test.timing` is optional by
+ * design (a draft is a `Test` too), so a version that reached the row any
+ * other way used to read as `?? 0` and mint an attempt with
+ * `deadline_at === started_at`: writable for exactly
+ * `late_sync_grace_seconds`, then every save `time_up` and the very next
+ * read a `timeout` submission. A zero-length attempt is not what "no
+ * duration" means, and neither is an unlimited one — both are a number
+ * nobody chose, invented on behalf of the organiser, under the clock the
+ * whole phase is gated on. So the paper is simply unavailable until a
+ * duration exists, with the same sentence every other unpreparable paper
+ * answers (`S-10` keeps the body uninformative; the checklist is where the
+ * organiser reads why).
+ */
+function durationMinutesOf(timing: Partial<TestTiming>): number {
+  if (timing.duration_minutes === undefined) {
+    throw conflict("paper_unavailable", STALE_MESSAGE, { field: "timing.duration_minutes" });
+  }
+  return timing.duration_minutes;
+}
+
 // --- the set a candidate sits ------------------------------------------
 
 const setsSectionOf = (sections: Section[]): Section | undefined =>
@@ -522,6 +547,11 @@ export async function startAttempt(
   const latestStart = instant(timing.latest_start_at) ?? instant(timing.closes_at);
   if (latestStart !== null && now > latestStart) throw refuse("window_closed");
 
+  // Before any of the work: a version with no duration cannot mint an
+  // attempt at all, and the candidate should meet that in the first
+  // millisecond rather than after the bank read.
+  const durationMinutes = durationMinutesOf(timing);
+
   // `T-14`, against the candidate the token names and no other.
   const attempts = await countAttemptsForCandidate(
     deps.db,
@@ -630,7 +660,7 @@ export async function startAttempt(
 
   const token = randomToken();
   // `AC-13`: from the server's clock, and **not** clipped to `closes_at`.
-  const deadlineAt = now + (timing.duration_minutes ?? 0) * 60_000;
+  const deadlineAt = now + durationMinutes * 60_000;
   await createAttempt(deps.db, test.workspaceId, {
     id: attemptId,
     candidateId: claim.candidateId,
@@ -891,8 +921,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     // D1 counts as one subrequest. Re-editing an answer in place, the
     // common case by far, issues no second statement at all.
     const movedOn = target > attempt.maxIndex;
-    const enteringLater =
-      movedOn && sectionIndexOf(attempt.layout, target) > currentSectionIndex(attempt);
+    const sectionStartsAt = sectionStartIndexOf(attempt.layout, target);
     const { stored } = await upsertResponse(deps.db, attempt.workspaceId, {
       attemptId: attempt.attemptId,
       questionId,
@@ -903,21 +932,50 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         ? {
             advance: {
               maxIndex: target,
-              // Stamped once per section, by `max_index < ?` in the same
-              // statement: the second save inside a section finds the
-              // column already past it and changes nothing.
-              ...(enteringLater ? { sectionStartedAt: now } : {}),
+              // Stamped once per section, by the statement's own
+              // `max_index < sectionStartsAt`: the second save inside a
+              // section finds the committed column already past it and
+              // changes nothing, whichever tab got there first.
+              sectionStartsAt,
+              sectionStartedAt: now,
             },
           }
         : {}),
     });
 
+    /**
+     * **What the save leaves behind, so the browser stores it rather than
+     * re-deriving it** (standing decision 6).
+     *
+     * `max_index` rides the same `db.batch` under the same two guards, so
+     * what it commits to is arithmetic this handler already holds — and a
+     * browser that mirrored it from `accepted` alone would drift, because
+     * the progress bump is guarded only by `max_index < ?` and happens on
+     * a `superseded` save too. The section reading is the same story one
+     * layer down: `section_started_at` is what the clock hangs on, and
+     * without it the candidate's section chip reads `0:00` for the rest of
+     * the paper.
+     *
+     * Neither field costs a subrequest: `clockOf` is pure arithmetic over
+     * the row the cookie already resolved.
+     */
+    const clock = clockOf(
+      {
+        ...attempt,
+        maxIndex: movedOn ? target : attempt.maxIndex,
+        sectionStartedAt:
+          movedOn && sectionStartsAt > attempt.maxIndex ? now : attempt.sectionStartedAt,
+      },
+      now,
+    );
     return c.json({
       outcome: stored ? "accepted" : "superseded",
       // `AC-13`'s anchor on the hottest path there is: the countdown
       // re-anchors from every save, so a tab that slept for an hour is
       // corrected by the next keystroke rather than by a reload.
-      remainingMs: clockOf(attempt, now).remainingMs,
+      remainingMs: clock.remainingMs,
+      maxIndex: movedOn ? target : attempt.maxIndex,
+      sectionRemainingMs: clock.sectionRemainingMs,
     });
   });
 

@@ -186,13 +186,19 @@ export const upsertResponse = scoped(
        * upsert, which D1 counts as one subrequest, so the answer route's
        * pinned budget of 2 does not move.
        *
-       * `sectionStartedAt` is set only when this save is the first to reach
-       * a *later* section; `section_started_at` is the one thing a
-       * per-section deadline cannot be derived from, and re-stamping it on
-       * every save inside a section would hand the candidate an unlimited
-       * section.
+       * **The statement decides whether to stamp `section_started_at`, not
+       * the caller.** `section_started_at` is the one thing a per-section
+       * deadline cannot be derived from, and re-stamping it on every save
+       * inside a section would hand the candidate an unlimited section — so
+       * the stamp is conditional on `max_index < sectionStartsAt`, the flat
+       * index that the target's section begins at, evaluated against the
+       * **committed** row. A caller deciding it in JS from its own read
+       * loses the race: two tabs that both read `max_index = 0` and target
+       * different indices in the same later section (A→5, B→7) each satisfy
+       * `max_index < maxIndex`, and the second would re-stamp the column
+       * with its own `now` and extend the section's clock.
        */
-      advance?: { maxIndex: number; sectionStartedAt?: number };
+      advance?: { maxIndex: number; sectionStartsAt: number; sectionStartedAt: number };
     },
   ): Promise<{ stored: boolean }> => {
     const upsert = {
@@ -224,23 +230,27 @@ export const upsertResponse = scoped(
     // `AND max_index < ?` is what makes "max_index never falls" a property
     // of the statement rather than of the caller reading first: two saves
     // racing from two tabs cannot reopen a question the lock has passed.
-    const stamp = advance.sectionStartedAt !== undefined;
     const [response] = await db.batch([
       upsert,
       {
         sql:
-          `UPDATE attempt SET max_index = ?${stamp ? ", section_started_at = ?" : ""} ` +
+          "UPDATE attempt SET max_index = ?, " +
+          "section_started_at = CASE WHEN max_index < ? THEN ? ELSE section_started_at END " +
           "WHERE workspace_id = ? AND id = ? AND max_index < ?",
         params: [
           advance.maxIndex,
-          ...(stamp ? [advance.sectionStartedAt] : []),
+          advance.sectionStartsAt,
+          advance.sectionStartedAt,
           workspaceId,
           input.attemptId,
           advance.maxIndex,
         ],
       },
     ]);
-    return { stored: (response?.changes ?? 0) > 0 };
+    if (response === undefined) {
+      throw new Error("batch() answered no result for the response upsert");
+    }
+    return { stored: response.changes > 0 };
   },
 );
 

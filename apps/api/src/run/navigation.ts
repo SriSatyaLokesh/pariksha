@@ -46,6 +46,20 @@ export function sectionIndexOf(layout: PinnedLayout, flatIndex: number): number 
   return Math.max(0, layout.sections.length - 1);
 }
 
+/**
+ * The flat index that `flatIndex`'s own section **begins** at.
+ *
+ * This is the number `max_index` has to still be below for a save to be
+ * the one that *enters* that section, which is what lets
+ * `section_started_at` be stamped by the statement against the committed
+ * row rather than by a caller reasoning from a read that may already be
+ * stale — see `upsertResponse`.
+ */
+export const sectionStartIndexOf = (layout: PinnedLayout, flatIndex: number): number =>
+  layout.sections
+    .slice(0, sectionIndexOf(layout, flatIndex))
+    .reduce((sum, section) => sum + section.questionIds.length, 0);
+
 /** The sentence each mode refuses with. Named, because `C-02` says a
  *  refusal must say what would help and "403" would not. */
 const RULE: Readonly<Record<Exclude<NavigationMode, "free">, string>> = {

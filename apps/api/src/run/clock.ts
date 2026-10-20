@@ -54,17 +54,16 @@ export const graceMsOf = (settings: unknown): number =>
 /**
  * What the clock knows, from a row and a `now`.
  *
- * `expired` is "the paper is over"; `withinGrace` is "it is over but a save
- * made before it ended may still arrive". The two together are what make a
- * late sync possible without making an unlimited test possible.
  * `sectionExpired` already has the grace folded in, because the only
- * question anybody asks it is "may this be written".
+ * question anybody asks it is "may this be written" — and "the paper is
+ * over" is `timedOut`, which folds the grace in for exactly the same
+ * reason. A separate `expired`/`withinGrace` pair shipped here with no
+ * caller in `src` or in any test, which is a distinction nothing in this
+ * runtime draws.
  */
 export interface ClockView {
   remainingMs: number;
   sectionRemainingMs: number | null;
-  expired: boolean;
-  withinGrace: boolean;
   sectionExpired: boolean;
 }
 
@@ -105,8 +104,6 @@ export function clockOf(attempt: ClockInput, now: number): ClockView {
   return {
     remainingMs: Math.max(0, attempt.deadlineAt - now),
     sectionRemainingMs: sectionDeadline === null ? null : Math.max(0, sectionDeadline - now),
-    expired: now > attempt.deadlineAt,
-    withinGrace: now > attempt.deadlineAt && now <= attempt.deadlineAt + grace,
     sectionExpired: sectionDeadline !== null && now > sectionDeadline + grace,
   };
 }
@@ -147,13 +144,34 @@ export function assertWritable(attempt: ClockInput, now: number): void {
  * A target in a **later** section is always allowed: moving on is how a
  * candidate leaves a section whose time is up, and refusing it would lock
  * them out of the rest of the paper.
+ *
+ * **An EARLIER timed section is closed by having been left.** `free`
+ * navigation is the only mode that offers that target at all —
+ * `assertReachable` returns immediately for it, and `linear`/`per_section`
+ * refuse it as a 403 before this is reached — and `free` plus
+ * `time_limit_minutes` was the combination nothing judged: the clock here
+ * only ever read the *current* section, so a candidate sitting in section 2
+ * could write back into section 1 however long ago its limit ran out. There
+ * is no reading under which that section is still open: one
+ * `section_started_at` column holds the current section's anchor and
+ * nothing else, so the clock that ran while the candidate was in that
+ * section is gone with it. The refusal names the section that is closed and
+ * where the candidate actually is.
  */
 export function assertSectionOpen(attempt: ClockInput, targetIndex: number, now: number): void {
-  if (!clockOf(attempt, now).sectionExpired) return;
   const current = currentSectionIndex(attempt);
-  if (sectionIndexOf(attempt.layout, targetIndex) > current) return;
-  const title = attempt.layout.paper[current]?.title ?? "this section";
-  const next = attempt.layout.paper[current + 1];
+  const target = sectionIndexOf(attempt.layout, targetIndex);
+  if (target > current) return;
+  const closed =
+    target < current
+      ? attempt.layout.paper[target]?.timeLimitMinutes != null
+      : clockOf(attempt, now).sectionExpired;
+  if (!closed) return;
+  const title = attempt.layout.paper[target]?.title ?? "this section";
+  // Where to carry on: the next section when it is the candidate's own
+  // that has run out, and the one they are already in when they reached
+  // back into a section they had left.
+  const next = attempt.layout.paper[target === current ? current + 1 : current];
   throw new ApiError(
     409,
     "section_over",

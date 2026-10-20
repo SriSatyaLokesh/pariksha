@@ -121,6 +121,27 @@ export function sqliteClient(path: string): DbClient {
   };
 }
 
+/**
+ * What D1 says each statement changed — **surfaced, never defaulted.**
+ *
+ * Cloudflare documents `changes` on `D1Result` for both `run()` and
+ * `batch()` (developers.cloudflare.com/d1/worker-api/return-object), so a
+ * `?? 0` here is defensive code that can only ever lie, and it lies in the
+ * one direction that loses work: `changes > 0` is how `upsertResponse`
+ * decides `accepted` against `superseded` (and Task 8's queue **drops** a
+ * `superseded`), how first-writer-wins submission is decided, and how every
+ * `deleted:` in `banks.ts` and `tests.ts` is answered. `?? 1` is worse, for
+ * the same three reasons pointing the other way. If the field is ever
+ * genuinely absent that is a D1 contract change, and it has to arrive as a
+ * 500 somebody reads rather than as a silently wrong word on the wire.
+ */
+function d1Changes(meta: { changes?: number }): number {
+  if (typeof meta.changes !== "number") {
+    throw new Error("D1 returned a result with no `changes`; refusing to guess what it wrote.");
+  }
+  return meta.changes;
+}
+
 /** Cloudflare Workers. The binding comes from the Worker's env. */
 export function d1Client(binding: D1Database): DbClient {
   return {
@@ -145,7 +166,7 @@ export function d1Client(binding: D1Database): DbClient {
         .prepare(sql)
         .bind(...params)
         .run();
-      return { changes: meta.changes ?? 0 };
+      return { changes: d1Changes(meta) };
     },
     // One `binding.batch()` call — one subrequest — carrying every prepared
     // statement. D1 runs a batch inside an implicit transaction and rejects
@@ -154,7 +175,7 @@ export function d1Client(binding: D1Database): DbClient {
       const results = await binding.batch(
         statements.map((s) => binding.prepare(s.sql).bind(...(s.params ?? []))),
       );
-      return results.map((result) => ({ changes: result.meta.changes ?? 0 }));
+      return results.map((result) => ({ changes: d1Changes(result.meta) }));
     },
     jsonParam: (value) => JSON.stringify(value),
     jsonValue: parseJsonText,
