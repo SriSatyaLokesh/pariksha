@@ -21,7 +21,14 @@
 
 import { expect, test } from "@playwright/test";
 import { seedWorkspace } from "../seed";
-import { SURFACES, countPrimaryRows, openSurface, primaryRowHeight, type Surface } from "../density";
+import {
+  PRIMARY_ROW,
+  SURFACES,
+  countPrimaryRows,
+  openSurface,
+  primaryRowHeight,
+  type Surface,
+} from "../density";
 
 /**
  * The figures captured on `main`'s UI. See
@@ -83,9 +90,7 @@ test.beforeAll(async ({ request }) => {
 
 test("seeds a workspace reachable in the organiser", async ({ page }) => {
   await openSurface(page, "testList");
-  expect(await page.locator("table.testbuilder-list tbody tr").count()).toBeGreaterThanOrEqual(
-    SEED.tests,
-  );
+  expect(await page.locator(PRIMARY_ROW.testList).count()).toBeGreaterThanOrEqual(SEED.tests);
 });
 
 for (const surface of SURFACES) {
@@ -93,12 +98,24 @@ for (const surface of SURFACES) {
     await openSurface(page, surface);
 
     const visible = await countPrimaryRows(page, surface);
-    const present = await page.locator(ROW_COUNT[surface]).count();
+    // The **same** selector `countPrimaryRows` measured through, deliberately.
+    // If the guard read a second copy of these strings and the two ever
+    // diverged — the copy still matching, the measured one not — this surface
+    // would report `present: 40, visible: 0, height: 0`, and `40 > 0`,
+    // `0 >= 0` and `0 <= 182` would all pass. Green forever, measuring
+    // nothing. One source of truth is what stops that.
+    const present = await page.locator(PRIMARY_ROW[surface]).count();
 
     // The gate is only worth anything if the count is a measurement and not
     // a row tally: the fixture puts far more rows on every surface than
     // 900px can hold, so a count equal to the number present would mean
     // the geometry was never consulted and the figure below is noise.
+    //
+    // A virtualized list would fail here even if density improved, because
+    // it would render only what fits. That is deliberate: a loud false alarm
+    // that makes someone come and look is the right failure mode for the one
+    // line holding this gate honest. Fix it then, with the measurement in
+    // front of you — not by relaxing it now.
     expect(present, `${surface} seeded too few rows to measure`).toBeGreaterThan(visible);
 
     const height = await primaryRowHeight(page, surface);
@@ -108,10 +125,3 @@ for (const surface of SURFACES) {
     expect(height).toBeLessThanOrEqual(BEFORE_HEIGHT[surface]);
   });
 }
-
-const ROW_COUNT: Record<Surface, string> = {
-  testList: "table.testbuilder-list tbody tr",
-  bankList: "ul.bank-list > li",
-  bankBrowser: "table.bank-browser__table tbody tr",
-  questionPicker: "ul.picker-drawer__list > li",
-};

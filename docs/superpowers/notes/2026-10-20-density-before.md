@@ -47,7 +47,10 @@ forward.**
 ---
 
 **Captured:** 2026-10-21
-**Measured at:** `0e0cfcd` on `phase-6-5a/defects-and-measurement`
+**Measured at:** `db2e7f5` on `phase-6-5a/defects-and-measurement` — the sha both
+columns below reproduce from. The counts were first taken at `0e0cfcd`; the
+row-height column and `primaryRowHeight` arrived in `db2e7f5`, and the counts
+are unchanged between the two.
 **Against `main`:** `1a7ed66` (`origin/main`). The branch's only `apps/web/src`
 changes from that commit are `components/exam/Receipt.tsx` and `lib/run.ts` —
 the candidate receipt, in the exam runtime. **No scanning surface differs from
@@ -78,9 +81,12 @@ moment a restyle makes a row taller. Proven, not assumed: adding
 `padding-block: 16px` to `.testbuilder-list td` took the row from 182px to 202px
 and the gate failed — while the count assertion stayed green at 0.
 
-Height is the **median** of the rows on screen, so one wrapped prompt or one
-long name does not stand for the list, rounded to two decimals because
-sub-pixel layout jitter is not a density change.
+Height is the **median over every matched row** — all 40, not only the ones
+above the fold — so one wrapped prompt or one long name does not stand for the
+list, rounded to two decimals because sub-pixel layout jitter is not a density
+change. Measuring all of them is deliberate: a median taken from the handful on
+screen would move with the viewport and with whatever chrome sits above the
+list, which is the count column's job, not this one's.
 
 ## The fixture is all-published, and that biases both columns
 
@@ -146,8 +152,14 @@ seeded prompt is one line at 1440px.
   guard against this.
 - Changing the counting rule in `apps/web/e2e/density.ts` (adding a width
   check, allowing partial rows, scrolling the list to the top of the viewport
-  before counting). Any of those is a different metric and the numbers above
-  do not transfer to it.
+  before counting, or taking the height median over only the visible rows).
+  Any of those is a different metric and the numbers above do not transfer
+  to it.
+- Changing a selector in `PRIMARY_ROW` without re-measuring. It is exported
+  from `density.ts` and read by both the measurement and the `present >
+  visible` guard that proves the measurement matched anything, on purpose: a
+  second copy that drifted from it would let a surface report 40 rows
+  present, 0 visible and 0px tall, and pass every assertion.
 - Seeding a draft/published mix, or any other counts, without re-measuring —
   a published row is the taller shape and these figures assume every test is
   published.

@@ -362,6 +362,10 @@ vermilion family, which makes the palette square and the focus ring read as sing
 > extension of that row, not a new one. The fix stays out of `run.ts`. `questionCount` summing to 0
 > over empty sections is checked for the same shape.
 >
+> *Pointer, not an amendment — the ruling above stands as written.* **The `#179` premise was
+> disproved by measurement** (6.5a Task 1, 2026-10-21): neither shape is reachable through any API
+> write path. See `apps/api/src/publish/checklist.ts`'s `timing_missing` note and commit `dd75d32`.
+>
 > **Already-published versions:** new publishes only. The builder runs one read-only check of the
 > deployed instance for an existing 0-duration published version and **reports** it rather than
 > silently repairing it. (My call; the instance is days old and none is known to exist.)
@@ -447,6 +451,11 @@ would be without it. Whether that is a regression is unknown until the before-fi
 id rather than dropping it is **not** the cheap escape it looks: the test-list table already fills
 its panel exactly (measured slack: **0px**), so Name would grow and `Version` or `Window` would
 compress, and every cell is `nowrap`.
+
+*Pointer, not an amendment — `D12` and `D13` stand as written.* **The 56px/11-rows figures above
+were superseded by measurement** (6.5a Task 4, 2026-10-21): they do not match the shipped screens,
+and the open question they frame cannot be answered as posed. Before building on them, see
+`docs/superpowers/notes/2026-10-20-density-before.md`.
 
 ### D14 — tests this phase touches migrate to reachability
 

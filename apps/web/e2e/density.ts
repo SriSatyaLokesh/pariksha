@@ -20,7 +20,7 @@
 // it.
 
 import { expect, type Locator, type Page } from "@playwright/test";
-import { ORGANISER, signIn } from "./seed";
+import { signIn } from "./seed";
 
 /** The four scanning surfaces D12 puts inside the gate. The builder, the
  *  question editor, the wizard and sign-in are editing surfaces and are
@@ -37,8 +37,14 @@ export type Surface = (typeof SURFACES)[number];
  * selector and a restyle that replaces the table with something else is
  * supposed to break it loudly.
  */
-const PRIMARY_ROW: Record<Surface, string> = {
-  testList: "table.testbuilder-list tbody tr",
+export const PRIMARY_ROW: Record<Surface, string> = {
+  // Scoped to the test list's own container. `table.testbuilder-list` is not
+  // unique: `VersionHistory` (components/testbuilder/VersionBanner.tsx) uses
+  // the same class on the single-test builder. Different routes today, so the
+  // figure is right either way — but if a later screen ever puts version
+  // history on a list, an unscoped selector would inflate the count and drop
+  // the median height, and **both of those failures are silently permissive**.
+  testList: "main#main-content > table.testbuilder-list tbody tr",
   bankList: "ul.bank-list > li",
   bankBrowser: "table.bank-browser__table tbody tr",
   questionPicker: "ul.picker-drawer__list > li",
@@ -70,9 +76,12 @@ export async function countPrimaryRows(page: Page, surface: Surface): Promise<nu
 }
 
 /**
- * The height of `surface`'s primary row, in CSS pixels — the median of the
- * rows on screen, so one odd row (a wrapped prompt, a longer name) does not
- * stand for the list.
+ * The height of `surface`'s primary row, in CSS pixels — the median over
+ * **every** matched row, not only the ones on screen, so one odd row (a
+ * wrapped prompt, a longer name) does not stand for the list. Measuring all
+ * of them deliberately: a median taken from the handful above the fold would
+ * move with the viewport and with whatever chrome sits above the list, which
+ * is the count's job, not this one's.
  *
  * Row height is the density variable that actually bites. It is what made
  * the test list fit zero rows: 182px of QR code, slug field and buttons per
@@ -136,5 +145,3 @@ async function settle(page: Page, rows: Locator): Promise<void> {
   await expect(rows.first()).toBeAttached();
   await page.evaluate(() => window.scrollTo(0, 0));
 }
-
-export { ORGANISER };

@@ -63,9 +63,14 @@ export async function seedWorkspace(
   await signInApi(request);
   const workspaceId = await workspace(request);
   // A test slug is unique per workspace, so two seeds in one run would
-  // collide on `assessment-01` and the second would 409. One short token
-  // per call keeps repeat seeding (6.5e, 6.5f) from needing to know that.
-  const run = Math.random().toString(36).slice(2, 7);
+  // collide on `assessment-01` and the second would 409. A per-call counter
+  // keeps repeat seeding (6.5e, 6.5f) from needing to know that — and it is
+  // a *counter* rather than a random token so every slug is the same length
+  // in every run. Slug length is a column width on the test list, and a
+  // figure three plans compare against should not have a random variable in
+  // it, however small.
+  seedCall += 1;
+  const run = String(seedCall).padStart(2, "0");
 
   const bankIds: string[] = [];
   for (let i = 0; i < counts.banks; i += 1) {
@@ -98,26 +103,38 @@ export async function seedWorkspace(
     );
   }
 
+  // Every seeded test gets a section drawing from the first bank, because a
+  // test with no questions cannot be published (`section_empty`). Asking for
+  // tests without a bank to draw from would otherwise yield a list of silent
+  // drafts, which is not the shape the density figures were measured against
+  // and not what the caller asked for — so it is an error, not a surprise.
   const firstBank = bankIds[0];
   const sectionQuestions = firstBank === undefined ? [] : (questionIds.get(firstBank) ?? []).slice(0, 5);
+  if (counts.tests > 0 && sectionQuestions.length === 0) {
+    throw new Error(
+      "seedWorkspace cannot publish tests without questions to draw from: " +
+        "ask for at least one bank with at least one question, or for no tests.",
+    );
+  }
 
   const testIds = await inBatches(counts.tests, async (i) => {
     const testId = await created(request, `/api/v1/workspaces/${workspaceId}/tests`, {
       name: `${TOPICS[i % TOPICS.length]} assessment ${pad(i + 1)}`,
       slug: `assessment-${run}-${pad(i + 1)}`,
     });
-    if (sectionQuestions.length > 0) {
-      await ok(request, "patch", `/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`, {
-        settings: { timing: { duration_minutes: 60 } },
-        sections: [{ id: "s1", title: "Section one", source: { kind: "fixed", questions: sectionQuestions } }],
-      });
-      await ok(request, "post", `/api/v1/workspaces/${workspaceId}/tests/${testId}/publish`, {});
-    }
+    await ok(request, "patch", `/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`, {
+      settings: { timing: { duration_minutes: 60 } },
+      sections: [{ id: "s1", title: "Section one", source: { kind: "fixed", questions: sectionQuestions } }],
+    });
+    await ok(request, "post", `/api/v1/workspaces/${workspaceId}/tests/${testId}/publish`, {});
     return testId;
   });
 
   return { workspaceId, bankIds, testIds };
 }
+
+/** Bumped once per `seedWorkspace` call, for the slug suffix above. */
+let seedCall = 0;
 
 const TOPICS = ["Algebra", "Mechanics", "Optics", "Genetics", "Kinetics", "Statistics", "Geometry", "Thermodynamics"];
 const DIFFICULTIES = ["easy", "medium", "hard"];
