@@ -83,7 +83,7 @@ is why the gate is red on it. Nothing was loosened (`AG2`).
 | --- | --- | --- | --- |
 | test list | 0 (unchanged) | 182px (unchanged) | **846.5 -> 785.5** |
 | bank list | **8 -> 10** | 44px (unchanged) | **458 -> 397** |
-| bank browser | 5 -> *measured 3* | 101px -> *measured 145px* | 312.31 -> *measured 411.31* |
+| bank browser | 5 -> *measured 4* | 101px, restored by `D18` | 312.31 -> *measured 411.31* |
 | question picker | 8 (unchanged) | 25px (unchanged) | 495.63 (unchanged) |
 
 **Why the two lists improved by the same 61px.** The shell's one persistent
@@ -116,12 +116,48 @@ causes, separated with a browser probe at 1440x900:
    directly above a scanning table. Hiding it in the probe puts the first row
    back at **323.31**.
 
-Arithmetic for whoever fixes it: with 101px rows, five rows need the first row
-at **y <= 394**. Un-clamping and collapsing the rail alone leaves it at 411.31
-and fits **four**. The remaining 17px is inside the 88px heading, so the count
-cannot be restored without the heading changing shape — and the heading is an
-accessibility fix, not decoration. That trade is a ruling, not an
-implementation detail.
+**Cause 1 is fixed; `D18` is spec text this phase owed.** 6.5c shipped both
+halves of it: `OrganiserShell` takes a `wide` flag that drops the clamp
+(`.organiser--full`, beside `.organiser--wide` where that idiom already is) and
+opens the rail collapsed. The row is back to **101px**, exactly `main`'s figure,
+and the count went **3 -> 4**. `BEFORE_HEIGHT.bankBrowser` passes again.
+
+**Cause 2 is not reachable by spacing, measured to the pixel after the fix:**
+
+| band | px | owner |
+| --- | --- | --- |
+| `.shell__bar` | 56 | `D3`, the persistent bar |
+| `.shell__page` `padding-block-start` (`--space-xl`) | 24 | `D15` page scale |
+| `.shell__head` — crumb 18 + gap 8 + `<h1>` 46 | 72 | Task 1 fix round, a11y |
+| `.shell__page` flex `gap` (`--space-lg`) | 16 | the heading block's bottom spacing |
+| **shell chrome above `.bank-browser`** | **168** | 6.5c's |
+| the screen's own chrome — bulk bar, actions, `thead` | 243.31 | 6.5e's |
+| **first row at** | **411.31** | |
+
+Rows are exactly 101.00px each, so row 5 ends at **916.31** and the count needs
+**16.31px** out of that 168.
+
+**The heading block's bottom spacing is 16.00px — deleting it outright still
+leaves 0.31px.** One step down the scale (`--space-lg` -> `--space-md`) recovers
+4px; taking the page's top padding one step down too (`--space-xl` ->
+`--space-lg`, already off `D15`'s page scale) adds 8 more. Nothing reaches 16.31
+without moving two tokens two steps each, which is the ad-hoc value `D15` exists
+to forbid. The 26px that *would* clear it is the crumb, and that is a content
+decision, not spacing.
+
+**`BEFORE_TOP` is unreachable inside the shell at all**, which is the part that
+settles it. Hiding the whole heading block (-88px) puts the first row at
+**323.31** — still **11px over** `main`'s 312.31, because the shell spends
+56 + 24 = **80px** before any screen content where `main`'s per-screen
+`OrganiserHeader` spent 69 and the bank browser had no page padding at all. So
+even deleting the `<h1>`, and reopening the `<h2>`-outline defect Task 1's review
+closed, does not green that bar. Only taking `D15`'s page padding below its own
+scale would.
+
+What is left is a ruling rather than an implementation: a heading change in
+6.5e, or an explicit recorded acceptance that this one scanning surface sits
+99px lower inside a shell than it did without one. **Do not lower `BEFORE` to
+reach either.**
 
 **All three columns are gates**, and the count is the weakest of them today.
 A count floor of 0 — which is what `main`'s test list honestly measures — passes
