@@ -677,6 +677,17 @@
   content: "";
 }
 
+/* Why the locked squares are locked (T-13, Task 10). Visible, not
+   screen-reader-only: a sighted candidate who finds a square that will
+   not open needs the same sentence, and needs it without hovering
+   anything. Referenced by every locked square's `aria-describedby`. */
+.exam-palette-reason {
+  margin: 12px 0 0;
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
 /* ---- the calculator ---------------------------------------------------- */
 
 .exam-calculator {

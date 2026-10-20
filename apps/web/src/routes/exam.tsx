@@ -14,7 +14,13 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { AttemptPaper, CandidateQuestion, LandingPayload, RunClient } from "../lib/run";
-import { Runner, firstOfNextSection, readMarked, writeMarked } from "../components/exam/Runner";
+import {
+  Runner,
+  firstOfNextSection,
+  lockedIndices,
+  readMarked,
+  writeMarked,
+} from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
 import { createSaveQueue, type SaveState } from "../lib/queue";
@@ -281,7 +287,21 @@ export function readRegistrationToken(): string | null {
 }
 
 function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient }) {
-  const [index, setIndex] = useState(0);
+  /**
+   * The first question this candidate may still write to.
+   *
+   * Zero on a fresh attempt and on any `free` paper, which is every
+   * candidate's first second in the runner. On a **resumed** `linear` or
+   * `per_section` paper it is not: question one is behind the lock, and
+   * opening there would show a dead screen — an input whose every save
+   * the server refuses — on the one page a candidate cannot leave.
+   */
+  const [index, setIndex] = useState(() => {
+    const locked = lockedIndices(paper);
+    let at = 0;
+    while (locked.has(at)) at += 1;
+    return at;
+  });
   const [marked, setMarked] = useState<ReadonlySet<string>>(() => readMarked(paper.attemptId));
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 

@@ -320,6 +320,9 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".palette-square.has-notch": "state-marked",
   ".palette-square.has-ring": "canvas",
   ".palette-square.has-lock": "state-locked",
+  // Why the locked squares are locked (Task 10). Under the rail, on the
+  // page's own cream.
+  ".exam-palette-reason": "cream",
   ".exam-calc-display": "canvas",
   ".exam-calc-key, .exam-calc-close": "canvas",
 

@@ -45,17 +45,71 @@ export function firstOfNextSection(paper: AttemptPaper, index: number): number |
 
 function stateOf(
   question: CandidateQuestion,
-  at: number,
   paper: AttemptPaper,
   marked: ReadonlySet<string>,
 ): PaletteState {
-  // A `free` paper locks nothing. On `linear` and `per_section` the server
-  // is the authority (standing decision 6) and `maxIndex` is its answer;
-  // this only draws it.
-  if (paper.navigation !== "free" && at > paper.maxIndex) return "locked";
   if (marked.has(question.id)) return "marked";
   if (paper.responses[question.id] != null) return "answered";
   return "unanswered";
+}
+
+/**
+ * Which flat indices this candidate may no longer write to (`T-13`).
+ *
+ * **"No going back", not "no looking forward"** — `AC-14` puts the whole
+ * paper in the browser before the network drops, so the lock is on
+ * *returning* and nothing else. `linear` closes everything behind
+ * `maxIndex`; `per_section` closes every section before the one
+ * `maxIndex` falls in, and leaves that section entirely open; `free`
+ * closes nothing.
+ *
+ * The server is the authority (standing decision 6) and refuses the same
+ * writes in `apps/api/src/run/navigation.ts`. This only draws it — which
+ * is why it reads `maxIndex` off the paper rather than tracking a number
+ * of its own.
+ */
+export function lockedIndices(paper: AttemptPaper): ReadonlySet<number> {
+  if (paper.navigation === "free") return new Set();
+  const sections = sectionOfIndex(paper);
+  const here = sections[paper.maxIndex] ?? 0;
+  const locked = new Set<number>();
+  for (let at = 0; at < sections.length; at++) {
+    const behind =
+      paper.navigation === "linear" ? at < paper.maxIndex : (sections[at] ?? 0) < here;
+    if (behind) locked.add(at);
+  }
+  return locked;
+}
+
+/** Why, in the test's own words — `C-02`: a refusal names the thing that
+ *  helps. `undefined` on a `free` paper, where nothing is locked. */
+export function lockedReasonFor(paper: AttemptPaper): string | undefined {
+  if (paper.navigation === "linear") return "This test does not allow going back to an earlier question.";
+  if (paper.navigation === "per_section") return "This section is closed. This test does not allow going back to a section you have already left.";
+  return undefined;
+}
+
+/**
+ * The rail, as `Palette` takes it.
+ *
+ * `locked` is additive beside `current`, not a sixth `state`: under
+ * `linear` every question behind the candidate is locked, and a
+ * single-valued state would repaint the whole rail as padlocks and lose
+ * the answered/marked information the palette exists to carry.
+ */
+export function paletteStates(
+  paper: AttemptPaper,
+  marked: ReadonlySet<string>,
+  current: number,
+): PaletteQuestion[] {
+  const locked = lockedIndices(paper);
+  return flatQuestions(paper).map((question, at) => ({
+    id: question.id,
+    number: at + 1,
+    state: stateOf(question, paper, marked),
+    current: at === current,
+    ...(locked.has(at) ? { locked: true } : {}),
+  }));
 }
 
 /**
@@ -118,12 +172,9 @@ export function Runner({
     setConfirmingClear(false);
   });
 
-  const squares: PaletteQuestion[] = questions.map((question, at) => ({
-    id: question.id,
-    number: at + 1,
-    state: stateOf(question, at, paper, marked),
-    current: at === index,
-  }));
+  const squares = paletteStates(paper, marked, index);
+  const locked = lockedIndices(paper);
+  const reason = lockedReasonFor(paper);
 
   if (!current) return null;
 
@@ -165,17 +216,31 @@ export function Runner({
         {questionSlot(current)}
 
         <div className="exam-question-controls">
-          <button
-            type="button"
-            className="exam-button"
-            aria-label="Previous question"
-            disabled={index === 0}
-            onClick={() => {
-              onIndex(index - 1);
-            }}
-          >
-            Previous
-          </button>
+          {/* **Absent, not disabled, when the question behind is locked.**
+              A disabled control is a promise that the thing exists and
+              might come back; under `linear` it never will, and leaving
+              a dead button on the one screen a candidate cannot leave is
+              a question they spend their own exam time on. The general
+              form, so it covers `per_section`'s first question and
+              `linear` alike: hide it exactly when the target is closed.
+              At index 0 there is no target at all. */}
+          {!locked.has(index - 1) && (
+            <button
+              type="button"
+              className="exam-button"
+              aria-label="Previous question"
+              // At the start of the paper it is disabled, not absent:
+              // there is a previous question in principle and the
+              // candidate will have one in a moment. A *locked* previous
+              // question is the different case handled above.
+              disabled={index === 0}
+              onClick={() => {
+                onIndex(index - 1);
+              }}
+            >
+              Previous
+            </button>
+          )}
           <button
             type="button"
             className="exam-button"
@@ -259,6 +324,7 @@ export function Runner({
           onIndex(questions.findIndex((question) => question.id === id));
         }}
         focusRef={paletteStop}
+        {...(reason === undefined ? {} : { lockedReason: reason })}
       />
     </div>
   );

@@ -36,9 +36,15 @@ function question(n: number): CandidateQuestion {
 }
 
 /** 17 questions over two sections — the paper the landing fixture
- * advertises. `linear` navigation plus `maxIndex: 10` is what puts real
- * `locked` squares on the board; on a `free` paper nothing is ever locked
- * and the locked carrier could never be asserted at all. */
+ * advertises, as a candidate who has just started it: `linear`, and
+ * `maxIndex: 0`, so nothing is locked yet and question one is where they
+ * are. `lockedProps()` below is the same paper later in the attempt, and
+ * is what puts real `locked` squares on the board.
+ *
+ * Task 10 corrected the pairing here. The fixture used to carry
+ * `maxIndex: 10` *and* `index: 0`, which under "no going back" is a
+ * position a candidate cannot be in — the lock is on everything BEHIND
+ * `maxIndex`, so a candidate at question one has `maxIndex` 0. */
 const paper: AttemptPaper = {
   attemptId: "att_demo",
   sections: [
@@ -60,7 +66,7 @@ const paper: AttemptPaper = {
   responses: { q2: { kind: "option", option: "a" } },
   clientSeq: 0,
   navigation: "linear",
-  maxIndex: 10,
+  maxIndex: 0,
   remainingMs: 45 * 60_000,
   sectionRemainingMs: 15 * 60_000,
   warnAtMinutes: [10, 5],
@@ -85,6 +91,13 @@ function props(overrides: Partial<Props> = {}): Props {
     bannerSlot: <span>Saved</span>,
     ...overrides,
   };
+}
+
+/** The same paper later in the attempt: the candidate has reached
+ * question 11, so questions 1-10 are behind the `linear` lock. `index`
+ * moves with `maxIndex`, because the two are the same fact. */
+function lockedProps(overrides: Partial<Props> = {}): Props {
+  return props({ paper: { ...paper, maxIndex: 10 }, index: 10, ...overrides });
 }
 
 /** Focus then click — a focused native button's real Enter/Space
@@ -181,7 +194,7 @@ describe("the runner shell (C-04)", () => {
   });
 
   it("DESIGN.md: every palette state carries a non-colour carrier a greyscale reader can see", () => {
-    render(<Runner {...props()} />);
+    render(<Runner {...lockedProps()} />);
     for (const [state, carrier] of [
       ["answered", "is-filled"],
       ["marked", "has-notch"],
@@ -315,13 +328,12 @@ describe("the runner shell (C-04)", () => {
     press("Home");
     expect(document.activeElement).toHaveAccessibleName(/question 1/i);
     press("End");
-    // End walks onto question 17, which this paper locks — the rail is
-    // navigable past the lock even though the lock does not open.
-    expect(document.activeElement).toHaveAccessibleName(/question 17 .*locked/i);
+    expect(document.activeElement).toHaveAccessibleName(/question 17/i);
     press("ArrowRight");
+    // End is the end: ArrowRight past it stays put rather than wrapping.
     expect(document.activeElement).toHaveAccessibleName(/question 17/i);
     activate(document.activeElement as HTMLElement);
-    expect(screen.getByText("Question 1 stem")).toBeVisible();
+    expect(screen.getByText("Question 17 stem")).toBeVisible();
     press("Home");
     press("ArrowRight");
     activate(document.activeElement as HTMLElement);
@@ -330,7 +342,7 @@ describe("the runner shell (C-04)", () => {
 
   it("a locked question cannot be jumped to, and says so rather than going quiet", () => {
     const onIndex = vi.fn();
-    render(<Runner {...props({ onIndex })} />);
+    render(<Runner {...lockedProps({ onIndex })} />);
     const locked = squareFor("locked");
     expect(locked).toHaveAttribute("aria-disabled", "true");
     expect(locked).toHaveAccessibleName(/locked/i);

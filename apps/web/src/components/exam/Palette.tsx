@@ -27,6 +27,18 @@ export interface PaletteQuestion {
   number: number;
   state: PaletteState;
   current?: boolean;
+  /**
+   * `locked` is additive for the same reason `current` is, and Task 10
+   * hit the limit from the other side.
+   *
+   * Under `linear` *every* question behind the candidate is locked, so a
+   * single-valued state would repaint the whole rail as a wall of
+   * padlocks and destroy the one thing a palette is for: knowing what you
+   * have answered. A square can legitimately be answered **and** closed
+   * — that is the normal condition of a linear paper — and both carriers
+   * have to survive. `state` keeps all five of its members.
+   */
+  locked?: boolean;
 }
 
 /** The shape a greyscale reader sees. `unanswered` is the outline-only
@@ -43,15 +55,20 @@ const CARRIER: Readonly<Record<PaletteState, string>> = {
  * row. Up and Down move by a row; nothing here measures the DOM for it. */
 const COLUMNS = 5;
 
+const isLocked = (question: PaletteQuestion): boolean =>
+  question.locked === true || question.state === "locked";
+
 function classesFor(question: PaletteQuestion): string {
   const carriers = [CARRIER[question.state]];
   if (question.current) carriers.push(CARRIER.current);
+  if (question.locked) carriers.push(CARRIER.locked);
   return ["palette-square", ...carriers.filter(Boolean)].join(" ");
 }
 
 function nameFor(question: PaletteQuestion): string {
   const words = question.current && question.state !== "current" ? ["current"] : [];
   words.push(question.state);
+  if (question.locked && question.state !== "locked") words.push("locked");
   return `Question ${String(question.number)} (${words.join(", ")})`;
 }
 
@@ -59,12 +76,23 @@ export function Palette({
   questions,
   onJump,
   focusRef,
+  lockedReason,
 }: {
   questions: PaletteQuestion[];
   onJump: (questionId: string) => void;
   /** The roving tab stop, so a "skip to the palette" control elsewhere on
    * the screen can hand focus to the rail in one keystroke. */
   focusRef?: RefObject<HTMLButtonElement | null>;
+  /**
+   * Why the locked squares are locked, in the test's own words.
+   *
+   * "Locked" says *that* a square will not open; `C-02` says a refusal
+   * must say what would help. One sentence, written once and referenced
+   * by every locked square's `aria-describedby`, so a screen-reader user
+   * hears the reason on the square itself rather than having to go
+   * looking for it.
+   */
+  lockedReason?: string;
 }) {
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const [focused, setFocused] = useState<number | null>(null);
@@ -125,8 +153,12 @@ export function Palette({
               aria-current={question.current ? "true" : undefined}
               // `aria-disabled`, not `disabled`: a locked square still has
               // to be reachable and readable, or a candidate cannot find
-              // out why it will not open.
-              aria-disabled={question.state === "locked" ? "true" : undefined}
+              // out why it will not open. It is genuinely inert all the
+              // same — `onJump` is not called for it below.
+              aria-disabled={isLocked(question) ? "true" : undefined}
+              aria-describedby={
+                isLocked(question) && lockedReason ? "exam-palette-locked-reason" : undefined
+              }
               tabIndex={at === stop ? 0 : -1}
               onKeyDown={(event) => {
                 onKeyDown(event, at);
@@ -135,7 +167,7 @@ export function Palette({
                 setFocused(at);
               }}
               onClick={() => {
-                if (question.state !== "locked") onJump(question.id);
+                if (!isLocked(question)) onJump(question.id);
               }}
             >
               {question.number}
@@ -143,6 +175,11 @@ export function Palette({
           </li>
         ))}
       </ul>
+      {lockedReason && (
+        <p id="exam-palette-locked-reason" className="exam-palette-reason">
+          {lockedReason}
+        </p>
+      )}
     </nav>
   );
 }
