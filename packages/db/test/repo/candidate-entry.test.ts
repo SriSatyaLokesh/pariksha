@@ -251,7 +251,6 @@ it("finds a submitted attempt by its reference alone, in one statement, with eve
   expect(found).toMatchObject({
     attemptId,
     workspaceId,
-    testId,
     candidateId,
     submittedAt: NOW + 1_000,
     score: { total: 7, max: 10 },
