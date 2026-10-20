@@ -426,3 +426,86 @@ it("measures the real subrequest cost of every route this task mounts", async ()
   expect(missing.counts().total, "GET /t/:code (miss)").toBe(2);
   expect(ROUTE_BUDGETS["/t/:code"]).toBe(2);
 });
+
+// --- Phase 6.5c Task 3 (D6b): `closesAt` on the wire --------------------
+//
+// `opens_at`/`closes_at` live in `TestTiming` inside the version body, so
+// `toWire` is the only place that holds them at list time — it already
+// destructures `publishedTiming` to derive `state` and throws it away.
+// Home's agenda cannot say the one thing that matters most without it.
+//
+// Parsed, not forwarded: the wire carries an epoch, the document carries a
+// string, and `instant` is the same parse `deriveState` judges the window
+// by — so a wire `closesAt` and a wire `state` can never disagree about
+// what the document said.
+
+/** A published test whose document carries `timing`, which is where a
+ *  closing time really lives. */
+async function publishedWithTiming(
+  timing: Record<string, unknown> | undefined,
+): Promise<string> {
+  const created = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Closing", slug: `closing-${Math.random().toString(36).slice(2, 8)}` }, authorCookie),
+  );
+  const testId = (await created.json()).id;
+  if (timing !== undefined) {
+    const patched = await app.request(
+      `/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`,
+      patch({ settings: { timing } }, authorCookie),
+    );
+    expect(patched.status, await patched.text()).toBe(200);
+  }
+  await publishDraftVersion(deps.db, workspaceId, testId, FIXED_NOW);
+  return testId;
+}
+
+async function wireFor(testId: string): Promise<{ closesAt: number | null }> {
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests`, get(authorCookie));
+  expect(res.status).toBe(200);
+  const row = (await res.json()).tests.find((t: { id: string }) => t.id === testId);
+  expect(row, "the test is in the list").toBeDefined();
+  return row;
+}
+
+it("returns closesAt from the published timing", async () => {
+  const closesAt = FIXED_NOW + 3_600_000;
+  const testId = await publishedWithTiming({
+    duration_minutes: 60,
+    closes_at: new Date(closesAt).toISOString(),
+  });
+  expect((await wireFor(testId)).closesAt).toBe(closesAt);
+});
+
+it("returns null for a test that has never been published", async () => {
+  const created = await app.request(
+    `/api/v1/workspaces/${workspaceId}/tests`,
+    post({ name: "Draft only", slug: "draft-only" }, authorCookie),
+  );
+  const testId = (await created.json()).id;
+  expect((await wireFor(testId)).closesAt).toBeNull();
+});
+
+it("returns null when the published timing sets no closing time", async () => {
+  const testId = await publishedWithTiming({ duration_minutes: 60 });
+  expect((await wireFor(testId)).closesAt).toBeNull();
+});
+
+// Not reachable through the route — `schemas/test-1.json` declares
+// `closes_at` as `format: date-time` and the draft validator asserts it —
+// but a row written by an import, an older build or a hand-edit can carry
+// one, and the wire must answer "no closing time" rather than NaN. This is
+// the same answer `deriveState` already gives such a row, which is the
+// point: one parse, one verdict.
+it("returns null when the stored closing time cannot be parsed", async () => {
+  const testId = await publishedWithTiming({ duration_minutes: 60 });
+  await deps.db.run(
+    "UPDATE test_version SET settings_json = ? WHERE workspace_id = ? AND test_id = ? AND published_at IS NOT NULL",
+    [
+      deps.db.jsonParam({ timing: { duration_minutes: 60, closes_at: "whenever" } }),
+      workspaceId,
+      testId,
+    ],
+  );
+  expect((await wireFor(testId)).closesAt).toBeNull();
+});

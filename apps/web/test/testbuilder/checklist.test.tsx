@@ -34,6 +34,7 @@ const TEST_ROW: TestSummary = {
   slug: "midterm",
   description: null,
   shortCode: "ab12cd",
+  closesAt: null,
   state: "draft",
   currentVersion: 1,
   draftVersion: 2,

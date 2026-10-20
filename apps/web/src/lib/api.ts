@@ -121,6 +121,11 @@ export interface TestSummary {
   reviewRequested: boolean;
   tags: string[];
   updatedAt: number;
+  /** When the published window shuts, as an epoch, or `null` — never
+   * published, no closing time set, or a stored one that would not parse.
+   * Phase 6.5c (`D6b`): Home's agenda cannot say the one thing that
+   * matters most without it, and the server was already holding it. */
+  closesAt: number | null;
 }
 
 export interface TestFilter {

@@ -44,6 +44,7 @@ import {
   workspaceQuestionSummaries,
   workspaceQuestions,
   deriveState,
+  instant,
   type QuestionSummary,
   type StoredSection,
   type TestDocumentBody,
@@ -444,6 +445,13 @@ interface TestWire {
   reviewRequested: boolean;
   tags: string[];
   updatedAt: number;
+  /** When the published window shuts, as an epoch — `null` for a test that
+   * has never been published, one whose window names no end, and one whose
+   * stored `closes_at` will not parse. Phase 6.5c (`D6b`): the document's
+   * `timing` block is the only place this lives, and `toWire` was already
+   * holding it to derive `state`. Parsed through `instant`, the same parse
+   * `deriveState` judges the window by, so the two can never disagree. */
+  closesAt: number | null;
 }
 
 const NO_HEAD: TestVersionHead = { draftVersion: null, publishedTiming: undefined };
@@ -462,6 +470,7 @@ function toWire(row: TestRow, head: TestVersionHead | undefined, now: number): T
     reviewRequested: row.reviewRequested,
     tags: row.tags,
     updatedAt: row.updatedAt,
+    closesAt: instant(publishedTiming?.closes_at),
   };
 }
 

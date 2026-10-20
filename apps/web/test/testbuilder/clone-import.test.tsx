@@ -27,6 +27,7 @@ const MIDTERM: TestSummary = {
   slug: "reasoning-aptitude-2026",
   description: null,
   shortCode: "ab12cd",
+  closesAt: null,
   state: "draft",
   currentVersion: null,
   draftVersion: 1,
@@ -41,6 +42,7 @@ const COPY: TestSummary = {
   name: "Midterm (copy)",
   slug: "reasoning-aptitude-2026-copy",
   shortCode: "ef34gh",
+  closesAt: null,
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
