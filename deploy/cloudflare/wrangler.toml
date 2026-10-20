@@ -8,8 +8,11 @@
 # makes the cookie work with no CORS, no `SameSite=None`, and it is the same
 # topology Phase 11 plans for Docker.
 #
-# Asset requests are free and unmetered and never invoke the script, so
-# folding the API in costs nothing against the 100,000 requests/day limit.
+# Asset requests are free and unmetered when they never invoke the script.
+# `/assets/*` and `/fonts/*` — every byte a page pulls after the first — are
+# excluded from `run_worker_first` below and stay free, so folding the API in
+# still costs nothing for them against the 100,000 requests/day limit. What
+# does cost is spelled out on `run_worker_first` itself.
 #
 # The name stays `pariksha-web` even though it now serves both halves: the
 # repository variable `SITE_URL` is baked into prerendered canonicals and SEO
@@ -38,16 +41,40 @@ binding = "ASSETS"
 not_found_handling = "404-page"
 # The API has no files under `dist/`, so without this every `/api/*` request
 # would be answered by the asset router's 404 before the script ran. With it
-# the script runs first, and the entry point only defers back to `ASSETS` for
-# paths outside `/api/` and `/t/` — so an unknown API path returns Hono's
-# JSON error envelope rather than the 404 page. Widening this list is what
-# would start metering requests that are free today.
+# the script runs first, and the entry point defers back to `ASSETS` for
+# everything it does not own — so an unknown API path returns Hono's JSON
+# error envelope rather than the 404 page.
 #
-# Phase 5 Task 2 (#54): `/t/*` added for T-02's public short link —
+# Phase 5 Task 2 (#54): `/t/*` for T-02's public short link —
 # `GET /t/:code` has no file under `dist/` either, and without this entry the
 # asset router's own 404 would answer every short link before Hono ever saw
 # it, the same failure `/api/*`'s own comment describes.
-run_worker_first = ["/api/*", "/t/*"]
+#
+# `/*/*` is the candidate URL `/<workspace-slug>/<test-slug>`, which has no
+# file behind it either and is served by the entry point as a rewrite onto
+# the exam shell. `_redirects` cannot do this job — its rules were tried,
+# measured on the deployed Worker and withdrawn in fb42d41 — so the Worker
+# has to see the request.
+#
+# WHAT THIS COSTS, which the two comments above used to warn about: `*` is a
+# deep match, so `/*/*` is every path of two segments or more. Those requests
+# are metered now — candidate URLs, and misses like `/a/b/c` — against the
+# free plan's 100,000 requests/day. What stays free is everything one segment
+# deep, which is the whole marketing site (`/`, `/admin`, `/robots.txt`,
+# `/sitemap.xml`, `/llms.txt`, `/favicon.ico`, `/favicon.svg`,
+# `/apple-touch-icon.png`, `/icon-512.png`, `/og.png`), plus the two
+# exclusions below. That is why this is `/*/*` and not the `/*` of
+# Cloudflare's own SPA-shell example: a landing-page view costs nothing, and
+# only a candidate sitting a test is metered.
+#
+# The exclusions are every two-segment path that DOES have a file behind it:
+# `dist/assets/` (hashed bundles and CSS) and `dist/fonts/`. Negative
+# patterns win over positive ones regardless of order, so these never reach
+# the script and never meter. The entry point's own `CANDIDATE_URL` rejects
+# them a second time on the dot in every asset filename, because a routing
+# rule that silently stops being honoured is exactly how Phase 6 broke
+# production.
+run_worker_first = ["/api/*", "/t/*", "/*/*", "!/assets/*", "!/fonts/*"]
 
 [[d1_databases]]
 binding = "DB"

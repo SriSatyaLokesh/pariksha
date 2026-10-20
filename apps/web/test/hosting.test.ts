@@ -115,14 +115,10 @@ describe("exam.html", () => {
   });
 });
 
-// T-02's candidate URL is `/<workspace-slug>/<test-slug>` — a path with no
-// file behind it, so without a rewrite the asset router answers every
-// candidate link with dist/404.html. `_headers` cannot express a rewrite
-// (it sets headers), so the rule lives in `_redirects`, which Workers
-// parses out of the same deployed asset directory. These tests exist for
-// the ordering: the fallback matches ANY two-segment path, so a rule added
-// below it would be dead and an asset prefix not claimed above it would be
-// swallowed.
+// This file is empty of rules on purpose and these tests keep it that way.
+// T-02's candidate URL `/<workspace-slug>/<test-slug>` was served from here
+// for one release; the rules broke every asset in production and were
+// withdrawn in fb42d41. The Worker entry serves it now.
 describe("_redirects", () => {
   const redirects = readFileSync(resolve(ROOT, "public/_redirects"), "utf8");
   const rules = redirects
@@ -152,9 +148,10 @@ describe("_redirects", () => {
   });
 
   it("has no active rule, which is the state the Worker leaves it in", () => {
-    // T-02's candidate URL needs serving by the Worker, not by this file.
-    // When that lands, this is replaced by a test that exercises the route
-    // rather than one that reads a line of config.
+    // T-02's candidate URL is served by the Worker entry, not by this file —
+    // `apps/api/test/worker.test.ts` exercises that route rather than
+    // reading a line of config. Nothing is left for this file to do, and the
+    // test above says why nothing may be put back.
     expect(rules).toEqual([]);
   });
 
@@ -182,33 +179,57 @@ describe("deploy/cloudflare/wrangler.toml", () => {
     );
   });
 
-  // Replaces "declares no main script": there is a script now, and what keeps
-  // every page, font and bundle request free is that it is invoked only on
-  // `/api/*` and, since Phase 5 Task 2's public short link, `/t/*` — both
-  // paths with no file under `dist/`, so without the entry the asset
-  // router's own 404 would answer before the script ran. Widening this list
-  // further than those two is what would start metering the site.
-  it("runs the Worker script on /api/* and /t/* only, so asset requests stay free", () => {
+  // This used to pin `["/api/*", "/t/*"]` and say that widening it was what
+  // would start metering the site. It has been widened, deliberately, and
+  // the comment on the line itself carries the cost: `/*/*` is every path of
+  // two segments or more, so a candidate URL now invokes the script against
+  // the free plan's 100,000 requests/day. T-02's `/<workspace-slug>/<test-slug>`
+  // has no file under `dist/`, and `not_found_handling = "404-page"` answers
+  // a request matching no asset with `404.html` without running the script —
+  // which is exactly what production does today.
+  //
+  // What stays free is what this test now pins hardest: the exclusions. Every
+  // byte a page pulls after the first — `/assets/*` and `/fonts/*` — must
+  // never reach the script, and `/` and `/admin` are one segment, which
+  // `/*/*` cannot match.
+  //
+  // This is a config assertion and it is NOT the coverage that matters. The
+  // outage this replaces was shipped under three green tests of exactly this
+  // kind. The behaviour lives in `apps/api/test/worker.test.ts`, against
+  // Miniflare — but that pool invokes the script for every path regardless of
+  // `run_worker_first` (measured, see the note there), so this line is the
+  // only place the routing config is checked at all. Treat it as a reminder,
+  // not as proof.
+  it("runs the Worker script on the API, short links and candidate URLs, with assets and fonts excluded", () => {
     expect(scalar("main")).toBeDefined();
-    expect(toml).toMatch(/^run_worker_first = \["\/api\/\*", "\/t\/\*"\]$/m);
+    const first = /^run_worker_first = \[(.+)\]$/m.exec(toml)?.[1];
+    expect(first).toBeDefined();
+    const patterns = [...(first ?? "").matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    expect(patterns).toEqual([
+      "/api/*",
+      "/t/*",
+      "/*/*",
+      "!/assets/*",
+      "!/fonts/*",
+    ]);
   });
 
   // T11 / SEO-4: a bogus URL must 404, never serve the landing page with a
   // soft-404 HTTP 200. `not_found_handling = "404-page"` is what keeps that
   // true for every path the asset router does not match.
   //
-  // Phase 6 Task 1 (#65) narrowed the claim, so this test's name narrowed
-  // with it. There IS now one rewrite, and exactly one: `_redirects` maps a
-  // TWO-SEGMENT path onto `exam.html` with a 200, because T-02's candidate
-  // URL `/<workspace-slug>/<test-slug>` has no file behind it. That is a
+  // There IS one rewrite, and exactly one: the Worker entry serves the exam
+  // shell for a TWO-SEGMENT path, because T-02's candidate URL
+  // `/<workspace-slug>/<test-slug>` has no file behind it. (Phase 6 put that
+  // rule in `_redirects`; it was withdrawn in fb42d41 after breaking every
+  // asset in production, and `apps/api/src/index.ts` owns it now.) That is a
   // deliberate, bounded exception — never a blanket
-  // `not_found_handling = "single-page-application"`, which would turn
-  // every miss at every depth into a page. One-segment and three-segment
-  // misses still get `dist/404.html`, which is what this line pins; the
-  // `_redirects` describe block above pins the exception's shape and
-  // ordering. Its accepted cost — a two-segment path naming no real test
-  // answers 200 with the exam shell, mitigated by `noindex` on both the
-  // meta tag and the header — is recorded in ADR 0008.
+  // `not_found_handling = "single-page-application"`, which would turn every
+  // miss at every depth into a page. One-segment and three-segment misses
+  // still get `dist/404.html`, which is what this line pins. Its accepted
+  // cost — a two-segment path naming no real test answers 200 with the exam
+  // shell, mitigated by `noindex` on both the meta tag and the header — is
+  // recorded in ADR 0008.
   it("serves dist/404.html on a miss, and never turns the whole site into a SPA", () => {
     expect(scalar("not_found_handling")).toBe("404-page");
     expect(toml).not.toContain("single-page-application");
@@ -242,7 +263,9 @@ describe("the public directory reaches the build", () => {
   it("is copied into dist, so _headers is deployed rather than only committed", () => {
     expect(publicDir).toBe("public");
     expect(existsSync(inPublicDir("_headers"))).toBe(true);
-    // Same reasoning, and the candidate URL is unreachable without it.
+    // `_redirects` carries no rule any more, only the record of why (see
+    // above), but it ships so that a file reappearing in `dist/` without one
+    // here would be noticed.
     expect(existsSync(inPublicDir("_redirects"))).toBe(true);
   });
 

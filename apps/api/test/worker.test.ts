@@ -129,10 +129,10 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   });
 });
 
-// One Worker serves the API and the static site, so the asset router sits in
-// front of the Hono app. These two assert the split holds in the runtime that
-// enforces it: `errors.test.ts` calls the app directly and would pass either
-// way, which is exactly how a production-only regression gets shipped.
+// One Worker serves the API and the static site, so the entry point has to
+// split the two. These assert the split in the runtime that enforces it:
+// `errors.test.ts` calls the app directly and would pass either way, which
+// is exactly how a production-only regression gets shipped.
 
 it("an unknown /api path answers with the JSON error envelope, not the 404 page", async () => {
   const res = await SELF.fetch("https://example.com/api/v1/nope");
@@ -150,9 +150,9 @@ it("an unknown non-API path answers with the static 404 page", async () => {
 });
 
 // Phase 5 Task 2 (#54): `/t/:code` is outside `/api/` too, so it needs the
-// same `run_worker_first` entry — proved here against the deployed
-// `wrangler.toml`, the one place `errors.test.ts`-style direct-app tests
-// cannot reach, exactly as the two tests above already do for `/api/`.
+// same `run_worker_first` entry — and the entry point has to send it to
+// Hono rather than to the binding, which is the half asserted here. The
+// config entry itself is not exercised by this pool; see the note below.
 it("an unknown short code answers with the JSON error envelope, not the static 404 page", async () => {
   await migrate(binding());
 
@@ -161,4 +161,104 @@ it("an unknown short code answers with the JSON error envelope, not the static 4
   expect(res.status).toBe(404);
   expect(res.headers.get("content-type")).toContain("application/json");
   expect(await res.text()).not.toContain("fixture-404");
+});
+
+// Phase 6 (T-02), the candidate URL `/<workspace-slug>/<test-slug>`. The
+// first attempt put these rules in `_redirects` and tested the FILE'S
+// CONTENT; the rules were inert, production served `/assets/<hashed>.css` as
+// a 307 to `/exam`, and every test stayed green (fb42d41). These exercise
+// the entry point's own routing instead — every path shape it has to tell
+// apart, through the binding, against the real asset fixtures.
+//
+// WHAT THESE CANNOT COVER, measured rather than assumed: `SELF.fetch` in
+// this pool invokes the script for EVERY path, under any `run_worker_first`
+// — probed with a script that echoed its own pathname, under the old
+// `["/api/*", "/t/*"]` and the new list alike, and it answered
+// `/assets/style-k5IQwTyP.css` and `/` in both. The asset router does not
+// sit in front of the script here; only the `ASSETS` binding is real, which
+// is why `not_found_handling` IS observable (flip it to
+// `single-page-application` and three tests below fail) and
+// `run_worker_first` is not. So no test here can prove the config line that
+// routes a candidate URL to the script in production — `hosting.test.ts`
+// pins the string and says the same thing out loud. What these prove is the
+// half that broke: given the request, the script answers it correctly.
+
+it("a candidate URL answers 200 with the exam shell, at the URL the candidate opened", async () => {
+  const res = await SELF.fetch("https://example.com/pariksha/test1", {
+    redirect: "manual",
+  });
+
+  // 200 and not 307: `exam-main.tsx` reads the slug pair out of
+  // `window.location`, so a redirect that drops it — which is what
+  // `html_handling` made of `_redirects`' rewrite to `/exam.html` — loses
+  // the one thing the rule exists to carry.
+  expect(res.status).toBe(200);
+  expect(res.url).toBe("https://example.com/pariksha/test1");
+  expect(res.headers.get("location")).toBeNull();
+  expect(await res.text()).toContain("fixture-exam");
+});
+
+it("serves the shell for a trailing slash too, which `slugPairFromPath` also accepts", async () => {
+  const res = await SELF.fetch("https://example.com/pariksha/test1/", {
+    redirect: "manual",
+  });
+
+  expect(res.status).toBe(200);
+  expect(await res.text()).toContain("fixture-exam");
+});
+
+// The whole of the outage in two assertions. `/assets/*` is two segments,
+// which is the shape the candidate URL claims, so this is the exact
+// collision that took the site down. `wrangler.toml` excludes `/assets/*`
+// from `run_worker_first`, but this asserts the second line of defence —
+// the dot in every hashed filename, which no slug may contain — because the
+// first line is a config entry no test here can exercise.
+it("never serves the exam shell for an asset path", async () => {
+  const hit = await SELF.fetch(
+    "https://example.com/assets/style-k5IQwTyP.css",
+    { redirect: "manual" },
+  );
+
+  expect(hit.status).toBe(200);
+  expect(hit.headers.get("location")).toBeNull();
+  const css = await hit.text();
+  expect(css).toContain(".fixture");
+  expect(css).not.toContain("fixture-exam");
+
+  // And an asset that does not exist is still a 404, not a soft-200 shell.
+  const miss = await SELF.fetch("https://example.com/assets/nope.css", {
+    redirect: "manual",
+  });
+
+  expect(miss.status).toBe(404);
+  expect(await miss.text()).not.toContain("fixture-exam");
+});
+
+it("never serves the exam shell for a font", async () => {
+  const res = await SELF.fetch("https://example.com/fonts/anek-latin.woff2", {
+    redirect: "manual",
+  });
+
+  expect(res.status).toBe(200);
+  expect(res.headers.get("content-type")).toContain("font");
+});
+
+it("still serves the landing page and the organiser app as their own documents", async () => {
+  const home = await SELF.fetch("https://example.com/");
+  expect(home.status).toBe(200);
+  expect(await home.text()).toContain("fixture-index");
+
+  const admin = await SELF.fetch("https://example.com/admin");
+  expect(admin.status).toBe(200);
+  expect(await admin.text()).toContain("fixture-admin");
+});
+
+// `/*/*` is a DEEP match, so in production three segments reach the script
+// too. `CANDIDATE_URL` is anchored at two, so they land where they did
+// before: `not_found_handling`.
+it("a deeper miss still answers with the static 404 page, not the shell", async () => {
+  const res = await SELF.fetch("https://example.com/pariksha/test1/extra");
+
+  expect(res.status).toBe(404);
+  expect(await res.text()).toContain("fixture-404");
 });
