@@ -122,13 +122,23 @@ export async function primaryRowTop(page: Page, surface: Surface): Promise<numbe
   });
 }
 
+/** A destination in the shell's rail (`D3`). 6.5c replaced the dashboard's
+ *  two entry buttons — "Question banks" and "Create your first test" — with
+ *  one persistent nav, and the second of those now appears only on an empty
+ *  workspace, which a seeded one never is. Scoped to the nav so a "Tests"
+ *  or "Banks" control elsewhere on a screen cannot be clicked by accident.
+ *  Navigation only: nothing here changes what is counted or how. */
+function rail(page: Page, label: string): Locator {
+  return page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: label });
+}
+
 /** Sign in and navigate to `surface`, leaving the page scrolled to the top
  *  and its rows loaded. The caller seeds first. */
 export async function openSurface(page: Page, surface: Surface): Promise<void> {
   await signIn(page);
 
   if (surface === "bankList" || surface === "bankBrowser") {
-    await page.getByRole("button", { name: "Question banks" }).click();
+    await rail(page, "Banks").click();
     await expect(page.getByRole("heading", { level: 1, name: "Banks" })).toBeVisible();
     if (surface === "bankList") return settle(page, page.locator(PRIMARY_ROW.bankList));
 
@@ -136,7 +146,7 @@ export async function openSurface(page: Page, surface: Surface): Promise<void> {
     return settle(page, page.locator(PRIMARY_ROW.bankBrowser));
   }
 
-  await page.getByRole("button", { name: "Create your first test" }).click();
+  await rail(page, "Tests").click();
   await expect(page.getByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
   if (surface === "testList") return settle(page, page.locator(PRIMARY_ROW.testList));
 

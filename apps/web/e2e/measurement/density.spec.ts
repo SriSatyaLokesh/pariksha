@@ -32,19 +32,28 @@ import {
 } from "../density";
 
 /**
- * The figures captured on `main`'s UI. See
- * `docs/superpowers/notes/2026-10-20-density-before.md` for the commit,
- * the date and what makes them invalid.
+ * The figures captured on `main`'s UI, **ratcheted** where a later plan
+ * measured better. See `docs/superpowers/notes/2026-10-20-density-before.md`
+ * for the commit, the date and what makes them invalid.
+ *
+ * A bar only ever moves in the direction that makes the gate stricter
+ * (`AG2`). 6.5c tightened `bankList` from 8 to 10 and both `BEFORE_TOP`
+ * figures below, because the shell's shared 56px bar is cheaper chrome than
+ * the per-screen `OrganiserHeader` plus margins it replaced. Nothing here
+ * was ever relaxed to make a restyle pass; if one of these goes red, that
+ * is the finding.
  */
 const BEFORE: Record<Surface, number> = {
   // Measured, not a placeholder. Every test-list row carries a 64px QR
   // code, an editable slug field with its own label and help line, and two
   // buttons — 182px of row — and the create form plus the filter bar put
-  // the first row's top at y=847 of a 900px viewport. So not one whole row
+  // the first row's top at y=786 of a 900px viewport. So not one whole row
   // is readable without scrolling. The figure is real and the gate below
   // cannot fail on it until a restyle raises it; see the note.
   testList: 0,
-  bankList: 8,
+  // 8 on `main`, 10 under 6.5c's shell: the same 44px row with 61px less
+  // chrome above it. Tightened, never loosened.
+  bankList: 10,
   bankBrowser: 5,
   questionPicker: 8,
 };
@@ -71,8 +80,8 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
 };
 
 /**
- * How far down the viewport each surface's first primary row starts on
- * `main`, captured in the same run as the other two.
+ * How far down the viewport each surface's first primary row starts,
+ * captured in the same run as the other two.
  *
  * The count and the height between them still cannot see the most likely
  * regression of the very next plan. 6.5c is the shell: a persistent sidebar
@@ -81,12 +90,29 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
  * table passes `0 >= 0` and `182 <= 182` and is a real density loss. This is
  * the number that sees it.
  *
- * 846.5px on the test list today — of a 900px viewport, which is the whole
+ * It saw it. 6.5c moved three of these four, and in both directions:
+ *
+ * - **test list 846.5 -> 785.5** and **bank list 458 -> 397**, the same
+ *   61px on both. The shell's bar is 56px where `OrganiserHeader` was 64px
+ *   plus its own margins, and the page head it replaced each screen's with
+ *   is cheaper. A ratchet may always tighten, so both are lowered.
+ * - **question picker unchanged at 495.63.** The builder arm passes no
+ *   `title`, so it renders no `.shell__head`, and the drawer is scrolled
+ *   into view rather than measured from the top of the document.
+ * - **bank browser 312.31 -> 411.31, a real regression, NOT recorded here.**
+ *   On `main` that screen was the one organiser surface with no page
+ *   heading at all — a document outline starting at `<h2>`, which 6.5c Task
+ *   1's fix round closed by giving the shell a `title` and a crumb for it.
+ *   That heading is 88px directly above a scanning table. The bar is
+ *   `AG2`-frozen at `main`'s figure and this surface is red until the
+ *   screen is fixed; see the note and 6.5c's Task 5 report.
+ *
+ * 785.5px on the test list today — of a 900px viewport, which is the whole
  * story of why that surface fits zero rows.
  */
 const BEFORE_TOP: Record<Surface, number> = {
-  testList: 846.5,
-  bankList: 458,
+  testList: 785.5,
+  bankList: 397,
   bankBrowser: 312.31,
   questionPicker: 495.63,
 };

@@ -46,7 +46,8 @@ forward.**
 
 ---
 
-**Captured:** 2026-10-21
+**Captured:** 2026-10-21 (re-measured against 6.5c's shell on 2026-10-21; see
+"Ratcheted by 6.5c" below)
 **Measured at:** `db2e7f5` on `phase-6-5a/defects-and-measurement` — the sha both
 columns below reproduce from. The counts were first taken at `0e0cfcd`; the
 row-height column and `primaryRowHeight` arrived in `db2e7f5`, and the counts
@@ -70,6 +71,57 @@ restyling commit exists, which is what D13 requires of them.
 | question picker | `ul.picker-drawer__list > li` | **8** | 40 | **25px** | **y = 495.63** |
 
 Stable: identical across repeated runs of the whole suite. No range to record.
+
+### Ratcheted by 6.5c — what the constants say today
+
+6.5c (the shell) re-measured all sixteen figures. Three moved in the strict
+direction and the constants in `density.spec.ts` were tightened to match; one
+surface regressed and its three bars were **left at `main`'s figures**, which
+is why the gate is red on it. Nothing was loosened (`AG2`).
+
+| surface | fully visible | row height | first row at |
+| --- | --- | --- | --- |
+| test list | 0 (unchanged) | 182px (unchanged) | **846.5 -> 785.5** |
+| bank list | **8 -> 10** | 44px (unchanged) | **458 -> 397** |
+| bank browser | 5 -> *measured 3* | 101px -> *measured 145px* | 312.31 -> *measured 411.31* |
+| question picker | 8 (unchanged) | 25px (unchanged) | 495.63 (unchanged) |
+
+**Why the two lists improved by the same 61px.** The shell's one persistent
+bar is **56px** where each screen's own `OrganiserHeader` was **64px plus its
+own margins**, and the page head that replaced each screen's header block is
+cheaper than what it replaced. Shared chrome turned out to be *lighter* chrome.
+
+**Why the question picker did not move at all.** The builder arm passes no
+`title` to `OrganiserShell`, so that screen renders no `.shell__head`, and the
+drawer is scrolled into view rather than measured from the top of the document.
+
+**Why the bank browser regressed, measured not guessed.** Two independent
+causes, separated with a browser probe at 1440x900:
+
+1. **Row height 101px -> 145px.** On `main` the bank browser was the one
+   organiser screen rendered *outside* `.organiser--wide` — a bare
+   `<div id="main-content" class="bank-browser">` at full viewport width. The
+   shell wraps every arm in `<main class="organiser organiser--wide
+   shell__page">`, so it is now clamped to **1080px**. Measured:
+   `.bank-browser__main` **1183px -> 772px**, and the seeded prompt that fit
+   one line at 1183px wraps at 772px. Forcing `max-width: none` **and**
+   collapsing the shell rail restores `__main` to 1047px and the row to
+   **101px**. Collapsing the rail *alone* changes nothing — the page is
+   clamped at 1080 either way, so **`D18`'s "opens with the rail collapsed"
+   is inert at this viewport unless the clamp is lifted too.** That is
+   measured, not inferred.
+2. **First row 312.31 -> 411.31.** The screen gained a page heading it never
+   had. 6.5c Task 1's fix round gave the bank browser a `title` and a crumb
+   because its document outline started at `<h2>`; `.shell__head` is **88px**
+   directly above a scanning table. Hiding it in the probe puts the first row
+   back at **323.31**.
+
+Arithmetic for whoever fixes it: with 101px rows, five rows need the first row
+at **y <= 394**. Un-clamping and collapsing the rail alone leaves it at 411.31
+and fits **four**. The remaining 17px is inside the 88px heading, so the count
+cannot be restored without the heading changing shape — and the heading is an
+accessibility fix, not decoration. That trade is a ruling, not an
+implementation detail.
 
 **All three columns are gates**, and the count is the weakest of them today.
 A count floor of 0 — which is what `main`'s test list honestly measures — passes
@@ -184,6 +236,11 @@ seeded prompt is one line at 1440px.
   re-measuring — or lowering `BEFORE` to make a restyle pass. AG2: never make
   a gate green by moving a bar. If the height or offset assertion goes red,
   that is a finding.
+- Navigating to a surface any way other than through `openSurface`. 6.5c
+  retired the dashboard's two entry buttons for the shell's rail, so that
+  helper now clicks "Banks" and "Tests" inside `nav[aria-label="Organiser"]`.
+  Navigation is not a counting rule and the figures transfer across it — but
+  a second route that reached a screen in a different state would not.
 - Seeding the questions any way other than through `seedWorkspace`. It fills
   each bank with **one whole-bank import** (`POST .../banks/:bankId/import`,
   the endpoint the import dialog calls) rather than 40 per-question POSTs.
@@ -194,6 +251,20 @@ seeded prompt is one line at 1440px.
   the harness answer 502 mid-seed on Windows; 40 do not. Note the ceiling the
   route brings: `questionsPerBank` is capped at `IMPORT_MAX_QUESTIONS` (500)
   per bank.
+
+## One more trap, found by 6.5c
+
+**The first failing surface hides every later one.** A failed test tears the
+worker down and Playwright re-runs `test.beforeAll` in a fresh one, where
+`seedCall` is back at 1 — so the second `seedWorkspace` re-uses
+`assessment-01-*` and dies on `409 slug_taken`, and every surface after the
+first failure reports that 409 instead of its own figures. The 409 is
+**protective** and must not be "fixed" by making the slug unique: the API
+process is not restarted, so a successful re-seed would double the fixture to
+80 banks and 80 tests and every figure after it would be measured against a
+different workspace. To read a surface behind a failing one, run it alone with
+`-g`. Making `beforeAll` idempotent (skip when the workspace already holds the
+fixture) is the real fix if this ever costs more than one extra run.
 
 ## One structural note for whoever edits the harness
 
