@@ -130,24 +130,32 @@ describe("_redirects", () => {
     .map((line) => line.trim())
     .filter((line) => line.length > 0 && !line.startsWith("#"));
 
-  it("rewrites the candidate slug pair onto exam.html with a 200, never a redirect", () => {
-    // 200 and not 301/302: the address bar has to keep the slug pair,
-    // because src/exam-main.tsx reads it to know which test to ask about.
-    expect(rules).toContain("/:workspaceSlug/:testSlug  /exam.html  200");
-  });
-
-  it("puts the catch-all fallback last, so nothing below it is dead", () => {
-    expect(rules.at(-1)).toMatch(/^\/:workspaceSlug\/:testSlug\b/);
-  });
-
-  it("claims every two-segment asset prefix above the fallback", () => {
-    // /assets/index-abc123.js and /fonts/anek.woff2 are two-segment paths
-    // and would otherwise match the fallback and serve the exam shell.
-    const fallbackAt = rules.findIndex((rule) => rule.startsWith("/:workspaceSlug"));
-    const above = rules.slice(0, fallbackAt).join("\n");
-    for (const prefix of ["/assets/*", "/fonts/*"]) {
-      expect(above, prefix).toContain(prefix);
+  // These two replace the three rules this file used to pin. The rules were
+  // withdrawn after being measured on the deployed Worker, and the old tests
+  // are the lesson: they asserted this file's CONTENT and stayed green while
+  // production was broken. The pass-throughs they checked for were present
+  // and did nothing — a 200 rewrite to its own path reads as a loop and is
+  // dropped — so every two-segment path matched the fallback and
+  // /assets/<hashed>.css answered 307 to /exam. The site lost every
+  // stylesheet and script; /admin rendered nothing at all.
+  //
+  // What belongs here is the invariant, not the mechanism.
+  it("carries no rule that could match a built asset path", () => {
+    // A built asset is /assets/<name> or /fonts/<name> — two segments. Any
+    // rule whose source can match two segments can swallow them, whatever
+    // sits above it, because the pass-throughs meant to claim them first do
+    // not take effect on Workers.
+    const twoSegment = /^\/(?::[^/]+|\*|[^/\s]+)\/(?::[^/]+|\*|[^/\s]+)(?:\s|$)/;
+    for (const rule of rules) {
+      expect(rule, rule + " can match /assets/<file>").not.toMatch(twoSegment);
     }
+  });
+
+  it("has no active rule, which is the state the Worker leaves it in", () => {
+    // T-02's candidate URL needs serving by the Worker, not by this file.
+    // When that lands, this is replaced by a test that exercises the route
+    // rather than one that reads a line of config.
+    expect(rules).toEqual([]);
   });
 
   it("never points at a third-party origin (S-11), as _headers does not", () => {

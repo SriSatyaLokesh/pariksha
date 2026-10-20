@@ -19,7 +19,25 @@
 # serves. /index.html, /admin.html, /exam.html and /404.html are single
 # segment, which the fallback's two-segment pattern cannot match.
 
-/assets/*  /assets/:splat  200
-/fonts/*   /fonts/:splat   200
-
-/:workspaceSlug/:testSlug  /exam.html  200
+# WITHDRAWN 2026-10-20, live on the deployed Worker:
+#
+#   /assets/*  /assets/:splat  200
+#   /fonts/*   /fonts/:splat   200
+#   /:workspaceSlug/:testSlug  /exam.html  200
+#
+# The pass-throughs do not take effect — a 200 rewrite to its own path reads
+# as a loop and is dropped — so EVERY two-segment path fell through to the
+# fallback, including /assets/<hashed>.css and /assets/<hashed>.js. Measured
+# on the deployed Worker: an asset that exists in dist/ answered 307 to /exam,
+# and so did /assets/definitely-not-here.css, which should have been a 404.
+# The landing page lost all styling and /admin loaded no script at all.
+#
+# The fallback also failed at its own job: /<ws>/<test> answered 307 to /exam
+# rather than rewriting, because html_handling turns a rewrite to /exam.html
+# into a redirect that drops the .html — and the slug pair with it, which
+# src/exam-main.tsx needs to know which test to load.
+#
+# No test caught this: the suite asserts this file's CONTENT, and nothing
+# exercises Cloudflare's asset router, which only exists in production.
+#
+# The candidate URL needs the Worker, not this file. See the issue.
