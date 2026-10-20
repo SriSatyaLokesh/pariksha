@@ -195,8 +195,24 @@ export function createSaveQueue(
   const sendable = (): QueuedSave[] =>
     [...waiting.values()].filter((save) => !unsaved.has(save.questionId));
 
-  /** The state a pass leaves behind. Refusals come first and outrank
-   *  everything: the banner must never read Saved while one stands. */
+  /**
+   * **The one place the banner's state is decided**, and the only place
+   * the ranking lives.
+   *
+   * Refusals outrank everything: the banner must never read Saved while
+   * one stands, and it must not read *Offline* over one either. The
+   * offline and transport-failure branches used to `emit()` for
+   * themselves, which skipped this ranking — so a standing refusal was
+   * replaced on screen by "Offline — N waiting" for the whole outage,
+   * telling a candidate that reconnecting would fix an answer that
+   * `sendable()` excludes until they edit it again. Every state now
+   * comes from here.
+   *
+   * `failures > 0` is the transport's own verdict and outranks
+   * `navigator.onLine`, which says nothing useful behind a captive
+   * portal: a save that could not be sent is a save the candidate should
+   * be told is waiting, whatever the browser believes about the network.
+   */
   function settle(): void {
     const outstanding = [...unsaved.entries()].pop();
     if (outstanding) {
@@ -208,7 +224,11 @@ export function createSaveQueue(
       emit({ kind: "saved", at: Date.now() });
       return;
     }
-    emit(offline() ? { kind: "offline", pending: left } : { kind: "saving", pending: left });
+    emit(
+      offline() || failures > 0
+        ? { kind: "offline", pending: left }
+        : { kind: "saving", pending: left },
+    );
   }
 
   function schedule(delay = SAVE_DEBOUNCE_MS): void {
@@ -227,10 +247,10 @@ export function createSaveQueue(
       const next = sendable()[0];
       if (next === undefined) break;
       if (offline()) {
-        emit({ kind: "offline", pending: sendable().length });
+        settle();
         return;
       }
-      emit({ kind: "saving", pending: sendable().length });
+      settle();
 
       let answer: { outcome: SaveOutcome; message?: string };
       try {
@@ -238,10 +258,12 @@ export function createSaveQueue(
       } catch {
         // A transport failure is not a refusal: the answer is kept, the
         // banner says Offline, and the next attempt is further away than
-        // the last.
+        // the last. Through `settle()`, so a refusal that is already
+        // standing stays on the screen instead of being replaced by a
+        // message that promises reconnecting will fix it.
         failures += 1;
         schedule(RETRY_MS[Math.min(failures - 1, RETRY_MS.length - 1)]);
-        emit({ kind: "offline", pending: sendable().length });
+        settle();
         return;
       }
       failures = 0;
@@ -302,11 +324,9 @@ export function createSaveQueue(
       // last value, this one has not been refused yet.
       unsaved.delete(questionId);
       persist();
-      emit(
-        offline()
-          ? { kind: "offline", pending: sendable().length }
-          : { kind: "saving", pending: sendable().length },
-      );
+      // Through `settle()` like every other state: another question's
+      // refusal still stands even though this one's is cleared.
+      settle();
       schedule();
     },
     drain,

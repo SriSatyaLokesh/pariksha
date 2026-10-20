@@ -281,7 +281,6 @@ export function readRegistrationToken(): string | null {
 
 function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient }) {
   const [index, setIndex] = useState(0);
-  const [responses, setResponses] = useState(paper.responses);
   const [marked, setMarked] = useState<ReadonlySet<string>>(() => readMarked(paper.attemptId));
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
@@ -303,7 +302,42 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
     () => createSaveQueue(paper.attemptId, (save) => client.putAnswer(save), undefined, paper.clientSeq),
     [paper.attemptId, paper.clientSeq, client],
   );
-  useEffect(() => queue.subscribe(setSaveState), [queue]);
+
+  /**
+   * **What the candidate sees is the server's rows with the queue's own
+   * unsent ones laid over them** — `AC-14`'s "closing and reopening the
+   * browser resumes with the same answers".
+   *
+   * A save that never reached the server is still the newest thing the
+   * candidate typed, and it survived the reload in `localStorage`.
+   * Seeding from `paper.responses` alone showed a resumed candidate an
+   * empty input and an "unanswered" palette square over an answer they
+   * had written, which reads as lost work even in the moment before the
+   * queue drains it.
+   */
+  const [responses, setResponses] = useState<AttemptPaper["responses"]>(() => {
+    const seeded = { ...paper.responses };
+    for (const save of queue.pending()) seeded[save.questionId] = save.value;
+    return seeded;
+  });
+
+  /**
+   * Subscribe, then **drain**.
+   *
+   * Restoring the queue from `localStorage` queues nothing: `enqueue`,
+   * the `online` listener and the `visibilitychange` listener are the
+   * only things that start a pass, and on a fresh load with the network
+   * already up none of them fires — `online` needs a transition and
+   * `visibilitychange` needs visibility to change. Without this line a
+   * candidate who went offline, typed, and then lost the tab reopens to
+   * answers that sit in storage and are never sent, which is exactly the
+   * "zero lost answers" promise this phase is gated on.
+   */
+  useEffect(() => {
+    const off = queue.subscribe(setSaveState);
+    void queue.drain();
+    return off;
+  }, [queue]);
 
   /** The answer blocks for all twelve types (Task 7), each change both
    * shown at once and queued for the server. The local state is not the

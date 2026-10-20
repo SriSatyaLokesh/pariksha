@@ -285,6 +285,65 @@ it("Review Focus 3: the banner never reads Saved while anything refused is outst
   expect(states.map((s) => s.kind)).not.toContain("saved");
 });
 
+it("I-1: an outage does not erase a standing refusal from the banner", async () => {
+  // The Review Focus 3 scenario one step on. A refusal stands; then the
+  // network drops with another answer still waiting. A banner that
+  // flipped to "Offline — 1 answer waiting" would be telling the
+  // candidate that reconnecting fixes an answer `sendable()` excludes
+  // until they edit it again — so they reconnect, watch the banner
+  // clear, and submit without it.
+  put.mockResolvedValueOnce({ outcome: "refused", message: "Time is up." });
+  queue.enqueue("A", v);
+  await flush();
+  expect(lastState()).toMatchObject({ kind: "refused", questionId: "A" });
+
+  goOffline();
+  queue.enqueue("B", v);
+  await advance(120_000);
+
+  expect(queue.pending().map((p) => p.questionId)).toEqual(["A", "B"]);
+  expect(lastState()).toMatchObject({ kind: "refused", questionId: "A" });
+  expect(states.map((s) => s.kind)).not.toContain("saved");
+});
+
+it("I-1: a transport failure does not erase one either", async () => {
+  put
+    .mockResolvedValueOnce({ outcome: "refused", message: "Time is up." })
+    .mockRejectedValue(new TypeError("Failed to fetch"));
+  queue.enqueue("A", v);
+  await flush();
+  expect(lastState().kind).toBe("refused");
+
+  queue.enqueue("B", v);
+  await advance(SAVE_DEBOUNCE_MS + 50);
+  expect(put.mock.calls.length).toBeGreaterThan(1);
+  expect(lastState()).toMatchObject({ kind: "refused", questionId: "A" });
+});
+
+it("I-1: editing a DIFFERENT question does not erase the refusal either, not even for a tick", async () => {
+  // `enqueue` is the third emit site. It clears the refusal on the
+  // question being edited and on no other, so a refusal on A must still
+  // be the banner the instant B is typed into — this assertion is made
+  // synchronously, before any drain can put it back.
+  put.mockResolvedValueOnce({ outcome: "refused", message: "Time is up." });
+  queue.enqueue("A", v);
+  await flush();
+  expect(lastState().kind).toBe("refused");
+
+  queue.enqueue("B", v);
+  expect(lastState()).toMatchObject({ kind: "refused", questionId: "A" });
+});
+
+it("with no refusal standing, an outage still says Offline and counts what is waiting", () => {
+  // The other half of the ranking: routing the offline branch through
+  // `settle()` must not cost the Offline message when it is the right
+  // one to show.
+  goOffline();
+  queue.enqueue("A", v);
+  queue.enqueue("B", v);
+  expect(lastState()).toEqual({ kind: "offline", pending: 2 });
+});
+
 it("a refused save is not re-sent on every tick — it is held, once", async () => {
   put.mockResolvedValue({ outcome: "refused", message: "Time is up." });
   queue.enqueue("A", v);

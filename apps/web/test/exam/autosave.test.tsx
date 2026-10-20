@@ -311,6 +311,87 @@ describe("the save banner is reached from the candidate app's own root", () => {
   });
 });
 
+describe("AC-14: closing and reopening the browser (Critical 1)", () => {
+  // The sequence the phase gate is written about: the candidate loses the
+  // network, types, the banner says "Offline — 2 answers waiting", and
+  // then the tab dies. Only `localStorage` crosses the gap. On reopening,
+  // nothing in the app had started a pass — `enqueue` had not been
+  // called, `online` needs a *transition* and `visibilitychange` needs
+  // visibility to *change* — so the answers sat in storage, were never
+  // sent, were not shown in the inputs, and the banner was blank. A
+  // submit from there loses them.
+  const STRANDED = {
+    seq: 4,
+    saves: [
+      { questionId: "q1", value: { kind: "text", text: "Delhi" }, clientSeq: 3, queuedAt: 0 },
+      { questionId: "q2", value: { kind: "text", text: "Yamuna" }, clientSeq: 4, queuedAt: 0 },
+    ],
+  };
+
+  function reopenWith(stranded: unknown): { saved: Saved } {
+    localStorage.setItem(queueStorageKey("att_save"), JSON.stringify(stranded));
+    const { client, saved } = clientThatSaves();
+    render(<ExamApp client={{ ...client, resume: () => Promise.resolve(paper) }} />);
+    return { saved };
+  }
+
+  it("the stranded answers are sent, in order, with no edit and no reconnection", async () => {
+    const { saved } = reopenWith(STRANDED);
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    await waitFor(() => {
+      expect(saved.calls).toHaveLength(2);
+    });
+    expect(saved.calls.map((call) => call.questionId)).toEqual(["q1", "q2"]);
+    expect(saved.calls[0]).toMatchObject({ value: { kind: "text", text: "Delhi" } });
+    await screen.findByText(/^Saved$/);
+    expect(localStorage.getItem(queueStorageKey("att_save"))).not.toContain("Delhi");
+  });
+
+  it("and they are on the screen before any of them reaches the server", async () => {
+    // An input the candidate has to look at while the queue drains must
+    // not be empty: an empty box over an answer they wrote reads as lost
+    // work even in the second before it is sent.
+    reopenWith(STRANDED);
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    expect(screen.getByRole("textbox")).toHaveValue("Delhi");
+    // `\b` before "answered", because "unanswered" contains it — the
+    // whole point of the assertion is which of the two words is there.
+    expect(screen.getByRole("button", { name: /^Question 1 .*\banswered/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /^Question 2 .*\banswered/ })).toBeVisible();
+  });
+
+  it("the server's own rows still show where the queue holds nothing newer", async () => {
+    localStorage.setItem(queueStorageKey("att_save"), JSON.stringify(STRANDED));
+    const { client } = clientThatSaves();
+    const resumed: AttemptPaper = {
+      ...paper,
+      // q1 is also held, newer, by the queue; q2 is only on the server
+      // here, so the overlay must not erase it.
+      responses: { q1: { kind: "text", text: "stale" }, q2: { kind: "text", text: "Ganga" } },
+    };
+    const held = { ...STRANDED, saves: [STRANDED.saves[0]] };
+    localStorage.setItem(queueStorageKey("att_save"), JSON.stringify(held));
+
+    render(<ExamApp client={{ ...client, resume: () => Promise.resolve(resumed) }} />);
+    await screen.findByRole("navigation", { name: /question palette/i });
+
+    expect(screen.getByRole("textbox")).toHaveValue("Delhi");
+    fireEvent.click(screen.getByRole("button", { name: /^question 2 /i }));
+    expect(screen.getByRole("textbox")).toHaveValue("Ganga");
+  });
+
+  it("an empty queue sends nothing on mount, so the drain costs a fresh candidate no request", async () => {
+    const { saved } = reopenWith({ seq: 0, saves: [] });
+    await screen.findByRole("navigation", { name: /question palette/i });
+    await waitFor(() => {
+      expect(screen.getByRole("status", { name: /save status/i })).toBeInTheDocument();
+    });
+    expect(saved.calls).toEqual([]);
+  });
+});
+
 describe("the attempt view seeds its counter from the server", () => {
   it("a resumed attempt starts above the highest sequence the server holds", async () => {
     // Without this a reload restarts the browser's counter at 1, the
