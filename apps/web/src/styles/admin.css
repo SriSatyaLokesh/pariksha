@@ -19,6 +19,13 @@
 
    No colour literal: every colour is a token var(). */
 
+/* Phase 6.5b Task 3: the organiser's two grounds under one set of semantic
+   names (D20). First, so a later rule in this chain can read them. The
+   organiser is admin.css's only root and the landing and exam entries never
+   load it (test/bundle.test.ts), so the semantic names reach the organiser
+   and nothing else — which is what D1 requires of an accent that cannot
+   cross grounds. */
+@import "./theme.css";
 @import "./primitives.css";
 @import "./authoring.css";
 @import "./registration.css";

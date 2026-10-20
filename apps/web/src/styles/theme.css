@@ -1,0 +1,96 @@
+/* The organiser's two grounds, under one set of names.
+
+   Phase 6.5b Task 3, spec D20: the light Signal palette ships beside the
+   dark one and a control in the top bar switches them. D1: an accent cannot
+   cross grounds — signal-accent is 1.60:1 on cream — so taking the landing
+   page's accent means taking its ground, and the light ground gets its own
+   accent instead.
+
+   Every organiser rule from 6.5c onwards reads the names below and never a
+   var(--color-signal*) token directly. That is the whole mechanism: one
+   data-theme attribute on <html> re-grounds nine screens, because this file
+   is the only place either palette is named.
+
+   :root carries the dark mapping and :root[data-theme="light"] the light
+   one. No other block may set these (apps/web/test/theme.test.ts).
+
+   The washes are the one mapping that is not a straight rename. A wash is
+   alpha over the ground's own ink, so the dark ground's wash is light and
+   the light ground's is dark — a light wash on a light ground is invisible.
+   They are derived here with color-mix() over generated tokens rather than
+   declared in DESIGN.md's front matter, because a wash is a mapping, not a
+   palette decision; the sixteen organiser colours in front matter are the
+   complete set.
+
+   D20a — the field is a dark-ground device and is allowed to disappear. On
+   the light ground --glow and --glow-strong resolve to a near-invisible
+   wash. That is the ruling, not an oversight: a green bloom on cream is the
+   same illegal-adjacent move D1 refused, and inventing a light-mode
+   ornament to replace it would make the two grounds two designs. */
+
+:root {
+  --ground: var(--color-signal-bg);
+  --ground-2: var(--color-signal-bg-2);
+  --surface: var(--color-signal-surface);
+  --surface-2: var(--color-signal-surface-2);
+
+  /* --edge and --edge-2 are decoration: 1.67:1 and 1.54:1 on the ground.
+     An input outline or a table rule needs 3:1 and takes --edge-strong,
+     which is the token D1 added for exactly that (3.88:1 on the ground). */
+  --edge: var(--color-signal-line);
+  --edge-2: var(--color-signal-line-2);
+  --edge-strong: var(--color-signal-line-strong);
+
+  --ink: var(--color-signal-text);
+  --ink-2: var(--color-signal-text-2);
+  --ink-3: var(--color-signal-text-3);
+
+  --accent: var(--color-signal-accent);
+  --accent-ink: var(--color-signal-accent-ink);
+  --accent-wash: color-mix(in srgb, var(--color-signal-accent) 12%, transparent);
+
+  --warn: var(--color-signal-flag-review);
+  --warn-wash: color-mix(in srgb, var(--color-signal-flag-review) 14%, transparent);
+  --risk: var(--color-signal-flag-risk);
+  --risk-wash: color-mix(in srgb, var(--color-signal-flag-risk) 14%, transparent);
+
+  --wash: color-mix(in srgb, var(--color-signal-text) 6%, transparent);
+  --wash-2: color-mix(in srgb, var(--color-signal-text) 12%, transparent);
+
+  --glow: color-mix(in srgb, var(--color-signal-accent) 18%, transparent);
+  --glow-strong: color-mix(in srgb, var(--color-signal-accent) 34%, transparent);
+}
+
+:root[data-theme="light"] {
+  --ground: var(--color-signal-l-bg);
+  --ground-2: var(--color-signal-l-bg-2);
+  --surface: var(--color-signal-l-surface);
+  --surface-2: var(--color-signal-l-surface-2);
+
+  --edge: var(--color-signal-l-line);
+  --edge-2: var(--color-signal-l-line-2);
+  --edge-strong: var(--color-signal-l-line-strong);
+
+  --ink: var(--color-signal-l-text);
+  --ink-2: var(--color-signal-l-text-2);
+  --ink-3: var(--color-signal-l-text-3);
+
+  --accent: var(--color-signal-l-accent);
+  --accent-ink: var(--color-signal-l-accent-ink);
+  --accent-wash: color-mix(in srgb, var(--color-signal-l-accent) 12%, transparent);
+
+  --warn: var(--color-signal-l-flag-review);
+  --warn-wash: color-mix(in srgb, var(--color-signal-l-flag-review) 14%, transparent);
+  --risk: var(--color-signal-l-flag-risk);
+  --risk-wash: color-mix(in srgb, var(--color-signal-l-flag-risk) 14%, transparent);
+
+  /* Dark ink over a light ground — the inverse of the pair above, and the
+     reason this block is not a copy of the one above with a prefix. */
+  --wash: color-mix(in srgb, var(--color-signal-l-text) 6%, transparent);
+  --wash-2: color-mix(in srgb, var(--color-signal-l-text) 12%, transparent);
+
+  /* D20a. No louder than the ambient wash, which is what "allowed to
+     disappear" means in a number. */
+  --glow: color-mix(in srgb, var(--color-signal-l-accent) 3%, transparent);
+  --glow-strong: color-mix(in srgb, var(--color-signal-l-accent) 5%, transparent);
+}
