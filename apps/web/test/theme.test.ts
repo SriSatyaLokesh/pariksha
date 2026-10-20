@@ -291,16 +291,21 @@ describe("the semantic names reach the organiser and nothing else (D1)", () => {
 // had given it up taking it back.
 //
 // 6.5c, 6.5d and 6.5e EACH shrink this list as they re-ground a surface —
-// not 6.5e alone. primitives.css's three uses are `.button-primary`'s hover
-// and focus-visible states and `.button-primary--surface`, which is 6.5c's
-// shell; base.css's is the focus ring 6.5b added `--focus` for, and it
-// lands on 6.5c's first screen; 6.5d and 6.5e both also modify
-// primitives.css. So the first implementer to see this go red will most
-// likely be on 6.5c or 6.5d: if this comment named one plan, they would
-// read "not mine" and go looking for a break that is not there. The end
-// state is the runtime's own chain (exam.css, and registration.css while it
-// stays shared with admin.css). Shrinking is the expected edit; growing
-// never is.
+// not 6.5e alone. primitives.css's three uses are TWO different components:
+// `.button-primary:hover, .button-primary:focus-visible` (:64) and
+// `.button-primary--surface` (:77), and — a separate component —
+// `.button-secondary:hover, .button-secondary:focus-visible` (:120).
+// base.css's two are both in the global `:focus-visible` rule (:86-91), the
+// ring 6.5b added `--focus` for. 6.5d and 6.5e also modify primitives.css.
+//
+// Naming every component matters more than it looks: whoever re-grounds
+// `.button-secondary` and hits this red test must find THEIR change named
+// here, or they read "not mine" and go hunting a break that is not there.
+// That is the same failure as naming a single plan, one level down.
+//
+// The end state is the runtime's own chain (exam.css, and registration.css
+// while it stays shared with admin.css). Shrinking is the expected edit;
+// growing never is.
 //
 // Counted per SOURCE file, not over a resolved bundle: question.css and
 // registration.css are imported by both entries, so a bundle-level count
@@ -333,10 +338,11 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
         "registration.css",
         // --- Below: the organiser's remaining voltage. Each line is deleted
         // by whichever of 6.5c / 6.5d / 6.5e re-grounds that surface. ---
-        // primitives.css: `.button-primary` hover/focus-visible and
-        // `.button-primary--surface` — 6.5c's shell. base.css: the focus
-        // ring 6.5b added `--focus` for, on 6.5c's first screen. The
-        // authoring and test-builder sheets carry their own selected states.
+        // primitives.css: `.button-primary:hover, :focus-visible` (:64),
+        // `.button-primary--surface` (:77) AND `.button-secondary:hover,
+        // :focus-visible` (:120) — two components, not one. base.css: the
+        // global `:focus-visible` ring (:86-91). The authoring and
+        // test-builder sheets carry their own selected states.
         "authoring.css",
         "base.css",
         "primitives.css",

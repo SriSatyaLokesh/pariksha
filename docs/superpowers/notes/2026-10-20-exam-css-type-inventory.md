@@ -394,11 +394,26 @@ has merged; a guard written against the end state would be **red on arrival** an
 rather than believed. What it catches now is the invariant worth having: voltage **spreading** — a
 new stylesheet reaching for the vermilion, or one that had given it up taking it back.
 
-**6.5c, 6.5d and 6.5e each shrink the list** — not 6.5e alone. `primitives.css`'s three uses are
-`.button-primary`'s hover and focus-visible states and `.button-primary--surface`, which is 6.5c's
-shell; `base.css`'s is the focus ring 6.5b added `--focus` for, landing on 6.5c's first screen; and
-6.5d and 6.5e both also modify `primitives.css`. So the first implementer to see this go red will
-most likely be on **6.5c or 6.5d** — naming one plan would send them looking for a break that is not
-theirs. Shrinking the list is the expected edit (delete the entry, keep the test); growing it is
-always a failure. The assertion carries that instruction as its own failure message, so it reaches
-whoever reads CI rather than only whoever reads the comment.
+**6.5c, 6.5d and 6.5e each shrink the list** — not 6.5e alone. `primitives.css`'s three uses span
+**two different components**, read off the file rather than recalled:
+
+| line | selector | declaration |
+|---|---|---|
+| `primitives.css:64` | `.button-primary:hover, .button-primary:focus-visible` | `background: var(--color-voltage-deep)` |
+| `primitives.css:77` | `.button-primary--surface` | `background: var(--color-voltage-deep)` |
+| `primitives.css:120` | `.button-secondary:hover, .button-secondary:focus-visible` | `border-color: var(--color-voltage)` |
+
+`base.css`'s two are both inside the single global `:focus-visible` rule (`base.css:86-91`) — the
+outline and its box-shadow — the ring 6.5b added `--focus` for. 6.5d and 6.5e also modify
+`primitives.css`.
+
+So the first implementer to see this go red will most likely be on **6.5c or 6.5d**, and naming one
+plan would send them looking for a break that is not theirs. The same trap exists one level down:
+an earlier draft of this section named only `.button-primary` and left `.button-secondary`
+unmentioned, so whoever re-grounds the secondary button would have hit the red test, read a comment
+about a component they had not touched, and drawn exactly the same wrong conclusion. **Every
+component holding a voltage line is now named, in both this note and the test comment.**
+
+Shrinking the list is the expected edit (delete the entry, keep the test); growing it is always a
+failure. The assertion carries that instruction as its own failure message, so it reaches whoever
+reads CI rather than only whoever reads the comment.
