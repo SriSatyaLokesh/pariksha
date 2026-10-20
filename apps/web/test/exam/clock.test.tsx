@@ -25,8 +25,8 @@ import { dirname, resolve } from "node:path";
 import { Clock, anchorFrom, formatRemaining, reanchor } from "../../src/components/exam/Clock";
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
-import type { RunClient } from "../../src/lib/run";
-import { SAVE_DEBOUNCE_MS } from "../../src/lib/queue";
+import type { Receipt, RunClient } from "../../src/lib/run";
+import { SAVE_DEBOUNCE_MS, queueStorageKey } from "../../src/lib/queue";
 import { RESULT_STUB } from "./run-client-stub";
 
 const MINUTE = 60_000;
@@ -51,6 +51,9 @@ afterEach(() => {
   vi.useRealTimers();
   vi.restoreAllMocks();
   document.documentElement.style.fontSize = "";
+  // The save queue lives in `localStorage`, and the zero tests below seed
+  // it on purpose: a leftover row is another test's unsent answer.
+  localStorage.clear();
 });
 
 /** Real elapsed time: the monotonic clock and the interval together. */
@@ -635,5 +638,84 @@ describe("the clock is on the runner a candidate actually reaches", () => {
     expect(putAnswer).toHaveBeenCalled();
     expect(shown()).toBe("45:00");
     expect(screen.getByRole("alert")).toHaveTextContent(/time for this test is up/i);
+  });
+});
+
+// --- C-07: zero, from the app root --------------------------------------
+//
+// The half of `C-07` the clock cannot prove on its own. Every test in
+// "C-07: zero" above renders `<Clock>` with a `vi.fn()` for `onZero`, so
+// what the runner actually *does* at zero — drain the queue, then submit —
+// was wired and reached by nothing: reverting `exam.tsx`'s `void finish()`
+// to the `void queue.drain()` it replaced passed the whole web suite.
+
+const receipt: Receipt = {
+  attemptId: "att_clock",
+  submittedAt: 1_760_000_000_000,
+  answered: 1,
+  unanswered: 1,
+  total: 2,
+  attemptNo: 1,
+  attemptsAllowed: 1,
+};
+
+/** An answer made in time that never reached the server — in
+ *  `localStorage`, which is where a reload really finds it. */
+function queueAnswerFor(attemptId: string): void {
+  localStorage.setItem(
+    queueStorageKey(attemptId),
+    JSON.stringify({
+      seq: 4,
+      saves: [
+        { questionId: "q1", value: { kind: "text", text: "Delhi" }, clientSeq: 4, queuedAt: 0 },
+      ],
+    }),
+  );
+}
+
+/** A resume at `deadline + 20 s`, inside the 30-second grace: the server
+ *  has not materialised the timeout, so it serves the paper with no time
+ *  left on it and the browser's own clock is at zero on arrival. */
+const expired = { ...resumedPaper, remainingMs: 0, sectionRemainingMs: null };
+
+describe("C-07: the countdown reaching zero ends the attempt", () => {
+  it("drains the queue and THEN submits, from the runner a candidate is sitting on", async () => {
+    const order: string[] = [];
+    const putAnswer = vi.fn(async () => {
+      order.push("save");
+      await Promise.resolve();
+      return { outcome: "accepted" as const };
+    });
+    const submit = vi.fn(async () => {
+      order.push("submit");
+      await Promise.resolve();
+      return { receipt, released: null };
+    });
+    queueAnswerFor(expired.attemptId);
+
+    render(<ExamApp client={resumingClient({ putAnswer, submit }, expired)} />);
+    await settle(50);
+
+    // Submitting first would close the attempt and the answer still in the
+    // queue would come back a 409 — `AC-14`'s "zero lost answers" on the
+    // one path the candidate is not there to retry.
+    expect(order).toEqual(["save", "submit"]);
+    // And the candidate lands on the finish page rather than on a paper
+    // whose every save is now refused.
+    expect(screen.getByRole("heading", { name: /submitted/i })).toBeVisible();
+    expect(screen.queryByRole("navigation", { name: /question palette/i })).toBeNull();
+  });
+
+  it("a refused auto-submit shows the reason and does NOT open a confirmation nobody asked for", async () => {
+    // The candidate never pressed Submit — their clock ran out. Opening
+    // the "Submit this test?" dialog here asks them to confirm something
+    // they did not do, on top of a paper they can no longer write to.
+    const submit = vi.fn(() => Promise.reject(new Error("The network dropped. Try again.")));
+    render(<ExamApp client={resumingClient({ submit }, expired)} />);
+    await settle(50);
+
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("alert")).toHaveTextContent(/network dropped/i);
   });
 });

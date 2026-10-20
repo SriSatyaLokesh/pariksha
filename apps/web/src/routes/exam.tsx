@@ -496,15 +496,20 @@ function AttemptView({
    * A refusal leaves the dialog open with a sentence in it, because a
    * candidate whose submission failed must be able to press again — the
    * server's own idempotence is what makes pressing again safe.
+   *
+   * **Unless they never opened it.** `auto` is the clock's own submission
+   * at zero: a refusal there must leave the sentence and nothing else,
+   * because re-opening "Submit this test?" asks a candidate whose time has
+   * run out to confirm something they did not do.
    */
-  const finish = useCallback(async () => {
+  const finish = useCallback(async (auto = false) => {
     setSubmitting("sending");
     setSubmitError(null);
     try {
       await queue.drain();
       onFinished(await client.submit());
     } catch (error) {
-      setSubmitting("confirming");
+      setSubmitting(auto ? "idle" : "confirming");
       setSubmitError(
         error instanceof Error
           ? error.message
@@ -543,7 +548,7 @@ function AttemptView({
             // Whichever of this and the server's own materialisation gets
             // there first wins; the other is a no-op, because
             // `finishAttempt` writes only `WHERE submitted_at IS NULL`.
-            void finish();
+            void finish(true);
           }}
           onSectionZero={() => {
             // `C-07` on the client: when the section's clock runs out the
