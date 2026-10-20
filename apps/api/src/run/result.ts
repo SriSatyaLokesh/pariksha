@@ -22,9 +22,14 @@
 //     `insertAuthToken` and `email.send`, so the two differ in *time*.
 //     Inherent to the shape, and the same shape `/email-code` already
 //     has — closing it would mean doing the work on a miss too.
-//   * **Both are rate-limited before they read anything**, by the
-//     reference *and* by the address: the first bounds guessing, the
-//     second bounds using this as a mailbomb aimed at a third party.
+//   * **Both are rate-limited.** `/result/code` by the address the code
+//     would be sent to, before it reads anything — that is what bounds
+//     using this as a mailbomb aimed at a third party, and the only
+//     thing a sweep of references can actually spend. `/result/verify`
+//     by the attempt the reference **resolved to**, which is what
+//     bounds guessing the six digits. Neither bucket is keyed on a
+//     string the caller invented: one that was mints a permanent row
+//     per request and counts to one.
 
 import { z } from "zod";
 import { Hono } from "hono";
@@ -102,11 +107,15 @@ export function resultRoutes(deps: AppDeps): Hono<AppBindings> {
 
     // Charged **before** the read, and on every request rather than on
     // misses alone: here the request *is* the cost, the way
-    // `/email-code`'s is. The reference bucket bounds guessing an
-    // address for one receipt; the address bucket bounds bombing one
-    // inbox, and is keyed by a digest so no address is written in the
-    // clear (`S-15`).
-    await limitOrThrow(deps, "result_code", attemptRef);
+    // `/email-code`'s is. Keyed by a digest so no address is written in
+    // the clear (`S-15`), and the same bucket `/email-code` uses because
+    // it is the same inbox being protected from the same thing.
+    //
+    // The reference is **not** a second bucket here. A sweep never
+    // repeats one, so that counter never reached 2 — it only wrote a
+    // permanent row per request — and the mail this route sends can only
+    // ever reach the address the attempt registered with, whose own
+    // bucket is this one.
     await limitOrThrow(deps, "email_code_address", await sha256Hex(normaliseEmail(email)));
 
     const found = await findAttemptByReference(deps.db, attemptRef);
@@ -140,7 +149,13 @@ export function resultRoutes(deps: AppDeps): Hono<AppBindings> {
     const { attemptRef, email, code } = parsed.data;
     const now = deps.now();
 
-    await limitOrThrow(deps, "result_code", attemptRef);
+    // Read first, so the guess is bounded on the attempt the reference
+    // **resolved to** rather than on the string the caller typed — one
+    // bucket per real attempt, not one per guess. A reference that
+    // resolves to nothing writes no row at all and falls through to the
+    // same 410 a wrong code gets.
+    const found = await findAttemptByReference(deps.db, attemptRef);
+    if (found !== null) await limitOrThrow(deps, "result_code", found.attemptId);
 
     const payload = (await consumeAuthToken(
       deps.db,
@@ -160,7 +175,6 @@ export function resultRoutes(deps: AppDeps): Hono<AppBindings> {
       );
     }
 
-    const found = await findAttemptByReference(deps.db, payload.attemptId);
     if (found === null || found.submittedAt === null) {
       throw new ApiError(404, "not_found", "No such resource.");
     }

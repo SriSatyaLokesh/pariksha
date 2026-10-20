@@ -332,6 +332,32 @@ it("C-09: a never-released test answers the code route the same way and releases
   expect(await res.json()).toBeNull();
 });
 
+it("S-07: the guess limiter is keyed on the attempt the reference resolved to", async () => {
+  const ref = await sitWithEmail();
+  await post(CODE_PATH, { attemptRef: ref, email: EMAIL });
+
+  // A sweep of references never repeats one, so a bucket per *typed*
+  // string counted to one forever while writing a permanent row per
+  // request. An unknown reference now writes no row at all.
+  await post(VERIFY_PATH, { attemptRef: "att_000000000000", email: EMAIL, code: "000000" });
+  const buckets = async (): Promise<string[]> =>
+    (await deps.db.query<{ bucket: string }>("SELECT bucket FROM rate_limit", [])).map(
+      (row) => row.bucket,
+    );
+  expect(await buckets()).not.toContain("result_code:att_000000000000");
+
+  // And guessing the six digits against a real one is bounded.
+  for (let i = 0; i < 20; i++) {
+    expect((await post(VERIFY_PATH, { attemptRef: ref, email: EMAIL, code: "000000" })).status).toBe(
+      410,
+    );
+  }
+  expect((await post(VERIFY_PATH, { attemptRef: ref, email: EMAIL, code: "000000" })).status).toBe(
+    429,
+  );
+  expect(await buckets()).toContain(`result_code:${ref}`);
+});
+
 // --- the budgets ---------------------------------------------------------
 
 it("every Task 11 route spends exactly its declared budget", async () => {

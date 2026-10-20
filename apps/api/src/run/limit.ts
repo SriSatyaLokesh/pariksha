@@ -47,14 +47,18 @@
 // A brute force against an 8-character access code at 300 guesses a minute
 // is still hopeless, so the sizing costs nothing in security.
 
-import { takeRateToken } from "@pariksha/db";
+import { sweepRateLimits, takeRateToken } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { EMAIL_CODE_TTL_MS, refuse } from "./entry.js";
 
 /** `RESULT_CODE_TTL_MS`, restated rather than imported: `run/result.ts`
  *  imports this module, so taking the constant from there would be a
- *  cycle. The two are asserted equal in `test/run/release.test.ts`. */
+ *  cycle. No assertion ties the two — they are pinned to the same
+ *  literal from both sides instead: `LIMITS` in `access.test.ts`
+ *  ("every anti-abuse ceiling and window is pinned to a literal") and
+ *  `RESULT_CODE_TTL_MS` in `release.test.ts`. A drift changes one of
+ *  those two literals and fails there. */
 const RESULT_CODE_WINDOW_MS = 10 * 60_000;
 
 export const LIMITS = {
@@ -73,13 +77,16 @@ export const LIMITS = {
    *  because this is the number that stands between a stranger and
    *  someone else's inbox. */
   email_code_address: { limit: 5, windowMs: EMAIL_CODE_TTL_MS },
-  /** Result codes asked for or verified against one attempt reference,
-   *  per ten minutes — the code's own TTL, so the window is the lifetime
-   *  of what it protects. Keyed on the **reference**, which is what a
-   *  guesser would sweep; the address half of the same route reuses
-   *  `email_code_address`, because it is the same inbox being protected
-   *  from the same thing. Twenty is generous for a candidate who
-   *  mistypes a code twice and asks again. */
+  /** Code guesses against one **resolved attempt**, per ten minutes — the
+   *  code's own TTL, so the window is the lifetime of what it protects.
+   *  Keyed on the attempt the reference resolved to and never on the
+   *  reference as typed: a guesser sweeping references never repeats
+   *  one, so a bucket per typed string was a counter that could not
+   *  reach 2 while minting a permanent row per request. Asking for a
+   *  code is bounded by the inbox it is sent to
+   *  (`email_code_address`) instead, which is the thing that attack
+   *  actually aims at. Twenty is generous for a candidate who mistypes
+   *  a code twice and asks again. */
   result_code: { limit: 20, windowMs: RESULT_CODE_WINDOW_MS },
   /** Short codes that resolved to nothing — **instance-wide**, not per
    *  code, per minute. See the header: a sweep never repeats a code. */
@@ -103,8 +110,21 @@ export async function limitOrThrow(deps: AppDeps, kind: LimitKind, key?: string)
   const { limit, windowMs } = LIMITS[kind];
   const bucket = key === undefined ? kind : `${kind}:${key}`;
   const count = await takeRateToken(deps.db, bucket, windowMs, deps.now());
+  // The one bucket whose key a stranger mints: every other one is a test
+  // version, a resolved attempt or nothing at all, and those rows are
+  // bounded by what the instance holds. Swept here because this is where
+  // the unbounded row is written, and by the **longest** window of any
+  // kind — one `DELETE` sees every kind's rows and clearing a live one
+  // would reset its count. One extra subrequest, on the two routes that
+  // already send a message.
+  if (kind === "email_code_address") {
+    await sweepRateLimits(deps.db, deps.now() - MAX_WINDOW_MS);
+  }
   if (count > limit) throw refuse("too_many_attempts");
 }
+
+/** The longest window any bucket counts over — see `limitOrThrow`. */
+const MAX_WINDOW_MS = Math.max(...Object.values(LIMITS).map((one) => one.windowMs));
 
 /**
  * The miss-counting form: run `work`, and charge the bucket only when it

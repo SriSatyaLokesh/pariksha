@@ -345,11 +345,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // candidate sends no session cookie, so `authenticate` never reads one.
   "/api/v1/run/:workspaceSlug/:testSlug/access": 4,
   // Resolve, the two `S-07` rate tokens (per test version and per
-  // address digest) and one insert — **4** since Task 4's fix round
-  // (#68, C-1); it was 2 while the route was unlimited. Sending the
-  // message is still not a D1, R2 or `deps.http` call. A refusal costs
-  // 2 or 3, because the limiters are charged before the write.
-  "/api/v1/run/:workspaceSlug/:testSlug/email-code": 4,
+  // address digest), the sweep that the address bucket pays for, and one
+  // insert — **5** since the final review's Important 2; it was 4 since
+  // Task 4's fix round (#68, C-1) and 2 while the route was unlimited.
+  // Sending the message is still not a D1, R2 or `deps.http` call. A
+  // refusal costs 2 to 4, because the limiters are charged before the
+  // write.
+  "/api/v1/run/:workspaceSlug/:testSlug/email-code": 5,
   // Resolve and the state insert, plus discovery and JWKS on a cold
   // isolate (`oidc.ts` caches both for the isolate's lifetime, so a warm
   // one spends 2).
@@ -462,11 +464,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // attempt count, the bank and the answers. Every lesser release level
   // costs 2, because the score is already on the row the join returned.
   "/api/v1/run/attempt/result": 4,
-  // `C-09`, the return visit. `/code` is **4**: the reference limiter,
-  // the address limiter, the attempt lookup and the token insert — plus
-  // the message itself, which is not a subrequest in this count unless
-  // `deps.http` is wired. `/verify` is **6**: the limiter, the single-use
-  // consume, the lookup, the candidate's attempt count, and — at
+  // `C-09`, the return visit. `/code` is **4**: the address limiter, its
+  // sweep, the attempt lookup and the token insert — plus the message
+  // itself, which is not a subrequest in this count unless `deps.http`
+  // is wired. The reference is no longer a bucket of its own (final
+  // review, Important 2), so the count is what it was. `/verify` is
+  // **6**: the lookup, the limiter on the attempt it resolved, the
+  // single-use consume, the candidate's attempt count, and — at
   // `full_review` only — the bank and the candidate's own answers. A
   // `score_only` verification costs 4.
   "/api/v1/run/result/code": 4,

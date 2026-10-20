@@ -790,6 +790,47 @@ it("the window rolls: an address refused this minute can ask again later", async
   clock = T;
 });
 
+it("S-07: stale buckets are swept and live ones are not", async () => {
+  // `takeRateToken` wrote one row per bucket and nothing ever deleted
+  // one, which was fine while every key was a test version — and stopped
+  // being fine when a bucket keyed on a digest of an address a stranger
+  // typed landed on two unauthenticated routes. Swept where that row is
+  // written.
+  await fillBucket("test_register", await versionOf("otp"));
+  await deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    "email_code_address:stale",
+    T - LIMITS.email_code_address.windowMs - 1,
+    3,
+  ]);
+
+  expect((await post("/api/v1/run/alpha/otp/email-code", { email: "sweep@b.ac.in" })).status).toBe(
+    202,
+  );
+
+  const buckets = await rateBuckets();
+  expect(buckets).not.toContain("email_code_address:stale");
+  // **And the live one survives.** A sweep that took the open windows
+  // with it would not be housekeeping, it would be the way past every
+  // ceiling in `LIMITS` — one `/email-code` call per thousand
+  // registrations and `test_register` never fires again.
+  expect(buckets).toContain(`test_register:${await versionOf("otp")}`);
+});
+
+it("S-07: every anti-abuse ceiling and window is pinned to a literal", () => {
+  // Without this, each number is only ever read back out of the constant
+  // the route uses — so any ceiling could be raised to anything, or to
+  // `Infinity`, with the suite green. The point of the numbers is that
+  // changing one is a diff a reviewer sees.
+  expect(LIMITS).toEqual({
+    test_access: { limit: 300, windowMs: 60_000 },
+    test_register: { limit: 1_000, windowMs: 300_000 },
+    email_code: { limit: 1_000, windowMs: 300_000 },
+    email_code_address: { limit: 5, windowMs: 600_000 },
+    result_code: { limit: 20, windowMs: 600_000 },
+    short_link: { limit: 300, windowMs: 60_000 },
+  });
+});
+
 // --- measured budgets ---------------------------------------------------
 
 const measure = async (request: () => RequestInit & { url: string }): Promise<number> => {

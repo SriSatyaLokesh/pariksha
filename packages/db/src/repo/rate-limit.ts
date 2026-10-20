@@ -27,10 +27,9 @@ import type { DbClient } from "../client.js";
  * per minute) the boundary effect is a doubling that no honest cohort can
  * reach and no attacker is helped by.
  *
- * ponytail: rows are never swept. One per bucket, and a bucket is a test
- * version or a short code, so the table's size is the instance's test
- * count — the `window_start` index is there for the sweep Phase 11's
- * retention job can add when that stops being true.
+ * Rows are swept by `sweepRateLimits`, not here: a sweep is a second
+ * statement and this one has to answer with a count, so the two cannot
+ * share a subrequest.
  */
 export async function takeRateToken(
   db: DbClient,
@@ -48,4 +47,27 @@ export async function takeRateToken(
     [bucket, now, since, now, since],
   );
   return Number(rows[0]?.count ?? 1);
+}
+
+/**
+ * Deletes every bucket whose window closed before `before`.
+ *
+ * A bucket keyed on a test version or an attempt is bounded by what the
+ * instance holds, and `short_link`'s is one row forever — but a bucket
+ * keyed on a digest of an address a stranger typed is not bounded by
+ * anything, and the note above (one row per test) stopped being true the
+ * moment one landed. Two permanent rows per unauthenticated request is a
+ * D1 daily write budget spent on garbage.
+ *
+ * **`before` must be older than the longest window of any kind**, not
+ * the caller's own: one `DELETE` sees every kind's rows, and clearing a
+ * row whose window is still open resets its count — which is a way past
+ * the limit rather than a tidy-up. `limitOrThrow` passes
+ * `now - MAX_WINDOW_MS` for exactly that reason.
+ *
+ * One statement, on the index `window_start` was created for.
+ */
+export async function sweepRateLimits(db: DbClient, before: number): Promise<number> {
+  const { changes } = await db.run("DELETE FROM rate_limit WHERE window_start <= ?", [before]);
+  return changes;
 }
