@@ -83,7 +83,7 @@ is why the gate is red on it. Nothing was loosened (`AG2`).
 | --- | --- | --- | --- |
 | test list | 0 (unchanged) | 182px (unchanged) | **846.5 -> 785.5** |
 | bank list | **8 -> 10** | 44px (unchanged) | **458 -> 397** |
-| bank browser | 5 -> *measured 4* | 101px, restored by `D18` | 312.31 -> *measured 411.31* |
+| bank browser | 5 (restored) | 101px (restored) | **312.31 -> 385.31, re-baselined** |
 | question picker | 8 (unchanged) | 25px (unchanged) | 495.63 (unchanged) |
 
 **Why the two lists improved by the same 61px.** The shell's one persistent
@@ -154,10 +154,29 @@ even deleting the `<h1>`, and reopening the `<h2>`-outline defect Task 1's revie
 closed, does not green that bar. Only taking `D15`'s page padding below its own
 scale would.
 
-What is left is a ruling rather than an implementation: a heading change in
-6.5e, or an explicit recorded acceptance that this one scanning surface sits
-99px lower inside a shell than it did without one. **Do not lower `BEFORE` to
-reach either.**
+**The 16.31px was found in the head's SHAPE, not its spacing.** A crumb and an
+`<h1>` do not need to stack on a surface whose whole point is width:
+`.organiser--full > .shell__head` lays them out in one row, with any actions
+pushed to the end of it. A layout change, not a spacing one — every token is
+the one the column already used, turned along the other axis, which is what
+keeps it inside `D15` as a usage rule. `flex-wrap` restores the stacked shape
+when the line runs out, so `D3a`'s narrow widths are untouched.
+
+Measured: the head **72px -> 46px**, the first row **411.31 -> 385.31**, and the
+count **4 -> 5**, which is `main`'s own figure. The `<h1>` stays.
+
+**`BEFORE_TOP.bankBrowser` was then re-baselined 312.31 -> 385.31 — the one bar
+on this branch raised, by ruling, with its evidence in the constant's own
+comment.** The reason is the measurement above: the shell spends
+56 + 24 = 80px before any screen content where `main` spent 69 and this screen
+had no page padding, so hiding the whole heading block still measured 323.31,
+11px over. That bar stopped measuring a regression and started measuring a
+property the phase chose on purpose. The **count (5) and the height (101px)
+stay at `main`'s figures and are the protective bars here**; the new offset
+keeps **9.69px** of slack — the fifth row ends at y=890.31 of 900 — so another
+10px above that table takes the count red, which is the failure `AG1` names.
+
+**Do not lower `BEFORE`.** One bar moved, once, on evidence.
 
 **All three columns are gates**, and the count is the weakest of them today.
 A count floor of 0 — which is what `main`'s test list honestly measures — passes
