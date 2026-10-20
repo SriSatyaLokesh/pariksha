@@ -34,12 +34,18 @@ export function sectionOfIndex(paper: AttemptPaper): number[] {
 }
 
 /**
- * The first question of the section after the one `index` is in, or null
- * when there is no next section. `C-07`'s auto-advance target.
+ * The first question of the next section that actually *has* a question,
+ * or null when there is none. `C-07`'s auto-advance target.
+ *
+ * The first index in a **later** section, not the first in `here + 1`:
+ * `sectionOfIndex` emits one entry per question, so a section an organiser
+ * left empty contributes no entry at all and an exact match would strand
+ * the candidate in the section whose time has just run out.
  */
 export function firstOfNextSection(paper: AttemptPaper, index: number): number | null {
   const sections = sectionOfIndex(paper);
-  const next = sections.indexOf((sections[index] ?? 0) + 1);
+  const here = sections[index] ?? 0;
+  const next = sections.findIndex((at) => at > here);
   return next === -1 ? null : next;
 }
 

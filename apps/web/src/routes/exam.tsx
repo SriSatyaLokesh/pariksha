@@ -302,6 +302,24 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
     while (locked.has(at)) at += 1;
     return at;
   });
+  /**
+   * How far the server says this candidate has got — **stored, never
+   * derived** (standing decision 6).
+   *
+   * `paper.maxIndex` is the reading the resume was handed and it is frozen
+   * there for the life of the attempt: without this the rail's lock, the
+   * opening index and the Previous rule only ever reflect the resume, so
+   * on a fresh `linear` attempt nothing ever locked — the candidate walked
+   * to question 5, the rail still showed 1-4 open, Previous was still
+   * there, and the save behind it took a 403.
+   *
+   * Every save answers the committed value, so this is assignment and not
+   * arithmetic. A browser that raised it itself would be a second
+   * implementation of a server rule and a wrong one: the progress bump
+   * rides the same statement under `max_index < ?`, so the server advances
+   * on a `superseded` save too.
+   */
+  const [maxIndex, setMaxIndex] = useState(paper.maxIndex);
   const [marked, setMarked] = useState<ReadonlySet<string>>(() => readMarked(paper.attemptId));
   const [saveState, setSaveState] = useState<SaveState>({ kind: "idle" });
 
@@ -345,8 +363,12 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
           // zero would be worse than not re-anchoring.
           if (answer.remainingMs !== undefined) {
             const reading = answer.remainingMs;
-            setAnchor((previous) => reanchor(previous, reading));
+            const section = answer.sectionRemainingMs;
+            setAnchor((previous) => reanchor(previous, reading, section));
           }
+          // The server's own `max_index` after this write, which is what
+          // locks the rail behind a candidate who has moved on.
+          if (answer.maxIndex !== undefined) setMaxIndex(answer.maxIndex);
           return answer;
         },
         undefined,
@@ -425,7 +447,7 @@ function AttemptView({ paper, client }: { paper: AttemptPaper; client: RunClient
 
   return (
     <Runner
-      paper={{ ...paper, responses }}
+      paper={{ ...paper, responses, maxIndex }}
       index={index}
       onIndex={setIndex}
       marked={marked}

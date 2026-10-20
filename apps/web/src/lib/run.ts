@@ -152,15 +152,27 @@ export interface RunClient {
    *  * 5xx and a transport failure **throw**, so the queue backs off and
    *    tries again rather than treating a bad minute as a verdict.
    *
-   * `remainingMs` is absent on a refusal and present on every answer the
-   * route actually produced — Task 9's countdown re-anchors from it, and
-   * re-anchoring to a number nobody sent would be worse than not
-   * re-anchoring at all.
+   * `remainingMs`, `maxIndex` and `sectionRemainingMs` are absent on a
+   * refusal and present on every answer the route actually produced.
+   *
+   * **The browser stores all three and derives none of them.** The
+   * countdown re-anchors from the first two readings — re-anchoring to a
+   * number nobody sent would be worse than not re-anchoring at all — and
+   * `maxIndex` is how far the server now says this candidate has got,
+   * which is what the rail's lock, the opening index and the Previous
+   * button are all drawn from. A browser that tracked its own furthest
+   * index would be a second implementation of a server rule, and a wrong
+   * one: the progress bump rides the same statement guarded only by
+   * `max_index < ?`, so it happens on a `superseded` save too.
    */
   putAnswer(save: QueuedSave): Promise<{
     outcome: SaveOutcome;
     message?: string;
     remainingMs?: number;
+    maxIndex?: number;
+    /** `null` on a paper with no section time limit — a reading, not an
+     *  absence, so it is distinguished from `undefined`. */
+    sectionRemainingMs?: number | null;
   }>;
 }
 
@@ -430,7 +442,12 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
     },
     putAnswer: async (save) => {
       try {
-        const body = await send<{ outcome: SaveOutcome; remainingMs: number }>(ANSWER_PATH, {
+        const body = await send<{
+          outcome: SaveOutcome;
+          remainingMs: number;
+          maxIndex: number;
+          sectionRemainingMs: number | null;
+        }>(ANSWER_PATH, {
           method: "PUT",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
@@ -442,6 +459,10 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
         return {
           outcome: body?.outcome ?? "accepted",
           ...(body?.remainingMs === undefined ? {} : { remainingMs: body.remainingMs }),
+          ...(body?.maxIndex === undefined ? {} : { maxIndex: body.maxIndex }),
+          ...(body?.sectionRemainingMs === undefined
+            ? {}
+            : { sectionRemainingMs: body.sectionRemainingMs }),
         };
       } catch (error) {
         // Anything that is not a refusal the server *chose* — a dropped

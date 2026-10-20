@@ -43,16 +43,26 @@ export function anchorFrom(remainingMs: number, sectionRemainingMs: number | nul
 }
 
 /**
- * Re-anchor from a **save**, which carries the paper's own remaining time
- * and not the section's.
+ * Re-anchor from a **save**.
  *
- * The section is carried forward from where the previous anchor projects
- * it to be now — monotonically, like everything else here. Inventing a
- * zero or reusing a stale absolute would be worse than the small drift of
- * a section clock the server is not reporting on, and the next resume
- * corrects it from the row.
+ * The save carries the section's own remaining time as well as the
+ * paper's, so the section chip re-anchors exactly the way the paper chip
+ * does — which is the only thing that makes a *second* section's clock
+ * readable at all. Carrying it forward from the previous anchor can only
+ * ever count down, so after the first boundary the chip read `0:00` for
+ * the rest of the paper, and it kept counting the section the candidate
+ * had just left.
+ *
+ * The projection survives as the fallback for a response that carries no
+ * section reading: inventing a zero would be worse than the small drift
+ * of a clock the server did not report on.
  */
-export function reanchor(previous: ClockAnchor, remainingMs: number): ClockAnchor {
+export function reanchor(
+  previous: ClockAnchor,
+  remainingMs: number,
+  sectionRemainingMs?: number | null,
+): ClockAnchor {
+  if (sectionRemainingMs !== undefined) return anchorFrom(remainingMs, sectionRemainingMs);
   const elapsed = performance.now() - previous.at;
   return anchorFrom(
     remainingMs,
@@ -151,12 +161,38 @@ function Chip({
   );
 }
 
-/** Fires its callback once, the first time `remainingMs` reaches zero.
- *  Once per mount and not once per anchor: a save that happens to answer
- *  `remainingMs: 0` re-anchors, and a second submission out of that would
- *  be a second request from a candidate who has already finished. */
-function useZeroOnce(remainingMs: number, at: number | null, onZero: (() => void) | undefined) {
+/**
+ * Fires its callback the first time `remainingMs` reaches zero.
+ *
+ * **Once per mount for the paper, once per section for the section.** The
+ * paper's clock reaches zero exactly once in an attempt's life, and a save
+ * that happens to answer `remainingMs: 0` re-anchors — so a guard that
+ * re-armed on every anchor would be a second submission from a candidate
+ * who has already finished. A section clock is the opposite case: it
+ * legitimately expires once per section, and a once-per-mount guard meant
+ * only section one ever auto-advanced.
+ *
+ * `rearmOn` is the **anchored** section reading, not the ticking one. It
+ * only ever rises when the server reports on a different section, which is
+ * the one event that is a new section and not a correction of this one.
+ * Omitted — the paper's clock — nothing ever re-arms.
+ */
+function useZeroOnce(
+  remainingMs: number,
+  at: number | null,
+  onZero: (() => void) | undefined,
+  rearmOn?: number | null,
+) {
   const fired = useRef(false);
+  const armedOn = useRef(rearmOn);
+  // Declared first so it runs first within the same commit: a re-anchor
+  // into the next section must re-arm before the zero check reads the ref.
+  useEffect(() => {
+    if (rearmOn != null && armedOn.current != null && rearmOn > armedOn.current) {
+      fired.current = false;
+    }
+    armedOn.current = rearmOn;
+  }, [rearmOn]);
   useEffect(() => {
     if (at === null || remainingMs > 0 || fired.current || !onZero) return;
     fired.current = true;
@@ -194,7 +230,12 @@ export function Clock({
     sectionRemainingMs === null ? 0 : warningsPassed(sectionRemainingMs, marks);
 
   useZeroOnce(remainingMs, anchor.at, onZero);
-  useZeroOnce(sectionRemainingMs ?? 1, sectionRemainingMs === null ? null : anchor.at, onSectionZero);
+  useZeroOnce(
+    sectionRemainingMs ?? 1,
+    sectionRemainingMs === null ? null : anchor.at,
+    onSectionZero,
+    anchor.sectionRemainingMs,
+  );
 
   /** What is *said*, as opposed to what is coloured — the carrier a
    *  screen-reader user has instead of the chip. Empty until a mark is
