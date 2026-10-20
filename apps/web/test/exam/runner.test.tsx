@@ -5,7 +5,7 @@ import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
-import { readResolvedCss } from "../css-chain";
+import { declarations, parseRuleBodies, readResolvedCss } from "../css-chain";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import { Runner, firstOfNextSection } from "../../src/components/exam/Runner";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
@@ -416,8 +416,81 @@ describe("the runner shell (C-04)", () => {
     // attribute assertions above cannot see whether anything is keyed off
     // it. This is the half that can fail.
     const css = readFileSync(EXAM_CSS, "utf8");
+    expect(css).toMatch(/:root\[data-font-scale="1\.25"\]\s*\{\s*--exam-font-scale:\s*1\.25/);
     expect(css).toMatch(/:root\[data-font-scale="1\.5"\]\s*\{\s*--exam-font-scale:\s*1\.5/);
-    expect(css).toMatch(/\.exam-question\s*\{[^}]*--exam-font-scale/);
+  });
+
+  // DO NOT DELETE THIS GUARD ALONGSIDE THE `calc()` IT PROTECTS.
+  //
+  // Phase 6.5f Task 1 (D8). Two declarations in exam.css are
+  // `calc(var(--type-*-size) * var(--exam-font-scale, 1))` — `.exam-runner`
+  // (the runner's body text) and `.exam-question` (the stem). They are the
+  // ONLY places the candidate's text-size control acts: exam.css's own
+  // comment states the design — everything in the runner inherits from
+  // there, so no component measures a font size and no component branches
+  // on the setting.
+  //
+  // Why that needs a guard. `calc(… * var(--exam-font-scale, 1))` is the odd
+  // shape on a page of plain `var(--type-*-size)`, so it is exactly what a
+  // type-scale sweep or a well-meaning tidy-up "normalises" to a bare token.
+  // Doing so DISABLES AN ACCESSIBILITY CONTROL and fails nothing: the
+  // radios still set `data-font-scale`, the attribute tests above still
+  // pass, every other test still passes, and at the default scale of 1 the
+  // rendered page is pixel-identical. The candidate who needs 1.5 is the
+  // only one who finds out, and they find out mid-attempt, when they cannot
+  // report a bug. That silence is the whole reason this is asserted.
+  //
+  // It asserts the INVARIANT — the control reaches the body text and the
+  // stem, off a scale token — not the literal text of lines 393 and 680, so
+  // the rules may be rewritten, renamed or moved as long as the control
+  // still arrives. jsdom cannot do better than read the stylesheet here:
+  // this suite runs with `css: false` and has no layout engine, so no
+  // render can measure a computed size (AG3's preference for exercising
+  // over asserting does not survive contact with jsdom).
+  describe("the candidate's text-size control reaches the text (D8)", () => {
+    /** Selectors whose own `font-size` is multiplied by `--exam-font-scale`. */
+    function scaledBy(css: string): Map<string, string> {
+      const hits = new Map<string, string>();
+      for (const rule of parseRuleBodies(css)) {
+        for (const decl of declarations(rule.body)) {
+          const colon = decl.indexOf(":");
+          if (colon === -1 || decl.slice(0, colon).trim() !== "font-size") continue;
+          const value = decl.slice(colon + 1);
+          if (value.includes("*") && /var\(\s*--exam-font-scale/.test(value)) {
+            hits.set(rule.selector, value.trim());
+          }
+        }
+      }
+      return hits;
+    }
+
+    // `readResolvedCss`, not a raw read: it strips comments (without which
+    // a rule's selector carries the comment above it and matches nothing)
+    // and inlines the runtime's own `@import`s, so an imported sheet
+    // overriding either rule is in scope too.
+    const scaled = scaledBy(readResolvedCss(EXAM_CSS));
+
+    for (const selector of [".exam-runner", ".exam-question"] as const) {
+      it(`${selector} multiplies its font-size by the scale`, () => {
+        expect(
+          [...scaled.keys()],
+          `${selector}'s font-size no longer multiplies by --exam-font-scale: the text-size control is dead for this element and nothing else will fail`,
+        ).toContain(selector);
+      });
+
+      it(`${selector} scales a type-scale step, not a literal`, () => {
+        // D8's other half: the scaled base stays a token, so the sweep and
+        // the control cannot be traded off against each other.
+        expect(scaled.get(selector) ?? "").toMatch(/var\(\s*--type-[a-z-]+-size\s*\)/);
+      });
+    }
+
+    it("reads a real stylesheet, so the assertions above are not vacuous", () => {
+      // Without this, renaming the custom property would empty the map and
+      // `toContain` would be the only thing failing — with a message that
+      // points at the selector rather than at the rename.
+      expect(scaled.size).toBeGreaterThanOrEqual(2);
+    });
   });
 
   it("C-04: high contrast is a token swap and keeps every non-colour carrier", () => {

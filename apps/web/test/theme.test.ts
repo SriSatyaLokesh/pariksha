@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -12,6 +12,7 @@ import {
   parseRuleBodies,
   readResolvedCss,
   readThemeMap,
+  stripCssComments,
 } from "./css-chain";
 
 // Phase 6.5b Task 3 (D20, D20a). `theme.css` gives the two organiser
@@ -271,4 +272,75 @@ describe("the semantic names reach the organiser and nothing else (D1)", () => {
       );
     });
   }
+});
+
+// Phase 6.5f Task 1 (D1). The mirror of the guard above: that one keeps the
+// organiser's semantic names off the runtime, this one keeps the runtime's
+// vermilion from spreading back.
+//
+// D1 retires `voltage` from the organiser and leaves the candidate runtime
+// the sole surface still using it — which is what makes the palette square
+// and the focus ring read as singular again. But that retirement happens as
+// 6.5c, 6.5d and 6.5e re-ground each screen, and NONE OF THOSE HAS MERGED.
+// So this asserts the set that is true TODAY, not D1's end state: a guard
+// written against the end state would be red on arrival and would be
+// deleted rather than believed.
+//
+// What it still catches, which is the invariant worth having now: voltage
+// SPREADING — a new stylesheet reaching for the vermilion, or a sheet that
+// had given it up taking it back. 6.5e tightens this list to the runtime's
+// own chain (exam.css, and registration.css while it stays shared with
+// admin.css); shrinking it then is the expected edit, growing it never is.
+//
+// Counted per SOURCE file, not over a resolved bundle: question.css and
+// registration.css are imported by both entries, so a bundle-level count
+// would blame the runtime for a sheet the organiser also loads. tokens.css
+// DEFINES the family rather than using it and so reads zero here, which is
+// correct — it is the mapping, the same exclusion contrast-usage.test.ts
+// makes.
+describe("voltage stays in the candidate runtime and does not spread (D1)", () => {
+  // Read off disk rather than listed by hand, so a NEW stylesheet that
+  // reaches for voltage cannot be invisible to this guard — the reason
+  // `organiserStylesheets()` derives its list too (d58d85b).
+  const voltageUsers = readdirSync(STYLES_DIR)
+    .filter((file) => file.endsWith(".css"))
+    .filter((file) =>
+      /var\(\s*--color-voltage/.test(
+        stripCssComments(readFileSync(resolve(STYLES_DIR, file), "utf8")),
+      ),
+    )
+    .sort();
+
+  it("is used by exactly the stylesheets that use it today", () => {
+    expect(voltageUsers).toEqual([
+      // The runtime's own chain — where D1 says voltage belongs.
+      "exam.css",
+      // Shared with admin.css today; stays once the organiser drops it.
+      "registration.css",
+      // --- Below: the organiser's remaining voltage, retired by 6.5e. ---
+      // The focus ring (base.css) and the organiser's primary button and
+      // selected-card border (primitives.css) are the shared chrome; the
+      // authoring and test-builder sheets carry their own selected states.
+      "authoring.css",
+      "base.css",
+      "primitives.css",
+      "testbuilder.css",
+    ].sort());
+  });
+
+  it("is really used by the runtime, so the list above is not vacuous", () => {
+    // A typo in the regex, or a rename of the whole family, would empty
+    // the list and make the assertion above pass only by matching [] to a
+    // list that is itself wrong. exam.css is the one file D1 guarantees.
+    expect(voltageUsers).toContain("exam.css");
+    expect(voltageUsers.length).toBeGreaterThan(1);
+  });
+
+  it("the landing page gave it up and has not taken it back (D1)", () => {
+    // signal.css is the surface D1 re-grounded first. It is the one file
+    // here whose zero is already a finished state rather than a pending
+    // one, so it gets its own assertion.
+    expect(voltageUsers).not.toContain("signal.css");
+    expect(voltageUsers).not.toContain("landing.css");
+  });
 });
