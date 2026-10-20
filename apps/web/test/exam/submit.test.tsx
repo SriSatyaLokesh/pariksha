@@ -125,6 +125,7 @@ const receipt: Receipt = {
   total: 7,
   attemptNo: 2,
   attemptsAllowed: 3,
+  finishMessage: null,
 };
 
 function client(overrides: Partial<RunClient> = {}): RunClient {
@@ -328,6 +329,51 @@ it("C-08: the finish page shows the reference, the time and 'Attempt 2 of 3', an
   expect(screen.queryByRole("heading", { name: /your result/i })).toBeNull();
   expect(screen.queryByText(/passed|not passed/i)).toBeNull();
   expect(screen.getByText(/results for this test are not shown here/i)).toBeVisible();
+});
+
+// --- #186: the organiser's finish message -------------------------------
+
+/** Submit a `release.when: "never"` receipt carrying `finishMessage` and
+ *  land on the finish page — the pairing the spec names, because there the
+ *  receipt is the whole answer and the message stands beside no score. */
+const finishMessaged = async (finishMessage: string | null): Promise<void> => {
+  await openTheDialog(
+    client({ submit: () => Promise.resolve({ receipt: { ...receipt, finishMessage }, released: null }) }),
+  );
+  await click(screen.getByRole("button", { name: /submit and finish/i }));
+  await screen.findByRole("heading", { name: /submitted/i });
+};
+
+it("shows the organiser's finish message after submitting", async () => {
+  await finishMessaged("Thank you. Your organiser will be in touch.");
+  expect(await screen.findByText("Thank you. Your organiser will be in touch.")).toBeVisible();
+});
+
+it("shows no empty message block when the organiser set none", async () => {
+  await finishMessaged(null);
+  expect(screen.queryByTestId("exam-finish-message")).toBeNull();
+  // And the finish page is still the finish page, so the absence above is
+  // an absent block rather than an unreached screen.
+  expect(screen.getByText(/results for this test are not shown here/i)).toBeVisible();
+});
+
+it("treats an empty message as no message, the way the start message does", async () => {
+  // The builder deletes the key rather than storing "" (`withMessage`), but
+  // an imported `pariksha/test@1` document can carry one — and an empty
+  // paragraph between the facts and the note is a gap nobody wrote.
+  await finishMessaged("");
+  expect(screen.queryByTestId("exam-finish-message")).toBeNull();
+});
+
+it("renders the message as text, never as markup", async () => {
+  // Organiser-authored free text landing on a candidate's screen. The
+  // payload is an `onerror` that fires the moment the element is parsed
+  // into the document, so the surviving `<img>` is the assertion — not the
+  // alert, which jsdom would swallow.
+  const payload = '<img src=x onerror="alert(1)">bye';
+  await finishMessaged(payload);
+  expect(await screen.findByText(payload)).toBeVisible();
+  expect(document.querySelector("img")).toBeNull();
 });
 
 it("the finish page has no axe violations", async () => {

@@ -156,7 +156,19 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
   // The root `required` floors, which `draftSchema()` drops wholesale
   // because `settings` is not a whole document. Import runs the unstripped
   // schema and so still refuses both; publish had nothing at all.
-  if (settings.timing === undefined) {
+  //
+  // #179 asks the row about the duration rather than about the block: a
+  // `timing` that is present and says nothing, or says zero, is the same
+  // 0-minute test to a candidate (`run.ts` reads `duration_minutes ?? 0`).
+  // Those two shapes do not in fact reach here today — `draftSchema()`
+  // drops only the *root* `required`, so `$defs/timing`'s own
+  // `required: ["duration_minutes"]` and its `minimum: 1` both survive into
+  // the save-time validator and the draft route refuses the body outright
+  // (`apps/api/test/lifecycle.test.ts` asserts that refusal). The row is
+  // written against the duration anyway because this is the gate: it judges
+  // a *stored* body and must not depend on which writer produced it, which
+  // is the same reason `mapIssue`'s fallback is blocking.
+  if ((settings.timing?.duration_minutes ?? 0) < 1) {
     rows.push({
       id: "timing_missing",
       severity: "blocking",
@@ -172,6 +184,33 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
       message: "this test has no sections, so there is nothing for a candidate to answer",
     });
   }
+  // #179's other half — a test whose sections exist but hold no questions —
+  // gets no row of its own, and the §8 plan's `no_questions` row was
+  // deliberately dropped rather than shipped. What is actually refused, and
+  // what is not:
+  //
+  //   - `fixed` and `sets`: refused by `section_empty` below, which
+  //     `drawsNothing` answers for both shapes.
+  //   - a **zero-count** `pool`: refused at *save*, not here —
+  //     `drawsNothing` returns a hardcoded `false` for a pool, but
+  //     `$defs/sourcePool.count` carries `minimum: 1` in
+  //     `schemas/test-1.json`, `stripDraftFloors` deletes only `minItems`
+  //     and `minLength` and never `minimum`, and the draft route runs
+  //     `schemaIssues` over every section patch. So `count: 0` never reaches
+  //     storage at all.
+  //   - a `pool` whose filter matches **fewer questions than `count`**:
+  //     **not refused.** `validateTest` raises `source.count`, `ISSUE_ROWS`
+  //     maps that field to `pool_short` with no message regex so `mapIssue`
+  //     always matches it, and `pool_short` is **advisory**. Such a test
+  //     publishes. That is the honest boundary of this decision: it is a
+  //     real gap, it is older than this branch, and it is not closed by
+  //     adding a `no_questions` row — which would fire on a *different*
+  //     shape and leave this one exactly as it is.
+  //
+  // A second test-level row for a cause `section_empty` already reports
+  // would put two red lights in the builder's rail (6.5d) for one defect.
+  // The shape is covered in `apps/api/test/lifecycle.test.ts`, at the gate,
+  // rather than by a row here.
 
   // `$defs/consent.text`'s `minLength: 1`, which `draftSchema()` strips
   // with every other emptiness floor. The pin called it "unreachable: only

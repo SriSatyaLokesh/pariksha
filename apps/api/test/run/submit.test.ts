@@ -6,7 +6,12 @@
 // computed if the route had called it.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { closeClient, readAttemptByTokenHash } from "@pariksha/db";
+import {
+  closeClient,
+  getDraftVersion,
+  putDraftVersion,
+  readAttemptByTokenHash,
+} from "@pariksha/db";
 import type { ResponseValue } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
@@ -14,8 +19,8 @@ import { ANSWER_PATH, type AttemptPaper, type PinnedLayout } from "../../src/run
 import { submitAttempt } from "../../src/run/submit.js";
 import { sha256Hex } from "../../src/auth/tokens.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
-import { seedPublishedTest } from "./fixtures.js";
-import { seedAttemptTests, startAttemptFor } from "./paper-fixtures.js";
+import { DAY, iso, seedPublishedTest, seedTest } from "./fixtures.js";
+import { PAPER_FORM, seedAttemptTests, startAttemptFor } from "./paper-fixtures.js";
 
 const T = FIXED_NOW;
 let clock = T;
@@ -23,7 +28,45 @@ let clock = T;
 const { deps } = await testDeps({ now: () => clock });
 const app = createApp(deps);
 const workspaceId = await seedPublishedTest(deps);
-await seedAttemptTests(deps, workspaceId);
+const q = await seedAttemptTests(deps, workspaceId);
+
+// --- #186: the organiser's finish message -------------------------------
+
+/** What `alpha/rel-never-message`'s organiser typed into the builder. */
+const FINISH_MESSAGE = "Thank you. Your organiser will be in touch.";
+
+/**
+ * `release.when: "never"` **and** a finish message — the pairing that makes
+ * the message the only thing on the finish page the organiser chose, and
+ * the one `rel-never` deliberately does not carry so the null case stays a
+ * real case.
+ */
+const messageTestId = await seedTest(deps, workspaceId, {
+  name: "Rel never, with a finish message",
+  slug: "rel-never-message",
+  body: {
+    settings: {
+      timing: {
+        duration_minutes: 45,
+        opens_at: iso(FIXED_NOW - DAY),
+        closes_at: iso(FIXED_NOW + DAY),
+        navigation: "free",
+      },
+      access: { mode: "link_code", access_code: "OPENSESAME" },
+      registration_form: PAPER_FORM,
+      release: { when: "never" },
+      branding: { finish_message: FINISH_MESSAGE },
+    },
+    sections: [
+      {
+        id: "logic",
+        title: "Logic",
+        shuffle_questions: false,
+        source: { kind: "fixed", questions: [q["LOG-001"] as string] },
+      },
+    ],
+  },
+});
 
 afterAll(() => closeClient(deps.db));
 
@@ -117,6 +160,43 @@ it('C-08: the receipt counts this attempt, so a retake reads "Attempt 2 of 3"', 
     receipt: { attemptNo: number; attemptsAllowed: number };
   };
   expect(body.receipt).toMatchObject({ attemptNo: 2, attemptsAllowed: 3 });
+});
+
+// --- #186: the finish message reaches the candidate ----------------------
+
+const receiptOf = async (cookie: string): Promise<{ finishMessage: string | null }> =>
+  (await (await submit(cookie)).json()).receipt;
+
+it("carries the pinned version's finish message on the receipt", async () => {
+  const { cookie } = await sat("rel-never-message");
+  expect((await receiptOf(cookie)).finishMessage).toBe(FINISH_MESSAGE);
+});
+
+it("sends null when the test has no finish message", async () => {
+  const { cookie } = await sat("rel-never");
+  expect((await receiptOf(cookie)).finishMessage).toBeNull();
+});
+
+it("reads the message from the attempt's pinned version, not the live draft", async () => {
+  // The whole reason this value travels on the receipt rather than being
+  // looked up: an organiser who rewrites the message while a candidate is
+  // sitting the paper has rewritten *the next version*, and the attempt in
+  // flight is still version 1's.
+  const { cookie } = await sat("rel-never-message");
+  const draft = await getDraftVersion(deps.db, workspaceId, messageTestId);
+  if (!draft) throw new Error("publishing did not open the next draft");
+  await putDraftVersion(
+    deps.db,
+    workspaceId,
+    draft,
+    {
+      ...draft.body,
+      settings: { ...draft.body.settings, branding: { finish_message: "Edited mid-attempt." } },
+    },
+    T,
+  );
+
+  expect((await receiptOf(cookie)).finishMessage).toBe(FINISH_MESSAGE);
 });
 
 it("the score shown is this attempt's, not the counted one (Phase 8 owns that)", async () => {

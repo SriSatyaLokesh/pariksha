@@ -90,6 +90,27 @@ export function Receipt({
           </dd>
         </dl>
 
+        {/* The organiser's last word (#186), on the landing page's own
+            message class — the finish page is that shell reused, so the
+            start message and this one are set the same way. Interpolated,
+            never `dangerouslySetInnerHTML`: it is free text an organiser
+            typed, and it reaches a candidate's browser. Truthy rather than
+            `!== null`, which is `exam.tsx`'s own guard on the start
+            message: an imported document may carry "", and an empty
+            paragraph is a gap nobody wrote. */}
+        {/* The only `data-testid` in `apps/web/src`, and deliberate: through a
+            restyle phase a testid is the stable hook a class name is not —
+            a test that selects on `.exam-landing-message` breaks the moment
+            that class is renamed, which is exactly what 6.5b-6.5e do. Copy
+            this precedent where a test needs to find an element that carries
+            no role or accessible name; prefer a role or a name wherever one
+            exists, because those are what a candidate actually has. */}
+        {receipt.finishMessage && (
+          <p className="exam-landing-message" data-testid="exam-finish-message">
+            {receipt.finishMessage}
+          </p>
+        )}
+
         {released && <ResultView result={released} />}
 
         {released === null && <p className="exam-finish-note">{NO_RESULT_NOTE}</p>}

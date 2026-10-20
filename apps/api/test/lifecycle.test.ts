@@ -99,11 +99,11 @@ beforeEach(async () => {
   });
 });
 
+const patchDraft = (patch: unknown): Promise<Response> =>
+  app.request(`/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`, send("PATCH", authorCookie, patch));
+
 async function saveDraft(patch: unknown): Promise<Response> {
-  const res = await app.request(
-    `/api/v1/workspaces/${workspaceId}/tests/${testId}/draft`,
-    send("PATCH", authorCookie, patch),
-  );
+  const res = await patchDraft(patch);
   expect(res.status, await res.clone().text()).toBe(200);
   return res;
 }
@@ -115,9 +115,28 @@ async function publish(cookie = adminCookie): Promise<{ status: number; body: Re
   return { status: res.status, body: await res.json() };
 }
 
+/** The ids of whichever envelope carries the rows — `GET …/checklist`
+ * returns them at the top level, the 422 nests them under `error.details`.
+ * One reader, so a test can say the same thing about the screen and the
+ * gate. */
 function rowIds(body: Record<string, unknown>): string[] {
-  const details = (body.error as { details: { rows: { id: string }[] } }).details;
-  return details.rows.map((r) => r.id);
+  const rows =
+    (body.rows as { id: string }[] | undefined) ??
+    (body.error as { details: { rows: { id: string }[] } }).details.rows;
+  return rows.map((r) => r.id);
+}
+
+/** The fields a 422 from the draft route names, which is the other shape
+ * an error body comes in here. */
+function issueFields(body: Record<string, unknown>): string[] {
+  const details = (body.error as { details: { issues: { field: string }[] } }).details;
+  return details.issues.map((i) => i.field);
+}
+
+async function getChecklist(id = testId): Promise<Record<string, unknown>> {
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${id}/checklist`, get(authorCookie));
+  expect(res.status, await res.clone().text()).toBe(200);
+  return await res.json();
 }
 
 async function versionCount(): Promise<number> {
@@ -269,8 +288,12 @@ it.each([
 // have demanded `timing`, and until this row existed nothing anywhere
 // caught it. A test published with no duration gives every candidate
 // unlimited time.
-it("a test that never got a timing block is refused at publish", async () => {
-  const other = (
+/** A second test that never got a timing block, with `sections` saved onto
+ * it. The only route to a draft whose `settings.timing` is absent: a PATCH
+ * cannot remove a key it does not name, and every other shape of missing
+ * duration is refused at save (see the #179 block below). */
+async function testWithoutTiming(sections: unknown): Promise<string> {
+  const id = (
     await (
       await app.request(
         `/api/v1/workspaces/${workspaceId}/tests`,
@@ -279,16 +302,85 @@ it("a test that never got a timing block is refused at publish", async () => {
     ).json()
   ).id;
   const saved = await app.request(
-    `/api/v1/workspaces/${workspaceId}/tests/${other}/draft`,
-    send("PATCH", authorCookie, {
-      sections: [{ id: "s1", title: "Section one", source: { kind: "fixed", questions: [questionId] } }],
-    }),
+    `/api/v1/workspaces/${workspaceId}/tests/${id}/draft`,
+    send("PATCH", authorCookie, { sections }),
   );
-  expect(saved.status).toBe(200);
+  expect(saved.status, await saved.clone().text()).toBe(200);
+  return id;
+}
+
+it("a test that never got a timing block is refused at publish", async () => {
+  const other = await testWithoutTiming([
+    { id: "s1", title: "Section one", source: { kind: "fixed", questions: [questionId] } },
+  ]);
 
   const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${other}/publish`, post({}, adminCookie));
   expect(res.status).toBe(422);
   expect(rowIds(await res.json())).toContain("timing_missing");
+});
+
+// #179 — a test with no duration cannot be published.
+//
+// **These next two are save-gate tests, and must stay that way.** Three
+// shapes of "no duration" exist in the *type* — `timing` absent (above),
+// `timing` present and empty, and `duration_minutes: 0` — but only the
+// first can ever reach `buildChecklist`. `draftSchema()`
+// (`apps/api/src/routes/tests.ts`) drops only the **root** `required`, so
+// `$defs/timing`'s own `required: ["duration_minutes"]` and its
+// `minimum: 1` both survive into the save-time validator; the draft PATCH
+// refuses those two bodies outright, and whole-test import runs the
+// unstripped schema, so no write path admits them. They were written as
+// publish-gate tests first and failed inside `saveDraft`, which is how the
+// schema was found.
+//
+// So do not "fix" them back into `publish()` tests and conclude from the
+// resulting 200 that the gate is untested: there would be nothing stored to
+// publish. `buildChecklist`'s widened `timing_missing` condition is
+// deliberate defence for *stored* bodies written before that schema — the
+// gate judges a body, not a writer — and a stored body is reachable from
+// this suite only through the absent-`timing` test above.
+
+it("the draft route refuses to store a timing object with no duration", async () => {
+  const res = await patchDraft({ settings: { timing: {} } });
+  expect(res.status, await res.clone().text()).toBe(422);
+  expect(issueFields(await res.json())).toContain("timing.duration_minutes");
+});
+
+it("the draft route refuses to store a duration of zero", async () => {
+  const res = await patchDraft({ settings: { timing: { duration_minutes: 0 } } });
+  expect(res.status, await res.clone().text()).toBe(422);
+  expect(issueFields(await res.json())).toContain("timing.duration_minutes");
+});
+
+it("still publishes a draft with a positive duration", async () => {
+  expect((await publish()).status).toBe(200);
+});
+
+// #179's other half, and the input class the row above does not cover: the
+// sections exist, so `no_sections` stays quiet, but between them they hold
+// no question at all. One `section_empty` per empty section is the whole
+// answer — the organiser is told which ones, and publish is refused.
+it("refuses to publish when every section is empty", async () => {
+  await saveDraft({
+    sections: [
+      { id: "s1", title: "A", source: { kind: "fixed", questions: [] } },
+      { id: "s2", title: "B", source: { kind: "sets", assignment: "round_robin", sets: [] } },
+    ],
+  });
+  const { status, body } = await publish();
+  expect(status).toBe(422);
+  expect(rowIds(body).filter((id) => id === "section_empty")).toHaveLength(2);
+  expect(await versionCount()).toBe(0);
+});
+
+it("reports the same rows on GET .../checklist as at the gate", async () => {
+  const other = await testWithoutTiming([{ id: "s1", title: "A", source: { kind: "fixed", questions: [] } }]);
+  const wanted = ["timing_missing", "section_empty"];
+  expect(rowIds(await getChecklist(other))).toEqual(expect.arrayContaining(wanted));
+
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${other}/publish`, post({}, adminCookie));
+  expect(res.status).toBe(422);
+  expect(rowIds(await res.json())).toEqual(expect.arrayContaining(wanted));
 });
 
 it("every refusing row names a field a screen can navigate to", async () => {
