@@ -469,24 +469,26 @@ Machine-readable tokens plus the reasoning behind them. Feed this file to Claude
 
 ## Overview
 
-Pariksha runs on one disciplined inversion and one hard rule that limits it.
+Pariksha runs on one ground shared from marketing through to product, one accent that cannot leave it, and one hard rule that keeps the two apart.
 
-**Voltage as canvas.** The brand colour, Voltage `{colors.voltage}` (#e24c18), is not held in reserve for a CTA fill. On the landing page, the test start page and the finish page, it _is_ the surface — a full-bleed vermilion block carrying a 56px display headline in cream `{colors.cream}` (#fffbf5, never pure white) with a fully-rounded cream pill CTA beneath. The confidence comes from one saturated field and one sentence, not from a gradient mesh or a hero illustration.
+**One ground, one accent.** The marketing site and the organiser share the Signal ground and its single green accent, in two measured palettes: dark (`{colors.signal-bg}`, accent `{colors.signal-accent}` #19e68c) and light (`{colors.signal-l-bg}`, accent `{colors.signal-l-accent}` #07744a). Both ship, and a viewer switches between them. The accent is a different green on each because it has to be: #19e68c is 1.60:1 on cream and no better on white — illegal as text and illegal as a border — so an accent cannot cross grounds, and taking one means taking the other.
 
-**The clock kills the canvas.** The moment an attempt starts, the system inverts. The test runner is cream and ink, hairline-ruled, and the voltage survives only as the "you are here" square in the question palette and the focus ring on a selected answer row. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The marketing canvas and the exam canvas are deliberately different places.
+**Voltage survives in the runtime alone.** Voltage `{colors.voltage}` (#e24c18) is no longer a canvas anywhere the organiser can see. Inside an attempt the surface is cream `{colors.cream}` (#fffbf5, never pure white) and ink, hairline-ruled, and the vermilion is reduced to exactly two jobs: the "you are here" square in the question palette and the focus ring on a selected answer row. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The start and finish pages keep the full-bleed vermilion block — a display headline in cream with a fully-rounded cream pill beneath — because they are the runtime's edges, not the organiser's.
 
-**Editorial display, monospace instrumentation.** Display is Anek Latin at weight 500 — not 700 — 56px with -1.4px tracking, closer to a magazine dek than a SaaS hero. Every label, timer, attempt reference, snapshot timestamp and code sample is JetBrains Mono. The sans speaks; the mono instruments. There is no uppercase-tracked sans label tier anywhere in the system — small-caps duty belongs entirely to `{typography.mono-sm}`.
+**The two never appear on one screen.** That separation is the hard rule, and it is what buys the rest. It lets `{colors.state-answered}` keep its green in the cream runtime while the accent carries positive meaning on the organiser: a light-legal green is 1.09:1 from `{colors.state-answered}` — the same colour to the eye — so if the two surfaces ever met, one of them would have to give up a meaning it already has.
 
-**One skeleton, three scripts.** Anek ships Latin, Telugu and Devanagari drawn on a shared skeleton, so a test translated into Telugu or Hindi keeps the same typographic voice instead of falling back to a mismatched Noto face mid-sentence. Both families are SIL OFL and self-hosted — the PRD forbids third-party scripts and fonts loaded from someone else's CDN (S-11), and that rule has no exceptions for typography.
+**Editorial display, monospace instrumentation.** The ground chooses the display face: Bricolage Grotesque on its `opsz` axis across the Signal surfaces, Anek Latin at weight 500 — not 700 — on the cream ones, both closer to a magazine dek than a SaaS hero. Inter sets Signal body copy. Every label, timer, attempt reference, snapshot timestamp and code sample on either ground is JetBrains Mono. The sans speaks; the mono instruments. There is no uppercase-tracked sans label tier anywhere in the system — small-caps duty belongs entirely to `{typography.mono-sm}`.
+
+**One skeleton, three scripts.** Anek ships Latin, Telugu and Devanagari drawn on a shared skeleton, so a test translated into Telugu or Hindi keeps the same typographic voice instead of falling back to a mismatched Noto face mid-sentence. That is why Anek cannot be retired when the organiser moves grounds, and why the family count is four rather than two. Every family is SIL OFL and self-hosted — the PRD forbids third-party scripts and fonts loaded from someone else's CDN (S-11), and that rule has no exceptions for typography.
 
 **State colour is structural, not decorative.** Attempt state (answered, marked, current, locked) and integrity state (clean, review, high risk) each own a token family. A palette square or a results row colours itself from that family and never borrows the brand voltage — which is why the voltage still reads as singular after a page shows forty coloured squares.
 
 **Key characteristics**
 
-- Single brand voltage `{colors.voltage}` fills marketing and transition surfaces, then withdraws to a focus ring and one palette square inside a live attempt.
-- Cream `{colors.cream}` (#fffbf5), not `#ffffff`, carries every "white" element that touches the voltage. Pure `{colors.canvas}` is the below-fold body and the inside of cards.
-- Two hairline tones, not one: `{colors.hairline}` for decoration, `{colors.hairline-strong}` for anything a candidate must perceive as an edge — input outlines, answer rows, palette squares, table rules.
-- Display weight 500 at 44–56px with tight tracking. Never 700.
+- Single green accent on the Signal ground — `{colors.signal-accent}` dark, `{colors.signal-l-accent}` light — carrying brand and positive meaning on the organiser alike. Voltage `{colors.voltage}` never leaves the candidate runtime, where it is a focus ring, one palette square and the start/finish block.
+- Cream `{colors.cream}` (#fffbf5), not `#ffffff`, carries every "white" element that touches the voltage. Pure `{colors.canvas}` is the inside of cards on the cream surfaces.
+- Two hairline tones, not one: `{colors.hairline}` for decoration, `{colors.hairline-strong}` for anything a candidate must perceive as an edge — input outlines, answer rows, palette squares, table rules. The Signal ground splits the same way, and for the same reason: `{colors.signal-line-2}` is decorative at 1.54:1, so `{colors.signal-line-strong}` and `{colors.signal-l-line-strong}` carry every edge that must be seen.
+- Display weight follows the face: Anek at 500 on the cream surfaces, never 700; Bricolage Grotesque at its heavier `opsz` steps on the Signal ground. Tight tracking on both.
 - Reading line-height is 1.55–1.6, not the 1.2 a marketing display uses. A question stem is read under time pressure.
 - Binary radius: small-step 3 / 4 / 6 / 8px, plus a full pill for exactly two surfaces (primary CTA, category tab). No 12 / 16 / 20px middle tier.
 - Hairlines carry elevation; shadows appear on exactly two things — the hero CTA and a modal.
@@ -585,7 +587,7 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 | ---------------------------- | ---- | ------ | ----------- | -------- | ----------------------------------------------------------------------------------------------------------- |
 | `{typography.display-xl}`    | 56px | 500    | 56px        | -1.4px   | Hero h1 on the voltage canvas; section h2 below the fold                                                    |
 | `{typography.display-lg}`    | 44px | 500    | 46px        | -1.1px   | Split-panel headlines, finish-page confirmation                                                             |
-| `{typography.heading-md}`    | 22px | 500    | 28px        | -0.4px   | Section titles inside the admin app, test names                                                             |
+| `{typography.heading-md}`    | 22px | 500    | 28px        | -0.4px   | Section titles and test names on the cream surfaces; the Signal ground's equivalent is `{typography.signal-display-lg}` |
 | `{typography.heading-sm}`    | 18px | 500    | 24px        | -0.2px   | Card titles, form field labels                                                                              |
 | `{typography.hero-lead}`     | 24px | 400    | 34px        | -0.2px   | The hero lead sentence on the voltage canvas; 24px is the smallest size at which cream on voltage clears AA |
 | `{typography.question-stem}` | 18px | 400    | 29px        | 0        | **The question itself.** 1.6 line-height, the loosest in the system                                         |
@@ -597,6 +599,9 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 | `{typography.timer-numeric}` | 20px | 500    | 24px        | 0        | **Tabular numerals.** Countdowns, scores, attempt references                                                |
 | `{typography.mono-md}`       | 15px | 400    | 24px        | 0        | Code blocks inside question prompts                                                                         |
 | `{typography.mono-sm}`       | 12px | 400    | 18px        | 0.3px    | Small-caps labels, palette numbers, footnotes, badges                                                       |
+| `{typography.signal-display-xl}` | clamp(40px, 6.6vw, 82px) | 800 | 0.98 | -0.03em | **Signal ground.** Hero h1 on marketing, the largest display tier on the organiser                 |
+| `{typography.signal-display-lg}` | clamp(28px, 4vw, 52px) | 700 | 1.02 | -0.024em | **Signal ground.** Section headlines, screen titles                                                  |
+| `{typography.signal-body}`   | 17px | 400    | 1.62        | 0        | **Signal ground.** Default running text, in Inter rather than Anek                                          |
 | `{typography.wordmark-display}` | clamp(44px, 6.2vw, 94px) | 700 | 1 | -0.01em | The hero masthead's product name ("Pariksha") only — nowhere else                           |
 
 ### Principles
@@ -607,13 +612,15 @@ The fallback stack walks Anek Latin → Anek Telugu → Anek Devanagari → `san
 
 **Numbers never jitter.** `{typography.timer-numeric}` sets `font-variant-numeric: tabular-nums`. A countdown whose digits change width every second pulls the eye away from the question — which is the one thing a timer must not do.
 
-**The mono voice does label duty.** No uppercase-tracked sans tier exists. If you reach for `letter-spacing: 0.08em; text-transform: uppercase` on Anek, you have broken the split.
+**The mono voice does label duty.** No uppercase-tracked sans tier exists on either ground. If you reach for `letter-spacing: 0.08em; text-transform: uppercase` on the body face — Anek on the cream surfaces, Inter on the Signal ones — you have broken the split. The rule is about the sans, not about which sans.
 
 **Cream on voltage has a size floor.** The Brand colour table sanctions `{colors.cream}` on `{colors.voltage}` only at 24px and above (3:1, the large-text AA threshold); under 24px it drops to 3.86:1 and fails. `{typography.hero-lead}` exists so the hero's lead sentence can sit on the voltage canvas at a legal size instead of being re-tinted — nothing smaller than 24px may set cream text on the voltage fill.
 
 ### Substitutes
 
-Anek is the intended family precisely because of its multi-script coverage; substituting it costs the Telugu and Devanagari skeleton match. If you must: **Inter** for Latin at 95% line-height with -0.04em display tracking, plus **Noto Sans Telugu** and **Noto Sans Devanagari** — and accept that the three scripts will no longer share a skeleton. For JetBrains Mono, **IBM Plex Mono** transfers at the same sizes.
+Anek is the intended family precisely because of its multi-script coverage; substituting it costs the Telugu and Devanagari skeleton match. If you must: **Noto Sans** for Latin at 95% line-height with -0.04em display tracking, plus **Noto Sans Telugu** and **Noto Sans Devanagari** — and accept that the three scripts will no longer share a skeleton. Inter is not the answer here even though it already ships: reaching for the Signal body face on a cream surface collapses the split the two grounds depend on.
+
+For Bricolage Grotesque, **Archivo Expanded** transfers on the same terms — a grotesque with an optical-size or weight range wide enough to hold the display register — and accept that the `opsz` axis goes with it, so display must then reach its register through weight and tracking alone. For Inter, **Source Sans 3** at the same sizes. For JetBrains Mono, **IBM Plex Mono** transfers at the same sizes.
 
 ## Layout
 
@@ -815,7 +822,8 @@ Deliberately deferred, and separate from the grounds above. A candidate-facing d
 
 ## Known gaps
 
-- **Dark mode.** Deferred by decision, not oversight. See _Modes_.
+- **Candidate dark mode.** Deferred by decision, not oversight — the organiser ships both Signal grounds, and only the cream runtime's dark mode is outstanding. See _Modes_.
+- **High contrast on the Signal grounds.** `C-04`'s swap table is specified for the cream surfaces only. What the organiser's two grounds do under a high-contrast setting is undesigned, and is a question for a later phase rather than this one.
 - **Charts.** The four-series data palette is specified; axis treatment, grid-line weight, tooltip surface and the item-analysis chart types (distribution, discrimination scatter, option pick rates) are not yet designed.
 - **Live monitor.** The 15-second-refresh proctor table needs a specification for how a row changes without stealing focus from the proctor's current action. Not yet written.
 - **Snapshot timeline.** The review screen's snapshot strip — thumbnail size, flagged-frame treatment, scrub behaviour — is unspecified.
