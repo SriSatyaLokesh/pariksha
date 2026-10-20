@@ -129,3 +129,120 @@ describe("upsertResponse", () => {
     expect(await repo.listResponses(db, other, attemptId)).toEqual([]);
   });
 });
+
+// --- the progress bump that rides the same batch (Phase 6 Tasks 9, 10) ---
+//
+// `max_index` and `section_started_at` cannot be a second statement: the
+// answer route is pinned at two subrequests and a candidate calls it
+// hundreds of times. So the progress update rides the same `db.batch` as
+// the upsert, and the batch reports what each statement did — otherwise
+// the conditional upsert could no longer say whether the row moved, and
+// `accepted` and `superseded` would collapse into each other.
+//
+// The `AND max_index < ?` guard inside that statement is a **concurrency**
+// rule, not a tidiness one: two tabs saving at once both read the same
+// `max_index` off their own request's row, and without the guard the
+// later-committing one can drag the lock backwards and reopen a question
+// the candidate has passed. The route's own `target > maxIndex` check
+// cannot see the other request, so it is tested here, against the
+// function, where two interleavings can actually be written down.
+
+const attemptRow = async (): Promise<{ max_index: number; section_started_at: number | null }> => {
+  const rows = await db.query<{ max_index: number; section_started_at: number | null }>(
+    "SELECT max_index, section_started_at FROM attempt WHERE id = ?",
+    [attemptId],
+  );
+  return rows[0] as { max_index: number; section_started_at: number | null };
+};
+
+describe("upsertResponse's progress bump", () => {
+  it("raises max_index in the same call, and still reports whether the row moved", async () => {
+    expect(
+      await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: { maxIndex: 4 } }),
+    ).toEqual({ stored: true });
+    expect((await attemptRow()).max_index).toBe(4);
+  });
+
+  it("a superseded save inside the batch is still reported as superseded", async () => {
+    await repo.upsertResponse(db, WORKSPACE, answer(9, "latest"));
+    expect(
+      await repo.upsertResponse(db, WORKSPACE, { ...answer(4, "stale"), advance: { maxIndex: 4 } }),
+    ).toEqual({ stored: false });
+    expect(
+      await repo.readResponse(db, WORKSPACE, attemptId, QUESTION),
+    ).toMatchObject({ value: "latest", clientSeq: 9 });
+  });
+
+  it("max_index never falls, even when a concurrent save asks it to", async () => {
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: { maxIndex: 7 } });
+    // The second tab read `max_index` before the first one's batch
+    // committed, so it asks for a number that is now behind. The
+    // statement's own `max_index < ?` is what refuses it.
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: { maxIndex: 3 } });
+    expect((await attemptRow()).max_index).toBe(7);
+  });
+
+  it("section_started_at is stamped only when it is asked for, and only on the way up", async () => {
+    await repo.upsertResponse(db, WORKSPACE, {
+      ...answer(1, "a"),
+      advance: { maxIndex: 4, sectionStartedAt: 5_000 },
+    });
+    expect(await attemptRow()).toMatchObject({ max_index: 4, section_started_at: 5_000 });
+
+    // A save further on that does not enter a section asks for no stamp.
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(2, "b"), advance: { maxIndex: 5 } });
+    expect(await attemptRow()).toMatchObject({ max_index: 5, section_started_at: 5_000 });
+
+    // And one that is behind changes neither, stamp included.
+    await repo.upsertResponse(db, WORKSPACE, {
+      ...answer(3, "c"),
+      advance: { maxIndex: 2, sectionStartedAt: 9_000 },
+    });
+    expect(await attemptRow()).toMatchObject({ max_index: 5, section_started_at: 5_000 });
+  });
+
+  it("a save with no advance leaves the progress columns alone", async () => {
+    await repo.upsertResponse(db, WORKSPACE, { ...answer(1, "a"), advance: { maxIndex: 4 } });
+    await repo.upsertResponse(db, WORKSPACE, answer(2, "b"));
+    expect((await attemptRow()).max_index).toBe(4);
+  });
+});
+
+// --- submitAttempt (Phase 6 Task 9) -------------------------------------
+
+describe("submitAttempt", () => {
+  it("stamps the end of the attempt and says it did", async () => {
+    expect(
+      await repo.submitAttempt(db, WORKSPACE, {
+        attemptId,
+        submittedAt: 2_000,
+        reason: "timeout",
+      }),
+    ).toEqual({ submitted: true });
+    const rows = await db.query<{ submitted_at: number; submit_reason: string }>(
+      "SELECT submitted_at, submit_reason FROM attempt WHERE id = ?",
+      [attemptId],
+    );
+    expect(rows[0]).toMatchObject({ submitted_at: 2_000, submit_reason: "timeout" });
+  });
+
+  it("the first writer wins: a second submission changes nothing and says so", async () => {
+    // The race this exists for: a candidate pressing Submit at the same
+    // moment a read materialises the timeout. Whichever lands first is
+    // the reason on the row, and the other must not rewrite it.
+    await repo.submitAttempt(db, WORKSPACE, { attemptId, submittedAt: 1_900, reason: "candidate" });
+    expect(
+      await repo.submitAttempt(db, WORKSPACE, {
+        attemptId,
+        submittedAt: 2_000,
+        reason: "timeout",
+      }),
+    ).toEqual({ submitted: false });
+
+    const rows = await db.query<{ submitted_at: number; submit_reason: string }>(
+      "SELECT submitted_at, submit_reason FROM attempt WHERE id = ?",
+      [attemptId],
+    );
+    expect(rows[0]).toMatchObject({ submitted_at: 1_900, submit_reason: "candidate" });
+  });
+});

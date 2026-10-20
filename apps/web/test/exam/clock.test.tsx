@@ -239,9 +239,27 @@ describe("C-07: zero", () => {
     advance(MINUTE + 5_000);
     expect(onZero).toHaveBeenCalledTimes(1);
 
-    // And it stays fired: the clock going further past zero, or a save
-    // re-anchoring at zero, must not submit twice.
+    // And it stays fired: the clock going further past zero must not
+    // submit twice.
     advance(60_000);
+    expect(onZero).toHaveBeenCalledTimes(1);
+  });
+
+  it("a save that re-anchors AT zero does not submit a second time", async () => {
+    // The production path the guard exists for, and the one a
+    // time-advancing test cannot reach: `onZero` drains the queue, the
+    // drain's own save answers `remainingMs: 0`, the attempt view
+    // re-anchors from it — and a fresh anchor is a fresh render with a
+    // fresh `at`. Without the once-per-mount guard that is a second
+    // submission from a candidate who has already finished.
+    const onZero = vi.fn();
+    const { rerender } = renderClock(1000, null, { onZero });
+    advance(2000);
+    expect(onZero).toHaveBeenCalledTimes(1);
+
+    mono += 500;
+    rerender(<Clock anchor={anchorFrom(0, null)} warnAtMinutes={[10, 2]} onZero={onZero} />);
+    advance(1000);
     expect(onZero).toHaveBeenCalledTimes(1);
   });
 

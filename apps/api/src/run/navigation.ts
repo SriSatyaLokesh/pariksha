@@ -17,8 +17,13 @@ import type { NavigationMode } from "@pariksha/core";
 import type { PinnedLayout } from "./attempt.js";
 
 /** Presentation order across sections; the index into this is
- *  `attempt.max_index`. */
-export function flatQuestionIds(layout: PinnedLayout): string[] {
+ *  `attempt.max_index`.
+ *
+ *  Not exported: the brief listed it as part of this module's interface,
+ *  but `indexOf` is the only thing that ever wants it and an export with
+ *  no caller outside its own file is the class of defect this phase has
+ *  already found twice. */
+function flatQuestionIds(layout: PinnedLayout): string[] {
   return layout.sections.flatMap((section) => section.questionIds);
 }
 
