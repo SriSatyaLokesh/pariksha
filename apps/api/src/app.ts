@@ -448,8 +448,11 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // candidate's attempt count (which is what prints "Attempt 2 of 3" and
   // what the `full_review` degrade is judged by), the workspace's bank
   // read **once** for the whole paper, the one `finishAttempt` write, and
-  // the audit row. A second press costs 1 — the join — because the row it
-  // resolves already carries the score and nothing is written again.
+  // the audit row. A second press writes nothing — the row the cookie
+  // resolved already carries the score and the stamp — but it is not
+  // free: it still pays the join, the answers and the attempt count, so
+  // **3**, and **4** at `full_review` where the bank is read again for
+  // the key. Both measured in the same file.
   //
   // A number above 6 means the bank is being read per question, which is
   // the failure this line exists to catch on a 50-subrequest ceiling.

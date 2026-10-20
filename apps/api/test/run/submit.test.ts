@@ -309,3 +309,28 @@ it("the submit route reads the questions once, not once per answer", async () =>
   expect(res.status).toBe(200);
   expect(counting.counts().total).toBe(ROUTE_BUDGETS[SUBMIT_PATH]);
 });
+
+it("a second press costs 3, and 4 when a full review is served", async () => {
+  // The one Task 11 path with no measurement, and the comments on both
+  // sides of it claimed 1. It is 3: `listResponses` and
+  // `countAttemptsForCandidate` both run *above* the already-submitted
+  // early return, because the receipt's `answered`/`unanswered` need the
+  // responses and `attemptNo` needs the count. That nothing is *written*
+  // is the property that matters, and it is asserted below — but the
+  // number is 3, and it is measured here rather than claimed in prose.
+  const cheap = await sat("rel-score");
+  await submit(cheap.cookie);
+  const cheapCount = countingDeps(deps);
+  expect((await submit(cheap.cookie, createApp(cheapCount.deps))).status).toBe(200);
+  expect(cheapCount.counts().total, "second submit, score_only").toBe(3);
+  expect(await auditActions(cheap.paper.attemptId)).toEqual(["attempt.submitted"]);
+
+  // `full_review` on a single-attempt test pays the bank as well, because
+  // the review it rebuilds needs the answer key.
+  const review = await sat("rel-review", { roll: "SECOND" });
+  await submit(review.cookie);
+  const reviewCount = countingDeps(deps);
+  const again = await submit(review.cookie, createApp(reviewCount.deps));
+  expect((await again.json()).released.show).toBe("full_review");
+  expect(reviewCount.counts().total, "second submit, full_review").toBe(4);
+});

@@ -226,11 +226,20 @@ export async function submitAttempt(
   const titles = titlesOf(layout);
   const { answered, unanswered, total } = counts(layout, responses);
 
-  // **The already-submitted path reads nothing more.** A second press, a
+  // **The already-submitted path writes nothing.** A second press, a
   // finish page reloaded, or a candidate returning to a tab the server
   // timed out while they were away: the row the cookie resolved already
-  // carries the score and the stamp, so this costs one read in total and
-  // writes nothing at all.
+  // carries the score and the stamp, so nothing is scored and nothing is
+  // stored again.
+  //
+  // It is not free, and an earlier version of this comment said it was.
+  // The two reads above this line are paid on *every* press — the
+  // receipt's `answered`/`unanswered` come from `listResponses` and its
+  // `attemptNo` from `countAttemptsForCandidate` — so a second press
+  // costs **3** subrequests (the join, the answers, the count) and **4**
+  // at `full_review`, where the bank is read again to rebuild the review.
+  // Measured in `submit.test.ts`'s "a second press costs 3" rather than
+  // asserted here; both numbers are well under the route's budget of 6.
   if (attempt.submittedAt !== null) {
     const stored = attempt.score as AttemptScore | null;
     return {
