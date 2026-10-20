@@ -202,6 +202,35 @@ it("the confirmation takes Escape, and returns focus to the control that opened 
   expect(document.activeElement).toHaveAccessibleName(/submit test/i);
 });
 
+it("Tab is trapped inside the confirmation, because it claims aria-modal", async () => {
+  // The hook's own rule and the repo's two precedents: `Runner.tsx`'s
+  // Clear-answer dialog declines `aria-modal` because it traps nothing,
+  // `Calculator.tsx` earns it. Telling a screen reader the paper behind
+  // is inert while Tab walks into it is the worst of the three states.
+  await openTheDialog(client());
+  const dialog = screen.getByRole("dialog", { name: /submit this test/i });
+  expect(dialog).toHaveAttribute("aria-modal", "true");
+
+  const stops = within(dialog).getAllByRole("button");
+  const first = stops[0] as HTMLElement;
+  const last = stops[stops.length - 1] as HTMLElement;
+  last.focus();
+  fireEvent.keyDown(last, { key: "Tab" });
+  expect(document.activeElement).toBe(first);
+  fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+  expect(document.activeElement).toBe(last);
+});
+
+it("the finish page takes the keyboard, rather than dropping it on <body>", async () => {
+  // A view swap moves no focus: the dialog's own cleanup restores focus
+  // to a Submit button that has just unmounted, so a candidate who has
+  // ended a timed exam hears nothing at all. axe cannot see this.
+  await openTheDialog(client({ submit: () => Promise.resolve({ receipt, released: null }) }));
+  await click(screen.getByRole("button", { name: /submit and finish/i }));
+
+  expect(await screen.findByRole("heading", { name: /submitted/i })).toHaveFocus();
+});
+
 it("the confirmation has no axe violations", async () => {
   await openTheDialog(client());
   expect(await axe(document.body)).toHaveNoViolations();

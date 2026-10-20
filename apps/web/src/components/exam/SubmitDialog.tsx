@@ -10,6 +10,14 @@
 // four organiser dialogs already use: Escape closes, focus moves in on
 // open and returns to the trigger on close. A candidate under a clock
 // must never have to hunt for where the keyboard went.
+//
+// **With `{ trapTab: true }`, which is what earns `aria-modal`.** The
+// hook's own rule, and the repo's two precedents: `Runner.tsx`'s
+// Clear-answer confirmation declines the attribute because it traps
+// nothing, and `Calculator.tsx` earns it. Claiming it without the trap
+// tells assistive technology the paper behind is inert while Tab walks
+// straight into it — and this is the one dialog whose wrong answer ends
+// the attempt.
 
 import { useDialogKeys } from "../useDialogKeys";
 
@@ -35,7 +43,7 @@ export function SubmitDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
-  const dialog = useDialogKeys<HTMLDivElement>(true, onCancel);
+  const dialog = useDialogKeys<HTMLDivElement>(true, onCancel, { trapTab: true });
 
   return (
     <div
