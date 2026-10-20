@@ -540,6 +540,91 @@ export async function seedResultTests(
       ],
     },
   });
+
+  // #129 under **negative** marking, which is the case the zero ruling
+  // does not cover. The blocked blank sits beside a question the
+  // candidate gets right, so a penalty taken on the blank drags the
+  // section below the 2 points they earned instead of being clamped away
+  // at zero — the one arrangement under which "a pending question never
+  // moves the total" is a falsifiable claim.
+  await seedTest(deps, workspaceId, {
+    name: "Bad regex, negative marking",
+    slug: "badregex-neg",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "free" },
+        access: gated,
+        registration_form: PAPER_FORM,
+        scoring: { default_mode: "negative" as const, negative_fraction: 1 },
+        release: { when: "on_submit", show: "score_and_sections" },
+      },
+      sections: [
+        {
+          id: "logic",
+          title: "Logic",
+          shuffle_questions: false,
+          source: {
+            kind: "fixed" as const,
+            questions: [q["BLK-001"] as string, q["LOG-001"] as string],
+          },
+        },
+      ],
+    },
+  });
+
+  await seedUngradeable(deps, workspaceId, q);
+}
+
+/**
+ * A paper carrying a stored question the grading engine does not survive,
+ * which is the third case `blockedQuestions` cannot pre-scan for: a
+ * `multi_matching` whose document has no `key` at all.
+ *
+ * It gets past `/start` because `forCandidate` hands a candidate only
+ * `left` and `right` and never reads `key`, and it is answerable for the
+ * same reason — so it reaches `scoreAttempt`, where `gradeStructured`
+ * does `Object.values(q.key)` and throws. Its own bank, so no suite that
+ * draws from the shared one changes shape because of it.
+ */
+async function seedUngradeable(
+  deps: AppDeps,
+  workspaceId: string,
+  q: QuestionIds,
+): Promise<void> {
+  const bankId = await createBank(deps.db, workspaceId, { name: "Malformed", now: FIXED_NOW });
+  const malformed = {
+    id: "MAL-001",
+    type: "multi_matching",
+    prompt: "Match several",
+    left: ["L1"],
+    right: ["R1", "R2"],
+    scoring: { points: 2 },
+  } as unknown as Question;
+  const { ids } = await upsertQuestions(deps.db, workspaceId, bankId, [malformed], FIXED_NOW);
+
+  await seedTest(deps, workspaceId, {
+    name: "Ungradeable",
+    slug: "ungradeable",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "free" },
+        access: gated,
+        registration_form: PAPER_FORM,
+        release: { when: "on_submit", show: "score_and_sections" },
+      },
+      sections: [
+        {
+          id: "logic",
+          title: "Logic",
+          shuffle_questions: false,
+          source: {
+            kind: "fixed" as const,
+            questions: [ids[0] as string, q["LOG-001"] as string],
+          },
+        },
+      ],
+    },
+  });
 }
 
 /**

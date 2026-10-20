@@ -18,11 +18,16 @@
 //    would leave a candidate who lost their network at the end with no
 //    receipt at all.
 //
-// 3. **One bad question costs one question.** #129: a pattern the regex
-//    bound refuses makes that question **pending** and flags the attempt
-//    for the organiser; the rest of the paper scores and the candidate
-//    gets their receipt. Scoring failures never block answering, which is
-//    the PRD's own rule.
+// 3. **One bad question costs one question, and a bad engine costs the
+//    score, never the receipt.** #129: a pattern the regex bound refuses
+//    makes that question **pending** and flags the attempt for the
+//    organiser; the rest of the paper scores and the candidate gets their
+//    receipt. A pending question is also never *graded* — handing one to
+//    the engine scores it wrong, which under `negative` marking takes
+//    marks off for somebody else's regex. And when the engine throws for
+//    a reason the pre-scan cannot see, the attempt is still stamped and
+//    still flagged, with no score at all: scoring failures never block
+//    answering *or submitting*, which is the PRD's own rule.
 
 import {
   appendAudit,
@@ -270,24 +275,54 @@ export async function submitAttempt(
     }),
   }));
   const scoring = scoringOf(attempt.settings);
-  const scored = scoreAttempt({
-    questionsBySection,
-    responses,
-    // Phase 8 owns rubric awards; nothing has recorded one yet, so every
-    // manual question is pending and that is the whole of `awards`.
-    awards: {},
-    defaults: defaultsOf(scoring),
-    ...(scoring.pass_mark_percent === undefined
-      ? {}
-      : { passMarkPercent: scoring.pass_mark_percent }),
-  });
-  // A blocked question joins the manual ones: awaiting a human, not
-  // wrong. Deduplicated, because a manual question cannot also be a
-  // `fill_blank` but a deleted one can already be neither.
-  const score: AttemptScore = {
-    ...scored,
-    pending: [...new Set([...scored.pending, ...blockedIds])],
-  };
+  // **A blocked question is never handed to the grader.** Grading one
+  // scores the candidate *wrong* — `compilePattern` returns `null` and
+  // `matchBlank` answers "did not match" — and under `scoring.mode:
+  // "negative"` that takes marks off for a regex the organiser typed, on
+  // the same question this `AttemptScore` simultaneously lists as
+  // pending. `bounded.ts`'s header says precisely this must not happen. A
+  // blank response scores 0 and never loses points **in any mode**
+  // (`grade/result.ts`), so the question still costs its points and still
+  // counts towards `max` — the ruling `bounded.test.ts` pins — without
+  // ever moving the total in either direction.
+  const graded: Record<string, ResponseValue | null> = { ...responses };
+  for (const id of blockedIds) graded[id] = null;
+
+  let score: AttemptScore | null;
+  try {
+    const scored = scoreAttempt({
+      questionsBySection,
+      responses: graded,
+      // Phase 8 owns rubric awards; nothing has recorded one yet, so every
+      // manual question is pending and that is the whole of `awards`.
+      awards: {},
+      defaults: defaultsOf(scoring),
+      ...(scoring.pass_mark_percent === undefined
+        ? {}
+        : { passMarkPercent: scoring.pass_mark_percent }),
+    });
+    // A blocked question joins the manual ones: awaiting a human, not
+    // wrong. Deduplicated, because a manual question cannot also be a
+    // `fill_blank` but a deleted one can already be neither.
+    score = { ...scored, pending: [...new Set([...scored.pending, ...blockedIds])] };
+  } catch (error) {
+    // **The attempt completes anyway**, which is rule 3 of the header and
+    // the plan's own property. The pre-scan above knows two ways a
+    // question can be ungradeable; the grading engine can still throw for
+    // a third nobody anticipated — a stored document whose shape a grader
+    // does not survive. Letting that out is a 500 with `finishAttempt`
+    // never reached: no stamp, no receipt, and a retry that fails
+    // identically, so the candidate cannot submit at all. Instead the
+    // attempt is stamped with **no score**, flagged, and the audit row
+    // tells the organiser what threw. `questionId: "*"` is the whole
+    // paper, because a throw out of the engine does not say which
+    // question it came from.
+    score = null;
+    blocked.push({
+      questionId: "*",
+      reason: `the grading engine threw: ${error instanceof Error ? error.message : String(error)}`,
+    });
+  }
 
   // The deadline, not the moment somebody noticed — see the header.
   const submittedAt = reason === "timeout" ? attempt.deadlineAt : now;
@@ -295,7 +330,7 @@ export async function submitAttempt(
     attemptId: attempt.attemptId,
     submittedAt,
     reason,
-    score,
+    ...(score === null ? {} : { score }),
     ...(blocked.length === 0 ? {} : { flag: BLOCKED }),
   });
 
@@ -337,15 +372,22 @@ export async function submitAttempt(
       attemptNo,
       attemptsAllowed,
     },
-    released: releasedResult(
-      release,
-      score,
-      paperOrder(layout, byId),
-      responses,
-      now,
-      attemptsRemaining,
-      titles,
-    ),
+    // No score, no release: an attempt the engine could not grade has
+    // nothing to disclose, and the receipt is a complete answer on its own.
+    released:
+      score === null
+        ? null
+        : releasedResult(
+            release,
+            score,
+            paperOrder(layout, byId),
+            // What the candidate actually typed, not the blanked copy the
+            // grader was given — a review shows them their own answer.
+            responses,
+            now,
+            attemptsRemaining,
+            titles,
+          ),
   };
 }
 

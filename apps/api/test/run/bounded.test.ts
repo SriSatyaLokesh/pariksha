@@ -154,6 +154,84 @@ it("#129: the sound question on the same paper still scores", async () => {
   expect(body.released).toMatchObject({ total: 2, max: 4 });
 });
 
+it("#129: under negative marking the blocked question costs nothing extra", async () => {
+  // The zero ruling above is one half; this is the other. `badregex-neg`
+  // marks `negative` at fraction 1, so a question graded *wrong* takes
+  // its full points off. The blank is pending — nobody can grade it — so
+  // it must not move the total in either direction, and the choice
+  // question beside it is what makes the difference visible: the
+  // candidate earns 2, and a penalty on the blank would clamp the section
+  // back to 0.
+  const started = await startAttemptFor(deps, app, "badregex-neg");
+  const paper = started.paper as AttemptPaper;
+  const blank = paper.sections[0]?.questions[0];
+  const choice = paper.sections[0]?.questions[1];
+  expect(blank?.type).toBe("fill_blank");
+
+  for (const [id, value] of [
+    [blank?.id, { kind: "blanks", values: { b1: "anything" } }],
+    [choice?.id, { kind: "option", option: "a" }],
+  ] as const) {
+    await app.request(ANSWER_PATH, {
+      method: "PUT",
+      headers: { cookie: started.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ questionId: id, value, clientSeq: 1 }),
+    });
+  }
+
+  const body = (await (
+    await app.request("/api/v1/run/attempt/submit", {
+      method: "POST",
+      headers: { cookie: started.cookie },
+    })
+  ).json()) as { released: { total: number; max: number; pending: string[] } };
+  expect(body.released).toMatchObject({ total: 2, max: 4 });
+  expect(body.released.pending).toContain(blank?.id);
+});
+
+it("a grading engine that throws still ends the attempt, with a receipt and a flag", async () => {
+  // The case the pre-scan cannot see: a stored `multi_matching` with no
+  // `key`, which `/start` serves happily and `gradeStructured` throws on.
+  // Without a catch this is a 500 with `finishAttempt` never reached — no
+  // stamp, no receipt, and a retry that fails identically, so the
+  // candidate cannot submit at all.
+  const started = await startAttemptFor(deps, app, "ungradeable");
+  const paper = started.paper as AttemptPaper;
+
+  const res = await app.request("/api/v1/run/attempt/submit", {
+    method: "POST",
+    headers: { cookie: started.cookie },
+  });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { receipt: { attemptId: string }; released: unknown };
+  expect(body.receipt.attemptId).toBe(paper.attemptId);
+  // No score was computed, so nothing is released — the receipt is the
+  // whole answer, exactly as it is for a `when: "never"` test.
+  expect(body.released).toBeNull();
+
+  const rows = await deps.db.query<{ submitted_at: number | null; score_json: unknown; flag: string }>(
+    "SELECT submitted_at, score_json, flag FROM attempt WHERE id = ?",
+    [paper.attemptId],
+  );
+  expect(rows[0]?.submitted_at).not.toBeNull();
+  expect(rows[0]?.score_json ?? null).toBeNull();
+  expect(rows[0]?.flag).toBe("scoring_blocked");
+
+  // And the organiser is told what threw, in their workspace.
+  const audit = await deps.db.query<{ action: string; detail_json: unknown }>(
+    "SELECT action, detail_json FROM audit_log WHERE target = ? ORDER BY id",
+    [paper.attemptId],
+  );
+  expect(audit.map((row) => row.action).sort()).toEqual([
+    "attempt.scoring_blocked",
+    "attempt.submitted",
+  ]);
+  const flagged = audit.find((row) => row.action === "attempt.scoring_blocked");
+  expect(JSON.stringify(deps.db.jsonValue(flagged?.detail_json))).toContain(
+    "the grading engine threw",
+  );
+});
+
 it("#129's second surface is unchanged: a registration pattern still lets the candidate through", async () => {
   // The other policy over the same bound (`run/bounded.ts`'s header): an
   // author's unsafe pattern must never become a stranger's refusal at the
