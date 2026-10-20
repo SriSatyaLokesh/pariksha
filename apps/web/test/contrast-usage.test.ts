@@ -22,7 +22,6 @@ import {
   readThemeMap,
   SEMANTIC_NAMES,
   GROUNDS,
-  THEME_SELECTOR,
   type Ground,
 } from "./css-chain";
 
@@ -969,11 +968,13 @@ const THEME_PAIRS: Array<{ fg: string; bg: string; threshold: number }> = [
 // to the contract later cannot arrive unaudited and unnoticed — it fails
 // here until someone either scores it or writes down why it is not scored.
 const UNSCORED_BY_DESIGN: Record<string, string> = {
-  // Grounds, not foregrounds: every pair above is already read ON them.
-  "--ground": "a ground, scored as the bg of every pair above",
-  "--ground-2": "a ground, scored as the bg of every pair above",
-  "--surface": "a ground, scored as the bg of every pair above",
-  "--surface-2": "a ground, scored as the bg of every pair above",
+  // The four grounds are NOT here: they are scored above, as the `bg` of
+  // every pair, so they are already in `scored` and an excuse beside that
+  // would be the exact contradiction the third assertion now forbids. They
+  // did sit here until fix round 3 added it, and it found them on its first
+  // run — which is the whole argument for writing the assertion rather than
+  // trusting the ledger.
+  //
   // D1: decoration, 1.67:1 and 1.54:1 on the dark ground, 1.43:1 and 1.37:1
   // on the light. --edge-strong exists precisely because these two cannot
   // carry a boundary that has to be seen, and IS scored, at 3:1.
@@ -1010,6 +1011,18 @@ describe("theme.css's semantic mapping clears its thresholds on both grounds (D1
       (name) => !(SEMANTIC_NAMES as readonly string[]).includes(name),
     );
     expect(stale).toEqual([]);
+    // Fix round 3, finding 2. The two assertions above both pass for a name
+    // that is in the ledger AND scored: `unaccounted` is empty because it is
+    // scored, `stale` is empty because it is still a contract name. So a
+    // fixed pair could keep its excuse sitting beside it and this suite would
+    // stay green — the exact failure the ledger is advertised against. The
+    // earlier report claimed the removal of --accent-deep was forced; it was
+    // manual, and that claim was wrong. This is the assertion that makes it
+    // true: a name is scored or excused, never both.
+    const excused = Object.keys(UNSCORED_BY_DESIGN).filter((name) =>
+      scored.has(name),
+    );
+    expect(excused).toEqual([]);
   });
 
   for (const ground of GROUNDS) {
@@ -1038,20 +1051,38 @@ describe("theme.css's semantic mapping clears its thresholds on both grounds (D1
 //
 // admin-main.tsx loads admin.css and testbuilder.css; both are organiser-only
 // (test/bundle.test.ts), and both are scanned here.
-const ORGANISER_CSS = `${readResolvedCss(ADMIN_CSS_PATH)}
-${readResolvedCss(TESTBUILDER_CSS_PATH)}`;
-const THEME_BLOCKS = new Set(Object.values(THEME_SELECTOR));
+//
+// Fix round 3, finding 3: theme.css is excluded BY SOURCE FILE, not by
+// selector text. Skipping every rule whose selector reads `:root` would also
+// skip a future `:root { --panel-accent: var(--color-signal-accent) }` in
+// admin.css — and because usagesOf resolves one level of indirection, that
+// one line would hide every downstream use of the dark accent from the guard
+// this whole phase exists to provide. Pre-seeding `seen` with theme.css is
+// what readResolvedCss's cycle guard already does for a file it has read, so
+// the file is simply absent from the text below.
+//
+// tokens.css is excluded for the same reason no-hex-colors.test.ts excludes
+// it: it IS DESIGN.md's output, so a literal there is not a colour declared
+// outside DESIGN.md. It reaches here only through base.css's own chain.
+const ORGANISER_CSS = ((seen) =>
+  [ADMIN_CSS_PATH, TESTBUILDER_CSS_PATH, BASE_CSS_PATH]
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n"))(
+  new Set<string>([
+    resolve(STYLES_DIR, "theme.css"),
+    resolve(STYLES_DIR, "tokens.css"),
+  ]),
+);
 const VAR_REF_RE = /var\(\s*(--[a-z0-9-]+)\s*\)/gi;
 
 /**
  * Selectors in `css` that paint `token` once every `var()` they read is
- * resolved on `ground`. theme.css's own two blocks are skipped: declaring a
+ * resolved on `ground`. theme.css is not in `css` at all: declaring a
  * mapping is not using it.
  */
 function usagesOf(token: ColorName, ground: Ground, css = ORGANISER_CSS): string[] {
   const hits: string[] = [];
   for (const rule of parseRuleBodies(css)) {
-    if (THEME_BLOCKS.has(rule.selector)) continue;
     for (const decl of declarations(rule.body)) {
       for (const [, ref] of decl.matchAll(VAR_REF_RE)) {
         if (colorNameOf(`var(${ref})`, ground) !== token) continue;
@@ -1084,6 +1115,30 @@ describe("the organiser's standing colour guards (D1, §12)", () => {
     // that reaches past --accent to the dark palette token keeps the green
     // when the viewer switches ground; --accent does not.
     expect(usagesOf("signal-accent", "light")).toEqual([]);
+  });
+
+  it("sees a :root rule in an organiser stylesheet, not just a class rule", () => {
+    // The blind spot fix round 3 closed. usagesOf used to skip every rule
+    // whose selector read `:root`, to avoid flagging theme.css's own
+    // mapping — which also made a `:root` block in admin.css invisible, and
+    // since usagesOf resolves one level of indirection, that one line would
+    // have hidden every downstream use of the dark accent from this guard.
+    // theme.css is excluded by SOURCE FILE now, so this is seen.
+    expect(
+      usagesOf(
+        "signal-accent",
+        "light",
+        ":root { --panel-accent: var(--color-signal-accent); }",
+      ),
+    ).toEqual([":root"]);
+  });
+
+  it("excludes theme.css by source file, and still reads everything else", () => {
+    // Both halves: the mapping's own blocks are absent (declaring is not
+    // using), and the exclusion did not empty the scan along with them.
+    const selectors = parseRuleBodies(ORGANISER_CSS).map((rule) => rule.selector);
+    expect(selectors).not.toContain(':root[data-theme="light"]');
+    expect(selectors).toContain(".organiser__title");
   });
 
   it("finds the landing page's own accent, so the guard above is not vacuous", () => {

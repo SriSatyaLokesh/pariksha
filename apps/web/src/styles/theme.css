@@ -25,8 +25,9 @@
    alpha over the ground's own ink, so the dark ground's wash is light and
    the light ground's is dark — a light wash on a light ground is invisible.
    They are derived here rather than declared in DESIGN.md's front matter,
-   because a wash is a mapping, not a palette decision; the sixteen
-   organiser colours in front matter are the complete set.
+   because a wash is a mapping, not a palette decision. DESIGN.md's front
+   matter carries fifteen signal-l-* colours and that is the complete light
+   palette; nothing here adds a sixteenth.
 
    D20a — the field is a dark-ground device and is allowed to disappear. On
    the light ground --glow and --glow-strong resolve to a near-invisible

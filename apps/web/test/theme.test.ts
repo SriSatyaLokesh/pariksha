@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -31,9 +32,25 @@ const STYLES_DIR = resolve(__dirname, "../src/styles");
 const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
 const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
+const ADMIN_MAIN_PATH = resolve(__dirname, "../src/admin-main.tsx");
 
 const theme = readThemeMap();
-const organiserCss = readResolvedCss(ADMIN_CSS_PATH);
+
+// EVERY stylesheet the organiser entry loads, not just admin.css's import
+// chain: `admin-main.tsx` imports base.css and testbuilder.css beside it,
+// and a semantic name assigned in either would be invisible to a guard that
+// read only the one chain. 6.5d restyles the test builder, so that hole is
+// one a later plan in this phase writes straight into. One shared `seen`
+// set, so a file reached from two entries is read once.
+const ORGANISER_ENTRY_CSS = [
+  ADMIN_CSS_PATH,
+  resolve(STYLES_DIR, "testbuilder.css"),
+  resolve(STYLES_DIR, "base.css"),
+];
+const organiserCss = ((seen) =>
+  ORGANISER_ENTRY_CSS.map((path) => readResolvedCss(path, seen)).join("\n"))(
+  new Set<string>(),
+);
 
 /** Every selector in `css` that assigns one of `names`. */
 function selectorsAssigning(names: readonly string[], css: string): string[] {
@@ -148,6 +165,47 @@ describe("neither ground can reach into the other's palette (D1)", () => {
   });
 });
 
+describe("every translucent name is alpha over the role it washes", () => {
+  // The family test above accepts `--wash: rgb(from var(--color-signal-l-bg)
+  // r g b / 0.06)` on light: right family, wrong role, and invisible —
+  // precisely the mistake the light block's own comment says it exists to
+  // prevent. A wash is alpha over the ground's own INK, and each of the
+  // others is alpha over the role it is named for. Asserted by reading the
+  // base role's own token rather than naming a token here, so this cannot
+  // drift from the mapping it checks.
+  const WASHES_OVER: Record<string, string> = {
+    "--wash": "--ink",
+    "--wash-2": "--ink",
+    "--accent-wash": "--accent",
+    "--warn-wash": "--warn",
+    "--risk-wash": "--risk",
+    "--glow": "--accent",
+    "--glow-strong": "--accent",
+  };
+
+  for (const ground of GROUNDS) {
+    it(`[${ground}] each one reads the same token as the role it washes`, () => {
+      for (const [wash, base] of Object.entries(WASHES_OVER)) {
+        expect(
+          referencedTokens(valueOf(ground, wash)),
+          `${ground} ${wash} should wash ${base}`,
+        ).toEqual(referencedTokens(valueOf(ground, base)));
+      }
+    });
+  }
+
+  it("the ink roles really are the text tokens, so the above is not vacuous", () => {
+    // Without this, the assertions above would hold for a mapping in which
+    // --ink itself had been pointed at a ground token.
+    expect(referencedTokens(valueOf("dark", "--ink"))).toEqual([
+      "--color-signal-text",
+    ]);
+    expect(referencedTokens(valueOf("light", "--ink"))).toEqual([
+      "--color-signal-l-text",
+    ]);
+  });
+});
+
 describe("the field is a dark-ground device and is allowed to disappear (D20a)", () => {
   // A green bloom on cream is the same illegal-adjacent move D1 refused, and
   // inventing a light-mode ornament to replace it would make the two grounds
@@ -179,6 +237,27 @@ describe("the semantic names reach the organiser and nothing else (D1)", () => {
     const selectors = parseRuleBodies(organiserCss).map((r) => r.selector);
     expect(selectors).toContain(THEME_SELECTOR.dark);
     expect(selectors).toContain(THEME_SELECTOR.light);
+  });
+
+  it("the organiser entry puts the viewer's ground on <html> before it mounts", () => {
+    // The CSS half of D20's switch is above; this is the TSX half. Nothing
+    // else asserts it: `readGround` has its own unit tests (ground.test.ts)
+    // and `theme.css` has these, but a refactor that dropped the assignment
+    // from admin-main.tsx would leave every one of them green while the
+    // page flashed the wrong ground on every load. A source scan, the shape
+    // fonts.test.ts and no-hex-colors.test.ts already use, rather than a
+    // jsdom import that would mount the whole organiser app to read one line.
+    const source = readFileSync(ADMIN_MAIN_PATH, "utf8");
+    const assignment = source.indexOf("document.documentElement.dataset.theme");
+    // `createRoot(` — the CALL. Anchoring on the bare name matches its
+    // import on line 2 and the assertion would compare against that instead.
+    const mount = source.indexOf("createRoot(");
+    // Both anchors found: a renamed entry point or a switch to a different
+    // mounting API must fail here rather than pass vacuously.
+    expect(assignment, "no data-theme assignment in admin-main.tsx").toBeGreaterThan(-1);
+    expect(mount, "no createRoot( call in admin-main.tsx").toBeGreaterThan(-1);
+    expect(source.slice(assignment)).toMatch(/^document\.documentElement\.dataset\.theme\s*=\s*readGround\(\)/);
+    expect(assignment, "the ground is set after mount, so the page flashes").toBeLessThan(mount);
   });
 
   for (const [name, path] of [
