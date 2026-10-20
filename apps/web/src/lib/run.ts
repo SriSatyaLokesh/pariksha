@@ -213,22 +213,26 @@ export interface RunClient {
    * one: the progress bump rides the same statement guarded only by
    * `max_index < ?`, so it happens on a `superseded` save too.
    */
+  putAnswer(save: QueuedSave): Promise<{
+    outcome: SaveOutcome;
+    message?: string;
+    remainingMs?: number;
+    maxIndex?: number;
+    /** `null` on a paper with no section time limit — a reading, not an
+     *  absence, so it is distinguished from `undefined`. */
+    sectionRemainingMs?: number | null;
+  }>;
   /**
    * End the attempt (Task 11, `C-08`). Takes nothing: the cookie is the
    * credential and the scope, and there is no field a candidate could
    * send that the server should believe.
    *
    * Idempotent on the server — a second call answers the first call's
-   * receipt rather than scoring again — so a double press, and the
-   * browser's own auto-submit at zero racing the candidate's, both end in
-   * one score and one audit row.
+   * receipt rather than scoring again — so a double press, the browser's
+   * own auto-submit at zero racing the candidate's, and a reload of the
+   * finish page all end in one score, one audit row and one receipt.
    */
   submit(): Promise<{ receipt: Receipt; released: ReleasedResult | null }>;
-  /**
-   * The same gate again, for a finish page that was reloaded. `null` is a
-   * complete answer: this test releases nothing, or not yet.
-   */
-  result(): Promise<ReleasedResult | null>;
   /**
    * `C-09`'s return visit, a week later with no cookie left. Resolves on
    * 202 and tells the caller nothing else — an unknown reference and the
@@ -239,15 +243,6 @@ export interface RunClient {
   /** Spends the emailed code. 410 (`RunError`, `code_expired`) once it has
    *  been used or has lapsed. */
   verifyResultCode(attemptRef: string, email: string, code: string): Promise<ReleasedResult | null>;
-  putAnswer(save: QueuedSave): Promise<{
-    outcome: SaveOutcome;
-    message?: string;
-    remainingMs?: number;
-    maxIndex?: number;
-    /** `null` on a paper with no section time limit — a reading, not an
-     *  absence, so it is distinguished from `undefined`. */
-    sectionRemainingMs?: number | null;
-  }>;
 }
 
 /** The save path. The attempt cookie rides it on its own (`S-06`), so
@@ -519,16 +514,12 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
         "/api/v1/run/attempt/submit",
         undefined,
       )) as { receipt: Receipt; released: ReleasedResult | null },
-    // `send` rather than `get`: a released `null` is a real answer and
-    // `get`'s cast would be a lie about it, which is the one place in this
-    // client where "nothing" and "not yet" have to stay the same thing.
-    result: async () =>
-      (await send<ReleasedResult | null>("/api/v1/run/attempt/result", {
-        headers: { accept: "application/json" },
-      })) ?? null,
     requestResultCode: async (attemptRef, email) => {
       await post("/api/v1/run/result/code", { attemptRef, email });
     },
+    // `post` answers `null` for a body that is literally `null` as well as
+    // for one it could not read, and here they are the same thing: a test
+    // that releases nothing to the candidate.
     verifyResultCode: async (attemptRef, email, code) =>
       (await post<ReleasedResult | null>("/api/v1/run/result/verify", {
         attemptRef,

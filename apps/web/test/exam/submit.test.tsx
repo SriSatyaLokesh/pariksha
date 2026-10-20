@@ -352,6 +352,34 @@ it("a pending question says the score may still rise", async () => {
   expect(screen.getByText(/waiting to be marked by a person/i)).toBeVisible();
 });
 
+// --- the reload after submitting ----------------------------------------
+
+it("a reload after submitting resumes to the finish page, not to a live paper", async () => {
+  // `GET /run/attempt` serves a submitted attempt's paper in full — the
+  // cookie outlives the deadline so the receipt can be re-read — so a
+  // `boot()` that only looked at "is there a paper" put the candidate back
+  // on a counting-down screen whose every save is a 409, with the restored
+  // queue replaying into refusals behind it.
+  const submit = vi.fn(() => Promise.resolve({ receipt, released: scoreOnly }));
+  const putAnswer = vi.fn(() => Promise.reject(new Error("a submitted attempt saves nothing")));
+  render(
+    <ExamApp
+      client={client({ resume: () => Promise.resolve({ ...paper, submittedAt: NOW }), submit, putAnswer })}
+    />,
+  );
+
+  await screen.findByRole("heading", { name: /submitted/i });
+  // The receipt, and the result the same server gate released with it.
+  expect(screen.getByText("att_finish01")).toBeVisible();
+  expect(screen.getByText(/attempt 2 of 3/i)).toBeVisible();
+  expect(screen.getByRole("heading", { name: /your result/i })).toBeVisible();
+  // And no paper: no palette, no clock, no Submit, and nothing queued.
+  expect(screen.queryByRole("navigation", { name: /question palette/i })).toBeNull();
+  expect(screen.queryByRole("timer")).toBeNull();
+  expect(screen.queryByRole("button", { name: /submit test/i })).toBeNull();
+  expect(putAnswer).not.toHaveBeenCalled();
+});
+
 it("the full review has no axe violations at 200% text", async () => {
   // The runner's own text-size control acts through a root attribute, so
   // the finish page inherits whatever the candidate left it at.

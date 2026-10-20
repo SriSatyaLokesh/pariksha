@@ -638,6 +638,28 @@ export function ExamApp({ client }: { client: RunClient }) {
       // attempt cookie (measured: 0 subrequests).
       const resumed = await client.resume();
       if (resumed) {
+        /**
+         * **A submitted attempt resumes to the finish page, never to the
+         * paper.** `GET /run/attempt` serves a submitted attempt's paper
+         * in full — the cookie outlives the deadline by an hour so the
+         * receipt can be re-read — so without this a reload of the finish
+         * page put the candidate back on a live-looking paper: a
+         * counting-down chip, Next and Clear, and every save a 409 as the
+         * restored queue replayed into refusals.
+         *
+         * `submit()` rather than `result()`: the finish page is a receipt
+         * *and* a result, and `attemptNo`, `attemptsAllowed` and the
+         * answered counts are on the receipt alone. The server's
+         * submission is idempotent — `finishAttempt` writes only `WHERE
+         * submitted_at IS NULL` — so this re-reads the first submission's
+         * receipt rather than scoring again, and writes no second audit
+         * row.
+         */
+        if (resumed.submittedAt !== null) {
+          const { receipt, released } = await client.submit();
+          setView({ kind: "finished", receipt, released });
+          return;
+        }
         setView({ kind: "attempt", paper: resumed });
         return;
       }
