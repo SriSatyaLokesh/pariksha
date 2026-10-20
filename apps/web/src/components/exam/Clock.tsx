@@ -176,6 +176,15 @@ function Chip({
  * only ever rises when the server reports on a different section, which is
  * the one event that is a new section and not a correction of this one.
  * Omitted — the paper's clock — nothing ever re-arms.
+ *
+ * `null` is an **untimed** section, and it is not a reading to compare
+ * against: `time_limit_minutes` is per section and optional, so a paper of
+ * timed → untimed → timed is representable. Holding the last reading and
+ * requiring it to be non-null meant the untimed section stored `null` and
+ * every later rise failed the comparison, so nothing after it ever
+ * auto-advanced. `?? -1` is below every real reading (`sectionRemainingMs`
+ * is floored at zero), which is exactly what "no section was armed" should
+ * compare as.
  */
 function useZeroOnce(
   remainingMs: number,
@@ -188,7 +197,7 @@ function useZeroOnce(
   // Declared first so it runs first within the same commit: a re-anchor
   // into the next section must re-arm before the zero check reads the ref.
   useEffect(() => {
-    if (rearmOn != null && armedOn.current != null && rearmOn > armedOn.current) {
+    if (rearmOn != null && rearmOn > (armedOn.current ?? -1)) {
       fired.current = false;
     }
     armedOn.current = rearmOn;

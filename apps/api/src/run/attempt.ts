@@ -921,7 +921,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     // common case by far, issues no second statement at all.
     const movedOn = target > attempt.maxIndex;
     const sectionStartsAt = sectionStartIndexOf(attempt.layout, target);
-    const { stored } = await upsertResponse(deps.db, attempt.workspaceId, {
+    const { stored, advanced } = await upsertResponse(deps.db, attempt.workspaceId, {
       attemptId: attempt.attemptId,
       questionId,
       value,
@@ -957,13 +957,35 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
      *
      * Neither field costs a subrequest: `clockOf` is pure arithmetic over
      * the row the cookie already resolved.
+     *
+     * **But only what the progress statement actually committed is
+     * reported.** `movedOn` and everything below it are computed from the
+     * row as read at the top of this handler, while the `UPDATE` is
+     * guarded by `max_index < ?` against the **committed** row. When a
+     * concurrent save from another tab has already pushed `max_index` past
+     * `target`, that statement no-ops (`advanced === false`) and answering
+     * `maxIndex: target` would hand the browser a value *below* what the
+     * row holds — the rail would unlock questions this same server then
+     * 403s, which is the dead control the stored-not-derived rule exists
+     * to prevent. The handler cannot learn the committed value without a
+     * read, and this route is pinned at exactly 2 subrequests, so it omits
+     * both fields instead: the browser keeps what it holds, which is a
+     * lower bound and never an over-report, and the next
+     * `GET /run/attempt` corrects it.
+     *
+     * The residue, named: in that two-tab race the rail can go on showing
+     * a question open that the server refuses, until the next `GET`. That
+     * is a display lower bound rather than lost data — the save itself was
+     * stored — and it is the honest state of a single `max_index` column
+     * under concurrent writers.
      */
+    const committed = movedOn && advanced === true;
     const clock = clockOf(
       {
         ...attempt,
-        maxIndex: movedOn ? target : attempt.maxIndex,
+        maxIndex: committed ? target : attempt.maxIndex,
         sectionStartedAt:
-          movedOn && sectionStartsAt > attempt.maxIndex ? now : attempt.sectionStartedAt,
+          committed && sectionStartsAt > attempt.maxIndex ? now : attempt.sectionStartedAt,
       },
       now,
     );
@@ -971,10 +993,13 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
       outcome: stored ? "accepted" : "superseded",
       // `AC-13`'s anchor on the hottest path there is: the countdown
       // re-anchors from every save, so a tab that slept for an hour is
-      // corrected by the next keystroke rather than by a reload.
+      // corrected by the next keystroke rather than by a reload. The
+      // paper's deadline is not `max_index`'s business, so this one is
+      // answered even when the pair below is not.
       remainingMs: clock.remainingMs,
-      maxIndex: movedOn ? target : attempt.maxIndex,
-      sectionRemainingMs: clock.sectionRemainingMs,
+      ...(movedOn && !committed
+        ? {}
+        : { maxIndex: committed ? target : attempt.maxIndex, sectionRemainingMs: clock.sectionRemainingMs }),
     });
   });
 

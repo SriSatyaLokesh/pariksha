@@ -200,7 +200,7 @@ export const upsertResponse = scoped(
        */
       advance?: { maxIndex: number; sectionStartsAt: number; sectionStartedAt: number };
     },
-  ): Promise<{ stored: boolean }> => {
+  ): Promise<{ stored: boolean; advanced?: boolean }> => {
     const upsert = {
       sql:
         "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
@@ -230,7 +230,7 @@ export const upsertResponse = scoped(
     // `AND max_index < ?` is what makes "max_index never falls" a property
     // of the statement rather than of the caller reading first: two saves
     // racing from two tabs cannot reopen a question the lock has passed.
-    const [response] = await db.batch([
+    const [response, progress] = await db.batch([
       upsert,
       {
         sql:
@@ -247,10 +247,20 @@ export const upsertResponse = scoped(
         ],
       },
     ]);
-    if (response === undefined) {
+    if (response === undefined || progress === undefined) {
       throw new Error("batch() answered no result for the response upsert");
     }
-    return { stored: response.changes > 0 };
+    /**
+     * `advanced` is the **progress statement's own** outcome, returned only
+     * when an advance was asked for. It is not a tidier `stored`: the two
+     * statements are guarded by different things, so a save can store and
+     * not advance (another tab already committed a higher `max_index`, so
+     * `max_index < ?` no-ops) or advance and not store (a stale
+     * `client_seq`). A caller that reports `max_index` back to the browser
+     * off its own pre-read row reports a number the row may not hold —
+     * see `attempt.ts`.
+     */
+    return { stored: response.changes > 0, advanced: progress.changes > 0 };
   },
 );
 

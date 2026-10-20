@@ -158,6 +158,15 @@ export function assertWritable(attempt: ClockInput, now: number): void {
  * section's anchor and nothing else, so the clock that ran while the
  * candidate was in that section is gone with it. The refusal names the
  * section that is closed and where the candidate actually is.
+ *
+ * **"Time outranks navigation" is about the section the candidate is IN.**
+ * Under `linear` and `per_section` an earlier target is refused as 403
+ * `navigation_locked` even when the candidate's *own* section has expired,
+ * and that is the intended code: the clock's refusal is temporary and
+ * names somewhere to go, while "this test does not allow going back" is
+ * permanent and is the sentence the candidate read on the landing page. A
+ * 409 `section_over` there would promise that a later moment makes this
+ * write land, and none does. Pinned at `navigation.test.ts`.
  */
 export function assertSectionOpen(
   attempt: ClockInput,
@@ -177,13 +186,22 @@ export function assertSectionOpen(
   // Where to carry on: the next section when it is the candidate's own
   // that has run out, and the one they are already in when they reached
   // back into a section they had left.
-  const next = attempt.layout.paper[target === current ? current + 1 : current];
+  const left = target < current;
+  const next = attempt.layout.paper[left ? current : current + 1];
+  // **Two refusals, two sentences.** The candidate's own section is closed
+  // by its clock; an earlier one is closed by having been *left* — its
+  // `section_started_at` is gone, so there is no reading under which it is
+  // still open, but its limit need never have run out. Telling a candidate
+  // who answered section two first that section one's time is up is simply
+  // untrue, and it is the sentence they would quote in a support ticket.
   throw new ApiError(
     409,
     "section_over",
-    next
-      ? `Time for ${title} is up. Carry on with ${next.title}.`
-      : `Time for ${title} is up, so this answer was not saved.`,
+    left
+      ? `You have moved on from ${title}, so this answer was not saved.${next ? ` Carry on with ${next.title}.` : ""}`
+      : next
+        ? `Time for ${title} is up. Carry on with ${next.title}.`
+        : `Time for ${title} is up, so this answer was not saved.`,
     next ? { nextSection: next.id } : undefined,
   );
 }
