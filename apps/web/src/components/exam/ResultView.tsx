@@ -46,7 +46,11 @@ function asText(value: unknown): string {
       .map(([key, one]) => `${key} → ${asText(one)}`)
       .join(", ");
   }
-  return String(value);
+  // Unreachable over a JSON payload — a symbol, a function and a bigint
+  // cannot survive `JSON.parse`. "No answer" rather than a stringified
+  // one, because whatever reached here is not something to show a
+  // candidate as their answer.
+  return "No answer";
 }
 
 export function ResultView({ result }: { result: ReleasedResult }) {

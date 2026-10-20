@@ -316,7 +316,7 @@ export async function findAttemptByReference(
     testVersionId: row.test_version_id,
     candidateId: row.candidate_id,
     externalId: row.external_id,
-    formValues: (db.jsonValue(row.form_values_json) ?? {}) as Record<string, unknown>,
+    formValues: db.jsonValue<Record<string, unknown>>(row.form_values_json) ?? {},
     submittedAt: row.submitted_at === null ? null : Number(row.submitted_at),
     score: row.score_json == null ? null : db.jsonValue(row.score_json),
     settings: db.jsonValue(row.settings_json),

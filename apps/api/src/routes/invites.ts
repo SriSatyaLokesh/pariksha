@@ -29,11 +29,10 @@ import {
   type CandidateRow,
   type InvitePayload,
 } from "@pariksha/db";
-import type { RegistrationFormSpec } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { randomToken } from "../auth/tokens.js";
-import { emailOf, identityField } from "../import/candidates.js";
+import { emailOf } from "../import/candidates.js";
 import { inviteHash } from "../run/entry.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 

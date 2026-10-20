@@ -37,7 +37,6 @@ import {
   type Question,
   type ResponseValue,
   type ScoringDefaults,
-  type ScoringMode,
   type TestRelease,
   type TestScoring,
 } from "@pariksha/core";
@@ -79,7 +78,7 @@ const scoringOf = (settings: unknown): TestScoring =>
 /** `scoring.default_mode` / `negative_fraction`, with the engine's own
  *  fallbacks. `resolveScoring` applies a question's override on top. */
 const defaultsOf = (scoring: TestScoring): ScoringDefaults => ({
-  mode: (scoring.default_mode ?? "all_or_nothing") as ScoringMode,
+  mode: scoring.default_mode ?? "all_or_nothing",
   negativeFraction: scoring.negative_fraction ?? 0,
 });
 
@@ -169,7 +168,7 @@ async function liveQuestions(
   workspaceId: string,
 ): Promise<Map<string, Question>> {
   const held = await workspaceQuestions(deps.db, workspaceId);
-  return new Map(held.map((one) => [one.id, { ...one.document, id: one.id } as Question]));
+  return new Map(held.map((one) => [one.id, { ...one.document, id: one.id }]));
 }
 
 /** Everything a receipt counts, off the rows the scoring read already
