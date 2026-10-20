@@ -6,11 +6,13 @@
 // computed if the route had called it.
 
 import { afterAll, beforeEach, expect, it } from "vitest";
-import { closeClient } from "@pariksha/db";
+import { closeClient, readAttemptByTokenHash } from "@pariksha/db";
 import type { ResponseValue } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
-import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
+import { ANSWER_PATH, type AttemptPaper, type PinnedLayout } from "../../src/run/attempt.js";
+import { submitAttempt } from "../../src/run/submit.js";
+import { sha256Hex } from "../../src/auth/tokens.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { seedPublishedTest } from "./fixtures.js";
 import { seedAttemptTests, startAttemptFor } from "./paper-fixtures.js";
@@ -228,6 +230,53 @@ it("submit_reason records which of the three ended it", async () => {
   expect(row.submit_reason).toBe("timeout");
   // Stamped at the deadline, not at the read.
   expect(row.submitted_at).toBe(T + 45 * 60_000);
+});
+
+it("C-07: a submission past the deadline is recorded as a timeout, stamped at the deadline", async () => {
+  // The other half of `submit_reason`, and the one nothing else reaches:
+  // a candidate whose tab came back after the clock ran out and pressed
+  // Submit, with no `GET /run/attempt` in between to have materialised
+  // it. The attempt ended when the clock ran out, not when they pressed.
+  const { cookie, paper } = await sat("rel-score");
+  clock = T + 46 * 60_000;
+  const res = await submit(cookie);
+  expect(res.status).toBe(200);
+  expect((await res.json()).receipt.submittedAt).toBe(T + 45 * 60_000);
+
+  const row = await attemptRow(paper.attemptId);
+  expect(row.submit_reason).toBe("timeout");
+  expect(row.submitted_at).toBe(T + 45 * 60_000);
+});
+
+it("two submissions that both read an unsubmitted row score once and audit once", async () => {
+  // The sequential double-press is the test above, and it never reaches
+  // the guard this one is about: by the time the second request resolves
+  // the cookie, `submitted_at` is set and the handler takes the cheap
+  // already-submitted path. The race `finishAttempt`'s `WHERE submitted_at
+  // IS NULL` exists for is two requests that *both* read the row before
+  // either wrote — which an in-memory driver serialises away, so it is
+  // reproduced here by handing `submitAttempt` the same stale record
+  // twice. The route is still what resolved that record.
+  const { cookie, paper, firstId } = await sat("rel-score");
+  await answer(cookie, firstId, { kind: "option", option: "a" });
+
+  const token = cookie.split("=")[1] ?? "";
+  const record = await readAttemptByTokenHash(deps.db, await sha256Hex(token));
+  if (!record) throw new Error("the attempt cookie resolved nothing");
+  const stale = { ...record, layout: record.layout as PinnedLayout };
+
+  const first = await submitAttempt(deps, stale, "manual", T);
+  const second = await submitAttempt(deps, stale, "timeout", T + 1_000);
+
+  expect(first.receipt.attemptId).toBe(paper.attemptId);
+  expect(second.receipt.attemptId).toBe(paper.attemptId);
+  expect(await auditActions(paper.attemptId)).toEqual(["attempt.submitted"]);
+  // The loser wrote nothing at all: the reason and the score are the
+  // winner's.
+  const row = await attemptRow(paper.attemptId);
+  expect(row.submit_reason).toBe("manual");
+  expect(row.submitted_at).toBe(T);
+  expect((await storedScore(paper.attemptId)).total).toBe(2);
 });
 
 it("a candidate whose attempt the server already timed out still gets their receipt", async () => {
