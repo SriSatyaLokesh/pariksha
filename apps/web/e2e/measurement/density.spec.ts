@@ -21,7 +21,7 @@
 
 import { expect, test } from "@playwright/test";
 import { seedWorkspace } from "../seed";
-import { SURFACES, countPrimaryRows, openSurface, type Surface } from "../density";
+import { SURFACES, countPrimaryRows, openSurface, primaryRowHeight, type Surface } from "../density";
 
 /**
  * The figures captured on `main`'s UI. See
@@ -41,9 +41,38 @@ const BEFORE: Record<Surface, number> = {
   questionPicker: 8,
 };
 
+/**
+ * The height of each surface's primary row on `main`, captured in the same
+ * run as the counts above. **This is the assertion with teeth.**
+ *
+ * A count floor of 0 — which is what `main`'s test list honestly measures —
+ * passes for every conceivable implementation, including one that renders
+ * nothing. Row height does not: it is the variable that made the test list
+ * fit zero rows in the first place, it has a real before-value on all four
+ * surfaces, and it goes red the moment a restyle makes a row taller.
+ *
+ * §11 is wrong about two of these. It states the test list and the bank
+ * list "both run 56px rows … so 11 rows are visible at 1440x900". They run
+ * 182px and 44px. See the note.
+ */
+const BEFORE_HEIGHT: Record<Surface, number> = {
+  testList: 182,
+  bankList: 44,
+  bankBrowser: 101,
+  questionPicker: 25,
+};
+
 // Comfortably more rows than any plausible redesign fits in 900px, so the
 // count measures the viewport rather than the fixture. If a later design
 // ever reaches these numbers the gate is saturated and they must go up.
+//
+// **Every seeded test is published, and that biases both tables above.** A
+// published test's slug field locks and gains a "Locked because this test
+// has been published." help line, so a published row is the *taller* shape.
+// That is deliberate: it is stable, it is the worst case, and a draft/
+// published mix would need a ratio whose value is arbitrary. 6.5e must seed
+// through this same helper with these same counts, or the comparison means
+// nothing.
 const SEED = { banks: 40, questionsPerBank: 40, tests: 40 };
 
 test.use({ viewport: { width: 1440, height: 900 } });
@@ -72,9 +101,11 @@ for (const surface of SURFACES) {
     // the geometry was never consulted and the figure below is noise.
     expect(present, `${surface} seeded too few rows to measure`).toBeGreaterThan(visible);
 
-    // This spec exists to report a number, so it prints one.
-    console.log(`DENSITY ${surface}: ${visible} of ${present} rows fully visible at 1440x900`);
+    const height = await primaryRowHeight(page, surface);
+    // This spec exists to report numbers, so it prints them.
+    console.log(`DENSITY ${surface}: ${visible} of ${present} rows fully visible, row ${height}px`);
     expect(visible).toBeGreaterThanOrEqual(BEFORE[surface]);
+    expect(height).toBeLessThanOrEqual(BEFORE_HEIGHT[surface]);
   });
 }
 

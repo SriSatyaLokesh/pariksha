@@ -1,5 +1,51 @@
 # Density before-figures — D13 / AG1
 
+## Read this first: §11's premise is false
+
+The spec states, as the thing D13 was commissioned to settle:
+
+> The test list and the bank list both run **56px rows**, of which the id line
+> under the name is **16.5px**, so **11 rows** are visible at 1440×900 where
+> **15** would be without it.
+
+Measured in Chromium at 1440×900 against `main`'s UI:
+
+| surface | §11 says | measured |
+| --- | --- | --- |
+| test list | 56px rows, 11 visible | **182px rows, 0 visible** |
+| bank list | 56px rows, 11 visible | **44px rows, 8 visible** |
+
+Neither number is close, and they are wrong in opposite directions. The test
+list's row is **more than three times** the assumed height, because every row
+carries a 64px QR code, an editable slug `<input>` with its own label and help
+line, and two buttons. The create form and the filter bar above the table put
+the first row's top at **y = 847** of a 900px viewport, so **not one whole row
+is readable without scrolling**. The bank list's row is *smaller* than assumed,
+at 44px.
+
+**How this was measured.** A seeded workspace built entirely over the HTTP API
+(40 banks, 40 questions each, 40 published tests), opened in a real Chromium at
+1440×900 by `apps/web/e2e/measurement/density.spec.ts`, counting primary rows
+whose whole height is inside the viewport and inside every vertically scrolling
+ancestor. Three consecutive full-suite runs, identical numbers. `apps/web`'s own
+suite cannot do this: it is jsdom, `getBoundingClientRect()` returns zeros, and
+`component-dimensions.test.ts` parses CSS text.
+
+**The open question §11 framed cannot be answered as posed.** It asks whether
+the 16.5px id line under the name costs four rows (11 instead of 15), and rules
+that "the id stays for now and the spec decides". The spec has now decided
+something else: on the test list the id line is not the constraint and removing
+it would change the count from 0 to 0. The constraint is the QR code, the inline
+slug editor and the chrome above the table. §11's follow-on argument — that
+inlining the id is "not the cheap escape it looks" because the table already
+fills its panel with 0px slack — rests on the same 56px derivation and needs
+re-deriving before anything is built on it.
+
+Three later plans read this note. **Do not carry the 56px / 11-row figure
+forward.**
+
+---
+
 **Captured:** 2026-10-21
 **Measured at:** `0e0cfcd` on `phase-6-5a/defects-and-measurement`
 **Against `main`:** `1a7ed66` (`origin/main`). The branch's only `apps/web/src`
@@ -13,14 +59,41 @@ restyling commit exists, which is what D13 requires of them.
 
 ## The figures
 
-| surface | primary row | fully visible | present | 
-| --- | --- | --- | --- |
-| test list | `table.testbuilder-list tbody tr` | **0** | 40 |
-| bank list | `ul.bank-list > li` | **8** | 40 |
-| bank browser | `table.bank-browser__table tbody tr` | **5** | 40 |
-| question picker | `ul.picker-drawer__list > li` | **8** | 40 |
+| surface | primary row | fully visible | of | row height |
+| --- | --- | --- | --- | --- |
+| test list | `table.testbuilder-list tbody tr` | **0** | 40 | **182px** |
+| bank list | `ul.bank-list > li` | **8** | 40 | **44px** |
+| bank browser | `table.bank-browser__table tbody tr` | **5** | 40 | **101px** |
+| question picker | `ul.picker-drawer__list > li` | **8** | 40 | **25px** |
 
 Stable: identical across repeated runs of the whole suite. No range to record.
+
+**Both columns are gates**, and the height column is the one with teeth today.
+A count floor of 0 — which is what `main`'s test list honestly measures — passes
+for every conceivable implementation, including one that renders nothing at all;
+that is a guard with nothing behind it, and it sits on the most important
+scanning surface in the product. Row height is the variable that *caused* the
+zero, it has a real before-value on all four surfaces, and it goes red the
+moment a restyle makes a row taller. Proven, not assumed: adding
+`padding-block: 16px` to `.testbuilder-list td` took the row from 182px to 202px
+and the gate failed — while the count assertion stayed green at 0.
+
+Height is the **median** of the rows on screen, so one wrapped prompt or one
+long name does not stand for the list, rounded to two decimals because
+sub-pixel layout jitter is not a density change.
+
+## The fixture is all-published, and that biases both columns
+
+Every test the seed creates is published (Task 1 of 6.5a made a draft with no
+duration unpublishable, so the seed sets `duration_minutes: 60` and publishes).
+A published test's slug field locks and gains a "Locked because this test has
+been published." help line, so **a published row is the taller shape**. The
+figures above are measured against an all-published list.
+
+This is deliberate and it stays: it is the stable shape, it is the worst case,
+and a draft/published mix would need a ratio whose value is arbitrary and which
+6.5e would have to match exactly. **6.5e must seed through `seedWorkspace` with
+these same counts, or the comparison is meaningless.**
 
 ## What the figure means
 
@@ -37,27 +110,19 @@ height within the viewport", and the test-list table is wider than its panel
 and scrolls sideways, so a width check would report zero rows on every
 surface for a reason that is a different defect from "fewer rows visible".
 
-## The test list's zero is a measurement, not a blank
+## What 6.5e owes this note
 
-This is the headline finding and it contradicts §11's own premise.
+`BEFORE.testList = 0` is a real measurement of a real screen, but the count
+floor it sets can never fail. **6.5e must re-measure the test list after the
+restyle and raise `BEFORE.testList`**, or the test list keeps a count floor of
+nothing for the life of the project. The same applies to every
+`BEFORE_HEIGHT` a restyle improves: a height that drops to 96px and is left
+recorded at 182px is a gate with 86px of slack in it.
 
-§11 says the test list and the bank list "both run 56px rows … so 11 rows are
-visible at 1440×900". The shipped test list does not. Each row carries a 64px
-QR code, an editable slug `<input>` with its own label and help line, and two
-buttons: **182px of row**. The create form and the filter bar above the table
-put the first row's top at **y = 847** of a 900px viewport. Not one whole row
-is readable without scrolling.
+Until then, the test list is guarded by its **height** constant alone, which
+is why that constant exists.
 
-So `BEFORE.testList = 0` is a real measurement of a real screen — but the gate
-it sets can never fail. **6.5e must re-measure the test list after the restyle
-and raise the figure in `BEFORE`**, or the test list keeps a floor of nothing
-for the life of the project. The other three figures are live gates today.
-
-The 56px claim in §11 is also worth re-deriving before anything is built on
-it: on this evidence it describes neither the test list nor the bank list as
-shipped.
-
-## The fixture, and how it biases the numbers
+## The rest of the fixture
 
 `seedWorkspace(request, { banks: 40, questionsPerBank: 40, tests: 40 })`,
 created entirely over the HTTP API the organiser itself calls — never by
@@ -66,18 +131,10 @@ writing rows. 40 is comfortably more than any plausible redesign fits in
 asserts `present > visible` on every surface for exactly that reason: a count
 equal to the rows present would mean the geometry was never consulted.
 
-Two fixture choices move the numbers and should be kept in mind when
-comparing a later measurement:
-
-- **Every seeded test is published.** Task 1 of 6.5a made a draft with no
-  duration unpublishable, so the seed sets `duration_minutes: 60` and
-  publishes. A published test's slug field is locked and gains a "Locked
-  because this test has been published." help line, which makes the row
-  *taller* than a draft's. The test-list figure is 0 either way, but a future
-  seed that stops publishing is not comparing like with like.
-- **Questions are `true_false` with one tag and a difficulty.** Prompt length
-  decides whether a bank-browser row wraps to two lines. The seeded prompt is
-  one line at 1440px.
+Besides the all-published bias above, one more fixture choice moves the
+numbers: **questions are `true_false` with one tag and a difficulty**. Prompt
+length decides whether a bank-browser row wraps to a second line, and the
+seeded prompt is one line at 1440px.
 
 ## What would make these figures invalid
 
@@ -91,8 +148,12 @@ comparing a later measurement:
   check, allowing partial rows, scrolling the list to the top of the viewport
   before counting). Any of those is a different metric and the numbers above
   do not transfer to it.
-- Raising `BEFORE` without re-measuring, or lowering it to make a restyle
-  pass. AG2: never make a gate green by moving a bar.
+- Seeding a draft/published mix, or any other counts, without re-measuring —
+  a published row is the taller shape and these figures assume every test is
+  published.
+- Raising `BEFORE`, or raising `BEFORE_HEIGHT`, without re-measuring — or
+  lowering either to make a restyle pass. AG2: never make a gate green by
+  moving a bar. If the height assertion goes red, that is a finding.
 
 ## One structural note for whoever edits the harness
 

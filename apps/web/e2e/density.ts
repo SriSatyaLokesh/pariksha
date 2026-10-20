@@ -69,6 +69,29 @@ export async function countPrimaryRows(page: Page, surface: Surface): Promise<nu
   });
 }
 
+/**
+ * The height of `surface`'s primary row, in CSS pixels — the median of the
+ * rows on screen, so one odd row (a wrapped prompt, a longer name) does not
+ * stand for the list.
+ *
+ * Row height is the density variable that actually bites. It is what made
+ * the test list fit zero rows: 182px of QR code, slug field and buttons per
+ * row. A count alone cannot catch a restyle that makes rows taller on a
+ * surface whose count is already zero, and it is the only one of the two
+ * numbers that has teeth on every surface today.
+ */
+export async function primaryRowHeight(page: Page, surface: Surface): Promise<number> {
+  return page.locator(PRIMARY_ROW[surface]).evaluateAll((rows) => {
+    const heights = rows
+      .map((row) => row.getBoundingClientRect().height)
+      .filter((height) => height > 0)
+      .sort((a, b) => a - b);
+    const middle = heights[Math.floor(heights.length / 2)] ?? 0;
+    // Two decimals: sub-pixel layout jitter is not a density change.
+    return Math.round(middle * 100) / 100;
+  });
+}
+
 /** Sign in and navigate to `surface`, leaving the page scrolled to the top
  *  and its rows loaded. The caller seeds first. */
 export async function openSurface(page: Page, surface: Surface): Promise<void> {
