@@ -41,6 +41,7 @@ import {
 } from "@pariksha/db";
 import {
   CONSENT_KEY,
+  CONSENT_REQUIRED_MESSAGE,
   normaliseUniqueValue,
   normaliseValues,
   uniqueFieldIds,
@@ -240,7 +241,7 @@ export function registrationRoutes(deps: AppDeps): Hono<AppBindings> {
       issues.unshift({
         field: CONSENT_KEY,
         code: "required",
-        message: "Tick the box to say you have read and accepted this.",
+        message: CONSENT_REQUIRED_MESSAGE,
       });
     }
     if (issues.length > 0) throw invalid(issues);

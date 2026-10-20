@@ -42,6 +42,19 @@ export interface FieldIssue {
 export const CONSENT_KEY = "consent";
 
 /**
+ * The one sentence an unticked consent box is refused with.
+ *
+ * Here rather than in the route, for the reason every other rule in this
+ * file is here: the browser checks consent before it spends a round trip
+ * and a proof of work on a form it can already see is incomplete, and the
+ * server re-checks it because that is the copy that counts
+ * (`docs/test-format.md:110`). Two sentences for one rule is the drift this
+ * module exists to prevent — `AC-12`'s "byte-identical" then holds by
+ * construction rather than by review.
+ */
+export const CONSENT_REQUIRED_MESSAGE = "Tick the box to say you have read and accepted this.";
+
+/**
  * The longest candidate value a `validation.pattern` is ever run against —
  * `docs/question-format.md`'s `short_answer` ceiling. Backtracking cost
  * grows with input length whatever the pattern is, so this cap is the half
