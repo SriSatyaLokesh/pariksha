@@ -5,6 +5,7 @@ import { CONSENT_REQUIRED_MESSAGE, type RegistrationFormSpec } from "@pariksha/c
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import {
   BOT_CHECK_MESSAGE,
+  type AccessRequest,
   REGISTER_PENDING_MESSAGE,
   RegistrationInvalid,
   RunError,
@@ -169,7 +170,11 @@ it("C-03: gate, consent, form, register, start — the whole walk from the landi
 });
 
 it("the gate sends what the candidate filled in and nothing else", async () => {
-  const access = vi.fn(() => Promise.resolve({ entryToken: "ent_1" }));
+  let sent: AccessRequest | null = null;
+  const access = vi.fn((input: AccessRequest) => {
+    sent = input;
+    return Promise.resolve({ entryToken: "ent_1" });
+  });
   const client = clientFor({ access, form: vi.fn(() => Promise.resolve(formPayload)) });
   await reachRegistration(client);
 
@@ -180,7 +185,7 @@ it("the gate sends what the candidate filled in and nothing else", async () => {
   // Keys, not a `toEqual`: `toHaveBeenCalledWith` and `toEqual` both treat
   // `{ identifier: undefined }` as equal to `{}`, so a gate that posted an
   // empty identifier would pass either of them.
-  expect(Object.keys(access.mock.calls[0]?.[0] ?? {})).toEqual(["code"]);
+  expect(Object.keys(sent ?? {})).toEqual(["code"]);
 });
 
 it("T-21: a candidate list identity is typed at the gate and travels with the code", async () => {
