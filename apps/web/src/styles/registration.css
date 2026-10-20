@@ -1,0 +1,165 @@
+/* The registration form, which BOTH sides render.
+
+   `components/testbuilder/RegistrationForm.tsx` is the one registration
+   renderer (ADR 0004's shape): the builder's preview imports it and the
+   candidate's own registration screen imports it. It hard-codes
+   `field-label`, `text-input` and the `registration-form__*` classes, so
+   its stylesheet has to be in both entries' chains or the candidate meets
+   an unstyled form — the preview would then be a picture of something
+   nobody sees, which is exactly what one renderer exists to prevent.
+
+   Phase 6 Task 6 (#70) split these out of admin.css (DESIGN.md's
+   "registration form" trio) and testbuilder.css (the renderer's own
+   rules). Nothing was rewritten in the move; the two rules that acquired a
+   type scale are marked where they are.
+
+   Imported by admin.css and by exam.css, the way question.css already is.
+   No colour literal: every value is a token var() from tokens.css, and
+   nothing here animates — a candidate fills this in under a clock. */
+
+/* ---- DESIGN.md's registration-form trio (was admin.css) --------------- */
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.field-label {
+  color: var(--color-ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+}
+
+/* "Says what the field wants before it is wrong." */
+.field-help {
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  margin: 0;
+}
+
+/* Prefixed with a ⚠ glyph in the markup so the error never depends on
+   colour alone. */
+.field-error {
+  color: var(--color-flag-risk);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  margin: 0;
+  display: flex;
+  gap: var(--space-xs);
+}
+
+/* DESIGN.md states both a height (44px, which is also the A10 hit-area
+   floor) and a padding for `text-input`. With the global border-box those
+   two agree, so both are declared and T30 checks both — and no
+   `line-height` is declared on top of them, which is what would push the
+   content box past the stated 44px. */
+.text-input {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  padding: 10px var(--space-md);
+  height: 44px;
+  width: 100%;
+}
+
+/* DESIGN.md's `text-input-focus` is "border swaps to voltage at 2px plus a
+   3px voltage ring at 25% alpha". base.css's global :focus-visible already
+   paints exactly that ring, so the only thing left here is the border —
+   recoloured rather than thickened, because growing it to 2px would reflow
+   the field by a pixel on focus. */
+.text-input:focus-visible {
+  border-color: var(--color-voltage);
+}
+
+/* `text-input-error`. Paired with .field-error in the markup; never the
+   only signal. */
+.text-input[aria-invalid="true"] {
+  border-color: var(--color-flag-risk);
+  border-width: 2px;
+}
+
+/* ---- The renderer's own rules (was testbuilder.css) ------------------- */
+
+.registration-form__choice {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+/* The type scale is declared here and was not in testbuilder.css, where
+   these two inherited the body size. They are help text, so they take the
+   same scale `.field-help` above takes — and a selector that sets a colour
+   has to resolve a size for `contrast-usage.test.ts` to hold it to a
+   threshold at all. */
+.registration-form__help,
+.registration-form__legend {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* Same: the scale is new, the colour is not. Prefixed with a ⚠ in the
+   markup, so colour is never the only carrier. */
+.registration-form__error {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--color-ink-soft);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.registration-form,
+.registration-form__field,
+.registration-form__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.registration-form__group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.registration-form__title {
+  margin: 0;
+}
+
+/* T-16's "phone (with country code)": the field's `default_country` shown
+   as the prefix the stored number starts with, rather than assumed
+   (task 5/6 review, M5). */
+.registration-form__dialled {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+}
+
+.registration-form__dialled .text-input {
+  flex: 1;
+}

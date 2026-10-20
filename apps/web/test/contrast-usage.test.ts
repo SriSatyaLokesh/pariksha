@@ -211,10 +211,16 @@ const SURFACE: Record<string, ColorName | ColorName[]> = {
   ".organiser__status": "canvas",
   ".organiser-empty__title": "canvas",
   ".organiser-empty__body": "canvas",
+  // registration.css, which admin.css and exam.css both import (Phase 6
+  // Task 6, #70): one renderer, so one stylesheet, read on canvas in both
+  // places — the organiser's CardHairline panel fills itself with canvas,
+  // and so does the candidate's `.exam-register-panel`.
   ".field-label": "canvas",
   ".field-help": "canvas",
   ".field-error": "canvas",
   ".text-input": "canvas",
+  ".registration-form__help, .registration-form__legend": "canvas",
+  ".registration-form__error": "canvas",
 
   // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
   // Same palette and the same reasoning: the editor and the preview are

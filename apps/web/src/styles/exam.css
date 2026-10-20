@@ -18,6 +18,7 @@
    running clock, often already nervous (DESIGN.md). */
 
 @import "./question.css";
+@import "./registration.css";
 
 .exam-landing {
   display: flex;

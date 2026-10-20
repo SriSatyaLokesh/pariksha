@@ -139,6 +139,11 @@ function effectiveBoxHeight(body: string): number {
 // stylesheet is byte-for-byte the same set of declarations.
 const primitivesCss = readCss("primitives.css");
 const adminCss = readCss("admin.css");
+// Phase 6 Task 6 (#70): `.text-input` and the field trio moved out of
+// admin.css into registration.css, which both the organiser entry and the
+// candidate entry import — the candidate registration screen renders the
+// same form. Same rules, same assertions, read from where they now live.
+const registrationCss = readCss("registration.css");
 // P6.6 (#70): the candidate runtime's own stylesheet, and the one
 // DESIGN.md component this phase builds — `palette-square`, which
 // `DESIGN.md:344-350` already pins at 36px / `{rounded.sm}`. T30 exists
@@ -195,27 +200,27 @@ describe("component dimensions match tokens.components (T30)", () => {
   // `line-height` is declared that would push the content box past the
   // stated 44px — which is also the A10 hit-area floor.
   it('.text-input height matches tokens.components["text-input"].height', () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(resolveSpacing(declaration(body, "height"))).toBe(
       tokens.components["text-input"].height,
     );
   });
 
   it('.text-input padding matches tokens.components["text-input"].padding', () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(resolveSpacing(declaration(body, "padding"))).toBe(
       tokens.components["text-input"].padding,
     );
   });
 
   it('.text-input border-radius matches tokens.components["text-input"].rounded', () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(declaration(body, "border-radius")).toBe("var(--rounded-xs)");
     expect(tokens.rounded.xs).toBe(tokens.components["text-input"].rounded);
   });
 
   it(".text-input declares no line-height that would break its stated 44px box", () => {
-    const body = ruleBody(adminCss, ".text-input ");
+    const body = ruleBody(registrationCss, ".text-input ");
     expect(tryDeclaration(body, "line-height")).toBeNull();
   });
 
