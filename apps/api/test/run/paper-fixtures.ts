@@ -321,6 +321,25 @@ export async function seedAttemptTests(deps: AppDeps, workspaceId: string): Prom
     },
   });
 
+  // The combination nothing judged: `free` navigation **and** per-section
+  // time limits. `assertReachable` returns immediately for `free`, so the
+  // section clock is the only thing standing between a candidate sitting
+  // in section two and a write back into section one — whose limit ran out
+  // while they were in it, and whose anchor the one `section_started_at`
+  // column no longer holds.
+  await seedTest(deps, workspaceId, {
+    name: "Free and timed",
+    slug: "free-timed",
+    body: {
+      settings: {
+        timing: { ...paperTiming, navigation: "free" },
+        access: gated,
+        registration_form: PAPER_FORM,
+      },
+      sections: twoSections([15, 10]),
+    },
+  });
+
   // `AC-13`: the grace comes from the **version**, not from a constant.
   // Twice the default, so a save 45 s late is refused on `alpha/paper`
   // and accepted here — which no hard-coded 30 can produce. No section
@@ -338,12 +357,34 @@ export async function seedAttemptTests(deps: AppDeps, workspaceId: string): Prom
     },
   });
 
-  // A test with **no** `timing` block at all, so what the paper carries
-  // is the server's own defaults (reconciliation row 8: they live only in
-  // the builder UI, and `Test.timing` is optional by design).
+  // A `timing` block carrying **only** `duration_minutes` — the one field
+  // `schemas/test-1.json` requires inside it — so what the paper carries
+  // for the other four is the server's own defaults (reconciliation row 8:
+  // they live only in the builder UI, and `Test.timing` is optional by
+  // design). The duration is here because a version without one is not
+  // startable at all: `?? 0` would mint an attempt whose deadline is its
+  // own start, and that refusal has a test of its own in `clock.test.ts`.
   await seedTest(deps, workspaceId, {
     name: "Bare",
     slug: "bare",
+    body: {
+      settings: {
+        timing: { duration_minutes: 45 },
+        access: gated,
+        registration_form: PAPER_FORM,
+      },
+      sections: [
+        { id: "logic", title: "Logic", source: { kind: "fixed", questions: [q["LOG-001"] as string] } },
+      ],
+    },
+  });
+
+  // And the shape `durationMinutesOf` refuses: no `timing` block at all.
+  // `buildChecklist` already refuses to publish this, so it can only be
+  // reached by a direct write — which is exactly what `seedTest` is.
+  await seedTest(deps, workspaceId, {
+    name: "Undated",
+    slug: "no-duration",
     body: {
       settings: { access: gated, registration_form: PAPER_FORM },
       sections: [

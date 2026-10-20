@@ -194,7 +194,11 @@ it("max_index never falls, so a resume cannot reopen a locked question", async (
 // --- per_section ----------------------------------------------------------
 
 it("per_section: free inside the current section, refused for a section already left", async () => {
-  // `alpha/per-section` is three questions then three more.
+  // `alpha/per-section` is three questions then three more, **both
+  // timed** — which is also what pins `assertSectionOpen`'s earlier-section
+  // rule to `free` alone. Dropping that gate makes this write a 409
+  // `section_over` instead of the 403 the candidate was told about on the
+  // landing page, and this assertion is what says so.
   const sat = await start("per-section");
   const [, , lastOfSectionOne, firstOfSectionTwo, secondOfSectionTwo] = sat.flat as string[];
 
@@ -278,9 +282,9 @@ it("and the navigation refusal is a 403, which the queue keeps exactly as it kee
   const back = await putOn(linear, { questionId: linear.flat[0] as string, clientSeq: 2 });
 
   expect(back.status).toBe(403);
-  expect(back.status).toBeGreaterThanOrEqual(400);
-  expect(back.status).toBeLessThan(500);
-  expect(back.status).not.toBe(404);
+  // The three lines that used to follow — `>= 400`, `< 500`, `not 404` —
+  // are tautologies after the assertion above. They could not fail and
+  // made the test read as broader coverage than it has.
 });
 
 // --- the budget -----------------------------------------------------------

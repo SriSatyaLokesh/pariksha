@@ -901,20 +901,19 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     const target = indexOf(attempt.layout, questionId);
     if (target < 0) throw new ApiError(404, "not_found", "No such resource.");
 
+    const mode = timingOf(attempt.settings).navigation ?? TIMING_DEFAULTS.navigation;
+
     // `C-07`: a section whose time has ended refuses a write into it and
     // names the next one. Before the navigation rule, for the same reason
-    // the deadline is: time is the more urgent truth.
-    assertSectionOpen(attempt, target, now);
+    // the deadline is: time is the more urgent truth. It takes the mode
+    // because an *earlier* section is a target only `free` ever offers —
+    // see `assertSectionOpen`.
+    assertSectionOpen(attempt, mode, target, now);
 
     // `AC-15`, asserted against this route and not against the function it
     // calls: the attack is a candidate scripting a `PUT` at an earlier
     // question after the interface stopped offering it.
-    assertReachable(
-      attempt.layout,
-      timingOf(attempt.settings).navigation ?? TIMING_DEFAULTS.navigation,
-      attempt.maxIndex,
-      questionId,
-    );
+    assertReachable(attempt.layout, mode, attempt.maxIndex, questionId);
 
     // The one write, and — only when the candidate has actually moved
     // forward — the progress bump riding the **same** `db.batch`, which

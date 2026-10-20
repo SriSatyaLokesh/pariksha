@@ -219,11 +219,93 @@ it("the grace comes from the version's late_sync_grace_seconds, not a constant",
   expect(sixty.paper.lateSyncGraceSeconds).toBe(60);
 });
 
-it("a test with no timing block at all still carries the server's own defaults", async () => {
+it("a test with no timing fields but a duration still carries the server's own defaults", async () => {
   const bare = await start("bare");
   expect(bare.paper.lateSyncGraceSeconds).toBe(30);
   expect(bare.paper.warnAtMinutes).toEqual([10, 2]);
   expect(bare.paper.navigation).toBe("free");
+});
+
+it("the fourth default is attempts_allowed: one sitting, not an unlimited number", async () => {
+  // The one `TIMING_DEFAULTS` entry nothing asserted. A regression to
+  // `?? 0` there makes `attempts.count >= allowed` true on the first
+  // comparison and false on none of them, so a candidate re-sits
+  // indefinitely and every other test in this file still passes. Asserted
+  // against the same candidate twice, which is the only way the count is
+  // reached at all.
+  const test = await resolvePublishedTest(deps.db, "alpha", "bare", T);
+  if (!test) throw new Error("no published test at alpha/bare");
+  const candidateId = await createCandidate(deps.db, test.workspaceId, {
+    testId: test.testId,
+    formValues: { roll: "R-twice-over" },
+    consentVersion: "2026-10-01",
+    now: T,
+  });
+  const sit = async (): Promise<Response> => {
+    const token = `reg-bare-${String(serial++)}-${newId("cnd")}`;
+    await insertAuthToken(deps.db, {
+      tokenHash: await registrationHash(test.testVersionId, token),
+      kind: REGISTRATION_KIND,
+      payload: { workspaceId: test.workspaceId, testVersionId: test.testVersionId, candidateId },
+      // Against the injected clock, not `T`: the second sitting is tried
+      // after the first attempt's deadline, and a token stamped at `T`
+      // would be 410 Gone before the allowance was ever consulted.
+      now: clock,
+      expiresAt: clock + REGISTRATION_TTL_MS,
+    });
+    return app.request("/api/v1/run/alpha/bare/start", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+  };
+
+  expect((await sit()).status).toBe(201);
+  // Past the first attempt's own deadline and grace, so what refuses the
+  // second is the allowance and not `attempt_in_progress`.
+  clock = T + 46 * MINUTE;
+  const second = await sit();
+  clock = T;
+
+  expect(second.status).toBe(409);
+  expect((await errorOf(second)).code).toBe("attempts_exhausted");
+});
+
+it("a version with no duration at all refuses to mint an attempt", async () => {
+  // `?? 0` used to read this as a zero-length attempt: writable for
+  // exactly `late_sync_grace_seconds`, then every save `time_up` and the
+  // next read a `timeout` submission. Neither zero nor unlimited is a
+  // duration anybody chose.
+  const test = await resolvePublishedTest(deps.db, "alpha", "no-duration", T);
+  if (!test) throw new Error("no published test at alpha/no-duration");
+  const candidateId = await createCandidate(deps.db, test.workspaceId, {
+    testId: test.testId,
+    formValues: { roll: "R-no-duration" },
+    consentVersion: "2026-10-01",
+    now: T,
+  });
+  const token = `reg-no-duration-${newId("cnd")}`;
+  await insertAuthToken(deps.db, {
+    tokenHash: await registrationHash(test.testVersionId, token),
+    kind: REGISTRATION_KIND,
+    payload: { workspaceId: test.workspaceId, testVersionId: test.testVersionId, candidateId },
+    now: T,
+    expiresAt: T + REGISTRATION_TTL_MS,
+  });
+
+  const res = await app.request("/api/v1/run/alpha/no-duration/start", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
+
+  expect(res.status).toBe(409);
+  expect((await errorOf(res)).code).toBe("paper_unavailable");
+  // And nothing was minted, so the candidate can sit it the moment the
+  // organiser sets a duration.
+  const rows = await deps.db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM attempt WHERE test_version_id = ?",
+    [test.testVersionId],
+  );
+  expect(Number(rows[0]?.n)).toBe(0);
 });
 
 // --- the deadline a write is judged by is NOT the test's window ---------
@@ -262,6 +344,50 @@ it("C-07: a write to a section whose time has ended is refused and names the nex
     code: "section_over",
     details: { nextSection: "quant" },
   });
+});
+
+it("free navigation plus a section limit still refuses a write back into the expired section", async () => {
+  // The combination nothing judged. `assertReachable` returns immediately
+  // for `free`, and the section clock used to read only the section the
+  // candidate is *in* — so a candidate sitting in section two could write
+  // back into section one however long ago its fifteen minutes ran out.
+  // There is no reading under which that section is still open: one
+  // `section_started_at` column holds the current section's anchor and
+  // the clock that ran while they were in section one is gone with it.
+  const free = await start("free-timed");
+  const flat = free.paper.sections.flatMap((section) => section.questions.map((one) => one.id));
+
+  // Into section two, which stamps its own clock, and comfortably inside
+  // section one's own limit so nothing here turns on the paper's time.
+  clock = T + 5 * MINUTE;
+  expect((await put({ questionId: flat[3] as string, clientSeq: 1 }, free.cookie)).status).toBe(200);
+
+  // Section one is now behind the candidate. The write is refused, and
+  // the refusal names where they actually are.
+  clock = T + 6 * MINUTE;
+  const refused = await put({ questionId: flat[0] as string, clientSeq: 2 }, free.cookie);
+  expect(refused.status).toBe(409);
+  expect(await errorOf(refused)).toMatchObject({
+    code: "section_over",
+    details: { nextSection: "quant" },
+  });
+
+  // And the candidate's own section is untouched by the new rule: a write
+  // inside section two, inside its ten minutes, still lands.
+  expect((await put({ questionId: flat[4] as string, clientSeq: 3 }, free.cookie)).status).toBe(200);
+});
+
+it("an UNtimed earlier section stays open under free navigation", async () => {
+  // The rule is "a timed section you have left", not "any section you have
+  // left": `alpha/free-nav` is the same paper with no limits at all, and
+  // refusing there would take `free` navigation away from every paper that
+  // merely has two sections.
+  const free = await start("free-nav");
+  const flat = free.paper.sections.flatMap((section) => section.questions.map((one) => one.id));
+
+  clock = T + 5 * MINUTE;
+  expect((await put({ questionId: flat[3] as string, clientSeq: 1 }, free.cookie)).status).toBe(200);
+  expect((await put({ questionId: flat[0] as string, clientSeq: 2 }, free.cookie)).status).toBe(200);
 });
 
 it("a section deadline gets the grace too, so an answer queued across the boundary still lands", async () => {
@@ -347,12 +473,23 @@ it("the timeout is stamped once: a second read does not move it, and a real reas
   });
 });
 
-it("after the timeout a save is refused as already submitted, and nothing is stored", async () => {
-  clock = deadlineAt + 60_000;
-  await resume();
+it("after a submission a save is refused as already submitted, and nothing is stored", async () => {
+  // Stamped **inside** the window on purpose. At `deadline + 60 s`
+  // `assertWritable` throws `time_up` before the `already_submitted`
+  // branch is reachable at all, so the old form of this test passed
+  // unchanged with that branch deleted — and no other server test covers
+  // it. Here the clock is still running and the only thing refusing the
+  // save is the submission itself.
+  await deps.db.run("UPDATE attempt SET submitted_at = ?, submit_reason = ? WHERE id = ?", [
+    T + MINUTE,
+    "candidate",
+    mine.paper.attemptId,
+  ]);
+  clock = T + 2 * MINUTE;
 
   const refused = await put({ clientSeq: 2 });
   expect(refused.status).toBe(409);
+  expect((await errorOf(refused)).code).toBe("already_submitted");
   const rows = await deps.db.query<{ n: number }>(
     "SELECT COUNT(*) AS n FROM response WHERE attempt_id = ?",
     [mine.paper.attemptId],
@@ -404,6 +541,78 @@ it("a save that also moves the clock's section is still one read and one write",
   // …and the batch still tells the two outcomes apart, which is what the
   // whole `{ changes }` return on `DbClient.batch` exists for.
   expect(((await res.json()) as { outcome: string }).outcome).toBe("accepted");
+});
+
+it("the save answers what it left behind: maxIndex and the section's own clock", async () => {
+  // Critical 1 and 2's server half. The browser stores both and derives
+  // neither — a mirror that raised its own furthest index would be a
+  // second implementation of a server rule, and a wrong one, because the
+  // progress bump rides the same statement under `max_index < ?` and so
+  // happens on a `superseded` save too.
+  const sectioned = await start("per-section");
+  const flat = sectioned.paper.sections.flatMap((section) => section.questions.map((one) => one.id));
+
+  // Still inside section one: `max_index` rises, the section clock is
+  // measured from `started_at` and keeps running.
+  clock = T + 5 * MINUTE;
+  const inside = await put({ questionId: flat[1] as string, clientSeq: 1 }, sectioned.cookie);
+  expect(await inside.json()).toMatchObject({
+    outcome: "accepted",
+    maxIndex: 1,
+    remainingMs: 40 * MINUTE,
+    sectionRemainingMs: 10 * MINUTE,
+  });
+
+  // The save that ENTERS section two: the reading it answers is the new
+  // section's full ten minutes, measured from the stamp this very save
+  // wrote. Carried forward from the previous anchor it would have read
+  // 10:00 counting down to zero and stayed there for the rest of the
+  // paper.
+  clock = T + 6 * MINUTE;
+  const entering = await put({ questionId: flat[3] as string, clientSeq: 2 }, sectioned.cookie);
+  expect(await entering.json()).toMatchObject({
+    outcome: "accepted",
+    maxIndex: 3,
+    sectionRemainingMs: 10 * MINUTE,
+  });
+
+  // A re-edit behind the furthest index moves neither: the answer is
+  // stored, `max_index` holds, and the section clock keeps counting the
+  // section the candidate is actually in.
+  clock = T + 7 * MINUTE;
+  const back = await put(
+    { questionId: flat[3] as string, value: chose("b"), clientSeq: 3 },
+    sectioned.cookie,
+  );
+  expect(await back.json()).toMatchObject({ maxIndex: 3, sectionRemainingMs: 9 * MINUTE });
+});
+
+it("a superseded save still answers the maxIndex the server committed to", async () => {
+  // The drift a browser-side mirror would take: the statement's guard is
+  // `max_index < ?` alone, so a stale-sequence save that is refused by
+  // `excluded.client_seq` still raises the lock. A client that advanced
+  // on `accepted` only would be behind the server by one question, which
+  // is one 403 on the candidate's next save.
+  const sectioned = await start("per-section");
+  const flat = sectioned.paper.sections.flatMap((section) => section.questions.map((one) => one.id));
+
+  await put({ questionId: flat[2] as string, value: chose("b"), clientSeq: 9 }, sectioned.cookie);
+  await deps.db.run("UPDATE attempt SET max_index = 0 WHERE id = ?", [sectioned.paper.attemptId]);
+
+  const late = await put(
+    { questionId: flat[2] as string, value: chose("a"), clientSeq: 4 },
+    sectioned.cookie,
+  );
+
+  expect(await late.json()).toMatchObject({ outcome: "superseded", maxIndex: 2 });
+  expect((await resume(sectioned.cookie)).maxIndex).toBe(2);
+});
+
+it("a paper with no section limit answers a null section reading, not a zero", async () => {
+  const free = await start("sets5");
+  const only = free.paper.sections[0]?.questions[0]?.id as string;
+  const res = await put({ questionId: only, clientSeq: 1 }, free.cookie);
+  expect(await res.json()).toMatchObject({ sectionRemainingMs: null });
 });
 
 it("a superseded save that also moves max_index is reported as superseded, not accepted", async () => {

@@ -145,26 +145,32 @@ export function assertWritable(attempt: ClockInput, now: number): void {
  * candidate leaves a section whose time is up, and refusing it would lock
  * them out of the rest of the paper.
  *
- * **An EARLIER timed section is closed by having been left.** `free`
- * navigation is the only mode that offers that target at all —
- * `assertReachable` returns immediately for it, and `linear`/`per_section`
- * refuse it as a 403 before this is reached — and `free` plus
- * `time_limit_minutes` was the combination nothing judged: the clock here
- * only ever read the *current* section, so a candidate sitting in section 2
- * could write back into section 1 however long ago its limit ran out. There
- * is no reading under which that section is still open: one
- * `section_started_at` column holds the current section's anchor and
- * nothing else, so the clock that ran while the candidate was in that
- * section is gone with it. The refusal names the section that is closed and
- * where the candidate actually is.
+ * **An EARLIER timed section is closed by having been left — under `free`
+ * navigation, which is the only mode that offers that target.**
+ * `linear` and `per_section` refuse it as a 403 `navigation_locked` and
+ * say so in the words the candidate read on the landing page, so the mode
+ * is passed in rather than this rule guessing: `free` plus
+ * `time_limit_minutes` was the one combination nothing judged at all. The
+ * clock here only ever read the section the candidate is *in*, so under
+ * `free` a candidate sitting in section 2 could write back into section 1
+ * however long ago its limit ran out. There is no reading under which that
+ * section is still open: one `section_started_at` column holds the current
+ * section's anchor and nothing else, so the clock that ran while the
+ * candidate was in that section is gone with it. The refusal names the
+ * section that is closed and where the candidate actually is.
  */
-export function assertSectionOpen(attempt: ClockInput, targetIndex: number, now: number): void {
+export function assertSectionOpen(
+  attempt: ClockInput,
+  mode: NavigationMode,
+  targetIndex: number,
+  now: number,
+): void {
   const current = currentSectionIndex(attempt);
   const target = sectionIndexOf(attempt.layout, targetIndex);
   if (target > current) return;
   const closed =
     target < current
-      ? attempt.layout.paper[target]?.timeLimitMinutes != null
+      ? mode === "free" && attempt.layout.paper[target]?.timeLimitMinutes != null
       : clockOf(attempt, now).sectionExpired;
   if (!closed) return;
   const title = attempt.layout.paper[target]?.title ?? "this section";
