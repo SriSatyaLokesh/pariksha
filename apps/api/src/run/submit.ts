@@ -42,6 +42,7 @@ import {
   type Question,
   type ResponseValue,
   type ScoringDefaults,
+  type TestBranding,
   type TestRelease,
   type TestScoring,
 } from "@pariksha/core";
@@ -71,6 +72,11 @@ export interface Receipt {
    *  and `timing.attempts_allowed`. */
   attemptNo: number;
   attemptsAllowed: number;
+  /** `branding.finish_message`, off the version this attempt is pinned to
+   *  — the last thing the organiser gets to say to a candidate, and on a
+   *  `release.when: "never"` test the only one. `null` when none was
+   *  written. */
+  finishMessage: string | null;
 }
 
 /** The organiser-facing marker on an attempt whose grading hit a pattern
@@ -89,6 +95,9 @@ const defaultsOf = (scoring: TestScoring): ScoringDefaults => ({
 
 const releaseOf = (settings: unknown): TestRelease | undefined =>
   (settings as { release?: TestRelease }).release;
+
+const brandingOf = (settings: unknown): TestBranding =>
+  (settings as { branding?: TestBranding }).branding ?? {};
 
 /**
  * Whether the bound will run this pattern at all — the pattern half of
@@ -223,6 +232,10 @@ export async function submitAttempt(
   const attemptsRemaining = Math.max(0, attemptsAllowed - attemptNo);
 
   const release = releaseOf(attempt.settings);
+  // `attempt.settings` is the pinned version's own `settings_json`, joined
+  // on `test_version_id` — so an organiser rewriting the draft mid-window
+  // cannot change what a candidate already sitting the paper is told.
+  const finishMessage = brandingOf(attempt.settings).finish_message ?? null;
   const titles = titlesOf(layout);
   const { answered, unanswered, total } = counts(layout, responses);
 
@@ -251,6 +264,7 @@ export async function submitAttempt(
         total,
         attemptNo,
         attemptsAllowed,
+        finishMessage,
       },
       released:
         stored === null
@@ -380,6 +394,7 @@ export async function submitAttempt(
       total,
       attemptNo,
       attemptsAllowed,
+      finishMessage,
     },
     // No score, no release: an attempt the engine could not grade has
     // nothing to disclose, and the receipt is a complete answer on its own.
