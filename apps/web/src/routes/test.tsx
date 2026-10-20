@@ -162,6 +162,16 @@ export function TestBuilder({
   // place, and Back closing it is the behaviour the `popstate` listener
   // above already implements — before this, Back from an open section left
   // the builder outright and the section stayed open on the way back.
+  //
+  // The cost, plainly (fix round 1): Back now walks back through accordion
+  // toggles, so an author who opened four sections presses it four times
+  // before leaving the builder. The alternative was a `replace` option on
+  // `writeView` — a knob with one caller, which would have left the
+  // listener above describing behaviour its own writer contradicted.
+  //
+  // Rebuilding the whole view from the URL rather than from props is safe
+  // only because `organiser.tsx` writes the URL before this screen mounts.
+  // 6.5d and 6.5e must keep that invariant or pass the view in.
   function openSection(id: string | null): void {
     setOpenSectionId(id);
     const params = readView(window.location.search);
@@ -438,10 +448,17 @@ export function TestBuilder({
           </div>
         )}
 
+        {/* Fix round 1, Minor 1: `draft === null` is also where a refused
+            load leaves this screen, so the error above used to be
+            announced beside a "Loading…" that would never resolve. Under
+            `D5` that pair is the first thing a stale bookmark shows. The
+            notice is the whole answer when there is one. */}
         {draft === null ? (
-          <p className="organiser__status" role="status">
-            Loading…
-          </p>
+          error === undefined && (
+            <p className="organiser__status" role="status">
+              Loading…
+            </p>
+          )
         ) : (
           <SectionList
             sections={draft.body.sections}

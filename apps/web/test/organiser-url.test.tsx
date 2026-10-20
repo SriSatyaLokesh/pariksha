@@ -241,6 +241,23 @@ describe("Back and Forward (D5 — the nav makes Back a visible problem)", () =>
     await expectHome();
   });
 
+  it("does not stack a Back stop for a URL that was typed rather than written", async () => {
+    // Fix round 1, Minor 4: an identity provider (or a person) can hand the
+    // app `?returnTo=/admin` with a raw slash, where `writeView` would
+    // write `%2F`. Comparing the two as strings makes the first click on
+    // the destination already open look like a navigation, and one Back
+    // press then appears to do nothing — the defect `5d9a8b0` fixed,
+    // surviving in the encoding corner.
+    window.history.pushState(null, "", "/admin?view=banks&returnTo=/admin");
+    render(<OrganiserApp client={fakeClient()} returnTo="/admin" />);
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+
+    fireEvent.click(screen.getByRole("button", { name: "Banks" }));
+
+    window.history.back();
+    await expectHome();
+  });
+
   it("goes forward again after a Back", async () => {
     render(<OrganiserApp client={fakeClient()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Banks" }));
@@ -269,6 +286,42 @@ describe("a deep link is a claim, not a fact", () => {
     );
 
     expect(await screen.findByRole("alert")).toHaveTextContent("That test does not exist.");
+    // Fix round 1, Minor 1: the error is the whole answer. A "Loading…"
+    // left running beside it says the screen is still coming, which is the
+    // first thing a stale bookmark would show.
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("lands on an error when the query string names a bank the actor cannot reach", async () => {
+    const refuse = async () => {
+      throw new ApiError(404, "not_found", "That bank does not exist.");
+    };
+    reloadAt(
+      "?view=bank&bank=bnk_nope",
+      fakeClient({ listQuestions: refuse, listTags: refuse, listGroups: refuse }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("That bank does not exist.");
+  });
+
+  it("restores the bank, not an editor, when the query string names a question", async () => {
+    // Fix round 1, Important: `QuestionScreen` fetches nothing — it takes
+    // `bankId` as a string — so `?view=question&bank=…` used to render a
+    // whole interactive editor around a bank nobody had checked, and the
+    // actor found out at Save. The bank browser does fetch, so landing
+    // there is what turns the claim in the URL into an answer.
+    const refuse = async () => {
+      throw new ApiError(403, "forbidden", "That bank belongs to another workspace.");
+    };
+    reloadAt(
+      "?view=question&bank=bnk_other_workspace",
+      fakeClient({ listQuestions: refuse, listTags: refuse, listGroups: refuse }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "That bank belongs to another workspace.",
+    );
+    expect(screen.queryByRole("heading", { level: 1, name: "New question" })).toBeNull();
   });
 
   it("lands on Home when the query string names a test but no id", async () => {

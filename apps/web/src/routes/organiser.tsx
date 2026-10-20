@@ -352,10 +352,19 @@ export function OrganiserApp({
  * it is the only side that knows — and it refuses with an error in place of
  * the screen.
  *
- * `?view=question` restores the editor's *bank*, not the question: which
- * question was open is not in `ViewParams`, so a reloaded link opens a new
- * one. Back from the editor returns to the bank, which is the entry the
- * navigation pushed.
+ * `?view=question` restores the **bank**, not the editor. Fix round 1
+ * (Important): every other screen behind a `?view=` fetches something and
+ * can therefore refuse — `QuestionScreen` does not. It takes `bankId` as a
+ * string and asks the server nothing, so a hand-typed or stale
+ * `?view=question&bank=bnk_other_workspace` used to render a complete,
+ * interactive editor around a bank nobody had checked, and the actor found
+ * out at Save. The bank browser is one step back, fetches on mount, and
+ * refuses there instead. `paramsOf` still writes `?view=question&bank=…`,
+ * so the editor remains a Back stop you can return *from*; it is only not
+ * a place a URL can put you.
+ *
+ * That also answers which question was open, which is not in `ViewParams`
+ * and is not worth amending `D5`'s parameter list to add.
  */
 function fromUrl(actor: Actor, workspace: Workspace): View {
   const params = readView(window.location.search);
@@ -373,9 +382,10 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
         ? home
         : { kind: "bank", actor, workspace, bankId: params.bank };
     case "question":
+      // Deliberately the bank: see the note above.
       return params.bank === undefined
         ? home
-        : { kind: "question", actor, workspace, bankId: params.bank };
+        : { kind: "bank", actor, workspace, bankId: params.bank };
     case "home":
       return home;
   }

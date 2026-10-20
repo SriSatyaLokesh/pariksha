@@ -34,7 +34,19 @@ export interface ViewParams {
   panel?: string;
 }
 
-const VIEWS: readonly string[] = ["home", "banks", "tests", "test", "bank", "question"];
+/* Typed as the union and not as `string[]`: this is the module whose whole
+   job is being the single source, and a typo in a `readonly string[]`
+   compiles and then quietly sends that view to Home for ever (fix round 1,
+   Minor 3). The cast is at the `includes` call instead, where it is a
+   widening of the *argument* and cannot hide a bad member. */
+const VIEWS: readonly ViewParams["view"][] = [
+  "home",
+  "banks",
+  "tests",
+  "test",
+  "bank",
+  "question",
+];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */
 const IDS = ["test", "bank", "section", "panel"] as const;
@@ -45,7 +57,9 @@ export function readView(search: string): ViewParams {
   const params = new URLSearchParams(search);
   const view = params.get("view") ?? "";
   const result: ViewParams = {
-    view: VIEWS.includes(view) ? (view as ViewParams["view"]) : "home",
+    view: (VIEWS as readonly string[]).includes(view)
+      ? (view as ViewParams["view"])
+      : "home",
   };
   for (const key of IDS) {
     const value = params.get(key);
@@ -70,7 +84,15 @@ export function writeView(params: ViewParams): void {
   // while on Tests is a no-op an organiser can perform five times without
   // noticing, and five identical entries make Back look broken for five
   // presses — the failure a persistent nav is most exposed to.
-  const next = `?${search}`;
-  if (next === window.location.search) return;
-  window.history.pushState(null, "", `${window.location.pathname}${next}`);
+  //
+  // Both sides are normalised before the comparison (fix round 1, Minor 4).
+  // `search` has been through `URLSearchParams`; the address bar has not,
+  // and an identity provider handing back `?returnTo=/admin` differs from
+  // the `%2F` this would write by encoding alone. Comparing those raw makes
+  // the first click on the open destination push a semantically identical
+  // entry, which is this same defect in the one corner the first fix
+  // could not see.
+  const next = search.toString();
+  if (next === new URLSearchParams(window.location.search).toString()) return;
+  window.history.pushState(null, "", `${window.location.pathname}?${next}`);
 }

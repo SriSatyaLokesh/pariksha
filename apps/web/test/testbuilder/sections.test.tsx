@@ -649,8 +649,15 @@ describe("TestBuilder (the open section lives in the URL)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /^Quantitative aptitude ·/i }));
     // The whole query string also carries `?view=test&test=tst_1` now
     // (`D5`), so this asserts the parameter this screen owns rather than
-    // the string every screen shares.
-    expect(new URLSearchParams(window.location.search).get("section")).toBe("quant");
+    // the string every screen shares — and then the two it must not
+    // disturb. Fix round 1, Minor 2: without them, an `openSection` that
+    // rebuilt the view from `readView`'s `"home"` default would write
+    // `?view=home&section=quant`, the reload would land on Home, and this
+    // suite would stay green on a link that no longer works.
+    const written = new URLSearchParams(window.location.search);
+    expect(written.get("section")).toBe("quant");
+    expect(written.get("view")).toBe("test");
+    expect(written.get("test")).toBe("tst_1");
   });
 
   it("fix round (task 3 review, I10): a reload with ?section= already in the URL opens that section", async () => {

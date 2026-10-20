@@ -25,6 +25,15 @@ afterEach(() => {
 // Guarded, because this file is also the setup for the handful of tests that
 // declare `@vitest-environment node` (the bundle and artefact budgets) and
 // there is no window there at all.
+//
+// One limit, recorded rather than fixed (fix round 1): `replaceState`
+// cleans the *current* entry and leaves the back-entries an earlier test in
+// the same file pushed. A test that called `history.back()` before pushing
+// anything of its own would therefore traverse into a previous test's URL.
+// Every `back()` in this package is preceded by a push — which truncates
+// the forward entries and makes the one behind it that test's own — so this
+// is correct today, and there is no API for clearing a jsdom history stack
+// short of a fresh window per test.
 beforeEach(() => {
   if (typeof window !== "undefined") window.history.replaceState(null, "", "/");
 });
