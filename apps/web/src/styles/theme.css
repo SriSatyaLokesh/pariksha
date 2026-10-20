@@ -29,6 +29,27 @@
    matter carries fifteen signal-l-* colours and that is the complete light
    palette; nothing here adds a sixteenth.
 
+   HANDOFFS TO 6.5c, none of them shippable in this plan, which changes no
+   screen. Named here rather than left to be rediscovered.
+
+   1. The focus ring. base.css paints :focus-visible with var(--color-voltage),
+      which is right for the cream candidate runtime and wrong on a Signal
+      surface. 6.5c overrides :focus-visible { outline-color: var(--focus) }
+      on the organiser root; base.css's voltage ring stays as it is. --focus
+      is the accent on both grounds and clears the 3:1 a non-text indicator
+      needs with room (12.01:1 dark, 5.48:1 light, against each ground).
+   2. The first paint. admin.html loads its module from the end of <body>, so
+      a light-preferring viewer can see a dark frame before readGround() runs.
+      Not reachable today — no organiser rule reads a name below, so nothing
+      re-grounds — and the usual fix, an inline <head> script, would restate
+      readGround's seed rule in raw JS and give the contract two sources of
+      truth. 6.5c owns the control and owns this decision.
+   3. --ground-2 and --surface-2 are the same colour on the light ground
+      (both #eef4f1) and differ on dark. A surface-2 card on a ground-2 band
+      reads on dark and vanishes on light, so previewing that pairing in
+      light will not show an implementer the choice they actually made.
+      Inherited from the plan's token table, not a defect of this file.
+
    D20a — the field is a dark-ground device and is allowed to disappear. On
    the light ground --glow and --glow-strong resolve to a near-invisible
    wash. That is the ruling, not an oversight: a green bloom on cream is the
@@ -41,9 +62,11 @@
   --surface: var(--color-signal-surface);
   --surface-2: var(--color-signal-surface-2);
 
-  /* --edge and --edge-2 are decoration: 1.67:1 and 1.54:1 on the ground.
-     An input outline or a table rule needs 3:1 and takes --edge-strong,
-     which is the token D1 added for exactly that (3.88:1 on the ground). */
+  /* --edge and --edge-2 are decoration. --edge is 1.31:1 on the ground and
+     1.21:1 on the surface; --edge-2 is 1.67:1 and 1.54:1. An input outline
+     or a table rule needs 3:1 and takes --edge-strong (3.88:1 on the ground,
+     3.58:1 on the surface; 3.28 / 3.49 on light) — the token D1 added for
+     exactly that. */
   --edge: var(--color-signal-line);
   --edge-2: var(--color-signal-line-2);
   --edge-strong: var(--color-signal-line-strong);
@@ -59,6 +82,7 @@
   --accent-deep: var(--color-signal-accent-deep);
   --accent-ink: var(--color-signal-accent-ink);
   --accent-wash: rgb(from var(--color-signal-accent) r g b / 0.12);
+  --focus: var(--color-signal-accent);
 
   --warn: var(--color-signal-flag-review);
   --warn-wash: rgb(from var(--color-signal-flag-review) r g b / 0.14);
@@ -90,6 +114,7 @@
   --accent-deep: var(--color-signal-l-accent-deep);
   --accent-ink: var(--color-signal-l-accent-ink);
   --accent-wash: rgb(from var(--color-signal-l-accent) r g b / 0.12);
+  --focus: var(--color-signal-l-accent);
 
   --warn: var(--color-signal-l-flag-review);
   --warn-wash: rgb(from var(--color-signal-l-flag-review) r g b / 0.14);

@@ -7,6 +7,7 @@ import {
   type Ground,
   SEMANTIC_NAMES,
   THEME_SELECTOR,
+  organiserStylesheets,
   declarations,
   parseRuleBodies,
   readResolvedCss,
@@ -29,7 +30,6 @@ import {
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STYLES_DIR = resolve(__dirname, "../src/styles");
-const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
 const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
 const ADMIN_MAIN_PATH = resolve(__dirname, "../src/admin-main.tsx");
@@ -40,17 +40,15 @@ const theme = readThemeMap();
 // chain: `admin-main.tsx` imports base.css and testbuilder.css beside it,
 // and a semantic name assigned in either would be invisible to a guard that
 // read only the one chain. 6.5d restyles the test builder, so that hole is
-// one a later plan in this phase writes straight into. One shared `seen`
-// set, so a file reached from two entries is read once.
-const ORGANISER_ENTRY_CSS = [
-  ADMIN_CSS_PATH,
-  resolve(STYLES_DIR, "testbuilder.css"),
-  resolve(STYLES_DIR, "base.css"),
-];
+// one a later plan in this phase writes straight into. The list is READ OUT
+// of admin-main.tsx (fix round 4, finding 3) rather than written here: it
+// was hardcoded in two files, and d58d85b exists because testbuilder.css
+// was missing from it. One shared `seen` set, so a file reached from two
+// entries is read once.
 const organiserCss = ((seen) =>
-  ORGANISER_ENTRY_CSS.map((path) => readResolvedCss(path, seen)).join("\n"))(
-  new Set<string>(),
-);
+  organiserStylesheets()
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n"))(new Set<string>());
 
 /** Every selector in `css` that assigns one of `names`. */
 function selectorsAssigning(names: readonly string[], css: string): string[] {
@@ -93,9 +91,12 @@ describe("theme.css names both grounds (D20)", () => {
   });
 
   it("declares no semantic name the contract does not list", () => {
-    // The other half of the contract: a seventeenth name invented here is a
-    // name 6.5c/d/e do not know about, and a palette decision taken outside
-    // DESIGN.md's front matter.
+    // The other half of the contract: a name invented here and not in
+    // SEMANTIC_NAMES is a name 6.5c/d/e do not know about, and a palette
+    // decision taken outside DESIGN.md's front matter. The count is
+    // deliberately not written down — it has moved twice already (21 at
+    // first, 22 with --accent-deep, 23 with --focus) and a number in prose
+    // is a thing that goes stale while the list stays right.
     const allowed = new Set<string>(SEMANTIC_NAMES);
     for (const ground of GROUNDS) {
       expect(

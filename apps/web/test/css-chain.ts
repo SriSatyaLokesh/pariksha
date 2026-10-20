@@ -117,6 +117,13 @@ export const SEMANTIC_NAMES = [
   "--wash-2",
   "--glow",
   "--glow-strong",
+  // Added in fix round 4. base.css paints `:focus-visible` with the cream
+  // world's voltage, which is correct for the candidate runtime and wrong on
+  // a Signal surface the moment 6.5c re-grounds one — and 6.5c's own top-bar
+  // control is focusable, so it lands on its first screen. The name exists
+  // now so that override is a one-line change there rather than a contract
+  // change across three plans.
+  "--focus",
 ] as const;
 
 export type SemanticName = (typeof SEMANTIC_NAMES)[number];
@@ -134,6 +141,31 @@ export const THEME_SELECTOR: Record<Ground, string> = {
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 
 export const THEME_CSS_PATH = resolve(TEST_DIR, "../src/styles/theme.css");
+
+const ADMIN_MAIN_PATH = resolve(TEST_DIR, "../src/admin-main.tsx");
+const STYLE_IMPORT_RE = /^import\s+["']\.\/styles\/([a-zA-Z0-9_-]+\.css)["'];?$/gm;
+
+/**
+ * Every stylesheet the organiser entry loads, read out of `admin-main.tsx`
+ * rather than listed by hand.
+ *
+ * Fix round 4, finding 3. Both guard files used to hardcode this list, and
+ * commit d58d85b exists precisely because `testbuilder.css` was missing from
+ * it — a hole that reopens silently the next time an entry grows a
+ * stylesheet. Deriving it means the guards widen with the entry.
+ */
+export function organiserStylesheets(): string[] {
+  const source = readFileSync(ADMIN_MAIN_PATH, "utf8");
+  const files = [...source.matchAll(STYLE_IMPORT_RE)].flatMap((m) =>
+    m[1] === undefined ? [] : [resolve(TEST_DIR, "../src/styles", m[1])],
+  );
+  // A guard that silently read nothing would be worse than the hardcoded
+  // list it replaces.
+  if (files.length === 0) {
+    throw new Error(`no "./styles/*.css" imports found in ${ADMIN_MAIN_PATH}`);
+  }
+  return files;
+}
 
 /**
  * `theme.css`'s two mappings — semantic name (with its `--`) to the raw CSS

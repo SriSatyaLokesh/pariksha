@@ -20,6 +20,7 @@ import {
   parseRuleBodies,
   readResolvedCss,
   readThemeMap,
+  organiserStylesheets,
   SEMANTIC_NAMES,
   GROUNDS,
   type Ground,
@@ -63,13 +64,12 @@ const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 // clears the same bar — in the phase where it matters most, because a
 // candidate under a clock cannot switch tools or come back tomorrow.
 const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
-// Phase 6.5b Task 3: admin-main.tsx loads admin.css AND testbuilder.css, so
-// "the organiser's stylesheets" is both. The SURFACE sweep below still reads
-// only the three entries it always has — testbuilder.css's selectors have
-// never been in it, which is a gap this task does not close — but the two
-// standing guards at the foot of this file are file scans, not SURFACE
-// walks, and they cover every line an organiser screen actually loads.
-const TESTBUILDER_CSS_PATH = resolve(STYLES_DIR, "testbuilder.css");
+// Phase 6.5b Task 3: the SURFACE sweep below still reads only the three
+// stylesheet entries it always has — testbuilder.css's selectors have never
+// been in it, which is a gap this task does not close — but the standing
+// guards at the foot of this file are file scans, not SURFACE walks, and
+// they read every stylesheet admin-main.tsx loads, derived from that file by
+// `organiserStylesheets()` rather than listed here (fix round 4, finding 3).
 
 // landing.css no longer carries any component's rules itself (besides the
 // five "reused unchanged" ones, §6) — it only @imports the files that do.
@@ -957,10 +957,15 @@ const THEME_PAIRS: Array<{ fg: string; bg: string; threshold: number }> = [
   { fg: "--accent-ink", bg: "--accent", threshold: 4.5 },
   { fg: "--accent-ink", bg: "--accent-deep", threshold: 4.5 },
   // An input outline or a table rule is non-text: 3:1. --edge and --edge-2
-  // are decoration (1.67:1 and 1.54:1 on the dark ground) and are
-  // deliberately NOT asserted here — D1 added --edge-strong precisely
-  // because they cannot carry a boundary that has to be seen.
+  // are decoration — --edge 1.31:1 on the dark ground, --edge-2 1.67:1 on
+  // the same ground and 1.54:1 on its surface — and are deliberately NOT
+  // asserted here; D1 added --edge-strong precisely because neither can
+  // carry a boundary that has to be seen.
   ...THEME_GROUNDS.map((bg) => ({ fg: "--edge-strong", bg, threshold: 3 })),
+  // Finding 4: the focus ring is a non-text indicator, so 3:1, read against
+  // every ground a focused control can sit on. base.css still paints the
+  // ring with voltage; theme.css's header names the 6.5c override.
+  ...THEME_GROUNDS.map((bg) => ({ fg: "--focus", bg, threshold: 3 })),
 ];
 
 // Every contract name THEME_PAIRS does not score, and why. The test below
@@ -975,9 +980,12 @@ const UNSCORED_BY_DESIGN: Record<string, string> = {
   // run — which is the whole argument for writing the assertion rather than
   // trusting the ledger.
   //
-  // D1: decoration, 1.67:1 and 1.54:1 on the dark ground, 1.43:1 and 1.37:1
-  // on the light. --edge-strong exists precisely because these two cannot
-  // carry a boundary that has to be seen, and IS scored, at 3:1.
+  // D1: decoration. Recomputed in fix round 4, because the figures here had
+  // been one token against two grounds read as two tokens against one.
+  // --edge is 1.31:1 on the dark ground and 1.21:1 on its surface, 1.19 and
+  // 1.26 on the light; --edge-2 is 1.67 / 1.54 dark and 1.43 / 1.52 light.
+  // --edge-strong exists precisely because neither can carry a boundary that
+  // has to be seen, and IS scored, at 3:1.
   "--edge": "decoration only; a visible boundary takes --edge-strong",
   "--edge-2": "decoration only; a visible boundary takes --edge-strong",
   // Translucent composites: they have no fixed resolved colour until they
@@ -1065,7 +1073,7 @@ describe("theme.css's semantic mapping clears its thresholds on both grounds (D1
 // it: it IS DESIGN.md's output, so a literal there is not a colour declared
 // outside DESIGN.md. It reaches here only through base.css's own chain.
 const ORGANISER_CSS = ((seen) =>
-  [ADMIN_CSS_PATH, TESTBUILDER_CSS_PATH, BASE_CSS_PATH]
+  organiserStylesheets()
     .map((path) => readResolvedCss(path, seen))
     .join("\n"))(
   new Set<string>([
@@ -1110,6 +1118,49 @@ function nonTokenColourLiterals(css: string): string[] {
 }
 
 describe("the organiser's standing colour guards (D1, §12)", () => {
+  // Fix round 4, finding 2. The accent guard below catches a rule reaching
+  // for the dark green and catches nothing if one reaches for
+  // --color-signal-surface, --color-signal-text or --color-signal-line-strong
+  // instead. Those are illegal by GROUND, not by contrast: a panel painted
+  // signal-surface stays near-black when the viewer picks light, which is the
+  // "two designs, not one design on two grounds" failure theme.css's header
+  // promises to prevent. It is also the likeliest mistake on this branch — a
+  // 6.5c implementer with signal.css open beside them copies
+  // `background: var(--color-signal-surface)` and every test here stays green.
+  //
+  // So: the stricter, simpler form. An organiser stylesheet reads NO palette
+  // token of either Signal family. Every colour it paints comes through a
+  // semantic name, which is the entire mechanism D20 rests on. theme.css is
+  // excluded by source file (it is the mapping), and base.css's voltage focus
+  // ring is untouched by this because voltage is not a signal-* token — the
+  // ring is named as a 6.5c handoff in theme.css's header instead.
+  const SIGNAL_TOKEN_RE = /var\(\s*(--color-signal-[a-z0-9-]+)\s*\)/gi;
+
+  function signalTokensIn(css: string): string[] {
+    const hits: string[] = [];
+    for (const rule of parseRuleBodies(css)) {
+      for (const decl of declarations(rule.body)) {
+        for (const [, token] of decl.matchAll(SIGNAL_TOKEN_RE)) {
+          if (token !== undefined) hits.push(`${rule.selector} { ${token} }`);
+        }
+      }
+    }
+    return hits;
+  }
+
+  it("reads no Signal palette token directly, on either ground", () => {
+    expect(signalTokensIn(ORGANISER_CSS)).toEqual([]);
+  });
+
+  it("finds the landing page's palette tokens, so the guard above is not vacuous", () => {
+    // signal.css is a dark-only page and names these tokens legitimately.
+    // Without this control, the empty result above would hold for a scanner
+    // that matched nothing at all.
+    expect(
+      signalTokensIn(readResolvedCss(LANDING_CSS_PATH)).length,
+    ).toBeGreaterThan(0);
+  });
+
   it("never puts signal-accent on a light surface", () => {
     // #19e68c is 1.60:1 on cream — illegal as text and as a border. A rule
     // that reaches past --accent to the dark palette token keeps the green
