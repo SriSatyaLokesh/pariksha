@@ -53,7 +53,18 @@
 // ordering — a spec that is correct only while it sorts after another is the
 // same trap `measurement/` exists to escape, one layer down. Everything here
 // lives in a workspace the density gate never opens, so this file's position
-// in the run stops mattering at all.
+// relative to `density.spec.ts` stops mattering.
+//
+// One dependency does remain, and it is stated rather than implied (fix round
+// 1 re-review): this file reaches its workspace through the switcher, and
+// `OrganiserShell` renders that control only when `workspaces.length > 1`. So
+// it needs `workspaces[0]` to already exist — which `first-run.spec.ts`
+// creates, a whole spec file earlier, against a DB that is fresh every run.
+// Under the full suite that always holds. Under a filtered run of
+// `measurement/` alone, `createWorkspace` would make the only workspace, no
+// switcher would render, and `getByLabel("Workspace")` would throw. That is
+// loud rather than silently green, which is the right failure, but it is not
+// "correct at every position in the run" and should not be read as such.
 
 import { expect, test, type Page } from "@playwright/test";
 import { createWorkspace, seedWorkspace, signIn } from "../seed";
