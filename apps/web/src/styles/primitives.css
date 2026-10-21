@@ -295,13 +295,21 @@ td.acts {
   white-space: nowrap;
 }
 
-/* `D15`, in-a-component scale, and `A10`'s 8px minimum between two touch
-   targets — the row's actions sat flush against each other before this. */
-td.acts > * + * {
-  margin-inline-start: var(--space-base);
-}
+/* NO GAP BETWEEN THE ACTIONS, and the deleted one is worth recording.
+   This rule shipped a `margin-inline-start: var(--space-base)` on
+   `td.acts > * + *`, justified as "`A10`'s 8px minimum between two touch
+   targets". `A10` says no such thing: its only definitions
+   (2026-10-17-landing-page-v2-design.md:1486, -v3-interactive.md:1293) are
+   about reaching a 44px HIT AREA through block padding, and no 8px spacing
+   rule exists anywhere in docs/. So the declaration was unrequested by `D21a`
+   and `D18`, carried no guard, and widened the gutter against the one
+   narrowness claim this rule does make and e2e proves. It is gone rather than
+   re-justified — `.button-secondary` already reaches 44px, which is what
+   WCAG 2.5.8 exempts adjacent targets on, so nothing accessible rests on it.
+   Two flush buttons are a design question for the screens, not a property of
+   a gutter. (Fix round 1, F2.)
 
-/* `@media (hover: hover)` rather than bare: a pointer that cannot hover never
+   `@media (hover: hover)` rather than bare: a pointer that cannot hover never
    fires `tr:hover`, so a touch device would be left with a gutter it can
    reach and cannot see. There the actions simply stand. */
 @media (hover: hover) {

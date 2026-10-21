@@ -148,6 +148,27 @@ const AUTO_GUTTER = `
 `;
 
 /**
+ * The table shrunk to its own minimum, so the test below can establish that
+ * it had room to give in the first place.
+ *
+ * Fix round 1, F1. The premise used to be
+ * `table.clientWidth - table.scrollWidth >= 0`, which is structurally true of
+ * every table there has ever been: a table box always grows to its own
+ * min-content, so `scrollWidth` never exceeds `clientWidth` and the guard
+ * could not fire in the case its own message named. A premise that cannot go
+ * red is not a premise. This one compares the shipped table against the same
+ * table at `width: min-content`: equal means there was no slack to
+ * distribute, `width: 1%` and `width: auto` would resolve to the same pixel,
+ * and the comparison that follows would be two equal numbers passing on a
+ * tie.
+ */
+const MIN_CONTENT_TABLE = `
+  table[data-proof="min-content"] {
+    width: min-content;
+  }
+`;
+
+/**
  * A reveal that really does widen the cell — the thing `D21a`'s "revealing an
  * action must never widen a row" forbids. Used only to prove the width
  * instrument; nothing ships it.
@@ -377,27 +398,43 @@ for (const table of Object.keys(TABLES) as TableName[]) {
   test(`${table} keeps the action gutter as narrow as its actions`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await TABLES[table].open(page);
-    await page.addStyleTag({ content: AUTO_GUTTER });
+    await page.addStyleTag({ content: AUTO_GUTTER + MIN_CONTENT_TABLE });
 
     const row = await firstRow(page, table);
     const gutter = row.locator("td.acts");
 
-    const slack = await row.evaluate((node) => {
-      const element = node.closest("table");
-      if (element === null) return Number.NaN;
-      return Math.round((element.clientWidth - element.scrollWidth) * 100) / 100;
-    });
-    expect(slack, "the table is already at its minimum width, so column widths cannot be compared").toBeGreaterThanOrEqual(0);
-
-    const width = async (): Promise<number> =>
+    const gutterWidth = async (): Promise<number> =>
       gutter.evaluate((cell) => Math.round(cell.getBoundingClientRect().width * 100) / 100);
 
-    const shipped = await width();
-    expect(shipped, "the action column reserves no width at all").toBeGreaterThan(0);
+    const tableWidth = async (): Promise<number> =>
+      row.evaluate((node) => {
+        const element = node.closest("table");
+        // Not zero and not a pass: a row outside a table is a broken
+        // selector, and NaN fails every comparison below rather than
+        // satisfying one.
+        if (element === null) return Number.NaN;
+        return Math.round(element.getBoundingClientRect().width * 100) / 100;
+      });
 
+    const shipped = await gutterWidth();
+    expect(shipped, "the action column reserves no width at all").toBeGreaterThan(0);
+    const shippedTable = await tableWidth();
+
+    // The premise, measured rather than assumed: this table has slack to
+    // distribute, so a column CAN be shown to be narrower than the layout
+    // would otherwise make it.
+    await proof(row, "min-content");
+    expect(
+      shippedTable,
+      "the table is already at its minimum width, so column widths cannot be compared here",
+    ).toBeGreaterThan(await tableWidth());
+
+    // `data-proof` is one attribute, so this also puts the table back to its
+    // shipped width — the gutter below is re-measured on the same layout the
+    // first reading was taken from.
     await proof(row, "auto-gutter");
     expect(
-      await width(),
+      await gutterWidth(),
       "the gutter is no narrower with D18's width: 1% than without it, so that declaration does nothing here",
     ).toBeGreaterThan(shipped);
   });

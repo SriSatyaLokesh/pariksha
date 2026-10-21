@@ -339,6 +339,14 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
       // needs `nowrap` and prose must never inherit it, so the declaration is
       // scoped to `.acts` and this is the other side of that scoping.
       expect(paintsIn(cell as Element, "white-space", ORGANISER)).not.toBe("nowrap");
+
+      // THE POSITIVE ARM, on the same mount (fix round 1, F7). A negative
+      // alone cannot tell "the scoping works" from "the reader found nothing"
+      // — a renamed property, a broken chain or a selector that stopped
+      // matching would all satisfy the line above. The gutter in the SAME
+      // rendered table must really carry the declaration the prose cell must
+      // not, which is the whole claim in one place.
+      expect(paintsIn(actionCell(action), "white-space", ORGANISER)).toBe("nowrap");
     });
   }
 
@@ -380,6 +388,12 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
     // sticky cell over a column that is scrolling under it is the same defect
     // wearing a different hat"). The two requirements have the same answer,
     // and this is the assertion that keeps them having it.
+    //
+    // The control arm first (fix round 1, F5): every assertion below is a
+    // `not.toContain` over a loop, so an empty `ACTS_RULES` would satisfy all
+    // of them without reading a single declaration — the same vacuous shape
+    // the browser spec's first draft had, caught there by its own proof.
+    expect(ACTS_RULES.length, "no gutter rule was found, so nothing was checked").toBeGreaterThan(0);
     for (const rule of ACTS_RULES) {
       const body = rule.body;
       for (const semantic of SEMANTIC_NAMES) {
