@@ -21,11 +21,13 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { act, render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 
+import { ApiError } from "../../src/lib/api";
 import type {
   ApiClient,
   Actor,
   ChecklistRow,
   DraftPatch,
+  StoredSection,
   TestSummary,
   TestVersionRow,
   Workspace,
@@ -323,7 +325,15 @@ describe("the checklist rail", () => {
     expect(screen.queryByRole("button", { name: /re-run the checks/i })).toBeNull();
 
     // Tabbing into the strip floats it too — a keyboard reader never hovers.
-    fireEvent.focus(screen.getByRole("button", { name: /Go to quant\./ }));
+    // The full accessible name, anchored, the way every other query in this
+    // file names a light: the target moved in fix round 1 (`Section B` is no
+    // longer a control), the matcher's discipline did not (fix round 2,
+    // review Minor 4).
+    fireEvent.focus(
+      screen.getByRole("button", {
+        name: /^Blocking — section "Quantitative aptitude" has no questions\. Go to quant\.$/,
+      }),
+    );
     expect(screen.getByRole("button", { name: /re-run the checks/i })).toBeVisible();
   });
 
@@ -459,6 +469,57 @@ describe("the rail refetches as the author works", () => {
     expect(checklistCalls()).toHaveLength(1);
   });
 
+  // Fix round 2 (review, Important). The two reads ride the same settled save
+  // burst, but they are not one read and must not share a fate. `GET
+  // …/checklist` is the heavier of the two — it scans every question in the
+  // workspace (`checklistFor`, apps/api/src/routes/tests.ts) — and it can
+  // fail on its own. Coupling them through a single `Promise.all` let a
+  // checklist fault discard an already-resolved draft, which silently freezes
+  // `UX-15`'s live draw and `UX-12`'s points: precisely the regression the
+  // follow-up read exists to prevent.
+  //
+  // This is the guard that fails if they are ever recoupled.
+  it("applies the draft figures when the checklist read fails", async () => {
+    const pool: StoredSection = {
+      id: "quant",
+      title: "Quantitative aptitude",
+      source: { kind: "pool", count: 10, filter: { tags: ["sql"] } },
+    };
+    let reads = 0;
+    const draft = vi.fn(async (): Promise<TestVersionRow> => {
+      reads += 1;
+      return {
+        ...DRAFT,
+        body: { ...DRAFT.body, sections: [pool] },
+        // UX-15's live draw, and the only figure that can say whether the
+        // draft read was applied: 14 matching on the load, 11 after the save.
+        draw: { quant: { matching: reads === 1 ? 14 : 11, wanted: 10 } },
+      };
+    });
+    let checks = 0;
+    const checklist = vi.fn(async () => {
+      checks += 1;
+      if (checks > 1) throw new ApiError(500, "server_error", "The checklist could not be read.");
+      return ROWS;
+    });
+    await openBuilder(fakeClient({ draft, checklist, patchDraft: echo }));
+
+    expect(await screen.findByText(/10 drawn from 14 matching/i)).toBeVisible();
+    await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
+
+    typeSeveralEdits();
+    await settle();
+
+    // The read that answered is applied. The read that failed does not get to
+    // discard it, and does not get to hold it up either.
+    expect(checklist).toHaveBeenCalledTimes(2);
+    expect(screen.getByText(/10 drawn from 11 matching/i)).toBeVisible();
+    // ...and the rail keeps the rows it is holding rather than blanking over
+    // a read that did not answer. The save itself landed; saying otherwise
+    // would be the louder lie.
+    expect(within(rail()).getByText("5 / 7")).toBeVisible();
+  });
+
   it("shows a row that a save just cleared", async () => {
     const TIMING_MISSING: ChecklistRow = {
       id: "timing_missing",
@@ -484,7 +545,13 @@ describe("the rail refetches as the author works", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Timing/ }));
     expect(rail()).toHaveAttribute("data-state", "lights");
     fireEvent.change(screen.getByLabelText(/overall duration \(minutes\)/i), { target: { value: "90" } });
-    fireEvent.click(screen.getByRole("button", { name: /apply the change/i }));
+    // This fixture's test is published (`currentVersion: 1`), so `UX-18`'s
+    // confirmation stands between the keystroke and the save. Named here
+    // rather than reached by a loose button query, so the ledger's claim that
+    // the dialog is answered is something the test actually asserts (fix
+    // round 2, review Minor 5).
+    const confirm = screen.getByRole("dialog", { name: /change timing on a published test/i });
+    fireEvent.click(within(confirm).getByRole("button", { name: /apply the change/i }));
 
     await waitFor(() => expect(within(rail()).queryByText(/no duration is set/i)).toBeNull());
     expect(within(rail()).getByText(/0 must fix/i)).toBeInTheDocument();
@@ -537,7 +604,12 @@ describe("the rail refetches as the author works", () => {
     expect(readiness).toHaveAttribute("aria-atomic", "true");
     // The rows themselves are not a live region: nothing else in the rail
     // announces, which is the whole of the budget this feature gets.
-    expect(rail().querySelectorAll("[aria-live]")).toHaveLength(1);
+    //
+    // Fix round 2 (review, MIN-2): `role="status"` and `role="alert"` are
+    // live regions too — the rail already carries one ("Checking…", while
+    // `rows === null`) — so a budget counting the attribute alone could not
+    // see a row given an implicit region later.
+    expect(rail().querySelectorAll('[aria-live], [role="status"], [role="alert"]')).toHaveLength(1);
 
     typeSeveralEdits();
     await settle();

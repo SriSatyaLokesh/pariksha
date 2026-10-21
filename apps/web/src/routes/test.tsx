@@ -352,33 +352,54 @@ export function TestBuilder({
         // author, and `saveSeq` drops it outright once a newer save has
         // started.
         //
-        // `D7b`: the checklist rides that same read. "A rail that reads only
-        // on mount lies while the author works" — it goes on showing rows the
-        // author has already answered, and goes on offering journeys into
-        // sections that are gone. One read per settled burst, riding the GET
-        // above rather than a timer of its own: a second debounce would be a
-        // second answer to the question this one already settled, and the
-        // interval is not a knob (`AG2`).
+        // `D7b`: the checklist rides that same settled save. "A rail that
+        // reads only on mount lies while the author works" — it goes on
+        // showing rows the author has already answered, and goes on offering
+        // journeys into sections that are gone. One read per settled burst,
+        // riding this save rather than a timer of its own: a second debounce
+        // would be a second answer to the question this one already settled,
+        // and the interval is not a knob (`AG2`).
+        //
+        // **Riding the same save is not sharing a fate** (fix round 2, review
+        // Important). These are two reads of two different things. A single
+        // `Promise.all` over them did two harms at once: a rejected checklist
+        // discarded an already-resolved draft through the shared `catch`,
+        // freezing exactly the `UX-15` draw and `UX-12` points this read
+        // exists to refresh — and, on the normal path, held those figures
+        // until the heavier call answered, because `checklistFor` scans every
+        // question in the workspace (apps/api/src/routes/tests.ts). So: two
+        // chains, each applying its own answer the moment it lands, each
+        // behind its own `saveSeq` check so a reply from an older burst
+        // cannot overwrite a newer one, and neither able to fail the other.
         //
         // The rows are taken exactly as the server sends them — the gate's
         // own order, words and severities (#64). Nothing here re-counts or
         // re-sorts them; `PublishChecklist` counts, and counts only what it
         // was given.
-        try {
-          const [fresh, rows] = await Promise.all([
-            client.draft(workspaceId, testId),
-            client.checklist(workspaceId, testId),
-          ]);
-          if (saveSeq.current !== seq) return;
-          setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
-          setChecklist(rows);
-        } catch {
-          // The save itself landed; only the derived figures and the rail are
-          // a beat behind, and the next settled burst corrects both.
-          // Reporting a failure over a save that succeeded would be the worse
-          // lie — and a rail that emptied itself on a failed read would be a
-          // louder one, so the rows it is holding stay up.
-        }
+        await Promise.all([
+          (async () => {
+            try {
+              const fresh = await client.draft(workspaceId, testId);
+              if (saveSeq.current !== seq) return;
+              setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
+            } catch {
+              // The save itself landed; only the derived figures are a beat
+              // behind, and the next settled burst corrects them. Reporting a
+              // failure over a save that succeeded would be the worse lie.
+            }
+          })(),
+          (async () => {
+            try {
+              const rows = await client.checklist(workspaceId, testId);
+              if (saveSeq.current !== seq) return;
+              setChecklist(rows);
+            } catch {
+              // A rail that emptied itself on a read that did not answer
+              // would be a louder lie than one a beat stale, so the rows it
+              // is holding stay up until a read succeeds.
+            }
+          })(),
+        ]);
       })();
     }, 250);
     return () => clearTimeout(timer);
@@ -588,8 +609,23 @@ export function TestBuilder({
           // judgement into `hasDestination`, which is the one predicate the
           // strip and the panel both read, so a stale row stops ANNOUNCING
           // the journey rather than offering one this then declines — the
-          // same defect task 3's review ruled on for field rows. Nothing
-          // reaches here that the rail did not just find a destination for.
+          // same defect task 3's review ruled on for field rows.
+          //
+          // **The premise, because it is what a later edit would break:**
+          // `sectionIds` above and this closure are sibling attributes of one
+          // JSX element, built in ONE render from the SAME `draft`. That — not
+          // the predicate on its own — is what makes a membership check here
+          // redundant rather than defensive: the ids that gated the control
+          // and the ids this would test are the same value, so there is no
+          // window between them, not even a torn one.
+          //
+          // Break that and the hole re-opens with no test watching it. It
+          // breaks if the two are ever sourced from different renders: a
+          // `useCallback` around this handler with stale deps, a memoised or
+          // hoisted `sectionIds`, ids derived from `pending` rather than
+          // `draft`, or a `React.memo` comparator on `PublishChecklist` that
+          // lets one prop through while holding the other back. Any of those
+          // and this guard has to come back.
           onGoTo={(row) => {
             if (row.sectionId !== undefined) openSection(row.sectionId);
           }}
