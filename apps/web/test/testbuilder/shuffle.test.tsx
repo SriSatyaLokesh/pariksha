@@ -187,7 +187,7 @@ describe("D19: shuffling is surfaced where it exists and disabled where it does 
   });
 
   it("does not change the default when surfacing it", async () => {
-    const patchDraft = vi.fn(async () => draftWith([QUANT, VERBAL]));
+    const patchDraft = vi.fn<ApiClient["patchDraft"]>(async () => draftWith([QUANT, VERBAL]));
     await openBuilder(fakeClient({ patchDraft }));
 
     // The chip really rendered, so the silence below is about the chip and
@@ -222,7 +222,7 @@ describe("D19: shuffling is surfaced where it exists and disabled where it does 
   });
 
   it("sends no shuffle_sections field", async () => {
-    const patchDraft = vi.fn(async () => draftWith([QUANT, VERBAL]));
+    const patchDraft = vi.fn<ApiClient["patchDraft"]>(async () => draftWith([QUANT, VERBAL]));
     await openBuilder(fakeClient({ patchDraft }));
 
     // Write something real first, so there is a patch to look inside.
