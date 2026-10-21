@@ -69,7 +69,20 @@ export async function countPrimaryRows(page: Page, surface: Surface): Promise<nu
     //
     // `clientTop` is the top border's width and `clientHeight` is the padding
     // box's height with the scrollbar strip already taken off, so the two
-    // together are exactly the content area, borders and scrollbar excluded.
+    // together are exactly the PADDING BOX — padding included, borders and
+    // scrollbar excluded. That is the right box and not merely a tighter one:
+    // the padding box is where overflow clipping actually happens, so it is
+    // the edge a reader asking "can this row be seen" has to use.
+    //
+    // ONE ROUNDING CAVEAT, named because `bankBrowser`'s count already moves
+    // by one between runs and nobody should spend an hour on the wrong
+    // suspect. `clientTop` and `clientHeight` are integer-rounded where
+    // `getBoundingClientRect()` is fractional, so a sub-pixel border could
+    // shift either edge by less than a pixel. No container in this gate's
+    // path has a border at all, and the quantity this guards against is a
+    // ~15px strip, so the rounding is bounded and irrelevant here — but it is
+    // not zero, and it is not the cause of that jitter (see the note beside
+    // `BEFORE.bankBrowser`, which is a wrapped prompt and a free row order).
     //
     // 6.5e Task 2 added the first scroll containers to sit between a row and
     // the viewport (`.table-scroll`, `D21a`), which is what made this

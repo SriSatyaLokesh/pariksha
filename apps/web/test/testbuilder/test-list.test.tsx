@@ -621,22 +621,30 @@ describe("TestList", () => {
       .map((path) => readResolvedCss(path, seen))
       .join("\n");
 
-    // THE POSITIVE ARM FIRST (fix round 1). Every assertion below is
-    // `toBeUndefined()`, which a broken chain, a renamed property or a
-    // reader that resolved nothing at all would satisfy just as well as the
-    // rule's absence. So the SAME reader, on the SAME mount, must return a
-    // real declaration for an element in the same row that the chain really
-    // does paint — `.test-version` takes `--ink-2` from testbuilder.css.
-    const versionCell = row.querySelector(".test-version") as HTMLElement;
-    // `toBeDefined`, not the literal token: what this arm has to show is that
-    // the reader RESOLVES something on this mount, not which tone the version
-    // cell was given — pinning the value here would redden on a legitimate
-    // re-tone for a reason that has nothing to do with the state badge, and
-    // `contrast-usage.test.ts` already owns which colour it is.
+    // THE POSITIVE ARM FIRST, AND IT SITS ON `badge` (fix round 3). Every
+    // assertion below is `toBeUndefined()`, which a broken chain, a renamed
+    // property or a reader that resolved nothing would satisfy just as well
+    // as the rule's absence. So the SAME reader, on the SAME mount, must
+    // return a real declaration — and it has to be asked about THIS element,
+    // not a neighbour.
+    //
+    // Fix round 1 put this control on `.test-version` in the same row, which
+    // covered a dead reader but not the vacuity class that actually bit this
+    // test: a `badge` that is NON-NULL BUT WRONG passes a control taken from
+    // a different element AND passes all three absences below, because the
+    // wrong element genuinely has no rule painting it. `css-chain.ts`'s own
+    // guard names that residue as the one thing it cannot catch. A control
+    // on `badge` closes it.
+    //
+    // `display`, not a colour: `.test-state` is `display: inline-flex` in
+    // testbuilder.css, which is the rule that puts the glyph and the label on
+    // one line. It cannot be loosened by a legitimate re-tone, and asserting
+    // it is not this test quietly taking ownership of a palette value that
+    // `contrast-usage.test.ts` owns.
     expect(
-      paintsIn(versionCell, "color", organiser),
-      "the reader resolved nothing at all, so the absences below mean nothing",
-    ).toBeDefined();
+      paintsIn(badge, "display", organiser),
+      "the reader resolved nothing on the state badge, so the absences below mean nothing",
+    ).toBe("inline-flex");
 
     // The rendered element: nothing in the chain paints it, so it inherits.
     for (const property of ["color", "background", "background-color"]) {
