@@ -238,8 +238,13 @@ describe("UX-11: who may publish", () => {
     fireEvent.click(screen.getByRole("button", { name: /^publish$/i }));
     await waitFor(() => expect(checklist).toHaveBeenCalledWith("wsp_1", "tst_1"));
 
-    const dialog = await screen.findByRole("dialog", { name: /publish checklist/i });
-    expect(within(dialog).getByText('section "Quantitative" has no questions')).toBeVisible();
+    // A `region` and not a `dialog` since `D7`: the checklist is a right rail
+    // on the page from the first paint, and Publish re-reads it and docks it
+    // rather than conjuring it. UX-17 is unchanged — what Publish opens is
+    // still a checklist.
+    const rail = await screen.findByRole("region", { name: /publish checklist/i });
+    expect(rail).toHaveAttribute("data-state", "docked");
+    expect(within(rail).getByText('section "Quantitative" has no questions')).toBeVisible();
     // Nothing published: the gate is a checklist, not a button.
     expect(publishTest).not.toHaveBeenCalled();
   });
