@@ -400,6 +400,32 @@ export function specificity(selector: string): number {
  * confused.
  */
 export function declaredFor(element: Element, property: string, css: string): string[] {
+  // A NULL ELEMENT IS NOT "NO RULE MATCHES". The `try/catch` below exists for
+  // a selector jsdom's engine cannot parse, and it swallowed a null `element`
+  // in exactly the same way: every selector read as no-match, this returned
+  // `[]`, and every `toBeUndefined()` built on `paintsIn` passed without
+  // looking at anything.
+  //
+  // Not hypothetical and not caught by a probe. 6.5e Task 2 shipped
+  // `(await screen.findByText(/draft/i)).closest(".test-state")` in
+  // `test-list.test.tsx`, where the text match resolved the Status filter's
+  // `<option>Draft</option>` — it sorts before the table — so `closest`
+  // answered `null`. Three `toBeUndefined()` assertions passed on it through a
+  // full review AND through two probes, because both probes happened to redden
+  // on that test's other, rule-set arm.
+  //
+  // Every caller's type says `Element`, so this can only be reached through a
+  // cast — which is what `as HTMLElement` over a `querySelector` is. Measured
+  // when it was added: ZERO tests redden across the 25 call sites in 5 files,
+  // so it is a guard against recurrence rather than a repair.
+  //
+  // WHAT IT DOES NOT CATCH, stated so nobody reads more into it: an element
+  // that is non-null but WRONG. `closest` returning an unexpected ancestor, or
+  // a stale node from a torn-down render, still reads as a legitimate no-match.
+  // The null case is the one that has actually bitten.
+  if (element === null || element === undefined) {
+    throw new Error(`declaredFor was handed ${String(element)} rather than an element`);
+  }
   const found: { weight: number; order: number; value: string }[] = [];
   let order = 0;
   for (const rule of parseRuleBodies(css)) {
