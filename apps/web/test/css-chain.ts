@@ -193,3 +193,105 @@ export function readThemeMap(
   }
   return map;
 }
+
+// ---------------------------------------------------------------------------
+// Reading a stylesheet the way the cascade reads it.
+//
+// `vitest.config.ts` sets `css: false`, so jsdom loads no stylesheet and
+// `getComputedStyle` knows nothing. Rather than scan a file for a string,
+// these ask the DOM — through `Element.matches()` — which of a resolved
+// chain's rules actually select a rendered element, and resolve the winner by
+// specificity. A rule whose selector stops matching the markup is then as red
+// as a rule whose declaration is deleted, which a text scan would not catch.
+//
+// Added in 6.5d Task 5 for the field-row guards and moved here in fix round 2,
+// when `test/exam/controls.test.tsx` needed the same reader for a different
+// entry chain. One copy, for the same reason the `@import` resolver above is
+// one copy.
+
+/**
+ * A selector's specificity as one comparable number.
+ *
+ * Needed, not decorative: `primitives.css` declares `.field-row > .field {
+ * display: grid }` and `registration.css`, which admin.css imports AFTER it,
+ * declares `.field { display: flex }`. Source order says flex and the cascade
+ * says grid (0,2,0 beats 0,1,0). A reader that took the last declaration
+ * would have reported the opposite of what a browser paints — it did, on the
+ * first green run, which is what this function exists because of.
+ *
+ * The functional pseudo-classes are handled the way CSS handles them rather
+ * than counted as plain pseudo-classes, because `primitives.css`'s own
+ * fallback uses one: `.field-row:has(.field-help) > .field` is (0,3,0), and
+ * scoring `:has` as an extra class on top of its argument would make it
+ * (0,4,0). Today `parseRuleBodies` never surfaces an `@supports` rule to this
+ * reader, so nothing would have noticed — which is exactly why it is fixed
+ * rather than left: a specificity helper that is quietly wrong is worse than
+ * no helper at all (fix round 1, finding 5).
+ *
+ * `:where()` contributes nothing; `:not()`, `:is()` and `:has()` contribute
+ * their argument's specificity and nothing of their own. A comma-separated
+ * argument — where CSS takes the most specific branch — needs a recursive
+ * reader, does not occur in this repo's stylesheets, and throws rather than
+ * being scored wrong. Pseudo-ELEMENTS (`::before`) are not counted in the
+ * element column: jsdom's `matches()` rejects them, so no rule carrying one
+ * ever reaches this function.
+ */
+export function specificity(selector: string): number {
+  const peeled = selector
+    .replace(/:where\([^()]*\)/g, " ")
+    .replace(/:(?:not|is|has)\(([^()]*)\)/g, (_whole, argument: string) => {
+      if (argument.includes(",")) {
+        throw new Error(`specificity(): comma-separated argument in ${selector}`);
+      }
+      return ` ${argument} `;
+    });
+  const ids = (peeled.match(/#[\w-]+/g) ?? []).length;
+  const classes = (peeled.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
+  const elements = (peeled.match(/(?:^|[\s>+~])[a-z][\w-]*/gi) ?? []).length;
+  return ids * 10_000 + classes * 100 + elements;
+}
+
+/**
+ * Every value `property` is given by a rule in `css` that really selects
+ * `element`, weakest-first — so the last one is the one that paints.
+ *
+ * `parseRuleBodies` skips `@supports` blocks whole (it recurses into `@media`
+ * only), which is what keeps this function reading the DEFAULT branch and
+ * `supportsBody()` below reading the fallback. They cannot be confused.
+ */
+export function declaredFor(element: Element, property: string, css: string): string[] {
+  const found: { weight: number; order: number; value: string }[] = [];
+  let order = 0;
+  for (const rule of parseRuleBodies(css)) {
+    order += 1;
+    const weights = rule.selector
+      .split(",")
+      .map((part) => part.trim())
+      .filter((part) => {
+        try {
+          return element.matches(part);
+        } catch {
+          // A selector jsdom's engine cannot parse is not a match it can
+          // confirm; it must not read as one either.
+          return false;
+        }
+      })
+      .map(specificity);
+    if (weights.length === 0) continue;
+    const weight = Math.max(...weights);
+    for (const decl of declarations(rule.body)) {
+      const colon = decl.indexOf(":");
+      if (colon !== -1 && decl.slice(0, colon).trim() === property) {
+        found.push({ weight, order, value: decl.slice(colon + 1).trim() });
+      }
+    }
+  }
+  return found
+    .sort((a, b) => a.weight - b.weight || a.order - b.order)
+    .map((hit) => hit.value);
+}
+
+/** The value `property` really paints on `element` under `css`, or `undefined`. */
+export function paintsIn(element: Element, property: string, css: string): string | undefined {
+  return declaredFor(element, property, css).at(-1);
+}

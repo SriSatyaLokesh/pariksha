@@ -565,17 +565,31 @@ tracks to `15px 36px 0px` — the reserved help track collapses rather than cost
 > **Cost if wrong.** Custom controls must keep real `<input>` semantics — they do; only the painting
 > changes.
 
-*Pointer, not an amendment — `D17` stands as written.* **"No browser default anywhere" is delivered
-on two of the three chains** (6.5d Task 5, 2026-10-21). The rule lives in `primitives.css`, which
-`admin.css` and `landing.css` import, so the organiser and the landing page are covered; the paint
-comes through a `--control-accent` / `--control-accent-ink` pair each chain defines for its own
-ground, because one rule set renders on cream and on Signal dark and `D1` forbids an accent crossing
-between them. **The candidate runtime is not covered.** `exam.css` imports only `question.css` and
-`registration.css`, so `exam/answer/Structured.tsx`, `exam/Registration.tsx` and
-`exam/ViewControls.tsx` still render the UA's blue. The owner has taken that later as **#201**;
-`registration.css` is imported by *both* `admin.css` and `exam.css`, so the fix is a move of the
-`D17` block into that file plus two `--control-accent` lines on `exam.css` — not a second palette
-exercise.
+*Pointer, not an amendment — `D17` stands as written.* **"No browser default anywhere" is delivered,
+and #201 is closed by this plan** (6.5d Task 5, fix round 2, 2026-10-21). The rule lives in
+`registration.css` — the one stylesheet the organiser's chain and the candidate's already share
+(`admin.css` imports it for the builder's preview, `exam.css` because the candidate fills the form
+in) — and it is there once, not copied. The first cut put it in `primitives.css`, which reaches
+`admin.css` and `landing.css` and **not** `exam.css`, so the surface with the least recourse in this
+product kept the UA's blue on `exam/answer/Choice.tsx`, the primary answer control of every choice
+question. That was **#201**, now fixed rather than deferred.
+
+The paint comes through three names each chain defines for the ground it really renders on:
+`--control-accent`, `--control-accent-ink` and `--control-edge`. An accent cannot cross grounds
+(`D1`), so a literal in the shared rule would be wrong on one of them. The organiser takes
+`state-answered` (5.20:1 on its cream page, 5.36:1 on a canvas card) and the runtime takes
+**voltage** — which is what `option-row-selected` above already means by "plus the filled control",
+and the accent `DESIGN.md` leaves this runtime: 3.98:1 on an option row's canvas, 3.86:1 on the
+selected row's cream, rising to 5.83:1 under `[data-contrast="high"]`, against the 3:1 a non-text
+indicator needs. `--control-edge` is separate because an unchecked control is a box, and painting
+one in the accent would put a vermilion ring on every option of every question.
+
+The landing chain imports neither the rule nor any control, which is correct rather than a second
+gap: nothing under `src/sections/signal/`, `src/routes/landing.tsx` or `src/island/` renders a
+checkbox or a radio. `apps/web/test/exam/controls.test.tsx` is the guard that keeps all of this
+true — it walks **every** source file that renders either control, maps it to the stylesheet entry
+it ships in, and fails if that entry leaves it on `appearance: auto`. The gap existed because
+nothing was watching the seam between the chains; that is now the thing being watched.
 
 ### D18 — screen-level rulings
 

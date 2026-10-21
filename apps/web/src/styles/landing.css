@@ -9,13 +9,14 @@
 @import "./primitives.css";
 @import "./signal.css";
 
-/* The landing chain's half of D17's control pair, the mirror of admin.css's.
-   primitives.css paints one checkbox and one radio through these two names
-   and never through a palette token, because the same rule set renders on two
-   grounds. Here the ground is Signal dark and the pair is simply its accent:
-   12.01:1 on the ground, 11.06:1 on a surface, and the glyph 11.47:1 on the
-   fill. */
-:root {
-  --control-accent: var(--color-signal-accent);
-  --control-accent-ink: var(--color-signal-accent-ink);
-}
+/* No D17 control pair here, deliberately. 6.5d Task 5 put the one checkbox
+   and the one radio in primitives.css, which this chain imports, and fix
+   round 2 moved them to registration.css — the only stylesheet the
+   organiser's chain and the candidate's share — so the rule would reach the
+   candidate runtime (#201). This chain imports neither.
+
+   That is correct rather than a gap: nothing under src/sections/signal/,
+   src/routes/landing.tsx or src/island/ renders a checkbox or a radio, so
+   defining a pair here would name a ground for a control that does not
+   exist. test/exam/controls.test.tsx asserts the absence, so the day one
+   appears the seam is a red test rather than a second #201. */
