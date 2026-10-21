@@ -34,7 +34,14 @@ import { isZone } from "./TimingPanel";
 // dropped from the line, because a row that omits what is unset reads
 // identically to a row whose author never scrolled far enough.
 
-export type PanelKey = "timing" | "access" | "registration" | "results" | "branding";
+/** The five, as a value as well as a type (6.5d Task 2): `?panel=` carries
+ *  one of them, and `view-url.ts` deliberately does not validate — "an id
+ *  in a URL is a claim anyone can type" — so the screen that owns the union
+ *  checks the claim against it. Derived rather than written twice, because
+ *  a list that can drift from the type is the drift. */
+export const PANEL_KEYS = ["timing", "access", "registration", "results", "branding"] as const;
+
+export type PanelKey = (typeof PANEL_KEYS)[number];
 
 /** The field a candidate list is keyed on: the first `unique: true` field
  * in the registration form's own order. The same rule

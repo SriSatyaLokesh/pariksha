@@ -20,6 +20,7 @@ import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 import {
+  PANEL_KEYS,
   SettingRow,
   accessSummary,
   brandingSummary,
@@ -61,6 +62,37 @@ const DEFAULT_ACCESS: TestAccess = { mode: "link_code" };
 const DEFAULT_RELEASE: TestRelease = { when: "on_submit" };
 
 const NO_BRANDING: TestBranding = {};
+
+/**
+ * Which setting the URL says is open (`D7` in `D5`'s query string).
+ *
+ * Two claims this resolves, both of which a hand-edited or stale link can
+ * make:
+ *
+ * 1. A `?panel=` that names nothing. `view-url.ts` is explicit that it does
+ *    not validate — an id in a URL is a claim anyone can type, and the
+ *    consumer decides — so the check against the five lives here, where the
+ *    union does, and not in the shared parser.
+ * 2. `?section=` and `?panel=` together. **The spine wins**: the section
+ *    opens and no panel does (6.5d's ruling). A stale URL that opens a
+ *    section instead of a setting costs one click to correct; the reverse
+ *    hides the thing being edited behind a settings panel.
+ *
+ * Deliberately a question about the URL and not about the draft, which has
+ * not been fetched when this first runs: `?section=` naming a section this
+ * test does not have still suppresses the panel. The rule is "the URL
+ * claims a section", not "a section is open", because the second is not
+ * knowable on first paint and a rule that changes answer once the fetch
+ * lands is worse than one that is stable and occasionally empty.
+ */
+function panelFromUrl(): PanelKey | null {
+  const params = readView(window.location.search);
+  if (params.section) return null;
+  const claimed = params.panel;
+  return (PANEL_KEYS as readonly string[]).includes(claimed ?? "")
+    ? (claimed as PanelKey)
+    : null;
+}
 
 export function TestBuilder({
   workspaceId,
@@ -116,10 +148,11 @@ export function TestBuilder({
   const [openSectionId, setOpenSectionId] = useState<string | null>(
     () => readView(window.location.search).section ?? null,
   );
-  // Phase 6.5d Task 1 (`D7`): one open setting at a time, so this is one
-  // key and not a set. Local for now; Task 2 puts it in `?panel=` through
-  // the same `readView`/`writeView` pair `?section=` already uses.
-  const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
+  // Phase 6.5d (`D7`): one open setting at a time, so this is one key and
+  // not a set — and it lives in `?panel=`, through the same
+  // `readView`/`writeView` pair `?section=` above already uses, so an
+  // opened setting is a place a reload, a bookmark and Back all return to.
+  const [openPanel, setOpenPanel] = useState<PanelKey | null>(panelFromUrl);
   // Task 5 (#57, P5.4): a whole `DraftPatch` rather than a sections array —
   // the registration form is a `settings` block and saves through the same
   // debounce, the same in-flight guard and the same one route. Each panel
@@ -165,8 +198,10 @@ export function TestBuilder({
   }, [load]);
 
   useEffect(() => {
-    const onPopState = () =>
+    const onPopState = () => {
       setOpenSectionId(readView(window.location.search).section ?? null);
+      setOpenPanel(panelFromUrl());
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -195,9 +230,18 @@ export function TestBuilder({
     writeView(params);
   }
 
-  /** `D7`: one at a time, and its own row closes it. */
+  /** `D7`: one at a time, and its own row closes it — the same read-then-
+   *  mutate shape as `openSection` above, for the same reason. `writeView`
+   *  clears every id it owns that the params it is handed omit, so anything
+   *  that built a `ViewParams` from scratch here would silently drop
+   *  `?section=` (and `?test=`) on the way to writing `?panel=`. */
   function togglePanel(id: PanelKey): void {
-    setOpenPanel((prev) => (prev === id ? null : id));
+    const next = openPanel === id ? null : id;
+    setOpenPanel(next);
+    const params = readView(window.location.search);
+    if (next) params.panel = next;
+    else delete params.panel;
+    writeView(params);
   }
 
   // Fix round (task 3 review, I4): a keystroke in a section's title or
