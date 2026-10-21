@@ -80,14 +80,43 @@
 
    `admin.css` is loaded by `src/admin-main.tsx` and by nothing else
    (test/bundle.test.ts), so this reaches the organiser and neither the
-   landing page nor the candidate runtime. base.css's own `body` rule is
-   (0,0,1) like this one and comes earlier in the entry's import order, so
-   this wins on source order; it is not a `:root`-level token swap, which
-   would re-ground registration.css's shared rules behind the contrast
-   gate's back. */
-body {
+   landing page nor the candidate runtime. It is not a `:root`-level token
+   swap, which would re-ground registration.css's shared rules behind the
+   contrast gate's back.
+
+   `:root[data-theme]` AND NOT A BARE `body`, and the reason was found in a
+   browser rather than reasoned about. A bare `body` here is (0,0,1), the
+   same specificity as base.css's own `body { background: var(--color-cream)
+   }`, so the winner is whichever comes later — and `admin-main.tsx`
+   imports base.css FIRST, which says this one does. The BUILT page says the
+   opposite: Vite emits the two as separate chunks and `dist/admin.html`
+   links `admin-*.css` BEFORE `base-*.css`, so the cream won and the four
+   screens that render outside the shell — `loading`, `error`, `signin`,
+   `setup` — shipped near-white ink on a cream page. Every jsdom guard in
+   this repo reads the IMPORT order, so not one of them could have seen it.
+
+   The attribute is the organiser's own root (`admin-main.tsx:17`, before
+   the first paint, and `readGround()` cannot return anything else), so this
+   is (0,1,1) and wins on specificity in any order. Nothing in the organiser
+   may beat a base.css rule on source order; `theme.test.ts` holds the whole
+   chain to that. */
+:root[data-theme] body {
   background: var(--ground);
   color: var(--ink);
+}
+
+/* The focus ring, deferred to this task by theme.css's header and by
+   shell.css's, which scoped its own override to the bar and the rail
+   because "the page inside .shell is still the cream canvas this plan does
+   not re-ground: --focus measures 1.60:1 on cream". The page is the Signal
+   ground now, so this is the widening both files named — and it reaches the
+   four screens outside the shell too, which `.shell` would not have.
+
+   Same specificity problem as `body` above: base.css's `:focus-visible` is
+   (0,1,0) and a bare one here would tie with it. */
+:root[data-theme] :focus-visible {
+  outline-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--accent-wash);
 }
 
 /* ---- The two shared stylesheets, repainted for this chain only --------- */

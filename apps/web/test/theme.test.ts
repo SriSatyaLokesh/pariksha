@@ -647,3 +647,89 @@ describe("no organiser-only stylesheet reads the cream palette (D1, G5)", () => 
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// NOTHING IN THE ORGANISER MAY BEAT base.css ON SOURCE ORDER.
+//
+// Found in a browser during 6.5e Task 1b, and invisible to every other guard
+// in this repo. `admin.css` re-grounded the page with a bare
+// `body { background: var(--ground) }`. That is (0,0,1), exactly what
+// base.css's own `body { background: var(--color-cream) }` is, so the winner
+// is whichever stylesheet the browser reads last — and the two orders
+// disagree:
+//
+//   `admin-main.tsx` imports base.css FIRST, then admin.css.
+//   `dist/admin.html` links `admin-*.css` FIRST, then `base-*.css`.
+//
+// Vite emits them as separate chunks and orders the links its own way, so
+// the built page is the one that counts and the cream won. The four screens
+// that render outside the shell — `loading`, `error`, `signin`, `setup` —
+// shipped near-white ink on a cream page, with the whole suite green: every
+// jsdom reader here resolves `organiserStylesheets()` in IMPORT order, which
+// is precisely the order the browser does not use.
+//
+// So the fix is not a better reader — a test that models one chunk order is
+// a test that is wrong on the other. It is the INVARIANT that makes order
+// irrelevant: an organiser rule that overrides base.css must win on
+// SPECIFICITY. Two rules with the same selector string cannot, by
+// definition, so that is what this forbids. `:root[data-theme] body` and
+// `:root[data-theme] :focus-visible` are how the two real cases are written.
+describe("no organiser stylesheet ties with base.css on a selector (D1)", () => {
+  const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
+
+  /** Every selector a stylesheet declares, each comma branch on its own. */
+  function selectorsOf(css: string): string[] {
+    return parseRuleBodies(css).flatMap((rule) =>
+      rule.selector.split(",").map((part) => part.replace(/\s+/g, " ").trim()),
+    );
+  }
+
+  // base.css ALONE, not its resolved chain: `tokens.css` and `fonts.css`
+  // come in through it and declare `:root` / `@font-face`, which every
+  // theme block legitimately also names.
+  const baseSelectors = new Set(
+    selectorsOf(stripCssComments(readFileSync(BASE_CSS_PATH, "utf8"))),
+  );
+
+  it("reads base.css's own selectors, so the comparison is not empty", () => {
+    expect(baseSelectors.has("body")).toBe(true);
+    expect(baseSelectors.has(":focus-visible")).toBe(true);
+    // ...and not its imports', which would make `:root` a false positive on
+    // theme.css, the one file that MUST declare it.
+    expect(baseSelectors.has(":root")).toBe(false);
+  });
+
+  // Every SOURCE stylesheet the organiser entry resolves to, except
+  // base.css itself — each read on its own so a tie names the one file that
+  // declares it rather than the chain that reached it. Not "organiser-only"
+  // either: `primitives.css` and `registration.css` are shared with another
+  // entry and would hit the same tie on the same page.
+  const organiserSheets = (() => {
+    const seen = new Set<string>();
+    for (const path of organiserStylesheets()) readResolvedCss(path, seen);
+    return [...seen].filter((path) => path !== BASE_CSS_PATH).sort();
+  })();
+
+  it("reads the organiser's other stylesheets, so the sweep is not empty", () => {
+    // Named rather than counted: the entry's own three minus base.css, plus
+    // everything admin.css imports. A resolver that silently returned less
+    // would make the assertion below pass by checking almost nothing.
+    expect(organiserSheets.map((path) => basename(path))).toContain("admin.css");
+    expect(organiserSheets.map((path) => basename(path))).toContain("shell.css");
+    expect(organiserSheets.map((path) => basename(path))).toContain("testbuilder.css");
+    expect(organiserSheets.length).toBeGreaterThan(5);
+  });
+
+  for (const path of organiserSheets) {
+    it(`${basename(path)} declares no selector base.css also declares`, () => {
+      const css = stripCssComments(readFileSync(path, "utf8"));
+      const ties = [...new Set(selectorsOf(css))].filter((selector) =>
+        baseSelectors.has(selector),
+      );
+      expect(
+        ties,
+        `${basename(path)} declares ${ties.map((tie) => `\`${tie}\``).join(", ")}, which base.css also declares. Equal specificity means the BUILT chunk order decides, and it is NOT the import order — raise the specificity (\`:root[data-theme] <selector>\`) rather than relying on which file comes last.`,
+      ).toEqual([]);
+    });
+  }
+});

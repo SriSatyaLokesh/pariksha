@@ -410,19 +410,13 @@
   padding-block-start: 0;
 }
 
-/* The focus ring, deferred to this plan by theme.css's header. base.css
-   paints :focus-visible with voltage, which is right for the candidate
-   runtime on cream and illegal on a Signal surface. Scoped to the bar and
-   the rail rather than to .shell, because the page inside .shell is still
-   the cream canvas this plan does not re-ground: --focus measures 1.60:1 on
-   cream, so widening this selector before 6.5d and 6.5e move the screens
-   would trade a wrong-world ring for an illegal one. Widening it to .shell
-   is their one-line change. */
-.shell__bar :focus-visible,
-.shell__rail :focus-visible {
-  outline-color: var(--focus);
-  box-shadow: 0 0 0 3px var(--accent-wash);
-}
+/* The focus ring was here, scoped to the bar and the rail because "the page
+   inside .shell is still the cream canvas this plan does not re-ground".
+   6.5e Task 1b re-grounded it and took the widening this comment called its
+   one-line change: `admin.css` now carries `:root[data-theme]
+   :focus-visible`, which reaches the page, the bar, the rail AND the four
+   screens that render outside `.shell` altogether. Two rules painting one
+   ring is how one of them drifts, so this one is gone rather than kept. */
 
 /* ---- D3a: below 719px the shell is ONE column, never a zero column ------ */
 

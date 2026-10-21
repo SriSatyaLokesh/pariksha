@@ -255,7 +255,7 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // fills itself with `--surface`. So the page's own type reads on the
   // ground and a panel's type reads on the surface, which is the same
   // two-level split the cream/canvas pair carried.
-  body: { dark: "signal-bg", light: "signal-l-bg" },
+  ":root[data-theme] body": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__title": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__lead": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__notice": { dark: "signal-surface", light: "signal-l-surface" },
@@ -633,7 +633,7 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // The organiser's own ground and default ink. base.css gives `body` the
   // body-md scale and admin.css re-colours it without restating the type,
   // so the size comes from there.
-  body: { px: 16, weight: 400 },
+  ":root[data-theme] body": { px: 16, weight: 400 },
   // The repaint rules for the two SHARED stylesheets change nothing but a
   // colour, so each one's size and weight are its own rule's, over in
   // registration.css and question.css.
