@@ -390,31 +390,36 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".home__clear": { dark: "signal-surface", light: "signal-l-surface" },
   ".home__clear:disabled": { dark: "signal-surface", light: "signal-l-surface" },
 
-  // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
-  // Same palette and the same reasoning: the editor and the preview are
-  // panels on the body's cream, each filling itself with canvas, so every
-  // colour authoring.css sets is read on canvas.
-  // Phase 6 Task 7 (#71): the candidate runtime now renders every prompt
+  // ---- question.css: shared with the candidate runtime -------------------
+  // `.rendered--stem` and `.prompt-editor__tool` are question.css's, which
+  // authoring.css imports and exam.css imports too. They KEEP the cream
+  // pair for the same reason registration.css's six do, and the organiser's
+  // repaint of them is scored separately above.
+  // Phase 6 Task 7 (#71): the candidate runtime renders every prompt
   // through the same component, and the runner's ground is the page's own
   // cream rather than a card's canvas.
   ".rendered--stem": both("canvas", "cream"),
   ".prompt-editor__tool": both("canvas"),
-  ".prompt-editor__source": both("canvas"),
-  ".preview__heading": both("canvas"),
-  ".preview__toggle": both("canvas"),
+
+  // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
+  // Re-grounded by 6.5e Task 1b. The editor and the preview are panels on
+  // the page's own --ground, each filling itself with --surface, so every
+  // colour authoring.css sets is read on the surface — the same one-level
+  // step the canvas-on-cream pair made.
+  ".prompt-editor__source": { dark: "signal-surface", light: "signal-l-surface" },
+  ".preview__heading": { dark: "signal-surface", light: "signal-l-surface" },
+  ".preview__toggle": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- authoring.css: the bank list and bank browser (P4.2) --------------
-  // The list and the browser are both the page's own cream, same as the
-  // dashboard above — `.bank-list__item` and `.bank-browser__tag-chip` are
-  // the only two elements here that fill themselves with canvas (the same
-  // "card on the page" pattern CardHairline uses), so everything else reads
-  // on cream.
-  ".bank-list__item": both("canvas"),
-  ".bank-list__count": both("canvas"),
-  ".bank-browser__group-label": both("cream"),
-  ".bank-browser__tag-chip": both("canvas"),
-  ".bank-browser__notice": both("cream"),
-  ".bank-browser__empty": both("cream"),
+  // `.bank-list__item` and `.bank-browser__tag-chip` are the only two
+  // elements here that fill themselves (the same "card on the page" pattern
+  // CardHairline uses), so everything else reads on the page's own ground.
+  ".bank-list__item": { dark: "signal-surface", light: "signal-l-surface" },
+  ".bank-list__count": { dark: "signal-surface", light: "signal-l-surface" },
+  ".bank-browser__group-label": { dark: "signal-bg", light: "signal-l-bg" },
+  ".bank-browser__tag-chip": { dark: "signal-surface", light: "signal-l-surface" },
+  ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
+  ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
 
   // ---- exam.css: the candidate runtime (Phase 6 Task 1, #65) -------------
   // DESIGN.md's two canvases. The landing hero is the full-bleed voltage

@@ -386,9 +386,12 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
         // primitives.css: `.button-primary:hover, :focus-visible` (:64),
         // `.button-primary--surface` (:77) AND `.button-secondary:hover,
         // :focus-visible` (:120) — two components, not one. base.css: the
-        // global `:focus-visible` ring (:86-91). The authoring and
-        // test-builder sheets carry their own selected states.
-        "authoring.css",
+        // global `:focus-visible` ring (:86-91). The test-builder sheet
+        // carries its own selected state.
+        //
+        // authoring.css left in 6.5e Task 1b: its two uses were the preview
+        // toggle's and the tag chip's checked borders, which are
+        // `var(--accent)` on the Signal ground now.
         "base.css",
         "primitives.css",
         "testbuilder.css",

@@ -4,10 +4,21 @@
    HTML and the reorderable list — moved to question.css in Phase 6 Task 7
    so exam.css can import those without importing an organiser screen.
 
-   No colour literal: every value is a token var() from tokens.css, which is
-   also why the fenced-code block below has no syntax theme. `language-x` is
-   the only hook markdown-it emits and blocks.css already styles `pre`
-   (ADR 0004, DESIGN.md §3.2). */
+   Phase 6.5e Task 1b re-grounded this file onto theme.css's semantic names
+   (`D1`, `D20`): no colour literal AND no cream token, so one data-theme
+   attribute re-grounds these screens with the rest of the organiser
+   (apps/web/test/theme.test.ts holds this file to it). The ink mapping is
+   ordinal — ink / ink-soft / muted to --ink / --ink-2 / --ink-3 — which
+   preserves the measured ratios almost exactly: the quietest tone was
+   5.18:1 on cream and is 5.28:1 on the dark ground, 5.04:1 on the light one.
+   DESIGN.md's own two-tone split carries the rules: --edge for decoration,
+   --edge-strong for "input outlines, answer rows, palette squares, table
+   rules" — which is why the two grids here took the stronger tone their
+   `hairline` never gave them.
+
+   That is also why the fenced-code block below has no syntax theme.
+   `language-x` is the only hook markdown-it emits and blocks.css already
+   styles `pre` (ADR 0004, DESIGN.md §3.2). */
 
 @import "./question.css";
 
@@ -28,10 +39,10 @@
 .prompt-editor__source {
   width: 100%;
   padding: var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-xs);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-mono-md-family);
   font-size: var(--type-mono-md-size);
   line-height: var(--type-mono-md-line-height);
@@ -43,7 +54,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding: var(--space-md);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-sm);
 }
 
@@ -54,9 +65,9 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-lg);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-md);
-  background-color: var(--color-canvas);
+  background-color: var(--surface);
 }
 
 .preview__bar {
@@ -72,23 +83,23 @@
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .preview__toggle {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-full);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-button-md-family);
   font-size: var(--type-body-sm-size);
   cursor: pointer;
 }
 
 .preview__toggle[aria-checked="true"] {
-  border-color: var(--color-voltage);
-  background-color: var(--color-voltage-soft);
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
 }
 
 .preview__options {
@@ -106,7 +117,7 @@
 
 .preview__key {
   padding-block-start: var(--space-md);
-  border-block-start: 1px solid var(--color-hairline);
+  border-block-start: 1px solid var(--edge);
 }
 
 .preview__key-line {
@@ -135,9 +146,9 @@
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-lg);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-md);
-  background-color: var(--color-canvas);
+  background-color: var(--surface);
 }
 
 /* ---- Type picker (UX-06) ------------------------------------------------- */
@@ -221,10 +232,13 @@
   border-collapse: collapse;
 }
 
+/* The matching/ordering grid is a TABLE and its rules are table rules, which
+   DESIGN.md puts at 3:1 ("input outlines, answer rows, palette squares,
+   table rules") rather than at the decorative tone. */
 .structured-grid th,
 .structured-grid td {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge-strong);
   text-align: center;
 }
 
@@ -260,7 +274,7 @@
 .written-rubric {
   margin: 0;
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-sm);
   display: flex;
   flex-direction: column;
@@ -274,8 +288,10 @@
   padding-block: var(--space-sm);
 }
 
+/* A row rule in a list of rubric rows does the job a table rule does, so it
+   takes the same 3:1 tone (DESIGN.md's two-tone split). */
 .written-rubric-row + .written-rubric-row {
-  border-block-start: 1px solid var(--color-hairline);
+  border-block-start: 1px solid var(--edge-strong);
 }
 
 /* ---- Bank list (UX-02) -------------------------------------------------- */
@@ -296,10 +312,10 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-sm);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   text-align: start;
@@ -308,11 +324,11 @@
 
 .bank-list__item:hover,
 .bank-list__item:focus-visible {
-  border-color: var(--color-hairline-strong);
+  border-color: var(--edge-strong);
 }
 
 .bank-list__count {
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   white-space: nowrap;
@@ -332,7 +348,7 @@
   flex-direction: column;
   gap: var(--space-md);
   padding-inline-end: var(--space-lg);
-  border-inline-end: 1px solid var(--color-hairline);
+  border-inline-end: 1px solid var(--edge);
 }
 
 .bank-browser__groups,
@@ -353,7 +369,7 @@
 
 .bank-browser__group-label {
   margin: 0 0 var(--space-xs);
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
@@ -362,18 +378,18 @@
 
 .bank-browser__tag-chip {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-full);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
   cursor: pointer;
 }
 
 .bank-browser__tag-chip[aria-pressed="true"] {
-  border-color: var(--color-voltage);
-  background-color: var(--color-voltage-soft);
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
 }
 
 .bank-browser__filter-select {
@@ -386,7 +402,7 @@
 
 .bank-browser__filter-select select {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-xs);
 }
 
@@ -406,16 +422,16 @@
 .bank-browser__bulk-bar {
   margin-block-end: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-sm);
-  background-color: var(--color-canvas);
+  background-color: var(--surface);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
 
 .bank-browser__notice {
   margin-block-end: var(--space-md);
-  color: var(--color-flag-risk);
+  color: var(--risk);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
 }
@@ -428,7 +444,7 @@
 .bank-browser__table th,
 .bank-browser__table td {
   padding: var(--space-sm) var(--space-md);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: start;
   vertical-align: top;
 }
@@ -446,7 +462,7 @@
 
 .bank-browser__empty {
   padding-block: var(--space-xl);
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
 }
@@ -463,7 +479,7 @@
 .import-dialog__table th,
 .import-dialog__table td {
   padding: var(--space-sm) var(--space-md);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: start;
   vertical-align: top;
 }
