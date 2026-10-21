@@ -144,7 +144,7 @@ export const landingPayload: LandingPayload = {
   questionCount: 12,
   sections: [{ id: "all", title: "Everything", questionCount: 12, timeLimitMinutes: null }],
   rules: null,
-  proctoring: "off",
+  proctoring: { profile: "off", requirements: [] },
   accessMode: "link_code",
   state: "open",
   opensAt: null,

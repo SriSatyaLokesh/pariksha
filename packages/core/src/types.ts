@@ -1,6 +1,8 @@
 // Mirrors schemas/question-1.json and schemas/bank-1.json exactly: same field
 // names, same optionality. See docs/question-format.md for the prose spec.
 
+import type { ProctoringOverrides, ProctoringProfile } from "./proctoring.js";
+
 export const QUESTION_TYPES = [
   "single",
   "multiple",
@@ -187,11 +189,13 @@ export interface Bank {
 // Test-format types, mirroring schemas/test-1.json's `$defs/section`,
 // `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access`,
 // `release`, `form`, `formField` and `validation` exactly. Only what
-// question selection and import validation need: `consent`, `proctoring`
-// and `retention` are in the schema but no rule in this package reads
-// them, so they are not modelled here yet. Add each when a phase needs it.
+// question selection and import validation need: `retention` is in the
+// schema but no rule in this package reads it, so it is not modelled here
+// yet. Add it when a phase needs it.
 // `registration_form` was the first to be claimed, by Task 5 (#57, P5.4);
-// `timing` by Task 7 (#59, P5.6) and `branding` by Task 10 (#61, P5.8).
+// `timing` by Task 7 (#59, P5.6), `branding` by Task 10 (#61, P5.8), and
+// `proctoring` by Phase 7a Task 4 — `resolveProctoring` (`@pariksha/core`)
+// is the one reader every Phase 7 screen resolves it through (`Q1`).
 
 export interface SourceFixed {
   kind: "fixed";
@@ -480,6 +484,10 @@ export interface Test {
   release?: TestRelease;
   branding?: TestBranding;
   consent?: TestConsent;
+  /** `Q1`: `profile` supplies defaults for `overrides`'s fifteen keys and
+   *  has no independent effect of its own — `resolveProctoring` is the one
+   *  reader every candidate-facing screen resolves this through. */
+  proctoring?: { profile?: ProctoringProfile; overrides?: ProctoringOverrides };
   sections: Section[];
 }
 

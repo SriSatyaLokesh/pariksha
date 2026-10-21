@@ -108,12 +108,6 @@ export function deviceReport(): { ok: boolean; findings: DeviceFinding[] } {
 
 // --- the landing page ----------------------------------------------------
 
-const PROCTORING_LABEL: Readonly<Record<LandingPayload["proctoring"], string>> = {
-  off: "Off",
-  standard: "Standard",
-  strict: "Strict",
-};
-
 /** What the candidate is told about a window they are outside of. Every
  * state carries its own sentence: "the button is greyed out" is not a
  * reason, and a candidate cannot come back tomorrow to ask. */
@@ -189,10 +183,6 @@ export function ExamLanding({
           <dd>{test.durationMinutes} minutes</dd>
           <dt>Questions</dt>
           <dd>{test.questionCount} questions</dd>
-          <dt>Proctoring</dt>
-          <dd>{PROCTORING_LABEL[test.proctoring]}</dd>
-          <dt>Devices</dt>
-          <dd>A laptop or desktop, with a mouse or trackpad.</dd>
           {test.opensAt !== null && (
             <>
               <dt>Opens</dt>
@@ -226,6 +216,22 @@ export function ExamLanding({
           <section className="exam-landing-rules">
             <h2>Rules</h2>
             <p>{test.rules}</p>
+          </section>
+        )}
+
+        {/* `Q1b`: the same sentences the runtime will enforce, so a
+            candidate who will be denied for having no camera learns it
+            before the timer starts rather than after. Empty for Off —
+            and for any test with every control turned off — so no
+            heading appears over nothing to list. */}
+        {test.proctoring.requirements.length > 0 && (
+          <section className="exam-landing-requirements">
+            <h2 id="exam-requirements-heading">Requirements</h2>
+            <ul aria-labelledby="exam-requirements-heading">
+              {test.proctoring.requirements.map((requirement) => (
+                <li key={requirement}>{requirement}</li>
+              ))}
+            </ul>
           </section>
         )}
 

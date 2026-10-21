@@ -23,7 +23,7 @@ const landingFixture: LandingPayload = {
     { id: "numeracy", title: "Numeracy", questionCount: 13, timeLimitMinutes: null },
   ],
   rules: "A candidate cannot go back to an earlier question.",
-  proctoring: "standard",
+  proctoring: { profile: "standard", requirements: [] },
   accessMode: "link_code",
   state: "open",
   opensAt: NOW - DAY,
@@ -77,7 +77,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("C-01: name, duration, question count, sections, rules, proctoring, devices and the window", async () => {
+it("C-01: name, duration, question count, sections, rules and the window", async () => {
   await mount();
   for (const text of [
     /Aptitude/,
@@ -85,14 +85,31 @@ it("C-01: name, duration, question count, sections, rules, proctoring, devices a
     /17 questions/i,
     /Logic/,
     /cannot go back to an earlier question/i,
-    /Standard/,
-    /laptop or desktop/i,
     /Closes/i,
   ]) {
     expect(screen.getByText(text), String(text)).toBeVisible();
   }
   expect(screen.getByText(/Alpha Corp · Hyderabad/)).toBeVisible();
   expect(screen.getByText(/Read every instruction before you begin\./)).toBeVisible();
+});
+
+it("lists Strict's requirements on the start page", async () => {
+  await mount({
+    ...landingFixture,
+    proctoring: {
+      profile: "strict",
+      requirements: ["A laptop or desktop computer.", "A working camera, on for the whole test."],
+    },
+  });
+  expect(await screen.findByText(/A working camera, on for the whole test\./)).toBeVisible();
+});
+
+// Review Focus 5 — most fixtures have no proctoring block at all, which
+// resolves to fully-populated Off: no requirements, and no heading over
+// an empty list either.
+it("shows no requirements and no error when the test has no proctoring block", async () => {
+  await mount({ ...landingFixture, proctoring: { profile: "off", requirements: [] } });
+  expect(screen.queryByRole("list", { name: /requirements/i })).toBeNull();
 });
 
 it("every section is listed with its own question count", async () => {

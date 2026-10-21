@@ -49,7 +49,7 @@ const landing: LandingPayload = {
   questionCount: 7,
   sections: [{ id: "logic", title: "Logic", questionCount: 7, timeLimitMinutes: null }],
   rules: null,
-  proctoring: "off",
+  proctoring: { profile: "off", requirements: [] },
   accessMode: "link_code",
   state: "closed",
   opensAt: null,
