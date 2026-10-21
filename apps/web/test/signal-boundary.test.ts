@@ -97,9 +97,15 @@ describe("D10: a .signal-* construct is declared in signal.css and nowhere else"
       offenders,
       "a .signal-* construct is declared outside signal.css. D10 moves a " +
         "construct only when the organiser needs the same STRUCTURE, and " +
-        "6.5e Task 7 measured that it needs none of them: no organiser route " +
-        "or component renders a .signal-* class, and every candidate already " +
-        "has an organiser equivalent. Note that a move into primitives.css " +
+        "6.5e Task 7 measured that it needs none of them today: no organiser " +
+        "route or component renders a .signal-* class. For most candidates " +
+        "the reason is PURPOSE — the construct exists for a marketing band. " +
+        "For .signal-btn, .signal-card and .signal-panel, which really are " +
+        "structural duplicates of .button-primary and .card-hairline, the " +
+        "reason is SCOPE: unifying them means the landing page renders the " +
+        "organiser's construct, and #187 puts the landing page out of this " +
+        "phase. That second answer is a scope answer and a later phase can " +
+        "reopen it. Note that a move into primitives.css " +
         "is NOT the safe half of the seam — primitives.css is imported by " +
         "landing.css too, so the construct stays rendered by the landing " +
         "page and merely also ships to the organiser. If the answer really " +
@@ -155,18 +161,34 @@ describe("D10: a .signal-* construct is declared in signal.css and nowhere else"
 //
 // That hole is worth its own line because it is not only this test's problem:
 // `theme.test.ts`'s seam guard (:527-530) skips every file whose `chainOf` does
-// not match the chain under test, so an UNASSIGNED file is invisible to it too
-// — including the very `CardHairline.tsx` its comment offers as the example it
-// would catch. Closing it means teaching `CHAINS` about `src/components/`,
-// which is `css-chain.ts`'s business and three other plans' blast radius, so
-// Task 7 reported it rather than widening its own diff.
+// not match the chain under test, so an UNASSIGNED file is invisible to it too.
+//
+// BE PRECISE ABOUT WHAT THAT MISSES, because the first draft of this comment
+// was not. The example `theme.test.ts:448` names — "a landing component that
+// starts rendering `.card-hairline`" — IS caught: a landing component lives
+// under `sections/`, `island/` or `routes/landing.tsx`, all of which `CHAINS`
+// assigns. What escapes is an UNASSIGNED file, `src/components/*` above all.
+// Benign today, and checked rather than assumed: every importer of
+// `CardHairline` and `MonoCaption` is a `routes/*` module or
+// `OrganiserShell.tsx`, never a landing source. Closing it means teaching
+// `CHAINS` about `src/components/`, which is `css-chain.ts`'s business and
+// three other plans' blast radius, so Task 7 reported it to the owner rather
+// than widening its own diff.
 
 const PRIMITIVES = "primitives.css";
 
-/** Every class painted by a rule in `css`: `.a:hover, .b > .c` -> a, b, c. */
+/** Every class painted by a rule in `css`: `.a:hover, .b > .c` -> a, b, c.
+ *
+ *  `parseRuleBodies` recurses into `@media` and DROPS every other at-rule, so
+ *  an `@supports` block's rules are invisible to it — and `primitives.css` has
+ *  one (`:232`), which is the only place `.field-help` is painted. Review round
+ *  2 (N3) caught that as an undercount: the file paints 12 classes and this
+ *  scan saw 11. Rewriting the at-rule keyword is the whole fix, because the
+ *  only thing wanted from inside the block is its selectors. Done here rather
+ *  than in `css-chain.ts`, whose parser three other plans share. */
 function classesPaintedBy(css: string): string[] {
   const hits = new Set<string>();
-  for (const rule of parseRuleBodies(css)) {
+  for (const rule of parseRuleBodies(css.replaceAll("@supports", "@media"))) {
     if (declarations(rule.body).length === 0) continue;
     for (const m of rule.selector.matchAll(/\.([A-Za-z_][\w-]*)/g)) {
       if (m[1] !== undefined) hits.add(m[1]);
@@ -175,15 +197,24 @@ function classesPaintedBy(css: string): string[] {
   return [...hits].sort();
 }
 
-/** Source files grouped by the chain they ship in, read once. */
-const SOURCES = sourceFiles().map((file) => {
-  const relativePath = srcRelative(file);
-  return {
-    path: relativePath,
-    page: chainOf(relativePath)?.page,
+/** Source files grouped by the chain they ship in, read once.
+ *
+ *  `src/styles/` IS EXCLUDED, AND THAT EXCLUSION IS LOAD-BEARING. `tokens.ts`
+ *  is a `.ts` file under `src`, so `sourceFiles()` returns it, and it holds
+ *  quoted class keys — `"mono-caption"` (:268), `"card-hairline"` (:373) —
+ *  which `renders()` matches exactly as if they were markup. A token map
+ *  renders nothing. Leaving it in meant a future mover could satisfy the
+ *  guard below by adding a token-map entry instead of an organiser consumer,
+ *  which is the hole this file exists to close, reopened one level down.
+ *  (Review round 2, N2.) */
+const SOURCES = sourceFiles()
+  .map((file) => ({ path: srcRelative(file), file }))
+  .filter(({ path }) => !path.startsWith("styles/"))
+  .map(({ path, file }) => ({
+    path,
+    page: chainOf(path)?.page,
     text: readFileSync(file, "utf8"),
-  };
-});
+  }));
 
 /** `className="a b"`, `className={"a"}` and a template literal all put the
  *  bare name in the source, so one scan covers them — the same bounded limit

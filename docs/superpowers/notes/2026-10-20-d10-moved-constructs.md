@@ -39,8 +39,8 @@ Four checks, in order. A candidate had to pass all of them to move.
    to `admin.css` (the brief to `admin.css:99-101`). It is no longer there:
    `9c7919c` (6.5e Task 1b) rewrote that header and dropped the quotation, and
    `admin.css:99-101` is now a note about specificity. The warning itself is
-   alive at **`docs/design.md:326`** — "The authoring side is an editing tool,
-   not a marketing page" — which is where it always came from, and
+   alive at **`docs/design.md:325-326`** — "The authoring side is an editing
+   tool, not a marketing page" — which is where it always came from, and
    `primitives.css`'s own header carries the same argument in the form that
    matters here: importing a landing stylesheet into the organiser entry "would
    have shipped the whole landing page to an admin screen to reuse a button".
@@ -107,11 +107,25 @@ The three answers the controller offered, measured rather than reasoned:
   so **one rule** can take **two different values** of the same role on two
   grounds, which is why `registration.css`'s checkbox works in both the
   organiser and the candidate runtime. The landing page and the organiser do
-  not disagree about a _value_ here: they disagree about **geometry and type**
-  — 15.5px against `--type-button-md-size`, a full-radius 13px/24px pill
-  against 9px/14px at `--rounded-md`. A colour indirection moves none of that,
-  so the shared rule would still have to pick one geometry and change whichever
-  page lost.
+  not disagree about a _value_ here: they disagree about **geometry and type**,
+  which a colour indirection does not move.
+
+  Measured against the right comparator — `.button-primary`, not
+  `.button-secondary` (review round 2, N4). `.signal-btn` is `15.5px`,
+  `padding: 13px 24px`, `--rounded-full`. `.button-primary`
+  (`primitives.css:62-70`) is `--type-button-md-size` (**16px**),
+  `var(--space-md) var(--space-xl)` (**12px/24px**), `--rounded-full`, **plus
+  `height: 46px`**. So the radius and the inline padding already agree, and
+  what is left is 0.5px of type, 1px of block padding, and a pinned height the
+  landing pill does not carry.
+
+  **Those differences being small is the point, not a weakness in the
+  argument.** They are near-identical, which is why the row above calls them a
+  real duplicate — and why the blocker is scope rather than difference:
+  unifying them would change the landing page's primary button by a measurable
+  amount, and #187 forbids that. A per-chain colour pair would not help,
+  because none of the three differences is a colour.
+
 - **Leave it in `signal.css`.** The direction `D10` points, and the one the
   measurement supports.
 
