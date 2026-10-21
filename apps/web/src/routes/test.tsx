@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { can } from "@pariksha/core";
-import type { FormField, TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
+import type { TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
 import {
   ApiError,
   type Actor,
@@ -23,6 +23,7 @@ import {
   SettingRow,
   accessSummary,
   brandingSummary,
+  identityFieldOf,
   registrationSummary,
   resultsSummary,
   timingSummary,
@@ -614,16 +615,6 @@ export function TestBuilder({
       )}
     </>
   );
-}
-
-/** The field a candidate list is keyed on: the first `unique: true` field
- * in the registration form's own order. The same rule
- * `apps/api/src/import/candidates.ts` applies — stated in both places
- * because the panel prints it and the converter keys on it, and a screen
- * naming one column while the server wants another is the defect this
- * exists to avoid. */
-export function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
-  return form?.fields.find((field) => field.unique === true) ?? null;
 }
 
 

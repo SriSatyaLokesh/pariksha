@@ -1,5 +1,6 @@
 import { useId, type ReactNode } from "react";
 import type {
+  FormField,
   RegistrationFormSpec,
   TestAccess,
   TestBranding,
@@ -9,14 +10,6 @@ import type {
 import { MODE_LABEL } from "./AccessPanel";
 import { SHOW_LABEL, WHEN_LABEL } from "./ReleasePanel";
 import { isZone } from "./TimingPanel";
-// `test.tsx` imports this module too, so this is a cycle — a deliberate
-// and safe one. `identityFieldOf` is a hoisted function declaration and
-// neither module calls the other at module scope; it is first called at
-// render. The alternative was a fourth copy of "the first `unique: true`
-// field in the form's own order", which is the rule `AccessPanel`'s own
-// prop, `apps/api/src/import/candidates.ts` and the publish checklist all
-// key on.
-import { identityFieldOf } from "../../routes/test";
 
 // Phase 6.5d Task 1, spec D7: the five settings — timing, access,
 // registration form, results, branding — collapse into one panel of rows
@@ -42,6 +35,22 @@ import { identityFieldOf } from "../../routes/test";
 // identically to a row whose author never scrolled far enough.
 
 export type PanelKey = "timing" | "access" | "registration" | "results" | "branding";
+
+/** The field a candidate list is keyed on: the first `unique: true` field
+ * in the registration form's own order. The same rule
+ * `apps/api/src/import/candidates.ts` applies — stated in both places
+ * because the panel prints it and the converter keys on it, and a screen
+ * naming one column while the server wants another is the defect this
+ * exists to avoid.
+ *
+ * It lives here rather than in `test.tsx` because it is a pure derivation
+ * over `FormField[]` with no route knowledge in it, and because every
+ * other thing this module reuses (`MODE_LABEL`, `WHEN_LABEL`,
+ * `SHOW_LABEL`, `isZone`) is a sibling import. The shell takes it from
+ * here; nothing points back up. */
+export function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
+  return form?.fields.find((field) => field.unique === true) ?? null;
+}
 
 export function SettingRow({
   id,
