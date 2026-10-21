@@ -306,6 +306,40 @@ describe("the checklist rail", () => {
     expect(new URLSearchParams(window.location.search).get("section")).toBe("quant");
   });
 
+  it("shows one named passing light when there is nothing to report", async () => {
+    // The one arm of the strip that no test ever rendered. Zero rows IS
+    // exercised — `checklist.test.tsx` and `lifecycle.test.tsx` both do it —
+    // but both leave the rail DOCKED, and the strip does not render at all
+    // while it is docked. So the passing light, its accessible name, and the
+    // `data-severity="passing"` hook that testbuilder.css's dimmed-but-
+    // visible ruling hangs off all shipped unexercised: a branch with no
+    // guard rather than a weak one.
+    await openBuilder(fakeClient({ checklist: async () => [] }));
+    await waitFor(() => expect(within(rail()).getByText("All clear")).toBeVisible());
+
+    fireEvent.click(collapse());
+
+    const lights = within(screen.getByRole("list", { name: /checklist lights/i }));
+    // ONE light. Not none — an empty strip would read as "the checks have
+    // not run" — and not one per row, because there are no rows.
+    expect(lights.getAllByRole("listitem")).toHaveLength(1);
+
+    // Named, because a colour is not a meaning: the strip has three and a
+    // reader who sees none of them gets this sentence instead (`O-04`).
+    const name = lights.getByText("Passing — every check is clear.");
+
+    // The attribute the stylesheet selects on, asserted on the rendered
+    // node: `.checklist-rail__light[data-severity="passing"]` is the rule
+    // carrying the 0.75 that composites to 3.28:1 over cream, and a light
+    // that rendered under a different severity would take a flag colour.
+    expect(name.parentElement).toHaveAttribute("data-severity", "passing");
+    expect(name.parentElement).toHaveClass("checklist-rail__light");
+
+    // A state, not a journey. There is nowhere to go from a clear check, so
+    // it is text in the strip and never a control.
+    expect(lights.queryAllByRole("button")).toEqual([]);
+  });
+
   it("floats the panel over the page without reflowing the spine", async () => {
     await openBuilder();
     await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
