@@ -29,7 +29,7 @@ import { CardHairline } from "../components/CardHairline";
  * the sample is a `pariksha/bank@1` document and handing it to the test
  * importer would be handing someone a file that cannot work.
  */
-export interface ImportResult {
+interface ImportResult {
   imported: number;
   issues: ImportReport["issues"];
   rebound?: TestImportReport["rebound"];
