@@ -29,7 +29,7 @@ export const STATE_LABEL: Record<TestState, string> = {
 //
 // The five below are still Unicode characters and are NOT this task's to
 // move (6.5d Task 6 is scoped to the "In review" diamond, both sites); they
-// go with the rest of the repo's icon-glyph sweep, filed as #200. The badge's
+// go with the rest of the repo's icon-glyph sweep, filed as issue 200. The badge's
 // own glyph is `Icon name="review"` as of that task — one family, one stroke.
 const STATE_GLYPH: Record<TestState, string> = {
   draft: "●",
