@@ -142,11 +142,6 @@ function toApiFilter(filter: UrlFilter): TestFilter {
   };
 }
 
-/** A download is still a fetch (repo convention, `routes/bank.tsx`'s own
- * note) — `client.exportTest` makes the network call; this only turns an
- * already-fetched document into a saved file. Duplicated from `bank.tsx`
- * rather than shared: six lines, two callers, and a `lib/download.ts` for
- * them would be a module whose whole content is one DOM idiom. */
 const SLUG_HELP = "Letters, numbers and hyphens, starting with a letter or number.";
 const NAME_MAX = 200;
 

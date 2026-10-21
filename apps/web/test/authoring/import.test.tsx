@@ -431,8 +431,16 @@ describe("the import rules are unchanged by the move", () => {
     upload(fileOf("bank.csv", "id,type,prompt,options,key\n", "text/csv"));
     await screen.findByText(/nothing was imported/i);
 
+    // Fix round 1, Minor 2: this was `getAllByText("4")`, inherited verbatim
+    // from the deleted `import-dialog.test.tsx` — and an exact string match
+    // cannot see the regression it exists for. The defect is the Question
+    // column rendering "line 4" beside the Line column's own "4"; `"4"`
+    // matches neither "line 4" nor any cell containing it, so the count
+    // stayed 1 with the defect present and the guard could never redden.
+    // The word boundary is what makes it count occurrences of the NUMBER
+    // wherever it appears in the row.
     const row = screen.getByRole("row", { name: /could not parse/ });
-    expect(within(row).getAllByText("4")).toHaveLength(1);
+    expect(within(row).getAllByText(/\b4\b/)).toHaveLength(1);
   });
 });
 
