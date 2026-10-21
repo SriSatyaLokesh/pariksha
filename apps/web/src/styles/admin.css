@@ -2,6 +2,12 @@
    Phase 3 Task 9. Loaded by src/admin-main.tsx only — never by the landing
    page, and never the other way round (test/bundle.test.ts).
 
+   Phase 6.5e Task 2 was briefed to retire this file as a placeholder and
+   found nothing to retire — see the note over `.organiser` below for what
+   each surviving rule is still doing and which one `D15` reading is open.
+   What it did change is one scale: the page's inline inset was a component
+   scale value doing a page-to-edge job.
+
    Phase 6.5e Task 1b REWROTE the palette half of this file. docs/design.md's
    screen-inventory note — "cream and ink surfaces, hairline rules ... voltage
    reserved for the primary action and the focus ring" — described the world
@@ -214,7 +220,38 @@
 
 /* ---- Page ------------------------------------------------------------- */
 
-/* One column, centred, 560px: DESIGN.md has no measure for an application
+/* NOT A PLACEHOLDER ANY MORE, and 6.5e Task 2 checked rather than assumed.
+   The plan carried this file forward as "the placeholder this phase retires,
+   196 lines" (brief) / "219 lines" (dispatch); it is 360, and every selector
+   in it is reachable from a rendered screen — a grep over the .tsx sources
+   finds a user for each of the eleven below. Task 1b rewrote its colour half
+   and the page half is still load-bearing, so there is nothing here to
+   delete:
+
+   - `.organiser` is BOTH the shell's page (`OrganiserShell.tsx:335` renders
+     `organiser organiser--wide shell__page` on one <main>) and the whole page
+     of the four arms that render OUTSIDE the shell — `loading`, `error`,
+     `signin`, `setup`. shell.css's `.shell > .shell__page` beats the padding
+     and the margin below for the first set and reaches none of the second,
+     so those declarations are live exactly where the shell is not.
+   - `.organiser--wide`'s 1080px clamp is read BY shell.css, whose own
+     comment turns on it ("absorb the free space .organiser--wide's max-width
+     leaves"), and `.organiser--full` is `D18`'s opt-out from it.
+   - `.organiser__title` and `.organiser__lead` are the SHELL's head
+     typography, rendered by `OrganiserShell.tsx:340-341`.
+
+   WHAT A LATER PLAN WOULD HAVE TO TAKE, named here rather than left to be
+   rediscovered: the page stack (`display: flex` and its `gap`) is the shell
+   page's as much as the bare screens', and splitting the two would need a
+   second class on the four bare arms. The gap is `--space-lg`, a COMPONENT
+   scale value on a page-level stack, which is the one `D15` reading in this
+   file that is open. It is not changed here because it is not free: the test
+   list has five of these gaps above its table, so moving them one step up
+   the page scale spends 40px of chrome and takes `AG1`'s `BEFORE_TOP` (785.5,
+   zero slack) red. That is a trade for the task that also reduces the chrome,
+   with the measurement in front of it.
+
+   One column, centred, 560px: DESIGN.md has no measure for an application
    screen, and 560px keeps a 16px body line inside the 60-75 character
    window the form copy needs. The dashboard widens to the landing page's
    own 1080px so a future test table has somewhere to go. */
@@ -222,7 +259,14 @@
   max-width: 560px;
   margin-inline: auto;
   padding-block: var(--space-4xl);
-  padding-inline: var(--space-lg);
+  /* The page scale's first step, not `--space-lg`. This is a page-to-edge
+     inset and `--space-lg` is `D15`'s component scale; shell.css's header
+     states the mapping and says a rule never mixes one scale's value into
+     the other's job. It is the same `--space-xl` shell.css gives its own
+     page below 719px, so the two insets agree where they are both in force.
+     Costs the density gate nothing: inline only, and overridden by
+     `.shell > .shell__page` on every screen that has a shell. */
+  padding-inline: var(--space-xl);
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);

@@ -230,6 +230,19 @@ describe("TestList", () => {
     expect(row).not.toBeNull();
     expect(within(row as HTMLElement).getByText(/draft/i)).toBeVisible();
     expect(row?.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
+
+    // 6.5e Task 2, issue 200: the glyph half, which this test was named for
+    // and could not tell from a Unicode character — an `aria-hidden` <span>
+    // holding U+25CF satisfied the line above exactly as well as an icon
+    // does. It is the shared `ICONS`/`Icon` family now (spec §13, "one
+    // family, consistent stroke, SVG"), the same assertion the "In review"
+    // badge below already makes, and `aria-hidden` so the state's accessible
+    // name is its label and nothing else.
+    const badge = within(row as HTMLElement).getByText(/draft/i).closest(".test-state") as HTMLElement;
+    const glyph = badge.querySelector("svg.shell__icon");
+    expect(glyph, "the state glyph is not from the one icon family").not.toBeNull();
+    expect(glyph).toHaveAttribute("aria-hidden", "true");
+    expect(badge.textContent).not.toMatch(/[■-◿]/);
   });
 
   it("the In review badge is text plus glyph, never colour alone", async () => {
@@ -453,7 +466,15 @@ describe("TestList", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: /^create test$/i }));
 
-    expect(await screen.findByText(/already exists in this workspace/i)).toBeVisible();
+    const message = await screen.findByText(/already exists in this workspace/i);
+    expect(message).toBeVisible();
+
+    // Issue 200, the other half of this file's glyph sweep: the error mark
+    // was U+26A0, a text character. Same family, same stroke, `aria-hidden`
+    // so the alert reads as the sentence alone.
+    const alert = message.closest(".field-error") as HTMLElement;
+    expect(alert.querySelector("svg.shell__icon"), "the error mark is not from the one icon family").not.toBeNull();
+    expect(alert.textContent).not.toContain("⚠");
   });
 
   // ---- `D7c`: State is the lifecycle, Version is the publish history ----

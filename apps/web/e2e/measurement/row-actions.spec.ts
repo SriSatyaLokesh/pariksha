@@ -457,6 +457,15 @@ for (const table of Object.keys(TABLES) as TableName[]) {
 // clientWidth`) in the same breath that the DOCUMENT is not. A page that does
 // not scroll sideways because nothing overflows anywhere would satisfy the
 // second half alone, and would pass with the scroll container deleted.
+//
+// WHICH OF THE TWO WIDTHS IS THE EVIDENCE, measured by probe rather than
+// assumed. Forcing `.table-scroll` to `overflow-x: visible` reddens three of
+// these four and leaves `testList at 390px` green — because at 390px
+// shell.css's `.shell__page > * { overflow-x: auto }` is in force and the
+// test list's wrapper is a direct child of `.shell__page`, so the page's own
+// narrow rule carries it. That pass is correct behaviour and not evidence
+// for `.table-scroll`. The 1440px pair is the evidence, and `D21a`'s defect
+// lives at desktop width anyway.
 
 for (const { label, width, height } of WIDTHS) {
   for (const table of Object.keys(TABLES) as TableName[]) {

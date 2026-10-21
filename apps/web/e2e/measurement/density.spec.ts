@@ -54,6 +54,19 @@ const BEFORE: Record<Surface, number> = {
   // 8 on `main`, 10 under 6.5c's shell: the same 44px row with 61px less
   // chrome above it. Tightened, never loosened.
   bankList: 10,
+  // 6.5e Task 2 measured this one at 7 on two runs and 8 on two others, with
+  // no code change between them, and chased it before finding the cause:
+  // the seeded questions come back in an order sqlite is free to vary (they
+  // share an `updatedAt`), and ONE of the forty wraps its prompt to 88px
+  // against the other thirty-nine at 63px. Whether that row lands inside the
+  // first eight decides whether the eighth row's bottom clears y=900, so the
+  // count flips by one between runs. The row HEIGHT is a median over all
+  // forty and does not move; only the count does.
+  //
+  // So this figure's slack is load-bearing and the console line beside it is
+  // not reproducible to better than +/-1. Do not ratchet it to a figure a
+  // single run printed — it would be red on the next run for no reason
+  // anyone could find. Raising it needs the fixture made deterministic first.
   bankBrowser: 5,
   questionPicker: 8,
 };

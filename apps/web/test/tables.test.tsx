@@ -55,6 +55,7 @@ import { fileURLToPath } from "node:url";
 
 import {
   SEMANTIC_NAMES,
+  type CssRule,
   declarations,
   declaredFor,
   entryStylesheets,
@@ -322,7 +323,26 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
       expect(element, `${table} did not render`).not.toBeNull();
       const container = (element as HTMLElement).parentElement as HTMLElement;
 
+      // THE RULE ITSELF, and a probe said this half had to be here. With only
+      // the `paintsIn` reading below, changing `.table-scroll` to
+      // `overflow-x: visible` reddened the bank browser and NOT the test
+      // list: the test list's wrapper is a direct child of `.shell__page`, so
+      // shell.css's `@media (max-width: 719px) { .shell__page > * }` also
+      // selects it — and this file's own header records that `parseRuleBodies`
+      // flattens `@media`, so the reader scored a narrow-width rule as if it
+      // applied at every width. One surface's guard was passing on a rule
+      // that is not in force where the defect lives.
+      const own = parseRuleBodies(ORGANISER).filter((rule) =>
+        rule.selector.split(",").some((part) => part.trim() === ".table-scroll"),
+      );
+      expect(own, "no .table-scroll rule in the organiser's chain").toHaveLength(1);
+      expect(declarations((own[0] as CssRule).body)).toContain("overflow-x: auto");
+
+      // ...and that the rule really reaches THIS element, which the rule set
+      // alone cannot say.
+      expect(container).toHaveClass("table-scroll");
       expect(paintsIn(container, "overflow-x", ORGANISER)).toBe("auto");
+
       // ...and it is the table's OWN wrapper, not the page. A container that
       // is also holding the create form and the filter bar would scroll
       // those sideways with the table.
