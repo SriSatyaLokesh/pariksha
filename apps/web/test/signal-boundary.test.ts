@@ -180,6 +180,11 @@ const PRIMITIVES = "primitives.css";
 /** Every class painted by a rule in `css`: `.a:hover, .b > .c` -> a, b, c.
  *
  *  `parseRuleBodies` recurses into `@media` and DROPS every other at-rule, so
+ *  CEILING, so the next reader meets it here and not in a report: this swap
+ *  is correct only because the scan wants SELECTORS and nothing else. The
+ *  moment it cares WHICH declarations are conditional, the rewrite is wrong
+ *  and the fix belongs in `css-chain.ts`'s parser rather than here.
+ *
  *  an `@supports` block's rules are invisible to it — and `primitives.css` has
  *  one (`:232`), which is the only place `.field-help` is painted. Review round
  *  2 (N3) caught that as an undercount: the file paints 12 classes and this
