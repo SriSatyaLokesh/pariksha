@@ -15,6 +15,20 @@
 // the declaration that wins. That is `paintsIn`, and it is the same reader
 // `contrast-usage.test.ts` scores colours with. The pixel half of this task
 // is `apps/web/e2e/measurement/density.spec.ts`'s job and is measured there.
+//
+// AND ONE MORE THING THIS READER CANNOT SEE, disclaimed rather than left for
+// someone to trust by accident (fix round 1, m1): `parseRuleBodies`
+// (`test/css-chain.ts`) recurses into `@media` blocks AND DISCARDS THE
+// CONDITION. So every dock assertion below — `display: grid`,
+// `grid-column: 2`, `position: sticky` — would pass identically if the
+// breakpoint read `min-width: 12000px`, or `@media print`. **The 1200px
+// value is asserted by nothing here, and nothing in the e2e gate either**:
+// with no dock at 1440 the drawer simply stays in the flow,
+// `scrollIntoViewIfNeeded` brings it to the top, and all three density
+// figures still pass. What these assertions pin is that the declarations
+// exist and win where they apply; the breakpoint itself is held by the
+// measurement in the report and by review. Fixing the reader is three plans'
+// blast radius and is on the owner's list, not this file's.
 
 import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent, waitFor, within } from "@testing-library/react";
@@ -30,7 +44,7 @@ import {
   type Workspace,
 } from "../../src/lib/api";
 import { OrganiserApp } from "../../src/routes/organiser";
-import { organiserStylesheets, paintsIn, readResolvedCss } from "../css-chain";
+import { declaredFor, organiserStylesheets, paintsIn, readResolvedCss } from "../css-chain";
 
 /** The organiser's whole stylesheet chain, in the order `admin-main.tsx`
  *  loads it — derived from that module rather than listed, the same way
@@ -241,6 +255,17 @@ describe("D18: the question picker docks beside the paper", () => {
     expect(paintsIn(label, "white-space", ORGANISER_CSS)).not.toBe("nowrap");
     expect(paintsIn(prompt, "white-space", ORGANISER_CSS)).not.toBe("nowrap");
 
+    // The positive control for the line above (fix round 1, m2). A negative
+    // read through `declaredFor` is also what a NON-NULL BUT WRONG element
+    // returns — that function's own header says so — and `white-space` was
+    // the only thing asserted against `label`. This pins a declaration that
+    // must be there, and it earns the line twice: the clamped prompt is a
+    // BLOCK-level box, so without `display: flex` here an inline `(N pts)`
+    // after it starts a second line and every one-line prompt becomes a
+    // two-line row — the density regression this whole task is measured
+    // against, and nothing else asserted it.
+    expect(paintsIn(label, "display", ORGANISER_CSS)).toBe("flex");
+
     // ...and the clamp, which is the half that did not exist. Two lines, and
     // the overflow hidden without which the clamp does nothing at all.
     expect(paintsIn(prompt, "-webkit-line-clamp", ORGANISER_CSS)).toBe("2");
@@ -253,6 +278,35 @@ describe("D18: the question picker docks beside the paper", () => {
     expect(prompt.querySelector(".picker-drawer__points")).toBeNull();
     expect(label.querySelector(".picker-drawer__points")).not.toBeNull();
     expect(screen.getByRole("checkbox", { name: /\(1 pts\)$/ })).toBeInTheDocument();
+  });
+
+  it("bounds the list's height at every width, docked or not", async () => {
+    // Fix round 1, M1. Removing the list's own `max-height: 16rem` is only
+    // safe where the dock supplies another bound, and the dock lives inside
+    // `@media (min-width: 1200px)`. Below it the list was unbounded: forty
+    // rows at full height, `overflow-y` never engaging, and the Cancel and
+    // Confirm buttons — which render AFTER the <ul> — pushed ~900px down a
+    // page the drawer already sat at the bottom of.
+    //
+    // WHAT THIS CAN AND CANNOT SEE. `declaredFor` returns every value the
+    // property is given by a rule that really selects this element,
+    // weakest-first, so the array below is the base bound followed by the
+    // dock's release — two rules, and that is exactly the pairing M1 broke.
+    // It CANNOT see which `@media` condition the release sits under
+    // (`parseRuleBodies` discards it — see this file's header), so it proves
+    // "a bound exists and one rule releases it", not "released only above
+    // 1200px". Naming the two bodies is the strongest claim available here:
+    // delete the base bound and this reads `["none"]`; delete the release and
+    // it reads `["16rem"]`; move the release out of the docked scope and the
+    // selector stops matching, which is the same red.
+    const drawer = await openPicker();
+    const list = drawer.querySelector(".picker-drawer__list");
+    if (list === null) throw new Error("the picker drawer holds no .picker-drawer__list");
+
+    expect(declaredFor(list, "max-height", ORGANISER_CSS)).toEqual(["16rem", "none"]);
+
+    // A bound means nothing without the scroller it bounds.
+    expect(paintsIn(list, "overflow-y", ORGANISER_CSS)).toBe("auto");
   });
 
   it("traps no focus and closes on Escape", async () => {

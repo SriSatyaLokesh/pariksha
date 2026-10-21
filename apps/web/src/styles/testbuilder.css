@@ -251,7 +251,21 @@
    whether a picker exists and the stylesheet decides what that does to the
    layout. `grid-row: 1 / span 40` for the same reason the rail gives: with
    no `grid-template-rows` the explicit grid has one line, so `1 / -1`
-   collapses the span to a single row and sticky would have no slack.
+   collapses the span to a single row and sticky would have no slack. The
+   rail's CEILING comes with its construct and is inherited rather than
+   escaped — ponytail: a `.section-list` with more than 40 direct children
+   loses the column's sticky slack (it stops sticking, it does not break);
+   raise the span, or give the list explicit rows, if one ever grows that
+   long.
+
+   The column keeps `overflow: visible` under its `max-height`, which
+   `e2e/density.ts` depends on (`clipOf` must skip it, leaving the list the
+   one clipping ancestor). The consequence, named rather than discovered: if
+   the children that are NOT the list — heading, the four filter fields,
+   footer, actions — ever exceed the bound between them, the column spills
+   below the fold with no scroller of its own. Not reachable at the gate's
+   1440x900, where they come to 453px of 796. The knob if it ever is would be
+   letting the filters shrink, never clipping the column.
 
    THE COLUMN'S WIDTH IS A MEASURED FIGURE, NOT A TASTE ONE, and `AG1` is
    why. `e2e/measurement/density.spec.ts` holds this surface's row height at
@@ -305,10 +319,34 @@
     align-self: start;
     /* Under the shell's own bar plus the page's top inset, so the column and
        the bar never overlap. `--shell-bar` is declared on `.shell` and
-       inherits down to here. */
+       inherits down to here.
+
+       The two `calc()`s below are the checklist rail's, character for
+       character, which is the point — one construct, not two. They are also
+       the formula `home.css` records as discarded (it went to `100%` of the
+       grid track), because they are only right while `.shell > .shell__page`
+       spends `--space-xl` on `padding-block` and nothing holds the two equal.
+       Matching the rail is still the defensible call and a third variant
+       would be worse: whoever moves the rail to a track-relative bound moves
+       this with it. */
     position: sticky;
     inset-block-start: calc(var(--shell-bar) + var(--space-xl));
     max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+  }
+
+  /* ...and ONLY here does the list give up its own 16rem bound, because only
+     here is there another one. The column above caps the drawer at the
+     viewport, so the list fills what the heading, the filters, the footer and
+     the actions leave — one scroll region instead of a 16rem box nested
+     inside a viewport-bounded one, which is where the extra visible rows come
+     from. `min-height: 0` because a flex item's default `min-height: auto`
+     refuses to shrink below its content and `overflow-y` would never engage.
+     Undo this pairing in either direction and the list is unbounded at some
+     width; `question-picker.test.tsx` asserts both halves are present. */
+  .section-list > .picker-drawer .picker-drawer__list {
+    max-height: none;
+    flex: 1;
+    min-height: 0;
   }
 }
 
@@ -318,21 +356,23 @@
   gap: var(--space-md);
 }
 
-/* The list is the drawer's one scroll region, and it FILLS the column rather
-   than sitting at a fixed 16rem inside it. That is the density half of the
-   dock: a 16rem box inside a column already bounded by the viewport is a
-   second scroller nested in the first, and it would hold the surface at the
-   eight rows it fit when the drawer was a block at the bottom of the page.
-   `min-height: 0` because a flex item's default `min-height: auto` refuses
-   to shrink below its content and `overflow-y` would then never engage. */
+/* THE LIST IS ALWAYS BOUNDED, and the bound lives HERE rather than in the
+   dock — fix round 1, M1. The dock's own bound (`flex: 1` inside a column
+   the viewport caps) only exists inside `@media (min-width: 1200px)` above,
+   so releasing `max-height` unconditionally left the list with no height
+   limit at all below that breakpoint: `flex: 1 1 0%` in an unbounded,
+   content-sized flex column resolves to the content's own height, forty rows
+   of it (~1,150px), and `overflow-y` never engages. The footer and the
+   Cancel/Confirm row render AFTER this `<ul>`, so Confirm went ~900px
+   further down a page the drawer already sat at the bottom of. 16rem is
+   where that bound has always been and it stays the undocked default. */
 .picker-drawer__list {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   padding: 0;
   list-style: none;
-  flex: 1;
-  min-height: 0;
+  max-height: 16rem;
   overflow-y: auto;
 }
 

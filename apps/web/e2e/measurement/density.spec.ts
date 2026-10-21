@@ -68,6 +68,41 @@ const BEFORE: Record<Surface, number> = {
   // single run printed — it would be red on the next run for no reason
   // anyone could find. Raising it needs the fixture made deterministic first.
   bankBrowser: 5,
+  // 6.5e Task 5 (`D18`) docked this surface, and **this figure must not be
+  // raised**, though four runs printed 11, 9, 8 and 10. It is left at 8 by
+  // ruling, and the reason is the same one `bankBrowser` above spends twelve
+  // lines on — now live here too.
+  //
+  // THE MECHANISM, probed rather than inferred. The list is no longer a fixed
+  // 16rem box that cut at exactly eight rows whatever they contained; it
+  // fills a viewport-bounded column, measured at a **343px window**. Of the
+  // forty seeded rows **36 are 25px and 4 are 50px** — the `Thermodynamics`
+  // prompts, the longest topic, which take the clamp's second line in a 544px
+  // column. The seeded questions share an `updatedAt`, so sqlite is free to
+  // vary their order, and which of those four land inside the window is what
+  // moves the count between 8 and 11.
+  //
+  // **The floor is 8 in the WORST DRAW, not deterministically**, and the
+  // arithmetic is why it is safe to leave here: four tall rows is the most the
+  // fixture can produce, and all four inside the window costs
+  // `4*50 + 3*4 = 212px`, leaving 127px — which holds four more 25px rows
+  // (`4*25 + 3*4 = 112`) and not five (`141`). Exactly 8. So this cannot go
+  // red on row order, and it has **zero margin**: a fifth tall row, or one
+  // 29px pitch off the window, takes it red.
+  //
+  // Ratcheting it to 9 would manufacture the flake, and `AG2` forbids
+  // freezing a number nothing has proved — 9, 10 and 11 are exactly that.
+  // **Raising it needs the fixture made deterministic first.** The bar that
+  // DID ratchet on this surface is `BEFORE_TOP` below, because that one is
+  // mechanically stable rather than statistically lucky; its own note says
+  // how.
+  //
+  // AND THE ROW HEIGHT IS NOW BIMODAL, which "25 -> 25, unchanged" is true
+  // about but does not say. `BEFORE_HEIGHT.questionPicker` is a MEDIAN over
+  // forty rows — index 20 — so it cannot move until **21** of them wrap. Four
+  // do. The height bar is therefore a much weaker guard on this surface than
+  // its unchanged figure suggests, which is the second half of why the count
+  // must keep its floor rather than be tightened to a lucky run.
   questionPicker: 8,
 };
 
@@ -112,6 +147,8 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
  * - **question picker unchanged at 495.63.** The builder arm passes no
  *   `title`, so it renders no `.shell__head`, and the drawer is scrolled
  *   into view rather than measured from the top of the document.
+ *   (6.5e Task 5 then lowered it to 384.81 by docking the picker — that is
+ *   this list's history, not its current figures; see the entry itself.)
  * - **bank browser 312.31 -> 385.31. The one bar on this branch that was
  *   RAISED, by ruling, on evidence. Read the block over its figure below
  *   before you touch it.**
@@ -168,7 +205,29 @@ const BEFORE_TOP: Record<Surface, number> = {
   // 900, so a restyle that spends another 10px above the table takes
   // `BEFORE.bankBrowser`'s count red as well — two bars, the top one first.
   bankBrowser: 385.31,
-  questionPicker: 495.63,
+  // **Tightened from 495.63 by 6.5e Task 5 (`D18`), which docked the picker
+  // as a right-hand column.** A ratchet, in the only direction this file
+  // allows, and the reason it is a proven number rather than a hopeful one is
+  // MECHANICAL, not statistical:
+  //
+  // The column is `position: sticky` at
+  // `calc(var(--shell-bar) + var(--space-xl))`, so `openSurface`'s
+  // `scrollIntoViewIfNeeded` parks it at a fixed **80px** no matter where the
+  // organiser had scrolled to, and the first row's top becomes a pure
+  // function of the drawer's own chrome above the list — its heading and the
+  // filter form. That is independent of the row order which makes the COUNT
+  // above jitter, which is why this figure printed to the hundredth on four
+  // separate runs where the count printed four different values. Two bars on
+  // one surface, stable for different reasons, and only this one earned a
+  // tighter bar.
+  //
+  // What it buys: the dock took 110.82px of chrome out from above this list.
+  // Left at 495.63 the next task could spend all of it again unwatched, which
+  // is the single regression this bar exists to catch.
+  //
+  // Zero slack, like every figure in this block: `toBeLessThanOrEqual`, so
+  // +0.01px is red.
+  questionPicker: 384.81,
 };
 
 // Comfortably more rows than any plausible redesign fits in 900px, so the
