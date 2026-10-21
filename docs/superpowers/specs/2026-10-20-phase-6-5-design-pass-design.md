@@ -409,8 +409,10 @@ vermilion family, which makes the palette square and the focus ring read as sing
 > **Why.** #181 names deciding this wrong in either direction as expensive. Structure-versus-purpose
 > is the only line checkable by reading one selector.
 >
-> **Cost if wrong.** Over-moving is worse: it is `admin.css`'s own warning about marketing styling
-> in an editing tool.
+> **Cost if wrong.** Over-moving is worse: it is the warning at `docs/design.md:325-326` — "The
+> authoring side is an editing tool, not a marketing page" — about marketing styling in an editing
+> tool. *(Citation corrected by 6.5e Task 7: this clause cited `admin.css`, whose header `9c7919c`
+> rewrote; the warning never originated there.)*
 
 ## 10. D11 — prototype first, then code
 
@@ -806,7 +808,12 @@ will be lost first.
 
 - Final shell proportions within `D15`'s scales: rail width (prototype uses 236px / 56px
   collapsed), top bar height (56px), checklist rail (320px / 52px collapsed).
-- The named list of constructs moving under `D10`, one line of reason each.
+- ~~The named list of constructs moving under `D10`, one line of reason each.~~ **Settled by 6.5e
+  Task 7: the list is empty — nothing moves out of `signal.css`.** All twenty-one candidates are
+  rendered by `sections/signal/` today, so no move would relocate a shared construct; each would
+  only *add* the organiser to one the landing page renders. Candidate-by-candidate reasoning is in
+  [`../notes/2026-10-20-d10-moved-constructs.md`](../notes/2026-10-20-d10-moved-constructs.md), and
+  `apps/web/test/signal-boundary.test.ts` holds the boundary.
 - Summary-row wording for each of the five settings — each must state its current setting.
 - The icon set. One family, consistent stroke, SVG, self-hosted or inline — PRD S-11 has no
   iconography exception. Prototype icons are placeholders.
