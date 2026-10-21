@@ -228,7 +228,7 @@ const SURFACE: Record<string, SurfaceEntry> = {
   //
   // Each button's fill is its own, so each is scored against what it paints
   // rather than against what is behind it.
-  ".mono-caption": { dark: "signal-surface", light: "signal-l-surface" },
+  ".mono-caption": { dark: "signal-bg", light: "signal-l-bg" },
   ".button-primary": { dark: "signal-accent", light: "signal-l-accent" },
   ".button-primary:hover, .button-primary:focus-visible": {
     dark: "signal-accent-deep",
@@ -257,8 +257,14 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ":root[data-theme] body": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__title": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__lead": { dark: "signal-bg", light: "signal-l-bg" },
-  ".organiser__notice": { dark: "signal-surface", light: "signal-l-surface" },
-  ".organiser__status": { dark: "signal-surface", light: "signal-l-surface" },
+  ".organiser__notice": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  ".organiser__status": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
   ".organiser-empty__title": {
     dark: "signal-surface",
     light: "signal-l-surface",
@@ -339,12 +345,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
     light: "signal-l-surface",
   },
   ":root[data-theme] .field-help": {
-    dark: "signal-surface",
-    light: "signal-l-surface",
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
   },
   ":root[data-theme] .field-error": {
-    dark: "signal-surface",
-    light: "signal-l-surface",
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
   },
   // The input fills itself, so its own text reads on its own fill.
   ":root[data-theme] .text-input": {
