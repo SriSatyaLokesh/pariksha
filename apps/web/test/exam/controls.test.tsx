@@ -240,6 +240,38 @@ describe("no chain that renders a control is left on the browser default (D17, #
     expect(paintsIn(input("checkbox"), "appearance", RESOLVED["index.html"]!)).toBeUndefined();
   });
 
+  it("the candidate chain renders no field row, which is why D16's rule may stay in primitives.css", () => {
+    // The issue 201 shape again, and this time correct — but unwatched until
+    // now. `D16`'s `.field-row` / `.field-affix` rule lives in
+    // `primitives.css`, which `admin.css` and `landing.css` import and
+    // `exam.css` does not. `D17`'s control rule had to move to
+    // `registration.css` for exactly that reason; this one did not, because
+    // the candidate runtime has no field rows — `RegistrationForm.tsx`, the
+    // one form a candidate fills, does not use them.
+    //
+    // That is a claim about today's markup, and nothing was checking it. So:
+    // every source that renders a field row, by chain. The day a candidate
+    // screen grows one, this reddens naming the file instead of shipping a
+    // row the candidate's chain cannot lay out.
+    const FIELD_ROW_FILES = sourceFiles(SRC_DIR)
+      .filter((file) => /className="field-(?:row|affix)/.test(readFileSync(file, "utf8")))
+      .map((file) => relative(SRC_DIR, file).replaceAll("\\", "/"))
+      .sort();
+
+    // Not an empty loop: the organiser really does render them, so an empty
+    // candidate list below is an absence and not a broken scan.
+    expect(FIELD_ROW_FILES).toContain("components/testbuilder/FormBuilder.tsx");
+    expect(FIELD_ROW_FILES).toContain("components/authoring/QuestionEditor.tsx");
+
+    expect(FIELD_ROW_FILES.filter((file) => chainOf(file)?.page === "exam.html")).toEqual([]);
+
+    // ...and the other side of the same fact, so the pairing is written down
+    // rather than inferred: the rule reaches the chain that renders the rows
+    // and not the chain that does not.
+    expect(RESOLVED["admin.html"]).toContain(".field-row");
+    expect(RESOLVED["exam.html"]).not.toContain(".field-row");
+  });
+
   it("paints through the chain's own names and never a palette literal", () => {
     const rootOf = (css: string): string =>
       parseRuleBodies(css)
@@ -272,6 +304,15 @@ describe("no chain that renders a control is left on the browser default (D17, #
     // imported by it. Reading the entry rather than the stylesheet is what
     // puts it in reach of every assertion here.
     expect(RESOLVED["admin.html"]).toContain(".form-builder");
+    // The landing chain, which the two above left out — and it is the one
+    // chain whose control assertion is a NEGATIVE ("names the landing
+    // chain's absence"). `entryStylesheets` throws only on a page that
+    // yields ZERO stylesheets and `index.html` links two, so a chain that
+    // half-resolved would still answer `undefined` for `appearance` and pass
+    // that test for the wrong reason. `.signal-nav` is landing-only and
+    // comes in through `landing.css`'s own chain, so this is the control arm
+    // that assertion had no way to carry itself.
+    expect(RESOLVED["index.html"]).toContain(".signal-nav");
     expect(parseRuleBodies(RESOLVED["exam.html"]!).length).toBeGreaterThan(20);
   });
 });
