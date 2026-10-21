@@ -515,3 +515,68 @@
   text-transform: uppercase;
   color: var(--color-ink-soft);
 }
+
+/* Phase 6.5d Task 1 (spec D7): the five settings as rows that state their
+   own setting, opening in place, one at a time.
+
+   D12 is the reason this breathes rather than packs: the rows-visible gate
+   governs SCANNING surfaces, and the builder is an EDITING surface. The
+   row's vertical padding is the component scale's top value, not the
+   smallest one that still reads.
+
+   D15, as shell.css's header maps it: every value here is from the
+   in-a-component scale (4/6/8/12/16 -> xs/sm/base/md/lg). Nothing on this
+   screen is a page-to-edge measurement.
+
+   The summary wraps rather than truncates, for the same reason
+   .section-row__summary does: an ellipsis hides the one thing the
+   collapsed row exists to say. */
+.setting-rows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.setting-row {
+  border-block-end: 1px solid var(--color-hairline);
+}
+
+.setting-row__button {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-base) var(--space-md);
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: none;
+  padding: var(--space-lg) 0;
+  font: inherit;
+  color: var(--color-ink);
+  cursor: pointer;
+}
+
+.setting-row__icon {
+  color: var(--color-ink-soft);
+}
+
+.setting-row__label {
+  /* The one fixed column on the row: five labels that start at the same
+     x are five rows an organiser scans down rather than reads across. It
+     is a minimum, not a width, so a longer label pushes its own summary
+     instead of being clipped. */
+  min-width: 7rem;
+}
+
+.setting-row__summary {
+  flex: 1 1 18rem;
+  color: var(--color-muted);
+  /* Durations, counts and timestamps are compared down the column. */
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.setting-row__body {
+  padding-block: var(--space-base) var(--space-lg);
+}

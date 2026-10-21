@@ -19,6 +19,15 @@ import { TimingPanel } from "../components/testbuilder/TimingPanel";
 import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
+import {
+  SettingRow,
+  accessSummary,
+  brandingSummary,
+  registrationSummary,
+  resultsSummary,
+  timingSummary,
+  type PanelKey,
+} from "../components/testbuilder/SettingRow";
 import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
@@ -105,6 +114,10 @@ export function TestBuilder({
   const [openSectionId, setOpenSectionId] = useState<string | null>(
     () => readView(window.location.search).section ?? null,
   );
+  // Phase 6.5d Task 1 (`D7`): one open setting at a time, so this is one
+  // key and not a set. Local for now; Task 2 puts it in `?panel=` through
+  // the same `readView`/`writeView` pair `?section=` already uses.
+  const [openPanel, setOpenPanel] = useState<PanelKey | null>(null);
   // Task 5 (#57, P5.4): a whole `DraftPatch` rather than a sections array —
   // the registration form is a `settings` block and saves through the same
   // debounce, the same in-flight guard and the same one route. Each panel
@@ -178,6 +191,11 @@ export function TestBuilder({
     if (id) params.section = id;
     else delete params.section;
     writeView(params);
+  }
+
+  /** `D7`: one at a time, and its own row closes it. */
+  function togglePanel(id: PanelKey): void {
+    setOpenPanel((prev) => (prev === id ? null : id));
   }
 
   // Fix round (task 3 review, I4): a keystroke in a section's title or
@@ -485,62 +503,110 @@ export function TestBuilder({
       )}
 
       {draft !== null && (
-        <TimingPanel
-          timing={draft.body.settings.timing ?? DEFAULT_TIMING}
-          sections={draft.body.sections}
-          published={published}
-          onChange={(timing) => saveSettings({ timing })}
-        />
+        /* `D7`: one panel of rows, each stating its own setting. The five
+           panels below are unchanged — they are `children` now, mounted
+           only while their row is open. Every summary is called HERE, at
+           render, from the draft this screen already holds: a summary
+           cached anywhere would still read 60 minutes after the organiser
+           typed 90. */
+        <section className="setting-rows" aria-label="Settings">
+          <h2>Settings</h2>
+
+          <SettingRow
+            id="timing"
+            icon="◷"
+            label="Timing"
+            summary={timingSummary(draft.body.settings.timing ?? DEFAULT_TIMING)}
+            open={openPanel === "timing"}
+            onToggle={togglePanel}
+          >
+            <TimingPanel
+              timing={draft.body.settings.timing ?? DEFAULT_TIMING}
+              sections={draft.body.sections}
+              published={published}
+              onChange={(timing) => saveSettings({ timing })}
+            />
+          </SettingRow>
+
+          <SettingRow
+            id="access"
+            icon="⊙"
+            label="Access"
+            summary={accessSummary(draft.body.settings.access ?? DEFAULT_ACCESS, candidates.length)}
+            open={openPanel === "access"}
+            onToggle={togglePanel}
+          >
+            <AccessPanel
+              access={draft.body.settings.access ?? DEFAULT_ACCESS}
+              onChange={(access) => saveSettings({ access })}
+              candidates={candidates}
+              identityField={identityFieldOf(draft.body.settings.registration_form)}
+              canManageCandidates={canManageCandidates}
+              onImportCandidates={async (csv, opts) => {
+                const report = await client.importCandidates(workspaceId, testId, csv, opts);
+                // A dry run changed nothing, so there is nothing to
+                // re-read; a real one replaced the list, and the count the
+                // panel prints has to come from storage rather than from
+                // the report it just rendered.
+                if (!opts.dryRun && report.issues.length === 0) {
+                  setCandidates(await client.candidates(workspaceId, testId));
+                }
+                return report;
+              }}
+            />
+          </SettingRow>
+
+          <SettingRow
+            id="registration"
+            icon="▤"
+            label="Registration"
+            summary={registrationSummary(draft.body.settings.registration_form)}
+            open={openPanel === "registration"}
+            onToggle={togglePanel}
+          >
+            <FormBuilder
+              form={draft.body.settings.registration_form}
+              onChange={(registration_form) => saveSettings({ registration_form })}
+              checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
+            />
+          </SettingRow>
+
+          <SettingRow
+            id="results"
+            icon="▥"
+            label="Results"
+            summary={resultsSummary(draft.body.settings.release ?? DEFAULT_RELEASE)}
+            open={openPanel === "results"}
+            onToggle={togglePanel}
+          >
+            <ReleasePanel
+              release={draft.body.settings.release ?? DEFAULT_RELEASE}
+              onChange={(release) => saveSettings({ release })}
+            />
+          </SettingRow>
+
+          <SettingRow
+            id="branding"
+            icon="◈"
+            label="Branding"
+            summary={brandingSummary(draft.body.settings.branding ?? NO_BRANDING, workspaceBranding)}
+            open={openPanel === "branding"}
+            onToggle={togglePanel}
+          >
+            <BrandingPanel
+              branding={draft.body.settings.branding ?? NO_BRANDING}
+              workspaceBranding={workspaceBranding}
+              canEditWorkspace={canEditWorkspace}
+              onChange={(branding) => saveSettings({ branding })}
+              onSaveWorkspace={async (next) => {
+                setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
+              }}
+              onUploadLogo={uploadLogo}
+            />
+          </SettingRow>
+        </section>
       )}
 
-      {draft !== null && (
-        <AccessPanel
-          access={draft.body.settings.access ?? DEFAULT_ACCESS}
-          onChange={(access) => saveSettings({ access })}
-          candidates={candidates}
-          identityField={identityFieldOf(draft.body.settings.registration_form)}
-          canManageCandidates={canManageCandidates}
-          onImportCandidates={async (csv, opts) => {
-            const report = await client.importCandidates(workspaceId, testId, csv, opts);
-            // A dry run changed nothing, so there is nothing to re-read;
-            // a real one replaced the list, and the count the panel
-            // prints has to come from storage rather than from the
-            // report it just rendered.
-            if (!opts.dryRun && report.issues.length === 0) {
-              setCandidates(await client.candidates(workspaceId, testId));
-            }
-            return report;
-          }}
-        />
-      )}
-
-      {draft !== null && (
-        <ReleasePanel
-          release={draft.body.settings.release ?? DEFAULT_RELEASE}
-          onChange={(release) => saveSettings({ release })}
-        />
-      )}
-
-      {draft !== null && (
-        <BrandingPanel
-          branding={draft.body.settings.branding ?? NO_BRANDING}
-          workspaceBranding={workspaceBranding}
-          canEditWorkspace={canEditWorkspace}
-          onChange={(branding) => saveSettings({ branding })}
-          onSaveWorkspace={async (next) => {
-            setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
-          }}
-          onUploadLogo={uploadLogo}
-        />
-      )}
-
-      {draft !== null && (
-        <FormBuilder
-          form={draft.body.settings.registration_form}
-          onChange={(registration_form) => saveSettings({ registration_form })}
-          checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
-        />
-      )}
     </>
   );
 }
