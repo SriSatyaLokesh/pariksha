@@ -16,7 +16,13 @@ import {
 } from "../src/lib/api";
 import { OrganiserApp } from "../src/routes/organiser";
 import { tokens, type TypographyName } from "../src/styles/tokens";
-import { declarations, parseRuleBodies, readResolvedCss } from "./css-chain";
+import {
+  declarations,
+  declaredFor,
+  paintsIn,
+  parseRuleBodies,
+  readResolvedCss,
+} from "./css-chain";
 import { SignIn } from "../src/routes/signin";
 import { Setup } from "../src/routes/setup";
 
@@ -1969,5 +1975,289 @@ describe("the workspace switcher (D4, D4a, D4b)", () => {
       .map((rule) => rule.selector);
 
     expect(hidden).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `D18`: sign-in and the first-run wizard are a SPLIT screen — the Signal
+// field quieted to one masked radial glow plus a grid, carrying the wordmark,
+// a headline and three checkable facts, with the form on the right. Below
+// 900px the brand half drops and the form stands alone.
+//
+// Both screens render OUTSIDE `.shell` (`organiser.tsx`'s `signin` and `setup`
+// arms), which is the whole reason this block exists: `D3a`'s trap is that a
+// screen with no bar and no rail, laid out on a template written for both,
+// drops its content into a zero-wide first column and renders EMPTY with a
+// complete DOM behind it. That has now been reproduced twice in this repo.
+//
+// WHAT NOTHING HERE PROVES, stated rather than implied, because the gap is
+// structural and not a gap in effort:
+//
+//   `vitest.config.ts` sets `css: false`, so jsdom loads no stylesheet,
+//   evaluates no media query and performs no layout. On top of that
+//   `parseRuleBodies` (`css-chain.ts:69-72`) recurses into `@media` DISCARDING
+//   THE CONDITION, so a rule written under `@media print` reads through
+//   `declaredFor`/`paintsIn` exactly like one written under
+//   `@media (max-width: 899px)`. An assertion of the FORM "the brand half is
+//   `display: none` below 900px", phrased through the chain alone, is
+//   therefore true of any breakpoint at all and of no breakpoint in
+//   particular — a vacuous assertion dressed as a measurement.
+//
+// So the breakpoint tests below locate the narrow block BY ITS EXACT
+// CONDITION TEXT and assert only what is inside it — the same idiom the
+// `D3a` guard above already uses. The remaining claim, that a browser APPLIES
+// that block at 880px and not at 1200px, is proved in Chromium by
+// `apps/web/e2e/measurement/split-screen.spec.ts` and nowhere else.
+//
+// `D20a` is NOT re-litigated here. `theme.css:53-57` rules that the field is
+// a dark-ground device and is ALLOWED to disappear: `--glow` resolves to
+// 0.03 alpha on the light ground, against 0.18 on dark. That is why every
+// assertion below is about the brand half's CONTENT — the wordmark, the
+// headline, the three facts — and none is about its ornament. The content is
+// what carries the half on both grounds.
+
+const ADMIN_CSS_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../src/styles/admin.css",
+);
+
+describe("D18: the split screen (sign-in and the first-run wizard)", () => {
+  /** The organiser's whole stylesheet, every `@import` inlined. */
+  const ADMIN_CSS = readResolvedCss(ADMIN_CSS_PATH);
+
+  /** The one condition this screen's narrow shape is written under. */
+  const NARROW = "@media (max-width: 899px)";
+
+  /**
+   * `css` split at the `@media` block `condition` opens — what is inside it,
+   * and everything that is not.
+   *
+   * By text, deliberately: `parseRuleBodies` throws the condition away, so
+   * this is the only level at which 899px can be told from 719px or from
+   * `print`. See the block comment above for what that does and does not buy.
+   */
+  function splitAtMedia(css: string, condition: string): { inside: string; outside: string } {
+    const start = css.indexOf(condition);
+    expect(start, `the organiser's stylesheet has no "${condition}" block`).toBeGreaterThan(-1);
+    const open = css.indexOf("{", start);
+    let depth = 1;
+    let i = open + 1;
+    while (depth > 0 && i < css.length) {
+      if (css[i] === "{") depth += 1;
+      else if (css[i] === "}") depth -= 1;
+      i += 1;
+    }
+    return {
+      inside: css.slice(open + 1, i - 1),
+      outside: css.slice(0, start) + css.slice(i),
+    };
+  }
+
+  /** A `grid-template-columns` value as its top-level tracks: the commas and
+   *  spaces INSIDE `minmax(...)` are not track separators, and reading them
+   *  as separators is how a scan for a zero track finds one in every
+   *  `minmax(0, 1fr)` ever written. */
+  function tracksOf(value: string): string[] {
+    const tracks: string[] = [];
+    let depth = 0;
+    let current = "";
+    for (const character of value) {
+      if (character === "(") depth += 1;
+      if (character === ")") depth -= 1;
+      if (depth === 0 && /\s/.test(character)) {
+        if (current !== "") tracks.push(current);
+        current = "";
+      } else {
+        current += character;
+      }
+    }
+    if (current !== "") tracks.push(current);
+    return tracks;
+  }
+
+  /** Every rule in `css` that selects `element` and takes it off the screen. */
+  function hiddenBy(element: Element, css: string): string[] {
+    return parseRuleBodies(css)
+      .filter((rule) =>
+        rule.selector.split(",").some((part) => {
+          try {
+            return element.matches(part.trim());
+          } catch {
+            return false;
+          }
+        }),
+      )
+      .filter((rule) =>
+        declarations(rule.body).some((decl) =>
+          /^(display\s*:\s*none|visibility\s*:\s*hidden|clip\s*:\s*rect)/.test(decl),
+        ),
+      )
+      .map((rule) => rule.selector);
+  }
+
+  /** The `<main>` the screen renders, never `null` — `declaredFor`'s own
+   *  header is the reason this throws rather than handing a null onward. */
+  function screenRoot(): HTMLElement {
+    const root = document.querySelector<HTMLElement>("main#main-content");
+    if (root === null) throw new Error('no <main id="main-content"> was rendered');
+    return root;
+  }
+
+  /** A direct child of the screen, by class — direct, because a brand panel
+   *  nested anywhere else is not a half of a split. */
+  function half(name: "brand" | "form"): HTMLElement {
+    const root = screenRoot();
+    const element = root.querySelector<HTMLElement>(`:scope > .screen__${name}`);
+    if (element === null) {
+      throw new Error(`the screen has no .screen__${name} as a direct child`);
+    }
+    return element;
+  }
+
+  function renderSignIn() {
+    return render(<SignIn client={fakeClient()} providers={[GOOGLE, EMAIL]} returnTo="/" />);
+  }
+
+  it("renders the sign-in form with no shell around it", () => {
+    renderSignIn();
+    const root = screenRoot();
+
+    // No chrome, and nothing of the shell's grid: `organiser.tsx:188-191`
+    // keeps these four arms outside `OrganiserShell` because a nav offering
+    // Banks and Tests to a visitor who has not signed in is a nav with
+    // nothing behind it.
+    expect(root.closest(".shell")).toBeNull();
+    expect(root.querySelector(".shell")).toBeNull();
+    expect(screen.queryByRole("navigation")).toBeNull();
+    expect(screen.queryByRole("button", { name: /sign out/i })).toBeNull();
+
+    // ...and the split really splits. Both halves are direct children of the
+    // screen, the form's own <h1> and field are INSIDE the form half, and the
+    // facts are inside the brand half. A brand panel bolted on beside a form
+    // still parented somewhere else would satisfy "both are on the page" and
+    // would not be a split layout.
+    expect(half("form").contains(screen.getByRole("heading", { level: 1, name: "Sign in" }))).toBe(
+      true,
+    );
+    expect(half("form").contains(screen.getByLabelText(/email address/i))).toBe(true);
+    expect(half("brand").querySelector("ol.screen__facts")).not.toBeNull();
+    expect(half("brand").contains(screen.getByLabelText(/email address/i))).toBe(false);
+  });
+
+  it("renders content, not an empty screen, when the rail and bar are absent", () => {
+    renderSignIn();
+    const root = screenRoot();
+    expect(root).not.toBeEmptyDOMElement();
+
+    // THE MECHANISM, not the symptom. `D3a`'s trap is a template that keeps a
+    // track for chrome that is not there: `0 minmax(0, 1fr)` leaves a
+    // zero-wide first column, auto-placement drops the page into it, and a
+    // complete DOM paints as a blank page. So: the screen declares a track
+    // list, and no track in any of them — at any width — is zero.
+    const declared = declaredFor(root, "grid-template-columns", ADMIN_CSS);
+    expect(declared.length, "the screen declares no grid-template-columns").toBeGreaterThan(0);
+
+    // The reader is not vacuous: the base rule really resolves to two tracks,
+    // so an empty track list cannot be what makes the filter below empty.
+    const base = declaredFor(root, "grid-template-columns", splitAtMedia(ADMIN_CSS, NARROW).outside);
+    expect(tracksOf(base.at(-1) ?? "")).toHaveLength(2);
+
+    const zero = declared
+      .flatMap((value) => tracksOf(value).map((track) => `${track} in "${value}"`))
+      .filter((track) => /^0(fr|px|%|r?em|vw)?\b/.test(track));
+    expect(zero, "a zero-width track is D3a's empty screen").toEqual([]);
+
+    // ...and the narrow shape is ONE track, named once — the same answer
+    // `shell.css:427-435` settled on for the same trap.
+    const narrow = declaredFor(root, "grid-template-columns", splitAtMedia(ADMIN_CSS, NARROW).inside);
+    expect(tracksOf(narrow.at(-1) ?? "")).toHaveLength(1);
+
+    // Whatever else moves, the form half is never taken off the screen.
+    expect(hiddenBy(half("form"), ADMIN_CSS)).toEqual([]);
+    expect(hiddenBy(root, ADMIN_CSS)).toEqual([]);
+  });
+
+  it("drops the brand half below 900px and keeps the form", () => {
+    renderSignIn();
+    const { inside, outside } = splitAtMedia(ADMIN_CSS, NARROW);
+
+    // Released by a rule inside the 899px block that really selects the
+    // rendered element — not by a string found somewhere in the file.
+    expect(paintsIn(half("brand"), "display", inside)).toBe("none");
+
+    // "Keeps the form" is a second claim and one rule could break either, so
+    // both are asserted: nothing in that block hides the form half or the
+    // screen itself.
+    expect(hiddenBy(half("form"), inside)).toEqual([]);
+    expect(hiddenBy(screenRoot(), inside)).toEqual([]);
+
+    // And the brand half is NOT hidden outside that block. Without this, a
+    // `display: none` in the base rule — the brand half gone at every width —
+    // would satisfy every assertion above.
+    expect(paintsIn(half("brand"), "display", outside)).not.toBe("none");
+    expect(hiddenBy(half("brand"), outside)).toEqual([]);
+  });
+
+  it("numbers the three facts and names the mechanism in each", () => {
+    renderSignIn();
+    const list = half("brand").querySelector<HTMLElement>("ol.screen__facts");
+    // An <ol>, so the numbering is the list's own and a screen reader is told
+    // there are three of them without reading a decorative numeral.
+    if (list === null) throw new Error("the three facts are not an ordered list");
+    const facts = within(list).getAllByRole("listitem");
+    expect(facts).toHaveLength(3);
+
+    // Each fact leads with a MECHANISM — the thing you can go and check — and
+    // the three are three different things.
+    const terms = facts.map((fact) => fact.querySelector("b")?.textContent?.trim() ?? "");
+    expect(terms.filter((term) => term !== "")).toHaveLength(3);
+    expect(new Set(terms).size).toBe(3);
+
+    // ...and the mechanism is not the whole fact. A bolded label with nothing
+    // after it is a claim, which is what `D18`'s word "checkable" refuses.
+    for (const [index, fact] of facts.entries()) {
+      const rest = (fact.textContent ?? "").replace(terms[index] ?? "", "");
+      expect(rest.length, `fact ${index + 1} states nothing beyond its term`).toBeGreaterThan(24);
+    }
+
+    // The visible numerals are decoration OF that ordered list: they run with
+    // it, and they are out of the accessibility tree so nothing is announced
+    // twice. A fourth fact added without one, or a reorder that leaves them
+    // behind, is red here.
+    expect(facts.map((fact) => fact.querySelector(".screen__fact-n")?.textContent)).toEqual([
+      "01",
+      "02",
+      "03",
+    ]);
+    for (const fact of facts) {
+      expect(fact.querySelector(".screen__fact-n")?.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  it("gives the first-run wizard the same split under its own headline", () => {
+    // `D18` names BOTH screens and the four sketches only reach sign-in. The
+    // wizard is the arm that runs once per instance, so a split that shipped
+    // on one of the two would be found by whoever installs Pariksha next and
+    // by nobody before them.
+    render(<Setup client={fakeClient()} onComplete={() => undefined} />);
+    expect(half("form").contains(screen.getByLabelText(/workspace name/i))).toBe(true);
+    expect(half("brand").querySelectorAll("ol.screen__facts > li")).toHaveLength(3);
+    const wizard = half("brand").querySelector(".screen__headline")?.textContent ?? "";
+    expect(wizard.length).toBeGreaterThan(0);
+
+    cleanup();
+    renderSignIn();
+    const signin = half("brand").querySelector(".screen__headline")?.textContent ?? "";
+
+    // Two different moments: one instance that has no owner yet, and one
+    // visitor who is not signed in. One headline for both would be a brand
+    // panel rather than a screen.
+    expect(signin.length).toBeGreaterThan(0);
+    expect(signin).not.toBe(wizard);
+  });
+
+  it("has no axe violations with the brand half rendered", async () => {
+    const { container } = renderSignIn();
+    expect(await axe(container)).toHaveNoViolations();
   });
 });
