@@ -194,13 +194,16 @@ async function openPicker(): Promise<HTMLElement> {
   return drawer;
 }
 
-/** The one row's own prompt label — the element `D18`'s second half is
- *  about. `declaredFor` throws on a null element (6.5e Task 2), so a query
- *  that stopped matching cannot read as "no rule applies". */
-function promptLabel(drawer: HTMLElement): Element {
+/** One row's own prompt text — the element `D18`'s second half is about —
+ *  and the `<label>` that holds it. `declaredFor` throws on a null element
+ *  (6.5e Task 2), so a query that stopped matching cannot read as "no rule
+ *  applies", but these throw first with a message that says which. */
+function promptParts(drawer: HTMLElement): { label: Element; prompt: Element } {
   const label = drawer.querySelector(".picker-drawer__row label");
   if (label === null) throw new Error("no prompt label in the picker drawer");
-  return label;
+  const prompt = label.querySelector(".picker-drawer__prompt");
+  if (prompt === null) throw new Error("the picker row's label holds no .picker-drawer__prompt");
+  return { label, prompt };
 }
 
 describe("D18: the question picker docks beside the paper", () => {
@@ -226,17 +229,30 @@ describe("D18: the question picker docks beside the paper", () => {
 
   it("wraps a long prompt and clamps it to two lines", async () => {
     const drawer = await openPicker();
-    const label = promptLabel(drawer);
+    const { label, prompt } = promptParts(drawer);
 
     // `D18` blames `white-space: nowrap` "inherited from the table rules".
     // Read through the real chain, primitives.css included, so this is a
-    // claim about the cascade rather than about one file.
+    // claim about the cascade rather than about one file — and asserted on
+    // BOTH boxes, because an inherited property reaches the inner one
+    // through the outer. (It is already cut: 6.5e Task 1 scoped that
+    // declaration to `th.acts, td.acts` and the picker is not a table. This
+    // half is a regression guard; the clamp below is the repair.)
     expect(paintsIn(label, "white-space", ORGANISER_CSS)).not.toBe("nowrap");
+    expect(paintsIn(prompt, "white-space", ORGANISER_CSS)).not.toBe("nowrap");
 
-    // ...and the clamp, which is the half that does not exist yet. Two
-    // lines, and the overflow hidden that makes the clamp bite.
-    expect(paintsIn(label, "-webkit-line-clamp", ORGANISER_CSS)).toBe("2");
-    expect(paintsIn(label, "overflow", ORGANISER_CSS)).toBe("hidden");
+    // ...and the clamp, which is the half that did not exist. Two lines, and
+    // the overflow hidden without which the clamp does nothing at all.
+    expect(paintsIn(prompt, "-webkit-line-clamp", ORGANISER_CSS)).toBe("2");
+    expect(paintsIn(prompt, "overflow", ORGANISER_CSS)).toBe("hidden");
+
+    // The points are not inside the clamped box — on a prompt this long the
+    // clamp would cut them off the end of line two, and the row that most
+    // needs its score would be the one without one. Still inside the
+    // <label>, so the checkbox is still named "<prompt> (1 pts)".
+    expect(prompt.querySelector(".picker-drawer__points")).toBeNull();
+    expect(label.querySelector(".picker-drawer__points")).not.toBeNull();
+    expect(screen.getByRole("checkbox", { name: /\(1 pts\)$/ })).toBeInTheDocument();
   });
 
   it("traps no focus and closes on Escape", async () => {

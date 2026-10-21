@@ -7,10 +7,18 @@
 //
 // A row counts only when its **whole height** is visible: inside the
 // viewport *and* inside every vertically scrolling ancestor. The second
-// half is not pedantry — `.picker-drawer__list` is `max-height: 16rem;
-// overflow-y: auto`, so a drawer row scrolled out of its own list still
-// has a bounding box inside the viewport, and counting it would report
-// rows nobody can read.
+// half is not pedantry — `.picker-drawer__list` is a height-constrained
+// `overflow-y: auto` box, so a drawer row scrolled out of its own list
+// still has a bounding box inside the viewport, and counting it would
+// report rows nobody can read.
+//
+// 6.5e Task 5 (`D18`) changed where that constraint COMES FROM and nothing
+// else about it: the list was `max-height: 16rem` and is now `flex: 1;
+// min-height: 0` inside a docked column the viewport bounds
+// (`.section-list > .picker-drawer`, testbuilder.css). Still one clipping
+// ancestor, still no border — the column itself keeps `overflow: visible`,
+// so `clipOf` below skips it, which is correct because the list absorbs
+// the column's height rather than overflowing it.
 //
 // Vertical only, which is D13's own wording ("a row counts only if its
 // full height is within the viewport"). The test list's table is wider
@@ -99,8 +107,9 @@ export async function countPrimaryRows(page: Page, surface: Surface): Promise<nu
     //      is BOTH height-constrained — so rows really do run past its
     //      content edge — and taller in its border box than its content box.
     //      `.picker-drawer__list` is the one height-constrained container
-    //      here (`max-height: 16rem`) and it has no border and no horizontal
-    //      scrollbar, so its two boxes coincide.
+    //      here (`flex: 1; min-height: 0` in a viewport-bounded column since
+    //      6.5e Task 5; `max-height: 16rem` before it) and it has no border
+    //      and no horizontal scrollbar, so its two boxes coincide.
     //
     // It goes live the day a `.table-scroll` grows a `max-height`, or any
     // clipping ancestor grows a border. The probe that proved the change:

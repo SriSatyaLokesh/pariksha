@@ -232,19 +232,107 @@
   border: 1px solid var(--edge-strong);
 }
 
+/* ---- D18: the picker DOCKS as a right-hand column beside the paper ------
+
+   "The question picker docks as a right-hand column beside the paper rather
+   than floating over it, which serves `UX-14` better."
+
+   ONE CORRECTION TO THE BULLET, recorded rather than quietly worked around:
+   it never floated. `.picker-drawer` has never carried `position: fixed` or
+   `absolute`; `SectionList` renders it as the LAST child of `.section-list`,
+   so it arrived *under* the sections — past the whole list, the "Add
+   section" button and the shuffle fieldset. The defect `UX-14` names is the
+   same either way (the paper is not beside you while you pick) and so is the
+   fix, but what it is a fix FROM is "below", not "over".
+
+   The construct is the checklist rail's, deliberately — same page, same
+   problem, and two different ways of making a column would be two things to
+   maintain. `:has()` rather than a modifier prop, so `SectionList` says only
+   whether a picker exists and the stylesheet decides what that does to the
+   layout. `grid-row: 1 / span 40` for the same reason the rail gives: with
+   no `grid-template-rows` the explicit grid has one line, so `1 / -1`
+   collapses the span to a single row and sticky would have no slack.
+
+   THE COLUMN'S WIDTH IS A MEASURED FIGURE, NOT A TASTE ONE, and `AG1` is
+   why. `e2e/measurement/density.spec.ts` holds this surface's row height at
+   `<= 25px` — one line — and the seeded prompt's own text measures 444.13px
+   in Chromium at 1440x900. Add the checkbox and its gap (17px) and the
+   drawer's padding and border (26px) and a row needs ~487px of column to
+   stay on one line. 34rem is 544px: the first step of the component scale
+   past that figure with room for the longest seeded topic, and the sections
+   column still takes 372px beside it at 1440. Narrow this and the prompts
+   wrap, the median row doubles, and the density gate goes red — which is
+   the gate working, not a bar to move (`AG2`).
+
+   `minmax(18rem, 1fr)` ON THE FIRST COLUMN IS WHAT STOPS THE PAPER STARVING.
+   The picker's track is `minmax(0, 34rem)`, so it is grown out of free space
+   AFTER the paper's 288px base is reserved: at a 940px spine that is
+   372 + 544, and with the checklist rail docked rather than in lights (a
+   672px spine) it is 288 + 360 — the picker gives way, the paper does not,
+   and neither overflows. The clamp below is what makes that narrower picker
+   still read.
+
+   Two columns only from 1200px. Below it the spine cannot hold 18rem of
+   paper and a picker wide enough to be one, so the drawer stays where it is
+   in the flow — which is the behaviour this screen already had.
+
+   `D15`, under shell.css's mapping: everything inside the construct is the
+   component scale, and the gap BETWEEN the two columns is a page-to-edge
+   measurement and takes `--space-xl`, exactly as the rail's does.
+
+   `D12` — the picker is one of `AG1`'s four SCANNING surfaces (the builder
+   around it is an editing one and is outside the gate), so the list below
+   is packed to win rows and is measured for it. */
+
+@media (min-width: 1200px) {
+  .section-list:has(> .picker-drawer) {
+    display: grid;
+    grid-template-columns: minmax(18rem, 1fr) minmax(0, 34rem);
+    column-gap: var(--space-xl);
+    align-content: start;
+  }
+
+  .section-list:has(> .picker-drawer) > * {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  /* After the rule above and at the same weight, so source order puts the
+     drawer in the second column — the rail's own arrangement. */
+  .section-list > .picker-drawer {
+    grid-column: 2;
+    grid-row: 1 / span 40;
+    align-self: start;
+    /* Under the shell's own bar plus the page's top inset, so the column and
+       the bar never overlap. `--shell-bar` is declared on `.shell` and
+       inherits down to here. */
+    position: sticky;
+    inset-block-start: calc(var(--shell-bar) + var(--space-xl));
+    max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+  }
+}
+
 .picker-drawer__filters {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-md);
 }
 
+/* The list is the drawer's one scroll region, and it FILLS the column rather
+   than sitting at a fixed 16rem inside it. That is the density half of the
+   dock: a 16rem box inside a column already bounded by the viewport is a
+   second scroller nested in the first, and it would hold the surface at the
+   eight rows it fit when the drawer was a block at the bottom of the page.
+   `min-height: 0` because a flex item's default `min-height: auto` refuses
+   to shrink below its content and `overflow-y` would then never engage. */
 .picker-drawer__list {
   display: flex;
   flex-direction: column;
   gap: var(--space-xs);
   padding: 0;
   list-style: none;
-  max-height: 16rem;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -252,6 +340,48 @@
   display: flex;
   align-items: start;
   gap: var(--space-xs);
+}
+
+/* The label is a row of its own, because the clamped prompt below is a
+   BLOCK-level box (`display: -webkit-box`) and an inline `(N pts)` after one
+   would start a second line — a two-line row for every one-line prompt,
+   which is the density regression this task is measured against. Flex puts
+   them side by side; `min-width: 0` lets the prompt shrink so the points are
+   never pushed out of the column, and the `gap` replaces the literal space
+   the markup still carries for the accessible name's sake. */
+.picker-drawer__row label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* `D18`'s second half: "Prompts wrap and clamp to two lines; the overflow
+   bug was `white-space: nowrap` inherited from the table rules."
+
+   THE INHERITANCE IS ALREADY CUT and this rule does not re-cut it. 6.5e
+   Task 1 scoped that declaration to `th.acts, td.acts` (primitives.css) and
+   `test/tables.test.tsx` holds it there; the picker is a `<ul>` of `<li>`
+   and never was a table, so nothing reaches it. What was missing is the
+   other half of the sentence — the clamp — without which a 300-word prompt
+   is a 300-word row and the eight rows beside it are pushed off the list.
+
+   `-webkit-box` plus `-webkit-line-clamp` because that is the clamp every
+   engine ships; the unprefixed `line-clamp` is beside it for the day they
+   stop. `overflow: hidden` is not decoration — the clamp does nothing
+   without it. `overflow-wrap: anywhere` for the prompt with no spaces in it,
+   the same declaration `.section-row__summary` already carries.
+
+   The points are OUTSIDE this box (see QuestionPickerDrawer.tsx): a clamp
+   over the whole label eats whatever ends line two, which is the points. */
+.picker-drawer__prompt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 
 .picker-drawer__points {
