@@ -6,7 +6,15 @@
 // default of 60.
 
 import { describe, expect, it } from "vitest";
-import { PROCTORING_DEFAULTS, proctoringRequirements, resolveProctoring } from "../src/index.js";
+import {
+  FAILURE_EVENTS,
+  isViolation,
+  PROCTORING_DEFAULTS,
+  PROCTORING_EVENTS,
+  proctoringRequirements,
+  resolveProctoring,
+  VIOLATION_EVENTS,
+} from "../src/index.js";
 
 describe("resolveProctoring", () => {
   it("returns fully-populated Off for undefined", () => {
@@ -71,5 +79,28 @@ describe("proctoringRequirements", () => {
     );
     expect(lines.join(" ")).toMatch(/camera/i);
     expect(lines.join(" ")).not.toMatch(/every/i);
+  });
+});
+
+// Task 5 (Q2/Q7b): the closed event vocabulary and its violation/failure
+// split. One definition here; Phase 8's monitor and CSV, and the violation
+// counter and integrity flag, all read it instead of re-deriving it.
+describe("proctoring events", () => {
+  it("classifies every event type exactly once as violation, failure or neither", () => {
+    for (const t of PROCTORING_EVENTS) {
+      expect([VIOLATION_EVENTS.has(t), FAILURE_EVENTS.has(t)].filter(Boolean).length, t)
+        .toBeLessThanOrEqual(1);
+    }
+  });
+
+  it("counts a camera loss as a violation and an upload failure as a failure", () => {
+    expect(isViolation("camera_lost")).toBe(true);
+    expect(isViolation("snapshot_failed")).toBe(false);
+    expect(FAILURE_EVENTS.has("snapshot_failed")).toBe(true);
+  });
+
+  it("does not count noise toward a limit", () => {
+    expect(isViolation("noise_above_threshold")).toBe(false);
+    expect(FAILURE_EVENTS.has("noise_above_threshold")).toBe(false);
   });
 });

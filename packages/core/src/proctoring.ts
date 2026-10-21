@@ -208,3 +208,55 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
 
   return lines;
 }
+
+// Phase 7a Task 5 (`Q7b`/`Q2`): the closed event vocabulary. A later plan's
+// browser-side proctor emits these; Phase 8's monitor and CSV export are the
+// readers this union exists for — both need a fixed string literal to switch
+// on, so the union is closed (not `string`) and this file is the only place
+// new names get added.
+export const PROCTORING_EVENTS = [
+  "fullscreen_exit", "fullscreen_restore",
+  "window_blur", "visibility_hidden",
+  "copy_blocked", "paste_blocked", "contextmenu_blocked",
+  "extra_monitor", "camera_lost", "camera_restored",
+  "identity_photo_captured", "noise_above_threshold",
+  "proctoring_unavailable", "snapshot_failed",
+  "violation_limit_reached", "attempt_locked", "attempt_unlocked",
+] as const;
+export type ProctoringEventType = (typeof PROCTORING_EVENTS)[number];
+
+/**
+ * `Q2`: the subset that counts toward `violationLimit`. Defined once, here,
+ * rather than re-derived by the violation counter and the integrity flag
+ * separately — both read this set instead of switching on the event name
+ * themselves.
+ */
+export const VIOLATION_EVENTS: ReadonlySet<ProctoringEventType> = new Set([
+  "fullscreen_exit", "window_blur", "visibility_hidden",
+  "copy_blocked", "paste_blocked", "contextmenu_blocked",
+  "extra_monitor", "camera_lost",
+]);
+
+/**
+ * `Q6b`: the subset that marks an attempt unobserved rather than suspicious
+ * — the proctoring stack itself failed, not the candidate.
+ */
+export const FAILURE_EVENTS: ReadonlySet<ProctoringEventType> = new Set([
+  "proctoring_unavailable", "snapshot_failed",
+]);
+
+// Deliberately neither: the four restore/capture/lifecycle types
+// (`fullscreen_restore`, `camera_restored`, `identity_photo_captured`,
+// `violation_limit_reached`/`attempt_locked`/`attempt_unlocked`) describe
+// state, not misbehaviour, so counting them would double up on the events
+// that caused them.
+//
+// `noise_above_threshold` is also neither, and that one is a ruling, not an
+// omission: it is recorded and shown on the attempt, but it counts toward
+// nothing. A microphone threshold that auto-submits an attempt because a
+// door slammed is exactly the false positive this phase exists to avoid —
+// nothing in the brief asks noise to gate an attempt, so it stays visible
+// without being load-bearing.
+export function isViolation(type: ProctoringEventType): boolean {
+  return VIOLATION_EVENTS.has(type);
+}
