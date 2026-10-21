@@ -129,6 +129,25 @@ const PRE_RULE_SHAPE = `
 `;
 
 /**
+ * The gutter column with `D18`'s `width: 1%` taken off, so the auto table
+ * layout gives it a share of the row's slack like any other column.
+ *
+ * This exists because a probe said it had to. Deleting `width: 1%` and
+ * `white-space: nowrap` from `primitives.css` reddened NO browser test: with
+ * an `opacity`-only reveal the cell is laid out whether it is showing or not,
+ * so "the column does not change width when revealed" is true with or without
+ * them. What those two declarations really deliver is `D18`'s other half —
+ * the gutter is as narrow as its actions and no narrower, so it does not take
+ * width from the columns an organiser is scanning. That is a measurable claim
+ * and this is what measures it.
+ */
+const AUTO_GUTTER = `
+  table[data-proof="auto-gutter"] .acts {
+    width: auto;
+  }
+`;
+
+/**
  * A reveal that really does widen the cell — the thing `D21a`'s "revealing an
  * action must never widen a row" forbids. Used only to prove the width
  * instrument; nothing ships it.
@@ -341,4 +360,45 @@ for (const { label, width, height } of WIDTHS) {
       ).not.toEqual(resting);
     });
   }
+}
+
+// ---------------------------------------------------------------------------
+// `D18`'s other half: the gutter is as narrow as its actions.
+//
+// 1440px ONLY, and the reason is the measurement rather than the design. A
+// column can only be shown to be narrower than the layout would otherwise
+// make it on a table that has slack to distribute — on a table already at its
+// minimum width, `width: 1%` and `width: auto` resolve to the same pixel and
+// the comparison below would be two equal numbers. The premise is asserted
+// rather than assumed, so the day the fixture outgrows 1440px this says so
+// instead of passing on a tie.
+
+for (const table of Object.keys(TABLES) as TableName[]) {
+  test(`${table} keeps the action gutter as narrow as its actions`, async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await TABLES[table].open(page);
+    await page.addStyleTag({ content: AUTO_GUTTER });
+
+    const row = await firstRow(page, table);
+    const gutter = row.locator("td.acts");
+
+    const slack = await row.evaluate((node) => {
+      const element = node.closest("table");
+      if (element === null) return Number.NaN;
+      return Math.round((element.clientWidth - element.scrollWidth) * 100) / 100;
+    });
+    expect(slack, "the table is already at its minimum width, so column widths cannot be compared").toBeGreaterThanOrEqual(0);
+
+    const width = async (): Promise<number> =>
+      gutter.evaluate((cell) => Math.round(cell.getBoundingClientRect().width * 100) / 100);
+
+    const shipped = await width();
+    expect(shipped, "the action column reserves no width at all").toBeGreaterThan(0);
+
+    await proof(row, "auto-gutter");
+    expect(
+      await width(),
+      "the gutter is no narrower with D18's width: 1% than without it, so that declaration does nothing here",
+    ).toBeGreaterThan(shipped);
+  });
 }
