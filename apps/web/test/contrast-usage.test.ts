@@ -222,22 +222,30 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".signal-footer__grid p": both("signal-bg"),
 
   // ---- primitives.css: shared by landing.css and admin.css (P3.9) --------
-  // No longer used by the landing page itself — confirmed absent from
-  // src/sections/signal/ and src/routes/landing.tsx — only the organiser
-  // screens still render these, via ButtonPrimary/ButtonSecondary (routes/
-  // dashboard.tsx, setup.tsx, signin.tsx), so they keep exactly their
-  // original classification.
-  ".mono-caption": both("cream"),
-  ".button-primary": both("cream"),
-  ".button-primary:hover, .button-primary:focus-visible": both("voltage-deep"),
-  ".button-primary--surface": both("voltage-deep"),
-  ".button-secondary": both("canvas"),
+  // Re-grounded by 6.5e Task 1b, which is only safe because the landing page
+  // renders NONE of these constructs — asserted off disk by theme.test.ts,
+  // not assumed. Every consumer is an organiser route or component, so the
+  // ground they read on is the organiser's.
+  //
+  // Each button's fill is its own, so each is scored against what it paints
+  // rather than against what is behind it.
+  ".mono-caption": { dark: "signal-surface", light: "signal-l-surface" },
+  ".button-primary": { dark: "signal-accent", light: "signal-l-accent" },
+  ".button-primary:hover, .button-primary:focus-visible": {
+    dark: "signal-accent-deep",
+    light: "signal-l-accent-deep",
+  },
+  ".button-primary--surface": {
+    dark: "signal-accent",
+    light: "signal-l-accent",
+  },
+  ".button-secondary": { dark: "signal-surface", light: "signal-l-surface" },
   // Phase 6.5d Task 5 (`D16`, content): a unit affix sits INSIDE its control,
   // absolutely positioned over `.text-input`'s own fill — so the background
-  // it really renders on is the input's canvas, not the panel or the page.
+  // it really renders on is the input's fill, not the panel or the page.
   // Organiser-only in practice (the landing page renders no field row), but
   // the rule lives here because the field-row rule it belongs to is shared.
-  ".field-affix__unit": both("canvas"),
+  ".field-affix__unit": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- admin.css: the organiser screens (P3.9, re-grounded by 6.5e T1b) --
   // `D1`: the organiser left the cream palette. `admin.css` now paints

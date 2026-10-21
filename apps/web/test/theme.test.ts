@@ -1,17 +1,24 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { tokens } from "../src/styles/tokens";
 import {
+  CHAINS,
   GROUNDS,
   type Ground,
   SEMANTIC_NAMES,
   THEME_SELECTOR,
+  chainOf,
+  entryStylesheets,
   organiserStylesheets,
   declarations,
   parseRuleBodies,
   readResolvedCss,
   readThemeMap,
+  resolvedChain,
+  sourceFiles,
+  srcRelative,
   stripCssComments,
 } from "./css-chain";
 
@@ -381,22 +388,21 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
         "exam.css",
         // Shared with admin.css today; stays once the organiser drops it.
         "registration.css",
-        // --- Below: the organiser's remaining voltage. Each line is deleted
-        // by whichever of 6.5c / 6.5d / 6.5e re-grounds that surface. ---
-        // primitives.css: `.button-primary:hover, :focus-visible` (:64),
-        // `.button-primary--surface` (:77) AND `.button-secondary:hover,
-        // :focus-visible` (:120) — two components, not one. base.css: the
-        // global `:focus-visible` ring (:86-91), which stays: base.css is in
-        // the candidate's chain too, and 6.5c already overrides
-        // `:focus-visible` with `--focus` on the organiser root.
-        //
-        // authoring.css and testbuilder.css left in 6.5e Task 1b.
-        // authoring.css's two uses were the preview toggle's and the tag
-        // chip's checked borders; testbuilder.css's one was `.button-link`,
-        // the flat button that reads as a test's name. Both are
-        // `var(--accent)` on the Signal ground now.
+        // base.css's two are both in the global `:focus-visible` ring
+        // (:86-91), and they STAY: base.css is in the candidate's chain too,
+        // and 6.5c already overrides `:focus-visible` with `--focus` on the
+        // organiser root. So this list is `D1`'s end state as of 6.5e Task
+        // 1b, not a pending one.
         "base.css",
-        "primitives.css",
+        //
+        // --- Deleted by 6.5e Task 1b, named rather than counted. ---
+        // authoring.css: the preview toggle's and the tag chip's checked
+        // borders. testbuilder.css: `.button-link`, the flat button that
+        // reads as a test's name. primitives.css: `.button-primary:hover,
+        // :focus-visible`, `.button-primary--surface` AND
+        // `.button-secondary:hover, :focus-visible` — two components, not
+        // one, which is the distinction this comment exists to keep. All
+        // five are `var(--accent)` or `var(--accent-deep)` now.
       ].sort(),
     );
   });
@@ -417,5 +423,227 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
     // one, so it gets its own assertion.
     expect(voltageUsers).not.toContain("signal.css");
     expect(voltageUsers).not.toContain("landing.css");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// THE CHAIN SEAM: a semantic name is only defined where theme.css is loaded.
+//
+// `landing.css:9` imports `primitives.css` and does NOT import `theme.css`,
+// so `var(--ink)` written into `primitives.css` is UNDEFINED on the landing
+// page. `exam.css` imports neither. This is the seam that produced issue 200
+// and #201, and 6.5e Task 1b reached for it a third time: the four shared
+// component rules — MonoCaption, ButtonPrimary, ButtonSecondary, CardHairline
+// — had to leave the cream palette with the rest of the organiser.
+//
+// It is safe only while the ungrounded chains render NONE of the constructs
+// those rules paint, and the corrected question is "does that page render
+// THIS construct", never "does it render a table": the landing page renders
+// two tables, and a first version of this ruling claimed it rendered none.
+//
+// So both halves are derived off disk. The class list comes out of the
+// stylesheets themselves — every selector that reads a semantic name, in a
+// chain that defines none — and the source set out of `CHAINS`, which
+// `controls.test.tsx` already watches for completeness against the pages on
+// disk. A landing component that starts rendering `.card-hairline`, or a new
+// rule in `primitives.css` that paints something the landing page does
+// render, is then a red test naming the file.
+describe("no chain reads a theme.css name its own chain never defines (D1, issue 200, #201)", () => {
+  /** Every class a selector names: `.a:hover, .b > .c` -> a, b, c. */
+  function classesIn(selector: string): string[] {
+    return [...selector.matchAll(/\.([A-Za-z_][\w-]*)/g)].flatMap((m) =>
+      m[1] === undefined ? [] : [m[1]],
+    );
+  }
+
+  const chains = CHAINS.map((chain) => {
+    const css = resolvedChain(chain.page);
+    return {
+      ...chain,
+      css,
+      // Not "does this chain's file list contain theme.css" — that is the
+      // mechanism. A chain is grounded when something in it really ASSIGNS
+      // the names, which is the property every rule below depends on.
+      grounded: selectorsAssigning(SEMANTIC_NAMES, css).length > 0,
+    };
+  });
+
+  const UNGROUNDED = chains.filter((chain) => !chain.grounded);
+
+  /** Every class painted by a rule in `css` that READS a semantic name. */
+  function classesPaintedBySemanticNames(css: string): string[] {
+    const wanted = new Set<string>(SEMANTIC_NAMES);
+    const hits = new Set<string>();
+    for (const rule of parseRuleBodies(css)) {
+      const reads = declarations(rule.body).some((decl) =>
+        referencedTokens(decl).some((token) => wanted.has(token)),
+      );
+      if (!reads) continue;
+      for (const name of classesIn(rule.selector)) hits.add(name);
+    }
+    return [...hits].sort();
+  }
+
+  it("has an ungrounded chain and a grounded one, so neither loop is empty", () => {
+    // Both halves named. An empty UNGROUNDED list would make every assertion
+    // below vacuously true, and a theme.css that had reached every chain
+    // would mean this guard had quietly stopped guarding anything.
+    expect(
+      chains.filter((chain) => chain.grounded).map((chain) => chain.page),
+    ).toEqual(["admin.html"]);
+    expect(UNGROUNDED.map((chain) => chain.page).sort()).toEqual([
+      "exam.html",
+      "index.html",
+    ]);
+  });
+
+  it("really finds the shared rules that read one, so the scan is not vacuous", () => {
+    // `primitives.css` is the file in two chains and these are the four
+    // components it shares. If a rename emptied this list, the assertions
+    // below would pass by finding nothing to check.
+    const shared = classesPaintedBySemanticNames(resolvedChain("index.html"));
+    expect(shared).toContain("mono-caption");
+    expect(shared).toContain("button-primary");
+    expect(shared).toContain("button-secondary");
+    expect(shared).toContain("card-hairline");
+  });
+
+  for (const chain of UNGROUNDED) {
+    it(`${chain.page} renders none of the constructs its own chain paints with an undefined name`, () => {
+      // A chain that paints NOTHING with a semantic name is the strongest
+      // state this guard can report, and `exam.html` is in it — its chain
+      // imports neither `theme.css` nor `primitives.css`. So an empty list
+      // here is an answer rather than a broken scan, and the vacuity check
+      // is the one above, which proves the scan finds the four shared
+      // components in the chain that really does share them.
+      const painted = classesPaintedBySemanticNames(chain.css);
+
+      // Every source file this page dresses, against every class those rules
+      // paint. `className="a b"`, `className={"a"}` and a template literal
+      // all put the bare class name in the source, so one scan covers them;
+      // a class assembled from fragments would not be found, which is the
+      // same bounded limit `controls.test.tsx` names for its own scan and
+      // why the four shared components are checked by name above.
+      const offenders: string[] = [];
+      for (const file of sourceFiles()) {
+        const relativePath = srcRelative(file);
+        if (chainOf(relativePath)?.page !== chain.page) continue;
+        const source = readFileSync(file, "utf8");
+        for (const name of painted) {
+          if (new RegExp("[\"'`\\s{]" + name + "[\"'`\\s}]").test(source)) {
+            offenders.push(
+              `${relativePath} renders .${name}, which ${chain.page}'s chain paints with a theme.css name it never defines`,
+            );
+          }
+        }
+      }
+      expect(offenders).toEqual([]);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The other direction: an organiser-only stylesheet may not read a CREAM
+// token, because `D1` moved the organiser off that palette altogether.
+//
+// Derived rather than listed, on both axes. The file set is every stylesheet
+// the organiser entry resolves to MINUS every stylesheet another entry also
+// resolves to — so `base.css`, `tokens.css`, `primitives.css` (the landing
+// page too) and `registration.css` / `question.css` (the candidate runtime
+// too) fall out on their own, which is right: each of those still dresses a
+// cream surface somewhere and must keep the palette that paints it. The
+// token set is every generated colour that is not `signal-*`.
+describe("no organiser-only stylesheet reads the cream palette (D1, G5)", () => {
+  /** Every source stylesheet `page`'s chain resolves to, by file name. */
+  function chainFiles(page: string): Set<string> {
+    const files = new Set<string>();
+    const seen = new Set<string>();
+    for (const path of entryStylesheets(page)) {
+      const before = new Set(seen);
+      readResolvedCss(path, seen);
+      for (const reached of seen) {
+        if (!before.has(reached)) files.add(basename(reached));
+      }
+    }
+    return files;
+  }
+
+  const organiserOnly = (() => {
+    const organiser = chainFiles("admin.html");
+    for (const page of ["index.html", "exam.html"]) {
+      for (const shared of chainFiles(page)) organiser.delete(shared);
+    }
+    return [...organiser].sort();
+  })();
+
+  /** The cream palette: every generated colour that is not a Signal one. */
+  const CREAM_TOKENS = Object.keys(tokens.colors)
+    .filter((name) => !name.startsWith("signal-"))
+    .map((name) => `--color-${name}`);
+
+  // `theme.css` is the MAPPING and reads the Signal families by definition.
+  // It is swept like the rest rather than excluded, because it reads no
+  // cream token and the sweep proving that is worth more than an exclusion
+  // comment claiming it.
+  const EXEMPT: Record<string, { tokens: string[]; why: string }> = {
+    "testbuilder.css": {
+      tokens: ["--color-cream", "--color-ink"],
+      why: "`.branding-panel__preview` is a MINIATURE OF THE CANDIDATE'S START PAGE as the branding settings will paint it, so its cream fill and the `var(--brand-primary, var(--color-ink))` fallback are the runtime's own palette. Re-grounding them would make the preview lie about the page it previews.",
+    },
+  };
+
+  it("finds the organiser's own stylesheets, so the sweep is not empty", () => {
+    // Named rather than counted: these are the six files `D1` moved, and a
+    // rename that silently emptied the list would make every assertion below
+    // pass by checking nothing.
+    expect(organiserOnly).toEqual([
+      "admin.css",
+      "authoring.css",
+      "home.css",
+      "shell.css",
+      "testbuilder.css",
+      "theme.css",
+    ]);
+  });
+
+  it("has a cream token to look for, so the pattern is not broken", () => {
+    expect(CREAM_TOKENS).toContain("--color-ink");
+    expect(CREAM_TOKENS).toContain("--color-cream");
+    expect(CREAM_TOKENS).not.toContain("--color-signal-accent");
+  });
+
+  for (const file of organiserOnly) {
+    it(`${file} paints in theme.css's names alone`, () => {
+      const css = stripCssComments(
+        readFileSync(resolve(STYLES_DIR, file), "utf8"),
+      );
+      const allowed = new Set(EXEMPT[file]?.tokens ?? []);
+      const found = CREAM_TOKENS.filter(
+        (token) =>
+          !allowed.has(token) &&
+          new RegExp(`var\\(\\s*${token}\\s*[,)]`).test(css),
+      );
+      expect(
+        found,
+        `${file} reads ${found.join(", ")} — the organiser left the cream palette in D1. An exemption belongs in EXEMPT above with a reason, never as a deletion here.`,
+      ).toEqual([]);
+    });
+  }
+
+  it("the one exemption is still load-bearing, not a stale entry", () => {
+    // The other half of any allowlist: an exemption nothing uses is a hole
+    // left open, so each exempted token must really be read by the file that
+    // claims it.
+    for (const [file, entry] of Object.entries(EXEMPT)) {
+      const css = stripCssComments(
+        readFileSync(resolve(STYLES_DIR, file), "utf8"),
+      );
+      for (const token of entry.tokens) {
+        expect(
+          new RegExp(`var\\(\\s*${token}\\s*[,)]`).test(css),
+          `${file} no longer reads ${token}: delete the exemption. ${entry.why}`,
+        ).toBe(true);
+      }
+    }
   });
 });

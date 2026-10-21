@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // One `@import` resolver for the whole test suite.
@@ -220,6 +220,89 @@ export function entryStylesheets(html: string): string[] {
     throw new Error(`${html} loads no stylesheet by <link> or by a module script's import`);
   }
   return files.map((file) => resolve(WEB_DIR, "src/styles", file));
+}
+
+// ---------------------------------------------------------------------------
+// Which SOURCE files each chain dresses.
+//
+// Moved here from `test/exam/controls.test.tsx` by 6.5e Task 1b, when a
+// second seam guard needed the same map — the same "one copy" the `@import`
+// resolver and the rule parser above already are. `controls.test.tsx`'s own
+// header is the reason it exists: #201 happened because nothing watched the
+// seam between two CSS chains, and a seam guard that keeps its own private
+// list of chains rebuilds that defect one level up.
+//
+// `page` is a real file name and `htmlEntries()` reads the pages off disk,
+// so a FOURTH page cannot be silently unclaimed — the callers assert that.
+// `owns` is still written by hand, because there is nothing to derive it
+// from short of walking the module graph; it is watched from two sides
+// instead, by requiring every relevant source file to fall under at least
+// one prefix. Overlaps are intended and resolved by LONGEST prefix:
+// `routes/exam.tsx` is the candidate's even though the organiser owns
+// `routes/`.
+
+export interface Chain {
+  name: string;
+  page: string;
+  owns: string[];
+}
+
+export const CHAINS: Chain[] = [
+  {
+    name: "candidate runtime",
+    page: "exam.html",
+    owns: ["components/exam/", "routes/exam.tsx"],
+  },
+  {
+    name: "organiser",
+    page: "admin.html",
+    owns: [
+      "components/testbuilder/",
+      "components/authoring/",
+      "components/organiser/",
+      "routes/",
+    ],
+  },
+  {
+    name: "landing",
+    page: "index.html",
+    owns: ["sections/", "island/", "routes/landing.tsx"],
+  },
+];
+
+export const SRC_DIR = resolve(TEST_DIR, "../src");
+
+/** Every `.ts`/`.tsx` file under `dir`, recursively. */
+export function sourceFiles(dir: string = SRC_DIR, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) sourceFiles(full, out);
+    else if (/\.tsx?$/.test(full)) out.push(full);
+  }
+  return out;
+}
+
+/** A source path as the chain map spells it: relative to `src`, forward slashes. */
+export function srcRelative(file: string): string {
+  return relative(SRC_DIR, file).replaceAll("\\", "/");
+}
+
+/** The chain a source file ships in, or `undefined` if the map has a hole. */
+export function chainOf(file: string): Chain | undefined {
+  return [...CHAINS]
+    .flatMap((chain) => chain.owns.map((prefix) => ({ chain, prefix })))
+    .sort((a, b) => b.prefix.length - a.prefix.length)
+    .find(({ prefix }) => file.startsWith(prefix))?.chain;
+}
+
+/** Every stylesheet `page` loads, resolved and joined — the cascade that
+ *  page really renders under. One shared `seen` set per page, so a file two
+ *  of its entries reach is read once. */
+export function resolvedChain(page: string): string {
+  const seen = new Set<string>();
+  return entryStylesheets(page)
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n");
 }
 
 /**

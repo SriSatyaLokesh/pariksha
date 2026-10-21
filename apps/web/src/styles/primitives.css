@@ -14,6 +14,29 @@
    own @import chain. Anything that is NOT reused by both entries stays
    where it was.
 
+   THE SEAM, AND WHY THE RULES BELOW MAY READ theme.css ANYWAY. `admin.css`
+   imports `theme.css` and `landing.css` does not, so `var(--ink)` in this
+   file is UNDEFINED on the landing page. That seam produced issue 200 and
+   #201 and this is the third time it has been reached for.
+
+   It is safe here for a reason that is MEASURED AND ASSERTED rather than
+   assumed: the landing page renders none of the constructs the rules below
+   paint. Every consumer of `.mono-caption`, `.button-primary`,
+   `.button-secondary`, `.card-hairline` and `.field-affix__unit` is an
+   organiser route or an organiser component; `src/sections/signal/`,
+   `src/island/`, `routes/landing.tsx`, `routes/exam.tsx` and
+   `components/exam/` render not one of them. `apps/web/test/theme.test.ts`
+   derives BOTH halves off disk — the class list out of this file and the
+   source set out of the entries — so a landing component that starts
+   rendering one of these, or a new rule here that paints a construct the
+   landing page does render, is a red test naming the file. The corrected
+   question is never "does the landing page render a table" but "does it
+   render THIS construct".
+
+   Rules the landing page DOES reach keep naming no colour at all: the
+   field row, the field affix's geometry and the row-action gutter are
+   layout and nothing else, and the gutter's own comment says why.
+
    No colour literal: every colour is a token var(). */
 
 /* ---- MonoCaption ------------------------------------------------------ */
@@ -24,7 +47,7 @@
   font-weight: var(--type-mono-sm-weight);
   line-height: var(--type-mono-sm-line-height);
   letter-spacing: var(--type-mono-sm-letter-spacing);
-  color: var(--color-muted);
+  color: var(--ink-3);
   margin: 0;
 }
 
@@ -34,8 +57,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  background: var(--color-cream);
-  color: var(--color-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
   font-weight: var(--type-button-md-weight);
@@ -47,6 +70,11 @@
   height: 46px;
   text-decoration: none;
   cursor: pointer;
+  /* The one cream token left in this file, deliberately. A shadow is not a
+     palette decision — it is 8% black under a pill, which is what a shadow
+     is on either ground — and `--color-shadow` is defined in `tokens.css`,
+     which BOTH chains load. A `theme.css` name here would be undefined on
+     the landing page for no gain. */
   box-shadow: 0 2px 4px rgb(from var(--color-shadow) r g b / 0.08);
   transition: none;
 }
@@ -61,21 +89,22 @@
 
 .button-primary:hover,
 .button-primary:focus-visible {
-  background: var(--color-voltage-deep);
-  color: var(--color-cream);
+  background: var(--accent-deep);
+  color: var(--accent-ink);
 }
 
-/* The surface variant: a CTA on a cream band takes the already-sanctioned
-   hover colours (voltage-deep fill, cream label, 5.66:1) as its resting
-   state, since the default cream pill would be invisible on cream. The
-   page's one shadow stays on the hero's primary CTA alone.
-
-   This is also the organiser side's only primary action style: docs/design.md
-   reserves voltage for the primary action and the focus ring there, and puts
-   the full-bleed voltage block on none of those screens. */
+/* The surface variant existed because the default CREAM pill would have been
+   invisible on a cream band, so it took the hover fill as its resting state.
+   `D1` dissolves that problem rather than solving it: the resting pill is
+   the accent now and reads on every organiser surface, so this variant and
+   the base rule paint the same two colours. What it still carries is the
+   other half of its job — the page's one shadow stays on the hero's primary
+   CTA alone, and this variant drops it. Kept as a separate rule rather than
+   folded in, because `box-shadow: none` is the declaration that differs and
+   the markup that asks for it has not changed. */
 .button-primary--surface {
-  background: var(--color-voltage-deep);
-  color: var(--color-cream);
+  background: var(--accent);
+  color: var(--accent-ink);
   box-shadow: none;
 }
 
@@ -91,14 +120,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
   font-weight: var(--type-button-md-weight);
   line-height: var(--type-button-md-line-height);
   letter-spacing: var(--type-button-md-letter-spacing);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-md);
   padding-block: 9px;
   padding-inline: 14px;
@@ -117,7 +146,7 @@
 
 .button-secondary:hover,
 .button-secondary:focus-visible {
-  border-color: var(--color-voltage);
+  border-color: var(--accent);
 }
 
 /* Disabled is deliberately opacity, never a colour swap: a disabled control
@@ -132,9 +161,9 @@
 /* ---- CardHairline ----------------------------------------------------- */
 
 .card-hairline {
-  background: var(--color-canvas);
-  color: var(--color-ink);
-  border: 1px solid var(--color-hairline);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-lg);
   padding: var(--space-xl);
 }
@@ -230,7 +259,7 @@
   display: flex;
   align-items: center;
   pointer-events: none;
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   font-weight: var(--type-mono-sm-weight);
