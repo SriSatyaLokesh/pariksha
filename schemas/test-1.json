@@ -208,12 +208,12 @@
             "camera_outage_seconds": {
               "type": "integer",
               "minimum": 1,
-              "description": "How long the camera may stay dark before the outage counts as a violation."
+              "description": "How long the camera may stay dark before the attempt is marked high_risk. A different axis from violation counting: camera_lost is already a violation event on its own."
             },
             "multi_face_snapshots": {
               "type": "integer",
               "minimum": 1,
-              "description": "How many consecutive snapshots with more than one face before the extra-face check counts as a violation."
+              "description": "How many consecutive snapshots with more than one face before the attempt is marked high_risk."
             },
             "allow_calculator": { "type": "boolean" }
           },
