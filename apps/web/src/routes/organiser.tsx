@@ -18,6 +18,7 @@ import { BankBrowser } from "./bank";
 import { QuestionScreen } from "./question";
 import { TestList } from "./tests";
 import { TestBuilder } from "./test";
+import { ImportScreen } from "./import";
 
 // Routing, without a router.
 //
@@ -76,6 +77,21 @@ type View =
       workspace: Workspace;
       bankId: string;
       initial?: Question;
+    }
+  // `D18`: import is a page. `bankId` present is a bank import; absent is a
+  // whole-test import, which names no bank because it creates its own
+  // test — the same asymmetry `?view=import[&bank=…]` carries, and the
+  // reason there is no second `kind` field here to fall out of step with
+  // it.
+  | {
+      kind: "import";
+      actor: Actor;
+      workspace: Workspace;
+      // `| undefined` spelled out, not just `?`: `exactOptionalPropertyTypes`
+      // is on, and `fromUrl` assigns `readView`'s own `string | undefined`
+      // straight through rather than branching on a value that is allowed
+      // to be absent.
+      bankId?: string | undefined;
     };
 
 export function OrganiserApp({
@@ -270,6 +286,9 @@ export function OrganiserApp({
           workspaceId={view.workspace.id}
           client={client}
           onOpenTest={(testId) => go({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
+          // `D18`: no bank id, so `?view=import` with nothing after it —
+          // which is what tells the page it is importing a whole test.
+          onImport={() => go({ kind: "import", actor: view.actor, workspace: view.workspace })}
         />,
       );
     case "test":
@@ -339,6 +358,9 @@ export function OrganiserApp({
               initial: question.document,
             })
           }
+          onImport={() =>
+            go({ kind: "import", actor: view.actor, workspace: view.workspace, bankId: view.bankId })
+          }
         />,
       );
     case "question":
@@ -364,6 +386,39 @@ export function OrganiserApp({
           onSaved={() => undefined}
         />,
       );
+    case "import": {
+      // One arm, both kinds (`D18` names one page, and `ImportDialog`
+      // already proved one component serves both: "a second copy of the
+      // error-summary pattern would be a second thing to keep in step").
+      // The rail marks Banks or Tests by which import this is, because
+      // that is the list the organiser came from and will go back to.
+      const bankImport = view.bankId !== undefined;
+      return shell(
+        bankImport ? "banks" : "tests",
+        view.actor,
+        view.workspace,
+        bankImport
+          ? { title: "Import questions", crumb: "Question banks" }
+          : { title: "Import a test", crumb: "Tests" },
+        <ImportScreen
+          workspaceId={view.workspace.id}
+          bankId={view.bankId}
+          kind={bankImport ? "bank" : "test"}
+          client={client}
+          // Where the dialog closed itself and asked its route to
+          // re-fetch, a page navigates: back to the bank it filled, or to
+          // the test list. Both screens fetch on mount, so arriving there
+          // is the re-fetch.
+          onImported={() =>
+            go(
+              view.bankId === undefined
+                ? { kind: "tests", actor: view.actor, workspace: view.workspace }
+                : { kind: "bank", actor: view.actor, workspace: view.workspace, bankId: view.bankId },
+            )
+          }
+        />,
+      );
+    }
   }
 }
 
@@ -412,6 +467,13 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
       return params.bank === undefined
         ? home
         : { kind: "bank", actor, workspace, bankId: params.bank };
+    case "import":
+      // The one view with no "no id, no view" refusal to make, because
+      // there is no missing id: `?view=import` without a bank is the test
+      // import, not a bank import with its id lost. A bank id that is a
+      // claim rather than a fact is still refused the way every other
+      // screen's is — by the import itself, which the server answers.
+      return { kind: "import", actor, workspace, bankId: params.bank };
     case "home":
       return home;
   }
@@ -433,6 +495,12 @@ function paramsOf(view: View): ViewParams | null {
       return { view: "bank", bank: view.bankId };
     case "question":
       return { view: "question", bank: view.bankId };
+    case "import":
+      // The key is omitted rather than set to `undefined`
+      // (`exactOptionalPropertyTypes`), and `writeView` then deletes
+      // `?bank=` because the new view carries no value for it — which is
+      // exactly what a test import needs.
+      return { view: "import", ...(view.bankId !== undefined && { bank: view.bankId }) };
     default:
       return null;
   }

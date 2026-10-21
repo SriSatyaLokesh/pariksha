@@ -27,7 +27,19 @@ import type { NavKey } from "../components/OrganiserShell";
  * other parameter a screen owns (`TestList`'s `?status=`/`?search=`).
  */
 export interface ViewParams {
-  view: NavKey | "test" | "bank" | "question";
+  /**
+   * `import` is 6.5e Task 4's (`D18`: "a page, not a modal — linkable").
+   * A VIEW and not a `?panel=` value: `?panel=` belongs to 6.5d's five
+   * settings panels inside one screen, and import is a destination of its
+   * own, reached from two different screens.
+   *
+   * It is also the one view whose `bank` is optional, and that optionality
+   * carries the meaning a second parameter would otherwise:
+   * `?view=import&bank=bnk_1` is a bank import, `?view=import` alone is a
+   * whole-test import — which names no bank, because it creates its own
+   * test. One parameter, not two that can disagree.
+   */
+  view: NavKey | "test" | "bank" | "question" | "import";
   test?: string;
   bank?: string;
   section?: string;
@@ -46,6 +58,7 @@ const VIEWS: readonly ViewParams["view"][] = [
   "test",
   "bank",
   "question",
+  "import",
 ];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */

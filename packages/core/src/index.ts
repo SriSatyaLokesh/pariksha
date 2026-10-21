@@ -58,6 +58,12 @@ export { PoolTooSmallError, assignSet, layoutForAttempt, matchesFilter } from ".
 // Cross-field import validation, for a bank and for a test document.
 export * from "./validate.js";
 
+// The downloadable import sample (`D18`): one question of every type, for
+// the organiser's import page. `apps/api/test/import/json.test.ts` puts it
+// through the real import route, which is what makes "it cannot drift from
+// what the importer accepts" a guard rather than a hope.
+export { sampleBank, SAMPLE_BANK_FILENAME } from "./sample.js";
+
 // WCAG contrast, for T-23's brand colour (Task 10, #61, P5.8). Public
 // because three callers need the identical number: the colour picker, the
 // server that re-checks the write, and the two apps/web test files that

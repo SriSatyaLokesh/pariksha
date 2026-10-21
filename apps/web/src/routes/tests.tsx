@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSummary } from "../lib/api";
-import { ImportDialog } from "../components/authoring/ImportDialog";
+import { downloadJson } from "../lib/download";
 import { CardHairline } from "../components/CardHairline";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
@@ -147,19 +147,6 @@ function toApiFilter(filter: UrlFilter): TestFilter {
  * already-fetched document into a saved file. Duplicated from `bank.tsx`
  * rather than shared: six lines, two callers, and a `lib/download.ts` for
  * them would be a module whose whole content is one DOM idiom. */
-function downloadJson(doc: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 const SLUG_HELP = "Letters, numbers and hyphens, starting with a letter or number.";
 const NAME_MAX = 200;
 
@@ -167,9 +154,13 @@ export function TestList({
   workspaceId,
   client,
   onOpenTest,
+  onImport,
 }: {
   workspaceId: string;
   client: ApiClient;
+  /** `D18`: import is a page of its own now, so this screen navigates to
+   * it rather than mounting it. */
+  onImport: () => void;
   /** Task 3 (#55, P5.2): a test's name opens its builder (Screen 7 onward),
    * the same `onOpenBank` pattern `BankList` already follows. */
   onOpenTest: (testId: string) => void;
@@ -187,8 +178,8 @@ export function TestList({
   const [slugDrafts, setSlugDrafts] = useState<Record<string, string>>({});
   const [slugError, setSlugError] = useState<Record<string, string>>({});
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  // Task 12 (#63, P5.10): clone, export and import.
-  const [importing, setImporting] = useState(false);
+  // Task 12 (#63, P5.10): clone and export. Import left this screen in
+  // 6.5e Task 4 (`D18`) and became a page.
   const [activity, setActivity] = useState("");
   const [clonedId, setClonedId] = useState<string | null>(null);
   const clonedRef = useRef<HTMLInputElement>(null);
@@ -378,27 +369,11 @@ export function TestList({
           </form>
         </CardHairline>
 
-        <button
-          type="button"
-          className="button-secondary"
-          aria-expanded={importing}
-          onClick={() => setImporting((prev) => !prev)}
-        >
-          {importing ? "Cancel import" : "Import a test"}
+        {/* `D18`: a link to a page, not a toggle that unfolds a dialog.
+            `aria-expanded` went with the dialog — nothing here expands. */}
+        <button type="button" className="button-secondary" onClick={onImport}>
+          Import a test
         </button>
-
-        {importing && (
-          <ImportDialog
-            workspaceId={workspaceId}
-            client={client}
-            kind="test"
-            onClose={() => setImporting(false)}
-            onImported={() => {
-              setImporting(false);
-              void load(filter);
-            }}
-          />
-        )}
 
         {/* Always present, text swapped in place — a live region inserted
             already carrying its text does not reliably announce. */}
