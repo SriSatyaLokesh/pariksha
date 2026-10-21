@@ -121,6 +121,8 @@ export const getAttempt = scoped(
     deadlineAt: number;
     submittedAt: number | null;
     flag: string;
+    integrityFlag: string;
+    observed: boolean;
   } | null> => {
     const rows = await db.query<{
       id: string;
@@ -132,8 +134,10 @@ export const getAttempt = scoped(
       deadline_at: number;
       submitted_at: number | null;
       flag: string;
+      integrity_flag: string;
+      observed: unknown;
     }>(
-      "SELECT id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, flag FROM attempt WHERE workspace_id = ? AND id = ?",
+      "SELECT id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, flag, integrity_flag, observed FROM attempt WHERE workspace_id = ? AND id = ?",
       [workspaceId, attemptId],
     );
     const row = rows[0];
@@ -148,7 +152,31 @@ export const getAttempt = scoped(
       deadlineAt: Number(row.deadline_at),
       submittedAt: row.submitted_at === null ? null : Number(row.submitted_at),
       flag: row.flag,
+      integrityFlag: row.integrity_flag,
+      // SQLite hands this back as 0/1; Boolean(...) is what the same
+      // `review_requested` read already does in repo/tests.ts.
+      observed: Boolean(row.observed),
     };
+  },
+);
+
+/**
+ * Sets the integrity verdict and whether this attempt was observed —
+ * proctoring's axis, independent of `flag` (grading's). Phase 7e computes
+ * `integrityFlag` from `observed` and other signals; this is only the
+ * writer, which is why it never touches `flag`.
+ */
+export const setIntegrity = scoped(
+  "setIntegrity",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; integrityFlag: string; observed: boolean },
+  ): Promise<void> => {
+    await db.run(
+      "UPDATE attempt SET integrity_flag = ?, observed = ? WHERE workspace_id = ? AND id = ?",
+      [input.integrityFlag, input.observed ? 1 : 0, workspaceId, input.attemptId],
+    );
   },
 );
 

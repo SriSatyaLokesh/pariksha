@@ -15,12 +15,14 @@ import {
   createAttempt,
   createTest,
   createWorkspace,
+  getAttempt,
   getDraftVersion,
   migrate,
   newId,
   publishDraftVersion,
   putDraftVersion,
   readAttemptByTokenHash,
+  setIntegrity,
   sqliteClient,
   type DbClient,
   type TestDocumentBody,
@@ -271,6 +273,39 @@ it("another candidate's attempts are not counted against this one", async () => 
   const theirs = await candidateIn(alpha);
   await attempt(alpha, { candidateId: theirs, tokenHash: "theirs" });
   expect((await countAttemptsForCandidate(db, alpha.workspaceId, mine, NOW)).count).toBe(0);
+});
+
+// --- integrity_flag / observed (Phase 7a Task 3, Q6) --------------------
+//
+// A different axis from grading: `flag` already carries a grading verdict
+// (`submit.ts:357` writes "scoring_blocked" when a bound refuses scoring),
+// and `setIntegrity` must never touch it.
+
+it("keeps a scoring_blocked flag through an integrity update", async () => {
+  const candidateId = await candidateIn(alpha);
+  const id = await attempt(alpha, { candidateId, tokenHash: "integrity-blocked" });
+  await db.run("UPDATE attempt SET flag = ? WHERE id = ?", ["scoring_blocked", id]);
+
+  await setIntegrity(db, alpha.workspaceId, {
+    attemptId: id,
+    integrityFlag: "high_risk",
+    observed: false,
+  });
+
+  const row = await getAttempt(db, alpha.workspaceId, id);
+  expect(row?.flag).toBe("scoring_blocked");
+  expect(row?.integrityFlag).toBe("high_risk");
+  // Not merely falsy: SQLite stores this as 0, and `toBe(false)` would pass
+  // on a raw 0 just as readily as on a real boolean.
+  expect(row?.observed).toBe(false);
+});
+
+it("defaults a fresh attempt to clean and observed", async () => {
+  const candidateId = await candidateIn(alpha);
+  const id = await attempt(alpha, { candidateId, tokenHash: "integrity-default" });
+  const row = await getAttempt(db, alpha.workspaceId, id);
+  expect(row?.integrityFlag).toBe("clean");
+  expect(row?.observed).toBe(true);
 });
 
 // --- countAttemptsForVersion -------------------------------------------

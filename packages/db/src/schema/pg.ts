@@ -259,6 +259,9 @@ export const attempt = pgTable(
     tokenHash: text("token_hash").notNull(),
     maxIndex: integer("max_index").notNull(),
     sectionStartedAt: bigint("section_started_at", { mode: "number" }),
+    // Phase 7a Task 3 (Q6): a separate axis from `flag` (grading).
+    integrityFlag: text("integrity_flag").notNull(),
+    observed: boolean("observed").notNull(),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

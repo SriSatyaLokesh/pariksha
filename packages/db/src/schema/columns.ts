@@ -402,6 +402,20 @@ export const TABLE_MANIFEST: TableSpec[] = [
       // from, and is null until the candidate enters a timed section.
       int("max_index"),
       ts("section_started_at", { null: true }),
+      // Phase 7a Task 3 (Q6): integrity is a different axis from grading.
+      // `flag` above is already NOT NULL and `submit.ts:357` writes
+      // "scoring_blocked" into it on a `bounded.ts` refusal — overloading
+      // that one column would mean every integrity recompute risks erasing
+      // a grading state. So two columns, independent of `flag` and of each
+      // other. Nothing in this plan computes `integrity_flag`; 7e does
+      // (Q6), reading `observed` (and other signals) to produce it.
+      //
+      // `integrity_flag` defaults `"clean"` and `observed` defaults `true`
+      // — a candidate is assumed clean and watched until proctoring signals
+      // say otherwise, which is also the correct backfill for every attempt
+      // already in flight when this migration runs.
+      text("integrity_flag"),
+      bool("observed"),
     ],
     indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
     uniques: [["token_hash"]],
