@@ -8,3 +8,15 @@
 
 @import "./primitives.css";
 @import "./signal.css";
+
+/* No D17 control pair here, deliberately. 6.5d Task 5 put the one checkbox
+   and the one radio in primitives.css, which this chain imports, and fix
+   round 2 moved them to registration.css — the only stylesheet the
+   organiser's chain and the candidate's share — so the rule would reach the
+   candidate runtime (#201). This chain imports neither.
+
+   That is correct rather than a gap: nothing under src/sections/signal/,
+   src/routes/landing.tsx or src/island/ renders a checkbox or a radio, so
+   defining a pair here would name a ground for a control that does not
+   exist. test/exam/controls.test.tsx asserts the absence, so the day one
+   appears the seam is a red test rather than a second #201. */

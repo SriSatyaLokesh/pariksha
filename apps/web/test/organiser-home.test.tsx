@@ -28,7 +28,7 @@ const HOME_CSS = resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles
 
 /** Every declaration `home.css` makes for `selector`, merged across the
  *  rules that name it (a base rule plus a `@media` reopening). */
-function declaredFor(selector: string): string[] {
+function declarationsOf(selector: string): string[] {
   return parseRuleBodies(readResolvedCss(HOME_CSS))
     .filter((rule) => rule.selector === selector)
     .flatMap((rule) => declarations(rule.body));
@@ -228,9 +228,9 @@ describe("the agenda groups by time horizon (D6a)", () => {
     // The reveal is `opacity`, never `visibility` (`D21a`), so the button is
     // tabbable before it is visible and focusing it is what shows it.
     expect(within(agenda()).getAllByRole("button", { name: /^Open / })).toHaveLength(4);
-    expect(declaredFor(".home__row-action")).toContain("opacity: 0");
+    expect(declarationsOf(".home__row-action")).toContain("opacity: 0");
     expect(
-      declaredFor(".home__row:hover .home__row-action, .home__row-action:focus-visible"),
+      declarationsOf(".home__row:hover .home__row-action, .home__row-action:focus-visible"),
     ).toContain("opacity: 1");
   });
 
@@ -295,14 +295,14 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     // The element the stylesheet bounds is the element Home renders.
     expect(container.querySelector(".home")).not.toBeNull();
 
-    const page = declaredFor(".shell__page:has(> .home)");
+    const page = declarationsOf(".shell__page:has(> .home)");
     const sizing = page.filter((decl) => /^(height|min-height|max-height)\s*:/.test(decl));
     expect(sizing).not.toHaveLength(0);
     expect(sizing.filter((decl) => /--shell-|calc\(/.test(decl))).toEqual([]);
 
     expect(page).toContain("overflow: hidden");
     // And nothing reintroduces a second, duplicated bound on the child.
-    expect(declaredFor(".shell__page > .home").join(";")).not.toMatch(/max-height/);
+    expect(declarationsOf(".shell__page > .home").join(";")).not.toMatch(/max-height/);
   });
 
   it("lets the page's height reach the panes", async () => {
@@ -312,7 +312,7 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     // is content-sized inside a clipped page, and without `min-height: 0`
     // the scroll areas below can never shrink, which pushes the strip off
     // screen rather than scrolling a pane.
-    const rules = declaredFor(".shell__page > .home");
+    const rules = declarationsOf(".shell__page > .home");
     expect(rules).toContain("flex: 1");
     expect(rules).toContain("min-height: 0");
     // Kept on the child too: shell.css gives every direct child of the page
@@ -330,7 +330,7 @@ describe("Home never scrolls, and its panes do (D21)", () => {
   it("floors the panes so they cannot be squeezed to a sliver", async () => {
     await openHome();
 
-    const panes = declaredFor(".home__panes");
+    const panes = declarationsOf(".home__panes");
     expect(panes).toContain("--home-pane-floor: 9rem");
     // One name the release rule reads, set per layout, so the stacked case
     // needs no branch of its own.
@@ -344,13 +344,13 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     await openHome();
 
     // The bound relaxes to a minimum, and the clip is lifted with it.
-    const page = declaredFor(".shell__page:has(> .home)");
+    const page = declarationsOf(".shell__page:has(> .home)");
     expect(page).toContain("min-height: 100%");
     expect(page).toContain("overflow: visible");
     // The floor becomes an explicit flex basis there: a zero basis in an
     // intrinsically-sized container makes the panes' contribution their
     // whole content, which turns the page into one long list.
-    expect(declaredFor(".home__panes")).toContain("flex: 1 1 var(--home-panes-floor)");
+    expect(declarationsOf(".home__panes")).toContain("flex: 1 1 var(--home-panes-floor)");
   });
 
   // The three fixes a browser probe found. jsdom cannot see any of them, so
@@ -358,13 +358,13 @@ describe("Home never scrolls, and its panes do (D21)", () => {
   it("keeps the row action out of the flow, so it costs a row no width", async () => {
     await openHome();
 
-    expect(declaredFor(".home__row-action")).toContain("position: absolute");
+    expect(declarationsOf(".home__row-action")).toContain("position: absolute");
   });
 
   it("makes the reason give way before the subject does", async () => {
     await openHome();
 
-    expect(declaredFor(".home__row-reason")).toContain("flex: 0 4 auto");
+    expect(declarationsOf(".home__row-reason")).toContain("flex: 0 4 auto");
   });
 
   it("paints the shell frame Home sits in, not only the page", async () => {
@@ -372,7 +372,7 @@ describe("Home never scrolls, and its panes do (D21)", () => {
 
     // The rail is `align-self: start`, so the grid cell below it shows
     // `.shell`'s own background — a cream wedge under the nav without this.
-    expect(declaredFor(".shell:has(> .shell__page > .home)")).toContain(
+    expect(declarationsOf(".shell:has(> .shell__page > .home)")).toContain(
       "background: var(--ground-2)",
     );
   });
@@ -381,7 +381,7 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     const { container } = await openHome();
 
     expect(container.querySelectorAll(".home__pane .home__scroll")).toHaveLength(2);
-    const rules = declaredFor(".home__scroll");
+    const rules = declarationsOf(".home__scroll");
     expect(rules).toContain("overflow-y: auto");
     expect(rules).toContain("min-height: 0");
   });
@@ -479,7 +479,7 @@ describe("the strip selects rather than reads out (D21, D21b)", () => {
     expect(subjectsIn(recent())).toEqual(["Midterm", "Mock 2", "Sketch"]);
     // 0.8 and no further — past that the row's secondary text drops under
     // the 3:1 DESIGN.md requires.
-    expect(declaredFor('.home__row[data-marked="off"]')).toContain("opacity: 0.8");
+    expect(declarationsOf('.home__row[data-marked="off"]')).toContain("opacity: 0.8");
   });
 
   it("reports the marked count in a live region", async () => {
@@ -502,7 +502,7 @@ describe("the strip selects rather than reads out (D21, D21b)", () => {
     // The same construct the agenda uses for urgency, so the strip and the
     // list speak one language.
     expect(container.querySelectorAll(".home__row .home__dot").length).toBeGreaterThan(0);
-    const dot = declaredFor(".home__dot");
+    const dot = declarationsOf(".home__dot");
     expect(dot).toContain("width: 7px");
     expect(dot).toContain("height: 7px");
     expect(dot).toContain("border-radius: var(--rounded-full)");

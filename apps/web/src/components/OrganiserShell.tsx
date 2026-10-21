@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { MonoCaption } from "./MonoCaption";
 import type { Actor, Workspace } from "../lib/api";
 import { readGround, writeGround, type Ground } from "../lib/ground";
@@ -20,17 +20,68 @@ export type NavKey = "home" | "banks" | "tests";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
-   or a font: five glyphs do not earn a loading strategy. */
-const ICONS: Record<string, string[]> = {
+   or a font: twelve glyphs do not earn a loading strategy.
+
+   Exported from 6.5d Task 1 (fix round 1) rather than copied: the builder's
+   five setting rows (`D7`) needed icons, and the only way "one family" stays
+   true is if there is literally one `ICONS` and one `Icon`. The five entries
+   below `moon` are that plan's; they are on this viewBox, at this stroke,
+   and they are the whole reason this is `export` and not `const`. A second
+   family — a font, a sprite, a dependency, or a row of Unicode glyphs whose
+   coverage is per-OS — is the thing this comment exists to refuse. */
+export const ICONS: Record<string, string[]> = {
   home: ["M3 9.2 10 3.2l7 6v8.1a.7.7 0 0 1-.7.7h-3.8v-5H7.5v5H3.7a.7.7 0 0 1-.7-.7Z"],
   banks: ["M10 2.6 2.6 6.4 10 10.2l7.4-3.8Z", "M2.6 10 10 13.8 17.4 10", "M2.6 13.6 10 17.4l7.4-3.8"],
   tests: ["M5.4 2.6h6l3.2 3.2v11.6H5.4Z", "M11.2 2.6v3.4h3.4", "M7.8 10.4h4.4", "M7.8 13.4h4.4"],
   panel: ["M3 4.2h14v11.6H3Z", "M7.8 4.2v11.6"],
   sun: ["M10 6.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Z", "M10 2.4v1.6", "M10 16v1.6", "M2.4 10H4", "M16 10h1.6", "M4.6 4.6l1.2 1.2", "M14.2 14.2l1.2 1.2", "M15.4 4.6l-1.2 1.2", "M5.8 14.2l-1.2 1.2"],
   moon: ["M16 11.8A6.6 6.6 0 0 1 8.2 4a6.6 6.6 0 1 0 7.8 7.8Z"],
+  /* The builder's five settings (`D7`): a clock, a lock, a filled-in form,
+     a bar chart and a drop of ink. */
+  timing: ["M10 3.4a6.6 6.6 0 1 0 0 13.2 6.6 6.6 0 0 0 0-13.2Z", "M10 6.4V10l2.8 1.8"],
+  access: ["M5.4 9h9.2v7.8H5.4Z", "M7.6 9V6.8a2.4 2.4 0 0 1 4.8 0V9"],
+  registration: [
+    "M7.4 3.4h5.2v2.2H7.4Z",
+    "M12.6 4.4h2v13H5.4v-13h2",
+    "M8 9.4h4",
+    "M8 12.6h4",
+  ],
+  results: ["M3.4 16.6h13.2", "M6.2 16.6v-4.4", "M10 16.6V7", "M13.8 16.6v-6.6"],
+  branding: ["M10 3.2c0 0 4.6 5.2 4.6 8.4a4.6 4.6 0 0 1-9.2 0C5.4 8.4 10 3.2 10 3.2Z"],
+  /* 6.5d Task 6: the "In review" badge, on the builder header and the test
+     list. It replaces U+25C6 BLACK DIAMOND — a text character whose shape,
+     weight and baseline are the reader's font's business, which is the
+     thing §13 and PRD S-11 refuse. A lens, because the badge says the
+     draft is being LOOKED AT; a tick would say it had been approved, and
+     approvals are ADR 0007's undelivered half (`D18`). */
+  review: ["M9 3.4a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4Z", "M12.9 12.9 16.8 16.8"],
 };
 
-function Icon({ name }: { name: string }) {
+/**
+ * `D7a` — "Opening a section or a setting retracts **both** sides
+ * automatically ... auto-collapse is a convenience, never a lock."
+ *
+ * A screen inside `children` has no handle on `railOpen`, which lives here.
+ * A context rather than a callback prop, because the alternative is one more
+ * argument through `organiser.tsx`'s page descriptor and every one of its
+ * eleven arms, for a thing exactly one screen asks for. The default is a
+ * no-op, so a screen rendered outside the shell (sign-in, the wizard, the
+ * boot) calls it harmlessly.
+ *
+ * TRANSIENT AND UNSTORED, and that is the whole of what keeps it clear of
+ * `D18`. Nothing writes this to `localStorage` (see `lib/rail-state.ts`,
+ * which carries the checklist side only and says why): it lasts as long as
+ * the screen, so it cannot be read back on a first paint and cannot reopen
+ * — or re-collapse — a rail whose default `D18` derives from `wide`.
+ */
+const RetractRail = createContext<() => void>(() => {});
+
+/** Collapse the nav rail, once, now. See `RetractRail` above. */
+export function useRetractRail(): () => void {
+  return useContext(RetractRail);
+}
+
+export function Icon({ name }: { name: string }) {
   return (
     <svg
       className="shell__icon"
@@ -122,6 +173,15 @@ export function OrganiserShell({
   useEffect(() => {
     setRailOpen(!wide);
   }, [wide]);
+
+  // `D7a`'s nav half. It survives the effect above rather than racing it:
+  // that effect fires only when `wide` changes, which for the builder means
+  // arriving at it or leaving it — never while a section is being opened —
+  // so a retract taken inside the screen stands until the reader navigates
+  // or presses the toggle. `D18`'s width-derived default is untouched, and
+  // the half of `D18` that says "the toggle still restores it" is what the
+  // button below keeps doing.
+  const retract = useCallback(() => setRailOpen(false), []);
 
   const hasHead =
     crumb !== undefined || title !== undefined || lead !== undefined || actions !== undefined;
@@ -253,7 +313,7 @@ export function OrganiserShell({
               {actions !== undefined && <div className="shell__head-actions">{actions}</div>}
             </div>
           )}
-          {children}
+          <RetractRail.Provider value={retract}>{children}</RetractRail.Provider>
         </main>
       </div>
     </>

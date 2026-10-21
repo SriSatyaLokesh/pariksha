@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { can } from "@pariksha/core";
-import type { FormField, TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
+import type { TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
 import {
   ApiError,
   type Actor,
@@ -19,11 +19,24 @@ import { TimingPanel } from "../components/testbuilder/TimingPanel";
 import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
+import {
+  PANEL_KEYS,
+  SettingRow,
+  accessSummary,
+  brandingSummary,
+  identityFieldOf,
+  registrationSummary,
+  resultsSummary,
+  timingSummary,
+  type PanelKey,
+} from "../components/testbuilder/SettingRow";
+import { Icon, useRetractRail } from "../components/OrganiserShell";
 import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
 import { useDialogKeys } from "../components/useDialogKeys";
 import { readView, writeView } from "../lib/view-url";
+import { readRailState, writeRailState, type RailState } from "../lib/rail-state";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -51,6 +64,37 @@ const DEFAULT_RELEASE: TestRelease = { when: "on_submit" };
 
 const NO_BRANDING: TestBranding = {};
 
+/**
+ * Which setting the URL says is open (`D7` in `D5`'s query string).
+ *
+ * Two claims this resolves, both of which a hand-edited or stale link can
+ * make:
+ *
+ * 1. A `?panel=` that names nothing. `view-url.ts` is explicit that it does
+ *    not validate — an id in a URL is a claim anyone can type, and the
+ *    consumer decides — so the check against the five lives here, where the
+ *    union does, and not in the shared parser.
+ * 2. `?section=` and `?panel=` together. **The spine wins**: the section
+ *    opens and no panel does (6.5d's ruling). A stale URL that opens a
+ *    section instead of a setting costs one click to correct; the reverse
+ *    hides the thing being edited behind a settings panel.
+ *
+ * Deliberately a question about the URL and not about the draft, which has
+ * not been fetched when this first runs: `?section=` naming a section this
+ * test does not have still suppresses the panel. The rule is "the URL
+ * claims a section", not "a section is open", because the second is not
+ * knowable on first paint and a rule that changes answer once the fetch
+ * lands is worse than one that is stable and occasionally empty.
+ */
+function panelFromUrl(): PanelKey | null {
+  const params = readView(window.location.search);
+  if (params.section) return null;
+  const claimed = params.panel;
+  return (PANEL_KEYS as readonly string[]).includes(claimed ?? "")
+    ? (claimed as PanelKey)
+    : null;
+}
+
 export function TestBuilder({
   workspaceId,
   testId,
@@ -74,10 +118,24 @@ export function TestBuilder({
   const [test, setTest] = useState<TestSummary | null>(null);
   const [versions, setVersions] = useState<readonly TestVersionSummary[]>([]);
   const [confirming, setConfirming] = useState<"close" | "archive" | null>(null);
-  // Task 13 (#64, P5.11): `null` is "the checklist is not open". Publish
-  // opens it rather than publishing (UX-17: "a publish checklist, not a
-  // publish button"), and confirming inside it is what calls the route.
+  // Task 13 (#64, P5.11), re-sited by 6.5d's `D7`: `null` is "not read
+  // yet", NOT "not open" — the checklist is a rail that is present from the
+  // first paint, so this is filled by `load` below rather than by the
+  // Publish button. `[]` would be the opposite claim ("every check passed")
+  // and is what the rail prints once the load answers with no rows.
+  // UX-17 survives the move: Publish still re-runs the checks and sends the
+  // reader to the rail, and confirming inside the rail is what calls the
+  // route.
   const [checklist, setChecklist] = useState<readonly ChecklistRow[] | null>(null);
+  // `D7a`/`D7d`: which side the viewer left the checklist rail on, per
+  // viewer. Only the checklist side is stored — `rail-state.ts`'s own header
+  // says why the nav side is not.
+  const [rail, setRail] = useState<RailState>(readRailState);
+  const railRef = useRef<HTMLElement>(null);
+  // `D7a`'s other side. `OrganiserShell` owns the nav rail's state under
+  // `D18`; this is the one-call handle it hands its children. Transient and
+  // unstored, which is what keeps it clear of `D18`'s width-derived default.
+  const retractNavRail = useRetractRail();
   const [rerunning, setRerunning] = useState(false);
   const [publishing, setPublishing] = useState(false);
   // UX-18 (Task 7): a test with a published version behind it is the case
@@ -105,6 +163,11 @@ export function TestBuilder({
   const [openSectionId, setOpenSectionId] = useState<string | null>(
     () => readView(window.location.search).section ?? null,
   );
+  // Phase 6.5d (`D7`): one open setting at a time, so this is one key and
+  // not a set — and it lives in `?panel=`, through the same
+  // `readView`/`writeView` pair `?section=` above already uses, so an
+  // opened setting is a place a reload, a bookmark and Back all return to.
+  const [openPanel, setOpenPanel] = useState<PanelKey | null>(panelFromUrl);
   // Task 5 (#57, P5.4): a whole `DraftPatch` rather than a sections array —
   // the registration form is a `settings` block and saves through the same
   // debounce, the same in-flight guard and the same one route. Each panel
@@ -119,9 +182,35 @@ export function TestBuilder({
 
   const historyRef = useRef<HTMLDivElement>(null);
 
+  /** The one writer of the rail's state, so the stored value and the
+   *  rendered one cannot drift. Auto-retraction (`D7a`) goes through here
+   *  too: a reader who opened a section meant the page to make room, and
+   *  that is a preference worth remembering. */
+  const setChecklistRail = useCallback((next: RailState["checklist"]) => {
+    const state: RailState = { checklist: next };
+    setRail(state);
+    writeRailState(state);
+  }, []);
+
+  /**
+   * `D7a` — "Opening a section or a setting retracts **both** sides
+   * automatically", and the one place that is true of. Separate from
+   * `setChecklistRail` above, which is also what the pin calls: pinning the
+   * checklist back open is not an edit and must not touch the nav.
+   *
+   * "A convenience, never a lock": neither side is disabled by this. The nav
+   * toggle in the top bar and the pin in the rail both still answer
+   * immediately afterwards, which is what `checklist-rail.test.tsx`'s
+   * "retracts both sides" case asserts after each retraction.
+   */
+  const retractSides = useCallback(() => {
+    setChecklistRail("lights");
+    retractNavRail();
+  }, [setChecklistRail, retractNavRail]);
+
   const load = useCallback(async () => {
     try {
-      const [summary, version, branding, listed, history] = await Promise.all([
+      const [summary, version, branding, listed, history, rows] = await Promise.all([
         client.test(workspaceId, testId),
         client.draft(workspaceId, testId),
         // An Author cannot write workspace branding but can read it — the
@@ -133,12 +222,19 @@ export function TestBuilder({
         // collecting a 403 that would fail this whole load.
         canManageCandidates ? client.candidates(workspaceId, testId) : Promise.resolve([]),
         client.versions(workspaceId, testId),
+        // `D7`: the rail is present from the first paint, so its rows are
+        // part of the screen's own load rather than something the Publish
+        // button fetches. `requires("tests.edit")` on the route, which is
+        // exactly who reaches this screen, so no role has to opt out of it
+        // the way `candidates` above does.
+        client.checklist(workspaceId, testId),
       ]);
       setTest(summary);
       setVersions(history);
       setWorkspaceBranding(branding);
       setCandidates(listed);
       setDraft(version);
+      setChecklist(rows);
       setError(undefined);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "The test could not be loaded.");
@@ -150,8 +246,10 @@ export function TestBuilder({
   }, [load]);
 
   useEffect(() => {
-    const onPopState = () =>
+    const onPopState = () => {
       setOpenSectionId(readView(window.location.search).section ?? null);
+      setOpenPanel(panelFromUrl());
+    };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
@@ -174,9 +272,29 @@ export function TestBuilder({
   // 6.5d and 6.5e must keep that invariant or pass the view in.
   function openSection(id: string | null): void {
     setOpenSectionId(id);
+    // `D7a`: "Opening a section or a setting retracts both sides
+    // automatically." Both, now: `retractSides` above collapses the nav rail
+    // through `OrganiserShell`'s context as well. A convenience and never a
+    // lock — the pin in the rail and the toggle in the bar both still answer.
+    if (id !== null) retractSides();
     const params = readView(window.location.search);
     if (id) params.section = id;
     else delete params.section;
+    writeView(params);
+  }
+
+  /** `D7`: one at a time, and its own row closes it — the same read-then-
+   *  mutate shape as `openSection` above, for the same reason. `writeView`
+   *  clears every id it owns that the params it is handed omit, so anything
+   *  that built a `ViewParams` from scratch here would silently drop
+   *  `?section=` (and `?test=`) on the way to writing `?panel=`. */
+  function togglePanel(id: PanelKey): void {
+    const next = openPanel === id ? null : id;
+    setOpenPanel(next);
+    if (next !== null) retractSides();
+    const params = readView(window.location.search);
+    if (next) params.panel = next;
+    else delete params.panel;
     writeView(params);
   }
 
@@ -191,7 +309,8 @@ export function TestBuilder({
   // the save is debounced the way `TestList`'s own filter already is (same
   // pattern, copied), so a burst of keystrokes costs one round trip rather
   // than one each. One *settled* save is then followed by one
-  // `GET …/draft`, because PATCH deliberately answers without
+  // `GET …/draft` — and, since `D7b`, by the one `GET …/checklist` that
+  // rides it — because PATCH deliberately answers without
   // `draw`/`setPoints`/`points` (apps/api/src/routes/tests.ts) and without
   // the re-fetch UX-15's live draw and UX-12's points froze from the first
   // keystroke onward. Only the derived figures are taken from it —
@@ -232,15 +351,59 @@ export function TestBuilder({
         // landing after the next keystroke would otherwise type over the
         // author, and `saveSeq` drops it outright once a newer save has
         // started.
-        try {
-          const fresh = await client.draft(workspaceId, testId);
-          if (saveSeq.current !== seq) return;
-          setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
-        } catch {
-          // The save itself landed; only the derived figures are a beat
-          // behind, and the next load corrects them. Reporting a failure
-          // over a save that succeeded would be the worse lie.
-        }
+        //
+        // `D7b`: the checklist rides that same settled save. "A rail that
+        // reads only on mount lies while the author works" — it goes on
+        // showing rows the author has already answered, and goes on offering
+        // journeys into sections that are gone. One read per settled burst,
+        // riding this save rather than a timer of its own: a second debounce
+        // would be a second answer to the question this one already settled,
+        // and the interval is not a knob (`AG2`).
+        //
+        // **Riding the same save is not sharing a fate** (fix round 2, review
+        // Important). These are two reads of two different things. A single
+        // `Promise.all` over them did two harms at once: a rejected checklist
+        // discarded an already-resolved draft through the shared `catch`,
+        // freezing exactly the `UX-15` draw and `UX-12` points this read
+        // exists to refresh — and, on the normal path, held those figures
+        // until the heavier call answered, because `checklistFor` scans every
+        // question in the workspace (apps/api/src/routes/tests.ts). So: two
+        // chains, each applying its own answer the moment it lands, each
+        // behind its own `saveSeq` check so a reply from an older burst
+        // cannot overwrite a newer one, and neither able to fail the other.
+        //
+        // The rows are taken exactly as the server sends them — the gate's
+        // own order, words and severities (#64). Nothing here re-counts or
+        // re-sorts them; `PublishChecklist` counts, and counts only what it
+        // was given.
+        //
+        // No join over the two, deliberately (fix round 2 re-review). An
+        // `await Promise.all([…])` here would be inert — nothing follows it,
+        // and each chain already applies its own answer from inside itself —
+        // but it is the one line a later reader could mistake for the
+        // coupling this round removed. Two statements say what happens.
+        void (async () => {
+          try {
+            const fresh = await client.draft(workspaceId, testId);
+            if (saveSeq.current !== seq) return;
+            setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
+          } catch {
+            // The save itself landed; only the derived figures are a beat
+            // behind, and the next settled burst corrects them. Reporting a
+            // failure over a save that succeeded would be the worse lie.
+          }
+        })();
+        void (async () => {
+          try {
+            const rows = await client.checklist(workspaceId, testId);
+            if (saveSeq.current !== seq) return;
+            setChecklist(rows);
+          } catch {
+            // A rail that emptied itself on a read that did not answer
+            // would be a louder lie than one a beat stale, so the rows it
+            // is holding stay up until a read succeeds.
+          }
+        })();
       })();
     }, 250);
     return () => clearTimeout(timer);
@@ -291,8 +454,8 @@ export function TestBuilder({
     setPending((prev) => ({ ...prev, settings: { ...prev?.settings, ...settings } }));
   }
 
-  /** Opens the checklist (and re-runs it from inside). The rows are the
-   * server's — this screen never computes one. */
+  /** Re-runs the checks — from the Publish button, and from inside the rail.
+   * The rows are the server's; this screen never computes one. */
   async function runChecklist(): Promise<void> {
     setRerunning(true);
     try {
@@ -309,7 +472,6 @@ export function TestBuilder({
     setPublishing(true);
     try {
       setTest(await client.publishTest(workspaceId, testId));
-      setChecklist(null);
       setError(undefined);
       // The publish opened the next numbered draft server-side (UX-18), so
       // the whole screen is re-read rather than patched up field by field:
@@ -388,7 +550,15 @@ export function TestBuilder({
             aria-disabled={!canPublish || publishing || draft === null}
             aria-describedby={canPublish ? undefined : "publish-why"}
             onClick={() => {
-              if (canPublish && !publishing) void runChecklist();
+              if (!canPublish || publishing) return;
+              // UX-17 is unchanged by `D7`'s move: this still opens the
+              // checklist rather than publishing. What "open" means is now
+              // "re-read it, dock the rail, and take the reader there" —
+              // the rows were already on screen, and a control whose whole
+              // effect is elsewhere on the page has to move focus with it.
+              void runChecklist();
+              setChecklistRail("docked");
+              railRef.current?.focus();
             }}
           >
             Publish
@@ -400,7 +570,7 @@ export function TestBuilder({
               Request review
             </button>
           )}
-          {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
+          {test.reviewRequested && <span className="test-badge"><Icon name="review" /> In review</span>}
 
           {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
             <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
@@ -415,6 +585,80 @@ export function TestBuilder({
         </div>
       )}
 
+      {/* `D18` — the flag above is the whole of ADR 0007 that shipped.
+          `docs/design.md`'s screen 10 — the reviewers list, per-question
+          comments, the Approved / Changes-requested marks — is NOT
+          DESIGNED, and a builder that quietly showed a flag and nothing
+          else leaves the organiser waiting for a panel that is not coming.
+          So this states the gap and builds none of it: no reviewer names,
+          no comment box, no approval control. Inventing one here would
+          promise a workflow with no server route, no permission and no
+          screen behind it. It appears only while the flag is set, because
+          with no review pending there is no gap to name. */}
+      {test?.reviewRequested === true && (
+        <p className="review-note">
+          Comments and approvals arrive with ADR 0007&apos;s second half.
+        </p>
+      )}
+
+      {/* `D7`: the rail, before the spine rather than after it. A direct
+          child of `.shell__page`, deliberately — testbuilder.css lays the
+          builder's page out as two columns and puts this one in the second,
+          and a wrapper around the spine would take shell.css's phone-width
+          `overflow-x: auto` off each panel and give it to the wrapper
+          instead, which is the per-panel scroll container `D3a` wants.
+          Early in the document order, because a rail a keyboard reader
+          reaches only after the whole builder is a rail they never reach. */}
+      {draft !== null && (
+        <PublishChecklist
+          railRef={railRef}
+          rows={checklist}
+          // `D7b` fix round 1: the rows and the sections answer questions
+          // asked at different moments — the rows were read before the
+          // author's last keystroke — so the rail is handed both and decides
+          // which rows still lead anywhere.
+          //
+          // Id AND title, because the rail has two questions to answer about
+          // a destination and they need different halves: `onGoTo` opens by
+          // id, and the journey label names the section the way the spine
+          // does (`D7a`: "Go to Section B", not "Go to quant").
+          sections={draft.body.sections.map(({ id, title }) => ({ id, title }))}
+          version={draft.version}
+          rerunning={rerunning}
+          busy={publishing}
+          state={rail.checklist}
+          onState={setChecklistRail}
+          // `D7b`, the other half: a row can outlive the section it names —
+          // a delete is a save, and the read that clears the row is a
+          // debounce and two round trips behind it. Fix round 1 moved that
+          // judgement into `destinationOf`, which is the one predicate the
+          // strip and the panel both read, so a stale row stops ANNOUNCING
+          // the journey rather than offering one this then declines — the
+          // same defect task 3's review ruled on for field rows.
+          //
+          // **The premise, because it is what a later edit would break:**
+          // `sections` above and this closure are sibling attributes of one
+          // JSX element, built in ONE render from the SAME `draft`. That — not
+          // the predicate on its own — is what makes a membership check here
+          // redundant rather than defensive: the ids that gated the control
+          // and the ids this would test are the same value, so there is no
+          // window between them, not even a torn one.
+          //
+          // Break that and the hole re-opens with no test watching it. It
+          // breaks if the two are ever sourced from different renders: a
+          // `useCallback` around this handler with stale deps, a memoised or
+          // hoisted `sections`, ids derived from `pending` rather than
+          // `draft`, or a `React.memo` comparator on `PublishChecklist` that
+          // lets one prop through while holding the other back. Any of those
+          // and this guard has to come back.
+          onGoTo={(row) => {
+            if (row.sectionId !== undefined) openSection(row.sectionId);
+          }}
+          onRerun={() => void runChecklist()}
+          onConfirm={() => void onPublish()}
+        />
+      )}
+
       {test !== null && draft !== null && (
         <VersionBanner
           draftVersion={draft.version}
@@ -427,21 +671,6 @@ export function TestBuilder({
         <p className="organiser__notice" role="alert">
           {error}
         </p>
-      )}
-
-      {checklist !== null && draft !== null && (
-        <PublishChecklist
-          rows={checklist}
-          version={draft.version}
-          rerunning={rerunning}
-          busy={publishing}
-          onGoTo={(row) => {
-            if (row.sectionId !== undefined) openSection(row.sectionId);
-          }}
-          onRerun={() => void runChecklist()}
-          onConfirm={() => void onPublish()}
-          onClose={() => setChecklist(null)}
-        />
       )}
 
       {confirming !== null && (
@@ -485,74 +714,116 @@ export function TestBuilder({
       )}
 
       {draft !== null && (
-        <TimingPanel
-          timing={draft.body.settings.timing ?? DEFAULT_TIMING}
-          sections={draft.body.sections}
-          published={published}
-          onChange={(timing) => saveSettings({ timing })}
-        />
-      )}
+        /* `D7`: one panel of rows, each stating its own setting. The five
+           panels below are unchanged — they are `children` now, mounted
+           only while their row is open. Every summary is called HERE, at
+           render, from the draft this screen already holds: a summary
+           cached anywhere would still read 60 minutes after the organiser
+           typed 90. */
+        <section className="setting-rows" aria-labelledby="settings-heading">
+          <h2 id="settings-heading">Settings</h2>
 
-      {draft !== null && (
-        <AccessPanel
-          access={draft.body.settings.access ?? DEFAULT_ACCESS}
-          onChange={(access) => saveSettings({ access })}
-          candidates={candidates}
-          identityField={identityFieldOf(draft.body.settings.registration_form)}
-          canManageCandidates={canManageCandidates}
-          onImportCandidates={async (csv, opts) => {
-            const report = await client.importCandidates(workspaceId, testId, csv, opts);
-            // A dry run changed nothing, so there is nothing to re-read;
-            // a real one replaced the list, and the count the panel
-            // prints has to come from storage rather than from the
-            // report it just rendered.
-            if (!opts.dryRun && report.issues.length === 0) {
-              setCandidates(await client.candidates(workspaceId, testId));
-            }
-            return report;
-          }}
-        />
-      )}
+          <SettingRow
+            id="timing"
+            icon={<Icon name="timing" />}
+            label="Timing"
+            summary={timingSummary(draft.body.settings.timing ?? DEFAULT_TIMING)}
+            open={openPanel === "timing"}
+            onToggle={togglePanel}
+          >
+            <TimingPanel
+              timing={draft.body.settings.timing ?? DEFAULT_TIMING}
+              sections={draft.body.sections}
+              published={published}
+              onChange={(timing) => saveSettings({ timing })}
+            />
+          </SettingRow>
 
-      {draft !== null && (
-        <ReleasePanel
-          release={draft.body.settings.release ?? DEFAULT_RELEASE}
-          onChange={(release) => saveSettings({ release })}
-        />
-      )}
+          <SettingRow
+            id="access"
+            icon={<Icon name="access" />}
+            label="Access"
+            summary={accessSummary(
+              draft.body.settings.access ?? DEFAULT_ACCESS,
+              // `load` asks for the list only with `candidates.manage`, so
+              // without it there is no count to state — only the reason.
+              canManageCandidates ? candidates.length : null,
+            )}
+            open={openPanel === "access"}
+            onToggle={togglePanel}
+          >
+            <AccessPanel
+              access={draft.body.settings.access ?? DEFAULT_ACCESS}
+              onChange={(access) => saveSettings({ access })}
+              candidates={candidates}
+              identityField={identityFieldOf(draft.body.settings.registration_form)}
+              canManageCandidates={canManageCandidates}
+              onImportCandidates={async (csv, opts) => {
+                const report = await client.importCandidates(workspaceId, testId, csv, opts);
+                // A dry run changed nothing, so there is nothing to
+                // re-read; a real one replaced the list, and the count the
+                // panel prints has to come from storage rather than from
+                // the report it just rendered.
+                if (!opts.dryRun && report.issues.length === 0) {
+                  setCandidates(await client.candidates(workspaceId, testId));
+                }
+                return report;
+              }}
+            />
+          </SettingRow>
 
-      {draft !== null && (
-        <BrandingPanel
-          branding={draft.body.settings.branding ?? NO_BRANDING}
-          workspaceBranding={workspaceBranding}
-          canEditWorkspace={canEditWorkspace}
-          onChange={(branding) => saveSettings({ branding })}
-          onSaveWorkspace={async (next) => {
-            setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
-          }}
-          onUploadLogo={uploadLogo}
-        />
-      )}
+          <SettingRow
+            id="registration"
+            icon={<Icon name="registration" />}
+            label="Registration"
+            summary={registrationSummary(draft.body.settings.registration_form)}
+            open={openPanel === "registration"}
+            onToggle={togglePanel}
+          >
+            <FormBuilder
+              form={draft.body.settings.registration_form}
+              onChange={(registration_form) => saveSettings({ registration_form })}
+              checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
+            />
+          </SettingRow>
 
-      {draft !== null && (
-        <FormBuilder
-          form={draft.body.settings.registration_form}
-          onChange={(registration_form) => saveSettings({ registration_form })}
-          checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
-        />
+          <SettingRow
+            id="results"
+            icon={<Icon name="results" />}
+            label="Results"
+            summary={resultsSummary(draft.body.settings.release ?? DEFAULT_RELEASE)}
+            open={openPanel === "results"}
+            onToggle={togglePanel}
+          >
+            <ReleasePanel
+              release={draft.body.settings.release ?? DEFAULT_RELEASE}
+              onChange={(release) => saveSettings({ release })}
+            />
+          </SettingRow>
+
+          <SettingRow
+            id="branding"
+            icon={<Icon name="branding" />}
+            label="Branding"
+            summary={brandingSummary(draft.body.settings.branding ?? NO_BRANDING, workspaceBranding)}
+            open={openPanel === "branding"}
+            onToggle={togglePanel}
+          >
+            <BrandingPanel
+              branding={draft.body.settings.branding ?? NO_BRANDING}
+              workspaceBranding={workspaceBranding}
+              canEditWorkspace={canEditWorkspace}
+              onChange={(branding) => saveSettings({ branding })}
+              onSaveWorkspace={async (next) => {
+                setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
+              }}
+              onUploadLogo={uploadLogo}
+            />
+          </SettingRow>
+        </section>
       )}
     </>
   );
-}
-
-/** The field a candidate list is keyed on: the first `unique: true` field
- * in the registration form's own order. The same rule
- * `apps/api/src/import/candidates.ts` applies — stated in both places
- * because the panel prints it and the converter keys on it, and a screen
- * naming one column while the server wants another is the defect this
- * exists to avoid. */
-function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
-  return form?.fields.find((field) => field.unique === true) ?? null;
 }
 
 

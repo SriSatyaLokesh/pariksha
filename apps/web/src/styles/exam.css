@@ -20,6 +20,35 @@
 @import "./question.css";
 @import "./registration.css";
 
+/* D17's one checkbox and one radio are painted in registration.css, which
+   this chain shares with admin.css, and this is the candidate runtime's set
+   of the three names that paint them (#201, fix round 2).
+
+   Voltage, and not the organiser's green. DESIGN.md's `option-row-selected`
+   is "cream fill, 2px voltage border, PLUS the filled control" — the control
+   and the row edge are ONE selection carrier, and filling the control in a
+   second colour would say the same thing twice in two vocabularies. Voltage
+   is also the accent DESIGN.md leaves this runtime: "the 'you are here'
+   marker in the question palette, the focus ring on an answer row or input".
+
+   Measured against the grounds a control really sits on here: 3.98:1 on an
+   option row's canvas and 3.86:1 on the selected row's cream, against the
+   3:1 a non-text indicator needs; the white glyph is 3.98:1 on the fill.
+   Under `:root[data-contrast="high"]` below, `--color-voltage` resolves to
+   voltage-deep and both rise to 5.83:1 — the high-contrast block raises this
+   pair, it never lowers it.
+
+   The edge is its own name because an unchecked control is a box, and a
+   vermilion ring on every option of every question is not "the saturated
+   vermilion reduced to a handful of marks". `muted` carries it at 5.34:1 on
+   canvas, rising to 10.88:1 under high contrast, where `hairline-strong`
+   would be 1.44:1. */
+:root {
+  --control-accent: var(--color-voltage);
+  --control-accent-ink: var(--color-canvas);
+  --control-edge: var(--color-muted);
+}
+
 .exam-landing {
   display: flex;
   flex-direction: column;

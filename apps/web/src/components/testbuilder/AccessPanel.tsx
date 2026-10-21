@@ -24,7 +24,7 @@ import { useDialogKeys } from "../useDialogKeys";
 // refuses exactly what the server refuses rather than a weaker guess one
 // package over.
 
-const MODE_LABEL: Readonly<Record<AccessMode, string>> = {
+export const MODE_LABEL: Readonly<Record<AccessMode, string>> = {
   link_code: "Link and code",
   invite_only: "Invite only",
   email_code: "Email code",

@@ -138,3 +138,102 @@
   border-radius: var(--rounded-lg);
   padding: var(--space-xl);
 }
+
+/* ---- D16: the field row ----------------------------------------------- */
+
+/* "A row of fields is ONE grid with three tracks — label, control, help.
+   Each field is a `subgrid` spanning all three; controls are
+   `align-self: start`."
+
+   The bug this replaces: with each field its own grid, a column without help
+   let its control stretch into the space its neighbours spent on a sentence,
+   and the controls landed on different lines. A padding fix would have moved
+   that bug to the next row, and giving every field help degrades the copy
+   into filler.
+
+   The three tracks are ROW tracks and the columns are the fields. Measured
+   on the prototype: a mixed row misaligns by 20.4px without this rule and 0px
+   with it, under both the real `subgrid` and the forced fallback; a row where
+   no field has help resolves to `15px 36px 0px` — the help track collapses
+   rather than costing an empty line. jsdom performs no layout, so the pixel
+   half of that lives in e2e/measurement/field-rows.spec.ts and the
+   declarations are what test/testbuilder/field-rows.test.tsx holds.
+
+   `minmax(180px, 1fr)` rather than a fixed column count: below about 400px a
+   two-field row has nowhere to put two controls, and `auto-fit` drops it to
+   one column instead of overflowing the page sideways. */
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-rows: auto auto auto;
+  column-gap: var(--space-lg);
+  row-gap: var(--space-sm);
+  align-items: start;
+}
+
+/* `row-gap` is declared rather than inherited from the row: a subgrid child
+   takes the parent's gap unless it sets one, and `.field` (registration.css)
+   already sets `gap`, which would otherwise win here through the shorthand
+   and make the two branches below differ by a value nobody chose. */
+.field-row > .field {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.field-row > .field > * {
+  align-self: start;
+  min-width: 0;
+}
+
+/* `subgrid` needs Chrome 117+, Safari 16+, Firefox 71+. Below that each field
+   is its own three-row grid, so the third track sizes to that field's own
+   help and not to the row's: a help-free field would collapse it to zero and
+   sit a line above its neighbour. So a row that holds help anywhere RESERVES
+   one help line on every field in it — the ruling's "one empty line, never a
+   misalignment" — and a row with no help at all reserves nothing and still
+   collapses.
+
+   `:has()` is what makes that conditional, and it is wider than `subgrid` in
+   every engine but one: Firefox 71-120 has subgrid and takes the branch
+   above, and Chrome 105-116 has `:has()` and takes this one. Older than both
+   and the row degrades to what it does today, which is where it started. */
+@supports not (grid-template-rows: subgrid) {
+  .field-row > .field {
+    grid-template-rows: auto auto auto;
+  }
+
+  .field-row:has(.field-help) > .field {
+    grid-template-rows: auto auto minmax(var(--type-body-sm-line-height), auto);
+  }
+}
+
+/* D16's content rule, first home: "a UNIT ('min', 'IST', 'pts') goes INSIDE
+   the control as an affix." The other two homes already exist — a constraint
+   or consequence is `.field-help`, and a note about the whole group is one
+   paragraph under the row. */
+.field-affix {
+  position: relative;
+  display: block;
+}
+
+.field-affix > .text-input {
+  padding-inline-end: var(--space-4xl);
+}
+
+.field-affix__unit {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-md);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}

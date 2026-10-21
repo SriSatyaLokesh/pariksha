@@ -408,72 +408,96 @@ export function QuestionEditor({
 
       <section>
         <h2>Meta</h2>
-        <label className="field-label" htmlFor={`${metaId}-id`}>
-          Question ID
-        </label>
-        <input
-          className="text-input"
-          id={`${metaId}-id`}
-          type="text"
-          value={question.id}
-          onChange={(event) => setQuestion((prev) => ({ ...prev, id: event.target.value }))}
-          onBlur={() =>
-            setQuestion((prev) => (prev.id.trim() === "" ? { ...prev, id: freshQuestionId() } : prev))
-          }
-        />
-        <p className="field-help">Letters, numbers, underscore, dot or hyphen — up to 64 characters.</p>
+        {/* `D16`: Meta is two rows of two, not eight stacked elements. Each
+            row is one grid with a label, a control and a help track, and each
+            field is a subgrid spanning all three — so the field that states a
+            constraint and the field beside it that states nothing still put
+            their controls on one line. Both rows here are deliberately mixed,
+            which is the case the rule exists for. */}
+        <div className="field-row">
+          <div className="field">
+            <label className="field-label" htmlFor={`${metaId}-id`}>
+              Question ID
+            </label>
+            <input
+              className="text-input"
+              id={`${metaId}-id`}
+              type="text"
+              value={question.id}
+              aria-describedby={`${metaId}-id-help`}
+              onChange={(event) => setQuestion((prev) => ({ ...prev, id: event.target.value }))}
+              onBlur={() =>
+                setQuestion((prev) => (prev.id.trim() === "" ? { ...prev, id: freshQuestionId() } : prev))
+              }
+            />
+            <p className="field-help" id={`${metaId}-id-help`}>
+              Letters, numbers, underscore, dot or hyphen — up to 64 characters.
+            </p>
+          </div>
 
-        <label className="field-label" htmlFor={`${metaId}-group`}>
-          Passage group
-        </label>
-        <select
-          id={`${metaId}-group`}
-          value={question.group ?? ""}
-          onChange={(event) =>
-            setMetaField("group", event.target.value === "" ? undefined : event.target.value)
-          }
-        >
-          <option value="">No group</option>
-          {groups.map((group) => (
-            <option key={group.id} value={group.id}>
-              {group.title ?? group.id}
-            </option>
-          ))}
-        </select>
+          <div className="field">
+            <label className="field-label" htmlFor={`${metaId}-group`}>
+              Passage group
+            </label>
+            <select
+              id={`${metaId}-group`}
+              value={question.group ?? ""}
+              onChange={(event) =>
+                setMetaField("group", event.target.value === "" ? undefined : event.target.value)
+              }
+            >
+              <option value="">No group</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.title ?? group.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
 
-        <label className="field-label" htmlFor={`${metaId}-difficulty`}>
-          Difficulty
-        </label>
-        <select
-          id={`${metaId}-difficulty`}
-          value={question.difficulty ?? ""}
-          onChange={(event) =>
-            setMetaField("difficulty", event.target.value ? (event.target.value as Difficulty) : undefined)
-          }
-        >
-          <option value="">Not set</option>
-          <option value="easy">Easy</option>
-          <option value="medium">Medium</option>
-          <option value="hard">Hard</option>
-        </select>
+        <div className="field-row">
+          <div className="field">
+            <label className="field-label" htmlFor={`${metaId}-difficulty`}>
+              Difficulty
+            </label>
+            <select
+              id={`${metaId}-difficulty`}
+              value={question.difficulty ?? ""}
+              onChange={(event) =>
+                setMetaField("difficulty", event.target.value ? (event.target.value as Difficulty) : undefined)
+              }
+            >
+              <option value="">Not set</option>
+              <option value="easy">Easy</option>
+              <option value="medium">Medium</option>
+              <option value="hard">Hard</option>
+            </select>
+          </div>
 
-        <label className="field-label" htmlFor={`${metaId}-tags`}>
-          Tags
-        </label>
-        <input
-          className="text-input"
-          id={`${metaId}-tags`}
-          type="text"
-          value={(question.tags ?? []).join(", ")}
-          onChange={(event) => {
-            const tags = event.target.value
-              .split(",")
-              .map((tag) => tag.trim())
-              .filter(Boolean);
-            setMetaField("tags", tags.length > 0 ? tags : undefined);
-          }}
-        />
-        <p className="field-help">Comma-separated. A tag with a slash, like sdlc/agile, groups in the browser.</p>
+          <div className="field">
+            <label className="field-label" htmlFor={`${metaId}-tags`}>
+              Tags
+            </label>
+            <input
+              className="text-input"
+              id={`${metaId}-tags`}
+              type="text"
+              value={(question.tags ?? []).join(", ")}
+              aria-describedby={`${metaId}-tags-help`}
+              onChange={(event) => {
+                const tags = event.target.value
+                  .split(",")
+                  .map((tag) => tag.trim())
+                  .filter(Boolean);
+                setMetaField("tags", tags.length > 0 ? tags : undefined);
+              }}
+            />
+            <p className="field-help" id={`${metaId}-tags-help`}>
+              Comma-separated. A tag with a slash, like sdlc/agile, groups in the browser.
+            </p>
+          </div>
+        </div>
 
         <PromptEditor
           value={question.explanation ?? ""}

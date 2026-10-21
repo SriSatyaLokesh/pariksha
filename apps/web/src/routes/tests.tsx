@@ -4,6 +4,7 @@ import { ImportDialog } from "../components/authoring/ImportDialog";
 import { CardHairline } from "../components/CardHairline";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
+import { Icon } from "../components/OrganiserShell";
 
 // Screen 6 (docs/design.md's screen inventory): the test list. T-01 (CRUD),
 // T-02 (short link and QR code), T-03 (filter/search/sort) and UX-10's "In
@@ -25,6 +26,11 @@ export const STATE_LABEL: Record<TestState, string> = {
 
 // Text plus glyph, never colour alone — the state and the "In review" badge
 // both carry one, `aria-hidden` so a screen reader hears only the label.
+//
+// The five below are still Unicode characters and are NOT this task's to
+// move (6.5d Task 6 is scoped to the "In review" diamond, both sites); they
+// go with the rest of the repo's icon-glyph sweep, filed as issue 200. The badge's
+// own glyph is `Icon name="review"` as of that task — one family, one stroke.
 const STATE_GLYPH: Record<TestState, string> = {
   draft: "●",
   scheduled: "◐",
@@ -472,7 +478,7 @@ export function TestList({
                       <TestStateBadge state={test.state} />
                       {test.reviewRequested && (
                         <span className="test-badge">
-                          <span aria-hidden="true">◆</span> In review
+                          <Icon name="review" /> In review
                         </span>
                       )}
                     </td>

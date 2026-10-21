@@ -55,13 +55,20 @@ export async function signIn(page: Page): Promise<void> {
  * `request` must be able to reach the API; it signs itself in through the
  * stub IdP if it is not signed in already, which is the same single
  * account the browser gets.
+ *
+ * `into` names the workspace to seed. Omitted, it is the one the organiser
+ * opens (`workspaces[0]`) — which is what the density gate measures, and
+ * therefore what a spec adding fixtures of its own must NOT write into. Pass
+ * `createWorkspace()`'s id to seed somewhere that gate never opens; see that
+ * function's own note for why isolation rather than ordering.
  */
 export async function seedWorkspace(
   request: APIRequestContext,
   counts: SeedCounts,
+  into?: string,
 ): Promise<SeedResult> {
   await signInApi(request);
-  const workspaceId = await workspace(request);
+  const workspaceId = into ?? (await workspace(request));
   // A test slug is unique per workspace, so two seeds in one run would
   // collide on `assessment-01` and the second would 409. A per-call counter
   // keeps repeat seeding (6.5e, 6.5f) from needing to know that — and it is
@@ -154,6 +161,51 @@ export async function seedWorkspace(
   });
 
   return { workspaceId, bankIds, testIds };
+}
+
+/**
+ * A SECOND workspace, so a spec can seed fixtures the density gate never
+ * sees.
+ *
+ * `D13`'s ratchet (`measurement/density.spec.ts`) measures the lists in the
+ * workspace `OrganiserApp` boots on — `workspaces[0]` — and its `BEFORE_TOP`
+ * figures sit at the exact measured pixel against `toBeLessThanOrEqual`, so
+ * they have **zero slack**. Any spec that seeds into that workspace is
+ * feeding fixtures to a gate measuring a design, and `AG2` forbids answering
+ * the resulting red by moving the bar.
+ *
+ * Isolation, not ordering. Sorted-path order is what bit this repo once
+ * already — `measurement/` exists because `e2e/density.spec.ts` sorted ahead
+ * of `first-run.spec.ts` — and a second spec that is correct only while it
+ * sorts after another is the same trap one layer down. A workspace the gate
+ * does not open is correct at every position in the run.
+ *
+ * `workspaces` comes back `ORDER BY m.created_at`
+ * (`packages/db/src/repo/identity.ts`), so the first-run wizard's workspace
+ * stays `workspaces[0]` and this one lands after it. The organiser still
+ * boots on the wizard's; a caller who wants to SEE this one switches to it
+ * through the top bar's workspace switcher, which only appears above one
+ * membership (`D4`).
+ */
+export async function createWorkspace(
+  request: APIRequestContext,
+  name: string,
+  slug: string,
+): Promise<string> {
+  await signInApi(request);
+  // Reused when it is already there, the same way `workspace()` below reuses
+  // `workspaces[0]`. A `slug` is unique per instance, so a second call would
+  // 409 — and a 409 in a `beforeAll` is the failure mode this repo already
+  // knows: one failed test restarts the worker, the hook runs again, and
+  // every later failure is hidden behind a seeding error that is not the bug.
+  // Idempotent here rather than guarded at each call site.
+  const listed = await request.get("/api/v1/workspaces");
+  expect(listed.ok(), `workspaces: ${listed.status()} ${await listed.text()}`).toBe(true);
+  const rows = (await listed.json()).workspaces as { id: string; slug: string }[] | undefined;
+  const existing = rows?.find((row) => row.slug === slug);
+  if (existing !== undefined) return existing.id;
+
+  return created(request, "/api/v1/workspaces", { name, slug });
 }
 
 /** Bumped once per `seedWorkspace` call, for the slug suffix above. */

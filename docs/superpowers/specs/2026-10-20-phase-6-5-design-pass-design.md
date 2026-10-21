@@ -538,6 +538,18 @@ duplicate id defeats it before the grid is involved. The builder uses `useId()` 
 per-panel prefix) for every `id`, `for` and `aria-describedby`; a section panel and a settings panel
 are both repeated constructs, so this is not hypothetical.
 
+*Pointer, not an amendment — `D16a` stands as written.* **The shipped builder already satisfies it**
+(6.5d Task 5 preflight, 2026-10-21). The duplicate-id measurement above was taken on the
+**prototype**, where three frames render one `screen()`; it was never taken against `apps/web`. In
+the shipped tree every repeated construct already derives its ids from `useId()` —
+`AccessPanel.tsx:105`, `BrandingPanel.tsx:77` and `FormBuilder.tsx:342` each hold `const ids =
+useId()` and build every `id`, `for` and `aria-describedby` from it, and the authoring components do
+the same. The only literal `id=` left in either directory is `PublishChecklist.tsx`'s
+`checklist-rail-heading`, which labels a singleton rail and is not a field. So `D16a`'s id work is
+**closed as already satisfied**, like `D8`'s sweep before it, and Task 5's id tests are regression
+guards on behaviour that already holds rather than a fix. The rule itself still binds every control
+the task adds.
+
 **Verified against both branches.** Every live row measures **0px** spread on labels and on control
 tops; the deliberately broken proof row measures **20.4px**. The `@supports not (subgrid)` path was
 forced on and re-measured: still 0px on every live row. A row whose fields all lack help resolves its
@@ -552,6 +564,32 @@ tracks to `15px 36px 0px` — the reserved help track collapses rather than cost
 >
 > **Cost if wrong.** Custom controls must keep real `<input>` semantics — they do; only the painting
 > changes.
+
+*Pointer, not an amendment — `D17` stands as written.* **"No browser default anywhere" is delivered,
+and #201 is closed by this plan** (6.5d Task 5, fix round 2, 2026-10-21). The rule lives in
+`registration.css` — the one stylesheet the organiser's chain and the candidate's already share
+(`admin.css` imports it for the builder's preview, `exam.css` because the candidate fills the form
+in) — and it is there once, not copied. The first cut put it in `primitives.css`, which reaches
+`admin.css` and `landing.css` and **not** `exam.css`, so the surface with the least recourse in this
+product kept the UA's blue on `exam/answer/Choice.tsx`, the primary answer control of every choice
+question. That was **#201**, now fixed rather than deferred.
+
+The paint comes through three names each chain defines for the ground it really renders on:
+`--control-accent`, `--control-accent-ink` and `--control-edge`. An accent cannot cross grounds
+(`D1`), so a literal in the shared rule would be wrong on one of them. The organiser takes
+`state-answered` (5.20:1 on its cream page, 5.36:1 on a canvas card) and the runtime takes
+**voltage** — which is what `option-row-selected` above already means by "plus the filled control",
+and the accent `DESIGN.md` leaves this runtime: 3.98:1 on an option row's canvas, 3.86:1 on the
+selected row's cream, rising to 5.83:1 under `[data-contrast="high"]`, against the 3:1 a non-text
+indicator needs. `--control-edge` is separate because an unchecked control is a box, and painting
+one in the accent would put a vermilion ring on every option of every question.
+
+The landing chain imports neither the rule nor any control, which is correct rather than a second
+gap: nothing under `src/sections/signal/`, `src/routes/landing.tsx` or `src/island/` renders a
+checkbox or a radio. `apps/web/test/exam/controls.test.tsx` is the guard that keeps all of this
+true — it walks **every** source file that renders either control, maps it to the stylesheet entry
+it ships in, and fails if that entry leaves it on `appearance: auto`. The gap existed because
+nothing was watching the seam between the chains; that is now the thing being watched.
 
 ### D18 — screen-level rulings
 

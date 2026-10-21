@@ -163,3 +163,120 @@
 .registration-form__dialled .text-input {
   flex: 1;
 }
+
+/* ---- D17: one checkbox and one radio for the whole product ------------- */
+
+/* "`appearance: none`, drawn in the accent with `accent-ink` glyphs, 17px,
+   custom focus ring, 4px radius for the checkbox and full round for the
+   radio. No browser default anywhere" — native controls rendered in the UA's
+   blue, which belongs to no palette this product has.
+
+   WHY THIS FILE. The rule shipped in `primitives.css` in 6.5d Task 5, which
+   reaches `admin.css` and `landing.css` and NOT `exam.css` — so the surface
+   with the least recourse in this product kept the UA's blue on
+   `exam/answer/Choice.tsx`, the primary answer control of every choice
+   question (#201). This file is the one stylesheet the organiser's chain and
+   the candidate's already share: `admin.css` imports it because the builder
+   previews the registration form, `exam.css` because the candidate fills it
+   in. Moved here rather than copied — two copies of "one checkbox for the
+   whole product" is the thing `D17` exists to prevent, and they would drift.
+
+   The landing chain imports neither this file nor any control: nothing under
+   `src/sections/signal/`, `src/routes/landing.tsx` or `src/island/` renders a
+   checkbox or a radio. `test/exam/controls.test.tsx` asserts that, so the day
+   one appears there the seam is a red test rather than a second #201.
+
+   THREE GROUNDS, ONE RULE. The paint comes through `--control-accent`,
+   `--control-accent-ink` and `--control-edge`, and each chain defines them
+   for the ground it really renders on — `admin.css` for the organiser's cream
+   surfaces, `exam.css` for the candidate runtime's. An accent cannot cross
+   grounds (`D1`), so a literal here would be wrong on two of the three.
+   `D17`'s "one checkbox for the whole product" is a rule about the CONTROL
+   being one thing, and it still is: one rule set, one geometry, one glyph.
+   Aliasing declares no colour, so DESIGN.md's front matter stays the only
+   place a colour is declared.
+
+   MEASURED, each against the ground it really renders on. 3:1 is the bar a
+   non-text indicator clears (WCAG 1.4.11).
+     organiser (cream): fill 5.20:1 on the cream page, 5.36:1 on a canvas
+       card; glyph on fill 5.36:1; edge 5.18:1 / 5.34:1.
+     candidate (cream and canvas): fill 3.98:1 on an option row's canvas and
+       3.86:1 on the selected row's cream; glyph on fill 3.98:1; edge 5.34:1
+       / 5.18:1. Under `[data-contrast="high"]` the fill becomes voltage-deep
+       and the pair rises to 5.83:1, and the edge to 10.88:1.
+
+   THE EDGE IS NOT THE ACCENT. An unchecked control is a box, and painting it
+   in the accent on the candidate runtime would put a vermilion ring on every
+   option of every question — against DESIGN.md's "the saturated vermilion
+   reduced to a handful of marks". `--color-hairline-strong`, which the rows
+   around it use, is 1.44:1 and cannot be the only thing that says a control
+   is there. So the edge is its own name, and `--color-muted` carries it on
+   both cream chains at 5.18:1 and better.
+
+   The element stays a real `<input>` — role, checked state and keyboard all
+   come from it. Only the painting changes.
+
+   The focus ring is the one each surface already paints, and the runtime has
+   TWO rather than one (corrected in fix round 3; this comment named only the
+   runner's). Inside an attempt, `.exam-runner :focus-visible` paints
+   voltage-deep at 5.83:1. The consent box on the registration screen is
+   outside that container — `Registration.tsx` renders `<main
+   class="exam-register">` — so it takes `base.css`'s own voltage ring, which
+   is 3.98:1 on canvas and 3.86:1 on cream. Both clear the 3:1 a non-text
+   indicator needs; the organiser takes the same `base.css` ring. */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  inline-size: 17px;
+  block-size: 17px;
+  margin: 0;
+  background: none;
+  border: 1px solid var(--control-edge);
+  border-radius: var(--rounded-sm);
+  cursor: pointer;
+}
+
+input[type="radio"] {
+  border-radius: var(--rounded-full);
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background: var(--control-accent);
+  border-color: var(--control-accent);
+}
+
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before {
+  content: "";
+  background: var(--control-accent-ink);
+}
+
+/* The tick is a clipped box rather than an SVG data URI: an inline SVG would
+   have to carry its stroke colour as a literal, which is the one thing no
+   file but DESIGN.md's front matter may do. */
+input[type="checkbox"]:checked::before {
+  inline-size: 11px;
+  block-size: 11px;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+input[type="radio"]:checked::before {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: var(--rounded-full);
+}
+
+/* Opacity, never a colour swap: a disabled control is exempt from WCAG 1.4.3,
+   and an opacity change keeps the box out of the contrast gate rather than
+   needing an exemption inside it. A locked option in `select_k` also carries
+   a dashed row edge, so the state never rests on this alone. */
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

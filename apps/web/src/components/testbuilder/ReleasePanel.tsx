@@ -23,13 +23,13 @@ import {
 // storage — which is exactly why it has to be visible here rather than
 // discovered at publish.
 
-const WHEN_LABEL: Readonly<Record<ReleaseWhen, string>> = {
+export const WHEN_LABEL: Readonly<Record<ReleaseWhen, string>> = {
   never: "Never",
   on_submit: "On submit",
   on_date: "On a date",
 };
 
-const SHOW_LABEL: Readonly<Record<ReleaseShow, string>> = {
+export const SHOW_LABEL: Readonly<Record<ReleaseShow, string>> = {
   score_only: "Score only",
   score_and_sections: "Score and sections",
   full_review: "Full review",

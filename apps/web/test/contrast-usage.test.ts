@@ -232,6 +232,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".button-primary:hover, .button-primary:focus-visible": both("voltage-deep"),
   ".button-primary--surface": both("voltage-deep"),
   ".button-secondary": both("canvas"),
+  // Phase 6.5d Task 5 (`D16`, content): a unit affix sits INSIDE its control,
+  // absolutely positioned over `.text-input`'s own fill — so the background
+  // it really renders on is the input's canvas, not the panel or the page.
+  // Organiser-only in practice (the landing page renders no field row), but
+  // the rule lives here because the field-row rule it belongs to is shared.
+  ".field-affix__unit": both("canvas"),
 
   // ---- admin.css: the organiser screens (P3.9) ---------------------------
   // The page is the body's cream; every panel is a CardHairline, which sets

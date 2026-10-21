@@ -128,6 +128,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   };
 }
 
+/** Phase 6.5d Task 1 (`D7`): the five settings are collapsed rows now, so a
+ *  settings panel is one click deeper than it was. `D14` is unchanged by
+ *  that — reachability is still proved from the app's own entry point, now
+ *  through the row an organiser actually sees and clicks. */
+async function openSetting(label: string): Promise<void> {
+  fireEvent.click(await screen.findByRole("button", { name: new RegExp(`^${label} —`) }));
+}
+
 describe("safeReturnTo (Review Focus 2: no open redirect)", () => {
   it("keeps a same-origin path", () => {
     expect(safeReturnTo("/dashboard?tab=tests")).toBe("/dashboard?tab=tests");
@@ -752,6 +760,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Registration");
     expect(await screen.findByRole("heading", { name: "Registration form" })).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText(/field type/i), { target: { value: "email" } });
@@ -839,6 +848,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Registration");
     fireEvent.change(await screen.findByLabelText(/try a link/i), {
       target: { value: "https://drive.example/cv.pdf" },
     });
@@ -900,6 +910,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Timing");
     expect(await screen.findByRole("heading", { name: "Timing and attempts" })).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText(/overall duration/i), { target: { value: "90" } });
 
@@ -959,6 +970,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Access");
     expect(await screen.findByRole("heading", { name: "Who can take this test" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
 
@@ -1015,11 +1027,16 @@ describe("OrganiserApp routes on state, not on a URL", () => {
 
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await openSetting("Access");
     await screen.findByRole("heading", { name: "Who can take this test" });
 
-    // Three writers, synchronously — well inside the shell's 250 ms.
+    // Three writers, synchronously — well inside the shell's 250 ms. Two of
+    // them are now in different settings panels and `D7` opens one at a
+    // time, so a row toggle sits between them: closing a panel mid-burst
+    // must not drop the patch that panel already wrote.
     fireEvent.click(screen.getByRole("button", { name: /add section/i }));
     fireEvent.click(screen.getByRole("radio", { name: /single sign-on/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Timing —/ }));
     fireEvent.click(screen.getByRole("radio", { name: /^linear$/i }));
 
     await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
@@ -1103,6 +1120,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Access");
     expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
     // Read through the real client method, not invented by the panel, and
     // the expected columns name the form's own first unique field.
@@ -1178,6 +1196,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Access");
     expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
     expect(screen.getByLabelText("Candidate list")).toBeDisabled();
     expect(screen.getByText("Needs an Admin — candidate lists are managed by Admins and Owners")).toBeVisible();
@@ -1252,8 +1271,12 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Results");
     expect(await screen.findByRole("heading", { name: "When candidates see their result" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Branding" })).toBeInTheDocument();
+    // One at a time (`D7`), so the branding panel is reached by its own row
+    // rather than found already mounted beside this one.
+    await openSetting("Branding");
+    expect(await screen.findByRole("heading", { name: "Branding" })).toBeInTheDocument();
     // Read through the real client method, not invented by the panel.
     expect(screen.getByLabelText(/footer text/i)).toHaveValue("Alpha College");
 
@@ -1342,6 +1365,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
+    await openSetting("Branding");
     expect(await screen.findByRole("heading", { name: "Branding" })).toBeInTheDocument();
     expect(screen.getByLabelText(/primary colour/i)).toBeDisabled();
     expect(screen.getByRole("button", { name: /save workspace branding/i })).toBeDisabled();
