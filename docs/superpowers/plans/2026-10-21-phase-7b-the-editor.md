@@ -12,6 +12,8 @@
 
 **Depends on:** **7a** for `resolveProctoring`, `ResolvedProctoring`, `PROCTORING_DEFAULTS` and the schema's three new overrides. Independent of 7c, 7d and 7e — nothing here enforces anything.
 
+**Rebased onto 6.5e (#203).** `SettingRow.tsx`, `PANEL_KEYS` and `routes/test.tsx` are **untouched** by 6.5e, so this plan's shape stands. `testbuilder.css` grew by ~400 lines and `primitives.css` by ~200 — read both before adding a selector, and reuse what 6.5e already named rather than declaring a neighbour.
+
 **Goals covered:** `G4` — the organiser can set all of it from the builder before publishing, can switch every observation off independently, and can see what each setting costs them.
 
 ## Global Constraints
@@ -20,6 +22,10 @@ Copied from the spec's §16 and §17. Every task's requirements implicitly inclu
 
 - **`D1`'s accent rule.** This panel paints on the **Signal ground, both modes**. An accent may not cross grounds — nothing here takes the runtime's voltage. Every colour-setting selector needs a `SURFACE` entry in `contrast-usage.test.ts`, **two of them**, one per ground (`D20`).
 - **`DESIGN.md` front matter is the only place a colour may be declared.** `no-hex-colors.test.ts` strips only `/* */` comments — issue references in CSS go in block comments.
+- **`apps/web/test/css-chain.ts` is the one `@import` resolver**, shared by `theme.test.ts`, `contrast-usage.test.ts` and `signal-boundary.test.ts` (6.5b/6.5e). It **strips comments**, so a rule named only in prose cannot satisfy a scan.
+- **A component's chain decides which stylesheet its rules live in** (`CHAINS` in `css-chain.ts`): `components/exam/` and `routes/exam.tsx` are the **candidate runtime** (`exam.css`); `components/testbuilder/`, `components/authoring/` and `components/organiser/` are the **organiser** (`admin.css` and its imports). Putting a shared control's rule in `primitives.css` is what caused **#201** — it reaches `admin.css` and `landing.css` and **not** `exam.css`.
+- **The two grounds are selectors, not a guess**: dark is `:root`, light is `:root[data-theme="light"]` (`THEME_SELECTOR`). They are the **only** two selectors permitted to assign a semantic name, and `theme.test.ts` enforces it.
+- **`SEMANTIC_NAMES` is a contract list.** Use the names that exist; adding one after a consuming plan has started is a change to three stylesheets and a gate, and 6.5b's own note says so.
 - **`D16`'s field-row rule** — one grid with three tracks per row, each field a `subgrid` spanning all three, `@supports not` reserving the help track. A unit goes inside the control as an affix; a constraint or consequence goes in the help track; an explanation of the whole group is **one note under the row**, never repeated per field.
 - **`D16a`** — every `id`, `for` and `aria-describedby` derives from `useId()`. A settings panel is a repeated construct.
 - **`D17`** — one checkbox and one radio for the whole product, from `registration.css`. No browser default anywhere.

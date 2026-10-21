@@ -7,6 +7,25 @@ a costed advisory.
 The spec covers five independently shippable subsystems, so it is five plans. Each produces working,
 testable software on its own.
 
+**Rebased onto 6.5e (#203) on 2026-10-22, and re-checked against it.** Phase 6.5 is complete — a
+(#196), b (#195), c (#199), d (#202), e (#203) and f (#198) are all on `main`. What the re-check
+found:
+
+- **Nothing these plans build on moved.** `SettingRow.tsx`, `PANEL_KEYS`, `routes/test.tsx`,
+  `exam.css` and all of `components/exam/` came through 6.5e untouched, so 7b's panel, 7c's layer and
+  7d's camera work sit on exactly the interfaces they were planned against, and `D8`'s frozen
+  geometry is frozen against the same bytes.
+- **Four guards arrived that the plans did not name**, and every plan's Global Constraints now
+  carries them: `css-chain.ts` as the one `@import` resolver (which strips comments, so a rule named
+  only in prose cannot satisfy a scan), `CHAINS` deciding which stylesheet a component's rules live
+  in, `THEME_SELECTOR` fixing the two grounds as `:root` and `:root[data-theme="light"]` as the only
+  selectors that may assign a semantic name, and `SEMANTIC_NAMES` as a contract list to consume
+  rather than extend.
+- **One new ruling fell out of it**: 6.5e shipped a live density registry, and 7e's locked-attempts
+  list declines to join it, with the reason recorded in 7e Task 4.
+- `testbuilder.css` grew ~400 lines and `primitives.css` ~200. 7b reads both before adding a
+  selector.
+
 | plan | ships | goals | depends on |
 | --- | --- | --- | --- |
 | [7a — the contract](2026-10-21-phase-7a-the-contract.md) | `resolveProctoring()`, the event vocabulary, three new overrides + ADR 0011, the `integrity_flag`/`observed` migration, the three converted `profile` readers, the advisory checklist rows | `G1` | — |

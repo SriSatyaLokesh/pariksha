@@ -12,6 +12,8 @@
 
 **Depends on:** **7a** for `ResolvedProctoring` and the event vocabulary; **7c** for the queue, the layer and `ProctoringOverlay`.
 
+**Rebased onto 6.5e (#203).** `exam.css` and `components/exam/` are **untouched** by the whole design pass after 6.5f, so every assumption here about the runtime still holds. `D8`'s frozen geometry is therefore frozen against the same bytes this plan was written against.
+
 **Goals covered:** `G2` (the camera half) and `G3` (snapshot objects in private storage).
 
 ## Global Constraints
@@ -24,6 +26,10 @@ Copied from the spec's §16 and §17. Every task's requirements implicitly inclu
 - **`AG4`** — proctoring code must not be able to crash the runner. **`AG5`** — never make a gate green by moving a bar.
 - **`Q3` is pre-cut** — `face_check` resolves false, `snapshot.faceCount` stays `null`, and nothing here loads a model or widens a CSP. The only CSP change in the phase is the `blob:` on `img-src` that `security.ts` already promises.
 - **`D1`** — the candidate's overlays take voltage; every new colour-setting selector takes `SURFACE` entries. **`D8`** — frozen geometry; nothing moves that a hand is on.
+- **`apps/web/test/css-chain.ts` is the one `@import` resolver**, shared by `theme.test.ts`, `contrast-usage.test.ts` and `signal-boundary.test.ts` (6.5b/6.5e). It **strips comments**, so a rule named only in prose cannot satisfy a scan.
+- **A component's chain decides which stylesheet its rules live in** (`CHAINS` in `css-chain.ts`): `components/exam/` and `routes/exam.tsx` are the **candidate runtime** (`exam.css`); `components/testbuilder/`, `components/authoring/` and `components/organiser/` are the **organiser** (`admin.css` and its imports). Putting a shared control's rule in `primitives.css` is what caused **#201** — it reaches `admin.css` and `landing.css` and **not** `exam.css`.
+- **The two grounds are selectors, not a guess**: dark is `:root`, light is `:root[data-theme="light"]` (`THEME_SELECTOR`). They are the **only** two selectors permitted to assign a semantic name, and `theme.test.ts` enforces it.
+- **`SEMANTIC_NAMES` is a contract list.** Use the names that exist; adding one after a consuming plan has started is a change to three stylesheets and a gate, and 6.5b's own note says so.
 - Every mounted route needs a **measured** `ROUTE_BUDGETS` entry and a `ROUTE_AUTH` declaration. **An R2 binding operation is a subrequest** (`instrument.ts:38-40`).
 - `pnpm build` needs `SITE_URL`. `pnpm test --force` does not work — use `npx turbo run test --force --concurrency=1`.
 - **Never create a git worktree beside this one.** Read a frozen commit with `git show <sha>:<path>`.

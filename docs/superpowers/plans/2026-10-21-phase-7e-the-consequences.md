@@ -21,6 +21,10 @@ Copied from the spec's §16 and §17. Every task's requirements implicitly inclu
 - **`AG1`** — a proctoring stack failure never blocks answering. `Q2`'s camera requirement is the single exception, and **a lock is a consequence of a violation, not of a failure**: `FAILURE_EVENTS` must never reach the counter.
 - **`AG5`** — never make a gate green by moving a bar.
 - **`D1`** — the candidate's locked overlay takes voltage; the organiser's locked-attempt surface paints on the Signal ground, **both modes**. An accent may not cross grounds; every new colour-setting selector takes `SURFACE` entries on both.
+- **`apps/web/test/css-chain.ts` is the one `@import` resolver**, shared by `theme.test.ts`, `contrast-usage.test.ts` and `signal-boundary.test.ts` (6.5b/6.5e). It **strips comments**, so a rule named only in prose cannot satisfy a scan.
+- **A component's chain decides which stylesheet its rules live in** (`CHAINS` in `css-chain.ts`): `components/exam/` and `routes/exam.tsx` are the **candidate runtime** (`exam.css`); `components/testbuilder/`, `components/authoring/` and `components/organiser/` are the **organiser** (`admin.css` and its imports). Putting a shared control's rule in `primitives.css` is what caused **#201** — it reaches `admin.css` and `landing.css` and **not** `exam.css`.
+- **The two grounds are selectors, not a guess**: dark is `:root`, light is `:root[data-theme="light"]` (`THEME_SELECTOR`). They are the **only** two selectors permitted to assign a semantic name, and `theme.test.ts` enforces it.
+- **`SEMANTIC_NAMES` is a contract list.** Use the names that exist; adding one after a consuming plan has started is a change to three stylesheets and a gate, and 6.5b's own note says so.
 - **`D14`** — every web assertion starts at `OrganiserApp` or `ExamApp` and clicks its way there.
 - Every mounted route needs a **measured** `ROUTE_BUDGETS` entry and a `ROUTE_AUTH` declaration; the organiser routes here are `workspace` authority, not `attempt`.
 - Organiser actions on a candidate's attempt write to Phase 3's **append-only audit log** and sit behind the permission matrix.
@@ -310,6 +314,8 @@ type LockedAttemptRow = {
 **`Q5a`** — there is **no organiser-side attempt route in the product at all**; `attempts.monitor` and `attempts.read_evidence` have existed in the permission matrix since Phase 3 with nothing behind them. So the unlock is really a minimal pair: a locked-attempts read, and the unlock. Both are replaced by Phase 8's monitor; neither is designed to survive it.
 
 **`Q5b`** — audited through Phase 3's append-only log, behind the permission matrix. **Not** a `review` row — `review` is Phase 8's verdict model and borrowing it would pre-empt a design that phase has not made.
+
+**Ruling — the locked-attempts list does not join the density registry.** 6.5e shipped `apps/web/e2e/density.ts` with `SURFACES = ["testList", "bankList", "bankBrowser", "questionPicker"]`, a `PRIMARY_ROW` selector per surface and `countPrimaryRows`, and `AG1`'s rows-visible gate governs every surface in it. This list is a list of rows and looks like a fifth. It is not one: `D12` scopes `AG1` to **scanning** surfaces, and nobody scans a list that is empty on almost every test and holds one row on the rest. Registering it would pin a density figure for a surface Phase 8 deletes. *Cost if wrong:* if locking turns out to be common enough that an organiser really does scan this list, it joins the registry then — adding a surface to it is four lines, and the figure would be captured against a real population rather than a fixture.
 
 - [ ] **Step 1: Write the failing tests**
 

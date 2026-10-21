@@ -12,6 +12,8 @@
 
 **Depends on:** **7a** for `ResolvedProctoring`, `PROCTORING_EVENTS`, `VIOLATION_EVENTS` and `isViolation`. Independent of 7b.
 
+**Rebased onto 6.5e (#203).** `exam.css` and `components/exam/` are **untouched** by the whole design pass after 6.5f, so every assumption here about the runtime still holds. `D8`'s frozen geometry is therefore frozen against the same bytes this plan was written against.
+
 **Goals covered:** `G2` (the no-camera half) and `G3` (event ingest and violation counting).
 
 ## Global Constraints
@@ -22,6 +24,10 @@ Copied from the spec's §16 and §17. Every task's requirements implicitly inclu
 - **`AG4`** — proctoring code must not be able to crash the runner.
 - **`AG5`** — never make a gate green by moving a bar.
 - **`D1`'s accent rule** — the candidate's overlays, warnings and watermark take **voltage**, the runtime's accent. An accent may not cross grounds. Every new colour-setting selector takes a `SURFACE` entry in `contrast-usage.test.ts`.
+- **`apps/web/test/css-chain.ts` is the one `@import` resolver**, shared by `theme.test.ts`, `contrast-usage.test.ts` and `signal-boundary.test.ts` (6.5b/6.5e). It **strips comments**, so a rule named only in prose cannot satisfy a scan.
+- **A component's chain decides which stylesheet its rules live in** (`CHAINS` in `css-chain.ts`): `components/exam/` and `routes/exam.tsx` are the **candidate runtime** (`exam.css`); `components/testbuilder/`, `components/authoring/` and `components/organiser/` are the **organiser** (`admin.css` and its imports). Putting a shared control's rule in `primitives.css` is what caused **#201** — it reaches `admin.css` and `landing.css` and **not** `exam.css`.
+- **The two grounds are selectors, not a guess**: dark is `:root`, light is `:root[data-theme="light"]` (`THEME_SELECTOR`). They are the **only** two selectors permitted to assign a semantic name, and `theme.test.ts` enforces it.
+- **`SEMANTIC_NAMES` is a contract list.** Use the names that exist; adding one after a consuming plan has started is a change to three stylesheets and a gate, and 6.5b's own note says so.
 - **`D8`'s frozen geometry** — nothing moves that a candidate's hand is already on. Overlays and the watermark sit **over** the paper; they do not reflow it.
 - Every mounted route needs a **measured** `ROUTE_BUDGETS` entry and a `ROUTE_AUTH` declaration. `budget.test.ts` and `routeAuthorities()` read the live route table; `scrub-scan.test.ts` derives its endpoint list from `ROUTE_AUTH` and its count must be bumped deliberately.
 - **An R2 binding operation is a subrequest** (`instrument.ts:38-40`). Budgets are **measured**, not assumed.
