@@ -447,10 +447,23 @@
 }
 
 .release-panel__fact,
-.branding-panel__fact,
-.branding-panel__footer {
+.branding-panel__fact {
   margin: 0;
   color: var(--ink-3);
+}
+
+/* The two quiet lines that render INSIDE a preview, on its cream rather than
+   on the page. `.branding-panel__footer` renders nowhere else
+   (BrandingPanel.tsx:286, 291, 296); `.branding-panel__fact` renders on the
+   page five times and in the preview once, so this is the descendant form
+   and the rule above keeps the page's own. Splitting the two is what lets
+   contrast-usage.test.ts score each against the one ground it really has —
+   a single entry naming both would be reporting a number for a pairing that
+   does not exist. */
+.branding-panel__preview .branding-panel__fact,
+.branding-panel__footer {
+  margin: 0;
+  color: var(--color-muted);
 }
 
 .release-panel__legend,
@@ -479,10 +492,25 @@
    not re-ground it. It is a miniature of the CANDIDATE'S start page as the
    branding settings will paint it, so `var(--color-ink)` below is the
    runtime's own cream ink and is correct; re-grounding it would make the
-   preview lie about the page it previews. What 6.5e did add is the cream
-   FILL the fallback always assumed — with the organiser on the Signal
-   ground an unfilled preview put near-black ink on a near-black page, so
-   the surface the preview claims to be is now the surface it paints. */
+   preview lie about the page it previews. What 6.5e added is the cream FILL
+   the fallback always assumed — with the organiser on the Signal ground an
+   unfilled preview put near-black ink on a near-black page.
+
+   THE WHOLE SUBTREE IS THE CREAM WORLD, NOT ONLY THE FILL, and the first
+   version of this rule got that wrong (fix round 1, C1). Painting the fill
+   alone left every bare <p> in the three previews inheriting `--ink` from
+   `admin.css`'s `body`: #eaf2ed on #fffbf5 is **1.11:1**. The footer and
+   the preview's own fact line, on `--ink-3`, measured **3.64:1** against a
+   4.5:1 bar.
+
+   Both were DARK-GROUND ONLY — on the light ground the same two names
+   measure 17.39:1 and 5.20:1 on cream and are perfectly legal — which is
+   the whole lesson: a semantic name over a FIXED cream fill resolves to one
+   palette on one ground and the other on the other, so it is legal by
+   accident rather than by rule. Everything inside the preview therefore
+   reads a cream-world token, which resolves the same on both grounds
+   because that is what the preview is showing. Measured on cream:
+   `--color-ink` 15.85:1, `--color-muted` 5.18:1. */
 .branding-panel__previews {
   display: flex;
   flex-wrap: wrap;
@@ -492,6 +520,9 @@
 .branding-panel__preview {
   flex: 1 1 14rem;
   background: var(--color-cream);
+  /* The three previews' own messages are bare <p>s with no colour of their
+     own, so this is what paints them. */
+  color: var(--color-ink);
   border: 1px solid var(--edge);
   border-block-start: 3px solid var(--brand-primary, var(--color-ink));
   padding: var(--space-md);

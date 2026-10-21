@@ -455,7 +455,15 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".access-panel__fact, .access-panel__summary": { dark: "signal-bg", light: "signal-l-bg" },
   ".access-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
   ".access-panel__issues caption": { dark: "signal-bg", light: "signal-l-bg" },
-  ".release-panel__fact, .branding-panel__fact, .branding-panel__footer": { dark: "signal-bg", light: "signal-l-bg" },
+  // `.release-panel__fact` renders on the page five times over and
+  // `.branding-panel__fact` five times beside it, so this pair is the
+  // page's own ground. The sixth `.branding-panel__fact` and every
+  // `.branding-panel__footer` render INSIDE a preview, on its cream, and
+  // are split out below (fix round 1, C2).
+  ".release-panel__fact, .branding-panel__fact": {
+    dark: "signal-bg",
+    light: "signal-l-bg",
+  },
   ".release-panel__risk, .branding-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
   ".version-banner, .review-note": { dark: "signal-bg", light: "signal-l-bg" },
   ".setting-row__button": { dark: "signal-bg", light: "signal-l-bg" },
@@ -464,11 +472,20 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".checklist-rail__count": { dark: "signal-bg", light: "signal-l-bg" },
   ".checklist-rail__pin": { dark: "signal-bg", light: "signal-l-bg" },
 
-  // The branding preview is a MINIATURE OF THE CANDIDATE'S START PAGE, so it
-  // keeps the cream world on purpose and now paints the cream fill its
-  // `var(--color-ink)` fallback always assumed. Re-grounding it would make
-  // the preview lie about the page it previews.
+  // The branding preview is a MINIATURE OF THE CANDIDATE'S START PAGE, so
+  // its WHOLE SUBTREE is the cream world, not only its fill — which is the
+  // half the first version of this got wrong. `both(...)` and not a pair:
+  // the fill is `var(--color-cream)` on either ground, so a semantic name
+  // in here would be scored against a fixed cream and pass on one ground
+  // only. That is exactly how #1.11:1 shipped green (fix round 1, C1/C2).
+  //
+  // The <h4> carries the brand colour, with the runtime's own ink as its
+  // fallback; `.branding-panel__preview` itself paints the three previews'
+  // bare <p> messages, which declare no colour of their own.
   ".branding-panel__preview h4": both("cream"),
+  ".branding-panel__preview": both("cream"),
+  ".branding-panel__preview .branding-panel__fact, .branding-panel__footer":
+    both("cream"),
 
   // The checklist renders in the docked rail, which has no fill, AND inside
   // the floating panel the collapsed strip opens, which fills itself with
@@ -666,7 +683,14 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".access-panel__fact, .access-panel__summary": { px: 16, weight: 400 },
   ".access-panel__risk": { px: 16, weight: 400 },
   ".access-panel__issues caption": { px: 16, weight: 400 },
-  ".release-panel__fact, .branding-panel__fact, .branding-panel__footer": { px: 16, weight: 400 },
+  ".release-panel__fact, .branding-panel__fact": { px: 16, weight: 400 },
+  ".branding-panel__preview .branding-panel__fact, .branding-panel__footer": {
+    px: 16,
+    weight: 400,
+  },
+  // The preview's own colour paints its bare <p> messages, which inherit
+  // the body scale like every other <p> in this file.
+  ".branding-panel__preview": { px: 16, weight: 400 },
   ".release-panel__risk, .branding-panel__risk": { px: 16, weight: 400 },
   ".version-banner, .review-note": { px: 16, weight: 400 },
   ".setting-row__button": { px: 16, weight: 400 },

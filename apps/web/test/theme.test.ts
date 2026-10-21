@@ -587,8 +587,8 @@ describe("no organiser-only stylesheet reads the cream palette (D1, G5)", () => 
   // comment claiming it.
   const EXEMPT: Record<string, { tokens: string[]; why: string }> = {
     "testbuilder.css": {
-      tokens: ["--color-cream", "--color-ink"],
-      why: "`.branding-panel__preview` is a MINIATURE OF THE CANDIDATE'S START PAGE as the branding settings will paint it, so its cream fill and the `var(--brand-primary, var(--color-ink))` fallback are the runtime's own palette. Re-grounding them would make the preview lie about the page it previews.",
+      tokens: ["--color-cream", "--color-ink", "--color-muted"],
+      why: "`.branding-panel__preview` is a MINIATURE OF THE CANDIDATE'S START PAGE as the branding settings will paint it, so its WHOLE SUBTREE is the runtime's palette and not only its fill: the cream background, the `var(--brand-primary, var(--color-ink))` heading fallback, the ink that paints the three previews' bare <p> messages, and the muted tone on the footer and the preview's own fact line. Re-grounding any of them would make the preview lie about the page it previews — and a SEMANTIC name over a fixed cream fill is worse than either, because it resolves to one palette on one ground and the other on the other: `--ink` measures 1.11:1 on cream dark and 17.39:1 light (fix round 1, C1).",
     },
   };
 

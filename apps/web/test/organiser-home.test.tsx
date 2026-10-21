@@ -406,6 +406,41 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     expect(paintsIn(page!, "background", organiserCss())).toBe("var(--ground)");
   });
 
+  it("paints the focus ring in the accent, on a page element and not only the chrome", async () => {
+    const { container } = await openHome();
+
+    // 6.5e Task 1b deleted TWO narrower copies of this rule — shell.css's
+    // `.shell__bar :focus-visible, .shell__rail :focus-visible` and
+    // home.css's `.home :focus-visible` — because admin.css's
+    // `:root[data-theme] :focus-visible` covers all three surfaces and two
+    // rules painting one ring is how one of them drifts. Deleting either was
+    // invisible to this suite: nothing asserted the organiser's focus ring
+    // anywhere. This is that assertion, and it is on a PAGE element rather
+    // than on the bar, because the page is the surface both deleted rules
+    // left uncovered and the one base.css would otherwise paint in the
+    // candidate runtime's voltage.
+    const pill = container.querySelector(".home__pill");
+    expect(pill).not.toBeNull();
+
+    // `Element.matches(":focus-visible")` is false for an unfocused node, so
+    // the rule is read against a probe that carries the class and is asked
+    // for the declaration the rule sets — the same way the frame assertion
+    // above reads `.shell`.
+    const css = organiserCss();
+    const ring = parseRuleBodies(css).filter(
+      (rule) => rule.selector === ":root[data-theme] :focus-visible",
+    );
+    expect(ring, "no :root[data-theme] :focus-visible rule in the organiser chain").toHaveLength(1);
+    const body = ring[0]!.body;
+    expect(declarations(body)).toContain("outline-color: var(--focus)");
+    expect(declarations(body)).toContain("box-shadow: 0 0 0 3px var(--accent-wash)");
+
+    // ...and the voltage ring base.css paints is not what wins here. The
+    // organiser rule is (0,1,1) against base.css's (0,1,0), so it wins in
+    // either chunk order — which is the whole point of writing it that way.
+    expect(css).not.toMatch(/:root\[data-theme\] :focus-visible \{[^}]*voltage/);
+  });
+
   it("scrolls the two panes inside themselves instead", async () => {
     const { container } = await openHome();
 

@@ -86,13 +86,12 @@
   overflow: hidden;
 }
 
-/* The ring, scoped the way shell.css scopes its own: --focus is the Signal
-   accent, which D1 measures at 1.60:1 on cream, so it may only be widened
-   to a surface that is actually on this ground. Home is. */
-.home :focus-visible {
-  outline-color: var(--focus);
-  box-shadow: 0 0 0 3px var(--accent-wash);
-}
+/* The ring was here, scoped the way shell.css scoped its own, because
+   "--focus is 1.60:1 on cream, so it may only be widened to a surface that
+   is actually on this ground". Every organiser surface is on this ground
+   from 6.5e Task 1b, and `admin.css`'s `:root[data-theme] :focus-visible`
+   paints the same two declarations at a higher specificity. Deleted rather
+   than left — the same reason shell.css's twin was (fix round 1, M1). */
 
 /* ---- Page lead --------------------------------------------------------- */
 

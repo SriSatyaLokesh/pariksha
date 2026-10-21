@@ -722,15 +722,17 @@ Every component below is a cream-surface component. The marketing site left this
 
 **`section-heading`** — The same display token in `{colors.ink}` on white, for a section below the canvas band.
 
+> **Five of the entries in the `components:` block above are the CREAM spec of a component the organiser no longer paints that way** — `mono-caption`, `button-primary`, `button-primary-hover`, `button-secondary` and `card-hairline`, re-grounded by `D1`. The block is not corrected in place because each of its fields holds ONE value and `D20` ships two palettes: a single `backgroundColor` cannot say `{colors.signal-surface}` on one ground and `{colors.signal-l-surface}` on the other. The paragraphs below carry both, the way `category-tab`'s already does, and the generated `tokens.components` keeps the cream values for the dimension assertions (`apps/web/test/component-dimensions.test.ts`) that are the only thing reading it. The organiser's real paint is `apps/web/src/styles/theme.css`, and `apps/web/test/theme.test.ts` is what holds it there.
+
 **`body-paragraph`** / **`body-paragraph-muted`** — Workhorse running text in ink and muted.
 
-**`mono-caption`** — `{typography.mono-sm}` in muted. Small-caps labels above feature cells, footnotes under diagrams, timestamps.
+**`mono-caption`** — `{typography.mono-sm}` in muted. Small-caps labels above feature cells, footnotes under diagrams, timestamps. **Re-grounded.** Only the organiser renders it now, and there it is the quietest ink tone of whichever ground is on — `{colors.signal-text-3}` dark, `{colors.signal-l-text-3}` light, the same role muted played on cream and within a tenth of its ratio (5.18:1 then, 5.28:1 and 5.04:1 now).
 
-**`button-primary`** — Cream fill, ink label, full pill, 46px tall, no border, one soft shadow. "Start the test →" is the canonical instance. Highest-contrast element on the hero (15.85:1) by inverting the figure-ground.
+**`button-primary`** — Full pill, 46px tall, no border, one soft shadow. **Re-grounded.** The cream fill and ink label were a way of inverting the figure-ground against a voltage hero (15.85:1), and no surviving surface renders it that way: only the organiser does, and there `D1` gives the primary action the one accent — `{colors.signal-accent}` with `{colors.signal-accent-ink}` dark (11.47:1), `{colors.signal-l-accent}` with `{colors.signal-l-accent-ink}` light (5.82:1). "Start the test →" stays the canonical instance of the shape.
 
-**`button-primary-hover`** — Flips to `{colors.voltage-deep}` with a cream label (**5.66:1**). The flip to the _deep_ step, not the hover step, is what keeps the label legal.
+**`button-primary-hover`** — **Re-grounded**, and the rule survives the move intact: the flip is to the _deep_ step, not the hover step, which is what keeps the label legal. On the organiser that is `{colors.signal-accent-deep}` under the same `{colors.signal-accent-ink}` (6.21:1 dark, 7.75:1 light), where it used to be `{colors.voltage-deep}` under cream (**5.66:1**). **`button-primary--surface`**, the variant that existed only because a cream pill vanished on a cream band, now paints what the resting pill does and keeps nothing but `box-shadow: none`.
 
-**`button-secondary`** — White fill, ink label, 1px `{colors.hairline-strong}`, 6px radius, 40px.
+**`button-secondary`** — 6px radius, 40px, 1px border. **Re-grounded.** White fill and ink label on cream become the ground's own surface and ink — `{colors.signal-surface}` / `{colors.signal-text}` dark, `{colors.signal-l-surface}` / `{colors.signal-l-text}` light — and the border takes the tone this file reserves for an edge that must be seen, `{colors.signal-line-strong}` / `{colors.signal-l-line-strong}`, where `{colors.hairline-strong}` carried it on cream.
 
 **`button-danger`** — White fill, `{colors.flag-risk}` label and border. Force-submit, reset attempt, delete candidate data. Always paired with a confirmation naming what is about to happen.
 
@@ -738,7 +740,7 @@ Every component below is a cream-surface component. The marketing site left this
 
 **`nav-link`** — Muted label, 6px hover pill in near-white. Never the voltage.
 
-**`card-hairline`** — White, 1px `{colors.hairline}`, 8px radius, 24px padding, no shadow.
+**`card-hairline`** — 8px radius, 24px padding, no shadow, 1px rule. **Re-grounded.** White on cream becomes `{colors.signal-surface}` / `{colors.signal-l-surface}` under `{colors.signal-text}` / `{colors.signal-l-text}`, and the rule stays the decorative tone (`{colors.signal-line}` / `{colors.signal-l-line}`) it was as `{colors.hairline}`. Every organiser panel is one of these.
 
 **`card-voltage`** — Voltage fill, cream text, 8px radius, 40px padding. The in-body emphasis block, usually half of a 50/50 split beside a `{component.card-hairline}`. **Superseded.** It was a marketing-page device, and the marketing site left the cream ground; no surviving cream surface uses it, because the start and finish pages carry the full-bleed `{component.hero-section}` instead. Kept as the record of its spec, not as a component to reach for — and never on the Signal ground.
 
@@ -831,7 +833,7 @@ Every component below is a cream-surface component. The marketing site left this
 - **Candidate dark mode.** Deferred by decision, not oversight — the organiser ships both Signal grounds, and only the cream runtime's dark mode is outstanding. See _Modes_.
 - **High contrast on the Signal grounds.** `C-04`'s swap table is specified for the cream surfaces only. What the organiser's two grounds do under a high-contrast setting is undesigned, and is a question for a later phase rather than this one.
 - **Measured ratios for the Signal grounds, stated in this file.** The thirty `signal-*` and `signal-l-*` tokens have no row in `## Colors`, and the blocker is the generator, not an oversight: `scripts/tokens.mjs` hardcodes the background every stated ratio is scored against (`parseContrastPairs`: `const bg = colors.cream`) and reads only a fixed list of six headings (`CONTRAST_SECTIONS`: Brand, Text, Hairline, Attempt state, Integrity state, Data). A Signal row is therefore either never parsed, if it sits outside those six, or parsed against cream, which is not the comparison being made. Teaching `parseTableRows` a per-row background — a column, or a `### …` heading that names its own ground — is what unblocks it; until then the measured tables live in ADR 0010 and the assertions in `apps/web/test/contrast-usage.test.ts`, and duplicating them here would add a fourth copy that nothing machine-checks.
-- **Signal-ground components.** `## Components` inventories the cream surfaces only. The Signal ground's components live in `signal.css` and are not written down here; the organiser's move gives them a home, and that inventory is a later pass.
+- **Signal-ground components.** `## Components`' `components:` block inventories the cream surfaces only, and is now **stale as well as incomplete**: five of its entries describe a cream spec the organiser no longer paints (noted at the head of that section), and the Signal ground's own components — the shell, the rail, Home's panes, the checklist rail — are not written down here at all. Both halves need the same unblocking as the ratio tables below, since a component on two grounds needs a field that can hold two values. That inventory is a later pass.
 - **Charts.** The four-series data palette is specified; axis treatment, grid-line weight, tooltip surface and the item-analysis chart types (distribution, discrimination scatter, option pick rates) are not yet designed.
 - **Live monitor.** The 15-second-refresh proctor table needs a specification for how a row changes without stealing focus from the proctor's current action. Not yet written.
 - **Snapshot timeline.** The review screen's snapshot strip — thumbnail size, flagged-frame treatment, scrub behaviour — is unspecified.
