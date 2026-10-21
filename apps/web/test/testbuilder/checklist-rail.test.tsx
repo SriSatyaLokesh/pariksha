@@ -18,13 +18,14 @@
 // section do to the rail.
 
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
+import { act, render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 
 import type {
   ApiClient,
   Actor,
   ChecklistRow,
+  DraftPatch,
   TestSummary,
   TestVersionRow,
   Workspace,
@@ -369,5 +370,131 @@ describe("the checklist rail", () => {
 
     fireEvent.click(collapse());
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+// `D7b` — the rail refetches `GET …/checklist` once per settled save burst,
+// riding the follow-up draft read the builder already fires (test.tsx's save
+// effect). A rail that reads only on mount lies while the author works: it
+// goes on showing rows the author has already fixed, and it goes on offering
+// journeys into sections that no longer exist.
+//
+// Everything below counts REAL calls on the client the screen was handed, and
+// drives the real debounce on real timers — the interval is the builder's and
+// is not a knob this file may touch (`AG2`).
+describe("the rail refetches as the author works", () => {
+  /** Echoes the patch back, the way the route does. The file's own
+   *  `patchDraft` answers the fixed `DRAFT`, which would restore a section
+   *  the moment it was deleted — fine for a file that never saved, useless
+   *  here. */
+  const echo = async (_ws: string, _id: string, patch: DraftPatch): Promise<TestVersionRow> => ({
+    ...DRAFT,
+    body: { ...DRAFT.body, ...patch },
+  });
+
+  /** Three keystrokes in one section title: one burst, one settled save. */
+  function typeSeveralEdits(): void {
+    fireEvent.click(screen.getByRole("button", { name: /^Quantitative aptitude/ }));
+    const title = screen.getByLabelText("Title");
+    for (const value of ["Quant", "Quanti", "Quantit"]) fireEvent.change(title, { target: { value } });
+  }
+
+  /** Long enough for the 250 ms debounce, the PATCH and the reads that ride
+   *  it — and then some, so a SECOND read would have landed if one were
+   *  coming. */
+  async function settle(): Promise<void> {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+    });
+  }
+
+  it("refetches the checklist once after a burst of edits settles", async () => {
+    const checklist = vi.fn(async () => ROWS);
+    await openBuilder(fakeClient({ checklist, patchDraft: echo }));
+    // The first paint's own read, which `D7` already owns. Everything after
+    // this is the refetch under test.
+    await waitFor(() => expect(checklist).toHaveBeenCalledTimes(1));
+    const checklistCalls = () => checklist.mock.calls.slice(1);
+
+    typeSeveralEdits();
+    await settle();
+
+    expect(checklistCalls()).toHaveLength(1);
+    expect(checklistCalls()[0]).toEqual(["wsp_1", "tst_1"]);
+  });
+
+  it("does not refetch per keystroke", async () => {
+    const checklist = vi.fn(async () => ROWS);
+    const patchDraft = vi.fn(echo);
+    await openBuilder(fakeClient({ checklist, patchDraft }));
+    await waitFor(() => expect(checklist).toHaveBeenCalledTimes(1));
+    const checklistCalls = () => checklist.mock.calls.slice(1);
+
+    typeSeveralEdits();
+    // Mid-burst: the save itself has not gone yet, so neither has the read.
+    expect(patchDraft).not.toHaveBeenCalled();
+    expect(checklistCalls()).toHaveLength(0);
+
+    await settle();
+
+    // Three keystrokes, one save, one read. Not three — and not zero, which
+    // is what a rail that only reads on mount would show here.
+    expect(patchDraft).toHaveBeenCalledTimes(1);
+    expect(checklistCalls()).toHaveLength(1);
+  });
+
+  it("shows a row that a save just cleared", async () => {
+    const TIMING_MISSING: ChecklistRow = {
+      id: "timing_missing",
+      severity: "blocking",
+      message: "no duration is set",
+      field: "timing.duration_minutes",
+    };
+    const advisory = ROWS.filter((row) => row.severity === "advisory");
+    let reads = 0;
+    const checklist = vi.fn(async () => {
+      reads += 1;
+      return reads === 1 ? [TIMING_MISSING, ...advisory] : advisory;
+    });
+    await openBuilder(fakeClient({ checklist, patchDraft: echo }));
+
+    // The gate's own sentence, in the rail, before the fix.
+    await waitFor(() => expect(within(rail()).getByText(/no duration is set/i)).toBeInTheDocument());
+    expect(within(rail()).getByText(/1 must fix/i)).toBeInTheDocument();
+
+    // Set the duration. Opening a setting retracts the rail to its lights
+    // (`D7a`), so the row leaving is watched in the collapsed state — the
+    // strip and the panel are the same rows and both have to be right.
+    fireEvent.click(screen.getByRole("button", { name: /^Timing/ }));
+    expect(rail()).toHaveAttribute("data-state", "lights");
+    fireEvent.change(screen.getByLabelText(/overall duration \(minutes\)/i), { target: { value: "90" } });
+    fireEvent.click(screen.getByRole("button", { name: /apply the change/i }));
+
+    await waitFor(() => expect(within(rail()).queryByText(/no duration is set/i)).toBeNull());
+    expect(within(rail()).getByText(/0 must fix/i)).toBeInTheDocument();
+  });
+
+  it("does not navigate into a section deleted since the rail was read", async () => {
+    // The rail's rows are a reading of a moment, and this one outlives the
+    // section it names: the fixture keeps reporting `quant` after the author
+    // has deleted it, which is exactly the window between a delete and the
+    // gate's next answer.
+    await openBuilder(fakeClient({ patchDraft: echo }));
+    await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Quantitative aptitude/ }));
+    fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
+    fireEvent.click(within(screen.getByRole("dialog", { name: /delete this section/i })).getByRole("button", { name: /^delete$/i }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: /^Quantitative aptitude/ })).toBeNull());
+
+    // The light still offers the journey, because the rail is still holding
+    // the rows it was given. Pressing it must not take the builder to a
+    // section that is not there — a `?section=` naming nothing opens nothing
+    // AND suppresses every setting panel (`panelFromUrl`), so the reader is
+    // left on a screen with no spine and no settings.
+    fireEvent.click(screen.getByRole("button", { name: /Go to quant\./ }));
+
+    expect(new URLSearchParams(window.location.search).get("section")).toBeNull();
+    expect(screen.getByRole("heading", { name: /^sections$/i })).toBeVisible();
   });
 });
