@@ -452,6 +452,11 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
   ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  // `D19`'s shuffle chip (6.5e Task 6). A bordered chip with no fill of its
+  // own, inside `.section-row` — which has no fill either — so what shows
+  // through it is the page's own --ground, exactly as for the two siblings
+  // below it. NOT --surface: nothing between it and <body> paints one.
+  ".section-row__chip": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__draw": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__flag-risk": { dark: "signal-bg", light: "signal-l-bg" },
   ".picker-drawer__points": { dark: "signal-bg", light: "signal-l-bg" },
