@@ -71,6 +71,9 @@
 // would throw. Loud rather than silently green, but not "correct at every
 // position in the run".
 
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createWorkspace, seedWorkspace, signIn } from "../seed";
 
@@ -109,25 +112,45 @@ const PRE_RULE_SHAPE = `
 
 /**
  * `primitives.css`'s `@supports not (grid-template-rows: subgrid)` branch,
- * restated unconditionally — which is how an engine without `subgrid` sees
- * the page.
+ * lifted out of the shipped file and restated unconditionally — which is how
+ * an engine without `subgrid` sees the page.
  *
  * `D16` and the brief both say that branch "was forced on and re-measured:
  * still 0px on every live row", and until fix round 1 nothing in a browser
  * checked it: the fallback was proved only against the resolved CSS in jsdom
- * (finding 3). Injected at the same specificity as the shipped rules and
- * after them, so it wins; `grid-template-rows: subgrid` on an engine that
- * lacks it is invalid at computed-value time anyway, which is why restating
- * the branch reproduces that engine rather than approximating it.
+ * (finding 3). Chromium supports `subgrid`, and a feature query cannot be
+ * turned off from a stylesheet, so the only way to put a browser on that path
+ * is to restate the branch at a specificity that wins.
+ *
+ * READ OFF THE FILE rather than retyped, which is the difference between a
+ * measurement and a fixture: a copy here would keep passing after the shipped
+ * branch changed, and the one thing this test exists to say is what the
+ * SHIPPED fallback does in a real engine. Deleting the reserve from
+ * `primitives.css` reddens this test (fix round 1, probe 11).
  */
-const FORCED_FALLBACK = `
-  .field-row > .field {
-    grid-template-rows: auto auto auto;
+const FORCED_FALLBACK = ((): string => {
+  const css = readFileSync(
+    resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/primitives.css"),
+    "utf8",
+  );
+  const at = css.indexOf("@supports not (grid-template-rows: subgrid)");
+  if (at === -1) throw new Error("primitives.css has no @supports not (subgrid) branch to force on");
+  const open = css.indexOf("{", at);
+  let depth = 1;
+  let i = open + 1;
+  while (depth > 0 && i < css.length) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}") depth--;
+    i++;
   }
-  .field-row:has(.field-help) > .field {
-    grid-template-rows: auto auto minmax(var(--type-body-sm-line-height), auto);
+  const body = css.slice(open + 1, i - 1);
+  // A branch that parsed to nothing would silently make the test below a
+  // second measurement of the subgrid path.
+  if (!/grid-template-rows/.test(body)) {
+    throw new Error("the @supports branch read out of primitives.css declares no row tracks");
   }
-`;
+  return body;
+})();
 
 /** `seedWorkspace`'s own name for the first test it publishes. */
 const TEST_NAME = "Algebra assessment 01";
@@ -412,6 +435,40 @@ test("a row where no field has help collapses its reserved help track", async ({
   expect(
     spent,
     "the mixed row spends nothing on help either, so the zero above proves nothing",
+  ).toBeGreaterThan(0);
+
+  // AND ON THE FALLBACK PATH, which is the path every engine without
+  // `subgrid` takes and the only one where a reserve exists at all.
+  //
+  // WHAT THIS PAIR OF ASSERTIONS IS AND IS NOT. It is an invariant, not an
+  // isolation, and the difference was established by probing rather than
+  // assumed. On the `subgrid` branch the row's third track is content-sized
+  // from its subgrid children and the parent's own sizing function for it is
+  // not what a browser renders: forcing it to `21px`, and to
+  // `minmax(21px, auto)`, changed nothing measurable, and dropping the
+  // fallback reserve's `:has(.field-help)` condition changed nothing either
+  // (fix round 1, probes 12, 12b, 11b — all three reported as NOT reddening).
+  // So no shipped declaration can be broken to turn the four zeros here red.
+  //
+  // What they do hold is the claim itself — that a row with no help in it
+  // spends no line on one, on BOTH paths — against a proof arm on the same
+  // screen that really does spend 46px of it. Breaking the help track so the
+  // mixed row stops spending it reddens the arm (probe 12c), which is what
+  // keeps these from being four zeros read off nothing.
+  await page.addStyleTag({ content: FORCED_FALLBACK });
+  const underFallback = await helpTrackCost(helpFree);
+  const spentUnderFallback = await helpTrackCost(mixed);
+  console.log(
+    `FIELD ROW help track under the forced fallback: ` +
+      `help-free row costs ${underFallback}px, mixed row costs ${spentUnderFallback}px`,
+  );
+  expect(
+    underFallback,
+    "the fallback reserves a help line on a row that has no help in it",
+  ).toBe(0);
+  expect(
+    spentUnderFallback,
+    "the fallback is not in force, so the zero beside it proves nothing",
   ).toBeGreaterThan(0);
 
   // And the units really are inside the controls on this row, which is what
