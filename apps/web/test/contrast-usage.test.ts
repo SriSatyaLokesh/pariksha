@@ -417,6 +417,27 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".preview__heading": { dark: "signal-surface", light: "signal-l-surface" },
   ".preview__toggle": { dark: "signal-surface", light: "signal-l-surface" },
 
+  // ---- authoring.css: the type picker's cards (6.5e Task 3, D18) --------
+  // The card FILLS ITSELF with --surface and sits on the question editor's
+  // own page ground, so its label and its note both read on --surface and
+  // not on the --ground one step out. Traced to the declaration rather
+  // than copied from a sibling: `.bank-browser__group-label` below is
+  // --ground precisely because that element sets no background of its own,
+  // and a card that does is the other case.
+  //
+  // The picked card fills with --accent-wash instead — 12% accent OVER
+  // that same --surface. A 12% wash does not move the ratio enough to
+  // score against, and the surface beneath it is the honest worst case:
+  // the reading `.shell__nav-item[aria-current="page"]` and
+  // `.home__pill[aria-pressed="true"]` already take. `aria-pressed` sets no
+  // `color` of its own, so there is no second entry to make.
+  //
+  // Nothing else the picker adds declares `color`: every part of all twelve
+  // drawn miniatures is a border, a fill or a gradient, which is why twelve
+  // drawings arrive here as two entries.
+  ".type-card": { dark: "signal-surface", light: "signal-l-surface" },
+  ".type-card__note": { dark: "signal-surface", light: "signal-l-surface" },
+
   // ---- authoring.css: the bank list and bank browser (P4.2) --------------
   // `.bank-list__item` and `.bank-browser__tag-chip` are the only two
   // elements here that fill themselves (the same "card on the page" pattern

@@ -30,10 +30,16 @@ import {
 // elements of a real mount: `paintsIn` walks every rule the organiser's
 // stylesheet chain really assembles, keeps the ones whose selector the
 // element really matches, and returns the value that really wins. Focus
-// state is part of that match — jsdom's `matches()` evaluates `:focus`,
-// `:focus-visible` and `:focus-within` against the real `activeElement` —
-// so "the card is focused, therefore the open rule is the one that paints"
-// is a statement about behaviour, not about the presence of a rule.
+// state is part of that match, and more faithfully than expected: jsdom's
+// selector engine implements the REAL `:focus-visible` heuristic
+// (`@asamuzakjp/dom-selector`'s `#matchFocusVisiblePseudoClass`). Being
+// `document.activeElement` is NOT enough for a <button> — the focus has
+// to have arrived the way a keyboard delivers it — so `tabTo()` below
+// dispatches a real `Tab` keydown on the element focus is leaving and
+// then moves focus, which is what the engine keys on. "The card took
+// keyboard focus, therefore the open rule is the one that paints" is a
+// statement about behaviour, not about the presence of a rule; a plain
+// `.focus()` with no Tab in front of it does not satisfy it.
 //
 // `:hover` is the one selector jsdom answers `false` to unconditionally
 // (there is no pointer), so the hover half of the ruling is guarded one
@@ -41,12 +47,8 @@ import {
 //
 // No `@testing-library/user-event` in this workspace (apps/web carries
 // @testing-library/react and jest-dom only — `test/authoring/reorder.test.tsx`
-// and `test/exam/calculator.test.tsx` both record this). Focus is moved
-// with `.focus()` on the real element, which is the same `activeElement`
-// a Tab produces; jsdom implements no sequential focus navigation and
-// resolves `:focus-visible` as `:focus`, so this file proves "focus opens
-// it" and cannot prove "only a KEYBOARD focus opens it". That distinction
-// is a browser fact and is named in the report, not asserted here.
+// and `test/exam/calculator.test.tsx` both record this), so the Tab is
+// dispatched rather than typed.
 
 const ALL_STYLESHEETS = organiserStylesheets();
 // One shared `seen` set so a file imported by two entries is read once, in
@@ -164,7 +166,6 @@ function fakeClient(): ApiClient {
  * `D14`: every assertion starts at `OrganiserApp` and clicks its way in.
  * Home -> Banks -> the bank -> the editor -> "Change type", which is the
  * only route an Author has to the picker this file is about.
- *
  */
 async function openPicker() {
   render(<OrganiserApp client={fakeClient()} />);
@@ -172,8 +173,31 @@ async function openPicker() {
   fireEvent.click(await screen.findByRole("button", { name: /SQL basics/ }));
   fireEvent.click(await screen.findByRole("button", { name: /^edit question:/i }));
   await screen.findByRole("heading", { level: 1, name: "Edit question" });
-  fireEvent.click(await screen.findByRole("button", { name: /^change type$/i }));
+  const change = await screen.findByRole("button", { name: /^change type$/i });
+  fireEvent.click(change);
+  // `fireEvent.click` does not move focus the way a real click does, and
+  // the Tab below has to start where a real one would have left it.
+  change.focus();
   await screen.findByRole("button", { name: /^Single choice/ });
+}
+
+/**
+ * Move focus to `target` the way Tab does — which, for `:focus-visible`,
+ * is not the same thing as calling `.focus()`. jsdom's selector engine
+ * reads the last key event to decide whether a focused element is focus-
+ * VISIBLE, so the keydown in front of the move is load-bearing rather
+ * than decoration: drop it and the card stays shut.
+ */
+function tabTo(target: HTMLElement) {
+  const from = document.activeElement as HTMLElement | null;
+  fireEvent.keyDown(from ?? document.body, { key: "Tab" });
+  // Focus leaves the old element before it reaches the new one, exactly as
+  // a Tab does. Doing it in two steps also keeps this helper independent
+  // of the engine's own `#lastFocusVisible` bookkeeping, which carries
+  // across tests in one jsdom document and made a single-step version pass
+  // or fail depending on which test ran first.
+  from?.blur();
+  target.focus();
 }
 
 /**
@@ -231,13 +255,13 @@ describe("D18: the type picker opens a drawn example", () => {
     expect(document.activeElement).not.toBe(single);
     expect(tracksOf(single).at(-1)).toBe("0fr");
 
-    single.focus();
+    tabTo(single);
     expect(document.activeElement).toBe(single);
 
-    // Focused: the open rule is now the one that wins the cascade on this
-    // very element. jsdom evaluates `:focus-visible` against the real
-    // `activeElement`, so this is the focus doing it and not the rule
-    // merely existing.
+    // Focused from the keyboard: the open rule is now the one that wins
+    // the cascade on this very element. The engine resolves
+    // `:focus-visible` from the real focus and the real key event, so
+    // this is the Tab doing it and not the rule merely existing.
     expect(tracksOf(single).at(-1)).toBe("1fr");
 
     // Focus leaves, and it closes again.
@@ -285,13 +309,14 @@ describe("D18: the type picker opens a drawn example", () => {
     const shapes = TYPES.map((type) => shapeOf(exampleFor(type)));
 
     // Every one really draws: a miniature with nothing but text in it is
-    // the description this ruling refuses.
-    for (const [index, shape] of shapes.entries()) {
-      const drawn = new DOMParser().parseFromString(`<i>${shape}</i>`, "text/html");
+    // the description this ruling refuses. Three is the floor a drawing
+    // of anything at all clears — a container and two marks — not a
+    // number taken from what the twelve happen to contain today.
+    for (const type of TYPES) {
       expect(
-        drawn.querySelectorAll("*").length,
-        `the ${TYPES[index]} example draws fewer than three elements`,
-      ).toBeGreaterThanOrEqual(4); // <html><head><body><i> is 4 before any shape
+        exampleFor(type).querySelectorAll("*").length,
+        `the ${type} example draws fewer than three elements`,
+      ).toBeGreaterThanOrEqual(3);
     }
 
     // Twelve types, twelve shapes. Text stripped, so twelve boxes each
@@ -299,7 +324,12 @@ describe("D18: the type picker opens a drawn example", () => {
     expect(new Set(shapes).size).toBe(12);
   });
 
-  it("resizes the example's own track rather than adding one, so the rows above it never move", async () => {
+  // Review Minor 2: the title used to promise "so the rows above it never
+  // move", which is a claim about pixels the body does not reach. It says
+  // what it proves now — the track list above the example is identical in
+  // both states — and the comment below keeps the pixel claim where it
+  // belongs, as the thing a browser would still have to measure.
+  it("resizes the example's own track rather than adding one, leaving the tracks above it identical", async () => {
     // The brief asks for "does not change the card grid's height when an
     // example opens". That is a PIXEL claim, and neither tool in this
     // repository can make it: jsdom does no layout (every rect is zero,
@@ -320,7 +350,7 @@ describe("D18: the type picker opens a drawn example", () => {
     expect(example.isConnected).toBe(true);
 
     const closed = tracksOf(single);
-    single.focus();
+    tabTo(single);
     expect(document.activeElement).toBe(single);
     const open = tracksOf(single);
 
@@ -343,5 +373,35 @@ describe("D18: the type picker opens a drawn example", () => {
     for (const type of TYPES.filter((candidate) => candidate !== "single")) {
       expect(cardFor(type)).toHaveAttribute("aria-pressed", "false");
     }
+  });
+
+  it("paints the picked card on the same background an unpicked one has", async () => {
+    // Fix round 1, and the guard the defect it fixes went through.
+    //
+    // `contrast-usage.test.ts` scores a selector's own declared `color`
+    // against the background its SURFACE entry names — here --surface, for
+    // `.type-card` and `.type-card__note`. A SIBLING selector that repaints
+    // that background underneath them is outside that sweep entirely: it
+    // declares no `color`, so it never enters `colorSelectors`, and the
+    // sweep goes on scoring the ink against a surface the user is no longer
+    // looking at. That is how `.type-card[aria-pressed="true"]`'s
+    // `background-color: var(--accent-wash)` shipped with the note at
+    // 3.81:1 and every --edge-strong mark at 2.81:1, both under their bars,
+    // past a green contrast suite.
+    //
+    // The relational half is the assertion that matters and freezes no
+    // number: selecting a card must not change what it is painted on. The
+    // second half ties the pair to the ground the SURFACE entries claim, so
+    // moving the card's resting fill without moving those entries reddens
+    // here rather than silently rescoring both of them.
+    await openPicker();
+    const picked = cardFor("single");
+    const unpicked = cardFor("ordering");
+    expect(picked).toHaveAttribute("aria-pressed", "true");
+    expect(unpicked).toHaveAttribute("aria-pressed", "false");
+
+    const pickedFill = paintsIn(picked, "background-color", ORGANISER_CSS);
+    expect(pickedFill).toBe(paintsIn(unpicked, "background-color", ORGANISER_CSS));
+    expect(pickedFill).toBe("var(--surface)");
   });
 });
