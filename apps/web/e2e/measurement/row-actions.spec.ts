@@ -87,6 +87,32 @@ const WIDTHS = [
 ];
 
 /**
+ * THE PRECONDITION THE DEFECT NEEDS, as a stylesheet: a table wider than its
+ * scrollport.
+ *
+ * `D21a` names two causes at once — "the action cell had no reserved width,
+ * and the table was wider than the page" — and a gutter can only be clipped
+ * by a table that does not fit. The seeded fixture here is one test and three
+ * questions, and at 1440px both of its tables FIT, so the first draft of this
+ * file measured zero clipping with the rule shipped AND zero with the rule
+ * forced off. Its own proof caught that, which is the whole reason the proof
+ * exists (`AG3`): a measurement that cannot tell the rule from its absence is
+ * a test that cannot fail.
+ *
+ * So the state the rule exists for is CONSTRUCTED rather than hoped for, and
+ * applied to BOTH passes — shipped and broken alike, so the only thing that
+ * differs between them is the rule. This is not a loosened bar: nothing
+ * asserted moves, and the production lists really are this shape (the test
+ * list is wider than its panel with 40 real rows, which is why
+ * `e2e/density.ts`'s own header says the gate must stay vertical-only).
+ */
+const TOO_WIDE = `
+  table[data-wide] {
+    min-width: 200%;
+  }
+`;
+
+/**
  * The shape `D21a` replaced, as a stylesheet: an action cell with no sticky
  * position and no reserved width, which is what let a button be cut off at a
  * row's edge when the table was wider than the page.
@@ -115,6 +141,18 @@ const WIDENING_REVEAL = `
 
 test.beforeAll(async ({ request }) => {
   const isolated = await createWorkspace(request, WORKSPACE_NAME, "row-action-fixtures");
+
+  // Seeded ONCE per run, the same idempotence `createWorkspace` itself
+  // documents and for the same reason. A failed test restarts the worker and
+  // this hook runs again; `seedWorkspace`'s slug counter restarts with it, so
+  // the second call 409s on `assessment-01-01` and every later test in this
+  // file dies reporting a seeding error that is not the bug. That cost two
+  // runs of this file before it was written down.
+  const listed = await request.get(`/api/v1/workspaces/${isolated}/tests`);
+  expect(listed.ok(), `tests: ${listed.status()} ${await listed.text()}`).toBe(true);
+  const already = ((await listed.json()).tests ?? []) as unknown[];
+  if (already.length > 0) return;
+
   // One bank with questions for the bank browser, and one published test for
   // the test list. Both tables carry row actions; neither needs volume, since
   // every claim here is about one row.
@@ -213,12 +251,22 @@ async function firstRow(page: Page, table: TableName): Promise<Locator> {
   return row;
 }
 
-/** Mark a table so one of the injected stylesheets above reaches it. */
-async function proof(row: Locator, value: string): Promise<void> {
-  await row.evaluate((node, mark) => {
+/** Mark `row`'s table with `attribute`, so one of the stylesheets above
+ *  reaches it. */
+async function mark(row: Locator, attribute: string): Promise<void> {
+  await row.evaluate((node, name) => {
     const table = node.closest("table");
     if (table === null) throw new Error("the measured row is not inside a table");
-    table.setAttribute("data-proof", mark);
+    table.setAttribute(name, "");
+  }, attribute);
+}
+
+/** ...and the same, with a value. */
+async function proof(row: Locator, value: string): Promise<void> {
+  await row.evaluate((node, broken) => {
+    const table = node.closest("table");
+    if (table === null) throw new Error("the measured row is not inside a table");
+    table.setAttribute("data-proof", broken);
   }, value);
 }
 
@@ -227,9 +275,13 @@ for (const { label, width, height } of WIDTHS) {
     test(`${table} keeps its row actions wholly inside the scrollport at ${label}`, async ({ page }) => {
       await page.setViewportSize({ width, height });
       await TABLES[table].open(page);
-      await page.addStyleTag({ content: PRE_RULE_SHAPE });
+      await page.addStyleTag({ content: TOO_WIDE + PRE_RULE_SHAPE });
 
       const row = await firstRow(page, table);
+      // The precondition, applied before either pass: a table that does not
+      // fit. Without it both passes measure a table that does, and a zero
+      // means nothing.
+      await mark(row, "data-wide");
       await hoverRow(row);
 
       const buttons = row.locator("td.acts button");
