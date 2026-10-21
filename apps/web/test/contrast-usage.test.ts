@@ -277,6 +277,35 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // here reads on the ground, which is also why `D20a` costs this screen no
   // contrast: the glow going near-invisible on the light ground changes the
   // background these five are measured against by nothing at all.
+  //
+  // THESE FIVE ARE A BASE, NOT A FLOOR, and the difference is the whole of
+  // what the next person to paint on a field has to know (fix round 1,
+  // Moderate). This gate scores a foreground against a NAMED background; it
+  // cannot see a composite, and the brand half really does composite
+  // `--glow-strong` (0.34 alpha) and `--wash` (0.06 alpha) over the ground.
+  // Hand-computed at the GLOW PEAK on the dark ground, which is the worst
+  // case anywhere on this screen:
+  //
+  //     --ink-2  (.screen__facts li)   3.88:1   against a 4.5:1 bar
+  //     --ink-3  (.screen__fact-n)     2.36:1   against a 4.5:1 bar
+  //
+  // NEITHER IS REACHABLE, and the reason is geometric rather than lucky.
+  // `admin.css`'s field is an axis-aligned ellipse centred at `40% 36%` of
+  // the brand box, fading to transparent at `0.72 x 46% = 33.1%` vertically
+  // — so it is gone below 69.1% of the box. Measured at 1200px, the facts
+  // begin at about 60% and the first of them is already past the bright
+  // core: `.screen__facts li` reads about 7.6:1 there. The numerals sit in
+  // the hanging indent at the far left, where the ellipse's normalised
+  // distance is 0.93 — outside the 0.72 fade stop, i.e. fully transparent —
+  // so `--ink-3` reads on the bare ground exactly as this entry says.
+  //
+  // THE INVARIANT, stated so it can be checked rather than re-derived: THE
+  // FACTS START BELOW 69.1% OF THE BRAND BOX. Moving the glow down, growing
+  // its vertical radius, or moving the facts up is what spends that
+  // headroom, and the two figures above are what is left when it is gone.
+  // Task 3 paid for this lesson once already: a precedent for a composite is
+  // only transferable along with its headroom, and headroom nobody wrote
+  // down is headroom the next reader assumes is infinite.
   ".screen__mark": { dark: "signal-bg", light: "signal-l-bg" },
   ".screen__headline": { dark: "signal-bg", light: "signal-l-bg" },
   ".screen__facts li": { dark: "signal-bg", light: "signal-l-bg" },

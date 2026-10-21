@@ -271,8 +271,13 @@ function stripCommentsForScan(content) {
 /**
  * True if `content` contains any illegal colour literal: a hex code, a
  * named-colour keyword, or a colour function whose first argument is not
- * the one legal relative-colour form `from var(--color-NAME)`. Comments are
- * ignored — this checks authored code, not prose about colour.
+ * the one legal relative-colour form `from var(--color-NAME)`. BLOCK and
+ * HTML comments are ignored — this checks authored code, not prose about
+ * colour — but a `//` line comment is NOT, deliberately, for the reason
+ * `stripCommentsForScan` above gives: stripping it would also eat
+ * `https://` inside a quoted URL. So a colour keyword in prose in a line
+ * comment reads as a colour literal here. That is a known cost, not a bug;
+ * the fix is to reword the prose, which 6.5e Task 8 did after meeting it.
  */
 export function hasIllegalColorLiteral(content) {
   const scanned = stripCommentsForScan(content);

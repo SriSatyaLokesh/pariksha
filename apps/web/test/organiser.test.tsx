@@ -2037,6 +2037,16 @@ describe("D18: the split screen (sign-in and the first-run wizard)", () => {
    * `print`. See the block comment above for what that does and does not buy.
    */
   function splitAtMedia(css: string, condition: string): { inside: string; outside: string } {
+    // EXACTLY ONE, not "the first". Fix round 1 (m2): `indexOf` takes the
+    // first occurrence, so the day a second `@media (max-width: 899px)` block
+    // is added — a legal thing to do, and `shell.css` already carries a
+    // second breakpoint in this chain — every assertion below would quietly
+    // read half the narrow shape and still pass. `split` counts them: one
+    // block is two pieces.
+    expect(
+      css.split(condition),
+      `the organiser's stylesheet must carry exactly one "${condition}" block`,
+    ).toHaveLength(2);
     const start = css.indexOf(condition);
     expect(start, `the organiser's stylesheet has no "${condition}" block`).toBeGreaterThan(-1);
     const open = css.indexOf("{", start);
@@ -2173,9 +2183,16 @@ describe("D18: the split screen (sign-in and the first-run wizard)", () => {
     const base = declaredFor(root, "grid-template-columns", splitAtMedia(ADMIN_CSS, NARROW).outside);
     expect(tracksOf(base.at(-1) ?? "")).toHaveLength(2);
 
+    // ANCHORED AT BOTH ENDS. Fix round 1 (m3): `\b` after the unit group also
+    // ends a match at the dot in `0.5fr`, so a legal fractional track read as
+    // a zero one. A false positive rather than a false pass — the test would
+    // have gone red on correct CSS — but a guard that cries wolf is a guard
+    // somebody deletes. The filter runs on the bare track and the message is
+    // built after it.
     const zero = declared
-      .flatMap((value) => tracksOf(value).map((track) => `${track} in "${value}"`))
-      .filter((track) => /^0(fr|px|%|r?em|vw)?\b/.test(track));
+      .flatMap((value) => tracksOf(value).map((track) => ({ track, value })))
+      .filter(({ track }) => /^0(fr|px|%|r?em|vw)?$/.test(track))
+      .map(({ track, value }) => `${track} in "${value}"`);
     expect(zero, "a zero-width track is D3a's empty screen").toEqual([]);
 
     // ...and the narrow shape is ONE track, named once — the same answer
@@ -2205,7 +2222,13 @@ describe("D18: the split screen (sign-in and the first-run wizard)", () => {
     // And the brand half is NOT hidden outside that block. Without this, a
     // `display: none` in the base rule — the brand half gone at every width —
     // would satisfy every assertion above.
-    expect(paintsIn(half("brand"), "display", outside)).not.toBe("none");
+    //
+    // THE POSITIVE FORM, not `not.toBe("none")`. Fix round 1 (m1): the
+    // negative passes on `undefined` too, so it was only a real assertion
+    // because `.screen__brand { display: flex }` happens to exist — delete
+    // that declaration and the guard goes quiet rather than red. Naming the
+    // value makes the base rule's existence part of what is asserted.
+    expect(paintsIn(half("brand"), "display", outside)).toBe("flex");
     expect(hiddenBy(half("brand"), outside)).toEqual([]);
   });
 

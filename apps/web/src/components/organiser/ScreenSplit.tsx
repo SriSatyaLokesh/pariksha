@@ -34,8 +34,10 @@ import type { ReactNode } from "react";
 // (That paragraph is worded around one word on purpose: `hasIllegalColorLiteral`
 // in `scripts/tokens.mjs` strips `/* */` and `<!-- -->` before it scans and
 // does NOT strip `//`, so a colour keyword in prose in a line comment reads
-// as a colour literal and reddens `test/no-hex-colors.test.ts`. Found here,
-// reported rather than fixed — the guard is shared with `pnpm tokens`.)
+// as a colour literal and reddens `test/no-hex-colors.test.ts`. That
+// omission is deliberate — stripping `//` would also eat `https://` inside a
+// quoted URL — and its own docstring now says so, which it did not when this
+// was met.)
 
 /** The three facts. Checkable, in `D18`'s sense: each names a mechanism a
  *  reader can go and verify — a licence, a database, a network panel — rather

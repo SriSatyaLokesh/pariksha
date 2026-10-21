@@ -460,7 +460,30 @@
 
 /* A <p> and not a heading: the screen's one <h1> is the form's, and a
    heading here would start the document outline on the brand panel instead
-   of on the thing being done. */
+   of on the thing being done. `test/organiser.test.tsx` asserts that this
+   screen carries exactly one heading, because axe does not — `heading-order`
+   only flags a level that SKIPS upward, so an <h2> here would pass the a11y
+   gate (probed).
+
+   THE CEILING IS A RAW 36px AND CANNOT BE A TOKEN, which fix round 1 (m4)
+   asked to be written down rather than left to be re-derived. The type scale
+   steps 56 / 44 / 22 / 18 and has nothing between 22 and 44; `.organiser__title`
+   can derive both its ceiling and its ratio from tokens because 44px is a
+   step and this size is not. The two candidates both lose something real:
+   `--type-display-lg-size` (44px) equals the <h1>'s own ceiling, so the brand
+   panel would weigh the same as the thing being done, and
+   `--type-heading-md-size` (22px) is below the <h1>'s clamp MINIMUM of 28px,
+   so the headline would be the smallest line on its own half. Declaring a
+   sixteenth type step here to hit 36px is a palette decision taken in a
+   stylesheet — the same move `shell.css`'s header refuses for the spacing
+   scale, and `theme.css`'s for colour. `line-height` is a ratio and not a
+   px literal for the same reason: there is no token pair to divide.
+
+   AND THE UNSCORED CEILING COSTS THE CONTRAST GATE NOTHING. The gate reads a
+   `clamp()`'s MINIMUM, so 36px is never scored — but the floor is 24px,
+   which is already WCAG's large-text threshold, and both ends paint
+   `var(--ink)` on the same ground. A larger size can only LOWER the bar, so
+   the end the gate does read is the worst case. */
 .screen__headline {
   color: var(--ink);
   font-family: var(--type-display-lg-family);
