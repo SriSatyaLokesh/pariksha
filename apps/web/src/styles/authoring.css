@@ -237,14 +237,41 @@
   }
 }
 
-/* The picked type. Same pair `.preview__toggle[aria-checked="true"]`
-   already uses: the accent on the edge, a 12% wash of it on the fill. The
-   wash does not move the ratio enough to score against, so the card's own
-   --surface beneath it stays the honest worst case in
-   contrast-usage.test.ts. */
+/* The picked type: the accent on the EDGE, and nothing on the fill.
+
+   Fix round 1. This first shipped with `background-color: var(--accent-wash)`
+   beside the border, copied from `.preview__toggle[aria-checked="true"]` and
+   defended with the reading `.shell__nav-item[aria-current="page"]` and
+   `.home__pill[aria-pressed="true"]` take — "a 12% wash does not move the
+   ratio enough to score against". That reading does not transfer here, and
+   the reason is a number. Both of those selectors set `color: var(--ink)`,
+   which measures 15.99:1 dark and 17.93:1 light on --surface, so 12% of
+   anything cannot reach the bar. This card's quietest text is --ink-3, at
+   4.86:1 dark and 5.36:1 light — 0.36 and 0.86 of headroom — and the wash
+   ate it: the note dropped to 3.81:1 / 4.49:1 against a 4.5 bar, and
+   --edge-strong, chosen for every mark in the miniature precisely because a
+   mark owes 3:1, dropped to 2.81:1 / 2.92:1. Both failed on the one card an
+   author is looking at straight after making a choice.
+
+   So the fill is deleted rather than compensated. The accent border already
+   says which card is picked (11.06:1 dark, 5.82:1 light on --surface, against
+   the 3:1 a non-text indicator owes), `aria-pressed` already says it to a
+   screen reader, and nothing on this card now renders on anything but
+   --surface — which is exactly what its two SURFACE entries claim. Raising
+   --ink-3 for this one state would have been a third tone to maintain on two
+   grounds in order to keep a decoration.
+
+   NOTE FOR THE NEXT AUTHOR: no gate caught this. `contrast-usage.test.ts`
+   scores a selector's own declared `color` against the background its SURFACE
+   entry names, and a sibling selector that repaints that background
+   underneath it declares no `color`, so it never enters the sweep at all;
+   non-text 3:1 is scored only by the hand-maintained token-pair table at that
+   file's :1276, which is pairs and not selectors. A composite over
+   --accent-wash has to be reasoned about here, in the stylesheet. The one
+   guard that watches this card specifically is the last test in
+   `test/authoring/type-picker.test.tsx`. */
 .type-card[aria-pressed="true"] {
   border-color: var(--accent);
-  background-color: var(--accent-wash);
 }
 
 .type-card__name {

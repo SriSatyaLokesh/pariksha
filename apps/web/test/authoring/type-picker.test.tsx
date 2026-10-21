@@ -324,7 +324,12 @@ describe("D18: the type picker opens a drawn example", () => {
     expect(new Set(shapes).size).toBe(12);
   });
 
-  it("resizes the example's own track rather than adding one, so the rows above it never move", async () => {
+  // Review Minor 2: the title used to promise "so the rows above it never
+  // move", which is a claim about pixels the body does not reach. It says
+  // what it proves now — the track list above the example is identical in
+  // both states — and the comment below keeps the pixel claim where it
+  // belongs, as the thing a browser would still have to measure.
+  it("resizes the example's own track rather than adding one, leaving the tracks above it identical", async () => {
     // The brief asks for "does not change the card grid's height when an
     // example opens". That is a PIXEL claim, and neither tool in this
     // repository can make it: jsdom does no layout (every rect is zero,
@@ -368,5 +373,35 @@ describe("D18: the type picker opens a drawn example", () => {
     for (const type of TYPES.filter((candidate) => candidate !== "single")) {
       expect(cardFor(type)).toHaveAttribute("aria-pressed", "false");
     }
+  });
+
+  it("paints the picked card on the same background an unpicked one has", async () => {
+    // Fix round 1, and the guard the defect it fixes went through.
+    //
+    // `contrast-usage.test.ts` scores a selector's own declared `color`
+    // against the background its SURFACE entry names — here --surface, for
+    // `.type-card` and `.type-card__note`. A SIBLING selector that repaints
+    // that background underneath them is outside that sweep entirely: it
+    // declares no `color`, so it never enters `colorSelectors`, and the
+    // sweep goes on scoring the ink against a surface the user is no longer
+    // looking at. That is how `.type-card[aria-pressed="true"]`'s
+    // `background-color: var(--accent-wash)` shipped with the note at
+    // 3.81:1 and every --edge-strong mark at 2.81:1, both under their bars,
+    // past a green contrast suite.
+    //
+    // The relational half is the assertion that matters and freezes no
+    // number: selecting a card must not change what it is painted on. The
+    // second half ties the pair to the ground the SURFACE entries claim, so
+    // moving the card's resting fill without moving those entries reddens
+    // here rather than silently rescoring both of them.
+    await openPicker();
+    const picked = cardFor("single");
+    const unpicked = cardFor("ordering");
+    expect(picked).toHaveAttribute("aria-pressed", "true");
+    expect(unpicked).toHaveAttribute("aria-pressed", "false");
+
+    const pickedFill = paintsIn(picked, "background-color", ORGANISER_CSS);
+    expect(pickedFill).toBe(paintsIn(unpicked, "background-color", ORGANISER_CSS));
+    expect(pickedFill).toBe("var(--surface)");
   });
 });
