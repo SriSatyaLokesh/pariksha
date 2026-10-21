@@ -50,15 +50,36 @@ const SEVERITY_GLYPH: Readonly<Record<ChecklistRow["severity"], string>> = {
   advisory: "!",
 };
 
+/** Whether this row names somewhere the builder can actually take you.
+ *
+ * `test.tsx`'s `onGoTo` opens a SECTION, and a row that raised itself against
+ * a setting (`access.access_code`, `release.at`, `branding.logo`) has no
+ * section to open — it used to render as a control that named a destination
+ * and then did nothing when pressed. Four of seven, in the rail's own test
+ * fixture. One predicate, read by the strip and by the panel below, so the
+ * two cannot disagree about which rows are reachable.
+ *
+ * The settings now have addressable rows of their own (`D7`, Task 1), so
+ * routing a field row to the panel that owns it is a real option and a
+ * strictly better answer than this one. It needs a field -> `PanelKey` map
+ * that only the gate's own field names can justify, and that is a ruling
+ * about the gate's vocabulary rather than about this component. Until then
+ * the honest rendering is: say the problem, promise no journey. */
+function hasDestination(row: ChecklistRow): boolean {
+  return row.sectionId !== undefined;
+}
+
 /** What a light is called. Three colours cannot carry three meanings on
  *  their own — that is colour-not-alone and the contrast rule at once — and
  *  an icon beside them would only add a second thing to decode. The NAME is
- *  what carries it, and it says both what is wrong and where to go. The
- *  words after the dash are the server's; only the severity and the
+ *  what carries it: what is wrong, and — when there is one — where to go.
+ *  The words after the dash are the server's; only the severity and the
  *  destination are this file's. */
 function lightName(row: ChecklistRow): string {
   const severity = row.severity === "blocking" ? "Blocking" : "Advisory";
-  return `${severity} — ${row.message}. Go to ${row.sectionId ?? row.field}.`;
+  return hasDestination(row)
+    ? `${severity} — ${row.message}. Go to ${row.sectionId}.`
+    : `${severity} — ${row.message}.`;
 }
 
 /** Stable across a re-run, and unique within one list. `row.id` alone is
@@ -145,20 +166,36 @@ export function PublishChecklist({
               <>
                 {/* `D7c`: the readiness figure lives here and nowhere else.
                     How many of the gate's own rows do not stop a publish,
-                    over how many it raised. */}
+                    over how many it raised.
+
+                    "not blocking", not "clear". The arithmetic is the
+                    brief's and is unchanged; the word was this file's and
+                    was wrong. Seven advisory rows and nothing blocking read
+                    "7 / 7 clear" directly above seven rows each labelled
+                    "Worth checking" — the rail contradicting its own panel
+                    at a glance, which is the one failure this feature
+                    exists to prevent.
+
+                    And the qualifier is unconditional, for the same reason:
+                    suppressing "0 must fix" is what left that case with
+                    nothing to correct the impression. */}
                 <strong>{`${rows.length - blocking.length} / ${rows.length}`}</strong>{" "}
                 <span className="checklist-rail__count">
-                  clear{blocking.length > 0 ? `, ${blocking.length} must fix` : ""}
+                  {`not blocking, ${blocking.length} must fix`}
                 </span>
               </>
             )}
           </p>
         )}
 
+        {/* No `aria-expanded`. It read `docked`, which is false for the
+            whole time a hovered or focused panel is open, and there was no
+            `aria-controls` saying what was expanded. The button's two
+            accessible names already carry the state, and a state that is
+            sometimes wrong is worse than one the name states. */}
         <button
           type="button"
           className="checklist-rail__pin"
-          aria-expanded={docked}
           onClick={() => onState(docked ? "lights" : "docked")}
         >
           <Icon name="panel" />
@@ -177,18 +214,26 @@ export function PublishChecklist({
               </span>
             </li>
           ) : (
-            rows.map((row) => (
-              <li key={keyOf(row)}>
-                <button
-                  type="button"
-                  className="checklist-rail__light"
-                  data-severity={row.severity}
-                  onClick={() => onGoTo(row)}
-                >
-                  <span className="visually-hidden">{lightName(row)}</span>
-                </button>
-              </li>
-            ))
+            rows.map((row) =>
+              hasDestination(row) ? (
+                <li key={keyOf(row)}>
+                  <button
+                    type="button"
+                    className="checklist-rail__light"
+                    data-severity={row.severity}
+                    onClick={() => onGoTo(row)}
+                  >
+                    <span className="visually-hidden">{lightName(row)}</span>
+                  </button>
+                </li>
+              ) : (
+                <li key={keyOf(row)}>
+                  <span className="checklist-rail__light" data-severity={row.severity}>
+                    <span className="visually-hidden">{lightName(row)}</span>
+                  </span>
+                </li>
+              ),
+            )
           )}
         </ul>
       )}
@@ -209,9 +254,20 @@ export function PublishChecklist({
                     <span aria-hidden="true">{SEVERITY_GLYPH[row.severity]}</span> {SEVERITY_LABEL[row.severity]}
                   </span>{" "}
                   <span>{row.message}</span>{" "}
-                  <button type="button" className="button-link" onClick={() => onGoTo(row)}>
-                    Go to {row.sectionId ?? row.field}
-                  </button>
+                  {/* Phase 5 shipped this as `Go to {row.sectionId ?? row.field}`
+                      on every row, which made a field-level row a control
+                      that named a destination and did nothing — the same
+                      defect the strip above would have doubled. One
+                      predicate answers it in both places. The field is still
+                      stated, because it is how the organiser finds the
+                      setting; it is simply not dressed as a journey. */}
+                  {hasDestination(row) ? (
+                    <button type="button" className="button-link" onClick={() => onGoTo(row)}>
+                      Go to {row.sectionId}
+                    </button>
+                  ) : (
+                    <span className="publish-checklist__field">{row.field}</span>
+                  )}
                 </li>
               ))}
             </ul>

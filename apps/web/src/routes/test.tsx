@@ -30,7 +30,7 @@ import {
   timingSummary,
   type PanelKey,
 } from "../components/testbuilder/SettingRow";
-import { Icon } from "../components/OrganiserShell";
+import { Icon, useRetractRail } from "../components/OrganiserShell";
 import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
@@ -132,6 +132,10 @@ export function TestBuilder({
   // says why the nav side is not.
   const [rail, setRail] = useState<RailState>(readRailState);
   const railRef = useRef<HTMLElement>(null);
+  // `D7a`'s other side. `OrganiserShell` owns the nav rail's state under
+  // `D18`; this is the one-call handle it hands its children. Transient and
+  // unstored, which is what keeps it clear of `D18`'s width-derived default.
+  const retractNavRail = useRetractRail();
   const [rerunning, setRerunning] = useState(false);
   const [publishing, setPublishing] = useState(false);
   // UX-18 (Task 7): a test with a published version behind it is the case
@@ -187,6 +191,22 @@ export function TestBuilder({
     setRail(state);
     writeRailState(state);
   }, []);
+
+  /**
+   * `D7a` — "Opening a section or a setting retracts **both** sides
+   * automatically", and the one place that is true of. Separate from
+   * `setChecklistRail` above, which is also what the pin calls: pinning the
+   * checklist back open is not an edit and must not touch the nav.
+   *
+   * "A convenience, never a lock": neither side is disabled by this. The nav
+   * toggle in the top bar and the pin in the rail both still answer
+   * immediately afterwards, which is what `checklist-rail.test.tsx`'s
+   * "retracts both sides" case asserts after each retraction.
+   */
+  const retractSides = useCallback(() => {
+    setChecklistRail("lights");
+    retractNavRail();
+  }, [setChecklistRail, retractNavRail]);
 
   const load = useCallback(async () => {
     try {
@@ -253,10 +273,10 @@ export function TestBuilder({
   function openSection(id: string | null): void {
     setOpenSectionId(id);
     // `D7a`: "Opening a section or a setting retracts both sides
-    // automatically." The nav side is `OrganiserShell`'s own state under
-    // `D18` and 6.5c owns it; this is the checklist side. A convenience and
-    // never a lock — the pin in the rail still docks it straight back.
-    if (id !== null) setChecklistRail("lights");
+    // automatically." Both, now: `retractSides` above collapses the nav rail
+    // through `OrganiserShell`'s context as well. A convenience and never a
+    // lock — the pin in the rail and the toggle in the bar both still answer.
+    if (id !== null) retractSides();
     const params = readView(window.location.search);
     if (id) params.section = id;
     else delete params.section;
@@ -271,7 +291,7 @@ export function TestBuilder({
   function togglePanel(id: PanelKey): void {
     const next = openPanel === id ? null : id;
     setOpenPanel(next);
-    if (next !== null) setChecklistRail("lights");
+    if (next !== null) retractSides();
     const params = readView(window.location.search);
     if (next) params.panel = next;
     else delete params.panel;

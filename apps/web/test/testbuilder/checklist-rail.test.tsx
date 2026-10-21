@@ -74,7 +74,12 @@ const DRAFT: TestVersionRow = {
 
 /** Seven rows, two of them blocking — so the readiness figure is "5 / 7" and
  *  the strip carries seven lights. The first row's words are the server's
- *  own: the light's accessible name is built from them, never written here. */
+ *  own: the light's accessible name is built from them, never written here.
+ *
+ *  Three of the seven name a SECTION and four name a setting field, and that
+ *  split is deliberate: `onGoTo` opens a section, so only the first three are
+ *  places the builder can take you. Fix round 1 — before it, all seven
+ *  rendered as controls that named a destination and did nothing. */
 const ROWS: ChecklistRow[] = [
   {
     id: "pool_short",
@@ -219,6 +224,23 @@ describe("the checklist rail", () => {
     expect(within(rail()).getByText(/2 must fix/i)).toBeVisible();
   });
 
+  // Fix round 1. The figure used to be followed by the literal word "clear"
+  // with the qualifier suppressed at zero, so seven advisory rows read
+  // "7 / 7 clear" directly above seven rows each labelled "Worth checking" —
+  // the rail contradicting its own panel, which is the failure the rail
+  // exists to prevent. The arithmetic is unchanged; the words are not.
+  it("does not call advisory rows clear when nothing blocks", async () => {
+    const advisory = ROWS.filter((row) => row.severity === "advisory");
+    await openBuilder(fakeClient({ checklist: async () => advisory }));
+
+    await waitFor(() => expect(within(rail()).getByText("5 / 5")).toBeVisible());
+    expect(within(rail()).getByText(/not blocking, 0 must fix/i)).toBeVisible();
+    expect(within(rail()).queryByText(/\bclear\b/i)).toBeNull();
+    // ...and the rows it is a figure about are still there, still called what
+    // the gate calls them.
+    expect(within(rail()).getAllByText(/worth checking/i)).toHaveLength(5);
+  });
+
   it("collapses to a strip of lights and back", async () => {
     await openBuilder();
     await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
@@ -230,7 +252,13 @@ describe("the checklist rail", () => {
     fireEvent.click(collapse());
 
     expect(rail()).toHaveAttribute("data-state", "lights");
-    expect(within(screen.getByRole("list", { name: /checklist lights/i })).getAllByRole("button")).toHaveLength(7);
+    const lights = within(screen.getByRole("list", { name: /checklist lights/i }));
+    // One light per row, every time — the strip is the rows, not a selection
+    // from them.
+    expect(lights.getAllByRole("listitem")).toHaveLength(7);
+    // ...but only the three that name a section are controls. A light for a
+    // setting-level row has nowhere to go, so it is not something to press.
+    expect(lights.getAllByRole("button")).toHaveLength(3);
     expect(screen.queryByRole("button", { name: /re-run the checks/i })).toBeNull();
 
     fireEvent.click(pin());
@@ -247,11 +275,14 @@ describe("the checklist rail", () => {
     expect(
       screen.getByRole("button", { name: /Blocking — a pool cannot fill\. Go to Section B\./ }),
     ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: /Advisory — no access code is set\. Go to access\.access_code\./ }),
-    ).toBeVisible();
 
-    // And a light is the way there, not only a label.
+    // A row that names a setting field says what is wrong and promises no
+    // journey, because there is none to make: `onGoTo` opens a section and
+    // this row names none. It is text in the strip, not a control.
+    expect(screen.getByText("Advisory — no access code is set.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /no access code is set/i })).toBeNull();
+
+    // And a light that does name a section is the way there, not only a label.
     fireEvent.click(screen.getByRole("button", { name: /Blocking — section "Quantitative aptitude" has no questions\. Go to quant\./ }));
     expect(new URLSearchParams(window.location.search).get("section")).toBe("quant");
   });
@@ -287,21 +318,29 @@ describe("the checklist rail", () => {
     // The section's own summary button, anchored at the start of its name:
     // the reorder controls beside it are "Move section Quantitative aptitude
     // up" and would match a looser pattern.
+    const shell = document.querySelector(".shell") as HTMLElement;
+    expect(shell.dataset.rail).toBe("open");
+
     fireEvent.click(screen.getByRole("button", { name: /^Quantitative aptitude/ }));
 
-    // The checklist side retracts. The nav side is `OrganiserShell`'s own
-    // state and 6.5c owns `D18`'s rule for it, so this file asserts that its
-    // toggle still answers rather than who collapsed it.
+    // BOTH sides, which is what `D7a` says and what this test is named for.
+    // Fix round 1: the nav half used to be missing and this assertion was a
+    // comment explaining its absence.
     expect(rail()).toHaveAttribute("data-state", "lights");
+    expect(shell.dataset.rail).toBe("collapsed");
 
-    const shell = document.querySelector(".shell") as HTMLElement;
-    const before = shell.dataset.rail;
+    // "Auto-collapse is a convenience, never a lock" — so both toggles still
+    // answer, immediately, with no second click to wake them.
     fireEvent.click(screen.getByRole("button", { name: /navigation/i }));
-    expect(shell.dataset.rail).not.toBe(before);
+    expect(shell.dataset.rail).toBe("open");
 
-    // Auto-collapse is a convenience, never a lock: the pin still docks.
     fireEvent.click(pin());
     expect(rail()).toHaveAttribute("data-state", "docked");
+
+    // And opening a SETTING retracts both the same way a section does.
+    fireEvent.click(screen.getByRole("button", { name: /^Timing/ }));
+    expect(rail()).toHaveAttribute("data-state", "lights");
+    expect(shell.dataset.rail).toBe("collapsed");
   });
 
   it("renders with the default rail state when localStorage throws", async () => {

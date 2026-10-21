@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { MonoCaption } from "./MonoCaption";
 import type { Actor, Workspace } from "../lib/api";
 import { readGround, writeGround, type Ground } from "../lib/ground";
@@ -49,6 +49,30 @@ export const ICONS: Record<string, string[]> = {
   results: ["M3.4 16.6h13.2", "M6.2 16.6v-4.4", "M10 16.6V7", "M13.8 16.6v-6.6"],
   branding: ["M10 3.2c0 0 4.6 5.2 4.6 8.4a4.6 4.6 0 0 1-9.2 0C5.4 8.4 10 3.2 10 3.2Z"],
 };
+
+/**
+ * `D7a` — "Opening a section or a setting retracts **both** sides
+ * automatically ... auto-collapse is a convenience, never a lock."
+ *
+ * A screen inside `children` has no handle on `railOpen`, which lives here.
+ * A context rather than a callback prop, because the alternative is one more
+ * argument through `organiser.tsx`'s page descriptor and every one of its
+ * eleven arms, for a thing exactly one screen asks for. The default is a
+ * no-op, so a screen rendered outside the shell (sign-in, the wizard, the
+ * boot) calls it harmlessly.
+ *
+ * TRANSIENT AND UNSTORED, and that is the whole of what keeps it clear of
+ * `D18`. Nothing writes this to `localStorage` (see `lib/rail-state.ts`,
+ * which carries the checklist side only and says why): it lasts as long as
+ * the screen, so it cannot be read back on a first paint and cannot reopen
+ * — or re-collapse — a rail whose default `D18` derives from `wide`.
+ */
+const RetractRail = createContext<() => void>(() => {});
+
+/** Collapse the nav rail, once, now. See `RetractRail` above. */
+export function useRetractRail(): () => void {
+  return useContext(RetractRail);
+}
 
 export function Icon({ name }: { name: string }) {
   return (
@@ -142,6 +166,15 @@ export function OrganiserShell({
   useEffect(() => {
     setRailOpen(!wide);
   }, [wide]);
+
+  // `D7a`'s nav half. It survives the effect above rather than racing it:
+  // that effect fires only when `wide` changes, which for the builder means
+  // arriving at it or leaving it — never while a section is being opened —
+  // so a retract taken inside the screen stands until the reader navigates
+  // or presses the toggle. `D18`'s width-derived default is untouched, and
+  // the half of `D18` that says "the toggle still restores it" is what the
+  // button below keeps doing.
+  const retract = useCallback(() => setRailOpen(false), []);
 
   const hasHead =
     crumb !== undefined || title !== undefined || lead !== undefined || actions !== undefined;
@@ -273,7 +306,7 @@ export function OrganiserShell({
               {actions !== undefined && <div className="shell__head-actions">{actions}</div>}
             </div>
           )}
-          {children}
+          <RetractRail.Provider value={retract}>{children}</RetractRail.Provider>
         </main>
       </div>
     </>

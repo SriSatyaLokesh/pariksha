@@ -162,7 +162,7 @@ const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
 // rendered here with six props, two of which Phase 6.5c Task 1 deleted with
 // `OrganiserHeader`; the walk is the same one `lifecycle.test.tsx` already
 // uses.
-async function openChecklist(client: ApiClient): Promise<{ container: HTMLElement; opener: HTMLElement }> {
+async function openChecklist(client: ApiClient): Promise<HTMLElement> {
   const { container } = render(<OrganiserApp client={client} />);
   fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
   fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
@@ -177,7 +177,11 @@ async function openChecklist(client: ApiClient): Promise<{ container: HTMLElemen
   // Publish re-reads the rows and takes focus to the rail; waited for here
   // once rather than in each test that depends on it having settled.
   await waitFor(() => expect(document.activeElement).toBe(checklistRail()));
-  return { container, opener };
+  // The container, and nothing else. `opener` used to come back with it for
+  // the Escape test's `focus returns to the opener`, which retired with the
+  // dialog; the `opener.focus()` above stays, because it is what makes the
+  // click below a real one from a focused control. Fix round 1.
+  return container;
 }
 
 /** The rail, by its landmark. A `region` and not a `dialog`: it is on the
@@ -204,7 +208,7 @@ describe("the publish checklist", () => {
     expect(screen.getByText('section "Quantitative aptitude" has no questions')).toBeVisible();
   });
 
-  it("every row links to the exact section, and returning keeps the checklist open", async () => {
+  it("every row links to the exact section, and the rail retracts to its lights rather than disappearing", async () => {
     await openChecklist(fakeClient());
 
     fireEvent.click(within(checklistRail()).getByRole("button", { name: /go to quant/i }));
@@ -284,7 +288,7 @@ describe("the publish checklist", () => {
   });
 
   it("the checklist has no axe violations", async () => {
-    const { container } = await openChecklist(fakeClient());
+    const container = await openChecklist(fakeClient());
     expect(await axe(container)).toHaveNoViolations();
   });
 });
