@@ -169,18 +169,273 @@
   margin: 0;
   padding: 0;
   border: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
 }
 
 .type-picker__group-label {
   padding: 0;
+  padding-block-end: var(--space-xs);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
   text-transform: uppercase;
+}
+
+.type-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--space-base);
+}
+
+/* `D18`: the card is itself a three-row grid — name, note, example — and
+   `align-content: start` is what pins the first two to the top of a card
+   the grid has stretched to a TALLER NEIGHBOUR's height. Without it a
+   closed card centres its text in that gap and the row reads as ragged.
+
+   The third track is the whole mechanism: `0fr` closed, `1fr` open, never
+   added and never removed. Opening is therefore a resize of a row that was
+   always there — the name and the note cannot move relative to the card's
+   top edge, and the example is never mounted or unmounted, which is the
+   other way a drawer makes a page jump. `min-height: 0` plus
+   `overflow: hidden` on the example is what lets a `0fr` track really
+   reach zero: a bare `0fr` is `minmax(auto, 0fr)`, and `auto` there is the
+   item's own min-content height unless the item can be clipped.
+
+   `D12`: the question editor is an editing surface, so AG1's rows-visible
+   rule does not apply and the picker gets the air these cards need. */
+.type-card {
+  display: grid;
+  grid-template-rows: auto auto 0fr;
+  align-content: start;
+  row-gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-md);
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  text-align: start;
+  cursor: pointer;
+}
+
+/* Hover AND keyboard focus, in one rule, because a hover-only drawer is
+   unreachable from the keyboard. `:focus-visible` rather than `:focus` so
+   a pointer click does not leave a card stuck open behind the pointer —
+   hover is already covering that case. */
+.type-card:hover,
+.type-card:focus-visible {
+  grid-template-rows: auto auto 1fr;
+}
+
+/* `fr` values interpolate, so the row really animates rather than snapping;
+   the repo's one idiom for motion that a reader may have switched off
+   (primitives.css's two buttons, `td.acts`) is to declare the transition
+   only inside this query rather than to unset it inside the opposite one. */
+@media (prefers-reduced-motion: no-preference) {
+  .type-card {
+    transition: grid-template-rows 160ms ease-out;
+  }
+}
+
+/* The picked type. Same pair `.preview__toggle[aria-checked="true"]`
+   already uses: the accent on the edge, a 12% wash of it on the fill. The
+   wash does not move the ratio enough to score against, so the card's own
+   --surface beneath it stays the honest worst case in
+   contrast-usage.test.ts. */
+.type-card[aria-pressed="true"] {
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
+}
+
+.type-card__name {
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-button-md-weight);
+}
+
+.type-card__note {
+  color: var(--ink-3);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.type-card__example {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- The drawn miniature inside a type card (`D18`) ----------------------
+
+   No `color` is set anywhere below, by design: every shape is a border, a
+   fill or one repeating gradient, so nothing here is text and nothing here
+   enters contrast-usage.test.ts's sweep (which keys on `color`). The two
+   tones it does use are chosen under DESIGN.md's own split rather than by
+   eye — `--edge-strong` (3.58:1 on the card's --surface dark, 3.49:1
+   light) for every mark that CARRIES the difference between one type and
+   another, since those are non-text indicators and owe 3:1; `--wash-2`
+   only for the grey bars that stand in for words, which are texture and
+   carry nothing. `--accent` marks what is answered. */
+
+.mini {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-block-start: var(--space-sm);
+}
+
+.mini--cols {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-base);
+}
+
+.mini__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.mini__bar {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--rounded-full);
+  background-color: var(--wash-2);
+}
+
+.mini__bar--short {
+  flex: 0 0 36%;
+}
+
+.mini__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-full);
+}
+
+.mini__box {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--edge-strong);
+  border-radius: 2px;
+}
+
+.mini__dot--on,
+.mini__box--on {
+  border-color: var(--accent);
+  background-color: var(--accent);
+}
+
+.mini__count {
+  flex: none;
+  width: 16px;
+  height: 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--rounded-full);
+}
+
+.mini__pair {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.mini__half {
+  flex: 1;
+  height: 16px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-sm);
+}
+
+.mini__half--on {
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
+}
+
+.mini__tag {
+  flex: none;
+  width: 12px;
+  height: 10px;
+  border: 1px solid var(--edge-strong);
+  border-radius: 2px;
+}
+
+.mini__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.mini__pill {
+  width: 32px;
+  height: 10px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-full);
+}
+
+.mini__wire {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-xs);
+}
+
+.mini__wire-line {
+  height: 1px;
+  background-color: var(--edge-strong);
+}
+
+/* The drag handle: three rules in one element rather than three elements. */
+.mini__grip {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--edge-strong) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.mini__rank {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--edge-strong);
+  border-radius: 2px;
+}
+
+.mini__gap {
+  flex: none;
+  width: 28px;
+  height: 8px;
+  border-block-end: 2px solid var(--accent);
+}
+
+.mini__field {
+  flex: 1;
+  height: 14px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
+}
+
+.mini__unit {
+  flex: none;
+  width: 22px;
+  height: 14px;
+  border: 1px dashed var(--edge-strong);
+  border-radius: var(--rounded-xs);
+}
+
+.mini__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
 }
 
 /* ---- Scoring row (P4.2) -------------------------------------------------- */
