@@ -421,6 +421,59 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
 
+  // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
+  // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
+  // through it, so for two phases its 26 colour-setting selectors were in
+  // the organiser's bundle and outside this sweep. The sweep is derived
+  // from that module now, so these arrived with it.
+  //
+  // Almost every one reads on the page's own --ground: the builder's
+  // panels (`.setting-row`, `.timing-panel__group`, `.form-builder__field`,
+  // `.picker-drawer`, each preview) are BORDERED BOXES WITH NO FILL, so
+  // what shows through them is the page. The three exceptions carry their
+  // own note.
+  ".test-badge": { dark: "signal-bg", light: "signal-l-bg" },
+  ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
+  ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
+  ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  ".section-row__draw": { dark: "signal-bg", light: "signal-l-bg" },
+  ".section-row__flag-risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".picker-drawer__points": { dark: "signal-bg", light: "signal-l-bg" },
+  ".sets-panel__consequence, .shuffle-group__fact": { dark: "signal-bg", light: "signal-l-bg" },
+  ".form-builder__fact": { dark: "signal-bg", light: "signal-l-bg" },
+  ".form-builder__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".timing-panel__fact": { dark: "signal-bg", light: "signal-l-bg" },
+  ".timing-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".access-panel__fact, .access-panel__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  ".access-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".access-panel__issues caption": { dark: "signal-bg", light: "signal-l-bg" },
+  ".release-panel__fact, .branding-panel__fact, .branding-panel__footer": { dark: "signal-bg", light: "signal-l-bg" },
+  ".release-panel__risk, .branding-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".version-banner, .review-note": { dark: "signal-bg", light: "signal-l-bg" },
+  ".setting-row__button": { dark: "signal-bg", light: "signal-l-bg" },
+  ".setting-row__icon": { dark: "signal-bg", light: "signal-l-bg" },
+  ".setting-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  ".checklist-rail__count": { dark: "signal-bg", light: "signal-l-bg" },
+  ".checklist-rail__pin": { dark: "signal-bg", light: "signal-l-bg" },
+
+  // The branding preview is a MINIATURE OF THE CANDIDATE'S START PAGE, so it
+  // keeps the cream world on purpose and now paints the cream fill its
+  // `var(--color-ink)` fallback always assumed. Re-grounding it would make
+  // the preview lie about the page it previews.
+  ".branding-panel__preview h4": both("cream"),
+
+  // The checklist renders in the docked rail, which has no fill, AND inside
+  // the floating panel the collapsed strip opens, which fills itself with
+  // --surface. Both are real, so both are named and both are scored.
+  ".publish-checklist__severity": {
+    dark: ["signal-bg", "signal-surface"],
+    light: ["signal-l-bg", "signal-l-surface"],
+  },
+  ".publish-checklist__field": {
+    dark: ["signal-bg", "signal-surface"],
+    light: ["signal-l-bg", "signal-l-surface"],
+  },
+
   // ---- exam.css: the candidate runtime (Phase 6 Task 1, #65) -------------
   // DESIGN.md's two canvases. The landing hero is the full-bleed voltage
   // field; everything below it is the cream-and-ink page `base.css` sets on
@@ -586,6 +639,36 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ":root[data-theme] .rendered--stem": { px: 18, weight: 400 },
   ":root[data-theme] .prompt-editor__tool": { px: 12, weight: 400 },
 
+  // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
+  // The builder's facts, consequences and summaries are <p> elements that
+  // declare no type of their own and inherit the body scale; the three
+  // buttons here declare `font: inherit`, which is the same 16px/400 by a
+  // different route. `.qr-code` and `.setting-row__icon` set a colour for an
+  // svg's `currentColor` rather than for text, and take the inherited scale
+  // for the same reason every wrapper above does.
+  ".qr-code": { px: 16, weight: 400 },
+  ".button-link": { px: 16, weight: 400 },
+  ".section-row__summary": { px: 16, weight: 400 },
+  ".picker-drawer__points": { px: 16, weight: 400 },
+  ".sets-panel__consequence, .shuffle-group__fact": { px: 16, weight: 400 },
+  ".form-builder__fact": { px: 16, weight: 400 },
+  ".form-builder__risk": { px: 16, weight: 400 },
+  ".timing-panel__fact": { px: 16, weight: 400 },
+  ".timing-panel__risk": { px: 16, weight: 400 },
+  ".access-panel__fact, .access-panel__summary": { px: 16, weight: 400 },
+  ".access-panel__risk": { px: 16, weight: 400 },
+  ".access-panel__issues caption": { px: 16, weight: 400 },
+  ".release-panel__fact, .branding-panel__fact, .branding-panel__footer": { px: 16, weight: 400 },
+  ".release-panel__risk, .branding-panel__risk": { px: 16, weight: 400 },
+  ".version-banner, .review-note": { px: 16, weight: 400 },
+  ".setting-row__button": { px: 16, weight: 400 },
+  ".setting-row__icon": { px: 16, weight: 400 },
+  ".setting-row__summary": { px: 16, weight: 400 },
+  ".checklist-rail__count": { px: 16, weight: 400 },
+  ".checklist-rail__pin": { px: 16, weight: 400 },
+  // An <h4> with no type of its own: the UA's own 1em bold.
+  ".branding-panel__preview h4": { px: 16, weight: 700 },
+
   // ---- primitives.css (unchanged by the Signal rework) --------------------
   // Same element as .button-primary; only the colour/background changes.
   ".button-primary:hover, .button-primary:focus-visible": {
@@ -748,9 +831,20 @@ const TYPE_WEIGHT_VAR_RE = /var\(--type-([a-z0-9-]+)-weight\)/i;
 // the day the first rule lands, instead of a second pass over this file.
 const THEME = readThemeMap();
 const SEMANTIC_VAR_RE = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i;
+// Phase 6.5e Task 1b. `var(--brand-primary, var(--color-ink))` — a property
+// set from an effect, with a token fallback — entered the sweep with
+// testbuilder.css. The FALLBACK is what this file can score and what it
+// must: the custom property is a workspace's own brand colour, chosen at
+// runtime and gated on the write path by `@pariksha/core`'s own
+// `contrastRatio` (the gate this file shares), while the fallback is what
+// the stylesheet guarantees before any colour is chosen. Reading the
+// fallback is therefore the stylesheet's own worst case, not a shortcut.
+const VAR_FALLBACK_RE = /^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i;
 
 /** `value` as a token name on `ground`, through theme.css where it applies. */
 function colorNameOf(value: string, ground: Ground): ColorName | null {
+  const fallback = VAR_FALLBACK_RE.exec(value)?.[1];
+  if (fallback !== undefined) return colorNameOf(fallback.trim(), ground);
   const semantic = SEMANTIC_VAR_RE.exec(value)?.[1];
   const mapped = semantic === undefined ? undefined : THEME[ground][semantic];
   const name = COLOR_VAR_RE.exec(mapped ?? value)?.[1];
@@ -758,10 +852,18 @@ function colorNameOf(value: string, ground: Ground): ColorName | null {
   return name as ColorName;
 }
 
-function parseColor(body: string, ground: Ground): ColorName | null {
-  const value = findDeclaration(body, "color");
+function parseColorProperty(
+  body: string,
+  property: string,
+  ground: Ground,
+): ColorName | null {
+  const value = findDeclaration(body, property);
   if (!value) return null;
   return colorNameOf(value, ground);
+}
+
+function parseColor(body: string, ground: Ground): ColorName | null {
+  return parseColorProperty(body, "color", ground);
 }
 
 function lengthToPx(literal: string): number | null {
@@ -847,8 +949,27 @@ beforeAll(() => {
   // src/exam-main.tsx, and joins the same sweep. It imports nothing, so the
   // shared `seen` set is unaffected by it.
   const seen = new Set<string>();
+  // Phase 6.5e Task 1b: the organiser side is READ OFF `admin-main.tsx`
+  // rather than named as `admin.css`. `admin-main.tsx` loads
+  // `testbuilder.css` BESIDE `admin.css` rather than through it, so for two
+  // phases the builder's 26 colour-setting selectors were in the bundle and
+  // outside this sweep — the file's own header at the top recorded the gap.
+  // Deriving the list means the sweep widens with the entry rather than the
+  // next time someone notices.
+  //
+  // base.css is dropped from it, and that exclusion is the one this file
+  // already documents at the top: it carries selectors this parser was never
+  // built for (`a { color: inherit }`, `:focus-visible`'s non-token
+  // `outline-color`), and the two it has that paint visible text — `body`
+  // and `.skip-link` — are checked directly in the "base.css" describe block
+  // below, by the same WCAG formula. admin.css's OWN `body` rule, which is
+  // the organiser's ground, is in the sweep and has its own entry.
+  const organiserCss = organiserStylesheets()
+    .filter((path) => !path.endsWith("base.css"))
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n");
   const css = `${readResolvedCss(LANDING_CSS_PATH, seen)}
-${readResolvedCss(ADMIN_CSS_PATH, seen)}
+${organiserCss}
 ${readResolvedCss(EXAM_CSS_PATH, seen)}`;
   const rules = parseRuleBodies(css);
   // A selector can appear more than once (e.g. a base rule plus its
@@ -1532,5 +1653,105 @@ describe("base.css: the two colour-bearing selectors outside landing.css's own i
         `${selector} on ${bg}: ${fg} on ${bg} at ${px}px/${weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
       ).toBeGreaterThanOrEqual(threshold);
     });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The publish checklist's indicator lights (Phase 6.5e Task 1b, D1/D7a).
+//
+// WHY THESE NEED THEIR OWN BLOCK. Every assertion above audits a
+// FOREGROUND — `colorSelectors` is built from rules that declare `color` —
+// and a light declares only a `background-color`. So the three colours this
+// task's headline ruling rests on had no gate at all: 6.5d chose the cream
+// flag trio over `theme.css`'s names on a measurement, and nothing would
+// have reddened when 6.5e moved them.
+//
+// 6.5d's measurement was 2.68 / 2.08 / 1.60:1 and it was right about the
+// page it was taken on — the lights were still on cream, where `D1` says in
+// as many words that the Signal accent is illegal. It was a fact about that
+// page and not about the tokens. This block is what makes the replacement
+// claim checkable instead of inherited: the severities, the names and the
+// dimming are all READ OUT OF the stylesheet, so a value edited there is
+// scored rather than described.
+//
+// Scored against all four of theme.css's background tokens rather than only
+// the --ground the rail renders on today. The rail is a construct that
+// moves — docked, a 52px strip, and a band across the page below 719px —
+// and the worst of four is both cheaper to state and stricter than the one.
+describe("the publish checklist's lights clear 3:1 on both grounds (D1)", () => {
+  const TESTBUILDER_CSS = resolve(STYLES_DIR, "testbuilder.css");
+  const lightRules = parseRuleBodies(readResolvedCss(TESTBUILDER_CSS)).filter(
+    (rule) => /^\.checklist-rail__light\[data-severity=/.test(rule.selector),
+  );
+  const GROUND_NAMES = ["--ground", "--ground-2", "--surface", "--surface-2"];
+
+  /** `fg` at `alpha` over `bg`, as a hex — the colour a dimmed light really
+   *  composites to. Both are opaque tokens, so one lerp per channel is the
+   *  whole of it. */
+  function composite(fg: string, alpha: number, bg: string): string {
+    const channel = (at: number): string => {
+      const mix =
+        parseInt(fg.slice(at, at + 2), 16) * alpha +
+        parseInt(bg.slice(at, at + 2), 16) * (1 - alpha);
+      return Math.round(mix).toString(16).padStart(2, "0");
+    };
+    return `#${channel(1)}${channel(3)}${channel(5)}`;
+  }
+
+  it("finds all three severities, so the sweep below is not an empty loop", () => {
+    // The whole rail is three lights; a renamed attribute or a deleted rule
+    // would otherwise make every assertion below vacuously true.
+    expect(lightRules.map((rule) => rule.selector).sort()).toEqual([
+      '.checklist-rail__light[data-severity="advisory"]',
+      '.checklist-rail__light[data-severity="blocking"]',
+      '.checklist-rail__light[data-severity="passing"]',
+    ]);
+  });
+
+  it("paints every light from theme.css, never from the cream palette", () => {
+    // The other half of `D1`: a light reaching past `--risk` to
+    // `var(--color-flag-risk)` would be the cream world on the Signal
+    // ground, which is the move the ratios below only measure the cost of.
+    for (const rule of lightRules) {
+      const value = findDeclaration(rule.body, "background-color");
+      expect(value, `${rule.selector} sets no background-color`).not.toBeNull();
+      expect(
+        SEMANTIC_VAR_RE.test(value ?? ""),
+        `${rule.selector} paints with ${String(value)}, not a theme.css name`,
+      ).toBe(true);
+      expect(SEMANTIC_NAMES).toContain(
+        SEMANTIC_VAR_RE.exec(value ?? "")?.[1] ?? "",
+      );
+    }
+  });
+
+  for (const ground of GROUNDS) {
+    for (const name of GROUND_NAMES) {
+      it(`[${ground}] every light clears 3:1 on ${name}`, () => {
+        const behind = colorNameOf(`var(${name})`, ground);
+        expect(behind, `theme.css maps no ${name} on ${ground}`).not.toBeNull();
+        if (!behind) return;
+
+        for (const rule of lightRules) {
+          const fg = parseColorProperty(rule.body, "background-color", ground);
+          expect(fg, `${rule.selector}: unresolvable fill`).not.toBeNull();
+          if (!fg) return;
+          // The dimming is the stylesheet's, read rather than assumed: a
+          // passing light is dimmed because it is there to be counted, not
+          // looked at, and a number hand-typed here would stop tracking it.
+          const opacity = Number(findDeclaration(rule.body, "opacity") ?? "1");
+          const painted = composite(
+            tokens.colors[fg],
+            opacity,
+            tokens.colors[behind],
+          );
+          const ratio = contrastRatio(painted, tokens.colors[behind]);
+          expect(
+            ratio,
+            `${rule.selector} on ${name} (${ground}): ${fg} at ${opacity} over ${behind} is ${ratio.toFixed(2)}:1, needs 3:1 (WCAG 1.4.11)`,
+          ).toBeGreaterThanOrEqual(3);
+        }
+      });
+    }
   }
 });

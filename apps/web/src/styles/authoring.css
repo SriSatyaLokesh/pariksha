@@ -13,8 +13,10 @@
    5.18:1 on cream and is 5.28:1 on the dark ground, 5.04:1 on the light one.
    DESIGN.md's own two-tone split carries the rules: --edge for decoration,
    --edge-strong for "input outlines, answer rows, palette squares, table
-   rules" — which is why the two grids here took the stronger tone their
-   `hairline` never gave them.
+   rules" — which is why `.structured-grid`'s rules took the stronger tone
+   their `hairline` never gave them. Only a real table's rules did: a list's
+   row separator keeps the decorative tone it had, so the re-ground changes
+   the colour and not what reads as loud.
 
    That is also why the fenced-code block below has no syntax theme.
    `language-x` is the only hook markdown-it emits and blocks.css already
@@ -288,10 +290,8 @@
   padding-block: var(--space-sm);
 }
 
-/* A row rule in a list of rubric rows does the job a table rule does, so it
-   takes the same 3:1 tone (DESIGN.md's two-tone split). */
 .written-rubric-row + .written-rubric-row {
-  border-block-start: 1px solid var(--edge-strong);
+  border-block-start: 1px solid var(--edge);
 }
 
 /* ---- Bank list (UX-02) -------------------------------------------------- */

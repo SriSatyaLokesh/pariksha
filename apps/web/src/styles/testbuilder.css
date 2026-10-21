@@ -15,10 +15,14 @@
   border-collapse: collapse;
 }
 
+/* A table rule, which DESIGN.md puts at 3:1 ("input outlines, answer rows,
+   palette squares, table rules") rather than at the decorative tone. The
+   row separators further down this file are a LIST's, not a table's, and
+   keep the quiet tone they had. */
 .testbuilder-list th,
 .testbuilder-list td {
   padding: var(--space-sm) var(--space-md);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: start;
   vertical-align: top;
 }
@@ -47,7 +51,7 @@
   align-items: center;
   gap: var(--space-xs);
   margin-inline-start: var(--space-sm);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
@@ -60,7 +64,7 @@
 }
 
 .qr-code {
-  color: var(--color-ink);
+  color: var(--ink);
 }
 
 /* A `<button>` that reads as the test's name, not as a button — the same
@@ -72,7 +76,7 @@
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--color-voltage);
+  color: var(--accent);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -91,7 +95,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding-block: var(--space-sm);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge);
 }
 
 .section-row__summary {
@@ -102,7 +106,7 @@
   border: none;
   padding: var(--space-xs) 0;
   font: inherit;
-  color: var(--color-ink);
+  color: var(--ink);
   cursor: pointer;
   /* UX-12: the collapsed sentence wraps rather than truncates, so it stays
      readable at phone width instead of hiding words behind an ellipsis. */
@@ -114,13 +118,13 @@
 }
 
 .section-row__draw {
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
 
 .section-row__flag-risk {
-  color: var(--color-flag-risk);
+  color: var(--risk);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
@@ -150,7 +154,7 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-md);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
 }
 
 .section-editor__source {
@@ -168,7 +172,7 @@
 }
 
 .section-editor__preview {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   padding: var(--space-sm);
 }
 
@@ -177,7 +181,7 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-md);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
 }
 
 .picker-drawer__filters {
@@ -203,7 +207,7 @@
 }
 
 .picker-drawer__points {
-  color: var(--color-muted);
+  color: var(--ink-3);
   /* Fix round (task 3 review, I12). */
   font-variant-numeric: tabular-nums;
 }
@@ -260,7 +264,7 @@
 .shuffle-group__fact {
   margin: 0;
   padding-inline-start: var(--space-md);
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 /* Task 5 (#57, P5.4): the registration form builder and the one renderer
@@ -272,7 +276,7 @@
   gap: var(--space-lg);
   margin-block-start: var(--space-xl);
   padding-block-start: var(--space-lg);
-  border-block-start: 1px solid var(--color-hairline);
+  border-block-start: 1px solid var(--edge);
 }
 
 .form-builder__templates,
@@ -287,7 +291,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   padding: var(--space-md);
 }
 
@@ -306,7 +310,7 @@
 
 .form-builder__fact {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .form-builder__risk {
@@ -314,11 +318,11 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 .form-builder__preview {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   padding: var(--space-md);
 }
 
@@ -344,7 +348,7 @@
 }
 
 .timing-panel__group {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   margin: 0;
   padding: var(--space-md);
 }
@@ -355,7 +359,7 @@
 
 .timing-panel__fact {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .timing-panel__risk {
@@ -363,7 +367,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* Task 8 (#60, P5.7): access modes and allowlists. */
@@ -377,7 +381,7 @@
 }
 
 .access-panel__group {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   margin: 0;
   padding: var(--space-md);
 }
@@ -385,7 +389,7 @@
 .access-panel__fact,
 .access-panel__summary {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .access-panel__legend {
@@ -400,7 +404,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* Task 9 (#60 / #56, P5.7b): the candidate list's dry-run report. One row
@@ -412,13 +416,14 @@
 
 .access-panel__issues caption {
   text-align: left;
-  color: var(--color-muted);
+  color: var(--ink-3);
   padding-bottom: var(--space-xs);
 }
 
+/* A table rule again (see `.testbuilder-list` above). */
 .access-panel__issues th,
 .access-panel__issues td {
-  border-bottom: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--edge-strong);
   padding: var(--space-xs);
   text-align: left;
   vertical-align: top;
@@ -436,7 +441,7 @@
 }
 
 .release-panel__group {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   margin: 0;
   padding: var(--space-md);
 }
@@ -445,7 +450,7 @@
 .branding-panel__fact,
 .branding-panel__footer {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .release-panel__legend,
@@ -462,13 +467,22 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* `--brand-primary` is set on this wrapper from an effect (no style={} is
    allowed in .tsx under src) and cascades into all three previews, so the
    colour is applied once rather than three times. The fallback keeps a
-   preview readable before any colour is chosen. */
+   preview readable before any colour is chosen.
+
+   THE PREVIEW IS THE ONE CREAM THING LEFT ON THE ORGANISER, and 6.5e did
+   not re-ground it. It is a miniature of the CANDIDATE'S start page as the
+   branding settings will paint it, so `var(--color-ink)` below is the
+   runtime's own cream ink and is correct; re-grounding it would make the
+   preview lie about the page it previews. What 6.5e did add is the cream
+   FILL the fallback always assumed — with the organiser on the Signal
+   ground an unfilled preview put near-black ink on a near-black page, so
+   the surface the preview claims to be is now the surface it paints. */
 .branding-panel__previews {
   display: flex;
   flex-wrap: wrap;
@@ -477,7 +491,8 @@
 
 .branding-panel__preview {
   flex: 1 1 14rem;
-  border: 1px solid var(--color-hairline);
+  background: var(--color-cream);
+  border: 1px solid var(--edge);
   border-block-start: 3px solid var(--brand-primary, var(--color-ink));
   padding: var(--space-md);
 }
@@ -503,8 +518,8 @@
 .review-note {
   margin-block: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-inline-start: 2px solid var(--color-hairline);
-  color: var(--color-ink-soft);
+  border-inline-start: 2px solid var(--edge);
+  color: var(--ink-2);
 }
 
 /* Task 13 (#64, P5.11): the publish checklist. */
@@ -517,7 +532,7 @@
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   text-transform: uppercase;
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* Where a row has no section to open, the field it raised itself against is
@@ -527,7 +542,7 @@
 .publish-checklist__field {
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 /* Phase 6.5d Task 1 (spec D7): the five settings as rows that state their
@@ -552,7 +567,7 @@
 }
 
 .setting-row {
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge);
 }
 
 .setting-row__button {
@@ -566,7 +581,7 @@
   border: none;
   padding: var(--space-lg) 0;
   font: inherit;
-  color: var(--color-ink);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -577,7 +592,7 @@
 .setting-row__icon {
   display: inline-flex;
   align-self: center;
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 .setting-row__label {
@@ -590,7 +605,7 @@
 
 .setting-row__summary {
   flex: 1 1 18rem;
-  color: var(--color-muted);
+  color: var(--ink-3);
   /* Durations, counts and timestamps are compared down the column. */
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -662,7 +677,7 @@
 /* The docked rail is a panel; the collapsed one is a 52px strip (`D7a`). */
 .checklist-rail[data-state="docked"] {
   width: 20rem;
-  border-inline-start: 1px solid var(--color-hairline);
+  border-inline-start: 1px solid var(--edge);
   padding-inline-start: var(--space-md);
 }
 
@@ -722,7 +737,7 @@
 }
 
 .checklist-rail__count {
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 /* The count is the figure's own qualifier; at 52px there is no room for it
@@ -745,7 +760,7 @@
   background: none;
   border: 0;
   cursor: pointer;
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 .checklist-rail__lights {
@@ -766,18 +781,22 @@
    three hues cannot carry three meanings on their own and a reader who sees
    none of them would be left with an unlabelled dot.
 
-   THE CREAM FLAG TRIO, not theme.css's --risk/--warn/--accent, and the
-   reason is a measurement rather than a preference. This screen is still on
-   the cream page (6.5e re-grounds it); theme.css's names resolve to the
-   DARK Signal palette there, and against --color-cream they measure
-   2.68:1, 2.08:1 and 1.60:1 — every one of them under the 3:1 a non-text
-   indicator needs, which is the same cross-ground move `D1` refuses by
-   name. These three are the cream world's own clean/review/risk triple,
-   already used by `.section-row__flag-risk` eight rules up, and they
-   measure 6.34:1, 5.48:1 and 5.20:1 on the same page. No colour is declared
-   here; DESIGN.md's front matter remains the only place one may be. When
-   6.5e moves this screen onto the Signal ground these three names move with
-   it, in one pass, with the rest of the file. */
+   THEME.CSS'S --risk / --warn / --accent, which is the move the cream flag
+   trio was holding this rule's place for. 6.5d measured that trio's
+   replacements at 2.68:1, 2.08:1 and 1.60:1 and kept the cream one — but
+   those were ratios against THE CREAM PAGE THE LIGHTS WERE STILL ON, not
+   against the tokens. On the Signal grounds this screen renders on from
+   6.5e, measured on all four surface tokens and both palettes:
+
+     --risk    7.16 / 6.90 / 6.59 / 6.17 dark,  6.16 / 5.87 / 6.54 / 5.87 light
+     --warn    9.22 / 8.88 / 8.49 / 7.95 dark,  5.32 / 5.07 / 5.65 / 5.07 light
+     --accent 12.01 / 11.57 / 11.06 / 10.36 dark, 5.48 / 5.23 / 5.82 / 5.23 light
+
+   Worst case 5.07:1 against the 3:1 a non-text indicator needs. So NO NEW
+   COLOUR IS DECLARED and none was ever needed: `D1` says in as many words
+   that "the accent itself carries positive meaning on the organiser", so
+   the passing light is the accent. DESIGN.md's front matter remains the
+   only place a colour may be declared and 6.5e declared none. */
 .checklist-rail__light {
   display: block;
   width: 44px;
@@ -792,20 +811,24 @@
 }
 
 .checklist-rail__light[data-severity="blocking"] {
-  background-color: var(--color-flag-risk);
+  background-color: var(--risk);
 }
 
 .checklist-rail__light[data-severity="advisory"] {
-  background-color: var(--color-flag-review);
+  background-color: var(--warn);
 }
 
 /* Dimmed, because a passing check is the absence of work: it is there to be
-   counted, not to be looked at. Dimmed and not faded away: 0.75 over the
-   cream page composites to 3.28:1, which clears the 3:1 a non-text
-   indicator needs with a little room. 0.45 — where this started — measures
-   1.95:1, and a light nobody can see is not a quiet light. */
+   counted, not to be looked at. Dimmed and not faded away, and the opacity
+   is unchanged by the re-ground because it is the SHAPE that was ruled, not
+   the number: 0.75 accent over the four Signal surfaces composites to
+   6.95 / 6.85 / 6.62 / 6.34 on dark and 3.41 / 3.30 / 3.53 / 3.30 on light.
+   The light ground's 3.30:1 is the tightest figure this rule has ever had —
+   it clears the 3:1 a non-text indicator needs, where 0.45 (where this
+   started) measured 1.95:1 on cream, and a light nobody can see is not a
+   quiet light. */
 .checklist-rail__light[data-severity="passing"] {
-  background-color: var(--color-flag-clean);
+  background-color: var(--accent);
   opacity: 0.75;
 }
 
@@ -838,8 +861,8 @@
   width: 20rem;
   max-width: calc(100vw - (2 * var(--space-xl)));
   max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
-  background: var(--color-canvas);
-  border: 1px solid var(--color-hairline-strong);
+  background: var(--surface);
+  border: 1px solid var(--edge-strong);
   padding: var(--space-md);
 }
 
@@ -865,7 +888,7 @@
     align-items: stretch;
     border-inline-start: 0;
     padding-inline-start: 0;
-    border-block-end: 1px solid var(--color-hairline);
+    border-block-end: 1px solid var(--edge);
   }
 
   .checklist-rail__head,
