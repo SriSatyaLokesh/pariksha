@@ -565,6 +565,18 @@ tracks to `15px 36px 0px` — the reserved help track collapses rather than cost
 > **Cost if wrong.** Custom controls must keep real `<input>` semantics — they do; only the painting
 > changes.
 
+*Pointer, not an amendment — `D17` stands as written.* **"No browser default anywhere" is delivered
+on two of the three chains** (6.5d Task 5, 2026-10-21). The rule lives in `primitives.css`, which
+`admin.css` and `landing.css` import, so the organiser and the landing page are covered; the paint
+comes through a `--control-accent` / `--control-accent-ink` pair each chain defines for its own
+ground, because one rule set renders on cream and on Signal dark and `D1` forbids an accent crossing
+between them. **The candidate runtime is not covered.** `exam.css` imports only `question.css` and
+`registration.css`, so `exam/answer/Structured.tsx`, `exam/Registration.tsx` and
+`exam/ViewControls.tsx` still render the UA's blue. The owner has taken that later as **#201**;
+`registration.css` is imported by *both* `admin.css` and `exam.css`, so the fix is a move of the
+`D17` block into that file plus two `--control-accent` lines on `exam.css` — not a second palette
+exercise.
+
 ### D18 — screen-level rulings
 
 - **Bank browser opens with the rail collapsed.** Browsing is where the page wants width; the toggle

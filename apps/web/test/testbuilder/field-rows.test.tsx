@@ -60,13 +60,35 @@ const LANDING_CSS = readResolvedCss(resolve(STYLES_DIR, "landing.css"));
  * would have reported the opposite of what a browser paints — it did, on the
  * first green run, which is what this function exists because of.
  *
- * `:not(...)`'s own argument is not counted, and neither is a pseudo-element
- * against the class column; neither form appears in the rules read here.
+ * The functional pseudo-classes are handled the way CSS handles them rather
+ * than counted as plain pseudo-classes, because `primitives.css`'s own
+ * fallback uses one: `.field-row:has(.field-help) > .field` is (0,3,0), and
+ * scoring `:has` as an extra class on top of its argument would make it
+ * (0,4,0). Today `parseRuleBodies` never surfaces an `@supports` rule to this
+ * reader, so nothing would have noticed — which is exactly why it is fixed
+ * rather than left: a specificity helper that is quietly wrong is worse than
+ * no helper at all (fix round 1, finding 5).
+ *
+ * `:where()` contributes nothing; `:not()`, `:is()` and `:has()` contribute
+ * their argument's specificity and nothing of their own. A comma-separated
+ * argument — where CSS takes the most specific branch — needs a recursive
+ * reader, does not occur in this repo's stylesheets, and throws rather than
+ * being scored wrong. Pseudo-ELEMENTS (`::before`) are not counted in the
+ * element column: jsdom's `matches()` rejects them, so no rule carrying one
+ * ever reaches this function.
  */
 function specificity(selector: string): number {
-  const ids = (selector.match(/#[\w-]+/g) ?? []).length;
-  const classes = (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
-  const elements = (selector.match(/(?:^|[\s>+~])[a-z][\w-]*/gi) ?? []).length;
+  const peeled = selector
+    .replace(/:where\([^()]*\)/g, " ")
+    .replace(/:(?:not|is|has)\(([^()]*)\)/g, (_whole, argument: string) => {
+      if (argument.includes(",")) {
+        throw new Error(`specificity(): comma-separated argument in ${selector}`);
+      }
+      return ` ${argument} `;
+    });
+  const ids = (peeled.match(/#[\w-]+/g) ?? []).length;
+  const classes = (peeled.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
+  const elements = (peeled.match(/(?:^|[\s>+~])[a-z][\w-]*/gi) ?? []).length;
   return ids * 10_000 + classes * 100 + elements;
 }
 
@@ -293,9 +315,18 @@ describe("D16 — secondary text has exactly three homes", () => {
     }
 
     // The invariant, stated over every help line the builder renders rather
-    // than over the one field this test set up: no help line is a bare unit.
+    // than over the one field this test set up: no help line repeats a unit.
+    //
+    // The vocabulary is READ OFF the rendered affixes rather than written
+    // here (fix round 1, finding 7). A hardcoded list would cover "chars" and
+    // let the next unit anyone adds walk straight into the help track, which
+    // is the rule this test exists to hold.
+    const units = new Set(
+      [...document.querySelectorAll(".field-affix__unit")].map((el) => el.textContent?.trim()),
+    );
+    expect(units.size, "no unit is rendered, so the check below is vacuous").toBeGreaterThan(0);
     for (const help of document.querySelectorAll(".field-help")) {
-      expect(["chars", "min", "pts", "IST"]).not.toContain(help.textContent?.trim());
+      expect([...units]).not.toContain(help.textContent?.trim());
     }
   });
 });
@@ -434,6 +465,21 @@ describe("the guards above read the real stylesheet", () => {
     expect(ADMIN_CSS).toContain(".button-primary");
     expect(LANDING_CSS).toContain(".button-primary");
     expect(parseRuleBodies(ADMIN_CSS).length).toBeGreaterThan(20);
+  });
+
+  it("scores a functional pseudo-class the way CSS does", () => {
+    // `primitives.css`'s own fallback rule is the live case: `:has()` adds
+    // its argument and nothing of its own, so the reserve rule outranks the
+    // plain one by exactly one class — which is what makes it win inside the
+    // `@supports` branch.
+    expect(specificity(".field-row:has(.field-help) > .field")).toBe(
+      specificity(".field-row > .field") + 100,
+    );
+    // ...and the three columns are counted apart, so a class can never
+    // outrank an id or be outranked by an element.
+    expect(specificity("input[type=\"radio\"]")).toBe(101);
+    expect(specificity(".field-row > .field")).toBe(200);
+    expect(specificity(":where(.signal) p")).toBe(1);
   });
 
   it("resolves the cascade by specificity, not by source order", () => {

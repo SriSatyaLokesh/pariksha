@@ -29,6 +29,16 @@
 // broken pass must be non-zero or the test fails, which is what makes the
 // shipped pass's zero mean something.
 //
+// FIVE TESTS, and what each is for. 1 and 2 are CALIBRATION: the two mixed
+// rows of the question editor's Meta section measure 0px and their own proof
+// row measures 23px, which proves the instrument can see a misalignment. 3
+// ISOLATES `subgrid` — a forced label wrap is the case where the shared track
+// is load-bearing, and deleting `grid-template-rows: subgrid` reddens this
+// one and only this one. 4 measures `D16`'s COLLAPSE claim on a help-free
+// row, against a row on the same screen that really does spend the line. 5
+// forces the `@supports not (subgrid)` branch on and re-measures, which `D16`
+// says was done and which nothing in a browser checked until fix round 1.
+//
 // WHY NOT IN `measurement/density.spec.ts`. That file is `AG1`'s density
 // gate, and `D12` puts the builder, the question editor, the wizard and
 // sign-in deliberately OUTSIDE it: they are editing surfaces, not scanning
@@ -97,25 +107,79 @@ const PRE_RULE_SHAPE = `
   }
 `;
 
+/**
+ * `primitives.css`'s `@supports not (grid-template-rows: subgrid)` branch,
+ * restated unconditionally — which is how an engine without `subgrid` sees
+ * the page.
+ *
+ * `D16` and the brief both say that branch "was forced on and re-measured:
+ * still 0px on every live row", and until fix round 1 nothing in a browser
+ * checked it: the fallback was proved only against the resolved CSS in jsdom
+ * (finding 3). Injected at the same specificity as the shipped rules and
+ * after them, so it wins; `grid-template-rows: subgrid` on an engine that
+ * lacks it is invalid at computed-value time anyway, which is why restating
+ * the branch reproduces that engine rather than approximating it.
+ */
+const FORCED_FALLBACK = `
+  .field-row > .field {
+    grid-template-rows: auto auto auto;
+  }
+  .field-row:has(.field-help) > .field {
+    grid-template-rows: auto auto minmax(var(--type-body-sm-line-height), auto);
+  }
+`;
+
+/** `seedWorkspace`'s own name for the first test it publishes. */
+const TEST_NAME = "Algebra assessment 01";
+
 test.beforeAll(async ({ request }) => {
   const isolated = await createWorkspace(request, WORKSPACE_NAME, "field-row-fixtures");
-  // One bank with questions: the question editor is reached by editing one,
-  // and `D16`'s two mixed rows live in that editor's Meta section. No tests —
-  // nothing here opens the builder.
-  await seedWorkspace(request, { banks: 1, questionsPerBank: 3, tests: 0 }, isolated);
+  // One bank with questions for the question editor's two MIXED rows, and one
+  // test for the registration form builder's HELP-FREE one — the row `D16`
+  // says collapses its reserved help track rather than spending a line on it.
+  await seedWorkspace(request, { banks: 1, questionsPerBank: 3, tests: 1 }, isolated);
 });
 
-/** Sign in, switch to this file's own workspace, and open the question editor
- *  the way an organiser does: the rail, a bank, then Edit on a row. */
-async function openQuestionEditor(page: Page): Promise<void> {
+/** Sign in and switch to this file's own workspace. */
+async function enterWorkspace(page: Page): Promise<void> {
   await signIn(page);
   await page.getByLabel("Workspace").selectOption({ label: WORKSPACE_NAME });
-  await page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: "Banks" }).click();
+}
+
+function rail(page: Page, label: string): Locator {
+  return page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: label });
+}
+
+/** Open the question editor the way an organiser does: the rail, a bank, then
+ *  Edit on a row. Its Meta section is where `D16`'s two mixed rows live. */
+async function openQuestionEditor(page: Page): Promise<void> {
+  await enterWorkspace(page);
+  await rail(page, "Banks").click();
   await expect(page.getByRole("heading", { level: 1, name: "Banks" })).toBeVisible();
   await page.locator(".bank-list__item").first().click();
   await page.getByRole("button", { name: /^Edit question:/ }).first().click();
   await expect(page.getByRole("heading", { name: "Meta" })).toBeVisible();
   await page.addStyleTag({ content: PRE_RULE_SHAPE });
+}
+
+/** Open the registration form builder and add one short-text field, which is
+ *  the field type that renders the help-free "Minimum length / Maximum
+ *  length" row — two fields, a unit inside each control, help on neither. */
+async function openLengthRow(page: Page): Promise<Locator> {
+  await enterWorkspace(page);
+  await rail(page, "Tests").click();
+  await expect(page.getByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+  await page.getByRole("button", { name: TEST_NAME }).click();
+  await page.getByRole("button", { name: /^Registration —/ }).click();
+  await page.getByLabel("Field type").selectOption({ label: "Short text" });
+  await page.getByRole("button", { name: "Add field" }).click();
+
+  const row = rowOf(page, "Minimum length");
+  await expect(row).toHaveCount(1);
+  // The premise: no field in this row carries help, so there is nothing for
+  // the reserve to reserve.
+  await expect(row.locator(".field-help")).toHaveCount(0);
+  return row;
 }
 
 /** The `.field-row` holding the control labelled `label`. */
@@ -136,12 +200,55 @@ async function topSpread(row: Locator, selector: string): Promise<number> {
   });
 }
 
+/**
+ * How many CSS pixels of `row` sit BELOW its lowest control — which is what
+ * the help track costs the row, measured rather than inferred.
+ *
+ * A row whose fields all lack help must spend nothing here: `D16`'s "the
+ * reserved track collapses rather than costing an empty line". A row that
+ * carries help anywhere must spend something, or the measurement means
+ * nothing.
+ */
+async function helpTrackCost(row: Locator): Promise<number> {
+  return row.evaluate((element) => {
+    const controls = [...element.querySelectorAll(".text-input, select")];
+    // No controls is not "costs nothing" — it is a broken selector.
+    if (controls.length === 0) return Number.POSITIVE_INFINITY;
+    const lowest = Math.max(...controls.map((control) => control.getBoundingClientRect().bottom));
+    return Math.round((element.getBoundingClientRect().bottom - lowest) * 100) / 100;
+  });
+}
+
+/** What Chromium reports for a row's own track sizes. Diagnostic only — see
+ *  the collapse test for why nothing asserts on it. */
+async function rowTracks(row: Locator): Promise<string[]> {
+  return row.evaluate((element) => getComputedStyle(element).gridTemplateRows.trim().split(/\s+/));
+}
+
 /** Both of `D16`'s spreads for a row, as it stands right now. */
 async function spreadsOf(row: Locator): Promise<{ label: number; control: number }> {
   return {
     label: await topSpread(row, ".field-label"),
     control: await topSpread(row, ".text-input, select"),
   };
+}
+
+/**
+ * The row really is two columns side by side.
+ *
+ * Every vertical measurement in this file rests on it: a spread of 0 down one
+ * stacked column is true of any markup at all, so a reflow that collapsed the
+ * row would turn each 0px below into a meaningless pass. Lifted out of
+ * `measureAgainstItsOwnProof` in fix round 1 (finding 6) so every path
+ * carries it rather than two of three.
+ */
+async function expectTwoColumns(row: Locator): Promise<void> {
+  const columns = await row
+    .locator(":scope > .field")
+    .evaluateAll(
+      (fields) => new Set(fields.map((field) => Math.round(field.getBoundingClientRect().left))).size,
+    );
+  expect(columns, "the row collapsed to one column, so a 0px spread proves nothing").toBe(2);
 }
 
 /**
@@ -155,15 +262,7 @@ async function measureAgainstItsOwnProof(row: Locator, name: string): Promise<vo
   // the other spends none — so the measurement is of the hard case.
   await expect(row.locator(".field")).toHaveCount(2);
   await expect(row.locator(".field-help")).toHaveCount(1);
-
-  // Side by side, not stacked: a spread of 0 down a single column would be
-  // true of any stack at all.
-  const columns = await row
-    .locator(":scope > .field")
-    .evaluateAll(
-      (fields) => new Set(fields.map((field) => Math.round(field.getBoundingClientRect().left))).size,
-    );
-  expect(columns, "the row collapsed to one column, so a 0px spread proves nothing").toBe(2);
+  await expectTwoColumns(row);
 
   const shipped = await spreadsOf(row);
 
@@ -235,6 +334,7 @@ test("a label that wraps in one field still leaves every control on one line", a
   // hunting a viewport width where real copy happens to wrap.
   const row = rowOf(page, "Question ID");
   await expect(row).toHaveCount(1);
+  await expectTwoColumns(row);
 
   const labelHeight = (): Promise<number> =>
     row.locator(".field-label").first().evaluate((el) => el.getBoundingClientRect().height);
@@ -263,5 +363,92 @@ test("a label that wraps in one field still leaves every control on one line", a
   expect(
     broken.control,
     "the own-grid shape measured aligned too, so subgrid is not what this test holds",
+  ).toBeGreaterThan(0);
+});
+
+test("a row where no field has help collapses its reserved help track", async ({ page }) => {
+  await page.setViewportSize(VIEWPORT);
+  const helpFree = await openLengthRow(page);
+  await expectTwoColumns(helpFree);
+
+  // `D16`: "A help-free row resolves its tracks to `15px 36px 0px` — the
+  // reserved track collapses rather than costing an empty line." Until fix
+  // round 1 nothing measured that (finding 2): the unit file only re-read the
+  // same `@supports` declaration the test before it reads, which is an
+  // inference about the collapse rather than the collapse.
+  //
+  // NOT read off `getComputedStyle(row).gridTemplateRows`, which is what the
+  // review asked for and what this first tried. Chromium does not report
+  // usable row tracks for a grid whose rows are entirely consumed by
+  // `subgrid` children: this row measures `20px 20px 20px` where the real
+  // tracks are a 24px label, a 44px control and an empty third — an even
+  // split whose TOTAL (60px) is right and whose three figures are not. The
+  // columns on the same element report correctly (`310.938px 310.938px 0px`),
+  // and a subgrid child reports the literal `subgrid`, so there is no
+  // element to read the tracks off. The figure is reported below as a
+  // diagnostic and asserted on by nothing.
+  //
+  // So the collapse is measured as the thing the ruling is actually about:
+  // how much of the row sits BELOW its controls. Zero is "no empty line".
+  const [collapsed, tracks] = await Promise.all([helpTrackCost(helpFree), rowTracks(helpFree)]);
+
+  // ...and against a row on the same screen that really does spend that line.
+  // "Visible label / Column name" is the mixed row of the same panel: one
+  // field states a consequence in the help track and the other states
+  // nothing. Without this arm a zero would be true of any row at all.
+  const mixed = rowOf(page, "Column name");
+  await expect(mixed).toHaveCount(1);
+  await expect(mixed.locator(".field-help")).toHaveCount(1);
+  const spent = await helpTrackCost(mixed);
+
+  console.log(
+    `FIELD ROW help track ${VIEWPORT.width}x${VIEWPORT.height}: ` +
+      `help-free row costs ${collapsed}px below its controls, mixed row costs ${spent}px ` +
+      `(Chromium reports the help-free row's tracks as ${tracks.join(" ")}, which is an even ` +
+      `split of the right total and not the real sizes)`,
+  );
+
+  expect(collapsed, "a row with no help in it still spends a line on the help track").toBe(0);
+  expect(
+    spent,
+    "the mixed row spends nothing on help either, so the zero above proves nothing",
+  ).toBeGreaterThan(0);
+
+  // And the units really are inside the controls on this row, which is what
+  // makes it the help-free row rather than one whose help was simply dropped.
+  await expect(helpFree.locator(".field-affix__unit")).toHaveCount(2);
+  await expect(helpFree.locator(".field-help")).toHaveCount(0);
+});
+
+test("the @supports fallback, forced on, still puts every control on one line", async ({ page }) => {
+  await page.setViewportSize(VIEWPORT);
+  await openQuestionEditor(page);
+  await page.addStyleTag({ content: FORCED_FALLBACK });
+
+  // `D16`'s own record: "The `@supports not (subgrid)` path was forced on and
+  // re-measured: still 0px on every live row." Until fix round 1 that was
+  // proved only against the resolved stylesheet in jsdom (finding 3) — and
+  // the fallback is the path every non-supporting engine actually takes.
+  //
+  // What this holds is the invariant, not an isolation: on these rows the
+  // reserve is not what delivers the zero (single-line labels put every
+  // second track at the same offset either way, which is the finding the
+  // first draft of this file was rewritten over). It would go red if the
+  // fallback branch introduced a misalignment the subgrid branch does not
+  // have, which is the thing a fallback is most likely to do.
+  await measureAgainstItsOwnProof(rowOf(page, "Question ID"), "forced fallback");
+
+  // The reserve really is in force here and really does cost a line, so the
+  // zero above is measured under the fallback's own geometry and not under a
+  // stylesheet the injection failed to apply.
+  const reserved = await rowOf(page, "Question ID")
+    .locator(":scope > .field")
+    .last()
+    .evaluate((element) => getComputedStyle(element).gridTemplateRows.trim().split(/\s+/));
+  console.log(`FIELD ROW forced-fallback help-free field tracks: ${reserved.join(" ")}`);
+  expect(reserved, "a field under the fallback does not have three tracks").toHaveLength(3);
+  expect(
+    Number.parseFloat(reserved[2]!),
+    "the help-free field reserved nothing, so the fallback is not in force",
   ).toBeGreaterThan(0);
 });

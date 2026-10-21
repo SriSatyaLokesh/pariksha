@@ -309,13 +309,6 @@ input[type="radio"]:checked::before {
   border-radius: var(--rounded-full);
 }
 
-/* base.css's global `:focus-visible` sets `border-radius: var(--rounded-xs)`
-   along with the ring, which would square the radio for as long as it has
-   focus. (0,1,1) beats its (0,1,0). */
-input[type="radio"]:focus-visible {
-  border-radius: var(--rounded-full);
-}
-
 /* Opacity, never a colour swap — the same reason the two buttons above give:
    a disabled control is exempt from WCAG 1.4.3, and an opacity change keeps
    the box out of the contrast gate rather than needing an exemption in it. */
