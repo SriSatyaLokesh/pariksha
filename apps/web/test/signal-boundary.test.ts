@@ -3,7 +3,14 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-import { stripCssComments } from "./css-chain";
+import {
+  chainOf,
+  declarations,
+  parseRuleBodies,
+  sourceFiles,
+  srcRelative,
+  stripCssComments,
+} from "./css-chain";
 
 // ---------------------------------------------------------------------------
 // D10 — what `signal.css` gives up, and the boundary that survives the answer.
@@ -34,6 +41,10 @@ import { stripCssComments } from "./css-chain";
 //     `primitives.css` -> 1 failure in 2046, this test, alone.
 //
 // So the colour half is already held, and this is the half that was not.
+//
+// The second describe closes the hole the first one leaves: a construct moved
+// AND RENAMED carries no `.signal-` prefix for the scan above to find. Review
+// round 1 (I3) named the inverse invariant that catches it, and it is here.
 
 const STYLES_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
@@ -41,7 +52,7 @@ const STYLES_DIR = resolve(
 );
 
 /** Every stylesheet in src/styles, comments stripped — prose cannot satisfy a
- *  scan, and three of these files discuss `.signal-*` in their headers. */
+ *  scan, and `theme.css:64` does name `.signal` in its header. */
 const SHEETS = readdirSync(STYLES_DIR)
   .filter((name) => name.endsWith(".css"))
   .sort()
@@ -118,5 +129,117 @@ describe("D10: a .signal-* construct is declared in signal.css and nowhere else"
       expect(mine).toContain(name);
     }
     expect(mine.length).toBeGreaterThan(40);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// I3 (review round 1) — the inverse invariant, which closes the rename hole.
+//
+// The scan above finds a construct by its `.signal-` prefix, so a construct
+// moved AND renamed (`.signal-scroll-x` -> `.scroll-x` in `primitives.css`,
+// colour-free) is invisible to it. Task 7's report called that unguardable
+// without barring a legal move. The reviewer was right that it is not, and the
+// guard is this: EVERY CLASS `primitives.css` PAINTS HAS A CONSUMER THAT IS NOT
+// THE LANDING PAGE. A legal D10 move brings organiser markup with it and passes;
+// a speculative move, or one whose only renderer is still `sections/signal/`,
+// does not.
+//
+// WHY "not the landing chain" RATHER THAN "an organiser source", which is how
+// the review phrased it. Measured, and the weaker-sounding form is the only
+// TRUE one: `.card-hairline` and `.mono-caption` are rendered ONLY by
+// `src/components/CardHairline.tsx` and `src/components/MonoCaption.tsx`, and
+// `CHAINS` assigns no chain to `src/components/*` — `chainOf()` returns
+// undefined for both. So "rendered by an admin.html source" is FALSE today for
+// two of the four components `primitives.css` exists to share, and asserting it
+// would have been a red test naming a file that is doing nothing wrong.
+//
+// That hole is worth its own line because it is not only this test's problem:
+// `theme.test.ts`'s seam guard (:527-530) skips every file whose `chainOf` does
+// not match the chain under test, so an UNASSIGNED file is invisible to it too
+// — including the very `CardHairline.tsx` its comment offers as the example it
+// would catch. Closing it means teaching `CHAINS` about `src/components/`,
+// which is `css-chain.ts`'s business and three other plans' blast radius, so
+// Task 7 reported it rather than widening its own diff.
+
+const PRIMITIVES = "primitives.css";
+
+/** Every class painted by a rule in `css`: `.a:hover, .b > .c` -> a, b, c. */
+function classesPaintedBy(css: string): string[] {
+  const hits = new Set<string>();
+  for (const rule of parseRuleBodies(css)) {
+    if (declarations(rule.body).length === 0) continue;
+    for (const m of rule.selector.matchAll(/\.([A-Za-z_][\w-]*)/g)) {
+      if (m[1] !== undefined) hits.add(m[1]);
+    }
+  }
+  return [...hits].sort();
+}
+
+/** Source files grouped by the chain they ship in, read once. */
+const SOURCES = sourceFiles().map((file) => {
+  const relativePath = srcRelative(file);
+  return {
+    path: relativePath,
+    page: chainOf(relativePath)?.page,
+    text: readFileSync(file, "utf8"),
+  };
+});
+
+/** `className="a b"`, `className={"a"}` and a template literal all put the
+ *  bare name in the source, so one scan covers them — the same bounded limit
+ *  `theme.test.ts:533` names for its own scan, and the same expression. */
+function renders(text: string, name: string): boolean {
+  return new RegExp("[\"'`\\s{]" + name + "[\"'`\\s}]").test(text);
+}
+
+describe("D10: every construct primitives.css paints has a non-landing consumer", () => {
+  const painted = classesPaintedBy(
+    SHEETS.find((sheet) => sheet.name === PRIMITIVES)?.css ?? "",
+  );
+
+  it("really finds the classes primitives.css paints, so the scan is not vacuous", () => {
+    // Positive control. An empty `painted` would make the assertion below pass
+    // by checking nothing, and these four are the components the file's own
+    // header says it exists to share.
+    for (const name of [
+      "mono-caption",
+      "button-primary",
+      "button-secondary",
+      "card-hairline",
+    ]) {
+      expect(painted).toContain(name);
+    }
+    expect(painted.length).toBeGreaterThan(8);
+  });
+
+  it("has landing sources to be distinguished from, so the filter is not vacuous", () => {
+    // If `chainOf` stopped resolving index.html, every class would trivially
+    // have a "non-landing" consumer and the guard would assert nothing.
+    expect(
+      SOURCES.filter((source) => source.page === "index.html").length,
+    ).toBeGreaterThan(2);
+  });
+
+  it("is rendered by something that is not a landing component", () => {
+    const orphans = painted.filter(
+      (name) =>
+        !SOURCES.some(
+          (source) =>
+            source.page !== "index.html" && renders(source.text, name),
+        ),
+    );
+
+    expect(
+      orphans,
+      "primitives.css paints a construct that no non-landing source renders. " +
+        "primitives.css is imported by BOTH admin.css:32 and landing.css:9, " +
+        "so a rule here that only the landing page renders is landing styling " +
+        "shipped into the organiser bundle — D10's expensive direction, and " +
+        "the shape a moved-and-renamed construct takes. A class nothing " +
+        "renders at all is the speculative move the same ruling forbids. " +
+        "Either give it its organiser consumer or leave the construct in " +
+        "signal.css; see " +
+        "docs/superpowers/notes/2026-10-20-d10-moved-constructs.md.",
+    ).toEqual([]);
   });
 });
