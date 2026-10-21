@@ -227,7 +227,11 @@ export function ExamLanding({
         {test.proctoring.requirements.length > 0 && (
           <section className="exam-landing-requirements">
             <h2 id="exam-requirements-heading">Requirements</h2>
-            <ul aria-labelledby="exam-requirements-heading">
+            {/* `list-style: none` (DESIGN.md) drops list semantics in
+                WebKit and takes the accessible name with it — this list
+                only; the Sections list and the device-report list share
+                the same CSS and are out of scope here. */}
+            <ul role="list" aria-labelledby="exam-requirements-heading">
               {test.proctoring.requirements.map((requirement) => (
                 <li key={requirement}>{requirement}</li>
               ))}
