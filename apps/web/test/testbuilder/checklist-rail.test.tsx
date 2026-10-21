@@ -651,6 +651,19 @@ describe("the reviewers card", () => {
     expect(screen.queryByRole("button", { name: /Approve|Comment/ })).toBeNull();
   });
 
+  // The other arm of the card's one branch. With no review pending there is
+  // no gap to name, and a permanent "comments are not built" note on every
+  // draft in the workspace is a worse screen than the one `D18` is fixing.
+  it("says nothing when no review is pending", async () => {
+    // The file's default fixture: `TEST_ROW.reviewRequested` is `false`.
+    await openBuilder();
+    // Same mechanism, same screen: the builder is really mounted and really
+    // loaded, which is what makes the two nulls below evidence.
+    expect(screen.getByRole("button", { name: /^Publish$/ })).toBeVisible();
+    expect(screen.queryByText(/Comments and approvals arrive with ADR 0007's second half/)).toBeNull();
+    expect(screen.queryByText(/In review/)).toBeNull();
+  });
+
   // Spec §13: "One family, consistent stroke, SVG, self-hosted or inline —
   // PRD S-11 has no iconography exception." The badge used to carry U+25C6
   // BLACK DIAMOND, a font-dependent character in a text node. It is now the
