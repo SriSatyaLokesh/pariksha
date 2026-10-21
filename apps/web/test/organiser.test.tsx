@@ -2142,6 +2142,17 @@ describe("D18: the split screen (sign-in and the first-run wizard)", () => {
     expect(half("form").contains(screen.getByLabelText(/email address/i))).toBe(true);
     expect(half("brand").querySelector("ol.screen__facts")).not.toBeNull();
     expect(half("brand").contains(screen.getByLabelText(/email address/i))).toBe(false);
+
+    // ONE heading on the screen, and it is the form's. The brand half's
+    // headline is a <p> on purpose — a heading there would start the document
+    // outline on a panel of marketing rather than on the thing being done —
+    // and THE AXE GUARD BELOW DOES NOT CATCH IT. Probed: `<h2>` in place of
+    // that `<p>` leaves the whole suite green, because axe's `heading-order`
+    // only flags a level that SKIPS upward and `page-has-heading-one` is
+    // satisfied by the <h1> further down. So it is asserted here instead.
+    const headings = screen.getAllByRole("heading");
+    expect(headings).toHaveLength(1);
+    expect(headings[0]).toBe(screen.getByRole("heading", { level: 1, name: "Sign in" }));
   });
 
   it("renders content, not an empty screen, when the rail and bar are absent", () => {
