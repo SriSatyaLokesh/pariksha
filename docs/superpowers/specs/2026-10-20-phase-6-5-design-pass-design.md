@@ -652,9 +652,15 @@ nothing was watching the seam between the chains; that is now the thing being wa
   type on hover *and* keyboard focus, animated `0fr→1fr` so nothing jumps. Twelve distinct examples
   — a description is not an example.
 - **Import is a page, not a modal** (owner's preference): linkable, no focus trap, room for a long
-  report, sticky action bar. It carries **"Download a sample"** — generated from
-  `schemas/question-1.json`, one question of every type, so it cannot drift from what the importer
-  accepts.
+  report, sticky action bar. It carries **"Download a sample"** — one question of every type
+  the schema enumerates, its coverage taken from `schemas/question-1.json`'s own `type` enum and its
+  shape proved on every run against that schema and against the importer's cross-field rules, so it
+  cannot drift from what the importer accepts. *(Amended by 6.5e Task 4: this clause read "generated
+  from `schemas/question-1.json`", which is not achievable — a mechanical schema instance satisfies
+  every `required` and is still refused, because `key` must name a real option, `select_k`'s key
+  length must equal `k`, and `fill_blank` placeholders must match the declared blanks. Those rules
+  live in `validateBank` precisely because no schema can express them. The end the clause asks for —
+  no drift — is delivered by proving the sample rather than by generating it.)*
 - **The question picker docks as a right-hand column** beside the paper rather than floating over
   it, which serves `UX-14` better. Prompts **wrap and clamp to two lines**; the overflow bug was
   `white-space: nowrap` inherited from the table rules.
