@@ -496,7 +496,11 @@
   margin-block: var(--space-md);
 }
 
-.version-banner {
+/* `D18`'s card shares the version banner's shape rather than inventing a
+   second one: both are a quiet aside the author reads once and works past,
+   and two near-identical rules is how one of them drifts. */
+.version-banner,
+.review-note {
   margin-block: var(--space-md);
   padding: var(--space-sm) var(--space-md);
   border-inline-start: 2px solid var(--color-hairline);

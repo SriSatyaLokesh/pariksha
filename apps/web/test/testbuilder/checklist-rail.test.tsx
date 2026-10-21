@@ -665,8 +665,15 @@ describe("the reviewers card", () => {
     expect(glyph).not.toBeNull();
     expect(glyph).toHaveAttribute("aria-hidden", "true");
     expect(glyph?.querySelectorAll("path").length).toBeGreaterThan(0);
-    // Byte-identical to what it said before the swap: the glyph is hidden,
-    // so the name is the words and only the words.
-    expect(badge).toHaveAccessibleName("In review");
+    // Byte-identical to what a reader got before the swap: the glyph is
+    // hidden, so the badge is the words and only the words.
+    //
+    // NOT `toHaveAccessibleName`, which was the first thing written here and
+    // was vacuous: `.test-badge` is a plain `<span>` with no role, so
+    // dom-accessibility-api computes "" for it — before the swap and after,
+    // diamond or no diamond. The text IS the measurable thing, and it moved:
+    // this read "◆ In review" an hour ago and would redden if a character
+    // crept back into the markup beside the icon.
+    expect(badge.textContent?.replace(/\s+/g, " ").trim()).toBe("In review");
   });
 });

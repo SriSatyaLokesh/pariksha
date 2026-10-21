@@ -570,7 +570,7 @@ export function TestBuilder({
               Request review
             </button>
           )}
-          {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
+          {test.reviewRequested && <span className="test-badge"><Icon name="review" /> In review</span>}
 
           {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
             <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
@@ -583,6 +583,22 @@ export function TestBuilder({
             </button>
           )}
         </div>
+      )}
+
+      {/* `D18` — the flag above is the whole of ADR 0007 that shipped.
+          `docs/design.md`'s screen 10 — the reviewers list, per-question
+          comments, the Approved / Changes-requested marks — is NOT
+          DESIGNED, and a builder that quietly showed a flag and nothing
+          else leaves the organiser waiting for a panel that is not coming.
+          So this states the gap and builds none of it: no reviewer names,
+          no comment box, no approval control. Inventing one here would
+          promise a workflow with no server route, no permission and no
+          screen behind it. It appears only while the flag is set, because
+          with no review pending there is no gap to name. */}
+      {test?.reviewRequested === true && (
+        <p className="review-note">
+          Comments and approvals arrive with ADR 0007&apos;s second half.
+        </p>
       )}
 
       {/* `D7`: the rail, before the spine rather than after it. A direct

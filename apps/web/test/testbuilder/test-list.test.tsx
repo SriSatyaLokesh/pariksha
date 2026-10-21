@@ -206,6 +206,22 @@ describe("TestList", () => {
     await renderList(fakeClient({ tests: async () => [PUBLISHED] }));
     const row = (await screen.findByText("Midterm")).closest("tr");
     expect(within(row as HTMLElement).getByText(/in review/i)).toBeVisible();
+
+    // 6.5d Task 6: the glyph half, which this test was named for and did
+    // not assert. It is the shared `ICONS`/`Icon` family — spec §13, "one
+    // family, consistent stroke, SVG" — not the U+25C6 character it used to
+    // be, and it is `aria-hidden`, so the badge's accessible name is the two
+    // words and nothing else. Both the name and the family matter: the same
+    // badge renders in the builder header (`routes/test.tsx`), and the two
+    // have to say the same thing.
+    const badge = within(row as HTMLElement).getByText(/in review/i).closest(".test-badge") as HTMLElement;
+    const glyph = badge.querySelector("svg.shell__icon");
+    expect(glyph).not.toBeNull();
+    expect(glyph).toHaveAttribute("aria-hidden", "true");
+    // The words and only the words — `.test-badge` has no role, so
+    // `toHaveAccessibleName` computes "" for it and would pass with the old
+    // U+25C6 still in place. The text content is what actually moved.
+    expect(badge.textContent?.replace(/\s+/g, " ").trim()).toBe("In review");
   });
 
   // Task 11 (#62) replaced the interim "published" state with the derived

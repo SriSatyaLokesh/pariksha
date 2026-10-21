@@ -20,7 +20,7 @@ export type NavKey = "home" | "banks" | "tests";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
-   or a font: eleven glyphs do not earn a loading strategy.
+   or a font: twelve glyphs do not earn a loading strategy.
 
    Exported from 6.5d Task 1 (fix round 1) rather than copied: the builder's
    five setting rows (`D7`) needed icons, and the only way "one family" stays
@@ -48,6 +48,13 @@ export const ICONS: Record<string, string[]> = {
   ],
   results: ["M3.4 16.6h13.2", "M6.2 16.6v-4.4", "M10 16.6V7", "M13.8 16.6v-6.6"],
   branding: ["M10 3.2c0 0 4.6 5.2 4.6 8.4a4.6 4.6 0 0 1-9.2 0C5.4 8.4 10 3.2 10 3.2Z"],
+  /* 6.5d Task 6: the "In review" badge, on the builder header and the test
+     list. It replaces U+25C6 BLACK DIAMOND — a text character whose shape,
+     weight and baseline are the reader's font's business, which is the
+     thing §13 and PRD S-11 refuse. A lens, because the badge says the
+     draft is being LOOKED AT; a tick would say it had been approved, and
+     approvals are ADR 0007's undelivered half (`D18`). */
+  review: ["M9 3.4a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4Z", "M12.9 12.9 16.8 16.8"],
 };
 
 /**
