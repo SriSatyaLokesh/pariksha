@@ -6,6 +6,7 @@
 
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { addMembership, closeClient, createUser } from "@pariksha/db";
+import { sampleBank } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps, mountedRoutes, SUBREQUEST_LIMIT } from "../../src/instrument.js";
 import { issueSession } from "../../src/auth/session.js";
@@ -403,4 +404,24 @@ it("every route this task mounts has a ROUTE_BUDGETS entry under the ceiling", (
   for (const r of mountedRoutes(app).filter((route) => route.includes("import"))) {
     expect(ROUTE_BUDGETS[r], r).toBeLessThan(SUBREQUEST_LIMIT);
   }
+});
+
+// Phase 6.5e Task 4 (`D18`): the import page's "Download a sample" hands an
+// organiser `sampleBank()`. "So it cannot drift from what the importer
+// accepts" is only true if something puts that exact document through the
+// importer — not through a second copy of its rules. This is that: the real
+// route, the real `validateBankDocumentStructure` + `validateBank` pair, the
+// real all-or-nothing contract. `packages/core/test/types.test.ts` holds the
+// other half (the sample against the schema files themselves).
+//
+// Both halves, because the route is also where a sample could pass every
+// rule in `packages/core` and still be refused — the 413 ceilings and the
+// duplicate-ref-id check live here and nowhere else.
+it("the downloadable sample (D18) imports whole through the real route", async () => {
+  const sample = sampleBank();
+  const res = await post(sample, authorCookie);
+
+  expect(res.status, await res.clone().text()).toBe(200);
+  expect(await res.json()).toEqual({ imported: sample.questions.length, issues: [] });
+  expect(await questionCount()).toBe(sample.questions.length);
 });

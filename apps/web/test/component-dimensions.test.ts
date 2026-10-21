@@ -150,6 +150,37 @@ const registrationCss = readCss("registration.css");
 // it; hand-writing 36px beside the guard built to measure it is the same
 // drift one commit earlier.
 const examCss = readCss("exam.css");
+// Phase 6.5e Task 4 (`D18`): the import page's sticky action bar lives in
+// admin.css, beside the `.organiser__*` rules it is a sibling of.
+const adminCss = readCss("admin.css");
+
+// `D18` — "sticky action bar", and `D15`'s trap underneath it: a bar pulled
+// out to the page edges with a negative inline margin names `shell.css`'s
+// page inset a SECOND time, and `shell.css` narrows that inset below 719px.
+// A prototype did exactly that and overflowed at the width nobody looks at.
+// The shipped bar bleeds nothing — it spans the page's content box, which
+// is what the panel above it spans, so there is nothing to bleed past — and
+// these two assertions are what keep both halves true: that it still
+// sticks, and that no negative margin has crept back in to do the job the
+// layout already does.
+describe("the import action bar sticks and bleeds nothing (D18, D15)", () => {
+  const bar = ruleBody(adminCss, ".import__bar");
+
+  it("is pinned to the foot of the page", () => {
+    expect(bar).toMatch(/position:\s*sticky/);
+    expect(bar).toMatch(/inset-block-end:\s*0/);
+  });
+
+  it("declares no negative margin of any kind", () => {
+    // `var(--space-lg)` contains a hyphen, so the token references are
+    // blanked before the scan rather than reasoned around — what is left
+    // is a negative number, `calc(… * -1)`, or nothing.
+    const values = [...bar.matchAll(/margin[\w-]*:([^;]*)/g)].map((match) =>
+      (match[1] ?? "").replace(/var\(--[\w-]+\)/g, "T"),
+    );
+    expect(values.filter((value) => /-\s*[\d.]/.test(value) || /\*\s*-/.test(value))).toEqual([]);
+  });
+});
 
 describe("component dimensions match tokens.components (T30)", () => {
   it('.button-primary height matches tokens.components["button-primary"].height', () => {

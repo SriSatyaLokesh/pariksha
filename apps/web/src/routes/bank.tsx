@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { QUESTION_TYPES, type ImportIssue, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
+import { downloadJson } from "../lib/download";
 import { MonoCaption } from "../components/MonoCaption";
 import { GroupEditor } from "../components/authoring/GroupEditor";
-import { ImportDialog } from "../components/authoring/ImportDialog";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -47,19 +47,6 @@ function exportFilename(name: string, fallback = "bank"): string {
   return `${slug || fallback}.json`;
 }
 
-function downloadJson(doc: unknown, filename: string): void {
-  const blob = new Blob([JSON.stringify(doc, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  try {
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = filename;
-    link.click();
-  } finally {
-    URL.revokeObjectURL(url);
-  }
-}
-
 /**
  * Fix round (whole-branch review, I4): `question_in_use` and `group_in_use`
  * are the same "blocked by other rows" shape (UX-05's refusal), now both
@@ -87,12 +74,16 @@ export function BankBrowser({
   client,
   onNewQuestion,
   onEditQuestion,
+  onImport,
 }: {
   bankId: string;
   workspaceId: string;
   client: ApiClient;
   onNewQuestion: () => void;
   onEditQuestion: (question: QuestionSummary) => void;
+  /** `D18`: import is a page of its own now, so this screen navigates to
+   * it rather than mounting it. */
+  onImport: () => void;
 }) {
   const [questions, setQuestions] = useState<QuestionSummary[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -109,11 +100,6 @@ export function BankBrowser({
   // `undefined`: no passage-group form open. `"new"`: the "New group" form.
   // A `PassageGroupSummary`: editing that existing group.
   const [editingGroup, setEditingGroup] = useState<PassageGroupSummary | "new" | undefined>(undefined);
-  // Fix round 1 (this review round), finding 4: Task 7's ImportDialog had no
-  // host — unreachable from the running app. A toggle next to "New group"
-  // is the smallest wiring; Task 8 (CSV/GIFT) and Task 9 (export) are what
-  // this screen's import/export affordances actually grow into later.
-  const [importing, setImporting] = useState(false);
   // Fix round 1, finding 9: a static id collides if `BankBrowser` is ever
   // rendered twice on one page — `PreviewPane` and `QuestionEditor` both use
   // `useId()` for exactly this reason.
@@ -190,7 +176,7 @@ export function BankBrowser({
   // Fix round (whole-branch review, I1): shared by every export handler
   // below — a 422 `not_exportable` names every offending `questionId`
   // (`apps/api/src/export/bank.ts`'s `exportIssues`), which this renders
-  // the way `ImportDialog` already renders an import report, rather than
+  // the way the import page already renders an import report, rather than
   // the `cause.message` generic alone.
   function handleExportFailure(cause: unknown, fallback: string): void {
     if (cause instanceof ApiError && cause.code === "not_exportable") {
@@ -350,7 +336,7 @@ export function BankBrowser({
         )}
 
         {/* Fix round (whole-branch review, I1): the same table shape
-            `ImportDialog` already renders for an import report, so an
+            the import page already renders for an import report, so an
             Author sees exactly which question(s) an export refused on and
             can deselect them (or select the rest) rather than getting a
             whole-bank refusal with no way to act on it. Keeps the Task 9
@@ -385,27 +371,11 @@ export function BankBrowser({
           New question
         </button>
 
-        <button
-          type="button"
-          className="button-secondary"
-          aria-expanded={importing}
-          onClick={() => setImporting((prev) => !prev)}
-        >
-          {importing ? "Cancel import" : "Import"}
+        {/* `D18`: a link to a page, not a toggle that unfolds a dialog.
+            `aria-expanded` went with the dialog — nothing here expands. */}
+        <button type="button" className="button-secondary" onClick={onImport}>
+          Import
         </button>
-
-        {importing && (
-          <ImportDialog
-            workspaceId={workspaceId}
-            bankId={bankId}
-            client={client}
-            onClose={() => setImporting(false)}
-            onImported={() => {
-              setImporting(false);
-              void load();
-            }}
-          />
-        )}
 
         <section aria-labelledby={groupsHeadingId}>
           <div className="question-editor__answer-bar">

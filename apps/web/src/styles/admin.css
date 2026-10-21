@@ -318,6 +318,51 @@
   gap: var(--space-lg);
 }
 
+/* ---- D18: the import page's sticky action bar ------------------------- */
+
+/* "Import is a page, not a modal: linkable, no focus trap, room for a long
+   report, sticky action bar." This is that bar - Import, and (bank imports
+   only) Download a sample - pinned to the foot of the viewport so a report
+   long enough to need scrolling never scrolls its own actions away. That is
+   the whole reason the surface stopped being a modal.
+
+   IT BLEEDS NOTHING, AND THAT IS THE POINT. A previous prototype pulled its
+   bar out to the page edges with a negative inline margin written against
+   one padding token, which overflowed the moment shell.css narrowed the
+   page's own inset below 719px - one value named in two places, and the
+   narrow one is the width nobody looks at. There is nothing to bleed PAST
+   here: the bar spans the page's content box, which is exactly what the
+   panel above it spans, so every pixel that scrolls under the bar scrolls
+   under THIS box. The gutters either side carry the page ground and never
+   any content, at any width. A bleed would buy a hairline that runs two
+   tokens further and a second place for the page's padding to be written
+   down. apps/web/test/component-dimensions.test.ts holds that open.
+
+   --edge-strong, not --edge: this rule is the only thing that says content
+   continues beneath the bar, which makes it meaning rather than decoration
+   (D1; --edge is 1.21-1.67:1).
+
+   --surface is the top bar's own fill, turned the other way up - the two
+   are the same object at the two ends of the page. The buttons inside paint
+   their own fills (.button-primary--surface, .button-secondary), so this
+   background changes no existing SURFACE entry, and this selector sets no
+   colour of its own to need one.
+
+   flex-wrap: D3a's narrow widths put the second button on its own line
+   rather than taking the page sideways. */
+.import__bar {
+  position: sticky;
+  inset-block-end: 0;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  padding-block: var(--space-lg);
+  background: var(--surface);
+  border-block-start: 1px solid var(--edge-strong);
+}
+
 /* A `role="status"` line: what just happened, in the panel it happened in. */
 .organiser__status {
   color: var(--ink);
