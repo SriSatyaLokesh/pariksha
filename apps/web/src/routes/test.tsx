@@ -309,7 +309,8 @@ export function TestBuilder({
   // the save is debounced the way `TestList`'s own filter already is (same
   // pattern, copied), so a burst of keystrokes costs one round trip rather
   // than one each. One *settled* save is then followed by one
-  // `GET …/draft`, because PATCH deliberately answers without
+  // `GET …/draft` — and, since `D7b`, by the one `GET …/checklist` that
+  // rides it — because PATCH deliberately answers without
   // `draw`/`setPoints`/`points` (apps/api/src/routes/tests.ts) and without
   // the re-fetch UX-15's live draw and UX-12's points froze from the first
   // keystroke onward. Only the derived figures are taken from it —
@@ -350,14 +351,33 @@ export function TestBuilder({
         // landing after the next keystroke would otherwise type over the
         // author, and `saveSeq` drops it outright once a newer save has
         // started.
+        //
+        // `D7b`: the checklist rides that same read. "A rail that reads only
+        // on mount lies while the author works" — it goes on showing rows the
+        // author has already answered, and goes on offering journeys into
+        // sections that are gone. One read per settled burst, riding the GET
+        // above rather than a timer of its own: a second debounce would be a
+        // second answer to the question this one already settled, and the
+        // interval is not a knob (`AG2`).
+        //
+        // The rows are taken exactly as the server sends them — the gate's
+        // own order, words and severities (#64). Nothing here re-counts or
+        // re-sorts them; `PublishChecklist` counts, and counts only what it
+        // was given.
         try {
-          const fresh = await client.draft(workspaceId, testId);
+          const [fresh, rows] = await Promise.all([
+            client.draft(workspaceId, testId),
+            client.checklist(workspaceId, testId),
+          ]);
           if (saveSeq.current !== seq) return;
           setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
+          setChecklist(rows);
         } catch {
-          // The save itself landed; only the derived figures are a beat
-          // behind, and the next load corrects them. Reporting a failure
-          // over a save that succeeded would be the worse lie.
+          // The save itself landed; only the derived figures and the rail are
+          // a beat behind, and the next settled burst corrects both.
+          // Reporting a failure over a save that succeeded would be the worse
+          // lie — and a rail that emptied itself on a failed read would be a
+          // louder one, so the rows it is holding stay up.
         }
       })();
     }, 250);
@@ -558,7 +578,24 @@ export function TestBuilder({
           state={rail.checklist}
           onState={setChecklistRail}
           onGoTo={(row) => {
-            if (row.sectionId !== undefined) openSection(row.sectionId);
+            // `D7b`, the other half: the rows are a reading of a moment, and
+            // one can outlive the section it names — a delete is a save, and
+            // the refetch that corrects the rail is a debounce and two round
+            // trips behind the click. `?section=` naming nothing opens
+            // nothing AND suppresses every setting panel (`panelFromUrl`),
+            // so following a stale row would leave the reader on a builder
+            // with no open section and no settings and nothing saying why.
+            //
+            // ponytail: the guard is here and not in `openSection`, which
+            // `SectionList` calls with an id it has only just added —
+            // `draft` in this closure is still the pre-add one, and a
+            // membership test there would refuse to open a brand-new
+            // section. Upgrade path: give `PublishChecklist` the live
+            // section ids so a stale row stops announcing a journey at all,
+            // rather than announcing one this ignores.
+            if (row.sectionId === undefined) return;
+            if (!draft.body.sections.some((section) => section.id === row.sectionId)) return;
+            openSection(row.sectionId);
           }}
           onRerun={() => void runChecklist()}
           onConfirm={() => void onPublish()}
