@@ -89,6 +89,21 @@ const CHANGED_SINCE_PUBLISH: TestSummary = {
   draftVersion: 2,
 };
 
+/** `D7c`'s own second sentence, literally: "Draft · changes since v1". The
+ *  row above carries the same publish history under an OPEN lifecycle, which
+ *  is the pairing that proves the two columns are independent — but the
+ *  ruling's headline case is this one, and nothing exercised it until fix
+ *  round 1 said so. */
+const DRAFT_SINCE_PUBLISH: TestSummary = {
+  ...DRAFT,
+  id: "tst_5",
+  name: "Reasoning mock 2",
+  slug: "reasoning-2",
+  state: "draft",
+  currentVersion: 1,
+  draftVersion: 2,
+};
+
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
   return {
     setupStatus: async () => ({ needed: false, providers: [] }),
@@ -499,7 +514,11 @@ describe("TestList", () => {
   });
 
   it("keeps the lifecycle and the publish history in separate columns", async () => {
-    await renderList(fakeClient({ tests: async () => [CHANGED_SINCE_PUBLISH] }));
+    await renderList(
+      fakeClient({
+        tests: async () => [NEVER_PUBLISHED, DRAFT_SINCE_PUBLISH, CHANGED_SINCE_PUBLISH],
+      }),
+    );
     await screen.findByText("Quant practice 1");
 
     // `D7c`: "State is the lifecycle (Open / Scheduled / Draft / Closed),
@@ -509,13 +528,30 @@ describe("TestList", () => {
     const state = screen.getByRole("columnheader", { name: /^state$/i });
     const version = screen.getByRole("columnheader", { name: /^version$/i });
     const headers = Array.from(document.querySelectorAll("table.testbuilder-list thead th"));
-    const cells = Array.from(
-      (screen.getByText("Quant practice 1").closest("tr") as HTMLElement).querySelectorAll("td"),
-    );
+    const cellsFor = (name: string) =>
+      Array.from((screen.getByText(name).closest("tr") as HTMLElement).querySelectorAll("td"));
 
-    expect(cells[headers.indexOf(state)]).toHaveTextContent("Open");
-    expect(cells[headers.indexOf(state)]).not.toHaveTextContent("live");
-    expect(cells[headers.indexOf(version)]).toHaveTextContent("v1 live · v2 draft");
+    // THE PAIRING MATRIX, which is the whole of the ruling. Two rows share a
+    // lifecycle and differ in publish history; two share a publish history
+    // and differ in lifecycle. Either column alone would collapse one of
+    // those pairs, and no single assertion can show that.
+    for (const [name, lifecycle, history] of [
+      // `D7c`'s first sentence: "Draft · never published".
+      ["Data structures midterm", "Draft", "never published"],
+      // ...and its second, literally: "Draft · changes since v1".
+      ["Reasoning mock 2", "Draft", "v1 live · v2 draft"],
+      // The same history under a different lifecycle — a published test with
+      // an edited draft behind it is OPEN, not a draft, and the single column
+      // this ruling replaced called it one.
+      ["Quant practice 1", "Open", "v1 live · v2 draft"],
+    ] as const) {
+      const cells = cellsFor(name);
+      expect(cells[headers.indexOf(state)], `${name}: state`).toHaveTextContent(lifecycle);
+      expect(cells[headers.indexOf(state)], `${name}: state carries history`).not.toHaveTextContent(
+        /live|never published/,
+      );
+      expect(cells[headers.indexOf(version)], `${name}: version`).toHaveTextContent(history);
+    }
   });
 
   // `D7c`: "No readiness meter here — the list route loads version heads, not
@@ -568,12 +604,39 @@ describe("TestList", () => {
   // that stopped matching is as red as a declaration that was deleted.
   it("carries no hue on test state", async () => {
     await renderList(fakeClient({ tests: async () => [DRAFT] }));
-    const badge = (await screen.findByText(/draft/i)).closest(".test-state") as HTMLElement;
+    // FROM THE ROW, not from a text match. This line used to read
+    // `(await screen.findByText(/draft/i)).closest(".test-state")`, which
+    // resolved the Status filter's `<option>Draft</option>` — it sorts before
+    // the table — and `.closest` then returned NULL. `declaredFor` guards
+    // `element.matches()` in a try/catch, so a null element reads as "no rule
+    // matches" and every `toBeUndefined()` below passed without looking at
+    // anything. The positive arm added in fix round 1 is what caught it; the
+    // rule-set arm at the foot is what was carrying this test.
+    const row = (await screen.findByText(DRAFT.name)).closest("tr") as HTMLElement;
+    const badge = row.querySelector(".test-state") as HTMLElement;
+    expect(badge, "the row rendered no state badge").not.toBeNull();
 
     const seen = new Set<string>();
     const organiser = entryStylesheets("admin.html")
       .map((path) => readResolvedCss(path, seen))
       .join("\n");
+
+    // THE POSITIVE ARM FIRST (fix round 1). Every assertion below is
+    // `toBeUndefined()`, which a broken chain, a renamed property or a
+    // reader that resolved nothing at all would satisfy just as well as the
+    // rule's absence. So the SAME reader, on the SAME mount, must return a
+    // real declaration for an element in the same row that the chain really
+    // does paint — `.test-version` takes `--ink-2` from testbuilder.css.
+    const versionCell = row.querySelector(".test-version") as HTMLElement;
+    // `toBeDefined`, not the literal token: what this arm has to show is that
+    // the reader RESOLVES something on this mount, not which tone the version
+    // cell was given — pinning the value here would redden on a legitimate
+    // re-tone for a reason that has nothing to do with the state badge, and
+    // `contrast-usage.test.ts` already owns which colour it is.
+    expect(
+      paintsIn(versionCell, "color", organiser),
+      "the reader resolved nothing at all, so the absences below mean nothing",
+    ).toBeDefined();
 
     // The rendered element: nothing in the chain paints it, so it inherits.
     for (const property of ["color", "background", "background-color"]) {

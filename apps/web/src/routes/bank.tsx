@@ -472,81 +472,81 @@ export function BankBrowser({
             the document. The same wrapper the test list takes, and the same
             one rule in `primitives.css` paints both. */}
         <div className="table-scroll">
-        <table className="bank-browser__table">
-          <thead>
-            <tr>
-              <th scope="col" className="bank-browser__select-col">
-                <span className="visually-hidden">Select</span>
-              </th>
-              <th scope="col">Prompt</th>
-              <th scope="col">Type</th>
-              <th scope="col">Difficulty</th>
-              <th scope="col">Tags</th>
-              <th scope="col">Points</th>
-              <th scope="col">Last edited</th>
-              <th scope="col">Used in</th>
-              <th scope="col" className="acts">
-                <span className="visually-hidden">Actions</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {questions.map((question) => (
-              <tr key={question.id}>
-                <td>
-                  <input
-                    type="checkbox"
-                    aria-label={`Select question: ${excerpt(question.document.prompt, 60)}`}
-                    checked={selected.has(question.id)}
-                    onChange={() => toggleSelected(question.id)}
-                  />
-                </td>
-                <td>{excerpt(question.document.prompt)}</td>
-                <td>{question.document.type}</td>
-                <td>{question.document.difficulty ?? "—"}</td>
-                <td>{(question.document.tags ?? []).join(", ") || "—"}</td>
-                <td>{question.points}</td>
-                <td>{new Date(question.updatedAt).toLocaleDateString()}</td>
-                <td>{question.usedInTests}</td>
-                {/* `D21a`: the row-action gutter, whose rule lives in
-                    primitives.css so every table inherits it. It is the LAST
-                    cell deliberately — a cell pinned to the inline end with a
-                    column after it slides over that column's content. */}
-                <td className="acts">
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    aria-label={`Edit question: ${excerpt(question.document.prompt, 60)}`}
-                    onClick={() => onEditQuestion(question)}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    aria-label={`Export question: ${excerpt(question.document.prompt, 60)}`}
-                    onClick={() => void onExportQuestion(question)}
-                  >
-                    Export
-                  </button>
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    // Fixture-review finding 10: "Delete" alone repeats once
-                    // per row, which a screen reader listing buttons on the
-                    // page hears as N identical entries — the per-row prompt
-                    // excerpt (same idea as the checkbox's own aria-label
-                    // above) makes each one distinct.
-                    aria-label={`Delete question: ${excerpt(question.document.prompt, 60)}`}
-                    onClick={() => void onDelete(question)}
-                  >
-                    Delete
-                  </button>
-                </td>
+          <table className="bank-browser__table">
+            <thead>
+              <tr>
+                <th scope="col" className="bank-browser__select-col">
+                  <span className="visually-hidden">Select</span>
+                </th>
+                <th scope="col">Prompt</th>
+                <th scope="col">Type</th>
+                <th scope="col">Difficulty</th>
+                <th scope="col">Tags</th>
+                <th scope="col">Points</th>
+                <th scope="col">Last edited</th>
+                <th scope="col">Used in</th>
+                <th scope="col" className="acts">
+                  <span className="visually-hidden">Actions</span>
+                </th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {questions.map((question) => (
+                <tr key={question.id}>
+                  <td>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select question: ${excerpt(question.document.prompt, 60)}`}
+                      checked={selected.has(question.id)}
+                      onChange={() => toggleSelected(question.id)}
+                    />
+                  </td>
+                  <td>{excerpt(question.document.prompt)}</td>
+                  <td>{question.document.type}</td>
+                  <td>{question.document.difficulty ?? "—"}</td>
+                  <td>{(question.document.tags ?? []).join(", ") || "—"}</td>
+                  <td>{question.points}</td>
+                  <td>{new Date(question.updatedAt).toLocaleDateString()}</td>
+                  <td>{question.usedInTests}</td>
+                  {/* `D21a`: the row-action gutter, whose rule lives in
+                      primitives.css so every table inherits it. It is the LAST
+                      cell deliberately — a cell pinned to the inline end with a
+                      column after it slides over that column's content. */}
+                  <td className="acts">
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      aria-label={`Edit question: ${excerpt(question.document.prompt, 60)}`}
+                      onClick={() => onEditQuestion(question)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      aria-label={`Export question: ${excerpt(question.document.prompt, 60)}`}
+                      onClick={() => void onExportQuestion(question)}
+                    >
+                      Export
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      // Fixture-review finding 10: "Delete" alone repeats once
+                      // per row, which a screen reader listing buttons on the
+                      // page hears as N identical entries — the per-row prompt
+                      // excerpt (same idea as the checkbox's own aria-label
+                      // above) makes each one distinct.
+                      aria-label={`Delete question: ${excerpt(question.document.prompt, 60)}`}
+                      onClick={() => void onDelete(question)}
+                    >
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
         {questions.length === 0 && <p className="bank-browser__empty">No questions match these filters yet.</p>}

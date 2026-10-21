@@ -57,13 +57,55 @@ export const PRIMARY_ROW: Record<Surface, string> = {
  *  "what an organiser sees when the screen opens". */
 export async function countPrimaryRows(page: Page, surface: Surface): Promise<number> {
   return page.locator(PRIMARY_ROW[surface]).evaluateAll((rows) => {
+    // THE PADDING BOX, NOT THE BORDER BOX, and the difference is a row.
+    //
+    // `getBoundingClientRect()` is the BORDER box: it includes the element's
+    // borders AND the strip a horizontal scrollbar occupies along the bottom.
+    // A scroll container that is scrolling sideways paints nothing readable in
+    // that strip — roughly 15px of it — so clipping on the border box counts a
+    // row an organiser cannot read. The error runs in the PERMISSIVE
+    // direction, which is the one `AG2` cares about: it reports more rows than
+    // are there, so a density regression could hide behind it.
+    //
+    // `clientTop` is the top border's width and `clientHeight` is the padding
+    // box's height with the scrollbar strip already taken off, so the two
+    // together are exactly the content area, borders and scrollbar excluded.
+    //
+    // 6.5e Task 2 added the first scroll containers to sit between a row and
+    // the viewport (`.table-scroll`, `D21a`), which is what made this
+    // reachable at all. LATENT WHEN IT WAS FIXED, measured twice over, and no
+    // figure in `density.spec.ts` moved:
+    //
+    //   1. Neither table overflows at 1440x900 with the real 40-row fixture
+    //      (`scrollWidth === clientWidth` on both wrappers), so there is no
+    //      scrollbar strip to mis-count.
+    //   2. Structurally, a wrapper with AUTO height cannot be caught by this
+    //      at all: its content edge sits exactly at its table's bottom, so no
+    //      row can extend past it, and the strip is painted below the last
+    //      row rather than across one. The bad count needs a container that
+    //      is BOTH height-constrained — so rows really do run past its
+    //      content edge — and taller in its border box than its content box.
+    //      `.picker-drawer__list` is the one height-constrained container
+    //      here (`max-height: 16rem`) and it has no border and no horizontal
+    //      scrollbar, so its two boxes coincide.
+    //
+    // It goes live the day a `.table-scroll` grows a `max-height`, or any
+    // clipping ancestor grows a border. The probe that proved the change:
+    // `max-height: 400px` plus a 60px bottom border on `.table-scroll` makes
+    // the old reader count 5 rows and this one 4.
+    //
+    // NOT PROVABLE FROM THE SCROLLBAR SIDE IN THIS HARNESS. Playwright
+    // launches Chromium with `--hide-scrollbars`, so the strip measures 0px
+    // even with `overflow-x: scroll` and an explicit
+    // `::-webkit-scrollbar { height: 15px }`. The border above is the same
+    // quantity from the other source, which is why the probe uses it.
     const clipOf = (element: Element): { top: number; bottom: number } => {
       const clip = { top: 0, bottom: window.innerHeight };
       for (let node = element.parentElement; node !== null; node = node.parentElement) {
         if (getComputedStyle(node).overflowY === "visible") continue;
-        const box = node.getBoundingClientRect();
-        clip.top = Math.max(clip.top, box.top);
-        clip.bottom = Math.min(clip.bottom, box.bottom);
+        const top = node.getBoundingClientRect().top + node.clientTop;
+        clip.top = Math.max(clip.top, top);
+        clip.bottom = Math.min(clip.bottom, top + node.clientHeight);
       }
       return clip;
     };

@@ -224,14 +224,15 @@
    The plan carried this file forward as "the placeholder this phase retires,
    196 lines" (brief) / "219 lines" (dispatch); it is 360, and every selector
    in it is reachable from a rendered screen — a grep over the .tsx sources
-   finds a user for each of the eleven below. Task 1b rewrote its colour half
+   finds a user for each of the fourteen below. Task 1b rewrote its colour half
    and the page half is still load-bearing, so there is nothing here to
    delete:
 
    - `.organiser` is BOTH the shell's page (`OrganiserShell.tsx:335` renders
-     `organiser organiser--wide shell__page` on one <main>) and the whole page
-     of the four arms that render OUTSIDE the shell — `loading`, `error`,
-     `signin`, `setup`. shell.css's `.shell > .shell__page` beats the padding
+     `organiser ${wide ? "organiser--full" : "organiser--wide"} shell__page`
+     on one <main>, so the modifier is one of two and never both) and the
+     whole page of the four arms that render OUTSIDE the shell — `loading`,
+     `error`, `signin`, `setup`. shell.css's `.shell > .shell__page` beats the padding
      and the margin below for the first set and reaches none of the second,
      so those declarations are live exactly where the shell is not.
    - `.organiser--wide`'s 1080px clamp is read BY shell.css, whose own

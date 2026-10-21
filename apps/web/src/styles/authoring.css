@@ -487,9 +487,12 @@
    The rail keeps its separator; it turns through 90 degrees with the layout,
    which is the same move shell.css makes with the nav rail's accent bar. */
 @media (max-width: 719px) {
+  /* Direction only. The base rule's `--space-xl` is the page scale and the
+     two halves of this screen are page-level blocks whichever way they sit,
+     so restating the gap one step down the COMPONENT scale would be `D15`'s
+     two scales mixed for no reason (fix round 1). */
   .bank-browser {
     flex-direction: column;
-    gap: var(--space-lg);
   }
 
   .bank-browser__rail {

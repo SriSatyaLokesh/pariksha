@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { TestBranding } from "@pariksha/core";
 
@@ -1583,12 +1583,33 @@ describe("the organiser shell (D3)", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Reasoning aptitude" })).toBeVisible();
 
     // Nothing stored. A `nav` key read on a first paint would reopen the rail
-    // `D18` collapses, which is why `lib/rail-state.ts` has one key and this
-    // is the guard that keeps it at one.
+    // `D18` collapses, which is why `lib/rail-state.ts` has one key.
     expect(Object.keys(localStorage)).not.toContain("pariksha.nav");
-    for (let i = 0; i < localStorage.length; i += 1) {
-      const key = localStorage.key(i) as string;
-      expect(localStorage.getItem(key), `${key} remembers the nav rail`).not.toMatch(/\bnav\b/);
+
+    // ...and the CONSEQUENCE, which is the half that cannot go vacuous (fix
+    // round 1). A scan over `localStorage` for a key holding "nav" passes
+    // trivially when storage is empty, which it is on this path — the loop
+    // this replaces read zero entries and asserted nothing at all. What
+    // `D18` actually requires is that a first paint cannot read the open
+    // rail back, so the app is torn down and mounted again: a fresh
+    // `OrganiserApp`, the same route, and the rail collapsed once more.
+    cleanup();
+    window.history.replaceState(null, "", "/?view=bank&bank=bnk_1");
+    try {
+      // A FIRST PAINT on the browsing surface, which is the only thing a
+      // stored rail state could ever affect. The URL is set by hand rather
+      // than inherited from the walk above, so this does not turn on what
+      // `go()` happens to write. The heading is "Bank" and not the bank's
+      // name because a deep link has no list behind it to carry one — the
+      // sibling test below says so for its own reasons.
+      renderOrganiser({ listBanks: async () => [bank] });
+      await screen.findByRole("heading", { level: 1, name: "Bank" });
+      expect(
+        screen.getByRole("button", { name: /navigation/i }),
+        "the open rail survived a remount, so something stored it",
+      ).toHaveAttribute("aria-expanded", "false");
+    } finally {
+      window.history.replaceState(null, "", "/");
     }
   });
 

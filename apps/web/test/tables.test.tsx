@@ -357,10 +357,19 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
     // an empty `<th>` would not.
     it(`${name} names its action column for a screen reader and not on the page`, async () => {
       await open();
-      const header = document.querySelector(`${table} thead th.acts`);
+      const header = document.querySelector(`${table} thead th.acts`) as HTMLElement | null;
       expect(header, "the action column has no header cell").not.toBeNull();
-      expect(header).toHaveTextContent("Actions");
-      expect((header as HTMLElement).querySelector(".visually-hidden")).not.toBeNull();
+
+      // ONE assertion binding the two, not two that pass independently (fix
+      // round 1). A visible "Actions" sitting beside an empty
+      // `.visually-hidden` span satisfied "has the text" and "has a hidden
+      // span" separately, while being exactly the shape this test exists to
+      // refuse. So: the hidden span must BE the name, and the cell must hold
+      // nothing besides it.
+      const hidden = (header as HTMLElement).querySelector(".visually-hidden");
+      expect(hidden, "the action column's name is not clipped to the a11y tree").not.toBeNull();
+      expect((hidden as HTMLElement).textContent).toBe("Actions");
+      expect((header as HTMLElement).textContent?.trim()).toBe("Actions");
     });
 
     it(`${name} keeps its action buttons focusable before they are revealed`, async () => {

@@ -485,127 +485,127 @@ export function TestList({
              under the name below, which is `D21a`'s own named example of
              fixing the table rather than the gutter. */
           <div className="table-scroll">
-          <table className="testbuilder-list">
-            <thead>
-              <tr>
-                <th scope="col" {...sortHeaderProps("name")}>
-                  Name
-                </th>
-                {/* `D7c`: two columns, not one. State is the lifecycle;
-                    Version is the publish history. */}
-                <th scope="col">State</th>
-                <th scope="col">Version</th>
-                <th scope="col" {...sortHeaderProps("updated")}>
-                  Last edited
-                </th>
-                <th scope="col">Slug</th>
-                <th scope="col">Short link</th>
-                {/* `D21a`: the action gutter is the LAST column. It was the
-                    sixth of seven, and a cell pinned to the inline end with a
-                    column after it slides over that column's content the
-                    moment the table scrolls — which this table does.
+            <table className="testbuilder-list">
+              <thead>
+                <tr>
+                  <th scope="col" {...sortHeaderProps("name")}>
+                    Name
+                  </th>
+                  {/* `D7c`: two columns, not one. State is the lifecycle;
+                      Version is the publish history. */}
+                  <th scope="col">State</th>
+                  <th scope="col">Version</th>
+                  <th scope="col" {...sortHeaderProps("updated")}>
+                    Last edited
+                  </th>
+                  <th scope="col">Slug</th>
+                  <th scope="col">Short link</th>
+                  {/* `D21a`: the action gutter is the LAST column. It was the
+                      sixth of seven, and a cell pinned to the inline end with a
+                      column after it slides over that column's content the
+                      moment the table scrolls — which this table does.
 
-                    Clipped to the accessibility tree, matching the bank
-                    browser's own header: the column rests at `opacity: 0`, so
-                    a visible "Actions" reads as a heading over an empty
-                    column. An empty `<th>` would be worse — a screen reader
-                    announces this cell for every action in the column. */}
-                <th scope="col" className="acts">
-                  <span className="visually-hidden">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {tests.map((test) => {
-                const locked = test.currentVersion !== null;
-                const slugId = `slug-${test.id}`;
-                const shortLinkPath = `/t/${test.shortCode}`;
-                return (
-                  <tr key={test.id}>
-                    {/* `D21a`: "fold the id under the name". The id was its
-                        own column and the table was wider than its page; it
-                        is the second line of the name cell now, which costs
-                        this table nothing in height — the row is governed by
-                        the short-link cell, not by this one — and gives back
-                        a whole column of width. It is still selectable mono
-                        text with tabular figures. */}
-                    <td>
-                      <div className="test-name">
-                        <button type="button" className="button-link" onClick={() => onOpenTest(test.id)}>
-                          {test.name}
-                        </button>
-                        <code className="test-id">{test.id}</code>
-                      </div>
-                    </td>
-                    <td>
-                      <TestStateBadge state={test.state} />
-                      {test.reviewRequested && (
-                        <span className="test-badge">
-                          <Icon name="review" /> In review
-                        </span>
-                      )}
-                    </td>
-                    <td className="test-version">{versionSummary(test)}</td>
-                    <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
-                    <td>
-                      <div className="field">
-                        <label className="field-label" htmlFor={slugId}>
-                          Slug
-                        </label>
-                        <input
-                          className="text-input"
-                          id={slugId}
-                          value={slugDrafts[test.id] ?? test.slug}
-                          readOnly={locked}
-                          ref={clonedId === test.id ? clonedRef : undefined}
-                          onChange={(event) =>
-                            setSlugDrafts((prev) => ({ ...prev, [test.id]: event.target.value }))
-                          }
-                          onBlur={() => void saveSlug(test)}
-                        />
-                        {locked ? (
-                          <p className="field-help">Locked because this test has been published.</p>
-                        ) : (
-                          slugError[test.id] && (
-                            <p className="field-error" role="alert">
-                              <Icon name="warn" /> <span>{slugError[test.id]}</span>
-                            </p>
-                          )
+                      Clipped to the accessibility tree, matching the bank
+                      browser's own header: the column rests at `opacity: 0`, so
+                      a visible "Actions" reads as a heading over an empty
+                      column. An empty `<th>` would be worse — a screen reader
+                      announces this cell for every action in the column. */}
+                  <th scope="col" className="acts">
+                    <span className="visually-hidden">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {tests.map((test) => {
+                  const locked = test.currentVersion !== null;
+                  const slugId = `slug-${test.id}`;
+                  const shortLinkPath = `/t/${test.shortCode}`;
+                  return (
+                    <tr key={test.id}>
+                      {/* `D21a`: "fold the id under the name". The id was its
+                          own column and the table was wider than its page; it
+                          is the second line of the name cell now, which costs
+                          this table nothing in height — the row is governed by
+                          the short-link cell, not by this one — and gives back
+                          a whole column of width. It is still selectable mono
+                          text with tabular figures. */}
+                      <td>
+                        <div className="test-name">
+                          <button type="button" className="button-link" onClick={() => onOpenTest(test.id)}>
+                            {test.name}
+                          </button>
+                          <code className="test-id">{test.id}</code>
+                        </div>
+                      </td>
+                      <td>
+                        <TestStateBadge state={test.state} />
+                        {test.reviewRequested && (
+                          <span className="test-badge">
+                            <Icon name="review" /> In review
+                          </span>
                         )}
-                      </div>
-                    </td>
-                    <td>
-                      <div className="testbuilder-shortlink">
-                        <QrCode value={`${window.location.origin}${shortLinkPath}`} label="QR code for the short link" size={64} />
-                        <a href={shortLinkPath}>{shortLinkPath}</a>
-                        <button type="button" className="button-secondary" onClick={() => void copyShortLink(test)}>
-                          Copy short link
+                      </td>
+                      <td className="test-version">{versionSummary(test)}</td>
+                      <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
+                      <td>
+                        <div className="field">
+                          <label className="field-label" htmlFor={slugId}>
+                            Slug
+                          </label>
+                          <input
+                            className="text-input"
+                            id={slugId}
+                            value={slugDrafts[test.id] ?? test.slug}
+                            readOnly={locked}
+                            ref={clonedId === test.id ? clonedRef : undefined}
+                            onChange={(event) =>
+                              setSlugDrafts((prev) => ({ ...prev, [test.id]: event.target.value }))
+                            }
+                            onBlur={() => void saveSlug(test)}
+                          />
+                          {locked ? (
+                            <p className="field-help">Locked because this test has been published.</p>
+                          ) : (
+                            slugError[test.id] && (
+                              <p className="field-error" role="alert">
+                                <Icon name="warn" /> <span>{slugError[test.id]}</span>
+                              </p>
+                            )
+                          )}
+                        </div>
+                      </td>
+                      <td>
+                        <div className="testbuilder-shortlink">
+                          <QrCode value={`${window.location.origin}${shortLinkPath}`} label="QR code for the short link" size={64} />
+                          <a href={shortLinkPath}>{shortLinkPath}</a>
+                          <button type="button" className="button-secondary" onClick={() => void copyShortLink(test)}>
+                            Copy short link
+                          </button>
+                          {/* Rendered on every row, always — only the text
+                              content changes. A live region that is inserted
+                              already carrying its text does not reliably
+                              announce; one that is already present and has
+                              its text updated does. */}
+                          <p className="organiser__status" role="status">
+                            {copiedId === test.id ? "Copied." : ""}
+                          </p>
+                        </div>
+                      </td>
+                      {/* `D21a`: the row-action gutter, whose rule lives in
+                          primitives.css so every table inherits it. */}
+                      <td className="acts">
+                        <button type="button" className="button-secondary" onClick={() => void onClone(test)}>
+                          Duplicate
                         </button>
-                        {/* Rendered on every row, always — only the text
-                            content changes. A live region that is inserted
-                            already carrying its text does not reliably
-                            announce; one that is already present and has
-                            its text updated does. */}
-                        <p className="organiser__status" role="status">
-                          {copiedId === test.id ? "Copied." : ""}
-                        </p>
-                      </div>
-                    </td>
-                    {/* `D21a`: the row-action gutter, whose rule lives in
-                        primitives.css so every table inherits it. */}
-                    <td className="acts">
-                      <button type="button" className="button-secondary" onClick={() => void onClone(test)}>
-                        Duplicate
-                      </button>
-                      <button type="button" className="button-secondary" onClick={() => void onExport(test)}>
-                        Export
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                        <button type="button" className="button-secondary" onClick={() => void onExport(test)}>
+                          Export
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
     </>
