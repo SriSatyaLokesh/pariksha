@@ -40,12 +40,30 @@
 // sorting before `e2e/first-run.spec.ts` would seed a workspace before the
 // test that walks the first-run wizard — which needs an instance that has
 // never been set up. `measurement/` sorts after it.
+//
+// AND IT SEEDS ITS OWN WORKSPACE, which is a separate rule from that one and
+// matters more (fix round 1). `D13`'s density ratchet measures the lists in
+// the workspace the organiser boots on, and its `BEFORE_TOP` figures sit at
+// the exact measured pixel against `toBeLessThanOrEqual` — **zero slack**.
+// This file used to call `seedWorkspace` with no target, which reuses
+// `workspaces[0]`, and it sorts ahead of `measurement/density.spec.ts`
+// ('c' < 'd') under `workers: 1`: the gate was measuring lists this spec had
+// just added rows to, and stayed green only on the accident that density
+// seeds second and therefore lists first. The fix is isolation and not
+// ordering — a spec that is correct only while it sorts after another is the
+// same trap `measurement/` exists to escape, one layer down. Everything here
+// lives in a workspace the density gate never opens, so this file's position
+// in the run stops mattering at all.
 
 import { expect, test, type Page } from "@playwright/test";
-import { seedWorkspace, signIn } from "../seed";
+import { createWorkspace, seedWorkspace, signIn } from "../seed";
 
 /** `seedWorkspace` names its first test after its first topic. */
 const TEST_NAME = "Algebra assessment 01";
+
+/** The workspace this file seeds into — never `workspaces[0]`, which is the
+ *  one `OrganiserApp` boots on and `density.spec.ts` measures. */
+const WORKSPACE_NAME = "Checklist rail fixtures";
 
 /** The two widths this file exists to separate. 390px is a phone and is where
  *  shell.css's phone-width scroll container would clip the panel; 1280px is a
@@ -56,7 +74,8 @@ const WIDTHS = [
 ];
 
 test.beforeAll(async ({ request }) => {
-  const seed = await seedWorkspace(request, { banks: 1, questionsPerBank: 5, tests: 1 });
+  const isolated = await createWorkspace(request, WORKSPACE_NAME, "checklist-rail-fixtures");
+  const seed = await seedWorkspace(request, { banks: 1, questionsPerBank: 5, tests: 1 }, isolated);
   // One empty section in the open draft, so the gate raises a real blocking
   // row and the strip carries a real light. Without it a freshly published
   // test's next draft is all-clear, and this file would measure the panel in
@@ -68,9 +87,16 @@ test.beforeAll(async ({ request }) => {
   expect(patched.ok(), `seeding a blocking row: ${patched.status()} ${await patched.text()}`).toBe(true);
 });
 
-/** Sign in and open the seeded test's builder, the way an organiser does. */
+/** Sign in, switch to this file's own workspace, and open the seeded test's
+ *  builder — the way an organiser does, through the top bar's switcher.
+ *
+ *  The switch is the price of the isolation above: the organiser boots on
+ *  `workspaces[0]` and the fixtures are not there. It is also the control
+ *  `D4` ships for exactly this, and it only exists above one membership —
+ *  which this file's second workspace is what creates. */
 async function openBuilder(page: Page): Promise<void> {
   await signIn(page);
+  await page.getByLabel("Workspace").selectOption({ label: WORKSPACE_NAME });
   await page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: "Tests" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
   await page.getByRole("button", { name: TEST_NAME }).click();
@@ -87,6 +113,21 @@ for (const { label, width, height } of WIDTHS) {
     await page.getByRole("button", { name: /collapse the checklist to lights/i }).click();
     const lights = page.getByRole("list", { name: "Checklist lights" });
     await expect(lights).toBeVisible();
+
+    // The pointer is still inside the rail from the click above, so the panel
+    // is ALREADY floating. Measuring the spine here and again after
+    // `lights.hover()` would compare one state with itself — the same
+    // comment-backed non-assertion this file's header is written against.
+    // Fix round 1: leave the rail properly first, so `before` is a genuinely
+    // unfloated page.
+    //
+    // Both halves are needed, and the pointer alone is not enough: the click
+    // left focus on the pin, and `onMouseLeave` deliberately refuses to close
+    // a panel a keyboard reader is inside. Blur, then move. (The assertion
+    // below is what caught that — the panel was still there after the move.)
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.mouse.move(0, 0);
+    await expect(page.locator(".checklist-rail__panel")).toHaveCount(0);
 
     const spine = page.locator(".section-list");
     const before = await spine.boundingBox();

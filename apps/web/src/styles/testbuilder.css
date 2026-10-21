@@ -516,6 +516,16 @@
   color: var(--color-ink-soft);
 }
 
+/* Where a row has no section to open, the field it raised itself against is
+   stated rather than dressed as a button that goes nowhere (fix round 1,
+   finding 2). Mono because it is an identifier from the gate's vocabulary,
+   not a sentence — the same reason `.test-id` is. */
+.publish-checklist__field {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--color-muted);
+}
+
 /* Phase 6.5d Task 1 (spec D7): the five settings as rows that state their
    own setting, opening in place, one at a time.
 
