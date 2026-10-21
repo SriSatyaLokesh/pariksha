@@ -50,7 +50,26 @@ const SEVERITY_GLYPH: Readonly<Record<ChecklistRow["severity"], string>> = {
   advisory: "!",
 };
 
-/** Whether this row names somewhere the builder can actually take you.
+/** A section as the rail needs it: the id `onGoTo` opens, and the title the
+ *  organiser reads in the spine. */
+export interface RailSection {
+  id: string;
+  title: string;
+}
+
+/** Where this row leads, NAMED — or `undefined` when it leads nowhere.
+ *
+ * `D7a`'s own worked example is "Blocking — a pool cannot fill. Go to
+ * Section B." — a name, not an id. The rail shipped the id
+ * (`Go to quant.`) because the id is what `onGoTo` needs; an organiser does
+ * not think in ids and never sees one anywhere else on this screen. So the
+ * rail takes `{id, title}` rather than ids alone and this answers both
+ * questions at once: is there a destination, and what is it called.
+ *
+ * `title || "Untitled section"` because a section starts life with an empty
+ * title (`SectionList.tsx`'s `addSection`) and "Go to ." is worse than the
+ * id ever was. The fallback is the spine's own wording, so the rail and the
+ * list of sections call the same section the same thing.
  *
  * `test.tsx`'s `onGoTo` opens a SECTION, and a row that raised itself against
  * a setting (`access.access_code`, `release.at`, `branding.logo`) has no
@@ -65,7 +84,7 @@ const SEVERITY_GLYPH: Readonly<Record<ChecklistRow["severity"], string>> = {
  * is a save, and the read that clears the row is a debounce and two round
  * trips behind the delete. So the question is not "does this row carry a
  * `sectionId`" but "is that section still there to open", which is why this
- * takes the live ids: a `?section=` naming nothing opens nothing AND
+ * takes the live sections: a `?section=` naming nothing opens nothing AND
  * suppresses every setting panel (`test.tsx`'s `panelFromUrl`), so following
  * a stale row leaves the reader on a builder with no open section, no
  * settings, and nothing saying why.
@@ -76,8 +95,9 @@ const SEVERITY_GLYPH: Readonly<Record<ChecklistRow["severity"], string>> = {
  * that only the gate's own field names can justify, and that is a ruling
  * about the gate's vocabulary rather than about this component. Until then
  * the honest rendering is: say the problem, promise no journey. */
-function hasDestination(row: ChecklistRow, sectionIds: readonly string[]): boolean {
-  return row.sectionId !== undefined && sectionIds.includes(row.sectionId);
+function destinationOf(row: ChecklistRow, sections: readonly RailSection[]): string | undefined {
+  const section = sections.find((candidate) => candidate.id === row.sectionId);
+  return section === undefined ? undefined : section.title || "Untitled section";
 }
 
 /** What a light is called. Three colours cannot carry three meanings on
@@ -86,11 +106,12 @@ function hasDestination(row: ChecklistRow, sectionIds: readonly string[]): boole
  *  what carries it: what is wrong, and — when there is one — where to go.
  *  The words after the dash are the server's; only the severity and the
  *  destination are this file's. */
-function lightName(row: ChecklistRow, sectionIds: readonly string[]): string {
+function lightName(row: ChecklistRow, sections: readonly RailSection[]): string {
   const severity = row.severity === "blocking" ? "Blocking" : "Advisory";
-  return hasDestination(row, sectionIds)
-    ? `${severity} — ${row.message}. Go to ${row.sectionId}.`
-    : `${severity} — ${row.message}.`;
+  const destination = destinationOf(row, sections);
+  return destination === undefined
+    ? `${severity} — ${row.message}.`
+    : `${severity} — ${row.message}. Go to ${destination}.`;
 }
 
 /** Stable across a re-run, and unique within one list. `row.id` alone is
@@ -105,7 +126,7 @@ function keyOf(row: ChecklistRow): string {
 export function PublishChecklist({
   railRef,
   rows,
-  sectionIds,
+  sections,
   version,
   rerunning,
   state,
@@ -122,10 +143,11 @@ export function PublishChecklist({
   /** `null` until the screen's own load answers. Not `[]`: an empty array is
    *  "every check passed", which is the opposite claim. */
   rows: readonly ChecklistRow[] | null;
-  /** The sections the draft has **right now**, which is a different question
-   * from the one the rows answer: they were read before the author's last
-   * keystroke. `hasDestination` above says why the difference matters. */
-  sectionIds: readonly string[];
+  /** The sections the draft has **right now** — id and title both, which is
+   * a different question from the one the rows answer: they were read before
+   * the author's last keystroke. `destinationOf` above says why the
+   * difference matters, and why the title travels with the id. */
+  sections: readonly RailSection[];
   /** The version number publishing would freeze — named on the button, so
    * the confirmation says what it does rather than "OK". */
   version: number;
@@ -241,7 +263,7 @@ export function PublishChecklist({
             </li>
           ) : (
             rows.map((row) =>
-              hasDestination(row, sectionIds) ? (
+              destinationOf(row, sections) !== undefined ? (
                 <li key={keyOf(row)}>
                   <button
                     type="button"
@@ -249,13 +271,13 @@ export function PublishChecklist({
                     data-severity={row.severity}
                     onClick={() => onGoTo(row)}
                   >
-                    <span className="visually-hidden">{lightName(row, sectionIds)}</span>
+                    <span className="visually-hidden">{lightName(row, sections)}</span>
                   </button>
                 </li>
               ) : (
                 <li key={keyOf(row)}>
                   <span className="checklist-rail__light" data-severity={row.severity}>
-                    <span className="visually-hidden">{lightName(row, sectionIds)}</span>
+                    <span className="visually-hidden">{lightName(row, sections)}</span>
                   </span>
                 </li>
               ),
@@ -287,9 +309,9 @@ export function PublishChecklist({
                       predicate answers it in both places. The field is still
                       stated, because it is how the organiser finds the
                       setting; it is simply not dressed as a journey. */}
-                  {hasDestination(row, sectionIds) ? (
+                  {destinationOf(row, sections) !== undefined ? (
                     <button type="button" className="button-link" onClick={() => onGoTo(row)}>
-                      Go to {row.sectionId}
+                      Go to {destinationOf(row, sections)}
                     </button>
                   ) : (
                     <span className="publish-checklist__field">{row.field}</span>

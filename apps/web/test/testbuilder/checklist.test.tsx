@@ -211,7 +211,7 @@ describe("the publish checklist", () => {
   it("every row links to the exact section, and the rail retracts to its lights rather than disappearing", async () => {
     await openChecklist(fakeClient());
 
-    fireEvent.click(within(checklistRail()).getByRole("button", { name: /go to quant/i }));
+    fireEvent.click(within(checklistRail()).getByRole("button", { name: /go to Quantitative aptitude/i }));
 
     // `?section=` is how the builder names the open section, so this is the
     // real navigation rather than a spy on a prop.

@@ -617,7 +617,12 @@ export function TestBuilder({
           // asked at different moments — the rows were read before the
           // author's last keystroke — so the rail is handed both and decides
           // which rows still lead anywhere.
-          sectionIds={draft.body.sections.map((section) => section.id)}
+          //
+          // Id AND title, because the rail has two questions to answer about
+          // a destination and they need different halves: `onGoTo` opens by
+          // id, and the journey label names the section the way the spine
+          // does (`D7a`: "Go to Section B", not "Go to quant").
+          sections={draft.body.sections.map(({ id, title }) => ({ id, title }))}
           version={draft.version}
           rerunning={rerunning}
           busy={publishing}
@@ -632,7 +637,7 @@ export function TestBuilder({
           // same defect task 3's review ruled on for field rows.
           //
           // **The premise, because it is what a later edit would break:**
-          // `sectionIds` above and this closure are sibling attributes of one
+          // `sections` above and this closure are sibling attributes of one
           // JSX element, built in ONE render from the SAME `draft`. That — not
           // the predicate on its own — is what makes a membership check here
           // redundant rather than defensive: the ids that gated the control
@@ -642,7 +647,7 @@ export function TestBuilder({
           // Break that and the hole re-opens with no test watching it. It
           // breaks if the two are ever sourced from different renders: a
           // `useCallback` around this handler with stale deps, a memoised or
-          // hoisted `sectionIds`, ids derived from `pending` rather than
+          // hoisted `sections`, ids derived from `pending` rather than
           // `draft`, or a `React.memo` comparator on `PublishChecklist` that
           // lets one prop through while holding the other back. Any of those
           // and this guard has to come back.

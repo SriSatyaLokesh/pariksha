@@ -272,9 +272,9 @@ describe("the checklist rail", () => {
     // already ruled on for field rows, reaching the strip by the other door.
     expect(lights.getByText("Blocking — a pool cannot fill.")).toBeInTheDocument();
     expect(
-      lights.getByText('Blocking — section "Quantitative aptitude" has no questions. Go to quant.'),
+      lights.getByText('Blocking — section "Quantitative aptitude" has no questions. Go to Quantitative aptitude.'),
     ).toBeInTheDocument();
-    expect(lights.getByText("Advisory — sets have unequal total points. Go to reasoning.")).toBeInTheDocument();
+    expect(lights.getByText("Advisory — sets have unequal total points. Go to Logical reasoning.")).toBeInTheDocument();
     expect(lights.getAllByRole("button")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /re-run the checks/i })).toBeNull();
 
@@ -302,8 +302,34 @@ describe("the checklist rail", () => {
     expect(screen.queryByRole("button", { name: /no access code is set/i })).toBeNull();
 
     // And a light that does name a section is the way there, not only a label.
-    fireEvent.click(screen.getByRole("button", { name: /Blocking — section "Quantitative aptitude" has no questions\. Go to quant\./ }));
+    fireEvent.click(screen.getByRole("button", { name: /Blocking — section "Quantitative aptitude" has no questions\. Go to Quantitative aptitude\./ }));
     expect(new URLSearchParams(window.location.search).get("section")).toBe("quant");
+  });
+
+  it("names a section with no title yet the way the spine does", async () => {
+    // A section starts life with `title: ""` (SectionList.tsx's `addSection`),
+    // so "the name, not the id" has to answer for a section that has no name
+    // yet. The spine already calls it "Untitled section"; the rail saying
+    // anything else — or saying "Go to ." — would be the rail and the spine
+    // disagreeing about the same section on the same screen.
+    const untitled: TestVersionRow = {
+      ...DRAFT,
+      body: {
+        ...DRAFT.body,
+        sections: [{ id: "quant", title: "", source: { kind: "fixed", questions: [] } }],
+      },
+    };
+    await openBuilder(fakeClient({ draft: async () => untitled }));
+    await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
+    fireEvent.click(collapse());
+
+    expect(
+      screen.getByRole("button", {
+        name: /^Blocking — section "Quantitative aptitude" has no questions\. Go to Untitled section\.$/,
+      }),
+    ).toBeInTheDocument();
+    // The id never reaches the reader, under any title.
+    expect(screen.queryByText(/Go to quant\./)).toBeNull();
   });
 
   it("shows one named passing light when there is nothing to report", async () => {
@@ -365,7 +391,7 @@ describe("the checklist rail", () => {
     // review Minor 4).
     fireEvent.focus(
       screen.getByRole("button", {
-        name: /^Blocking — section "Quantitative aptitude" has no questions\. Go to quant\.$/,
+        name: /^Blocking — section "Quantitative aptitude" has no questions\. Go to Quantitative aptitude\.$/,
       }),
     );
     expect(screen.getByRole("button", { name: /re-run the checks/i })).toBeVisible();
@@ -611,7 +637,7 @@ describe("the rail refetches as the author works", () => {
     // declined it would be the same keyboard-reachable lie as a field row
     // dressed as a destination (fix round 1).
     expect(within(rail()).getByText(/section "Quantitative aptitude" has no questions/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Go to quant\./ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Go to Quantitative aptitude\./ })).toBeNull();
 
     // Nowhere was navigated to, and the builder is where it was.
     expect(new URLSearchParams(window.location.search).get("section")).toBeNull();
