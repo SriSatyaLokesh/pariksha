@@ -251,6 +251,28 @@ describe("the five settings are rows that state their own setting (D7)", () => {
     );
   });
 
+  it("states a dated release as the day it is, and a withheld one as withheld", async () => {
+    const dated: TestVersionRow = {
+      ...DRAFT,
+      body: {
+        ...DRAFT.body,
+        settings: { ...DRAFT.body.settings, release: { when: "on_date", at: "2026-11-02T00:00:00Z" } },
+      },
+    };
+    const { unmount } = await openBuilder(fakeClient({ draft: async () => dated }));
+    // The day, not midnight UTC: the product releases on a day and stores
+    // an hour it does not honour.
+    expect(rowFor("Results")).toHaveTextContent("On 2 Nov 2026 · score only");
+    unmount();
+
+    const never: TestVersionRow = {
+      ...DRAFT,
+      body: { ...DRAFT.body, settings: { ...DRAFT.body.settings, release: { when: "never" } } },
+    };
+    await openBuilder(fakeClient({ draft: async () => never }));
+    expect(rowFor("Results")).toHaveTextContent("Never released");
+  });
+
   it("has no axe violations collapsed or open", async () => {
     const { container } = await openBuilder();
     const rows = within(container).getByRole("region", { name: "Settings" });

@@ -116,6 +116,19 @@ function stamp(iso: string, zone: string): string {
     .replace(",", "");
 }
 
+/** "24 Oct 2026" — the stored midnight-UTC release day, read back in UTC so
+ * it does not slide a day either way on a machine west of Greenwich. */
+function day(iso: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "UTC",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(at);
+}
+
 /** A zone `Intl` will accept, falling back the way `TimingPanel` does. */
 function safeZone(zone: string | undefined): string {
   try {
@@ -176,7 +189,11 @@ export function resultsSummary(release: TestRelease): string {
     release.when === "on_date"
       ? release.at === undefined
         ? "On a date · no date chosen"
-        : `On ${stamp(release.at, "UTC")}`
+        : // A release is a day, not a moment (`ReleasePanel` stores
+          // midnight UTC and T-22 asks for no hour), so the row states the
+          // day. An "00:00 UTC" here would be a figure the product does
+          // not actually honour.
+          `On ${day(release.at)}`
       : WHEN_LABEL[release.when];
   // `ReleasePanel`'s own control falls back to `score_only` when the
   // document omits `show`, so that is what a candidate gets and that is
