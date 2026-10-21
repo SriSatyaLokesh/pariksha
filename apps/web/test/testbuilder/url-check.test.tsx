@@ -8,13 +8,21 @@
 // having one.
 
 import { useState } from "react";
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { RegistrationFormSpec } from "@pariksha/core";
 
 import { FormBuilder } from "../../src/components/testbuilder/FormBuilder";
-import type { ReachResult } from "../../src/lib/api";
+import type {
+  Actor,
+  ApiClient,
+  ReachResult,
+  TestSummary,
+  TestVersionRow,
+  Workspace,
+} from "../../src/lib/api";
+import { OrganiserApp } from "../../src/routes/organiser";
 
 const CHECKED_AT = 1_760_000_000_000;
 
@@ -195,5 +203,223 @@ describe("the url field's reachability affordance (T-19)", () => {
     expect(
       await axe(within(container).getByRole("group", { name: /Link to your resume/i })),
     ).toHaveNoViolations();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// `D7` + `D5`: which setting is open is part of where you are.
+//
+// The five rows above collapse the builder's settings; a row an organiser
+// opened is a place they can be sent back to, so it lives in `?panel=` the
+// way `?section=` already lives in the URL. `view-url.ts` owns the parser —
+// nothing below reads the query string for itself — and deliberately does
+// not validate, so the check that `?panel=` names one of the five belongs
+// to the screen that owns the union.
+//
+// `D14`: a deep link cannot be clicked to, so these mount the real entry
+// point with the URL already set, which is exactly what a reload does.
+
+const VIEW_WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
+
+const VIEW_ACTOR: Actor = {
+  userId: "usr_1",
+  email: "rao@example.edu",
+  memberships: [{ workspaceId: "wsp_1", role: "owner", grants: [] }],
+};
+
+const VIEW_TEST: TestSummary = {
+  id: "tst_1",
+  name: "Midterm",
+  slug: "midterm",
+  description: null,
+  shortCode: "ab12cd",
+  closesAt: null,
+  state: "draft",
+  currentVersion: null,
+  draftVersion: 1,
+  reviewRequested: false,
+  tags: [],
+  updatedAt: 0,
+};
+
+/** One section, so the spine has something to open, and settings in every
+ *  block, so each row states a value rather than a default. */
+const VIEW_DRAFT: TestVersionRow = {
+  id: "ver_1",
+  testId: "tst_1",
+  version: 1,
+  body: {
+    settings: {
+      timing: { timezone: "Asia/Kolkata", duration_minutes: 60 },
+      access: { mode: "link_code", access_code: "APTI-2026" },
+      release: { when: "on_submit", show: "score_and_sections" },
+    },
+    sections: [
+      { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } },
+    ],
+  },
+  publishedAt: null,
+  createdAt: 0,
+  draw: {},
+  setPoints: {},
+  points: {},
+};
+
+function viewClient(): ApiClient {
+  const notUsed = () => {
+    throw new Error("not used by this test file");
+  };
+  return {
+    setupStatus: async () => ({ needed: false, providers: [] }),
+    me: async () => VIEW_ACTOR,
+    workspaces: async () => [VIEW_WORKSPACE],
+    completeSetup: async () => VIEW_WORKSPACE,
+    requestMagicLink: async () => undefined,
+    signOut: async () => undefined,
+    listBanks: async () => [],
+    createBank: notUsed,
+    listQuestions: async () => ({ questions: [] }),
+    deleteQuestion: async () => undefined,
+    saveQuestion: notUsed,
+    listTags: async () => [],
+    listGroups: async () => [],
+    createGroup: notUsed,
+    updateGroup: notUsed,
+    deleteGroup: async () => undefined,
+    importBank: async () => ({ imported: 0, issues: [] }),
+    exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
+    exportQuestion: notUsed,
+    tests: async () => [VIEW_TEST],
+    createTest: notUsed,
+    test: async () => VIEW_TEST,
+    updateTest: notUsed,
+    draft: async () => VIEW_DRAFT,
+    patchDraft: async () => VIEW_DRAFT,
+    publishTest: notUsed,
+    closeTest: notUsed,
+    archiveTest: notUsed,
+    versions: async () => [],
+    checklist: async () => [],
+    cloneTest: notUsed,
+    exportTest: notUsed,
+    importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
+    checkUrl: notUsed,
+    workspaceBranding: async () => ({}),
+    saveWorkspaceBranding: notUsed,
+    uploadMedia: notUsed,
+    candidates: async () => [],
+    importCandidates: notUsed,
+  };
+}
+
+/** A reload at `search`: the URL is set before the app's first paint, which
+ *  is the only difference between a deep link and a click. */
+async function openBuilder({ search }: { search: string }) {
+  window.history.replaceState(null, "", `/admin${search}`);
+  const view = render(<OrganiserApp client={viewClient()} />);
+  await screen.findByRole("heading", { level: 1, name: "Midterm" });
+  return view;
+}
+
+/** The setting row's own control, named by its label (settings-rows.test.tsx). */
+function rowFor(label: string): HTMLElement {
+  return screen.getByRole("button", { name: new RegExp(`^${label}\\b`) });
+}
+
+/** The section's disclosure, which is the spine's half of the argument. */
+function sectionRow(): HTMLElement {
+  return screen.getByRole("button", { name: /^Quantitative aptitude ·/i });
+}
+
+const PANEL_LABELS = ["Timing", "Access", "Registration", "Results", "Branding"];
+
+function expectNoPanelOpen(): void {
+  for (const label of PANEL_LABELS) {
+    expect(rowFor(label)).toHaveAttribute("aria-expanded", "false");
+  }
+}
+
+describe("the open setting lives in the query string (D7, D5)", () => {
+  beforeEach(() => {
+    window.history.replaceState(null, "", "/admin");
+  });
+
+  afterEach(() => {
+    window.history.replaceState(null, "", "/admin");
+  });
+
+  it("opens the panel named in the query string", async () => {
+    await openBuilder({ search: "?view=test&test=tst_1&panel=access" });
+    expect(rowFor("Access")).toHaveAttribute("aria-expanded", "true");
+    // Open, not merely marked open: the panel itself is mounted.
+    expect(await screen.findByRole("heading", { name: "Who can take this test" })).toBeVisible();
+    // And one at a time still holds on the way in.
+    expect(rowFor("Timing")).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("puts the open panel in the query string", async () => {
+    await openBuilder({ search: "?view=test&test=tst_1" });
+    expect(new URLSearchParams(window.location.search).get("panel")).toBeNull();
+
+    fireEvent.click(rowFor("Timing"));
+    const written = new URLSearchParams(window.location.search);
+    expect(written.get("panel")).toBe("timing");
+    // The parameters this screen does not own are undisturbed, so the link
+    // still names the test it was written from.
+    expect(written.get("view")).toBe("test");
+    expect(written.get("test")).toBe("tst_1");
+
+    // Closing the row takes it back out rather than leaving a stale claim.
+    fireEvent.click(rowFor("Timing"));
+    expect(new URLSearchParams(window.location.search).get("panel")).toBeNull();
+  });
+
+  it("follows Back from an open panel to the closed builder", async () => {
+    await openBuilder({ search: "?view=test&test=tst_1" });
+    fireEvent.click(rowFor("Access"));
+    expect(rowFor("Access")).toHaveAttribute("aria-expanded", "true");
+
+    window.history.back();
+
+    // History traversal is a queued task in jsdom exactly as it is in a
+    // browser, so the listener has to be allowed to arrive.
+    await waitFor(() => expect(rowFor("Access")).toHaveAttribute("aria-expanded", "false"));
+    expect(screen.queryByRole("heading", { name: "Who can take this test" })).toBeNull();
+    // Back closed the panel; it did not leave the builder.
+    expect(screen.getByRole("heading", { level: 1, name: "Midterm" })).toBeVisible();
+  });
+
+  it("ignores an unknown panel name and opens none", async () => {
+    // `view-url.ts` deliberately returns what the string said — an id in a
+    // URL is a claim anyone can type. The union lives on this screen, so
+    // the refusal does too.
+    const { unmount } = await openBuilder({ search: "?view=test&test=tst_1&panel=payments" });
+    expectNoPanelOpen();
+    unmount();
+
+    // The control, down the identical mount path: a name that IS one of the
+    // five opens. Without it, "opens none" is satisfied just as well by a
+    // screen that never reads `?panel=` at all.
+    await openBuilder({ search: "?view=test&test=tst_1&panel=branding" });
+    expect(rowFor("Branding")).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("opens the section when ?section= and ?panel= are both present, and no panel", async () => {
+    // The ruling (6.5d): the spine wins. A stale URL that opens a section
+    // instead of a setting costs one click to correct; the reverse hides
+    // the thing being edited behind a settings panel.
+    const { unmount } = await openBuilder({
+      search: "?view=test&test=tst_1&section=quant&panel=access",
+    });
+    expect(sectionRow()).toHaveAttribute("aria-expanded", "true");
+    expectNoPanelOpen();
+    expect(screen.queryByRole("heading", { name: "Who can take this test" })).toBeNull();
+    unmount();
+
+    // The control: the same `?panel=access`, alone, does open Access — so
+    // the refusal above is the ruling being applied and not the parameter
+    // being ignored.
+    await openBuilder({ search: "?view=test&test=tst_1&panel=access" });
+    expect(rowFor("Access")).toHaveAttribute("aria-expanded", "true");
   });
 });
