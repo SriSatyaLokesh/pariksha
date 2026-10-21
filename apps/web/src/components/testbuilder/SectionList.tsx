@@ -393,16 +393,35 @@ export function SectionList({
           The sentence below is persistent text rather than a tooltip or a
           `title`, for the same reason every other consequence on this screen
           is: a disabled input takes no focus, so a description hung off it
-          is one a keyboard or touch user may never hear. */}
+          is one a keyboard or touch user may never hear.
+
+          Fix round 1, M1: and it is BOUND to the control with
+          `aria-describedby` rather than merely placed beside it. The
+          precedent is this repo's own — the Publish button carries
+          "2 blocking rows must clear first." the same way (spec §13). A
+          control that is disabled owes the reason to a screen reader, not
+          only to a sighted reader: a sentence sitting next to one is read by
+          a reader sweeping the page in document order and by nobody tabbing
+          the form. */}
       <fieldset className="shuffle-group">
         <legend>Section order</legend>
         <div className="shuffle-group__row">
-          <input type="checkbox" id={sectionOrderId} checked={false} disabled readOnly />
+          <input
+            type="checkbox"
+            id={sectionOrderId}
+            checked={false}
+            disabled
+            readOnly
+            aria-describedby={`${sectionOrderId}-why`}
+          />
           <label htmlFor={sectionOrderId}>Order of the sections themselves</label>
         </div>
-        <p className="shuffle-group__fact">
-          Not supported today — every candidate sees these sections in the order above. Varying it needs a new field
-          in the test format and a decision about per-section time limits.
+        {/* Fix round 1, M3: "the order above" named a list that can be empty
+            — a test with no sections yet still renders this control, and
+            there was nothing above it for the sentence to point at. */}
+        <p className="shuffle-group__fact" id={`${sectionOrderId}-why`}>
+          Not supported today — every candidate sees the sections in the order this list sets. Varying it needs a
+          new field in the test format and a decision about per-section time limits.
         </p>
       </fieldset>
 

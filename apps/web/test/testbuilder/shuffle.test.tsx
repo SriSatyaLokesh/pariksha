@@ -219,6 +219,12 @@ describe("D19: shuffling is surfaced where it exists and disabled where it does 
     expect(control).toBeDisabled();
     expect(control).not.toBeChecked();
     expect(screen.getByText(/Not supported today/)).toBeVisible();
+    // Fix round 1, M1: visible AND announced. A disabled control owes its
+    // reason to a screen reader too, and a sentence merely placed beside one
+    // is read by a reader sweeping the page in document order and by nobody
+    // tabbing the form. `toBeVisible` above cannot tell those two cases
+    // apart; the accessible description can.
+    expect(control).toHaveAccessibleDescription(/Not supported today/);
   });
 
   it("sends no shuffle_sections field", async () => {
@@ -240,10 +246,19 @@ describe("D19: shuffling is surfaced where it exists and disabled where it does 
     expect(body).not.toContain("shuffle_sections");
 
     // And the disabled control is inert: clicking it writes nothing.
+    //
+    // Fix round 1, M2: this arm was challenged as possibly unfalsifiable,
+    // since React dispatches no handler from a disabled input. It is not.
+    // `fireEvent.click` still BUBBLES out of a disabled input, so a handler
+    // on any ancestor — the row, the fieldset, a wrapper added by a later
+    // task — fires on this click while the control itself stays disabled.
+    // That is a defect the `toBeDisabled()` test above cannot see, and the
+    // probe for it reddens this line and only this line. The duplicate
+    // string assertion that used to follow was deleted in the same round:
+    // it re-stringified the very object already asserted four lines up.
     fireEvent.click(screen.getByRole("checkbox", { name: /Order of the sections themselves/ }));
     await settled();
     expect(patchDraft).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(patchDraft.mock.calls[0]![2])).not.toContain("shuffle_sections");
   });
 
   it("the chip and the disabled control have no axe violations", async () => {
