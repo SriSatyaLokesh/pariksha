@@ -322,12 +322,18 @@ unaffected, and the organiser can see that the attempt has fewer images than its
 > the locked overlay tells the candidate to contact the organiser named on the test rather than
 > giving them an address this product does not hold.
 
-**`Q5a` — the unlock is audited and permissioned.** An organiser action on a candidate's attempt:
+**`Q5a` — the unlock needs a surface, because none exists.** There is **no organiser-side attempt
+route in the product at all** — `attempts.monitor` and `attempts.read_evidence` exist in the
+permission matrix with nothing behind them. So `Q5`'s "one button on the attempt" is really a
+minimal pair: a locked-attempts read on the test, and the unlock itself. Both are replaced by
+Phase 8's monitor; neither is designed to survive it.
+
+**`Q5b` — the unlock is audited and permissioned.** An organiser action on a candidate's attempt:
 Phase 3's append-only audit log, behind the permission matrix like every other one. It is **not**
 a `review` row — `review` is Phase 8's verdict model and borrowing it would pre-empt a design that
 phase has not made.
 
-**`Q5b` — unlocking does not refund time.** The timer is server-authoritative (Phase 6 Task 9) and
+**`Q5c` — unlocking does not refund time.** The timer is server-authoritative (Phase 6 Task 9) and
 it ran through the lock. Whether an organiser may *extend* an attempt is Phase 8's question, and
 this phase must not answer it by accident.
 
@@ -336,7 +342,7 @@ this phase must not answer it by accident.
 > **Ruling.** `P-10` says the rule is one the organiser can edit. What ships is **the three
 > thresholds in the PRD's own defaults, as three editable numbers** — the violation count
 > (`violation_limit`, which exists), the camera-outage seconds and the count of multi-face
-> snapshots (**two new overrides**, bringing the block to fourteen) — plus the fixed sentence that
+> snapshots (**two new overrides**; with `Q12`'s `require_microphone` the block becomes fifteen) — plus the fixed sentence that
 > combines them. `high_risk` when any threshold is met, `review` on any violation at all, `clean`
 > otherwise.
 >
@@ -407,11 +413,11 @@ endpoint a candidate's browser can call in a loop uses it. The route also needs 
 > test-level setting in `schemas/test-1.json` beside timing, access and branding; putting it
 > anywhere else would give the builder's information architecture an exception in its first month.
 >
-> **Cost if wrong.** Fourteen overrides plus the profile is more controls than any other panel
+> **Cost if wrong.** Fifteen overrides plus the profile is more controls than any other panel
 > carries, and a panel that opens in place must still fit. `D16`'s three-track field-row grid is
 > the shape, grouped — gating, camera and microphone, consequences — with `D16`'s "explanation of
 > the whole group is one note under the row" doing the work per-field help would otherwise do
-> fourteen times.
+> fifteen times.
 
 **`Q8a` — the profile is the panel's first control and it rewrites the rest.** Choosing Standard
 sets the overrides to Standard's defaults, visibly. An override differing from its profile default
@@ -558,7 +564,7 @@ Not suggestions. These are gates that will fail.
 - **`DESIGN.md` is the only place a colour is declared.** `no-hex-colors.test.ts` fails a raw hex
   anywhere else, and it strips only `/* */` comments, so an issue reference in a CSS comment goes in
   a block comment.
-- **`D16`'s field-row grid and `D17`'s controls** for the proctoring panel. Fourteen controls, one
+- **`D16`'s field-row grid and `D17`'s controls** for the proctoring panel. Fifteen controls, one
   grid per group, ids from `useId()`.
 - **`D8`'s frozen geometry.** The candidate runtime's layout does not move. The watermark and the
   overlays sit over it; they do not reflow it.
@@ -595,7 +601,7 @@ Carried from the 6.5 spec because each has cost a previous session real time.
 - Event type names and each type's detail JSON shape, within `Q7b`'s closed set.
 - Which event types flush immediately beyond a violation that triggers an action, within the
   ten-per-request cap.
-- Grouping and summary wording for the proctoring panel's fourteen controls, within `Q8`.
+- Grouping and summary wording for the proctoring panel's fifteen controls, within `Q8`.
 - The noise threshold and window for `Q12`, and whether it is organiser-settable or a constant.
 - Whether the extra-monitor check prompts for the Window Management permission or reads only what is
   available without one. `P-08` says "where the browser exposes it"; a permission prompt mid-exam is
@@ -611,7 +617,7 @@ Five plans, each shipping working, testable software on its own.
 | plan | ships | goals | depends on |
 | --- | --- | --- | --- |
 | **7a — the contract** | `resolveProctoring()` and `ResolvedProctoring` in core; the two new overrides and `snapshot_interval_seconds: 0` with their ADR; `Q7b`'s event union; the `integrity_flag` + `observed` migration on three dialects; the `ROUTE_AUTH` re-check and `scrub-scan` replay; converting the three existing `profile` readers; `Q1b`'s start-page requirements; the checklist's advisory rows | `G1` | — |
-| **7b — the editor** | the sixth setting row, all fourteen controls, `Q8a`'s profile behaviour, `Q11`'s cost figure, both grounds | `G4` | 7a |
+| **7b — the editor** | the sixth setting row, all fifteen controls, `Q8a`'s profile behaviour, `Q11`'s cost figure, both grounds | `G4` | 7a |
 | **7c — the gates** | `Q9b`'s extended device gate, browser support, fullscreen, window-leave, copy/paste/right-click, the watermark, extra monitors, and `Q7`'s event ingest | `G2`, `G3` (part) | 7a |
 | **7d — the eye** | camera, identity photo, `Q4`'s POST route and its measured budget, snapshots, `Q12`'s microphone level | `G2`, `G3` (part) | 7a, 7c |
 | **7e — the consequences** | violation counting, the limit, all four actions, `Q5`'s lock and unlock, `Q6`'s integrity flag and `observed` | `G3`, `G5` | 7a, 7c, 7d |
