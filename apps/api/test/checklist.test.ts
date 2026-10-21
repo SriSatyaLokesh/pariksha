@@ -445,6 +445,20 @@ it("is silent about cost when snapshots are off", async () => {
   expect(ids(await rows())).not.toContain("proctoring_snapshot_cost");
 });
 
+// This was nearly the one blocking row Phase 7 added — a `lock` has no way
+// out but an organiser opening the attempt — and is deliberately advisory
+// instead, for the reason stated above. Both halves of that ruling need a
+// row of their own: present, and never blocking.
+it("a lock with no way to reach the organiser is advisory, and never blocks", async () => {
+  await saveDraft({ settings: { proctoring: { profile: "standard", overrides: { violation_action: "lock" } } } });
+  const list = await rows();
+  expect(list.find((r) => r.id === "proctoring_lock_without_recourse")).toMatchObject({
+    severity: "advisory",
+    message: expect.stringContaining("phase 8"),
+  });
+  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+});
+
 it("measures the real subrequest cost of the checklist route, flat in candidates and sections", async () => {
   await uploadCandidates("email,set\none@ac.in,\ntwo@ac.in,\nthree@ac.in,\nfour@ac.in,\n");
 
