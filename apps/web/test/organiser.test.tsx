@@ -1698,10 +1698,18 @@ describe("the workspace switcher (D4, D4a, D4b)", () => {
   // the URL against whatever workspace is CURRENT, so an entry naming
   // workspace A's test, one press away from workspace B, is the same
   // cross-tenant read by a slower route.
-  it("does not request the other workspace's test after a switch, or after Back", async () => {
+  it("replaces the entry naming the old workspace's test, so Back cannot reopen it", async () => {
     const carrying: string[] = [];
     const record = (workspaceId: string, testId: string) => {
       if (testId === "tst_8c21a4") carrying.push(workspaceId);
+      // What the server does with a stale entry, stood up here so the web
+      // side asserts the boundary rather than assuming it (whole-branch
+      // review, Minor 5). `membershipOr404` in apps/api resolves membership
+      // from the path parameter, so a test id belonging to workspace A is
+      // NOT FOUND in workspace B — a refusal, never a cross-tenant read.
+      if (testId === "tst_8c21a4" && workspaceId !== "wsp_1") {
+        throw new ApiError(404, "not_found", "That test could not be found in this workspace.");
+      }
     };
     render(
       <OrganiserApp
@@ -1742,10 +1750,77 @@ describe("the workspace switcher (D4, D4a, D4b)", () => {
     fireEvent.change(switcher(), { target: { value: "wsp_2" } });
     expect(await screen.findByRole("heading", { level: 1, name: "Northfield" })).toBeVisible();
 
+    // The builder's own entry is the one `resetViewForWorkspace` replaced,
+    // so Back skips straight past it to the list. Under `pushState` this
+    // press lands on `?view=test&test=tst_8c21a4` instead and the builder
+    // remounts under workspace B, which is how this assertion discriminates.
     window.history.back();
     expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
 
     expect(carrying.filter((id) => id !== "wsp_1")).toEqual([]);
+  });
+
+  // The boundary the test above does NOT cover, asserted rather than left in
+  // a report's concerns list (whole-branch review, Minor 5).
+  // `resetViewForWorkspace` replaces ONE entry — the one you switched from.
+  // Navigate on after opening a test and the builder's entry is no longer
+  // the current one, so the switch cannot reach it, and Back walks into a
+  // URL still naming workspace A's test under workspace B.
+  //
+  // The request is therefore made. That is the honest shape, and it is why
+  // neither test here is named "never": what closes it is the server.
+  // `membershipOr404` resolves membership from the path parameter, so
+  // workspace A's test id is NOT FOUND in workspace B — a refusal, never a
+  // cross-tenant read — and the builder shows the refusal in place of the
+  // test. `fromUrl`'s standing answer, exercised: an id in a URL is a claim,
+  // and the screen's own fetch is the side that decides.
+  it("refuses, rather than serves, a stale entry Back reaches from deeper in the stack", async () => {
+    const carrying: string[] = [];
+    const refuseAcrossWorkspaces = (workspaceId: string, testId: string) => {
+      if (testId !== "tst_8c21a4") return;
+      carrying.push(workspaceId);
+      if (workspaceId !== "wsp_1") {
+        throw new ApiError(404, "not_found", "That test could not be found in this workspace.");
+      }
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+          tests: async () => [MIDTERM],
+          test: async (workspaceId, testId) => {
+            refuseAcrossWorkspaces(workspaceId, testId);
+            return MIDTERM;
+          },
+          draft: async (workspaceId, testId) => {
+            refuseAcrossWorkspaces(workspaceId, testId);
+            return MIDTERM_DRAFT;
+          },
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    // Tests -> the builder -> Banks. The builder's entry is now behind the
+    // current one, which is the entry the switch will replace.
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await screen.findByRole("heading", { level: 1, name: "Midterm" });
+    fireEvent.click(screen.getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+
+    fireEvent.change(switcher(), { target: { value: "wsp_2" } });
+    await screen.findByRole("heading", { level: 1, name: "Northfield" });
+    expect(carrying.filter((id) => id !== "wsp_1")).toEqual([]);
+
+    window.history.back();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /could not be found in this workspace/i,
+    );
+    expect(screen.queryByRole("heading", { level: 1, name: "Midterm" })).toBeNull();
+    expect(carrying).toContain("wsp_2");
   });
 
   // D4b's whole argument is that a native <select> carries an accessible

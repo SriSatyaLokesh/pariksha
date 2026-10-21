@@ -56,7 +56,28 @@
    same illegal-adjacent move D1 refused, and inventing a light-mode
    ornament to replace it would make the two grounds two designs. */
 
+/* The UA's own scheme follows the ground, and it has to be declared here
+   because this is the file that owns the mapping (6.5c whole-branch review,
+   Important 1).
+
+   `base.css:11` says `html { color-scheme: light }` unconditionally, and
+   signal.css's `color-scheme: dark` is scoped to `.signal` — landing page
+   only, not in the organiser bundle. That was invisible while 6.5b shipped
+   the attribute and changed no screen; 6.5c is the first plan to put
+   `data-theme="dark"` on a page that has native UA-painted chrome on it,
+   and three constructs then render light-scheme on a near-black page:
+   Home's two scrolling panes, the rail and the document scrollbar, and the
+   workspace <select>'s picker and disclosure triangle. The last one is the
+   real cause of what looked like `background: none` losing to
+   `appearance: auto` — `background` was never the lever.
+
+   `:root` is (0,1,0) and `base.css`'s `html` is (0,0,1), so this wins
+   wherever the two are loaded and import order does not matter. Every
+   <input>, <select>, <textarea> and scroll container 6.5d and 6.5e move
+   onto this ground inherits the fix rather than meeting the bug. */
 :root {
+  color-scheme: dark;
+
   --ground: var(--color-signal-bg);
   --ground-2: var(--color-signal-bg-2);
   --surface: var(--color-signal-surface);
@@ -97,6 +118,8 @@
 }
 
 :root[data-theme="light"] {
+  color-scheme: light;
+
   --ground: var(--color-signal-l-bg);
   --ground-2: var(--color-signal-l-bg-2);
   --surface: var(--color-signal-l-surface);

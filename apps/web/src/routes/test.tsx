@@ -358,179 +358,189 @@ export function TestBuilder({
 
   return (
     <>
-      <div className="organiser__panel">
-        <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
+      {/* No wrapper element here. `admin.css`'s `.organiser__panel` is
+          `display:flex; flex-direction:column; gap: var(--space-lg)` —
+          byte-identical to what `.organiser` already applies to
+          `.shell__page`, so a <div> carrying it inside the page was a
+          layout no-op (measured in Chrome at 1440 and 400: every child's
+          rect unchanged). Removing it also removes the trap of 6.5e
+          styling the builder's root as a panel by accident, and it gives
+          each panel below its own `overflow-x: auto` under 719px —
+          `overflow-x` on these children went `visible` -> `auto` in the
+          same measurement — which is one scroll container per panel, as
+          `D3a` intends, rather than one around the whole screen
+          (whole-branch review, Minor 3). */}
+      <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
 
-        {test !== null && (
-          <div className="testbuilder-lifecycle">
-            <TestStateBadge state={test.state} />
+      {test !== null && (
+        <div className="testbuilder-lifecycle">
+          <TestStateBadge state={test.state} />
 
-            {/* UX-11: the button is in place and disabled for an Author,
-                not hidden — a control that vanishes teaches nothing, and
-                the reason has to be reachable by keyboard, which a
-                `disabled` button is not. `aria-disabled` plus a no-op
-                handler keeps it in the tab order so a reader meets the
-                explanation `aria-describedby` points at. */}
-            <button
-              type="button"
-              className="button-primary button-primary--surface"
-              aria-disabled={!canPublish || publishing || draft === null}
-              aria-describedby={canPublish ? undefined : "publish-why"}
-              onClick={() => {
-                if (canPublish && !publishing) void runChecklist();
-              }}
-            >
-              Publish
+          {/* UX-11: the button is in place and disabled for an Author,
+              not hidden — a control that vanishes teaches nothing, and
+              the reason has to be reachable by keyboard, which a
+              `disabled` button is not. `aria-disabled` plus a no-op
+              handler keeps it in the tab order so a reader meets the
+              explanation `aria-describedby` points at. */}
+          <button
+            type="button"
+            className="button-primary button-primary--surface"
+            aria-disabled={!canPublish || publishing || draft === null}
+            aria-describedby={canPublish ? undefined : "publish-why"}
+            onClick={() => {
+              if (canPublish && !publishing) void runChecklist();
+            }}
+          >
+            Publish
+          </button>
+          {!canPublish && <span id="publish-why">Needs an Admin — request review instead</span>}
+
+          {!canPublish && !test.reviewRequested && (
+            <button type="button" className="button-secondary" onClick={() => void onRequestReview()}>
+              Request review
             </button>
-            {!canPublish && <span id="publish-why">Needs an Admin — request review instead</span>}
+          )}
+          {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
 
-            {!canPublish && !test.reviewRequested && (
-              <button type="button" className="button-secondary" onClick={() => void onRequestReview()}>
-                Request review
-              </button>
-            )}
-            {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
+          {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
+            <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
+              Close
+            </button>
+          )}
+          {canPublish && test.state === "closed" && (
+            <button type="button" className="button-secondary" onClick={() => setConfirming("archive")}>
+              Archive
+            </button>
+          )}
+        </div>
+      )}
 
-            {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
-              <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
-                Close
-              </button>
-            )}
-            {canPublish && test.state === "closed" && (
-              <button type="button" className="button-secondary" onClick={() => setConfirming("archive")}>
-                Archive
-              </button>
-            )}
-          </div>
-        )}
+      {test !== null && draft !== null && (
+        <VersionBanner
+          draftVersion={draft.version}
+          publishedVersion={test.currentVersion}
+          onOpenPublished={() => historyRef.current?.focus()}
+        />
+      )}
 
-        {test !== null && draft !== null && (
-          <VersionBanner
-            draftVersion={draft.version}
-            publishedVersion={test.currentVersion}
-            onOpenPublished={() => historyRef.current?.focus()}
-          />
-        )}
+      {error !== undefined && (
+        <p className="organiser__notice" role="alert">
+          {error}
+        </p>
+      )}
 
-        {error !== undefined && (
-          <p className="organiser__notice" role="alert">
-            {error}
+      {checklist !== null && draft !== null && (
+        <PublishChecklist
+          rows={checklist}
+          version={draft.version}
+          rerunning={rerunning}
+          busy={publishing}
+          onGoTo={(row) => {
+            if (row.sectionId !== undefined) openSection(row.sectionId);
+          }}
+          onRerun={() => void runChecklist()}
+          onConfirm={() => void onPublish()}
+          onClose={() => setChecklist(null)}
+        />
+      )}
+
+      {confirming !== null && (
+        <ConfirmTransition
+          kind={confirming}
+          busy={publishing}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void onTransition(confirming)}
+        />
+      )}
+
+      {versions.some((v) => v.publishedAt !== null) && (
+        <div ref={historyRef} tabIndex={-1}>
+          <VersionHistory versions={versions} />
+        </div>
+      )}
+
+      {/* Fix round 1, Minor 1: `draft === null` is also where a refused
+          load leaves this screen, so the error above used to be
+          announced beside a "Loading…" that would never resolve. Under
+          `D5` that pair is the first thing a stale bookmark shows. The
+          notice is the whole answer when there is one. */}
+      {draft === null ? (
+        error === undefined && (
+          <p className="organiser__status" role="status">
+            Loading…
           </p>
-        )}
+        )
+      ) : (
+        <SectionList
+          sections={draft.body.sections}
+          draw={draft.draw ?? {}}
+          setPoints={draft.setPoints ?? {}}
+          points={draft.points ?? {}}
+          onChange={saveSections}
+          openSectionId={openSectionId}
+          onOpenSection={openSection}
+          client={client}
+          workspaceId={workspaceId}
+        />
+      )}
 
-        {checklist !== null && draft !== null && (
-          <PublishChecklist
-            rows={checklist}
-            version={draft.version}
-            rerunning={rerunning}
-            busy={publishing}
-            onGoTo={(row) => {
-              if (row.sectionId !== undefined) openSection(row.sectionId);
-            }}
-            onRerun={() => void runChecklist()}
-            onConfirm={() => void onPublish()}
-            onClose={() => setChecklist(null)}
-          />
-        )}
+      {draft !== null && (
+        <TimingPanel
+          timing={draft.body.settings.timing ?? DEFAULT_TIMING}
+          sections={draft.body.sections}
+          published={published}
+          onChange={(timing) => saveSettings({ timing })}
+        />
+      )}
 
-        {confirming !== null && (
-          <ConfirmTransition
-            kind={confirming}
-            busy={publishing}
-            onCancel={() => setConfirming(null)}
-            onConfirm={() => void onTransition(confirming)}
-          />
-        )}
+      {draft !== null && (
+        <AccessPanel
+          access={draft.body.settings.access ?? DEFAULT_ACCESS}
+          onChange={(access) => saveSettings({ access })}
+          candidates={candidates}
+          identityField={identityFieldOf(draft.body.settings.registration_form)}
+          canManageCandidates={canManageCandidates}
+          onImportCandidates={async (csv, opts) => {
+            const report = await client.importCandidates(workspaceId, testId, csv, opts);
+            // A dry run changed nothing, so there is nothing to re-read;
+            // a real one replaced the list, and the count the panel
+            // prints has to come from storage rather than from the
+            // report it just rendered.
+            if (!opts.dryRun && report.issues.length === 0) {
+              setCandidates(await client.candidates(workspaceId, testId));
+            }
+            return report;
+          }}
+        />
+      )}
 
-        {versions.some((v) => v.publishedAt !== null) && (
-          <div ref={historyRef} tabIndex={-1}>
-            <VersionHistory versions={versions} />
-          </div>
-        )}
+      {draft !== null && (
+        <ReleasePanel
+          release={draft.body.settings.release ?? DEFAULT_RELEASE}
+          onChange={(release) => saveSettings({ release })}
+        />
+      )}
 
-        {/* Fix round 1, Minor 1: `draft === null` is also where a refused
-            load leaves this screen, so the error above used to be
-            announced beside a "Loading…" that would never resolve. Under
-            `D5` that pair is the first thing a stale bookmark shows. The
-            notice is the whole answer when there is one. */}
-        {draft === null ? (
-          error === undefined && (
-            <p className="organiser__status" role="status">
-              Loading…
-            </p>
-          )
-        ) : (
-          <SectionList
-            sections={draft.body.sections}
-            draw={draft.draw ?? {}}
-            setPoints={draft.setPoints ?? {}}
-            points={draft.points ?? {}}
-            onChange={saveSections}
-            openSectionId={openSectionId}
-            onOpenSection={openSection}
-            client={client}
-            workspaceId={workspaceId}
-          />
-        )}
+      {draft !== null && (
+        <BrandingPanel
+          branding={draft.body.settings.branding ?? NO_BRANDING}
+          workspaceBranding={workspaceBranding}
+          canEditWorkspace={canEditWorkspace}
+          onChange={(branding) => saveSettings({ branding })}
+          onSaveWorkspace={async (next) => {
+            setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
+          }}
+          onUploadLogo={uploadLogo}
+        />
+      )}
 
-        {draft !== null && (
-          <TimingPanel
-            timing={draft.body.settings.timing ?? DEFAULT_TIMING}
-            sections={draft.body.sections}
-            published={published}
-            onChange={(timing) => saveSettings({ timing })}
-          />
-        )}
-
-        {draft !== null && (
-          <AccessPanel
-            access={draft.body.settings.access ?? DEFAULT_ACCESS}
-            onChange={(access) => saveSettings({ access })}
-            candidates={candidates}
-            identityField={identityFieldOf(draft.body.settings.registration_form)}
-            canManageCandidates={canManageCandidates}
-            onImportCandidates={async (csv, opts) => {
-              const report = await client.importCandidates(workspaceId, testId, csv, opts);
-              // A dry run changed nothing, so there is nothing to re-read;
-              // a real one replaced the list, and the count the panel
-              // prints has to come from storage rather than from the
-              // report it just rendered.
-              if (!opts.dryRun && report.issues.length === 0) {
-                setCandidates(await client.candidates(workspaceId, testId));
-              }
-              return report;
-            }}
-          />
-        )}
-
-        {draft !== null && (
-          <ReleasePanel
-            release={draft.body.settings.release ?? DEFAULT_RELEASE}
-            onChange={(release) => saveSettings({ release })}
-          />
-        )}
-
-        {draft !== null && (
-          <BrandingPanel
-            branding={draft.body.settings.branding ?? NO_BRANDING}
-            workspaceBranding={workspaceBranding}
-            canEditWorkspace={canEditWorkspace}
-            onChange={(branding) => saveSettings({ branding })}
-            onSaveWorkspace={async (next) => {
-              setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
-            }}
-            onUploadLogo={uploadLogo}
-          />
-        )}
-
-        {draft !== null && (
-          <FormBuilder
-            form={draft.body.settings.registration_form}
-            onChange={(registration_form) => saveSettings({ registration_form })}
-            checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
-          />
-        )}
-      </div>
+      {draft !== null && (
+        <FormBuilder
+          form={draft.body.settings.registration_form}
+          onChange={(registration_form) => saveSettings({ registration_form })}
+          checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
+        />
+      )}
     </>
   );
 }

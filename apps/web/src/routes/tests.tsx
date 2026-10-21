@@ -10,7 +10,12 @@ import { QrCode } from "../components/QrCode";
 // review" badge (ADR 0007) all live here; the builder itself (sections,
 // timing, access…) is Screen 7 onward, Task 3's `test.tsx`.
 
-const STATE_LABEL: Record<TestState, string> = {
+/** The one rendering of a state's NAME, exported for the same reason
+ *  `TestStateBadge` is: Home shows a test's state as a row's reason, and a
+ *  second label map is exactly how one screen ends up saying `draft` while
+ *  the screen one rail click away says `Draft` (whole-branch review,
+ *  Minor 4). */
+export const STATE_LABEL: Record<TestState, string> = {
   draft: "Draft",
   scheduled: "Scheduled",
   open: "Open",

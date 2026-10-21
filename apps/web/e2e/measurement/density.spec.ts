@@ -107,6 +107,13 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
  * story of why that surface fits zero rows.
  */
 const BEFORE_TOP: Record<Surface, number> = {
+  // ZERO SLACK, both of these: each sits at the exact value 6.5c measured,
+  // against `toBeLessThanOrEqual`, so any added chrome above the table —
+  // 0.01px of it — goes red. That is the ratchet working, and on the two
+  // surfaces 6.5e is scheduled to rebuild it will arrive looking like a
+  // regression when it is a restyle. Re-measure and rule on the number the
+  // way the `bankBrowser` entry below does; never nudge it to get green
+  // (`AG2`).
   testList: 785.5,
   bankList: 397,
   // **Raised from `main`'s 312.31, which is the one direction this file is
@@ -137,9 +144,16 @@ const BEFORE_TOP: Record<Surface, number> = {
   // **The protective bars on this surface are the other two**, and both are
   // at `main`'s figures: `BEFORE.bankBrowser` (5 rows) and
   // `BEFORE_HEIGHT.bankBrowser` (101px). They are what still catch a density
-  // regression here. This figure has 9.69px of slack — the fifth row ends at
-  // y=890.31 of 900 — so a restyle that spends another 10px above the table
-  // takes the count red, which is the right failure and the one `AG1` names.
+  // regression here.
+  //
+  // This figure itself is a `toBeLessThanOrEqual` on the top, so it goes red
+  // at **+0.01px** like the two above — it has no slack of its own (whole-
+  // branch review, Minor 6: an earlier draft of this comment named the count
+  // as the bar that breaks first, which is wrong and this comment is the
+  // evidence for a re-baseline, so it has to be exact). The 9.69px is the
+  // slack on the SECOND line of defence: the fifth row ends at y=890.31 of
+  // 900, so a restyle that spends another 10px above the table takes
+  // `BEFORE.bankBrowser`'s count red as well — two bars, the top one first.
   bankBrowser: 385.31,
   questionPicker: 495.63,
 };

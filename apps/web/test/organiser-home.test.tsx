@@ -567,6 +567,20 @@ describe("a test that is over is not on the agenda (D6b)", () => {
     expect(subjectsIn(recent())).toEqual(["Abandoned sketch", "Pulled mock"]);
   });
 
+  // Whole-branch review, Minor 4. Recently edited rendered `test.state`
+  // straight off the wire, so Home said `draft`/`closed` while the test
+  // list one rail click away says `Draft`/`Closed` — two vocabularies for
+  // one fact. `tests.tsx` exports `STATE_LABEL` now and both screens read
+  // it; a second label map is how one of them starts saying something else.
+  it("names a test's state the way the test list names it", async () => {
+    await openHome({ tests: async () => over });
+
+    const reasons = [...recent().querySelectorAll(".home__row-reason")].map(
+      (el) => el.textContent ?? "",
+    );
+    expect(reasons).toEqual(["Archived", "Closed"]);
+  });
+
   it("counts nothing on any pill, so none of them is live", async () => {
     await openHome({ tests: async () => over });
 

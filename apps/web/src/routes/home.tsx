@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Actor, ApiClient, TestSummary, Workspace } from "../lib/api";
+// One vocabulary for a test's state across both screens that name it
+// (whole-branch review, Minor 4): this row used to render the raw wire
+// value, so Home said `draft`/`open` where the test list says `Draft`/`Open`.
+import { STATE_LABEL } from "./tests";
 
 // Home (spec §5, `D6`/`D6a`/`D6b`; §11, `D21`/`D21b`).
 //
@@ -448,7 +452,7 @@ export function Home({
                       time={timeLabel(test.updatedAt, now)}
                       tone={first?.tone ?? "muted"}
                       subject={test.name}
-                      reason={test.state}
+                      reason={STATE_LABEL[test.state]}
                       marked={
                         selected === null
                           ? undefined
