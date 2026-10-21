@@ -14,6 +14,29 @@
    own @import chain. Anything that is NOT reused by both entries stays
    where it was.
 
+   THE SEAM, AND WHY THE RULES BELOW MAY READ theme.css ANYWAY. `admin.css`
+   imports `theme.css` and `landing.css` does not, so `var(--ink)` in this
+   file is UNDEFINED on the landing page. That seam produced issue 200 and
+   #201 and this is the third time it has been reached for.
+
+   It is safe here for a reason that is MEASURED AND ASSERTED rather than
+   assumed: the landing page renders none of the constructs the rules below
+   paint. Every consumer of `.mono-caption`, `.button-primary`,
+   `.button-secondary`, `.card-hairline` and `.field-affix__unit` is an
+   organiser route or an organiser component; `src/sections/signal/`,
+   `src/island/`, `routes/landing.tsx`, `routes/exam.tsx` and
+   `components/exam/` render not one of them. `apps/web/test/theme.test.ts`
+   derives BOTH halves off disk — the class list out of this file and the
+   source set out of the entries — so a landing component that starts
+   rendering one of these, or a new rule here that paints a construct the
+   landing page does render, is a red test naming the file. The corrected
+   question is never "does the landing page render a table" but "does it
+   render THIS construct".
+
+   Rules the landing page DOES reach keep naming no colour at all: the
+   field row, the field affix's geometry and the row-action gutter are
+   layout and nothing else, and the gutter's own comment says why.
+
    No colour literal: every colour is a token var(). */
 
 /* ---- MonoCaption ------------------------------------------------------ */
@@ -24,7 +47,7 @@
   font-weight: var(--type-mono-sm-weight);
   line-height: var(--type-mono-sm-line-height);
   letter-spacing: var(--type-mono-sm-letter-spacing);
-  color: var(--color-muted);
+  color: var(--ink-3);
   margin: 0;
 }
 
@@ -34,8 +57,8 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-xs);
-  background: var(--color-cream);
-  color: var(--color-ink);
+  background: var(--accent);
+  color: var(--accent-ink);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
   font-weight: var(--type-button-md-weight);
@@ -47,6 +70,11 @@
   height: 46px;
   text-decoration: none;
   cursor: pointer;
+  /* The one cream token left in this file, deliberately. A shadow is not a
+     palette decision — it is 8% black under a pill, which is what a shadow
+     is on either ground — and `--color-shadow` is defined in `tokens.css`,
+     which BOTH chains load. A `theme.css` name here would be undefined on
+     the landing page for no gain. */
   box-shadow: 0 2px 4px rgb(from var(--color-shadow) r g b / 0.08);
   transition: none;
 }
@@ -61,21 +89,22 @@
 
 .button-primary:hover,
 .button-primary:focus-visible {
-  background: var(--color-voltage-deep);
-  color: var(--color-cream);
+  background: var(--accent-deep);
+  color: var(--accent-ink);
 }
 
-/* The surface variant: a CTA on a cream band takes the already-sanctioned
-   hover colours (voltage-deep fill, cream label, 5.66:1) as its resting
-   state, since the default cream pill would be invisible on cream. The
-   page's one shadow stays on the hero's primary CTA alone.
-
-   This is also the organiser side's only primary action style: docs/design.md
-   reserves voltage for the primary action and the focus ring there, and puts
-   the full-bleed voltage block on none of those screens. */
+/* The surface variant existed because the default CREAM pill would have been
+   invisible on a cream band, so it took the hover fill as its resting state.
+   `D1` dissolves that problem rather than solving it: the resting pill is
+   the accent now and reads on every organiser surface, so this variant and
+   the base rule paint the same two colours. What it still carries is the
+   other half of its job — the page's one shadow stays on the hero's primary
+   CTA alone, and this variant drops it. Kept as a separate rule rather than
+   folded in, because `box-shadow: none` is the declaration that differs and
+   the markup that asks for it has not changed. */
 .button-primary--surface {
-  background: var(--color-voltage-deep);
-  color: var(--color-cream);
+  background: var(--accent);
+  color: var(--accent-ink);
   box-shadow: none;
 }
 
@@ -91,14 +120,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--color-canvas);
-  color: var(--color-ink);
+  background: var(--surface);
+  color: var(--ink);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
   font-weight: var(--type-button-md-weight);
   line-height: var(--type-button-md-line-height);
   letter-spacing: var(--type-button-md-letter-spacing);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-md);
   padding-block: 9px;
   padding-inline: 14px;
@@ -117,7 +146,7 @@
 
 .button-secondary:hover,
 .button-secondary:focus-visible {
-  border-color: var(--color-voltage);
+  border-color: var(--accent);
 }
 
 /* Disabled is deliberately opacity, never a colour swap: a disabled control
@@ -132,9 +161,9 @@
 /* ---- CardHairline ----------------------------------------------------- */
 
 .card-hairline {
-  background: var(--color-canvas);
-  color: var(--color-ink);
-  border: 1px solid var(--color-hairline);
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-lg);
   padding: var(--space-xl);
 }
@@ -230,10 +259,132 @@
   display: flex;
   align-items: center;
   pointer-events: none;
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   font-weight: var(--type-mono-sm-weight);
   line-height: var(--type-mono-sm-line-height);
   letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* ---- D21a: the row-action gutter -------------------------------------- */
+
+/* "A row action can never be clipped, in any table."
+
+   The reported defect was an action button cut off at a bank row's edge, and
+   the cause was two things at once: the action cell had no reserved width,
+   and the table was wider than the page. The first is fixed here, as a rule
+   every table inherits rather than a value each screen re-decides. The
+   second's fix is the TABLE — "fold the id under the name, let one column
+   wrap" — and belongs to the screen, not to the gutter; what this rule owes
+   a table that does not fit is that the action survives it anyway.
+
+   `width: 1%` is `D18`'s own value. On an auto-layout table it means
+   shrink-to-fit bounded below by min-content, and `white-space: nowrap` makes
+   that min-content "the buttons, side by side". So the column is as wide as
+   its actions whether or not the actions are showing, which is the whole of
+   "width always reserved" — neither declaration sits in a hover or focus
+   rule, so there is nothing for a reveal to change.
+
+   THE NOWRAP IS SCOPED TO THE GUTTER AND MUST STAY THERE. `D18` records the
+   bug a wider rule caused: "Prompts wrap and clamp to two lines; the overflow
+   bug was `white-space: nowrap` inherited from the table rules."
+   test/tables.test.tsx asserts both sides — the gutter has it, a cell holding
+   prose does not.
+
+   THE REVEAL IS `opacity` ALONE, NEVER `visibility`. `D18`'s bullet says
+   "reveal with `visibility` plus `opacity`" and `D21a`, which is later, says
+   the opposite; `D21a` is the one that can be built, because
+   `visibility: hidden` takes an element OUT of the tab order and would defeat
+   the `tr:focus-within` reveal specified in the same sentence. `opacity`
+   changes no layout, so revealing an action cannot widen a row either.
+
+   AND THE CELL IS TRANSPARENT, deliberately: an opaque sticky cell sliding
+   over a column that is scrolling under it is the same defect wearing a
+   different hat. That it names no colour is also what makes one rule safe in
+   two stylesheet chains — `primitives.css` is imported by `admin.css`, which
+   imports `theme.css`, AND by `landing.css`, which does not, so any semantic
+   colour name written here would be undefined on the landing page. The two
+   requirements have the same answer and test/tables.test.tsx holds them to it.
+
+   `inset-inline-end` rather than `right`: this file's neighbours are logical
+   throughout (`padding-inline`, `border-block-end`, `text-align: start`), and
+   the gutter belongs at the inline end of the row in any writing mode.
+
+   The gutter is the LAST cell in its row. That is markup rather than CSS and
+   cannot be enforced from here, so test/tables.test.tsx asserts it: a cell
+   pinned to the inline end with a column after it slides over that column's
+   content the moment the table scrolls. */
+
+th.acts,
+td.acts {
+  position: sticky;
+  inset-inline-end: 0;
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* ...AND THE SCROLL CONTAINER THEY ARE STICKY INSIDE OF, which `D21a` names
+   in the same sentence and Phase 6.5e Task 2 is the first to build:
+   "`th.acts`, `td.acts` are `position: sticky; right: 0` INSIDE THEIR OWN
+   SCROLL CONTAINER".
+
+   Without one, `position: sticky` resolves against the nearest scrollport
+   that really scrolls, which at 1440px is the DOCUMENT — so on a table wider
+   than its page the transparent gutter floats over the columns to its left
+   instead of pinning to the table's own edge. That is a regression the
+   gutter itself introduced: before it, the actions sat in an ordinary cell
+   and could not overlap anything. shell.css has `.shell__page > *
+   { overflow-x: auto }`, but only inside `@media (max-width: 719px)`, so it
+   is not this container at any width an organiser works at — and a page-wide
+   one would scroll the create form and the filter bar sideways with the
+   table.
+
+   `overflow-x: auto` computes `overflow-y` to `auto` as well, so this box is
+   a scroll container on both axes. That is deliberate and is what makes the
+   sticky cell resolve here; it costs nothing vertically because the wrapper
+   is exactly as tall as its table. It does mean `e2e/density.ts`'s
+   `countPrimaryRows` now sees one more clip boundary per table — which is
+   why this rule waited for the task that re-measures (`AG1`).
+
+   Here rather than in a screen's stylesheet for the same reason the gutter
+   is: every table inherits it, and it names no colour, so it is safe in both
+   `admin.css`'s chain and `landing.css`'s. */
+.table-scroll {
+  overflow-x: auto;
+}
+
+/* NO GAP BETWEEN THE ACTIONS, and the deleted one is worth recording.
+   This rule shipped a `margin-inline-start: var(--space-base)` on
+   `td.acts > * + *`, justified as "`A10`'s 8px minimum between two touch
+   targets". `A10` says no such thing: its only definitions
+   (2026-10-17-landing-page-v2-design.md:1486, -v3-interactive.md:1293) are
+   about reaching a 44px HIT AREA through block padding, and no 8px spacing
+   rule exists anywhere in docs/. So the declaration was unrequested by `D21a`
+   and `D18`, carried no guard, and widened the gutter against the one
+   narrowness claim this rule does make and e2e proves. It is gone rather than
+   re-justified — `.button-secondary` already reaches 44px, which is what
+   WCAG 2.5.8 exempts adjacent targets on, so nothing accessible rests on it.
+   Two flush buttons are a design question for the screens, not a property of
+   a gutter. (Fix round 1, F2.)
+
+   `@media (hover: hover)` rather than bare: a pointer that cannot hover never
+   fires `tr:hover`, so a touch device would be left with a gutter it can
+   reach and cannot see. There the actions simply stand. */
+@media (hover: hover) {
+  td.acts {
+    opacity: 0;
+    transition: none;
+  }
+
+  tr:hover > td.acts,
+  tr:focus-within > td.acts {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  td.acts {
+    transition: opacity 120ms ease-out;
+  }
 }

@@ -15,10 +15,14 @@
   border-collapse: collapse;
 }
 
+/* A table rule, which DESIGN.md puts at 3:1 ("input outlines, answer rows,
+   palette squares, table rules") rather than at the decorative tone. The
+   row separators further down this file are a LIST's, not a table's, and
+   keep the quiet tone they had. */
 .testbuilder-list th,
 .testbuilder-list td {
   padding: var(--space-sm) var(--space-md);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: start;
   vertical-align: top;
 }
@@ -30,10 +34,38 @@
   text-transform: uppercase;
 }
 
+/* `D21a`: "fold the id under the name". The id was its own column while the
+   table was wider than its page; it is the second line of the name cell now.
+   `--space-xs` is the component scale's smallest step (`D15`) — the two lines
+   are one fact about one test, not two stacked rows. */
+.test-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+/* Still selectable mono text with tabular figures, which is what the id is
+   for; `--ink-3` because it is now the quieter half of a pair rather than a
+   column of its own. */
 .test-id {
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   font-variant-numeric: tabular-nums;
+}
+
+/* `D7c`: the publish history. Mono, like every other count and id in the
+   organiser, and `--ink-2` so it reads as supporting fact beside the
+   lifecycle rather than competing with it. NO HUE on either (`D1`) — this
+   rule paints the version, which is not the state; `.test-state` is painted
+   by nothing at all and `test-list.test.tsx` holds it there. */
+.test-version {
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .test-state {
@@ -47,7 +79,7 @@
   align-items: center;
   gap: var(--space-xs);
   margin-inline-start: var(--space-sm);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
@@ -60,7 +92,7 @@
 }
 
 .qr-code {
-  color: var(--color-ink);
+  color: var(--ink);
 }
 
 /* A `<button>` that reads as the test's name, not as a button — the same
@@ -72,7 +104,7 @@
   border: none;
   padding: 0;
   font: inherit;
-  color: var(--color-voltage);
+  color: var(--accent);
   text-decoration: underline;
   cursor: pointer;
 }
@@ -91,7 +123,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding-block: var(--space-sm);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge);
 }
 
 .section-row__summary {
@@ -102,7 +134,7 @@
   border: none;
   padding: var(--space-xs) 0;
   font: inherit;
-  color: var(--color-ink);
+  color: var(--ink);
   cursor: pointer;
   /* UX-12: the collapsed sentence wraps rather than truncates, so it stays
      readable at phone width instead of hiding words behind an ellipsis. */
@@ -113,14 +145,34 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* `D19`: each section's own shuffle state, on its collapsed row. A chip
+   rather than a sixth clause in UX-12's sentence — it is a switch's state,
+   not a figure, and it reads at a glance down a column of rows. Bordered
+   with --edge-strong rather than --edge: the border is the only thing
+   making this read as a chip rather than as one more line of row text, so
+   it carries meaning and takes the 3:1 tone (DESIGN.md). `align-self`
+   because .section-row is a column flex container, in which a block child
+   would stretch the chip the whole width of the row. */
+.section-row__chip {
+  align-self: start;
+  margin: 0;
+  padding: var(--space-xs) var(--space-base);
+  border: 1px solid var(--edge-strong);
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
 .section-row__draw {
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
 
 .section-row__flag-risk {
-  color: var(--color-flag-risk);
+  color: var(--risk);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
@@ -150,7 +202,7 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-md);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
 }
 
 .section-editor__source {
@@ -168,7 +220,7 @@
 }
 
 .section-editor__preview {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   padding: var(--space-sm);
 }
 
@@ -177,7 +229,125 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-md);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
+}
+
+/* ---- D18: the picker DOCKS as a right-hand column beside the paper ------
+
+   "The question picker docks as a right-hand column beside the paper rather
+   than floating over it, which serves `UX-14` better."
+
+   ONE CORRECTION TO THE BULLET, recorded rather than quietly worked around:
+   it never floated. `.picker-drawer` has never carried `position: fixed` or
+   `absolute`; `SectionList` renders it as the LAST child of `.section-list`,
+   so it arrived *under* the sections — past the whole list, the "Add
+   section" button and the shuffle fieldset. The defect `UX-14` names is the
+   same either way (the paper is not beside you while you pick) and so is the
+   fix, but what it is a fix FROM is "below", not "over".
+
+   The construct is the checklist rail's, deliberately — same page, same
+   problem, and two different ways of making a column would be two things to
+   maintain. `:has()` rather than a modifier prop, so `SectionList` says only
+   whether a picker exists and the stylesheet decides what that does to the
+   layout. `grid-row: 1 / span 40` for the same reason the rail gives: with
+   no `grid-template-rows` the explicit grid has one line, so `1 / -1`
+   collapses the span to a single row and sticky would have no slack. The
+   rail's CEILING comes with its construct and is inherited rather than
+   escaped — ponytail: a `.section-list` with more than 40 direct children
+   loses the column's sticky slack (it stops sticking, it does not break);
+   raise the span, or give the list explicit rows, if one ever grows that
+   long.
+
+   The column keeps `overflow: visible` under its `max-height`, which
+   `e2e/density.ts` depends on (`clipOf` must skip it, leaving the list the
+   one clipping ancestor). The consequence, named rather than discovered: if
+   the children that are NOT the list — heading, the four filter fields,
+   footer, actions — ever exceed the bound between them, the column spills
+   below the fold with no scroller of its own. Not reachable at the gate's
+   1440x900, where they come to 453px of 796. The knob if it ever is would be
+   letting the filters shrink, never clipping the column.
+
+   THE COLUMN'S WIDTH IS A MEASURED FIGURE, NOT A TASTE ONE, and `AG1` is
+   why. `e2e/measurement/density.spec.ts` holds this surface's row height at
+   `<= 25px` — one line — and the seeded prompt's own text measures 444.13px
+   in Chromium at 1440x900. Add the checkbox and its gap (17px) and the
+   drawer's padding and border (26px) and a row needs ~487px of column to
+   stay on one line. 34rem is 544px: the first step of the component scale
+   past that figure with room for the longest seeded topic, and the sections
+   column still takes 372px beside it at 1440. Narrow this and the prompts
+   wrap, the median row doubles, and the density gate goes red — which is
+   the gate working, not a bar to move (`AG2`).
+
+   `minmax(18rem, 1fr)` ON THE FIRST COLUMN IS WHAT STOPS THE PAPER STARVING.
+   The picker's track is `minmax(0, 34rem)`, so it is grown out of free space
+   AFTER the paper's 288px base is reserved: at a 940px spine that is
+   372 + 544, and with the checklist rail docked rather than in lights (a
+   672px spine) it is 288 + 360 — the picker gives way, the paper does not,
+   and neither overflows. The clamp below is what makes that narrower picker
+   still read.
+
+   Two columns only from 1200px. Below it the spine cannot hold 18rem of
+   paper and a picker wide enough to be one, so the drawer stays where it is
+   in the flow — which is the behaviour this screen already had.
+
+   `D15`, under shell.css's mapping: everything inside the construct is the
+   component scale, and the gap BETWEEN the two columns is a page-to-edge
+   measurement and takes `--space-xl`, exactly as the rail's does.
+
+   `D12` — the picker is one of `AG1`'s four SCANNING surfaces (the builder
+   around it is an editing one and is outside the gate), so the list below
+   is packed to win rows and is measured for it. */
+
+@media (min-width: 1200px) {
+  .section-list:has(> .picker-drawer) {
+    display: grid;
+    grid-template-columns: minmax(18rem, 1fr) minmax(0, 34rem);
+    column-gap: var(--space-xl);
+    align-content: start;
+  }
+
+  .section-list:has(> .picker-drawer) > * {
+    grid-column: 1;
+    min-width: 0;
+  }
+
+  /* After the rule above and at the same weight, so source order puts the
+     drawer in the second column — the rail's own arrangement. */
+  .section-list > .picker-drawer {
+    grid-column: 2;
+    grid-row: 1 / span 40;
+    align-self: start;
+    /* Under the shell's own bar plus the page's top inset, so the column and
+       the bar never overlap. `--shell-bar` is declared on `.shell` and
+       inherits down to here.
+
+       The two `calc()`s below are the checklist rail's, character for
+       character, which is the point — one construct, not two. They are also
+       the formula `home.css` records as discarded (it went to `100%` of the
+       grid track), because they are only right while `.shell > .shell__page`
+       spends `--space-xl` on `padding-block` and nothing holds the two equal.
+       Matching the rail is still the defensible call and a third variant
+       would be worse: whoever moves the rail to a track-relative bound moves
+       this with it. */
+    position: sticky;
+    inset-block-start: calc(var(--shell-bar) + var(--space-xl));
+    max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+  }
+
+  /* ...and ONLY here does the list give up its own 16rem bound, because only
+     here is there another one. The column above caps the drawer at the
+     viewport, so the list fills what the heading, the filters, the footer and
+     the actions leave — one scroll region instead of a 16rem box nested
+     inside a viewport-bounded one, which is where the extra visible rows come
+     from. `min-height: 0` because a flex item's default `min-height: auto`
+     refuses to shrink below its content and `overflow-y` would never engage.
+     Undo this pairing in either direction and the list is unbounded at some
+     width; `question-picker.test.tsx` asserts both halves are present. */
+  .section-list > .picker-drawer .picker-drawer__list {
+    max-height: none;
+    flex: 1;
+    min-height: 0;
+  }
 }
 
 .picker-drawer__filters {
@@ -186,6 +356,16 @@
   gap: var(--space-md);
 }
 
+/* THE LIST IS ALWAYS BOUNDED, and the bound lives HERE rather than in the
+   dock — fix round 1, M1. The dock's own bound (`flex: 1` inside a column
+   the viewport caps) only exists inside `@media (min-width: 1200px)` above,
+   so releasing `max-height` unconditionally left the list with no height
+   limit at all below that breakpoint: `flex: 1 1 0%` in an unbounded,
+   content-sized flex column resolves to the content's own height, forty rows
+   of it (~1,150px), and `overflow-y` never engages. The footer and the
+   Cancel/Confirm row render AFTER this `<ul>`, so Confirm went ~900px
+   further down a page the drawer already sat at the bottom of. 16rem is
+   where that bound has always been and it stays the undocked default. */
 .picker-drawer__list {
   display: flex;
   flex-direction: column;
@@ -202,8 +382,50 @@
   gap: var(--space-xs);
 }
 
+/* The label is a row of its own, because the clamped prompt below is a
+   BLOCK-level box (`display: -webkit-box`) and an inline `(N pts)` after one
+   would start a second line — a two-line row for every one-line prompt,
+   which is the density regression this task is measured against. Flex puts
+   them side by side; `min-width: 0` lets the prompt shrink so the points are
+   never pushed out of the column, and the `gap` replaces the literal space
+   the markup still carries for the accessible name's sake. */
+.picker-drawer__row label {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  min-width: 0;
+}
+
+/* `D18`'s second half: "Prompts wrap and clamp to two lines; the overflow
+   bug was `white-space: nowrap` inherited from the table rules."
+
+   THE INHERITANCE IS ALREADY CUT and this rule does not re-cut it. 6.5e
+   Task 1 scoped that declaration to `th.acts, td.acts` (primitives.css) and
+   `test/tables.test.tsx` holds it there; the picker is a `<ul>` of `<li>`
+   and never was a table, so nothing reaches it. What was missing is the
+   other half of the sentence — the clamp — without which a 300-word prompt
+   is a 300-word row and the eight rows beside it are pushed off the list.
+
+   `-webkit-box` plus `-webkit-line-clamp` because that is the clamp every
+   engine ships; the unprefixed `line-clamp` is beside it for the day they
+   stop. `overflow: hidden` is not decoration — the clamp does nothing
+   without it. `overflow-wrap: anywhere` for the prompt with no spaces in it,
+   the same declaration `.section-row__summary` already carries.
+
+   The points are OUTSIDE this box (see QuestionPickerDrawer.tsx): a clamp
+   over the whole label eats whatever ends line two, which is the points. */
+.picker-drawer__prompt {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
 .picker-drawer__points {
-  color: var(--color-muted);
+  color: var(--ink-3);
   /* Fix round (task 3 review, I12). */
   font-variant-numeric: tabular-nums;
 }
@@ -260,7 +482,7 @@
 .shuffle-group__fact {
   margin: 0;
   padding-inline-start: var(--space-md);
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 /* Task 5 (#57, P5.4): the registration form builder and the one renderer
@@ -272,7 +494,7 @@
   gap: var(--space-lg);
   margin-block-start: var(--space-xl);
   padding-block-start: var(--space-lg);
-  border-block-start: 1px solid var(--color-hairline);
+  border-block-start: 1px solid var(--edge);
 }
 
 .form-builder__templates,
@@ -287,7 +509,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   padding: var(--space-md);
 }
 
@@ -306,7 +528,7 @@
 
 .form-builder__fact {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .form-builder__risk {
@@ -314,11 +536,11 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 .form-builder__preview {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   padding: var(--space-md);
 }
 
@@ -344,7 +566,7 @@
 }
 
 .timing-panel__group {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   margin: 0;
   padding: var(--space-md);
 }
@@ -355,7 +577,7 @@
 
 .timing-panel__fact {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .timing-panel__risk {
@@ -363,7 +585,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* Task 8 (#60, P5.7): access modes and allowlists. */
@@ -377,7 +599,7 @@
 }
 
 .access-panel__group {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   margin: 0;
   padding: var(--space-md);
 }
@@ -385,7 +607,7 @@
 .access-panel__fact,
 .access-panel__summary {
   margin: 0;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .access-panel__legend {
@@ -400,7 +622,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* Task 9 (#60 / #56, P5.7b): the candidate list's dry-run report. One row
@@ -412,13 +634,14 @@
 
 .access-panel__issues caption {
   text-align: left;
-  color: var(--color-muted);
+  color: var(--ink-3);
   padding-bottom: var(--space-xs);
 }
 
+/* A table rule again (see `.testbuilder-list` above). */
 .access-panel__issues th,
 .access-panel__issues td {
-  border-bottom: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--edge-strong);
   padding: var(--space-xs);
   text-align: left;
   vertical-align: top;
@@ -436,13 +659,26 @@
 }
 
 .release-panel__group {
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   margin: 0;
   padding: var(--space-md);
 }
 
 .release-panel__fact,
-.branding-panel__fact,
+.branding-panel__fact {
+  margin: 0;
+  color: var(--ink-3);
+}
+
+/* The two quiet lines that render INSIDE a preview, on its cream rather than
+   on the page. `.branding-panel__footer` renders nowhere else
+   (BrandingPanel.tsx:286, 291, 296); `.branding-panel__fact` renders on the
+   page five times and in the preview once, so this is the descendant form
+   and the rule above keeps the page's own. Splitting the two is what lets
+   contrast-usage.test.ts score each against the one ground it really has —
+   a single entry naming both would be reporting a number for a pairing that
+   does not exist. */
+.branding-panel__preview .branding-panel__fact,
 .branding-panel__footer {
   margin: 0;
   color: var(--color-muted);
@@ -462,13 +698,37 @@
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* `--brand-primary` is set on this wrapper from an effect (no style={} is
    allowed in .tsx under src) and cascades into all three previews, so the
    colour is applied once rather than three times. The fallback keeps a
-   preview readable before any colour is chosen. */
+   preview readable before any colour is chosen.
+
+   THE PREVIEW IS THE ONE CREAM THING LEFT ON THE ORGANISER, and 6.5e did
+   not re-ground it. It is a miniature of the CANDIDATE'S start page as the
+   branding settings will paint it, so `var(--color-ink)` below is the
+   runtime's own cream ink and is correct; re-grounding it would make the
+   preview lie about the page it previews. What 6.5e added is the cream FILL
+   the fallback always assumed — with the organiser on the Signal ground an
+   unfilled preview put near-black ink on a near-black page.
+
+   THE WHOLE SUBTREE IS THE CREAM WORLD, NOT ONLY THE FILL, and the first
+   version of this rule got that wrong (fix round 1, C1). Painting the fill
+   alone left every bare <p> in the three previews inheriting `--ink` from
+   `admin.css`'s `body`: #eaf2ed on #fffbf5 is **1.11:1**. The footer and
+   the preview's own fact line, on `--ink-3`, measured **3.64:1** against a
+   4.5:1 bar.
+
+   Both were DARK-GROUND ONLY — on the light ground the same two names
+   measure 17.39:1 and 5.20:1 on cream and are perfectly legal — which is
+   the whole lesson: a semantic name over a FIXED cream fill resolves to one
+   palette on one ground and the other on the other, so it is legal by
+   accident rather than by rule. Everything inside the preview therefore
+   reads a cream-world token, which resolves the same on both grounds
+   because that is what the preview is showing. Measured on cream:
+   `--color-ink` 15.85:1, `--color-muted` 5.18:1. */
 .branding-panel__previews {
   display: flex;
   flex-wrap: wrap;
@@ -477,7 +737,11 @@
 
 .branding-panel__preview {
   flex: 1 1 14rem;
-  border: 1px solid var(--color-hairline);
+  background: var(--color-cream);
+  /* The three previews' own messages are bare <p>s with no colour of their
+     own, so this is what paints them. */
+  color: var(--color-ink);
+  border: 1px solid var(--edge);
   border-block-start: 3px solid var(--brand-primary, var(--color-ink));
   padding: var(--space-md);
 }
@@ -503,8 +767,8 @@
 .review-note {
   margin-block: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border-inline-start: 2px solid var(--color-hairline);
-  color: var(--color-ink-soft);
+  border-inline-start: 2px solid var(--edge);
+  color: var(--ink-2);
 }
 
 /* Task 13 (#64, P5.11): the publish checklist. */
@@ -517,7 +781,7 @@
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   text-transform: uppercase;
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 /* Where a row has no section to open, the field it raised itself against is
@@ -527,7 +791,7 @@
 .publish-checklist__field {
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 /* Phase 6.5d Task 1 (spec D7): the five settings as rows that state their
@@ -552,7 +816,7 @@
 }
 
 .setting-row {
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge);
 }
 
 .setting-row__button {
@@ -566,7 +830,7 @@
   border: none;
   padding: var(--space-lg) 0;
   font: inherit;
-  color: var(--color-ink);
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -577,7 +841,7 @@
 .setting-row__icon {
   display: inline-flex;
   align-self: center;
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 .setting-row__label {
@@ -590,7 +854,7 @@
 
 .setting-row__summary {
   flex: 1 1 18rem;
-  color: var(--color-muted);
+  color: var(--ink-3);
   /* Durations, counts and timestamps are compared down the column. */
   font-variant-numeric: tabular-nums;
   overflow-wrap: anywhere;
@@ -662,7 +926,7 @@
 /* The docked rail is a panel; the collapsed one is a 52px strip (`D7a`). */
 .checklist-rail[data-state="docked"] {
   width: 20rem;
-  border-inline-start: 1px solid var(--color-hairline);
+  border-inline-start: 1px solid var(--edge);
   padding-inline-start: var(--space-md);
 }
 
@@ -722,7 +986,7 @@
 }
 
 .checklist-rail__count {
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 /* The count is the figure's own qualifier; at 52px there is no room for it
@@ -745,7 +1009,7 @@
   background: none;
   border: 0;
   cursor: pointer;
-  color: var(--color-ink-soft);
+  color: var(--ink-2);
 }
 
 .checklist-rail__lights {
@@ -766,18 +1030,22 @@
    three hues cannot carry three meanings on their own and a reader who sees
    none of them would be left with an unlabelled dot.
 
-   THE CREAM FLAG TRIO, not theme.css's --risk/--warn/--accent, and the
-   reason is a measurement rather than a preference. This screen is still on
-   the cream page (6.5e re-grounds it); theme.css's names resolve to the
-   DARK Signal palette there, and against --color-cream they measure
-   2.68:1, 2.08:1 and 1.60:1 — every one of them under the 3:1 a non-text
-   indicator needs, which is the same cross-ground move `D1` refuses by
-   name. These three are the cream world's own clean/review/risk triple,
-   already used by `.section-row__flag-risk` eight rules up, and they
-   measure 6.34:1, 5.48:1 and 5.20:1 on the same page. No colour is declared
-   here; DESIGN.md's front matter remains the only place one may be. When
-   6.5e moves this screen onto the Signal ground these three names move with
-   it, in one pass, with the rest of the file. */
+   THEME.CSS'S --risk / --warn / --accent, which is the move the cream flag
+   trio was holding this rule's place for. 6.5d measured that trio's
+   replacements at 2.68:1, 2.08:1 and 1.60:1 and kept the cream one — but
+   those were ratios against THE CREAM PAGE THE LIGHTS WERE STILL ON, not
+   against the tokens. On the Signal grounds this screen renders on from
+   6.5e, measured on all four surface tokens and both palettes:
+
+     --risk    7.16 / 6.90 / 6.59 / 6.17 dark,  6.16 / 5.87 / 6.54 / 5.87 light
+     --warn    9.22 / 8.88 / 8.49 / 7.95 dark,  5.32 / 5.07 / 5.65 / 5.07 light
+     --accent 12.01 / 11.57 / 11.06 / 10.36 dark, 5.48 / 5.23 / 5.82 / 5.23 light
+
+   Worst case 5.07:1 against the 3:1 a non-text indicator needs. So NO NEW
+   COLOUR IS DECLARED and none was ever needed: `D1` says in as many words
+   that "the accent itself carries positive meaning on the organiser", so
+   the passing light is the accent. DESIGN.md's front matter remains the
+   only place a colour may be declared and 6.5e declared none. */
 .checklist-rail__light {
   display: block;
   width: 44px;
@@ -792,20 +1060,24 @@
 }
 
 .checklist-rail__light[data-severity="blocking"] {
-  background-color: var(--color-flag-risk);
+  background-color: var(--risk);
 }
 
 .checklist-rail__light[data-severity="advisory"] {
-  background-color: var(--color-flag-review);
+  background-color: var(--warn);
 }
 
 /* Dimmed, because a passing check is the absence of work: it is there to be
-   counted, not to be looked at. Dimmed and not faded away: 0.75 over the
-   cream page composites to 3.28:1, which clears the 3:1 a non-text
-   indicator needs with a little room. 0.45 — where this started — measures
-   1.95:1, and a light nobody can see is not a quiet light. */
+   counted, not to be looked at. Dimmed and not faded away, and the opacity
+   is unchanged by the re-ground because it is the SHAPE that was ruled, not
+   the number: 0.75 accent over the four Signal surfaces composites to
+   6.95 / 6.85 / 6.62 / 6.34 on dark and 3.41 / 3.30 / 3.53 / 3.30 on light.
+   The light ground's 3.30:1 is the tightest figure this rule has ever had —
+   it clears the 3:1 a non-text indicator needs, where 0.45 (where this
+   started) measured 1.95:1 on cream, and a light nobody can see is not a
+   quiet light. */
 .checklist-rail__light[data-severity="passing"] {
-  background-color: var(--color-flag-clean);
+  background-color: var(--accent);
   opacity: 0.75;
 }
 
@@ -838,8 +1110,8 @@
   width: 20rem;
   max-width: calc(100vw - (2 * var(--space-xl)));
   max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
-  background: var(--color-canvas);
-  border: 1px solid var(--color-hairline-strong);
+  background: var(--surface);
+  border: 1px solid var(--edge-strong);
   padding: var(--space-md);
 }
 
@@ -865,7 +1137,7 @@
     align-items: stretch;
     border-inline-start: 0;
     padding-inline-start: 0;
-    border-block-end: 1px solid var(--color-hairline);
+    border-block-end: 1px solid var(--edge);
   }
 
   .checklist-rail__head,

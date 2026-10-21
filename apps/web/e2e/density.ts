@@ -7,10 +7,18 @@
 //
 // A row counts only when its **whole height** is visible: inside the
 // viewport *and* inside every vertically scrolling ancestor. The second
-// half is not pedantry — `.picker-drawer__list` is `max-height: 16rem;
-// overflow-y: auto`, so a drawer row scrolled out of its own list still
-// has a bounding box inside the viewport, and counting it would report
-// rows nobody can read.
+// half is not pedantry — `.picker-drawer__list` is a height-constrained
+// `overflow-y: auto` box, so a drawer row scrolled out of its own list
+// still has a bounding box inside the viewport, and counting it would
+// report rows nobody can read.
+//
+// 6.5e Task 5 (`D18`) changed where that constraint COMES FROM and nothing
+// else about it: the list was `max-height: 16rem` and is now `flex: 1;
+// min-height: 0` inside a docked column the viewport bounds
+// (`.section-list > .picker-drawer`, testbuilder.css). Still one clipping
+// ancestor, still no border — the column itself keeps `overflow: visible`,
+// so `clipOf` below skips it, which is correct because the list absorbs
+// the column's height rather than overflowing it.
 //
 // Vertical only, which is D13's own wording ("a row counts only if its
 // full height is within the viewport"). The test list's table is wider
@@ -57,13 +65,69 @@ export const PRIMARY_ROW: Record<Surface, string> = {
  *  "what an organiser sees when the screen opens". */
 export async function countPrimaryRows(page: Page, surface: Surface): Promise<number> {
   return page.locator(PRIMARY_ROW[surface]).evaluateAll((rows) => {
+    // THE PADDING BOX, NOT THE BORDER BOX, and the difference is a row.
+    //
+    // `getBoundingClientRect()` is the BORDER box: it includes the element's
+    // borders AND the strip a horizontal scrollbar occupies along the bottom.
+    // A scroll container that is scrolling sideways paints nothing readable in
+    // that strip — roughly 15px of it — so clipping on the border box counts a
+    // row an organiser cannot read. The error runs in the PERMISSIVE
+    // direction, which is the one `AG2` cares about: it reports more rows than
+    // are there, so a density regression could hide behind it.
+    //
+    // `clientTop` is the top border's width and `clientHeight` is the padding
+    // box's height with the scrollbar strip already taken off, so the two
+    // together are exactly the PADDING BOX — padding included, borders and
+    // scrollbar excluded. That is the right box and not merely a tighter one:
+    // the padding box is where overflow clipping actually happens, so it is
+    // the edge a reader asking "can this row be seen" has to use.
+    //
+    // ONE ROUNDING CAVEAT, named because `bankBrowser`'s count already moves
+    // by one between runs and nobody should spend an hour on the wrong
+    // suspect. `clientTop` and `clientHeight` are integer-rounded where
+    // `getBoundingClientRect()` is fractional, so a sub-pixel border could
+    // shift either edge by less than a pixel. No container in this gate's
+    // path has a border at all, and the quantity this guards against is a
+    // ~15px strip, so the rounding is bounded and irrelevant here — but it is
+    // not zero, and it is not the cause of that jitter (see the note beside
+    // `BEFORE.bankBrowser`, which is a wrapped prompt and a free row order).
+    //
+    // 6.5e Task 2 added the first scroll containers to sit between a row and
+    // the viewport (`.table-scroll`, `D21a`), which is what made this
+    // reachable at all. LATENT WHEN IT WAS FIXED, measured twice over, and no
+    // figure in `density.spec.ts` moved:
+    //
+    //   1. Neither table overflows at 1440x900 with the real 40-row fixture
+    //      (`scrollWidth === clientWidth` on both wrappers), so there is no
+    //      scrollbar strip to mis-count.
+    //   2. Structurally, a wrapper with AUTO height cannot be caught by this
+    //      at all: its content edge sits exactly at its table's bottom, so no
+    //      row can extend past it, and the strip is painted below the last
+    //      row rather than across one. The bad count needs a container that
+    //      is BOTH height-constrained — so rows really do run past its
+    //      content edge — and taller in its border box than its content box.
+    //      `.picker-drawer__list` is the one height-constrained container
+    //      here (`flex: 1; min-height: 0` in a viewport-bounded column since
+    //      6.5e Task 5; `max-height: 16rem` before it) and it has no border
+    //      and no horizontal scrollbar, so its two boxes coincide.
+    //
+    // It goes live the day a `.table-scroll` grows a `max-height`, or any
+    // clipping ancestor grows a border. The probe that proved the change:
+    // `max-height: 400px` plus a 60px bottom border on `.table-scroll` makes
+    // the old reader count 5 rows and this one 4.
+    //
+    // NOT PROVABLE FROM THE SCROLLBAR SIDE IN THIS HARNESS. Playwright
+    // launches Chromium with `--hide-scrollbars`, so the strip measures 0px
+    // even with `overflow-x: scroll` and an explicit
+    // `::-webkit-scrollbar { height: 15px }`. The border above is the same
+    // quantity from the other source, which is why the probe uses it.
     const clipOf = (element: Element): { top: number; bottom: number } => {
       const clip = { top: 0, bottom: window.innerHeight };
       for (let node = element.parentElement; node !== null; node = node.parentElement) {
         if (getComputedStyle(node).overflowY === "visible") continue;
-        const box = node.getBoundingClientRect();
-        clip.top = Math.max(clip.top, box.top);
-        clip.bottom = Math.min(clip.bottom, box.bottom);
+        const top = node.getBoundingClientRect().top + node.clientTop;
+        clip.top = Math.max(clip.top, top);
+        clip.bottom = Math.min(clip.bottom, top + node.clientHeight);
       }
       return clip;
     };

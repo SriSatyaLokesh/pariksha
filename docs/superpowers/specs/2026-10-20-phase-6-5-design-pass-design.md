@@ -409,8 +409,10 @@ vermilion family, which makes the palette square and the focus ring read as sing
 > **Why.** #181 names deciding this wrong in either direction as expensive. Structure-versus-purpose
 > is the only line checkable by reading one selector.
 >
-> **Cost if wrong.** Over-moving is worse: it is `admin.css`'s own warning about marketing styling
-> in an editing tool.
+> **Cost if wrong.** Over-moving is worse: it is the warning at `docs/design.md:325-326` — "The
+> authoring side is an editing tool, not a marketing page" — about marketing styling in an editing
+> tool. *(Citation corrected by 6.5e Task 7: this clause cited `admin.css`, whose header `9c7919c`
+> rewrote; the warning never originated there.)*
 
 ## 10. D11 — prototype first, then code
 
@@ -498,6 +500,55 @@ and the open question they frame cannot be answered as posed. Before building on
 >
 > **Cost if wrong.** Roughly a week of test work dragged behind `D3`. The lighter reading —
 > mechanical prop-drop only — was offered and refused.
+
+*Pointer, not an amendment — `D14`'s rule stands as written; its example and its cost estimate do not.*
+**The named instance was already closed when this plan started** (6.5e preflight, 2026-10-21).
+`bank-browser.test.tsx` "renders `BankBrowser` directly 13 times" was true when the spec was written and
+is now **zero**: 6.5c migrated the file in `1a8e9f2`, because `D3` deleted the props those renders
+passed, and its header at `:161-166` records the migration in exactly those terms. It renders
+`OrganiserApp` once, through `openBankList`/`openBrowser` at `:168-181`. This is the **sixth** figure in
+this spec produced by a method that was never checked against what it claimed to measure — after `D8`'s
+63 font-size literals, `D16a`'s duplicate ids, `D13`'s 56px/11-row figures, §1's voltage counts and
+§8's `#179` shapes.
+
+**But the rule is very much alive, and the work is not where the example put it.** Measured across
+`apps/web/test/authoring/` and `apps/web/test/testbuilder/` (9,498 lines today, not 7,551 — the
+directories grew through 6.5c and 6.5d):
+
+| file | direct component mounts |
+| --- | --- |
+| `testbuilder/timing.test.tsx` | 27 |
+| `testbuilder/release-branding.test.tsx` | 22 |
+| `testbuilder/form-builder.test.tsx` | 21 |
+| `authoring/reorder.test.tsx` | 21 |
+| `testbuilder/access.test.tsx` | 19 |
+| `testbuilder/sections.test.tsx` | 18 |
+| `testbuilder/candidate-list.test.tsx` | 11 |
+| `authoring/import-dialog.test.tsx` | 5 |
+| `authoring/render.test.tsx` | 5 |
+| `authoring/choice-editor.test.tsx` | 4 |
+| `testbuilder/qr-code.test.tsx` | 4 |
+| `testbuilder/url-check.test.tsx` | 3 |
+| eleven others | 1-2 each |
+
+**Scoping ruling made at 6.5e preflight, and flagged to the owner rather than buried.** `D14` as
+written binds the **file**: "any test file this phase edits is rewritten to click from `OrganiserApp`".
+Read literally, 6.5e's shuffle task — which adds a handful of tests to `sections.test.tsx` — would owe a
+rewrite of that file's eighteen unrelated mounts, and its question-picker task would owe more. 6.5e
+instead migrates **the mounts a task's own change touches**, inventories the rest, and leaves them.
+
+The reason is that `D14`'s own justification has been spent. The ruling rests on "`D3` deletes props
+those tests pass, so they must be touched anyway" — and that was true for `bank-browser.test.tsx`,
+which is why 6.5c migrated it for free alongside work that had to happen. 6.5c has now deleted those
+props; the remaining files compile untouched. So the rewrite no longer rides along with anything: it is
+standalone work of roughly 160 mounts, which is precisely the "roughly a week of test work" this
+ruling's own **Cost if wrong** paragraph priced — and 6.5e's tasks are sized for a restyle, not for a
+week of test migration each.
+
+This is a narrowing of a locked owner's ruling and the owner should see it. It is **not** the lighter
+reading that was offered and refused — that was "mechanical prop-drop only", which would have migrated
+nothing. The inventory above is filed as its own piece of work rather than dropped, on the same footing
+as issue 200.
 
 ### D15 — two spacing scales
 
@@ -601,9 +652,15 @@ nothing was watching the seam between the chains; that is now the thing being wa
   type on hover *and* keyboard focus, animated `0fr→1fr` so nothing jumps. Twelve distinct examples
   — a description is not an example.
 - **Import is a page, not a modal** (owner's preference): linkable, no focus trap, room for a long
-  report, sticky action bar. It carries **"Download a sample"** — generated from
-  `schemas/question-1.json`, one question of every type, so it cannot drift from what the importer
-  accepts.
+  report, sticky action bar. It carries **"Download a sample"** — one question of every type
+  the schema enumerates, its coverage taken from `schemas/question-1.json`'s own `type` enum and its
+  shape proved on every run against that schema and against the importer's cross-field rules, so it
+  cannot drift from what the importer accepts. *(Amended by 6.5e Task 4: this clause read "generated
+  from `schemas/question-1.json`", which is not achievable — a mechanical schema instance satisfies
+  every `required` and is still refused, because `key` must name a real option, `select_k`'s key
+  length must equal `k`, and `fill_blank` placeholders must match the declared blanks. Those rules
+  live in `validateBank` precisely because no schema can express them. The end the clause asks for —
+  no drift — is delivered by proving the sample rather than by generating it.)*
 - **The question picker docks as a right-hand column** beside the paper rather than floating over
   it, which serves `UX-14` better. Prompts **wrap and clamp to two lines**; the overflow bug was
   `white-space: nowrap` inherited from the table rules.
@@ -757,7 +814,12 @@ will be lost first.
 
 - Final shell proportions within `D15`'s scales: rail width (prototype uses 236px / 56px
   collapsed), top bar height (56px), checklist rail (320px / 52px collapsed).
-- The named list of constructs moving under `D10`, one line of reason each.
+- ~~The named list of constructs moving under `D10`, one line of reason each.~~ **Settled by 6.5e
+  Task 7: the list is empty — nothing moves out of `signal.css`.** All twenty-one candidates are
+  rendered by `sections/signal/` today, so no move would relocate a shared construct; each would
+  only *add* the organiser to one the landing page renders. Candidate-by-candidate reasoning is in
+  [`../notes/2026-10-20-d10-moved-constructs.md`](../notes/2026-10-20-d10-moved-constructs.md), and
+  `apps/web/test/signal-boundary.test.ts` holds the boundary.
 - Summary-row wording for each of the five settings — each must state its current setting.
 - The icon set. One family, consistent stroke, SVG, self-hosted or inline — PRD S-11 has no
   iconography exception. Prototype icons are placeholders.

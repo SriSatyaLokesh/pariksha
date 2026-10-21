@@ -22,9 +22,25 @@ import { fileURLToPath } from "node:url";
 
 import type { Actor, ApiClient, Bank, TestSummary, Workspace } from "../src/lib/api";
 import { OrganiserApp } from "../src/routes/organiser";
-import { declarations, parseRuleBodies, readResolvedCss } from "./css-chain";
+import {
+  declarations,
+  organiserStylesheets,
+  paintsIn,
+  parseRuleBodies,
+  readResolvedCss,
+} from "./css-chain";
 
 const HOME_CSS = resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/home.css");
+
+/** Every stylesheet `admin-main.tsx` loads, resolved — the cascade the
+ *  organiser really renders under, which is wider than home.css alone. One
+ *  shared `seen` set, so a file two entries reach is read once. */
+function organiserCss(): string {
+  const seen = new Set<string>();
+  return organiserStylesheets()
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n");
+}
 
 /** Every declaration `home.css` makes for `selector`, merged across the
  *  rules that name it (a base rule plus a `@media` reopening). */
@@ -368,13 +384,62 @@ describe("Home never scrolls, and its panes do (D21)", () => {
   });
 
   it("paints the shell frame Home sits in, not only the page", async () => {
-    await openHome();
+    const { container } = await openHome();
 
     // The rail is `align-self: start`, so the grid cell below it shows
     // `.shell`'s own background — a cream wedge under the nav without this.
-    expect(declarationsOf(".shell:has(> .shell__page > .home)")).toContain(
-      "background: var(--ground-2)",
+    //
+    // 6.5e Task 1b moved the fill from home.css's `.shell:has(> .shell__page
+    // > .home)` onto `.shell` itself, because every screen is on the ground
+    // now and not only Home. So this reads the ORGANISER'S WHOLE CHAIN and
+    // asks the rendered element what paints it, rather than scanning
+    // home.css for a selector that has moved: the invariant is "the frame
+    // Home sits in is filled", and the rule's address is not part of it.
+    const shell = container.querySelector(".shell");
+    expect(shell).not.toBeNull();
+    expect(paintsIn(shell!, "background", organiserCss())).toBe("var(--ground-2)");
+
+    // ...and the page over it is still the ground, so the two are not one
+    // flat surface. Together these are the pairing the browser probe found.
+    const page = container.querySelector(".shell__page");
+    expect(page).not.toBeNull();
+    expect(paintsIn(page!, "background", organiserCss())).toBe("var(--ground)");
+  });
+
+  it("paints the focus ring in the accent, on a page element and not only the chrome", async () => {
+    const { container } = await openHome();
+
+    // 6.5e Task 1b deleted TWO narrower copies of this rule — shell.css's
+    // `.shell__bar :focus-visible, .shell__rail :focus-visible` and
+    // home.css's `.home :focus-visible` — because admin.css's
+    // `:root[data-theme] :focus-visible` covers all three surfaces and two
+    // rules painting one ring is how one of them drifts. Deleting either was
+    // invisible to this suite: nothing asserted the organiser's focus ring
+    // anywhere. This is that assertion, and it is on a PAGE element rather
+    // than on the bar, because the page is the surface both deleted rules
+    // left uncovered and the one base.css would otherwise paint in the
+    // candidate runtime's voltage.
+    const pill = container.querySelector(".home__pill");
+    expect(pill).not.toBeNull();
+
+    // `Element.matches(":focus-visible")` is false for an unfocused node, so
+    // the rule is read against a probe that carries the class and is asked
+    // for the declaration the rule sets — the same way the frame assertion
+    // above reads `.shell`.
+    const css = organiserCss();
+    const ring = parseRuleBodies(css).filter(
+      (rule) => rule.selector === ":root[data-theme] :focus-visible",
     );
+    expect(ring, "no :root[data-theme] :focus-visible rule in the organiser chain").toHaveLength(1);
+    const body = ring[0]!.body;
+    expect(declarations(body)).toContain("outline-color: var(--focus)");
+    expect(declarations(body)).toContain("box-shadow: 0 0 0 3px var(--accent-wash)");
+
+    // ...and the voltage ring base.css paints is not what wins here. The
+    // organiser rule is (0,3,0) against base.css's (0,1,0), so it wins in
+    // either chunk order — which is the whole point of writing it that way,
+    // and the whole reason Task 1b's body tie shipped past a green suite.
+    expect(css).not.toMatch(/:root\[data-theme\] :focus-visible \{[^}]*voltage/);
   });
 
   it("scrolls the two panes inside themselves instead", async () => {

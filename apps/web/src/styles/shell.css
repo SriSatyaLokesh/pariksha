@@ -58,10 +58,19 @@
   grid-template-rows: var(--shell-bar) minmax(0, 1fr);
   min-height: 100dvh;
 }
-/* No background on .shell itself. The bar and the rail paint their own, and
-   the page between them keeps the cream canvas base.css gives <body> until
-   6.5d and 6.5e re-ground the screens. Painting --ground here would put
-   near-black behind text admin.css still writes in near-black ink. */
+/* 6.5e Task 1b: the ground, promised here by the comment this replaces
+   ("the page between them keeps the cream canvas base.css gives <body>
+   until 6.5d and 6.5e re-ground the screens").
+
+   --ground-2 on .shell and not --ground, because the rail is
+   `align-self: start` and the grid cell BELOW it shows whatever .shell has.
+   --ground-2 is the rail's own fill, so that column reads as one surface;
+   the page then paints its own --ground over the rest. home.css found this
+   with a browser probe and scoped both fills to Home while every other
+   screen was still cream — they are unscoped here now that none is. */
+.shell {
+  background: var(--ground-2);
+}
 
 .shell[data-rail="collapsed"] {
   --shell-rail: 56px;
@@ -348,6 +357,7 @@
    min-width: 0 lets the item take the track instead of its content's
    min-content width. */
 .shell > .shell__page {
+  background: var(--ground);
   min-width: 0;
   width: 100%;
   margin-inline: auto;
@@ -400,19 +410,13 @@
   padding-block-start: 0;
 }
 
-/* The focus ring, deferred to this plan by theme.css's header. base.css
-   paints :focus-visible with voltage, which is right for the candidate
-   runtime on cream and illegal on a Signal surface. Scoped to the bar and
-   the rail rather than to .shell, because the page inside .shell is still
-   the cream canvas this plan does not re-ground: --focus measures 1.60:1 on
-   cream, so widening this selector before 6.5d and 6.5e move the screens
-   would trade a wrong-world ring for an illegal one. Widening it to .shell
-   is their one-line change. */
-.shell__bar :focus-visible,
-.shell__rail :focus-visible {
-  outline-color: var(--focus);
-  box-shadow: 0 0 0 3px var(--accent-wash);
-}
+/* The focus ring was here, scoped to the bar and the rail because "the page
+   inside .shell is still the cream canvas this plan does not re-ground".
+   6.5e Task 1b re-grounded it and took the widening this comment called its
+   one-line change: `admin.css` now carries `:root[data-theme]
+   :focus-visible`, which reaches the page, the bar, the rail AND the four
+   screens that render outside `.shell` altogether. Two rules painting one
+   ring is how one of them drifts, so this one is gone rather than kept. */
 
 /* ---- D3a: below 719px the shell is ONE column, never a zero column ------ */
 

@@ -4,10 +4,27 @@
    HTML and the reorderable list — moved to question.css in Phase 6 Task 7
    so exam.css can import those without importing an organiser screen.
 
-   No colour literal: every value is a token var() from tokens.css, which is
-   also why the fenced-code block below has no syntax theme. `language-x` is
-   the only hook markdown-it emits and blocks.css already styles `pre`
-   (ADR 0004, DESIGN.md §3.2). */
+   Phase 6.5e Task 1b re-grounded this file onto theme.css's semantic names
+   (`D1`, `D20`): no colour literal AND no cream token, so one data-theme
+   attribute re-grounds these screens with the rest of the organiser
+   (apps/web/test/theme.test.ts holds this file to it). The ink mapping is
+   ordinal — ink / ink-soft / muted to --ink / --ink-2 / --ink-3 — which
+   preserves the measured ratios almost exactly: the quietest tone was
+   5.18:1 on cream and is 5.28:1 on the dark ground, 5.04:1 on the light one.
+   DESIGN.md's own two-tone split carries the rules: --edge for decoration,
+   --edge-strong for "input outlines, answer rows, palette squares, table
+   rules" — which is why all three of this file's real tables took the
+   stronger tone their `hairline` never gave them: `.structured-grid`,
+   `.bank-browser__table` and `.import-dialog__table`. (Six across the
+   organiser, with `.testbuilder-list` and `.access-panel__issues` in
+   testbuilder.css and question.css's `.rendered` through admin.css's
+   repaint.) Only a real table's rules did: a list's row separator keeps the
+   decorative tone it had, so the re-ground changes the colour and not what
+   reads as loud.
+
+   That is also why the fenced-code block below has no syntax theme.
+   `language-x` is the only hook markdown-it emits and blocks.css already
+   styles `pre` (ADR 0004, DESIGN.md §3.2). */
 
 @import "./question.css";
 
@@ -28,10 +45,10 @@
 .prompt-editor__source {
   width: 100%;
   padding: var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-xs);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-mono-md-family);
   font-size: var(--type-mono-md-size);
   line-height: var(--type-mono-md-line-height);
@@ -43,7 +60,7 @@
   flex-direction: column;
   gap: var(--space-xs);
   padding: var(--space-md);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-sm);
 }
 
@@ -54,9 +71,9 @@
   flex-direction: column;
   gap: var(--space-md);
   padding: var(--space-lg);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-md);
-  background-color: var(--color-canvas);
+  background-color: var(--surface);
 }
 
 .preview__bar {
@@ -72,23 +89,23 @@
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
   text-transform: uppercase;
-  color: var(--color-muted);
+  color: var(--ink-3);
 }
 
 .preview__toggle {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-full);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-button-md-family);
   font-size: var(--type-body-sm-size);
   cursor: pointer;
 }
 
 .preview__toggle[aria-checked="true"] {
-  border-color: var(--color-voltage);
-  background-color: var(--color-voltage-soft);
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
 }
 
 .preview__options {
@@ -106,7 +123,7 @@
 
 .preview__key {
   padding-block-start: var(--space-md);
-  border-block-start: 1px solid var(--color-hairline);
+  border-block-start: 1px solid var(--edge);
 }
 
 .preview__key-line {
@@ -135,9 +152,9 @@
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-lg);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-md);
-  background-color: var(--color-canvas);
+  background-color: var(--surface);
 }
 
 /* ---- Type picker (UX-06) ------------------------------------------------- */
@@ -152,18 +169,300 @@
   margin: 0;
   padding: 0;
   border: 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--space-xs);
 }
 
 .type-picker__group-label {
   padding: 0;
+  padding-block-end: var(--space-xs);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
   text-transform: uppercase;
+}
+
+.type-picker__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: var(--space-base);
+}
+
+/* `D18`: the card is itself a three-row grid — name, note, example — and
+   `align-content: start` is what pins the first two to the top of a card
+   the grid has stretched to a TALLER NEIGHBOUR's height. Without it a
+   closed card centres its text in that gap and the row reads as ragged.
+
+   The third track is the whole mechanism: `0fr` closed, `1fr` open, never
+   added and never removed. Opening is therefore a resize of a row that was
+   always there — the name and the note cannot move relative to the card's
+   top edge, and the example is never mounted or unmounted, which is the
+   other way a drawer makes a page jump. `min-height: 0` plus
+   `overflow: hidden` on the example is what lets a `0fr` track really
+   reach zero: a bare `0fr` is `minmax(auto, 0fr)`, and `auto` there is the
+   item's own min-content height unless the item can be clipped.
+
+   `D12`: the question editor is an editing surface, so AG1's rows-visible
+   rule does not apply and the picker gets the air these cards need. */
+.type-card {
+  display: grid;
+  grid-template-rows: auto auto 0fr;
+  align-content: start;
+  row-gap: var(--space-xs);
+  padding: var(--space-md);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-md);
+  background-color: var(--surface);
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  text-align: start;
+  cursor: pointer;
+}
+
+/* Hover AND keyboard focus, in one rule, because a hover-only drawer is
+   unreachable from the keyboard. `:focus-visible` rather than `:focus` so
+   a pointer click does not leave a card stuck open behind the pointer —
+   hover is already covering that case. */
+.type-card:hover,
+.type-card:focus-visible {
+  grid-template-rows: auto auto 1fr;
+}
+
+/* `fr` values interpolate, so the row really animates rather than snapping;
+   the repo's one idiom for motion that a reader may have switched off
+   (primitives.css's two buttons, `td.acts`) is to declare the transition
+   only inside this query rather than to unset it inside the opposite one. */
+@media (prefers-reduced-motion: no-preference) {
+  .type-card {
+    transition: grid-template-rows 160ms ease-out;
+  }
+}
+
+/* The picked type: the accent on the EDGE, and nothing on the fill.
+
+   Fix round 1. This first shipped with `background-color: var(--accent-wash)`
+   beside the border, copied from `.preview__toggle[aria-checked="true"]` and
+   defended with the reading `.shell__nav-item[aria-current="page"]` and
+   `.home__pill[aria-pressed="true"]` take — "a 12% wash does not move the
+   ratio enough to score against". That reading does not transfer here, and
+   the reason is a number. Both of those selectors set `color: var(--ink)`,
+   which measures 15.99:1 dark and 17.93:1 light on --surface, so 12% of
+   anything cannot reach the bar. This card's quietest text is --ink-3, at
+   4.86:1 dark and 5.36:1 light — 0.36 and 0.86 of headroom — and the wash
+   ate it: the note dropped to 3.81:1 / 4.49:1 against a 4.5 bar, and
+   --edge-strong, chosen for every mark in the miniature precisely because a
+   mark owes 3:1, dropped to 2.81:1 / 2.92:1. Both failed on the one card an
+   author is looking at straight after making a choice.
+
+   So the fill is deleted rather than compensated. The accent border already
+   says which card is picked (11.06:1 dark, 5.82:1 light on --surface, against
+   the 3:1 a non-text indicator owes), `aria-pressed` already says it to a
+   screen reader, and nothing on this card now renders on anything but
+   --surface — which is exactly what its two SURFACE entries claim. Raising
+   --ink-3 for this one state would have been a third tone to maintain on two
+   grounds in order to keep a decoration.
+
+   NOTE FOR THE NEXT AUTHOR: no gate caught this. `contrast-usage.test.ts`
+   scores a selector's own declared `color` against the background its SURFACE
+   entry names, and a sibling selector that repaints that background
+   underneath it declares no `color`, so it never enters the sweep at all;
+   non-text 3:1 is scored only by the hand-maintained token-pair table at that
+   file's :1276, which is pairs and not selectors. A composite over
+   --accent-wash has to be reasoned about here, in the stylesheet. The one
+   guard that watches this card specifically is the last test in
+   `test/authoring/type-picker.test.tsx`. */
+.type-card[aria-pressed="true"] {
+  border-color: var(--accent);
+}
+
+.type-card__name {
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-button-md-weight);
+}
+
+.type-card__note {
+  color: var(--ink-3);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.type-card__example {
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ---- The drawn miniature inside a type card (`D18`) ----------------------
+
+   No `color` is set anywhere below, by design: every shape is a border, a
+   fill or one repeating gradient, so nothing here is text and nothing here
+   enters contrast-usage.test.ts's sweep (which keys on `color`). The two
+   tones it does use are chosen under DESIGN.md's own split rather than by
+   eye — `--edge-strong` (3.58:1 on the card's --surface dark, 3.49:1
+   light) for every mark that CARRIES the difference between one type and
+   another, since those are non-text indicators and owe 3:1; `--wash-2`
+   only for the grey bars that stand in for words, which are texture and
+   carry nothing. `--accent` marks what is answered. */
+
+.mini {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-block-start: var(--space-sm);
+}
+
+.mini--cols {
+  flex-direction: row;
+  align-items: flex-start;
+  gap: var(--space-base);
+}
+
+.mini__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.mini__bar {
+  flex: 1;
+  height: 4px;
+  border-radius: var(--rounded-full);
+  background-color: var(--wash-2);
+}
+
+.mini__bar--short {
+  flex: 0 0 36%;
+}
+
+.mini__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-full);
+}
+
+.mini__box {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--edge-strong);
+  border-radius: 2px;
+}
+
+.mini__dot--on,
+.mini__box--on {
+  border-color: var(--accent);
+  background-color: var(--accent);
+}
+
+.mini__count {
+  flex: none;
+  width: 16px;
+  height: 8px;
+  border: 1px solid var(--accent);
+  border-radius: var(--rounded-full);
+}
+
+.mini__pair {
+  display: flex;
+  gap: var(--space-sm);
+}
+
+.mini__half {
+  flex: 1;
+  height: 16px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-sm);
+}
+
+.mini__half--on {
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
+}
+
+.mini__tag {
+  flex: none;
+  width: 12px;
+  height: 10px;
+  border: 1px solid var(--edge-strong);
+  border-radius: 2px;
+}
+
+.mini__col {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.mini__pill {
+  width: 32px;
+  height: 10px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-full);
+}
+
+.mini__wire {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-xs);
+}
+
+.mini__wire-line {
+  height: 1px;
+  background-color: var(--edge-strong);
+}
+
+/* The drag handle: three rules in one element rather than three elements. */
+.mini__grip {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    var(--edge-strong) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.mini__rank {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--edge-strong);
+  border-radius: 2px;
+}
+
+.mini__gap {
+  flex: none;
+  width: 28px;
+  height: 8px;
+  border-block-end: 2px solid var(--accent);
+}
+
+.mini__field {
+  flex: 1;
+  height: 14px;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
+}
+
+.mini__unit {
+  flex: none;
+  width: 22px;
+  height: 14px;
+  border: 1px dashed var(--edge-strong);
+  border-radius: var(--rounded-xs);
+}
+
+.mini__lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
 }
 
 /* ---- Scoring row (P4.2) -------------------------------------------------- */
@@ -221,10 +520,13 @@
   border-collapse: collapse;
 }
 
+/* The matching/ordering grid is a TABLE and its rules are table rules, which
+   DESIGN.md puts at 3:1 ("input outlines, answer rows, palette squares,
+   table rules") rather than at the decorative tone. */
 .structured-grid th,
 .structured-grid td {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge-strong);
   text-align: center;
 }
 
@@ -260,7 +562,7 @@
 .written-rubric {
   margin: 0;
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-sm);
   display: flex;
   flex-direction: column;
@@ -275,7 +577,7 @@
 }
 
 .written-rubric-row + .written-rubric-row {
-  border-block-start: 1px solid var(--color-hairline);
+  border-block-start: 1px solid var(--edge);
 }
 
 /* ---- Bank list (UX-02) -------------------------------------------------- */
@@ -296,10 +598,10 @@
   justify-content: space-between;
   gap: var(--space-md);
   padding: var(--space-md) var(--space-lg);
-  border: 1px solid var(--color-hairline);
+  border: 1px solid var(--edge);
   border-radius: var(--rounded-sm);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   text-align: start;
@@ -308,11 +610,11 @@
 
 .bank-list__item:hover,
 .bank-list__item:focus-visible {
-  border-color: var(--color-hairline-strong);
+  border-color: var(--edge-strong);
 }
 
 .bank-list__count {
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   white-space: nowrap;
@@ -332,7 +634,7 @@
   flex-direction: column;
   gap: var(--space-md);
   padding-inline-end: var(--space-lg);
-  border-inline-end: 1px solid var(--color-hairline);
+  border-inline-end: 1px solid var(--edge);
 }
 
 .bank-browser__groups,
@@ -353,7 +655,7 @@
 
 .bank-browser__group-label {
   margin: 0 0 var(--space-xs);
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   letter-spacing: var(--type-mono-sm-letter-spacing);
@@ -362,18 +664,18 @@
 
 .bank-browser__tag-chip {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-full);
-  background-color: var(--color-canvas);
-  color: var(--color-ink);
+  background-color: var(--surface);
+  color: var(--ink);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
   cursor: pointer;
 }
 
 .bank-browser__tag-chip[aria-pressed="true"] {
-  border-color: var(--color-voltage);
-  background-color: var(--color-voltage-soft);
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
 }
 
 .bank-browser__filter-select {
@@ -386,7 +688,7 @@
 
 .bank-browser__filter-select select {
   padding: var(--space-xs) var(--space-sm);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-xs);
 }
 
@@ -406,16 +708,16 @@
 .bank-browser__bulk-bar {
   margin-block-end: var(--space-md);
   padding: var(--space-sm) var(--space-md);
-  border: 1px solid var(--color-hairline-strong);
+  border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-sm);
-  background-color: var(--color-canvas);
+  background-color: var(--surface);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
 }
 
 .bank-browser__notice {
   margin-block-end: var(--space-md);
-  color: var(--color-flag-risk);
+  color: var(--risk);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
 }
@@ -428,7 +730,7 @@
 .bank-browser__table th,
 .bank-browser__table td {
   padding: var(--space-sm) var(--space-md);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: start;
   vertical-align: top;
 }
@@ -446,9 +748,48 @@
 
 .bank-browser__empty {
   padding-block: var(--space-xl);
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
+}
+
+/* The filter rail stacks ABOVE the table at phone width rather than beside
+   it, at shell.css's own 719px breakpoint so the two rails leave their
+   columns together.
+
+   Found by measurement, not by eye (6.5e Task 2). A 220px `flex: 0 0` rail
+   inside a 390px screen leaves the table roughly 80px of scrollport, and
+   `D21a`'s gutter — sticky to the inline end of that scrollport, and as wide
+   as three buttons — then covers the whole of it. `row-actions.spec.ts`
+   caught it the moment the table got the scroll container `D21a` asks for:
+   the gutter intercepted the pointer over the row's FIRST cell. Before the
+   scroll container, the gutter stuck to the page instead and the 80px
+   scrollport was just as narrow but less visible.
+
+   The rail keeps its separator; it turns through 90 degrees with the layout,
+   which is the same move shell.css makes with the nav rail's accent bar. */
+@media (max-width: 719px) {
+  /* Direction only. The base rule's `--space-xl` is the page scale and the
+     two halves of this screen are page-level blocks whichever way they sit,
+     so restating the gap one step down the COMPONENT scale would be `D15`'s
+     two scales mixed for no reason (fix round 1). */
+  .bank-browser {
+    flex-direction: column;
+  }
+
+  .bank-browser__rail {
+    flex: none;
+    align-self: stretch;
+    padding-inline-end: 0;
+    padding-block-end: var(--space-lg);
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--edge);
+  }
+
+  .bank-browser__main {
+    align-self: stretch;
+    width: 100%;
+  }
 }
 
 /* Fix round 1, finding 11: ImportDialog's own issues table — same rules as
@@ -463,7 +804,7 @@
 .import-dialog__table th,
 .import-dialog__table td {
   padding: var(--space-sm) var(--space-md);
-  border-block-end: 1px solid var(--color-hairline);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: start;
   vertical-align: top;
 }

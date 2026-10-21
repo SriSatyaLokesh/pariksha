@@ -57,7 +57,6 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
-const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 // Phase 6 Task 1 (#65): the candidate runtime is a third stylesheet entry
 // (exam.css, loaded only by src/exam-main.tsx) and every colour it declares
@@ -222,46 +221,158 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".signal-footer__grid p": both("signal-bg"),
 
   // ---- primitives.css: shared by landing.css and admin.css (P3.9) --------
-  // No longer used by the landing page itself — confirmed absent from
-  // src/sections/signal/ and src/routes/landing.tsx — only the organiser
-  // screens still render these, via ButtonPrimary/ButtonSecondary (routes/
-  // dashboard.tsx, setup.tsx, signin.tsx), so they keep exactly their
-  // original classification.
-  ".mono-caption": both("cream"),
-  ".button-primary": both("cream"),
-  ".button-primary:hover, .button-primary:focus-visible": both("voltage-deep"),
-  ".button-primary--surface": both("voltage-deep"),
-  ".button-secondary": both("canvas"),
+  // Re-grounded by 6.5e Task 1b, which is only safe because the landing page
+  // renders NONE of these constructs — asserted off disk by theme.test.ts,
+  // not assumed. Every consumer is an organiser route or component, so the
+  // ground they read on is the organiser's.
+  //
+  // Each button's fill is its own, so each is scored against what it paints
+  // rather than against what is behind it.
+  ".mono-caption": { dark: "signal-bg", light: "signal-l-bg" },
+  ".button-primary": { dark: "signal-accent", light: "signal-l-accent" },
+  ".button-primary:hover, .button-primary:focus-visible": {
+    dark: "signal-accent-deep",
+    light: "signal-l-accent-deep",
+  },
+  ".button-primary--surface": {
+    dark: "signal-accent",
+    light: "signal-l-accent",
+  },
+  ".button-secondary": { dark: "signal-surface", light: "signal-l-surface" },
   // Phase 6.5d Task 5 (`D16`, content): a unit affix sits INSIDE its control,
   // absolutely positioned over `.text-input`'s own fill — so the background
-  // it really renders on is the input's canvas, not the panel or the page.
+  // it really renders on is the input's fill, not the panel or the page.
   // Organiser-only in practice (the landing page renders no field row), but
   // the rule lives here because the field-row rule it belongs to is shared.
-  ".field-affix__unit": both("canvas"),
+  ".field-affix__unit": { dark: "signal-surface", light: "signal-l-surface" },
 
-  // ---- admin.css: the organiser screens (P3.9) ---------------------------
-  // The page is the body's cream; every panel is a CardHairline, which sets
-  // its own canvas fill, so the form trio and the empty state render on
-  // canvas. docs/design.md's screen-inventory note — "cream and ink
-  // surfaces, hairline rules" — is the whole palette here; voltage survives
-  // only on the primary action (.button-primary--surface, already above)
-  // and the focus ring (base.css).
-  ".organiser__title": both("cream"),
-  ".organiser__lead": both("cream"),
-  ".organiser__notice": both("canvas"),
-  ".organiser__status": both("canvas"),
-  ".organiser-empty__title": both("canvas"),
-  ".organiser-empty__body": both("canvas"),
+  // ---- admin.css: the organiser screens (P3.9, re-grounded by 6.5e T1b) --
+  // `D1`: the organiser left the cream palette. `admin.css` now paints
+  // `body` with `--ground` — the four arms that render OUTSIDE the shell
+  // (`loading`, `error`, `signin`, `setup`) each put their own bare `<main>`
+  // on it — and every panel is a CardHairline, which fills itself with
+  // `--surface`. So the page's own type reads on the ground and a panel's
+  // type reads on the surface, which is the same two-level split the
+  // cream/canvas pair carried.
+  ":root[data-theme] body": { dark: "signal-bg", light: "signal-l-bg" },
+  ".organiser__title": { dark: "signal-bg", light: "signal-l-bg" },
+  ".organiser__lead": { dark: "signal-bg", light: "signal-l-bg" },
+  ".organiser__notice": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  ".organiser__status": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  ".organiser-empty__title": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ".organiser-empty__body": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  // `D18`'s split screen (6.5e Task 8). THE GROUND, named rather than
+  // guessed: the brand half fills NOTHING. Its two pseudo-elements paint a
+  // radial `--glow-strong` and a `--wash` grid, both of them alpha over
+  // whatever is behind, and what is behind is `:root[data-theme] body`'s
+  // `--ground`. The form half fills nothing either — its only filled box is
+  // the CardHairline inside it, whose own type is scored through
+  // `.organiser__notice` / `.organiser__status` above. So every selector
+  // here reads on the ground, which is also why `D20a` costs this screen no
+  // contrast: the glow going near-invisible on the light ground changes the
+  // background these five are measured against by nothing at all.
+  //
+  // THESE FIVE ARE A BASE, NOT A FLOOR, and the difference is the whole of
+  // what the next person to paint on a field has to know (fix round 1,
+  // Moderate). This gate scores a foreground against a NAMED background; it
+  // cannot see a composite, and the brand half really does composite
+  // `--glow-strong` (0.34 alpha) and `--wash` (0.06 alpha) over the ground.
+  // Hand-computed at the GLOW PEAK on the dark ground, which is the worst
+  // case anywhere on this screen:
+  //
+  //     --ink-2  (.screen__facts li)   3.88:1   against a 4.5:1 bar
+  //     --ink-3  (.screen__fact-n)     2.36:1   against a 4.5:1 bar
+  //
+  // NEITHER IS REACHABLE, and the reason is geometric rather than lucky.
+  // `admin.css`'s field is an axis-aligned ellipse centred at `40% 36%` of
+  // the brand box, fading to transparent at `0.72 x 46% = 33.1%` vertically
+  // — so it is gone below 69.1% of the box. Measured at 1200px, the facts
+  // begin at about 60% and the first of them is already past the bright
+  // core: `.screen__facts li` reads about 7.6:1 there. The numerals sit in
+  // the hanging indent at the far left, where the ellipse's normalised
+  // distance is 0.93 — outside the 0.72 fade stop, i.e. fully transparent —
+  // so `--ink-3` reads on the bare ground exactly as this entry says.
+  //
+  // THE INVARIANT, stated so it can be checked rather than re-derived: THE
+  // FACTS START BELOW 69.1% OF THE BRAND BOX. Moving the glow down, growing
+  // its vertical radius, or moving the facts up is what spends that
+  // headroom, and the two figures above are what is left when it is gone.
+  // Task 3 paid for this lesson once already: a precedent for a composite is
+  // only transferable along with its headroom, and headroom nobody wrote
+  // down is headroom the next reader assumes is infinite.
+  ".screen__mark": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__headline": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__facts li": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__facts b": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__fact-n": { dark: "signal-bg", light: "signal-l-bg" },
   // registration.css, which admin.css and exam.css both import (Phase 6
   // Task 6, #70): one renderer, so one stylesheet, read on canvas in both
-  // places — the organiser's CardHairline panel fills itself with canvas,
-  // and so does the candidate's `.exam-register-panel`.
+  // places — the candidate's `.exam-register-panel` fills itself with
+  // canvas, and so did the organiser's CardHairline panel until 6.5e.
+  //
+  // THESE SIX STAY ON CREAM AND THAT IS NOT AN OVERSIGHT. The rules are
+  // shared with the candidate runtime and are left exactly as they were;
+  // the organiser repaints them from `admin.css` under `:root[data-theme]`,
+  // which is a SEPARATE selector with its own entries below. Both pairs are
+  // scored — rewriting the shared rule would have scored one and silently
+  // dropped the other.
   ".field-label": both("canvas"),
   ".field-help": both("canvas"),
   ".field-error": both("canvas"),
   ".text-input": both("canvas"),
   ".registration-form__help, .registration-form__legend": both("canvas"),
   ".registration-form__error": both("canvas"),
+
+  // ---- admin.css: the organiser's repaint of the two SHARED sheets ------
+  // registration.css's form trio and question.css's rendered prompt, on the
+  // Signal ground. `.field-label`'s cream `--color-ink` measures 1.09:1 on
+  // `--surface`: without these the organiser would ship invisible form
+  // labels on every screen that holds a field.
+  ":root[data-theme] .field-label": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ":root[data-theme] .field-help": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  ":root[data-theme] .field-error": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  // The input fills itself, so its own text reads on its own fill.
+  ":root[data-theme] .text-input": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ":root[data-theme] .registration-form__help, :root[data-theme] .registration-form__legend":
+    { dark: "signal-surface", light: "signal-l-surface" },
+  ":root[data-theme] .registration-form__error": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  // The stem renders on a panel in the editor and directly on the page in
+  // the builder's preview, so both grounds are named and both are scored.
+  ":root[data-theme] .rendered--stem": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  ":root[data-theme] .prompt-editor__tool": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
 
   // ---- shell.css: the organiser's chrome (Phase 6.5c Task 1, D3) --------
   // The first rules in the organiser bundle to read theme.css's semantic
@@ -336,31 +447,141 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".home__clear": { dark: "signal-surface", light: "signal-l-surface" },
   ".home__clear:disabled": { dark: "signal-surface", light: "signal-l-surface" },
 
-  // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
-  // Same palette and the same reasoning: the editor and the preview are
-  // panels on the body's cream, each filling itself with canvas, so every
-  // colour authoring.css sets is read on canvas.
-  // Phase 6 Task 7 (#71): the candidate runtime now renders every prompt
+  // ---- question.css: shared with the candidate runtime -------------------
+  // `.rendered--stem` and `.prompt-editor__tool` are question.css's, which
+  // authoring.css imports and exam.css imports too. They KEEP the cream
+  // pair for the same reason registration.css's six do, and the organiser's
+  // repaint of them is scored separately above.
+  // Phase 6 Task 7 (#71): the candidate runtime renders every prompt
   // through the same component, and the runner's ground is the page's own
   // cream rather than a card's canvas.
   ".rendered--stem": both("canvas", "cream"),
   ".prompt-editor__tool": both("canvas"),
-  ".prompt-editor__source": both("canvas"),
-  ".preview__heading": both("canvas"),
-  ".preview__toggle": both("canvas"),
+
+  // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
+  // Re-grounded by 6.5e Task 1b. The editor and the preview are panels on
+  // the page's own --ground, each filling itself with --surface, so every
+  // colour authoring.css sets is read on the surface — the same one-level
+  // step the canvas-on-cream pair made.
+  ".prompt-editor__source": { dark: "signal-surface", light: "signal-l-surface" },
+  ".preview__heading": { dark: "signal-surface", light: "signal-l-surface" },
+  ".preview__toggle": { dark: "signal-surface", light: "signal-l-surface" },
+
+  // ---- authoring.css: the type picker's cards (6.5e Task 3, D18) --------
+  // The card FILLS ITSELF with --surface and sits on the question editor's
+  // own page ground, so its label and its note both read on --surface and
+  // not on the --ground one step out. Traced to the declaration rather
+  // than copied from a sibling: `.bank-browser__group-label` below is
+  // --ground precisely because that element sets no background of its own,
+  // and a card that does is the other case.
+  //
+  // The picked card fills with --accent-wash instead — 12% accent OVER
+  // that same --surface. A 12% wash does not move the ratio enough to
+  // score against, and the surface beneath it is the honest worst case:
+  // the reading `.shell__nav-item[aria-current="page"]` and
+  // `.home__pill[aria-pressed="true"]` already take. `aria-pressed` sets no
+  // `color` of its own, so there is no second entry to make.
+  //
+  // Nothing else the picker adds declares `color`: every part of all twelve
+  // drawn miniatures is a border, a fill or a gradient, which is why twelve
+  // drawings arrive here as two entries.
+  ".type-card": { dark: "signal-surface", light: "signal-l-surface" },
+  ".type-card__note": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- authoring.css: the bank list and bank browser (P4.2) --------------
-  // The list and the browser are both the page's own cream, same as the
-  // dashboard above — `.bank-list__item` and `.bank-browser__tag-chip` are
-  // the only two elements here that fill themselves with canvas (the same
-  // "card on the page" pattern CardHairline uses), so everything else reads
-  // on cream.
-  ".bank-list__item": both("canvas"),
-  ".bank-list__count": both("canvas"),
-  ".bank-browser__group-label": both("cream"),
-  ".bank-browser__tag-chip": both("canvas"),
-  ".bank-browser__notice": both("cream"),
-  ".bank-browser__empty": both("cream"),
+  // `.bank-list__item` and `.bank-browser__tag-chip` are the only two
+  // elements here that fill themselves (the same "card on the page" pattern
+  // CardHairline uses), so everything else reads on the page's own ground.
+  ".bank-list__item": { dark: "signal-surface", light: "signal-l-surface" },
+  ".bank-list__count": { dark: "signal-surface", light: "signal-l-surface" },
+  ".bank-browser__group-label": { dark: "signal-bg", light: "signal-l-bg" },
+  ".bank-browser__tag-chip": { dark: "signal-surface", light: "signal-l-surface" },
+  ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
+  ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
+
+  // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
+  // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
+  // through it, so for two phases its 26 colour-setting selectors were in
+  // the organiser's bundle and outside this sweep. The sweep is derived
+  // from that module now, so these arrived with it.
+  //
+  // Almost every one reads on the page's own --ground: the builder's
+  // panels (`.setting-row`, `.timing-panel__group`, `.form-builder__field`,
+  // `.picker-drawer`, each preview) are BORDERED BOXES WITH NO FILL, so
+  // what shows through them is the page. The three exceptions carry their
+  // own note.
+  ".test-badge": { dark: "signal-bg", light: "signal-l-bg" },
+  // 6.5e Task 2. The test list's table fills nothing — `.shell__page` paints
+  // `--ground` under it and `.testbuilder-list` declares no background — so
+  // both of these read on the page's own ground, the same pairing
+  // `.test-badge` above already names for a span in the same row. `.test-id`
+  // arrives in this sweep now because it gained a colour: it was unpainted
+  // mono in a column of its own and is the quieter second line of the name
+  // cell since `D21a`'s id fold.
+  ".test-id": { dark: "signal-bg", light: "signal-l-bg" },
+  ".test-version": { dark: "signal-bg", light: "signal-l-bg" },
+  ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
+  ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
+  ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  // `D19`'s shuffle chip (6.5e Task 6). A bordered chip with no fill of its
+  // own, inside `.section-row` — which has no fill either — so what shows
+  // through it is the page's own --ground, exactly as for the two siblings
+  // below it. NOT --surface: nothing between it and <body> paints one.
+  ".section-row__chip": { dark: "signal-bg", light: "signal-l-bg" },
+  ".section-row__draw": { dark: "signal-bg", light: "signal-l-bg" },
+  ".section-row__flag-risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".picker-drawer__points": { dark: "signal-bg", light: "signal-l-bg" },
+  ".sets-panel__consequence, .shuffle-group__fact": { dark: "signal-bg", light: "signal-l-bg" },
+  ".form-builder__fact": { dark: "signal-bg", light: "signal-l-bg" },
+  ".form-builder__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".timing-panel__fact": { dark: "signal-bg", light: "signal-l-bg" },
+  ".timing-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".access-panel__fact, .access-panel__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  ".access-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".access-panel__issues caption": { dark: "signal-bg", light: "signal-l-bg" },
+  // `.release-panel__fact` renders on the page five times over and
+  // `.branding-panel__fact` five times beside it, so this pair is the
+  // page's own ground. The sixth `.branding-panel__fact` and every
+  // `.branding-panel__footer` render INSIDE a preview, on its cream, and
+  // are split out below (fix round 1, C2).
+  ".release-panel__fact, .branding-panel__fact": {
+    dark: "signal-bg",
+    light: "signal-l-bg",
+  },
+  ".release-panel__risk, .branding-panel__risk": { dark: "signal-bg", light: "signal-l-bg" },
+  ".version-banner, .review-note": { dark: "signal-bg", light: "signal-l-bg" },
+  ".setting-row__button": { dark: "signal-bg", light: "signal-l-bg" },
+  ".setting-row__icon": { dark: "signal-bg", light: "signal-l-bg" },
+  ".setting-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
+  ".checklist-rail__count": { dark: "signal-bg", light: "signal-l-bg" },
+  ".checklist-rail__pin": { dark: "signal-bg", light: "signal-l-bg" },
+
+  // The branding preview is a MINIATURE OF THE CANDIDATE'S START PAGE, so
+  // its WHOLE SUBTREE is the cream world, not only its fill — which is the
+  // half the first version of this got wrong. `both(...)` and not a pair:
+  // the fill is `var(--color-cream)` on either ground, so a semantic name
+  // in here would be scored against a fixed cream and pass on one ground
+  // only. That is exactly how #1.11:1 shipped green (fix round 1, C1/C2).
+  //
+  // The <h4> carries the brand colour, with the runtime's own ink as its
+  // fallback; `.branding-panel__preview` itself paints the three previews'
+  // bare <p> messages, which declare no colour of their own.
+  ".branding-panel__preview h4": both("cream"),
+  ".branding-panel__preview": both("cream"),
+  ".branding-panel__preview .branding-panel__fact, .branding-panel__footer":
+    both("cream"),
+
+  // The checklist renders in the docked rail, which has no fill, AND inside
+  // the floating panel the collapsed strip opens, which fills itself with
+  // --surface. Both are real, so both are named and both are scored.
+  ".publish-checklist__severity": {
+    dark: ["signal-bg", "signal-surface"],
+    light: ["signal-l-bg", "signal-l-surface"],
+  },
+  ".publish-checklist__field": {
+    dark: ["signal-bg", "signal-surface"],
+    light: ["signal-l-bg", "signal-l-surface"],
+  },
 
   // ---- exam.css: the candidate runtime (Phase 6 Task 1, #65) -------------
   // DESIGN.md's two canvases. The landing hero is the full-bleed voltage
@@ -509,6 +730,66 @@ const SURFACE: Record<string, SurfaceEntry> = {
 // supply exactly this and nothing else — foreground and surface are still
 // resolved independently, from the selector's own declarations.
 const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
+  // ---- admin.css (Phase 6.5e Task 1b) -------------------------------------
+  // The organiser's own ground and default ink. base.css gives `body` the
+  // body-md scale and admin.css re-colours it without restating the type,
+  // so the size comes from there.
+  ":root[data-theme] body": { px: 16, weight: 400 },
+  // The repaint rules for the two SHARED stylesheets change nothing but a
+  // colour, so each one's size and weight are its own rule's, over in
+  // registration.css and question.css.
+  ":root[data-theme] .field-label": { px: 18, weight: 500 },
+  ":root[data-theme] .field-help": { px: 14, weight: 400 },
+  ":root[data-theme] .field-error": { px: 14, weight: 400 },
+  ":root[data-theme] .text-input": { px: 16, weight: 400 },
+  ":root[data-theme] .registration-form__help, :root[data-theme] .registration-form__legend":
+    { px: 14, weight: 400 },
+  ":root[data-theme] .registration-form__error": { px: 14, weight: 400 },
+  ":root[data-theme] .rendered--stem": { px: 18, weight: 400 },
+  ":root[data-theme] .prompt-editor__tool": { px: 12, weight: 400 },
+
+  // `D18`'s split screen (6.5e Task 8). The <b> that opens each fact names
+  // the mechanism and changes nothing but weight and ink, so its size is the
+  // body-sm scale `.screen__facts li` sets on the line it sits in.
+  ".screen__facts b": { px: 14, weight: 600 },
+
+  // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
+  // The builder's facts, consequences and summaries are <p> elements that
+  // declare no type of their own and inherit the body scale; the three
+  // buttons here declare `font: inherit`, which is the same 16px/400 by a
+  // different route. `.qr-code` and `.setting-row__icon` set a colour for an
+  // svg's `currentColor` rather than for text, and take the inherited scale
+  // for the same reason every wrapper above does.
+  ".qr-code": { px: 16, weight: 400 },
+  ".button-link": { px: 16, weight: 400 },
+  ".section-row__summary": { px: 16, weight: 400 },
+  ".picker-drawer__points": { px: 16, weight: 400 },
+  ".sets-panel__consequence, .shuffle-group__fact": { px: 16, weight: 400 },
+  ".form-builder__fact": { px: 16, weight: 400 },
+  ".form-builder__risk": { px: 16, weight: 400 },
+  ".timing-panel__fact": { px: 16, weight: 400 },
+  ".timing-panel__risk": { px: 16, weight: 400 },
+  ".access-panel__fact, .access-panel__summary": { px: 16, weight: 400 },
+  ".access-panel__risk": { px: 16, weight: 400 },
+  ".access-panel__issues caption": { px: 16, weight: 400 },
+  ".release-panel__fact, .branding-panel__fact": { px: 16, weight: 400 },
+  ".branding-panel__preview .branding-panel__fact, .branding-panel__footer": {
+    px: 16,
+    weight: 400,
+  },
+  // The preview's own colour paints its bare <p> messages, which inherit
+  // the body scale like every other <p> in this file.
+  ".branding-panel__preview": { px: 16, weight: 400 },
+  ".release-panel__risk, .branding-panel__risk": { px: 16, weight: 400 },
+  ".version-banner, .review-note": { px: 16, weight: 400 },
+  ".setting-row__button": { px: 16, weight: 400 },
+  ".setting-row__icon": { px: 16, weight: 400 },
+  ".setting-row__summary": { px: 16, weight: 400 },
+  ".checklist-rail__count": { px: 16, weight: 400 },
+  ".checklist-rail__pin": { px: 16, weight: 400 },
+  // An <h4> with no type of its own: the UA's own 1em bold.
+  ".branding-panel__preview h4": { px: 16, weight: 700 },
+
   // ---- primitives.css (unchanged by the Signal rework) --------------------
   // Same element as .button-primary; only the colour/background changes.
   ".button-primary:hover, .button-primary:focus-visible": {
@@ -671,9 +952,20 @@ const TYPE_WEIGHT_VAR_RE = /var\(--type-([a-z0-9-]+)-weight\)/i;
 // the day the first rule lands, instead of a second pass over this file.
 const THEME = readThemeMap();
 const SEMANTIC_VAR_RE = /^var\(\s*(--[a-z0-9-]+)\s*\)$/i;
+// Phase 6.5e Task 1b. `var(--brand-primary, var(--color-ink))` — a property
+// set from an effect, with a token fallback — entered the sweep with
+// testbuilder.css. The FALLBACK is what this file can score and what it
+// must: the custom property is a workspace's own brand colour, chosen at
+// runtime and gated on the write path by `@pariksha/core`'s own
+// `contrastRatio` (the gate this file shares), while the fallback is what
+// the stylesheet guarantees before any colour is chosen. Reading the
+// fallback is therefore the stylesheet's own worst case, not a shortcut.
+const VAR_FALLBACK_RE = /^var\(\s*--[a-z0-9-]+\s*,\s*(.+)\)$/i;
 
 /** `value` as a token name on `ground`, through theme.css where it applies. */
 function colorNameOf(value: string, ground: Ground): ColorName | null {
+  const fallback = VAR_FALLBACK_RE.exec(value)?.[1];
+  if (fallback !== undefined) return colorNameOf(fallback.trim(), ground);
   const semantic = SEMANTIC_VAR_RE.exec(value)?.[1];
   const mapped = semantic === undefined ? undefined : THEME[ground][semantic];
   const name = COLOR_VAR_RE.exec(mapped ?? value)?.[1];
@@ -681,10 +973,18 @@ function colorNameOf(value: string, ground: Ground): ColorName | null {
   return name as ColorName;
 }
 
-function parseColor(body: string, ground: Ground): ColorName | null {
-  const value = findDeclaration(body, "color");
+function parseColorProperty(
+  body: string,
+  property: string,
+  ground: Ground,
+): ColorName | null {
+  const value = findDeclaration(body, property);
   if (!value) return null;
   return colorNameOf(value, ground);
+}
+
+function parseColor(body: string, ground: Ground): ColorName | null {
+  return parseColorProperty(body, "color", ground);
 }
 
 function lengthToPx(literal: string): number | null {
@@ -770,8 +1070,27 @@ beforeAll(() => {
   // src/exam-main.tsx, and joins the same sweep. It imports nothing, so the
   // shared `seen` set is unaffected by it.
   const seen = new Set<string>();
+  // Phase 6.5e Task 1b: the organiser side is READ OFF `admin-main.tsx`
+  // rather than named as `admin.css`. `admin-main.tsx` loads
+  // `testbuilder.css` BESIDE `admin.css` rather than through it, so for two
+  // phases the builder's 26 colour-setting selectors were in the bundle and
+  // outside this sweep — the file's own header at the top recorded the gap.
+  // Deriving the list means the sweep widens with the entry rather than the
+  // next time someone notices.
+  //
+  // base.css is dropped from it, and that exclusion is the one this file
+  // already documents at the top: it carries selectors this parser was never
+  // built for (`a { color: inherit }`, `:focus-visible`'s non-token
+  // `outline-color`), and the two it has that paint visible text — `body`
+  // and `.skip-link` — are checked directly in the "base.css" describe block
+  // below, by the same WCAG formula. admin.css's OWN `body` rule, which is
+  // the organiser's ground, is in the sweep and has its own entry.
+  const organiserCss = organiserStylesheets()
+    .filter((path) => !path.endsWith("base.css"))
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n");
   const css = `${readResolvedCss(LANDING_CSS_PATH, seen)}
-${readResolvedCss(ADMIN_CSS_PATH, seen)}
+${organiserCss}
 ${readResolvedCss(EXAM_CSS_PATH, seen)}`;
   const rules = parseRuleBodies(css);
   // A selector can appear more than once (e.g. a base rule plus its
@@ -1455,5 +1774,105 @@ describe("base.css: the two colour-bearing selectors outside landing.css's own i
         `${selector} on ${bg}: ${fg} on ${bg} at ${px}px/${weight} is ${ratio.toFixed(2)}:1, needs ${threshold}:1`,
       ).toBeGreaterThanOrEqual(threshold);
     });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// The publish checklist's indicator lights (Phase 6.5e Task 1b, D1/D7a).
+//
+// WHY THESE NEED THEIR OWN BLOCK. Every assertion above audits a
+// FOREGROUND — `colorSelectors` is built from rules that declare `color` —
+// and a light declares only a `background-color`. So the three colours this
+// task's headline ruling rests on had no gate at all: 6.5d chose the cream
+// flag trio over `theme.css`'s names on a measurement, and nothing would
+// have reddened when 6.5e moved them.
+//
+// 6.5d's measurement was 2.68 / 2.08 / 1.60:1 and it was right about the
+// page it was taken on — the lights were still on cream, where `D1` says in
+// as many words that the Signal accent is illegal. It was a fact about that
+// page and not about the tokens. This block is what makes the replacement
+// claim checkable instead of inherited: the severities, the names and the
+// dimming are all READ OUT OF the stylesheet, so a value edited there is
+// scored rather than described.
+//
+// Scored against all four of theme.css's background tokens rather than only
+// the --ground the rail renders on today. The rail is a construct that
+// moves — docked, a 52px strip, and a band across the page below 719px —
+// and the worst of four is both cheaper to state and stricter than the one.
+describe("the publish checklist's lights clear 3:1 on both grounds (D1)", () => {
+  const TESTBUILDER_CSS = resolve(STYLES_DIR, "testbuilder.css");
+  const lightRules = parseRuleBodies(readResolvedCss(TESTBUILDER_CSS)).filter(
+    (rule) => /^\.checklist-rail__light\[data-severity=/.test(rule.selector),
+  );
+  const GROUND_NAMES = ["--ground", "--ground-2", "--surface", "--surface-2"];
+
+  /** `fg` at `alpha` over `bg`, as a hex — the colour a dimmed light really
+   *  composites to. Both are opaque tokens, so one lerp per channel is the
+   *  whole of it. */
+  function composite(fg: string, alpha: number, bg: string): string {
+    const channel = (at: number): string => {
+      const mix =
+        parseInt(fg.slice(at, at + 2), 16) * alpha +
+        parseInt(bg.slice(at, at + 2), 16) * (1 - alpha);
+      return Math.round(mix).toString(16).padStart(2, "0");
+    };
+    return `#${channel(1)}${channel(3)}${channel(5)}`;
+  }
+
+  it("finds all three severities, so the sweep below is not an empty loop", () => {
+    // The whole rail is three lights; a renamed attribute or a deleted rule
+    // would otherwise make every assertion below vacuously true.
+    expect(lightRules.map((rule) => rule.selector).sort()).toEqual([
+      '.checklist-rail__light[data-severity="advisory"]',
+      '.checklist-rail__light[data-severity="blocking"]',
+      '.checklist-rail__light[data-severity="passing"]',
+    ]);
+  });
+
+  it("paints every light from theme.css, never from the cream palette", () => {
+    // The other half of `D1`: a light reaching past `--risk` to
+    // `var(--color-flag-risk)` would be the cream world on the Signal
+    // ground, which is the move the ratios below only measure the cost of.
+    for (const rule of lightRules) {
+      const value = findDeclaration(rule.body, "background-color");
+      expect(value, `${rule.selector} sets no background-color`).not.toBeNull();
+      expect(
+        SEMANTIC_VAR_RE.test(value ?? ""),
+        `${rule.selector} paints with ${String(value)}, not a theme.css name`,
+      ).toBe(true);
+      expect(SEMANTIC_NAMES).toContain(
+        SEMANTIC_VAR_RE.exec(value ?? "")?.[1] ?? "",
+      );
+    }
+  });
+
+  for (const ground of GROUNDS) {
+    for (const name of GROUND_NAMES) {
+      it(`[${ground}] every light clears 3:1 on ${name}`, () => {
+        const behind = colorNameOf(`var(${name})`, ground);
+        expect(behind, `theme.css maps no ${name} on ${ground}`).not.toBeNull();
+        if (!behind) return;
+
+        for (const rule of lightRules) {
+          const fg = parseColorProperty(rule.body, "background-color", ground);
+          expect(fg, `${rule.selector}: unresolvable fill`).not.toBeNull();
+          if (!fg) return;
+          // The dimming is the stylesheet's, read rather than assumed: a
+          // passing light is dimmed because it is there to be counted, not
+          // looked at, and a number hand-typed here would stop tracking it.
+          const opacity = Number(findDeclaration(rule.body, "opacity") ?? "1");
+          const painted = composite(
+            tokens.colors[fg],
+            opacity,
+            tokens.colors[behind],
+          );
+          const ratio = contrastRatio(painted, tokens.colors[behind]);
+          expect(
+            ratio,
+            `${rule.selector} on ${name} (${ground}): ${fg} at ${opacity} over ${behind} is ${ratio.toFixed(2)}:1, needs 3:1 (WCAG 1.4.11)`,
+          ).toBeGreaterThanOrEqual(3);
+        }
+      });
+    }
   }
 });

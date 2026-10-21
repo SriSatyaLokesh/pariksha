@@ -4,11 +4,27 @@ import { ApiError, type ApiClient, type Bank, type QuestionSummary } from "../..
 import { TextField } from "../TextField";
 import { useDialogKeys } from "../useDialogKeys";
 
-// UX-14: a drawer over the builder, with the bank browser's own filters
+// UX-14: the question picker, with the bank browser's own filters
 // (type/difficulty/tag/search — `BankBrowser`, apps/web/src/routes/bank.tsx)
 // and a running "N selected · M points" footer. Not `aria-modal`: like
 // `ImportDialog`'s own dialog, nothing here traps focus, so claiming
 // "modal" would be a lie the keyboard does not back up.
+//
+// `D18` (6.5e Task 5): it DOCKS AS A RIGHT-HAND COLUMN beside the paper.
+// That is entirely testbuilder.css's doing — `.section-list` becomes two
+// columns while it holds one of these — because the dock is where the thing
+// paints, not what it is.
+//
+// AND IT STAYS A `dialog`, which was the ruling this task had to make rather
+// than inherit. The checklist rail went the other way in 6.5c, dropping
+// `role="dialog"` for `role="region"`, and the reason was `D7`: that rail is
+// ALWAYS PRESENT, and an always-present dialog is a lie to assistive
+// technology plus a focus trap fighting its own toggles. This column is not
+// always present. It is summoned by "Add questions", it is dismissed with
+// Escape, it hands focus back to the control that opened it, and it goes
+// away on Cancel or Confirm — a NON-MODAL dialog, which is a real pattern
+// and the one every line of behaviour here already implements. Docking moved
+// it beside the paper instead of under it; it did not make it furniture.
 //
 // `client`/`workspaceId` are not in the plan's own signature sketch — a
 // drawer that lists and filters a workspace's questions cannot do either
@@ -225,8 +241,17 @@ export function QuestionPickerDrawer({
                     checked={picked.has(q.id)}
                     onChange={() => toggle(q.id)}
                   />
+                  {/* `D18`: the prompt wraps and CLAMPS TO TWO LINES, and
+                      the points are outside the clamped box on purpose. A
+                      clamp over the whole label cuts whatever sits at the
+                      end of line two — which is the points — on exactly
+                      the long prompts the clamp exists for, so the one row
+                      that most needs its score loses it. Both spans stay
+                      inside the <label>, so the checkbox's accessible name
+                      is still "<prompt> (N pts)" either way. */}
                   <label htmlFor={checkboxId}>
-                    {q.document.prompt} <span className="picker-drawer__points">({q.points} pts)</span>
+                    <span className="picker-drawer__prompt">{q.document.prompt}</span>{" "}
+                    <span className="picker-drawer__points">({q.points} pts)</span>
                   </label>
                 </li>
               );

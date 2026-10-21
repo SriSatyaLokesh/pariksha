@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // One `@import` resolver for the whole test suite.
@@ -222,6 +222,89 @@ export function entryStylesheets(html: string): string[] {
   return files.map((file) => resolve(WEB_DIR, "src/styles", file));
 }
 
+// ---------------------------------------------------------------------------
+// Which SOURCE files each chain dresses.
+//
+// Moved here from `test/exam/controls.test.tsx` by 6.5e Task 1b, when a
+// second seam guard needed the same map — the same "one copy" the `@import`
+// resolver and the rule parser above already are. `controls.test.tsx`'s own
+// header is the reason it exists: #201 happened because nothing watched the
+// seam between two CSS chains, and a seam guard that keeps its own private
+// list of chains rebuilds that defect one level up.
+//
+// `page` is a real file name and `htmlEntries()` reads the pages off disk,
+// so a FOURTH page cannot be silently unclaimed — the callers assert that.
+// `owns` is still written by hand, because there is nothing to derive it
+// from short of walking the module graph; it is watched from two sides
+// instead, by requiring every relevant source file to fall under at least
+// one prefix. Overlaps are intended and resolved by LONGEST prefix:
+// `routes/exam.tsx` is the candidate's even though the organiser owns
+// `routes/`.
+
+export interface Chain {
+  name: string;
+  page: string;
+  owns: string[];
+}
+
+export const CHAINS: Chain[] = [
+  {
+    name: "candidate runtime",
+    page: "exam.html",
+    owns: ["components/exam/", "routes/exam.tsx"],
+  },
+  {
+    name: "organiser",
+    page: "admin.html",
+    owns: [
+      "components/testbuilder/",
+      "components/authoring/",
+      "components/organiser/",
+      "routes/",
+    ],
+  },
+  {
+    name: "landing",
+    page: "index.html",
+    owns: ["sections/", "island/", "routes/landing.tsx"],
+  },
+];
+
+export const SRC_DIR = resolve(TEST_DIR, "../src");
+
+/** Every `.ts`/`.tsx` file under `dir`, recursively. */
+export function sourceFiles(dir: string = SRC_DIR, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) sourceFiles(full, out);
+    else if (/\.tsx?$/.test(full)) out.push(full);
+  }
+  return out;
+}
+
+/** A source path as the chain map spells it: relative to `src`, forward slashes. */
+export function srcRelative(file: string): string {
+  return relative(SRC_DIR, file).replaceAll("\\", "/");
+}
+
+/** The chain a source file ships in, or `undefined` if the map has a hole. */
+export function chainOf(file: string): Chain | undefined {
+  return [...CHAINS]
+    .flatMap((chain) => chain.owns.map((prefix) => ({ chain, prefix })))
+    .sort((a, b) => b.prefix.length - a.prefix.length)
+    .find(({ prefix }) => file.startsWith(prefix))?.chain;
+}
+
+/** Every stylesheet `page` loads, resolved and joined — the cascade that
+ *  page really renders under. One shared `seen` set per page, so a file two
+ *  of its entries reach is read once. */
+export function resolvedChain(page: string): string {
+  const seen = new Set<string>();
+  return entryStylesheets(page)
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n");
+}
+
 /**
  * `theme.css`'s two mappings — semantic name (with its `--`) to the raw CSS
  * value it is given on that ground. Raw, not resolved: a caller that wants a
@@ -317,6 +400,32 @@ export function specificity(selector: string): number {
  * confused.
  */
 export function declaredFor(element: Element, property: string, css: string): string[] {
+  // A NULL ELEMENT IS NOT "NO RULE MATCHES". The `try/catch` below exists for
+  // a selector jsdom's engine cannot parse, and it swallowed a null `element`
+  // in exactly the same way: every selector read as no-match, this returned
+  // `[]`, and every `toBeUndefined()` built on `paintsIn` passed without
+  // looking at anything.
+  //
+  // Not hypothetical and not caught by a probe. 6.5e Task 2 shipped
+  // `(await screen.findByText(/draft/i)).closest(".test-state")` in
+  // `test-list.test.tsx`, where the text match resolved the Status filter's
+  // `<option>Draft</option>` — it sorts before the table — so `closest`
+  // answered `null`. Three `toBeUndefined()` assertions passed on it through a
+  // full review AND through two probes, because both probes happened to redden
+  // on that test's other, rule-set arm.
+  //
+  // Every caller's type says `Element`, so this can only be reached through a
+  // cast — which is what `as HTMLElement` over a `querySelector` is. Measured
+  // when it was added: ZERO tests redden across the 25 call sites in 5 files,
+  // so it is a guard against recurrence rather than a repair.
+  //
+  // WHAT IT DOES NOT CATCH, stated so nobody reads more into it: an element
+  // that is non-null but WRONG. `closest` returning an unexpected ancestor, or
+  // a stale node from a torn-down render, still reads as a legitimate no-match.
+  // The null case is the one that has actually bitten.
+  if (element === null || element === undefined) {
+    throw new Error(`declaredFor was handed ${String(element)} rather than an element`);
+  }
   const found: { weight: number; order: number; value: string }[] = [];
   let order = 0;
   for (const rule of parseRuleBodies(css)) {

@@ -218,10 +218,18 @@ describe("export", () => {
 describe("import", () => {
   const DOC = { format: "pariksha/test@1", name: "Midterm", slug: "midterm", sections: [] };
 
-  async function openImport(client: ApiClient): Promise<HTMLElement> {
+  /** `D18`: import is a page now, not a dialog on the list. The button on
+   *  the list navigates to it, which is the wiring these tests exercise —
+   *  the same reason the dialog's own tests always started at
+   *  `OrganiserApp` and never at the component. */
+  async function openImport(client: ApiClient): Promise<void> {
     await openList(client);
     fireEvent.click(screen.getByRole("button", { name: /import a test/i }));
-    return screen.getByRole("dialog", { name: /import a test/i });
+    await screen.findByRole("heading", { level: 1, name: "Import a test" });
+  }
+
+  function uploadTest(file: File): void {
+    fireEvent.change(screen.getByLabelText(/test file/i), { target: { files: [file] } });
   }
 
   it("import reports what landed and what was skipped in the #51 error-summary pattern", async () => {
@@ -233,9 +241,9 @@ describe("import", () => {
       ],
       rebound: [],
     }));
-    const dialog = await openImport(fakeClient({ importTest }));
+    await openImport(fakeClient({ importTest }));
 
-    fireEvent.change(within(dialog).getByLabelText(/test file/i), { target: { files: [jsonFile("test.json", DOC)] } });
+    uploadTest(jsonFile("test.json", DOC));
     await waitFor(() => expect(importTest).toHaveBeenCalled());
 
     expect(await screen.findByText(/nothing was imported/i)).toBeVisible();
@@ -249,59 +257,55 @@ describe("import", () => {
       issues: [],
       rebound: [{ questionId: "LOG-001", bankName: "Aptitude" }],
     }));
-    const dialog = await openImport(fakeClient({ importTest }));
+    await openImport(fakeClient({ importTest }));
 
-    fireEvent.change(within(dialog).getByLabelText(/test file/i), { target: { files: [jsonFile("test.json", DOC)] } });
+    uploadTest(jsonFile("test.json", DOC));
     await waitFor(() => expect(importTest).toHaveBeenCalled());
 
     expect(await screen.findByText(/LOG-001 resolved to bank “Aptitude”/i)).toBeVisible();
   });
 
-  it("the dry run is what the dialog shows first — nothing is written until Import", async () => {
+  it("the dry run is what the page shows first — nothing is written until Import", async () => {
     const importTest = vi.fn(async () => ({ testId: null, imported: false, issues: [], rebound: [] }));
-    const dialog = await openImport(fakeClient({ importTest }));
+    await openImport(fakeClient({ importTest }));
 
-    fireEvent.change(within(dialog).getByLabelText(/test file/i), { target: { files: [jsonFile("test.json", DOC)] } });
+    uploadTest(jsonFile("test.json", DOC));
     await waitFor(() => expect(importTest).toHaveBeenCalledWith("wsp_1", DOC, { dryRun: true }));
 
-    fireEvent.click(within(dialog).getByRole("button", { name: /^import$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^import$/i }));
     await waitFor(() => expect(importTest).toHaveBeenCalledWith("wsp_1", DOC, { dryRun: false }));
   });
 
   it("only a .json file is offered, because there is no CSV shape for a whole test", async () => {
-    const dialog = await openImport(fakeClient());
-    fireEvent.change(within(dialog).getByLabelText(/test file/i), {
-      target: { files: [new File(["x"], "test.csv", { type: "text/csv" })] },
-    });
+    await openImport(fakeClient());
+
+    uploadTest(new File(["x"], "test.csv", { type: "text/csv" }));
+
     expect(await screen.findByRole("alert")).toHaveTextContent(/choose a \.json file/i);
   });
 
-  it("the dialog takes Escape, starts focused, and gives focus back to the control that opened it", async () => {
-    // Task 7 declared `role="dialog"` here and handled none of the three.
-    // Driven through `OrganiserApp` and a real `keyDown`, not by rendering
-    // `ImportDialog` directly: what is under test is the wiring — that the
-    // route passes an `onClose` that actually unmounts the dialog — and a
-    // direct render would pass with either route still broken.
-    await openList(fakeClient());
-    const trigger = screen.getByRole("button", { name: /import a test/i });
-    trigger.focus();
-    fireEvent.click(trigger);
+  it("is its own history entry, so Back returns to the list rather than leaving the app", async () => {
+    // What replaces the dialog's Escape-and-return-focus test: `D18` moved
+    // import off the list and onto an address, so the way out is the
+    // browser's own Back — and the thing that can break is the routing
+    // (`view-url.ts`, `fromUrl`, `paramsOf`), not a focus trap this page
+    // deliberately does not have.
+    await openImport(fakeClient());
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("import");
+    expect(screen.queryByRole("dialog")).toBeNull();
 
-    const dialog = await screen.findByRole("dialog", { name: /import a test/i });
-    expect(dialog).toHaveFocus();
+    window.history.back();
 
-    fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    // The same element, whose label has flipped back from "Cancel import".
-    expect(trigger).toHaveFocus();
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+    expect(screen.queryByRole("heading", { level: 1, name: "Import a test" })).toBeNull();
   });
 
-  it("the test list and its import dialog have no axe violations", async () => {
+  it("the test list and the import page it opens have no axe violations", async () => {
     const { container } = await openList(fakeClient());
     expect(await axe(container)).toHaveNoViolations();
 
     fireEvent.click(screen.getByRole("button", { name: /import a test/i }));
-    await screen.findByRole("dialog", { name: /import a test/i });
+    await screen.findByRole("heading", { level: 1, name: "Import a test" });
     expect(await axe(container)).toHaveNoViolations();
   });
 });

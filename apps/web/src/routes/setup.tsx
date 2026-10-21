@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { CardHairline } from "../components/CardHairline";
 import { MonoCaption } from "../components/MonoCaption";
+import { ScreenSplit } from "../components/organiser/ScreenSplit";
 import { TextField } from "../components/TextField";
 import { ApiError, type ApiClient } from "../lib/api";
 
@@ -58,7 +59,9 @@ export function Setup({
   }
 
   return (
-    <main id="main-content" className="organiser">
+    // `D18`: the same split as sign-in, under the headline of this moment —
+    // an instance that has no owner yet, which happens once.
+    <ScreenSplit headline="This instance has no owner yet. Naming a workspace makes you one.">
       <MonoCaption>First run · step 1 of 1</MonoCaption>
       <h1 className="organiser__title">Name your first workspace</h1>
       <p className="organiser__lead">
@@ -91,6 +94,6 @@ export function Setup({
           </button>
         </form>
       </CardHairline>
-    </main>
+    </ScreenSplit>
   );
 }

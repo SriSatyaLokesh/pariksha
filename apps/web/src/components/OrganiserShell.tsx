@@ -55,7 +55,36 @@ export const ICONS: Record<string, string[]> = {
      draft is being LOOKED AT; a tick would say it had been approved, and
      approvals are ADR 0007's undelivered half (`D18`). */
   review: ["M9 3.4a5.2 5.2 0 1 0 0 10.4 5.2 5.2 0 0 0 0-10.4Z", "M12.9 12.9 16.8 16.8"],
+  /* 6.5e Task 2, issue 200: the test list's five lifecycle glyphs and the
+     field-error mark, which were U+25CF U+25D0 U+25CB U+25A0 U+25A2 and
+     U+26A0 — text characters whose shape, weight and baseline are the
+     reader's font's business, and whose coverage is per-OS. Same viewBox,
+     same stroke, same `currentColor` as every entry above.
+
+     ONLY `routes/tests.tsx`'s. The other 24 Unicode glyphs across 12 files
+     are their own piece of work (issue 200) and are deliberately not swept
+     here; these six are the ones this task rewrites the lines of anyway.
+
+     The lifecycle pair reads as a progression: a disc for a draft that
+     exists but is not out, a clock for one waiting on its window, a ring
+     for one open now, a filled square for one shut and an outline square
+     for one filed away. Fill versus outline is the distinction the Unicode
+     shapes carried and it is kept, because the label beside it is the
+     primary signal and the glyph only has to agree with it. */
+  "state-draft": ["M10 4.6a5.4 5.4 0 1 0 0 10.8 5.4 5.4 0 0 0 0-10.8Z"],
+  "state-scheduled": ["M10 4.2a5.8 5.8 0 1 0 0 11.6 5.8 5.8 0 0 0 0-11.6Z", "M10 6.8V10l2.4 1.6"],
+  "state-open": ["M10 4.6a5.4 5.4 0 1 0 0 10.8 5.4 5.4 0 0 0 0-10.8Z"],
+  "state-closed": ["M5.2 5.2h9.6v9.6H5.2Z"],
+  "state-archived": ["M4.4 5h11.2v10H4.4Z", "M4.4 8.2h11.2", "M8.4 11h3.2"],
+  warn: ["M10 3.6 17.4 16.4H2.6Z", "M10 8.4v3.4", "M10 14h.01"],
 };
+
+/* The icons whose SHAPE is a fill rather than an outline — `D1`'s "glyph and
+   label on inherited ink" needs a draft to look different from an open test
+   with no hue to tell them apart, and filled-against-outline is the one
+   distinction left. Two entries, so this is a set and not a parameter on
+   every call site. */
+const FILLED = new Set(["state-draft", "state-closed"]);
 
 /**
  * `D7a` — "Opening a section or a setting retracts **both** sides
@@ -88,7 +117,7 @@ export function Icon({ name }: { name: string }) {
       viewBox="0 0 20 20"
       width="18"
       height="18"
-      fill="none"
+      fill={FILLED.has(name) ? "currentColor" : "none"}
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"

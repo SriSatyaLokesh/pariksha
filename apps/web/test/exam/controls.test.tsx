@@ -29,17 +29,19 @@
 import { useState } from "react";
 import { describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { readFileSync, readdirSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync } from "node:fs";
 import type { RegistrationFormSpec, ResponseValue, SingleQuestion } from "@pariksha/core";
 
 import {
-  entryStylesheets,
+  CHAINS,
+  chainOf,
   htmlEntries,
   paintsIn,
   parseRuleBodies,
-  readResolvedCss,
+  resolvedChain,
+  SRC_DIR,
+  sourceFiles,
+  srcRelative,
 } from "../css-chain";
 import { AnswerInput } from "../../src/components/exam/answer";
 import { FormBuilder } from "../../src/components/testbuilder/FormBuilder";
@@ -48,80 +50,28 @@ import { ViewControls } from "../../src/components/exam/ViewControls";
 import type { CandidateQuestion } from "../../src/lib/paper";
 import type { ApiClient } from "../../src/lib/api";
 
-const TEST_DIR = dirname(fileURLToPath(import.meta.url));
-const SRC_DIR = resolve(TEST_DIR, "../../src");
-
 /**
- * The pages this app ships, and the source each one dresses.
+ * The pages this app ships, their stylesheets and the sources each dresses.
  *
- * `page` is the real file name, and `htmlEntries()` reads `apps/web/*.html`
- * off disk: the test below asserts the two sets are equal, so a FOURTH page
- * cannot be silently unclaimed. That assertion is not decoration. #201 existed
- * because nothing watched the seam between two CSS chains, and a seam guard
- * that hardcodes its own list of chains rebuilds that defect one level up —
- * a new entry whose sources sit under a prefix another chain already claims
- * (`routes/`, `components/exam/`) would map to the wrong chain and pass bare.
+ * `CHAINS`, `sourceFiles`, `srcRelative` and `chainOf` moved to
+ * `test/css-chain.ts` in 6.5e Task 1b, when `theme.test.ts`'s own seam guard
+ * — the one that says `primitives.css` may read `theme.css` only on
+ * constructs the landing page never renders — needed the same map. The
+ * reason for one copy is this file's own: a seam guard that keeps a private
+ * list of chains rebuilds #201 one level up, and two such lists drifting
+ * apart is the same defect twice. The prose about why `owns` is hand-written
+ * and watched from two sides moved with it.
  *
- * `owns` is still written by hand, because there is nothing to derive it from
- * short of walking the module graph. It is watched from two sides instead:
- * every control-rendering source file must fall under at least one prefix
- * (overlaps are intended and resolved by longest prefix — `routes/exam.tsx`
- * is the candidate's, `routes/` the organiser's), and the page set itself is
- * read off disk.
- */
-const CHAINS: { name: string; page: string; owns: string[] }[] = [
-  {
-    name: "candidate runtime",
-    page: "exam.html",
-    owns: ["components/exam/", "routes/exam.tsx"],
-  },
-  {
-    name: "organiser",
-    page: "admin.html",
-    owns: [
-      "components/testbuilder/",
-      "components/authoring/",
-      "components/organiser/",
-      "routes/",
-    ],
-  },
-  {
-    name: "landing",
-    page: "index.html",
-    owns: ["sections/", "island/", "routes/landing.tsx"],
-  },
-];
-
-/**
- * EVERY stylesheet each page loads, resolved and joined — not one entry
- * stylesheet.
- *
- * `admin.html` runs `admin-main.tsx`, which imports `base.css`, `admin.css`
- * AND `testbuilder.css` side by side; reading `admin.css` alone would leave a
- * descendant-scoped override in `testbuilder.css` invisible to every
- * assertion below. `index.html` links its two stylesheets directly rather
- * than running a module at all. `entryStylesheets()` covers both shapes.
+ * `RESOLVED` is EVERY stylesheet each page loads, resolved and joined — not
+ * one entry stylesheet. `admin.html` runs `admin-main.tsx`, which imports
+ * `base.css`, `admin.css` AND `testbuilder.css` side by side; reading
+ * `admin.css` alone would leave a descendant-scoped override in
+ * `testbuilder.css` invisible to every assertion below. `index.html` links
+ * its two stylesheets directly rather than running a module at all.
  */
 const RESOLVED: Record<string, string> = Object.fromEntries(
-  CHAINS.map((chain) => [
-    chain.page,
-    // One shared `seen` set per page, so a stylesheet two of its entries
-    // reach is read once rather than twice.
-    ((seen) =>
-      entryStylesheets(chain.page)
-        .map((path) => readResolvedCss(path, seen))
-        .join("\n"))(new Set<string>()),
-  ]),
+  CHAINS.map((chain) => [chain.page, resolvedChain(chain.page)]),
 );
-
-function sourceFiles(dir: string, out: string[] = []): string[] {
-  for (const entry of readdirSync(dir)) {
-    const full = join(dir, entry);
-    if (statSync(full).isDirectory()) sourceFiles(full, out);
-    else if (/\.tsx?$/.test(full)) out.push(full);
-  }
-  return out;
-}
 
 /**
  * A source file that renders a checkbox or a radio.
@@ -152,18 +102,8 @@ const CONTROL_RE = /type=(?:"(?:checkbox|radio)"|\{[^}]*\b(?:checkbox|radio)\b[^
 /** Every source file that renders a checkbox or a radio, repo-relative. */
 const CONTROL_FILES = sourceFiles(SRC_DIR)
   .filter((file) => CONTROL_RE.test(readFileSync(file, "utf8")))
-  .map((file) => relative(SRC_DIR, file).replaceAll("\\", "/"))
+  .map(srcRelative)
   .sort();
-
-/** The chain a source file ships in, or `undefined` if the map has a hole. */
-function chainOf(file: string): (typeof CHAINS)[number] | undefined {
-  // Longest prefix wins: `routes/exam.tsx` is the candidate's even though the
-  // organiser owns `routes/`.
-  return [...CHAINS]
-    .flatMap((chain) => chain.owns.map((prefix) => ({ chain, prefix })))
-    .sort((a, b) => b.prefix.length - a.prefix.length)
-    .find(({ prefix }) => file.startsWith(prefix))?.chain;
-}
 
 /** A real `<input>` of `type`. Deliberately NOT attached to the document:
  *  `Element.matches()` answers for a detached element, every rule read here
@@ -255,7 +195,7 @@ describe("no chain that renders a control is left on the browser default (D17, #
     // row the candidate's chain cannot lay out.
     const FIELD_ROW_FILES = sourceFiles(SRC_DIR)
       .filter((file) => /className="field-(?:row|affix)/.test(readFileSync(file, "utf8")))
-      .map((file) => relative(SRC_DIR, file).replaceAll("\\", "/"))
+      .map(srcRelative)
       .sort();
 
     // Not an empty loop: the organiser really does render them, so an empty

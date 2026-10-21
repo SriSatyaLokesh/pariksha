@@ -41,8 +41,10 @@
    scroll the document — the one thing D21 forbids — with the whole suite
    green. One source of truth instead of a guard over two. */
 .shell__page:has(> .home) {
-  background: var(--ground);
-  /* `100%` of the grid area, not `100dvh` minus a list of chrome. Fix
+  /* The ground itself is shell.css's from 6.5e Task 1b — every screen has
+     one now, so Home no longer paints its own.
+
+     `100%` of the grid area, not `100dvh` minus a list of chrome. Fix
      round 2: the subtraction was right while the shell was bar + page at
      every width, and wrong the moment 6.5c Task 4 put the rail back on the
      screen below 719px as a horizontal strip in its own grid row. The page
@@ -60,18 +62,6 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-}
-
-/* And the frame around it. shell.css deliberately paints no background on
-   `.shell` itself — near-black behind a cream screen's near-black ink — and
-   the rail is `align-self: start`, so the grid cell BELOW the rail shows
-   whatever `.shell` has. Against a cream page that was invisible; against
-   Home's ground it is a cream wedge under the nav, which a browser probe
-   caught and jsdom structurally cannot. --ground-2 is the rail's own fill,
-   so the column reads as one surface. Scoped to Home for the same reason
-   the rule above is: every other screen is still cream until 6.5e. */
-.shell:has(> .shell__page > .home) {
-  background: var(--ground-2);
 }
 
 /* Fills the box the rule above bounds, and never more: `flex: 1` takes the
@@ -96,13 +86,12 @@
   overflow: hidden;
 }
 
-/* The ring, scoped the way shell.css scopes its own: --focus is the Signal
-   accent, which D1 measures at 1.60:1 on cream, so it may only be widened
-   to a surface that is actually on this ground. Home is. */
-.home :focus-visible {
-  outline-color: var(--focus);
-  box-shadow: 0 0 0 3px var(--accent-wash);
-}
+/* The ring was here, scoped the way shell.css scoped its own, because
+   "--focus is 1.60:1 on cream, so it may only be widened to a surface that
+   is actually on this ground". Every organiser surface is on this ground
+   from 6.5e Task 1b, and `admin.css`'s `:root[data-theme] :focus-visible`
+   paints the same two declarations at a higher specificity. Deleted rather
+   than left — the same reason shell.css's twin was (fix round 1, M1). */
 
 /* ---- Page lead --------------------------------------------------------- */
 
@@ -374,8 +363,11 @@
    --surface plus a translucent --wash. An opaque --surface fill therefore
    read as a hard-edged rectangle one step off its own row. The wash is
    layered as a background IMAGE rather than as an inset box-shadow so it
-   cannot out-specify `.home :focus-visible`'s ring on a row that is both
-   hovered and focused. */
+   cannot out-specify the focus ring on a row that is both hovered and
+   focused. (The ring is `admin.css`'s `:root[data-theme] :focus-visible`
+   since 6.5e Task 1b; this file's own `.home :focus-visible` was deleted as
+   redundant against it. A background-image cannot out-specify a box-shadow
+   whichever rule paints it, so the reasoning is unchanged by the move.) */
 .home__row:hover .home__row-action {
   background-image: linear-gradient(var(--wash), var(--wash));
 }
