@@ -126,7 +126,11 @@ export function resolveProctoring(
   input: { profile?: ProctoringProfile; overrides?: ProctoringOverrides } | undefined,
 ): ResolvedProctoring {
   const profile = input?.profile ?? "off";
-  const defaults = PROCTORING_DEFAULTS[profile];
+  // Not reachable today — `profile` is typed to the three keys this table
+  // has — but this is a public `@pariksha/core` function whose own doc
+  // comment promises every field present, and a later plan calls it from
+  // the browser against payload-shaped input it does not control.
+  const defaults = PROCTORING_DEFAULTS[profile] ?? PROCTORING_DEFAULTS.off;
   const overrides = input?.overrides;
   return {
     profile,
@@ -166,7 +170,11 @@ export function resolveProctoring(
  * line. The browser line itself is backed by no override — it is emitted
  * only when at least one other requirement is enabled (derived from
  * whether any other line was produced, not from `profile`), so Off still
- * produces an empty list.
+ * produces an empty list. Identity photo and images are additionally
+ * gated on `requireCamera`: neither capture can happen without it
+ * (`Q11b`), so a document that asks for one without the other promises
+ * nothing here — see the checklist's `proctoring_capture_without_camera`
+ * row for where that organiser is told instead.
  */
 export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
   const lines: string[] = [];
@@ -184,7 +192,14 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
     resolved.requireMicrophone ||
     resolved.extraMonitorCheck;
   if (anyOtherRequirement) {
-    lines.push("Use the latest Chrome, Edge or Firefox on a laptop or desktop, or Safari on a Mac.");
+    // No device clause here — `desktopOnly` is the only line that names a
+    // device, and it already fires whenever a device is actually required
+    // (the only time it is true). `desktop_only` is a supported
+    // configuration a phone may take, so claiming a laptop or desktop on
+    // every other requirement too would tell a phone candidate something
+    // false, the same false claim Task 11 deliberately removed from
+    // `apps/web/src/routes/exam.tsx`'s device check.
+    lines.push("Use a fully updated Chrome, Edge, Firefox or Safari.");
   }
 
   if (resolved.requireFullscreen) {
@@ -193,10 +208,20 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
   if (resolved.requireCamera) {
     lines.push("A working camera is required for the whole test.");
   }
-  if (resolved.identityPhoto) {
+  // `identityPhoto` and the per-interval images both need a live camera
+  // stream to produce anything — `Q11b`: `require_camera` false means
+  // `getUserMedia` is never called, no permission prompt, no indicator, no
+  // capture. A document with `require_camera: false, identity_photo: true`
+  // must not promise a photo nothing can take. `resolveProctoring` is not
+  // the place to paper over that by inferring `requireCamera` from either
+  // toggle — a camera requirement blocks an attempt indefinitely by
+  // design, and arriving at it from a different control is exactly the
+  // inference this phase refuses to make. The organiser is told instead,
+  // in the publish checklist's `proctoring_capture_without_camera` row.
+  if (resolved.requireCamera && resolved.identityPhoto) {
     lines.push("A photo of your face is taken before you can start.");
   }
-  if (resolved.snapshotIntervalSeconds > 0) {
+  if (resolved.requireCamera && resolved.snapshotIntervalSeconds > 0) {
     lines.push(`The camera captures an image every ${String(resolved.snapshotIntervalSeconds)} seconds.`);
   }
   if (resolved.requireMicrophone) {

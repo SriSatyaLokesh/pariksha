@@ -25,6 +25,76 @@ describe("resolveProctoring", () => {
     expect(resolveProctoring({})).toEqual(PROCTORING_DEFAULTS.off);
   });
 
+  // The two tests above compare `resolveProctoring` to `PROCTORING_DEFAULTS`
+  // itself, which proves resolution reaches the table but asserts nothing
+  // about what the table says — in particular `violationLimit`,
+  // `cameraOutageSeconds` and `multiFaceSnapshots` had no assertion anywhere
+  // in the tree, and those are three of the thresholds a later plan computes
+  // the integrity flag from. These pin today's table against literals, one
+  // profile at a time.
+  it("pins Off's defaults", () => {
+    expect(PROCTORING_DEFAULTS.off).toEqual({
+      profile: "off",
+      desktopOnly: false,
+      requireFullscreen: false,
+      blockCopyPaste: false,
+      watermark: false,
+      requireCamera: false,
+      identityPhoto: false,
+      snapshotIntervalSeconds: 0,
+      faceCheck: false,
+      requireMicrophone: false,
+      extraMonitorCheck: false,
+      violationLimit: 5,
+      violationAction: "warn_only",
+      cameraOutageSeconds: 120,
+      multiFaceSnapshots: 2,
+      allowCalculator: false,
+    });
+  });
+
+  it("pins Standard's defaults", () => {
+    expect(PROCTORING_DEFAULTS.standard).toEqual({
+      profile: "standard",
+      desktopOnly: true,
+      requireFullscreen: true,
+      blockCopyPaste: true,
+      watermark: false,
+      requireCamera: false,
+      identityPhoto: false,
+      snapshotIntervalSeconds: 0,
+      faceCheck: false,
+      requireMicrophone: false,
+      extraMonitorCheck: false,
+      violationLimit: 5,
+      violationAction: "warn_then_flag",
+      cameraOutageSeconds: 120,
+      multiFaceSnapshots: 2,
+      allowCalculator: false,
+    });
+  });
+
+  it("pins Strict's defaults", () => {
+    expect(PROCTORING_DEFAULTS.strict).toEqual({
+      profile: "strict",
+      desktopOnly: true,
+      requireFullscreen: true,
+      blockCopyPaste: true,
+      watermark: true,
+      requireCamera: true,
+      identityPhoto: true,
+      snapshotIntervalSeconds: 60,
+      faceCheck: false,
+      requireMicrophone: false,
+      extraMonitorCheck: true,
+      violationLimit: 5,
+      violationAction: "warn_then_flag",
+      cameraOutageSeconds: 120,
+      multiFaceSnapshots: 2,
+      allowCalculator: false,
+    });
+  });
+
   it("takes defaults from the profile", () => {
     const r = resolveProctoring({ profile: "strict" });
     expect(r.requireCamera).toBe(true);
@@ -80,13 +150,27 @@ describe("proctoringRequirements", () => {
     expect(lines.join(" ")).toMatch(/camera/i);
     expect(lines.join(" ")).not.toMatch(/every/i);
   });
+
+  // `Q11b`: no camera requirement means no stream is ever acquired, so a
+  // document asking for an identity photo or snapshots without a camera
+  // must not tell the candidate a capture is coming — nothing can take it.
+  it("omits the identity photo and the images when require_camera is false", () => {
+    const lines = proctoringRequirements(
+      resolveProctoring({
+        profile: "strict",
+        overrides: { require_camera: false, identity_photo: true, snapshot_interval_seconds: 60 },
+      }),
+    );
+    expect(lines.join(" ")).not.toMatch(/photo/i);
+    expect(lines.join(" ")).not.toMatch(/every 60 seconds/i);
+  });
 });
 
 // Task 5 (Q2/Q7b): the closed event vocabulary and its violation/failure
 // split. One definition here; Phase 8's monitor and CSV, and the violation
 // counter and integrity flag, all read it instead of re-deriving it.
 describe("proctoring events", () => {
-  it("classifies every event type exactly once as violation, failure or neither", () => {
+  it("never classifies an event type as both a violation and a failure", () => {
     for (const t of PROCTORING_EVENTS) {
       expect([VIOLATION_EVENTS.has(t), FAILURE_EVENTS.has(t)].filter(Boolean).length, t)
         .toBeLessThanOrEqual(1);

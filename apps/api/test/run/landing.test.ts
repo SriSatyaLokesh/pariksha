@@ -36,7 +36,7 @@ it("C-01: the landing payload carries everything the page shows", async () => {
       profile: "standard",
       requirements: [
         "This test must be taken on a desktop or laptop, not a phone or tablet.",
-        "Use the latest Chrome, Edge or Firefox on a laptop or desktop, or Safari on a Mac.",
+        "Use a fully updated Chrome, Edge, Firefox or Safari.",
         "The test runs in fullscreen. Leaving it is logged.",
       ],
     },
