@@ -20,17 +20,37 @@ export type NavKey = "home" | "banks" | "tests";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
-   or a font: five glyphs do not earn a loading strategy. */
-const ICONS: Record<string, string[]> = {
+   or a font: eleven glyphs do not earn a loading strategy.
+
+   Exported from 6.5d Task 1 (fix round 1) rather than copied: the builder's
+   five setting rows (`D7`) needed icons, and the only way "one family" stays
+   true is if there is literally one `ICONS` and one `Icon`. The five entries
+   below `moon` are that plan's; they are on this viewBox, at this stroke,
+   and they are the whole reason this is `export` and not `const`. A second
+   family — a font, a sprite, a dependency, or a row of Unicode glyphs whose
+   coverage is per-OS — is the thing this comment exists to refuse. */
+export const ICONS: Record<string, string[]> = {
   home: ["M3 9.2 10 3.2l7 6v8.1a.7.7 0 0 1-.7.7h-3.8v-5H7.5v5H3.7a.7.7 0 0 1-.7-.7Z"],
   banks: ["M10 2.6 2.6 6.4 10 10.2l7.4-3.8Z", "M2.6 10 10 13.8 17.4 10", "M2.6 13.6 10 17.4l7.4-3.8"],
   tests: ["M5.4 2.6h6l3.2 3.2v11.6H5.4Z", "M11.2 2.6v3.4h3.4", "M7.8 10.4h4.4", "M7.8 13.4h4.4"],
   panel: ["M3 4.2h14v11.6H3Z", "M7.8 4.2v11.6"],
   sun: ["M10 6.4a3.6 3.6 0 1 0 0 7.2 3.6 3.6 0 0 0 0-7.2Z", "M10 2.4v1.6", "M10 16v1.6", "M2.4 10H4", "M16 10h1.6", "M4.6 4.6l1.2 1.2", "M14.2 14.2l1.2 1.2", "M15.4 4.6l-1.2 1.2", "M5.8 14.2l-1.2 1.2"],
   moon: ["M16 11.8A6.6 6.6 0 0 1 8.2 4a6.6 6.6 0 1 0 7.8 7.8Z"],
+  /* The builder's five settings (`D7`): a clock, a lock, a filled-in form,
+     a bar chart and a drop of ink. */
+  timing: ["M10 3.4a6.6 6.6 0 1 0 0 13.2 6.6 6.6 0 0 0 0-13.2Z", "M10 6.4V10l2.8 1.8"],
+  access: ["M5.4 9h9.2v7.8H5.4Z", "M7.6 9V6.8a2.4 2.4 0 0 1 4.8 0V9"],
+  registration: [
+    "M7.4 3.4h5.2v2.2H7.4Z",
+    "M12.6 4.4h2v13H5.4v-13h2",
+    "M8 9.4h4",
+    "M8 12.6h4",
+  ],
+  results: ["M3.4 16.6h13.2", "M6.2 16.6v-4.4", "M10 16.6V7", "M13.8 16.6v-6.6"],
+  branding: ["M10 3.2c0 0 4.6 5.2 4.6 8.4a4.6 4.6 0 0 1-9.2 0C5.4 8.4 10 3.2 10 3.2Z"],
 };
 
-function Icon({ name }: { name: string }) {
+export function Icon({ name }: { name: string }) {
   return (
     <svg
       className="shell__icon"

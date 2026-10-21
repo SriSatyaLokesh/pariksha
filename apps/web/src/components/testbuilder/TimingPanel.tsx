@@ -53,7 +53,7 @@ const DEFAULTS = {
  * as the gate: it answers with the legacy canonical names (`Asia/Calcutta`,
  * not `Asia/Kolkata`), so it would reject the zone this repo's own example
  * test and docs use. It is still the right source for the *suggestions*. */
-function isZone(zone: string): boolean {
+export function isZone(zone: string): boolean {
   try {
     new Intl.DateTimeFormat("en-GB", { timeZone: zone });
     return true;

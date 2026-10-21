@@ -161,14 +161,82 @@ describe("the five settings are rows that state their own setting (D7)", () => {
     expect(screen.getByText("logo set · start message set · finish message empty")).toBeVisible();
   });
 
-  it("states a value, never the name of the field it is for", async () => {
+  // Fix round 1, finding 10. This used to assert a negative regex the test
+  // itself authored, which almost any wording passed. The real claim is
+  // behavioural and is asserted as such: what the collapsed row says is the
+  // value the panel's own control holds, and it keeps following that control
+  // rather than describing the field it belongs to.
+  it("states the value its own control holds, and follows it when it changes", async () => {
     await openBuilder();
-    // The failure this whole task exists to prevent, named as an assertion:
-    // "when the test opens and closes" is a description; "opens 24 Oct" is a
-    // value. No row may read as the former.
-    for (const label of ["Timing", "Access", "Registration", "Results", "Branding"]) {
-      expect(rowFor(label)).not.toHaveTextContent(/\bchoose\b|\bset (?:up|the|a)\b|\bwhen the test\b/i);
-    }
+
+    fireEvent.click(rowFor("Access"));
+    expect(await screen.findByRole("radio", { name: "Link and code" })).toBeChecked();
+    fireEvent.click(rowFor("Access"));
+    expect(rowFor("Access")).toHaveTextContent("Link and code");
+
+    // Pick a different mode and the collapsed row states that one — a row
+    // naming the field rather than its value would be unmoved by this.
+    fireEvent.click(rowFor("Access"));
+    fireEvent.click(await screen.findByRole("radio", { name: "Single sign-on" }));
+    fireEvent.click(rowFor("Access"));
+    expect(rowFor("Access")).toHaveTextContent("Single sign-on");
+    expect(rowFor("Access")).not.toHaveTextContent("Link and code");
+  });
+
+  // Fix round 1, finding 2. `AccessPanel` renders the access-code field only
+  // for `link_code`, and `validateTest` requires one only then.
+  it("names the access code only under the mode that has one", async () => {
+    await openBuilder();
+    expect(rowFor("Access")).toHaveTextContent("code APTI-2026");
+
+    fireEvent.click(rowFor("Access"));
+    fireEvent.click(await screen.findByRole("radio", { name: "Single sign-on" }));
+    fireEvent.click(rowFor("Access"));
+
+    // Not "Single sign-on · no code set · …": that names a setting the mode
+    // does not have and reads as unfinished work.
+    expect(rowFor("Access")).toHaveTextContent("Single sign-on · no candidates on the list");
+    expect(rowFor("Access")).not.toHaveTextContent(/code/i);
+  });
+
+  // Fix round 1, finding 1. `test.tsx`'s `load` resolves `[]` rather than
+  // asking for the candidate list when the actor lacks `candidates.manage`,
+  // so a count stated here would be a fact about data never read.
+  it("states the permission, not a count, when the list was never read", async () => {
+    const AUTHOR: Actor = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author", grants: [] }],
+    };
+    const candidates = vi.fn(async () => []);
+    await openBuilder(fakeClient({ me: async () => AUTHOR, candidates }));
+
+    expect(rowFor("Access")).toHaveTextContent("candidate list needs an Admin");
+    expect(rowFor("Access")).not.toHaveTextContent("no candidates on the list");
+    // And the claim is honest because the screen really never asked.
+    expect(candidates).not.toHaveBeenCalled();
+  });
+
+  // Fix round 1, finding 6. Unreachable from the panel's own
+  // `datetime-local` control, reachable from an imported document.
+  it("says a time cannot be read rather than leaving the clause blank", async () => {
+    const unreadable: TestVersionRow = {
+      ...DRAFT,
+      body: {
+        ...DRAFT.body,
+        settings: {
+          ...DRAFT.body.settings,
+          timing: { timezone: "Asia/Kolkata", duration_minutes: 60, opens_at: "not-a-time" },
+        },
+      },
+    };
+    await openBuilder(fakeClient({ draft: async () => unreadable }));
+
+    expect(rowFor("Timing")).toHaveTextContent(
+      "60 minutes · opens at a time that cannot be read · no closing time · 1 attempt",
+    );
+    // The shape `D7` forbids: two separators with nothing between them.
+    expect(rowFor("Timing")).not.toHaveTextContent("·  ·");
   });
 
   it("mounts no panel until its row is opened", async () => {

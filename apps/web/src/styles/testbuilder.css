@@ -556,7 +556,13 @@
   cursor: pointer;
 }
 
+/* The shell's own icon family (`OrganiserShell`'s `ICONS`/`Icon`), which
+   paints in `currentColor` — so the colour is set here, on the wrapper, and
+   the svg inherits it. `align-self` because the row aligns on the baseline
+   and an inline svg has none worth aligning to. */
 .setting-row__icon {
+  display: inline-flex;
+  align-self: center;
   color: var(--color-ink-soft);
 }
 

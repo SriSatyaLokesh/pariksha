@@ -28,6 +28,7 @@ import {
   timingSummary,
   type PanelKey,
 } from "../components/testbuilder/SettingRow";
+import { Icon } from "../components/OrganiserShell";
 import { VersionBanner, VersionHistory } from "../components/testbuilder/VersionBanner";
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
@@ -509,12 +510,12 @@ export function TestBuilder({
            render, from the draft this screen already holds: a summary
            cached anywhere would still read 60 minutes after the organiser
            typed 90. */
-        <section className="setting-rows" aria-label="Settings">
-          <h2>Settings</h2>
+        <section className="setting-rows" aria-labelledby="settings-heading">
+          <h2 id="settings-heading">Settings</h2>
 
           <SettingRow
             id="timing"
-            icon="◷"
+            icon={<Icon name="timing" />}
             label="Timing"
             summary={timingSummary(draft.body.settings.timing ?? DEFAULT_TIMING)}
             open={openPanel === "timing"}
@@ -530,9 +531,14 @@ export function TestBuilder({
 
           <SettingRow
             id="access"
-            icon="⊙"
+            icon={<Icon name="access" />}
             label="Access"
-            summary={accessSummary(draft.body.settings.access ?? DEFAULT_ACCESS, candidates.length)}
+            summary={accessSummary(
+              draft.body.settings.access ?? DEFAULT_ACCESS,
+              // `load` asks for the list only with `candidates.manage`, so
+              // without it there is no count to state — only the reason.
+              canManageCandidates ? candidates.length : null,
+            )}
             open={openPanel === "access"}
             onToggle={togglePanel}
           >
@@ -558,7 +564,7 @@ export function TestBuilder({
 
           <SettingRow
             id="registration"
-            icon="▤"
+            icon={<Icon name="registration" />}
             label="Registration"
             summary={registrationSummary(draft.body.settings.registration_form)}
             open={openPanel === "registration"}
@@ -573,7 +579,7 @@ export function TestBuilder({
 
           <SettingRow
             id="results"
-            icon="▥"
+            icon={<Icon name="results" />}
             label="Results"
             summary={resultsSummary(draft.body.settings.release ?? DEFAULT_RELEASE)}
             open={openPanel === "results"}
@@ -587,7 +593,7 @@ export function TestBuilder({
 
           <SettingRow
             id="branding"
-            icon="◈"
+            icon={<Icon name="branding" />}
             label="Branding"
             summary={brandingSummary(draft.body.settings.branding ?? NO_BRANDING, workspaceBranding)}
             open={openPanel === "branding"}
@@ -606,7 +612,6 @@ export function TestBuilder({
           </SettingRow>
         </section>
       )}
-
     </>
   );
 }
@@ -617,7 +622,7 @@ export function TestBuilder({
  * because the panel prints it and the converter keys on it, and a screen
  * naming one column while the server wants another is the defect this
  * exists to avoid. */
-function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
+export function identityFieldOf(form: { fields: FormField[] } | undefined): FormField | null {
   return form?.fields.find((field) => field.unique === true) ?? null;
 }
 

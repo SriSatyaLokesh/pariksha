@@ -8,6 +8,15 @@ import type {
 } from "@pariksha/core";
 import { MODE_LABEL } from "./AccessPanel";
 import { SHOW_LABEL, WHEN_LABEL } from "./ReleasePanel";
+import { isZone } from "./TimingPanel";
+// `test.tsx` imports this module too, so this is a cycle — a deliberate
+// and safe one. `identityFieldOf` is a hoisted function declaration and
+// neither module calls the other at module scope; it is first called at
+// render. The alternative was a fourth copy of "the first `unique: true`
+// field in the form's own order", which is the rule `AccessPanel`'s own
+// prop, `apps/api/src/import/candidates.ts` and the publish checklist all
+// key on.
+import { identityFieldOf } from "../../routes/test";
 
 // Phase 6.5d Task 1, spec D7: the five settings — timing, access,
 // registration form, results, branding — collapse into one panel of rows
@@ -95,14 +104,15 @@ export function SettingRow({
 // The five summaries. Each takes exactly the draft it states and nothing
 // else, so there is nowhere for a stale copy to live.
 
-/** "24 Oct 09:00 IST". `en-IN` because it is the one English locale whose
- * ICU data abbreviates the zones this product is used in ("IST", not
+/** "24 Oct 09:00 IST", or `null` when the stored string is not a time this
+ * screen can read. `en-IN` because it is the one English locale whose ICU
+ * data abbreviates the zones this product is used in ("IST", not
  * "GMT+5:30"), and a fixed locale because the row must read the same on
  * every machine. The comma `en-IN` puts after the day is dropped: the spec
  * writes this stamp without one. */
-function stamp(iso: string, zone: string): string {
+function stamp(iso: string, zone: string): string | null {
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
+  if (Number.isNaN(at.getTime())) return null;
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: zone,
     day: "numeric",
@@ -117,10 +127,11 @@ function stamp(iso: string, zone: string): string {
 }
 
 /** "24 Oct 2026" — the stored midnight-UTC release day, read back in UTC so
- * it does not slide a day either way on a machine west of Greenwich. */
-function day(iso: string): string {
+ * it does not slide a day either way on a machine west of Greenwich. `null`
+ * when the document holds something that is not a date. */
+function day(iso: string): string | null {
   const at = new Date(iso);
-  if (Number.isNaN(at.getTime())) return "";
+  if (Number.isNaN(at.getTime())) return null;
   return new Intl.DateTimeFormat("en-IN", {
     timeZone: "UTC",
     day: "numeric",
@@ -129,55 +140,81 @@ function day(iso: string): string {
   }).format(at);
 }
 
-/** A zone `Intl` will accept, falling back the way `TimingPanel` does. */
-function safeZone(zone: string | undefined): string {
-  try {
-    new Intl.DateTimeFormat("en-IN", { timeZone: zone ?? "UTC" });
-    return zone ?? "UTC";
-  } catch {
-    return "UTC";
-  }
-}
-
 const plural = (n: number, one: string): string => `${n} ${one}${n === 1 ? "" : "s"}`;
 
+/** One end of the window, stated three ways: the time, the absence of one,
+ * or — for a document an import brought in carrying an unreadable string —
+ * the fact that it cannot be read. `D7` forbids the fourth way, which is
+ * an empty clause: "opens  · closes " tells an organiser nothing and reads
+ * as a rendering fault rather than as a setting. */
+function edge(iso: string | undefined, verb: string, absent: string, zone: string): string {
+  if (iso === undefined) return absent;
+  const at = stamp(iso, zone);
+  return at === null ? `${verb} at a time that cannot be read` : `${verb} ${at}`;
+}
+
 export function timingSummary(timing: TestTiming): string {
-  const zone = safeZone(timing.timezone);
-  const opens = timing.opens_at === undefined ? "no opening time" : `opens ${stamp(timing.opens_at, zone)}`;
-  const closes =
-    timing.closes_at === undefined ? "no closing time" : `closes ${stamp(timing.closes_at, zone)}`;
-  // `attempts_allowed`'s documented default is 1 (docs/test-format.md
-  // § `timing`), so the row states what a candidate will actually get
-  // rather than going silent on an unset field.
+  // `TimingPanel`'s own gate, not a second copy of it: the row and the
+  // panel must not disagree about which zone a stamp is in.
+  const zone = timing.timezone !== undefined && isZone(timing.timezone) ? timing.timezone : "UTC";
+  // `attempts_allowed`'s documented default is 1 — docs/test-format.md
+  // § `timing`, and the runtime's own `TIMING_DEFAULTS.attempts_allowed`
+  // (`apps/api/src/run/clock.ts`), which is the source of record and is
+  // not importable from this app. Named here so whoever moves it can find
+  // this line. The row states what a candidate will actually get rather
+  // than going silent on an unset field.
   return [
     plural(timing.duration_minutes, "minute"),
-    opens,
-    closes,
+    edge(timing.opens_at, "opens", "no opening time", zone),
+    edge(timing.closes_at, "closes", "no closing time", zone),
     plural(timing.attempts_allowed ?? 1, "attempt"),
   ].join(" · ");
 }
 
-export function accessSummary(access: TestAccess, candidateCount: number): string {
-  const code =
-    access.access_code === undefined || access.access_code === ""
-      ? "no code set"
-      : `code ${access.access_code}`;
-  const list =
-    candidateCount === 0 ? "no candidates on the list" : `${plural(candidateCount, "candidate")} on the list`;
-  return [MODE_LABEL[access.mode], code, list].join(" · ");
+/**
+ * `candidateCount` is `null` for an actor without `candidates.manage`: the
+ * shell deliberately does not fetch the list for them (`test.tsx`'s `load`
+ * resolves `[]` rather than asking, because the route would 403 and fail
+ * the whole load). A row that printed "no candidates on the list" there
+ * would be stating a fact about data the screen never read — the one
+ * failure `D7`'s whole defence rests on avoiding — so it states the
+ * permission instead.
+ */
+export function accessSummary(access: TestAccess, candidateCount: number | null): string {
+  const clauses = [MODE_LABEL[access.mode]];
+  // The access code belongs to `link_code` alone: `AccessPanel` renders the
+  // field only for that mode and `validateTest` requires one only then.
+  // Naming it under SSO would name a setting that mode does not have, and
+  // "no code set" would read as unfinished work rather than as a value.
+  if (access.mode === "link_code") {
+    clauses.push(
+      access.access_code === undefined || access.access_code === ""
+        ? "no code set"
+        : `code ${access.access_code}`,
+    );
+  }
+  clauses.push(
+    candidateCount === null
+      ? "candidate list needs an Admin"
+      : candidateCount === 0
+        ? "no candidates on the list"
+        : `${plural(candidateCount, "candidate")} on the list`,
+  );
+  return clauses.join(" · ");
 }
 
 export function registrationSummary(form: RegistrationFormSpec | undefined): string {
   const fields = form?.fields ?? [];
   if (fields.length === 0) return "no fields yet · nothing identifies a candidate";
   const required = fields.filter((field) => field.required === true).length;
-  // The same rule `identityFieldOf` and apps/api/src/import/candidates.ts
-  // apply: the first `unique: true` field in the form's own order.
-  const identity = fields.find((field) => field.unique === true);
+  // The shell's own rule, not a copy of it: the row must name the column
+  // the candidate list is really keyed on, which is what `AccessPanel` is
+  // handed and what the CSV importer keys on.
+  const identity = identityFieldOf(form);
   return [
     plural(fields.length, "field"),
     `${required} required`,
-    identity === undefined ? "nothing identifies a candidate" : `identified by ${identity.label}`,
+    identity === null ? "nothing identifies a candidate" : `identified by ${identity.label}`,
   ].join(" · ");
 }
 
@@ -193,7 +230,7 @@ export function resultsSummary(release: TestRelease): string {
           // midnight UTC and T-22 asks for no hour), so the row states the
           // day. An "00:00 UTC" here would be a figure the product does
           // not actually honour.
-          `On ${day(release.at)}`
+          `On ${day(release.at) ?? "a date that cannot be read"}`
       : WHEN_LABEL[release.when];
   // `ReleasePanel`'s own control falls back to `score_only` when the
   // document omits `show`, so that is what a candidate gets and that is
