@@ -750,7 +750,20 @@
    GLANCE and never the meaning — each light's accessible name states the
    severity and the destination in words (PublishChecklist.tsx), because
    three hues cannot carry three meanings on their own and a reader who sees
-   none of them would be left with an unlabelled dot. */
+   none of them would be left with an unlabelled dot.
+
+   THE CREAM FLAG TRIO, not theme.css's --risk/--warn/--accent, and the
+   reason is a measurement rather than a preference. This screen is still on
+   the cream page (6.5e re-grounds it); theme.css's names resolve to the
+   DARK Signal palette there, and against --color-cream they measure
+   2.68:1, 2.08:1 and 1.60:1 — every one of them under the 3:1 a non-text
+   indicator needs, which is the same cross-ground move `D1` refuses by
+   name. These three are the cream world's own clean/review/risk triple,
+   already used by `.section-row__flag-risk` eight rules up, and they
+   measure 6.34:1, 5.48:1 and 5.20:1 on the same page. No colour is declared
+   here; DESIGN.md's front matter remains the only place one may be. When
+   6.5e moves this screen onto the Signal ground these three names move with
+   it, in one pass, with the rest of the file. */
 .checklist-rail__light {
   display: block;
   width: 44px;
@@ -765,18 +778,21 @@
 }
 
 .checklist-rail__light[data-severity="blocking"] {
-  background-color: var(--risk);
+  background-color: var(--color-flag-risk);
 }
 
 .checklist-rail__light[data-severity="advisory"] {
-  background-color: var(--warn);
+  background-color: var(--color-flag-review);
 }
 
 /* Dimmed, because a passing check is the absence of work: it is there to be
-   counted, not to be looked at. */
+   counted, not to be looked at. Dimmed and not faded away: 0.75 over the
+   cream page composites to 3.28:1, which clears the 3:1 a non-text
+   indicator needs with a little room. 0.45 — where this started — measures
+   1.95:1, and a light nobody can see is not a quiet light. */
 .checklist-rail__light[data-severity="passing"] {
-  background-color: var(--accent);
-  opacity: 0.45;
+  background-color: var(--color-flag-clean);
+  opacity: 0.75;
 }
 
 .checklist-rail__panel {
@@ -808,7 +824,7 @@
   width: 20rem;
   max-width: calc(100vw - (2 * var(--space-xl)));
   max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
-  background: var(--color-paper);
+  background: var(--color-canvas);
   border: 1px solid var(--color-hairline-strong);
   padding: var(--space-md);
 }
@@ -859,9 +875,20 @@
 
   /* The panel still floats over the page rather than opening it: this is the
      width where reflowing the spine costs the most. Anchored to the page's
-     own gutters, so the whole box is inside the viewport at 320px. */
+     own gutters, so the whole box is inside the viewport at 320px.
+
+     From the BOTTOM, and never taller than three-fifths of the screen. Both
+     halves are about one failure, found in Chromium rather than reasoned
+     about: with the panel pinned under the bar it covered the very band of
+     lights that opens it, so the pointer left the strip the instant the
+     panel arrived, the panel closed, and the two flickered against each
+     other. A panel that cannot reach the thing it is opened from cannot do
+     that, at any length of checklist. */
   .checklist-rail[data-state="lights"] .checklist-rail__panel {
     inset-inline: var(--space-xl);
+    inset-block-start: auto;
+    inset-block-end: var(--space-xl);
     width: auto;
+    max-height: 60dvh;
   }
 }
