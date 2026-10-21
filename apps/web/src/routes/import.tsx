@@ -2,6 +2,7 @@ import { useId, useRef, useState } from "react";
 import { sampleBank, SAMPLE_BANK_FILENAME } from "@pariksha/core";
 import { ApiError, type ApiClient, type ImportReport, type TestImportReport } from "../lib/api";
 import { downloadJson } from "../lib/download";
+import { CardHairline } from "../components/CardHairline";
 
 /**
  * Import, as a page (`D18`, owner's preference): "linkable, no focus trap,
@@ -181,9 +182,16 @@ export function ImportScreen({
     // it would be silently inert at phone width. The page's children are
     // the page's children.
     <>
-      <div className="import">
-        <p className="import__lead">{copy.help}</p>
-
+      {/* The panel, not the bare page. `contrast-usage.test.ts` already
+          scores `:root[data-theme] .field-label/.field-help/.field-error/
+          .text-input` and `.import-dialog__table`'s neighbours against
+          `--surface`, because every organiser form has been inside one
+          since 6.5c — putting this one straight onto `--ground` would have
+          made four existing SURFACE entries silently wrong for this screen,
+          which is the exact defect Task 1b's Critical was. `D12`: import is
+          an EDITING surface, so `AG1`'s rows-visible rule does not apply
+          and `.organiser__panel`'s `--space-lg` gap is the air it gets. */}
+      <CardHairline className="organiser__panel">
         <label className="field-label" htmlFor={fileId}>
           {copy.fileLabel}
         </label>
@@ -194,6 +202,7 @@ export function ImportScreen({
           accept={copy.accept}
           onChange={(event) => void onFileChange(event)}
         />
+        <p className="field-help">{copy.help}</p>
 
         {error !== undefined && (
           <p className="field-error" role="alert">
@@ -273,11 +282,11 @@ export function ImportScreen({
         )}
 
         {report !== undefined && !hasIssues && (
-          <p role="status">
+          <p className="organiser__status" role="status">
             {report.imported} {report.imported === 1 ? copy.unit[0] : copy.unit[1]} ready to import.
           </p>
         )}
-      </div>
+      </CardHairline>
 
       {/* `D18`'s sticky action bar. It is a sibling of the report, not its
           footer, so a long report scrolls under a bar that stays reachable
