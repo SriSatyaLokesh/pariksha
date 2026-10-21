@@ -482,8 +482,13 @@
    AND THE UNSCORED CEILING COSTS THE CONTRAST GATE NOTHING. The gate reads a
    `clamp()`'s MINIMUM, so 36px is never scored — but the floor is 24px,
    which is already WCAG's large-text threshold, and both ends paint
-   `var(--ink)` on the same ground. A larger size can only LOWER the bar, so
-   the end the gate does read is the worst case. */
+   `var(--ink)` on the same ground. Precisely: the threshold rule is
+   `px >= 24 || (px >= 18.66 && weight >= 700) ? 3 : 4.5`
+   (`contrast-usage.test.ts:1764`), so 24px and 36px sit in the SAME 3:1
+   bucket — the bar does not drop across the clamp, it is flat. A larger size
+   can never make the bar stricter, and the ratio itself is a property of the
+   colour pair and not of the size, so the end the gate does read is never
+   the easier case. */
 .screen__headline {
   color: var(--ink);
   font-family: var(--type-display-lg-family);
