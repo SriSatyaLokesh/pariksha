@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | Draft — not locked. `Q4` is under advisement; everything else is settled. |
+| **Status** | Draft — awaiting the owner's approval. Every ruling is settled, `Q4` included. |
 | **Date** | 2026-10-21 |
 | **Implements** | [PRD.md](../../PRD.md) `P-01`–`P-10`, `AC-17`–`AC-21` |
 | **Builds on** | [Phase 6.5 design pass](2026-10-20-phase-6-5-design-pass-design.md) — its rulings bind every surface this phase adds |
@@ -239,23 +239,47 @@ a guard that is already in place when the field fills.
 
 ## 7. `Q4` — the snapshot upload path
 
-> **Under advisement.** Two paths, and the choice turns on facts about the deployment rather than
-> about the design:
+> **Ruling.** The browser POSTs the JPEG to one `attempt`-authority route, which calls the
+> `StorageAdapter.put()` that already exists. No presigned PUT, no storage-seam change, no new
+> credential, no bucket CORS, and the only CSP change in the whole phase is the `blob:` on
+> `img-src` that `security.ts` already promises. The storage key never leaves the server.
 >
-> **(A) POST the JPEG through the Worker.** One `attempt`-authority route calling the
-> `StorageAdapter.put()` that already exists. No CSP change, no new credentials, no bucket CORS,
-> no storage-seam change, and the key never reaches the browser — so `scrub-scan`'s `wsp_`
-> prohibition is satisfied by construction. Matches `routes/media.ts`'s standing decision for
-> reads.
+> **Why.** A presigned PUT exists to keep bytes out of the Worker — and it does not save the
+> resource that actually binds. On the Workers free plan the ceiling is **100,000 requests a day**;
+> a presigned design mints one URL per snapshot and then takes a report-back leg, so it spends the
+> same request count or twice it. Everything else it touches this codebase has already decided
+> against: `connect-src 'self'` and `hosting.test.ts`'s no-absolute-URL assertion forbid the origin
+> it needs, `routes/media.ts` already proxies *reads* for exactly this reason, and ADR 0009
+> rejected a `connect-src` widening for a smaller feature than this. The deployed Worker has no
+> signer and no secret to build one from. And `Q4a`'s key would carry a `wsp_` into a presigned URL
+> handed to a candidate, which `scrub-scan` fails on by design.
 >
-> **(B) Presigned PUT direct from the browser.** Keeps the bytes out of the Worker, and costs:
-> `signedUploadUrl()` on four adapters; a `connect-src` widening against `AG5` and against
-> `hosting.test.ts`'s no-absolute-URL assertion; R2 S3-API access keys minted and held as Worker
-> secrets — a security-sensitive action on §17's stop list; a bucket CORS rule; `setup.mjs`
-> changes; and the disk read path built from nothing, since `verifyDiskSignature` has no caller
-> and no `/files` route is mounted.
+> Two further facts settle it. **Body size is enforceable only on this path** —
+> `readBodyWithLimit` caps the POST at the trust boundary, where a signed PUT cannot bound what
+> arrives (R2 does not document content-length signing), so one hostile candidate could PUT a
+> multi-gigabyte object under a signed `image/jpeg` and exhaust the free tier. And **private
+> storage stays private on every deployment**: a presigned design forces MinIO onto the public
+> internet with TLS and CORS, where today it sits on the Docker network and `s3Adapter.put()`
+> already works.
 >
-> **This section is filled in when the advisory lands, and nothing in 7d is planned until it is.**
+> Build cost: roughly four files against twelve or more. One failure state instead of three.
+>
+> **Cost if wrong.** It pins the floor at one metered Worker request per snapshot. The phase's own
+> worst case — a 180-minute test at the 15 s floor, 720 images a candidate — is 216,000 requests
+> across 300 candidates, which no free-plan deployment survives. A presigned design does not escape
+> that either; the escape is batching, and it is the same escape on both paths. So the route carries
+> a `ponytail:` note naming *k* JPEGs per POST as the upgrade path, and `Q11`'s advisory row is
+> where an organiser meets the arithmetic before they meet the limit.
+
+**`Q4e` — the measured budget is 3.** An R2 binding operation **is** a subrequest against the
+50-per-request limit (`instrument.ts:38-40` already counts `put` and deliberately does not count
+`signedUrl`). The route's `ROUTE_BUDGETS` entry is the attempt join, the put and the snapshot row
+— measured, not assumed, like every other entry.
+
+**`Q4f` — the row exists if and only if the object does.** Write the `snapshot` row after the put
+succeeds. A row naming an object that was never written is a gap Phase 8's review timeline cannot
+explain; a successful put with no row is one orphan object the retention job can still sweep by
+prefix.
 
 Settled either way, and true of both paths:
 
@@ -460,9 +484,14 @@ clicks its way there. No component is mounted in isolation to make a test shorte
 > which it is not today — the cheapest meaningful Strict configuration, and currently unreachable.
 > No new field, no format bump, and no existing document can hold a 0.
 >
-> The panel shows a figure derived from the settings as entered — "≈ 60 images · ≈ 1.5 MB per
-> candidate" — and **not** a total, because the product does not know the headcount. An advisory
-> checklist row fires on the expensive configurations (`Q1c`).
+> The panel shows a figure derived from the settings as entered — "≈ 60 images · ≈ 1.5 MB · ≈ 60
+> uploads per candidate" — and **not** a total, because the product does not know the headcount. An
+> advisory checklist row fires on the expensive configurations (`Q1c`).
+>
+> **The upload count is on that line because requests, not bytes, are the ceiling.** `Q4`'s worst
+> case — 720 images a candidate — is 216,000 Worker requests across 300 candidates against a
+> free-plan limit of 100,000 a day. Storage is the cost an organiser pays; requests are the cost
+> that stops the test. Both belong on the row.
 >
 > **Why.** Snapshots are the one part of this phase that costs an organiser real money, at a rate
 > they set with a number they may not connect to storage. A 180-minute test at the 15 s floor is 720
@@ -584,11 +613,11 @@ Five plans, each shipping working, testable software on its own.
 | **7a — the contract** | `resolveProctoring()` and `ResolvedProctoring` in core; the two new overrides and `snapshot_interval_seconds: 0` with their ADR; `Q7b`'s event union; the `integrity_flag` + `observed` migration on three dialects; the `ROUTE_AUTH` re-check and `scrub-scan` replay; converting the three existing `profile` readers; `Q1b`'s start-page requirements; the checklist's advisory rows | `G1` | — |
 | **7b — the editor** | the sixth setting row, all fourteen controls, `Q8a`'s profile behaviour, `Q11`'s cost figure, both grounds | `G4` | 7a |
 | **7c — the gates** | `Q9b`'s extended device gate, browser support, fullscreen, window-leave, copy/paste/right-click, the watermark, extra monitors, and `Q7`'s event ingest | `G2`, `G3` (part) | 7a |
-| **7d — the eye** | camera, identity photo, the `Q4` upload path, snapshots, `Q12`'s microphone level | `G2`, `G3` (part) | 7a, 7c, **and `Q4` being settled** |
+| **7d — the eye** | camera, identity photo, `Q4`'s POST route and its measured budget, snapshots, `Q12`'s microphone level | `G2`, `G3` (part) | 7a, 7c |
 | **7e — the consequences** | violation counting, the limit, all four actions, `Q5`'s lock and unlock, `Q6`'s integrity flag and `observed` | `G3`, `G5` | 7a, 7c, 7d |
 
 **Order.** 7a first and alone — everything consumes its types and its migration. 7b and 7c are then
-independent of each other. 7d needs 7c's event ingest and cannot be planned until `Q4` is settled.
+independent of each other. 7d needs 7c's event ingest.
 7e needs all of them, because it is the phase's consequences and there is nothing to have
 consequences about until the signals exist.
 
