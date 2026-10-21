@@ -30,7 +30,7 @@
 
 import { useState } from "react";
 import { describe, it, expect } from "vitest";
-import { render, screen, within, cleanup } from "@testing-library/react";
+import { render, screen, cleanup } from "@testing-library/react";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RegistrationFormSpec, SingleQuestion } from "@pariksha/core";
