@@ -22,9 +22,25 @@ import { fileURLToPath } from "node:url";
 
 import type { Actor, ApiClient, Bank, TestSummary, Workspace } from "../src/lib/api";
 import { OrganiserApp } from "../src/routes/organiser";
-import { declarations, parseRuleBodies, readResolvedCss } from "./css-chain";
+import {
+  declarations,
+  organiserStylesheets,
+  paintsIn,
+  parseRuleBodies,
+  readResolvedCss,
+} from "./css-chain";
 
 const HOME_CSS = resolve(dirname(fileURLToPath(import.meta.url)), "../src/styles/home.css");
+
+/** Every stylesheet `admin-main.tsx` loads, resolved — the cascade the
+ *  organiser really renders under, which is wider than home.css alone. One
+ *  shared `seen` set, so a file two entries reach is read once. */
+function organiserCss(): string {
+  const seen = new Set<string>();
+  return organiserStylesheets()
+    .map((path) => readResolvedCss(path, seen))
+    .join("\n");
+}
 
 /** Every declaration `home.css` makes for `selector`, merged across the
  *  rules that name it (a base rule plus a `@media` reopening). */
@@ -368,13 +384,26 @@ describe("Home never scrolls, and its panes do (D21)", () => {
   });
 
   it("paints the shell frame Home sits in, not only the page", async () => {
-    await openHome();
+    const { container } = await openHome();
 
     // The rail is `align-self: start`, so the grid cell below it shows
     // `.shell`'s own background — a cream wedge under the nav without this.
-    expect(declarationsOf(".shell:has(> .shell__page > .home)")).toContain(
-      "background: var(--ground-2)",
-    );
+    //
+    // 6.5e Task 1b moved the fill from home.css's `.shell:has(> .shell__page
+    // > .home)` onto `.shell` itself, because every screen is on the ground
+    // now and not only Home. So this reads the ORGANISER'S WHOLE CHAIN and
+    // asks the rendered element what paints it, rather than scanning
+    // home.css for a selector that has moved: the invariant is "the frame
+    // Home sits in is filled", and the rule's address is not part of it.
+    const shell = container.querySelector(".shell");
+    expect(shell).not.toBeNull();
+    expect(paintsIn(shell!, "background", organiserCss())).toBe("var(--ground-2)");
+
+    // ...and the page over it is still the ground, so the two are not one
+    // flat surface. Together these are the pairing the browser probe found.
+    const page = container.querySelector(".shell__page");
+    expect(page).not.toBeNull();
+    expect(paintsIn(page!, "background", organiserCss())).toBe("var(--ground)");
   });
 
   it("scrolls the two panes inside themselves instead", async () => {

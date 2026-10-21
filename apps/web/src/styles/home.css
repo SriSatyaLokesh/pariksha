@@ -41,8 +41,10 @@
    scroll the document — the one thing D21 forbids — with the whole suite
    green. One source of truth instead of a guard over two. */
 .shell__page:has(> .home) {
-  background: var(--ground);
-  /* `100%` of the grid area, not `100dvh` minus a list of chrome. Fix
+  /* The ground itself is shell.css's from 6.5e Task 1b — every screen has
+     one now, so Home no longer paints its own.
+
+     `100%` of the grid area, not `100dvh` minus a list of chrome. Fix
      round 2: the subtraction was right while the shell was bar + page at
      every width, and wrong the moment 6.5c Task 4 put the rail back on the
      screen below 719px as a horizontal strip in its own grid row. The page
@@ -60,18 +62,6 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
-}
-
-/* And the frame around it. shell.css deliberately paints no background on
-   `.shell` itself — near-black behind a cream screen's near-black ink — and
-   the rail is `align-self: start`, so the grid cell BELOW the rail shows
-   whatever `.shell` has. Against a cream page that was invisible; against
-   Home's ground it is a cream wedge under the nav, which a browser probe
-   caught and jsdom structurally cannot. --ground-2 is the rail's own fill,
-   so the column reads as one surface. Scoped to Home for the same reason
-   the rule above is: every other screen is still cream until 6.5e. */
-.shell:has(> .shell__page > .home) {
-  background: var(--ground-2);
 }
 
 /* Fills the box the rule above bounds, and never more: `flex: 1` takes the

@@ -58,10 +58,19 @@
   grid-template-rows: var(--shell-bar) minmax(0, 1fr);
   min-height: 100dvh;
 }
-/* No background on .shell itself. The bar and the rail paint their own, and
-   the page between them keeps the cream canvas base.css gives <body> until
-   6.5d and 6.5e re-ground the screens. Painting --ground here would put
-   near-black behind text admin.css still writes in near-black ink. */
+/* 6.5e Task 1b: the ground, promised here by the comment this replaces
+   ("the page between them keeps the cream canvas base.css gives <body>
+   until 6.5d and 6.5e re-ground the screens").
+
+   --ground-2 on .shell and not --ground, because the rail is
+   `align-self: start` and the grid cell BELOW it shows whatever .shell has.
+   --ground-2 is the rail's own fill, so that column reads as one surface;
+   the page then paints its own --ground over the rest. home.css found this
+   with a browser probe and scoped both fills to Home while every other
+   screen was still cream — they are unscoped here now that none is. */
+.shell {
+  background: var(--ground-2);
+}
 
 .shell[data-rail="collapsed"] {
   --shell-rail: 56px;
@@ -348,6 +357,7 @@
    min-width: 0 lets the item take the track instead of its content's
    min-content width. */
 .shell > .shell__page {
+  background: var(--ground);
   min-width: 0;
   width: 100%;
   margin-inline: auto;

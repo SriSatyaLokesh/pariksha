@@ -2,14 +2,15 @@
    Phase 3 Task 9. Loaded by src/admin-main.tsx only — never by the landing
    page, and never the other way round (test/bundle.test.ts).
 
-   docs/design.md's screen-inventory note is the whole visual brief for the
-   authoring side: "cream and ink surfaces, hairline rules, JetBrains Mono
-   for every label, count, ID and code sample, and voltage reserved for the
-   primary action and the focus ring. The authoring side is an editing tool,
-   not a marketing page — the full-bleed voltage block appears in none of
-   these screens." So: the body's cream is the page, every panel is a
-   CardHairline, voltage appears on .button-primary--surface and on
-   base.css's focus ring, and nowhere else.
+   Phase 6.5e Task 1b REWROTE the palette half of this file. docs/design.md's
+   screen-inventory note — "cream and ink surfaces, hairline rules ... voltage
+   reserved for the primary action and the focus ring" — described the world
+   `D1` replaced: the organiser now sits on the Signal ground, in both of
+   `D20`'s palettes, and voltage retreats to the candidate runtime alone.
+   What survives of that note is its shape: JetBrains Mono for every label,
+   count, id and code sample, one accent on the primary action and the focus
+   ring, and no full-bleed block anywhere. So: `body` is the ground, every
+   panel is a CardHairline on `--surface`, and the accent is theme.css's.
 
    Everything shaped like a button or a card comes from primitives.css.
    DESIGN.md's registration-form trio — field-label, field-help,
@@ -17,7 +18,9 @@
    Phase 6 Task 6, because the candidate's registration screen renders the
    same form and must not reach into the organiser stylesheet for it.
 
-   No colour literal: every colour is a token var(). */
+   No colour literal, and from 6.5e no CREAM token either: every colour here
+   is one of theme.css's semantic names, which resolve per ground.
+   `apps/web/test/theme.test.ts` holds this file to that. */
 
 /* Phase 6.5b Task 3: the organiser's two grounds under one set of semantic
    names (D20). First, so a later rule in this chain can read them. The
@@ -43,32 +46,141 @@
    `--control-accent`, `--control-accent-ink` and `--control-edge`, and this
    is the organiser chain's set of the three.
 
-   It cannot be `var(--accent)`. theme.css maps that to the DARK Signal green
-   on `:root` and to the light one only under `data-theme="light"`, while the
-   builder's own surfaces are STILL CREAM — shell.css paints no ground on
-   `.shell` for exactly that reason, and 6.5e is the plan that re-grounds
-   them. So on a dark-ground viewer the control would be #19e68c on cream,
-   which is 1.60:1: D1's "an accent cannot cross grounds", on the one screen
-   this task touches.
+   6.5c wrote here that "when 6.5e re-grounds the builder these two lines
+   become `var(--accent)` and `var(--accent-ink)` and nothing else moves",
+   and that is what this is. The organiser's surfaces are the Signal ground
+   from this task on, so the accent that could not cross onto cream is now
+   on the ground it was measured against.
 
-   `state-answered` is the cream world's own positive green — the palette
-   square that says a question HAS an answer — and a checked box says the same
-   thing about a control. It measures 5.20:1 on the cream page and 5.36:1 on a
-   canvas card, against the 3:1 a non-text indicator needs; the white glyph is
-   5.36:1 on the fill. `flag-clean` is the same hex under the integrity-report
-   name ("this row passes"), and that meaning is the one a checkbox does not
-   have, so the name chosen here is the one that is true.
+   MEASURED on both grounds, against the 3:1 WCAG 1.4.11 asks of a non-text
+   indicator: fill 12.01:1 on the page and 11.06:1 on a card (dark), 5.48:1
+   and 5.82:1 (light); the glyph on the fill is 11.47:1 and 5.82:1.
 
-   When 6.5e re-grounds the builder these two lines become `var(--accent)` and
-   `var(--accent-ink)` and nothing else moves. */
+   THE EDGE IS STILL NOT THE ACCENT — an unchecked control is a box, and
+   registration.css's own header says why. `--edge-strong` is the name D1
+   added for "an input outline or a table rule needs 3:1": 3.88:1 on the
+   page and 3.58:1 on a card (dark), 3.28:1 and 3.49:1 (light), where
+   `--edge` is 1.31:1 and cannot be the only thing that says a control is
+   there. */
 :root {
-  --control-accent: var(--color-state-answered);
-  --control-accent-ink: var(--color-canvas);
-  /* The edge is not the accent: an unchecked control is a box. `muted` is
-     5.18:1 on the cream page and 5.34:1 on a canvas card, where
-     `hairline-strong` — what the inputs beside it use — is 1.44:1 and
-     cannot be the only thing that says a control is there. */
-  --control-edge: var(--color-muted);
+  --control-accent: var(--accent);
+  --control-accent-ink: var(--accent-ink);
+  --control-edge: var(--edge-strong);
+}
+
+/* ---- The ground itself (D1, D20) --------------------------------------- */
+
+/* THE ONE DECLARATION THAT RE-GROUNDS THE ORGANISER, and it is on `body`
+   rather than on `.shell` because four screens render outside the shell:
+   `organiser.tsx`'s `loading`, `error`, `signin` and `setup` arms are a
+   bare `<main class="organiser">` on the page. shell.css's own header
+   hands this here — "the page between them keeps the cream canvas base.css
+   gives <body> until 6.5d and 6.5e re-ground the screens" — and home.css
+   scoped the same two fills to Home for the same stated reason.
+
+   `admin.css` is loaded by `src/admin-main.tsx` and by nothing else
+   (test/bundle.test.ts), so this reaches the organiser and neither the
+   landing page nor the candidate runtime. base.css's own `body` rule is
+   (0,0,1) like this one and comes earlier in the entry's import order, so
+   this wins on source order; it is not a `:root`-level token swap, which
+   would re-ground registration.css's shared rules behind the contrast
+   gate's back. */
+body {
+  background: var(--ground);
+  color: var(--ink);
+}
+
+/* ---- The two shared stylesheets, repainted for this chain only --------- */
+
+/* `registration.css` (shared with exam.css) and `question.css` (shared with
+   exam.css through authoring.css) paint the form trio, the text input and
+   the rendered prompt in the CREAM palette, because the candidate runtime
+   renders the same elements and must keep it. `.field-label`'s
+   `--color-ink` on this chain's `--surface` is 1.09:1 — the whole organiser
+   would ship with invisible form labels.
+
+   Re-grounding those two files in place is the defect #201 was: it would
+   drag the organiser's ground onto the candidate runtime. Aliasing their
+   colours through per-chain custom properties would hide them from
+   contrast-usage.test.ts, which resolves a foreground through `tokens.css`
+   or `theme.css` and nothing else — the gate would stop scoring the one
+   screen a candidate fills in under a clock.
+
+   So the shared rules are left EXACTLY as they are and this chain repaints
+   them under its own root attribute. `admin-main.tsx:17` sets
+   `data-theme` before the first paint and `readGround()` cannot return
+   anything else, so the scope is the organiser and only the organiser;
+   `exam.html` sets no such attribute. Each rule is a SEPARATE selector, so
+   contrast-usage.test.ts scores BOTH — the cream pair on the candidate's
+   canvas and the Signal pair here — where one rewritten rule would have
+   scored one and lost the other. */
+:root[data-theme] .field-label {
+  color: var(--ink);
+}
+
+:root[data-theme] .field-help {
+  color: var(--ink-3);
+}
+
+:root[data-theme] .field-error {
+  color: var(--risk);
+}
+
+:root[data-theme] .text-input {
+  background: var(--surface);
+  color: var(--ink);
+  border-color: var(--edge-strong);
+}
+
+/* DESIGN.md's `text-input-focus` is "the border swaps to the accent": the
+   ring itself is base.css's, which shell.css already overrides to `--focus`
+   on this chain. */
+:root[data-theme] .text-input:focus-visible {
+  border-color: var(--focus);
+}
+
+:root[data-theme] .text-input[aria-invalid="true"] {
+  border-color: var(--risk);
+}
+
+:root[data-theme] .registration-form__help,
+:root[data-theme] .registration-form__legend {
+  color: var(--ink-3);
+}
+
+:root[data-theme] .registration-form__error {
+  color: var(--ink-2);
+}
+
+/* question.css: the one prompt renderer, shared for the same reason. */
+:root[data-theme] .rendered--stem {
+  color: var(--ink);
+}
+
+:root[data-theme] .rendered pre {
+  border-color: var(--edge);
+  background-color: var(--ground-2);
+}
+
+/* A table rule, which DESIGN.md puts at 3:1 ("input outlines, answer rows,
+   palette squares, table rules") — so `--edge-strong`, not `--edge`. */
+:root[data-theme] .rendered td,
+:root[data-theme] .rendered th {
+  border-color: var(--edge-strong);
+}
+
+:root[data-theme] .rendered blockquote {
+  border-inline-start-color: var(--edge-strong);
+}
+
+:root[data-theme] .prompt-editor__tool {
+  background-color: var(--surface);
+  color: var(--ink);
+  border-color: var(--edge-strong);
+}
+
+:root[data-theme] .reorderable-list__item {
+  border-color: var(--edge);
 }
 
 /* ---- Page ------------------------------------------------------------- */
@@ -104,7 +216,7 @@
 /* Clamped so the title never eats a 375px screen; the floor (28px) is what
    the contrast gate measures. */
 .organiser__title {
-  color: var(--color-ink);
+  color: var(--ink);
   font-family: var(--type-display-lg-family);
   font-weight: var(--type-display-lg-weight);
   font-size: clamp(1.75rem, 1.3rem + 2.5vw, var(--type-display-lg-size));
@@ -116,7 +228,7 @@
 }
 
 .organiser__lead {
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   font-weight: var(--type-body-md-weight);
@@ -134,7 +246,7 @@
 
 /* A `role="status"` line: what just happened, in the panel it happened in. */
 .organiser__status {
-  color: var(--color-ink);
+  color: var(--ink);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   font-weight: var(--type-body-md-weight);
@@ -146,7 +258,7 @@
 /* The one case where a screen has nothing to offer: an instance with no
    identity provider configured. Stated, never hidden. */
 .organiser__notice {
-  color: var(--color-ink);
+  color: var(--ink);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   font-weight: var(--type-body-md-weight);
@@ -165,7 +277,7 @@
 }
 
 .organiser-empty__title {
-  color: var(--color-ink);
+  color: var(--ink);
   font-family: var(--type-heading-md-family);
   font-size: var(--type-heading-md-size);
   font-weight: var(--type-heading-md-weight);
@@ -175,7 +287,7 @@
 }
 
 .organiser-empty__body {
-  color: var(--color-muted);
+  color: var(--ink-3);
   font-family: var(--type-body-md-family);
   font-size: var(--type-body-md-size);
   font-weight: var(--type-body-md-weight);
@@ -203,7 +315,7 @@
    hairline rule separates it from the provider stack without ranking it. */
 .organiser-divider {
   border: 0;
-  border-top: 1px solid var(--color-hairline);
+  border-top: 1px solid var(--edge);
   margin: 0;
 }
 

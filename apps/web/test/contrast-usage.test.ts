@@ -239,29 +239,83 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // the rule lives here because the field-row rule it belongs to is shared.
   ".field-affix__unit": both("canvas"),
 
-  // ---- admin.css: the organiser screens (P3.9) ---------------------------
-  // The page is the body's cream; every panel is a CardHairline, which sets
-  // its own canvas fill, so the form trio and the empty state render on
-  // canvas. docs/design.md's screen-inventory note — "cream and ink
-  // surfaces, hairline rules" — is the whole palette here; voltage survives
-  // only on the primary action (.button-primary--surface, already above)
-  // and the focus ring (base.css).
-  ".organiser__title": both("cream"),
-  ".organiser__lead": both("cream"),
-  ".organiser__notice": both("canvas"),
-  ".organiser__status": both("canvas"),
-  ".organiser-empty__title": both("canvas"),
-  ".organiser-empty__body": both("canvas"),
+  // ---- admin.css: the organiser screens (P3.9, re-grounded by 6.5e T1b) --
+  // `D1`: the organiser left the cream palette. `admin.css` now paints
+  // `body` with `--ground` — the four arms that render OUTSIDE the shell
+  // (`loading`, `error`, `signin`, `setup`) are a bare `<main
+  // class="organiser">` on it — and every panel is a CardHairline, which
+  // fills itself with `--surface`. So the page's own type reads on the
+  // ground and a panel's type reads on the surface, which is the same
+  // two-level split the cream/canvas pair carried.
+  body: { dark: "signal-bg", light: "signal-l-bg" },
+  ".organiser__title": { dark: "signal-bg", light: "signal-l-bg" },
+  ".organiser__lead": { dark: "signal-bg", light: "signal-l-bg" },
+  ".organiser__notice": { dark: "signal-surface", light: "signal-l-surface" },
+  ".organiser__status": { dark: "signal-surface", light: "signal-l-surface" },
+  ".organiser-empty__title": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ".organiser-empty__body": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
   // registration.css, which admin.css and exam.css both import (Phase 6
   // Task 6, #70): one renderer, so one stylesheet, read on canvas in both
-  // places — the organiser's CardHairline panel fills itself with canvas,
-  // and so does the candidate's `.exam-register-panel`.
+  // places — the candidate's `.exam-register-panel` fills itself with
+  // canvas, and so did the organiser's CardHairline panel until 6.5e.
+  //
+  // THESE SIX STAY ON CREAM AND THAT IS NOT AN OVERSIGHT. The rules are
+  // shared with the candidate runtime and are left exactly as they were;
+  // the organiser repaints them from `admin.css` under `:root[data-theme]`,
+  // which is a SEPARATE selector with its own entries below. Both pairs are
+  // scored — rewriting the shared rule would have scored one and silently
+  // dropped the other.
   ".field-label": both("canvas"),
   ".field-help": both("canvas"),
   ".field-error": both("canvas"),
   ".text-input": both("canvas"),
   ".registration-form__help, .registration-form__legend": both("canvas"),
   ".registration-form__error": both("canvas"),
+
+  // ---- admin.css: the organiser's repaint of the two SHARED sheets ------
+  // registration.css's form trio and question.css's rendered prompt, on the
+  // Signal ground. `.field-label`'s cream `--color-ink` measures 1.09:1 on
+  // `--surface`: without these the organiser would ship invisible form
+  // labels on every screen that holds a field.
+  ":root[data-theme] .field-label": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ":root[data-theme] .field-help": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ":root[data-theme] .field-error": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  // The input fills itself, so its own text reads on its own fill.
+  ":root[data-theme] .text-input": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ":root[data-theme] .registration-form__help, :root[data-theme] .registration-form__legend":
+    { dark: "signal-surface", light: "signal-l-surface" },
+  ":root[data-theme] .registration-form__error": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  // The stem renders on a panel in the editor and directly on the page in
+  // the builder's preview, so both grounds are named and both are scored.
+  ":root[data-theme] .rendered--stem": {
+    dark: ["signal-surface", "signal-bg"],
+    light: ["signal-l-surface", "signal-l-bg"],
+  },
+  ":root[data-theme] .prompt-editor__tool": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
 
   // ---- shell.css: the organiser's chrome (Phase 6.5c Task 1, D3) --------
   // The first rules in the organiser bundle to read theme.css's semantic
@@ -509,6 +563,24 @@ const SURFACE: Record<string, SurfaceEntry> = {
 // supply exactly this and nothing else — foreground and surface are still
 // resolved independently, from the selector's own declarations.
 const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
+  // ---- admin.css (Phase 6.5e Task 1b) -------------------------------------
+  // The organiser's own ground and default ink. base.css gives `body` the
+  // body-md scale and admin.css re-colours it without restating the type,
+  // so the size comes from there.
+  body: { px: 16, weight: 400 },
+  // The repaint rules for the two SHARED stylesheets change nothing but a
+  // colour, so each one's size and weight are its own rule's, over in
+  // registration.css and question.css.
+  ":root[data-theme] .field-label": { px: 18, weight: 500 },
+  ":root[data-theme] .field-help": { px: 14, weight: 400 },
+  ":root[data-theme] .field-error": { px: 14, weight: 400 },
+  ":root[data-theme] .text-input": { px: 16, weight: 400 },
+  ":root[data-theme] .registration-form__help, :root[data-theme] .registration-form__legend":
+    { px: 14, weight: 400 },
+  ":root[data-theme] .registration-form__error": { px: 14, weight: 400 },
+  ":root[data-theme] .rendered--stem": { px: 18, weight: 400 },
+  ":root[data-theme] .prompt-editor__tool": { px: 12, weight: 400 },
+
   // ---- primitives.css (unchanged by the Signal rework) --------------------
   // Same element as .button-primary; only the colour/background changes.
   ".button-primary:hover, .button-primary:focus-visible": {
