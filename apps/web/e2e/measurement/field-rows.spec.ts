@@ -456,11 +456,48 @@ test("a row where no field has help collapses its reserved help track", async ({
   // mixed row stops spending it reddens the arm (probe 12c), which is what
   // keeps these from being four zeros read off nothing.
   await page.addStyleTag({ content: FORCED_FALLBACK });
+
+  // THE INJECTION REALLY TOOK EFFECT, asserted before anything is measured
+  // under it (fix round 3). `addStyleTag` could silently fail to win — a
+  // specificity change in the shipped branch would do it — and the second
+  // pair of zeros below would then be a duplicate measurement of the SUBGRID
+  // path wearing the fallback's name, so "both paths are measured" would have
+  // no evidence in the test at all.
+  //
+  // Read as TEXT rather than parsed into pixels. Chromium resolves
+  // `grid-template-rows` to used sizes on some of these fields and hands back
+  // the specified value on others (`auto auto minmax(21px, auto)`), which a
+  // px parse would read as four tracks; the two facts below hold either way.
+  //   1. A subgrid child reports the literal `subgrid` for its own tracks, so
+  //      a field that no longer does has left that branch.
+  //   2. The field in the MIXED row must differ from the one in the help-free
+  //      row — that difference IS the `:has(.field-help)` reserve, which is
+  //      the fallback's own mechanism and not merely the loss of `subgrid`.
+  const tracksOf = (row: Locator): Promise<string> =>
+    row
+      .locator(":scope > .field")
+      .first()
+      .evaluate((element) => getComputedStyle(element).gridTemplateRows.trim());
+
+  const helpFreeField = await tracksOf(helpFree);
+  const mixedField = await tracksOf(mixed);
+  expect(helpFreeField, "the injected fallback did not win: the field is still a subgrid").not.toBe(
+    "subgrid",
+  );
+  expect(mixedField, "the injected fallback did not win on the mixed row either").not.toBe(
+    "subgrid",
+  );
+  expect(
+    mixedField,
+    "a row with help reserves the same tracks as one without, so the fallback's own rule is not in force",
+  ).not.toBe(helpFreeField);
+
   const underFallback = await helpTrackCost(helpFree);
   const spentUnderFallback = await helpTrackCost(mixed);
   console.log(
     `FIELD ROW help track under the forced fallback: ` +
-      `help-free row costs ${underFallback}px, mixed row costs ${spentUnderFallback}px`,
+      `help-free row costs ${underFallback}px, mixed row costs ${spentUnderFallback}px ` +
+      `(help-free field tracks "${helpFreeField}", mixed field "${mixedField}")`,
   );
   expect(
     underFallback,

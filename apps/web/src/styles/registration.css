@@ -214,9 +214,16 @@
    both cream chains at 5.18:1 and better.
 
    The element stays a real `<input>` — role, checked state and keyboard all
-   come from it. Only the painting changes. The focus ring is the one each
-   ground already paints: `base.css`'s voltage outline on the organiser, and
-   `.exam-runner :focus-visible`'s voltage-deep at 5.83:1 in the runtime. */
+   come from it. Only the painting changes.
+
+   The focus ring is the one each surface already paints, and the runtime has
+   TWO rather than one (corrected in fix round 3; this comment named only the
+   runner's). Inside an attempt, `.exam-runner :focus-visible` paints
+   voltage-deep at 5.83:1. The consent box on the registration screen is
+   outside that container — `Registration.tsx` renders `<main
+   class="exam-register">` — so it takes `base.css`'s own voltage ring, which
+   is 3.98:1 on canvas and 3.86:1 on cream. Both clear the 3:1 a non-text
+   indicator needs; the organiser takes the same `base.css` ring. */
 input[type="checkbox"],
 input[type="radio"] {
   appearance: none;

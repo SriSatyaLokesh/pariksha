@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -165,6 +165,61 @@ export function organiserStylesheets(): string[] {
     throw new Error(`no "./styles/*.css" imports found in ${ADMIN_MAIN_PATH}`);
   }
   return files;
+}
+
+// ---------------------------------------------------------------------------
+// The entries themselves, read off the pages rather than listed.
+//
+// `organiserStylesheets()` above derives ONE entry's stylesheets from ONE
+// module, which is right for the two guards that call it and wrong for a
+// guard whose whole subject is the set of entries. `test/exam/controls.test.tsx`
+// exists because nothing watched the seam between two CSS chains (#201), and a
+// guard that hardcodes its own list of chains rebuilds that defect one level
+// up: a fourth page would simply not be looked at.
+//
+// So the entries come from `apps/web/*.html` — the files Vite is given as
+// `rollupOptions.input` — and a page's stylesheets are both halves of how one
+// can load them: a `<link rel="stylesheet" href="/src/styles/X.css">` (which
+// `index.html` uses, for the reason its own comment gives) and the
+// `import "./styles/X.css"` lines of whatever module script it loads (which
+// `admin.html` and `exam.html` use).
+
+const WEB_DIR = resolve(TEST_DIR, "..");
+const LINKED_STYLE_RE = /<link[^>]+rel="stylesheet"[^>]+href="\/src\/styles\/([a-zA-Z0-9_-]+\.css)"/g;
+const MODULE_SCRIPT_RE = /<script[^>]+type="module"[^>]+src="\/src\/([a-zA-Z0-9_\-/]+\.tsx?)"/g;
+
+/** Every HTML page in `apps/web`, newest-sorted by name for stability. */
+export function htmlEntries(): string[] {
+  const pages = readdirSync(WEB_DIR)
+    .filter((file) => file.endsWith(".html"))
+    .sort();
+  if (pages.length === 0) throw new Error(`no .html entries found in ${WEB_DIR}`);
+  return pages;
+}
+
+/**
+ * Every stylesheet the page `html` really loads, in load order — its own
+ * `<link>`s first, then those of each module script it runs.
+ *
+ * Absolute paths, so a caller can hand them straight to `readResolvedCss`.
+ * Throws rather than returning nothing: a guard that silently read an empty
+ * chain would report every rule as absent, which reads as "nothing is
+ * styled" and would be dismissed as a broken test rather than a real one.
+ */
+export function entryStylesheets(html: string): string[] {
+  const page = readFileSync(resolve(WEB_DIR, html), "utf8");
+  const files = [...page.matchAll(LINKED_STYLE_RE)].flatMap((m) => (m[1] === undefined ? [] : [m[1]]));
+  for (const [, module] of page.matchAll(MODULE_SCRIPT_RE)) {
+    if (module === undefined) continue;
+    const source = readFileSync(resolve(WEB_DIR, "src", module), "utf8");
+    files.push(
+      ...[...source.matchAll(STYLE_IMPORT_RE)].flatMap((m) => (m[1] === undefined ? [] : [m[1]])),
+    );
+  }
+  if (files.length === 0) {
+    throw new Error(`${html} loads no stylesheet by <link> or by a module script's import`);
+  }
+  return files.map((file) => resolve(WEB_DIR, "src/styles", file));
 }
 
 /**

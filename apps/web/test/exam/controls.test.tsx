@@ -32,36 +32,52 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ResponseValue } from "@pariksha/core";
+import type { RegistrationFormSpec, ResponseValue, SingleQuestion } from "@pariksha/core";
 
-import { paintsIn, parseRuleBodies, readResolvedCss } from "../css-chain";
+import {
+  entryStylesheets,
+  htmlEntries,
+  paintsIn,
+  parseRuleBodies,
+  readResolvedCss,
+} from "../css-chain";
 import { AnswerInput } from "../../src/components/exam/answer";
+import { FormBuilder } from "../../src/components/testbuilder/FormBuilder";
+import { QuestionEditor } from "../../src/components/authoring/QuestionEditor";
 import { ViewControls } from "../../src/components/exam/ViewControls";
 import type { CandidateQuestion } from "../../src/lib/paper";
+import type { ApiClient } from "../../src/lib/api";
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
 const SRC_DIR = resolve(TEST_DIR, "../../src");
-const STYLES_DIR = resolve(SRC_DIR, "styles");
 
 /**
- * The three stylesheet entries this app ships, and the source each one
- * dresses.
+ * The pages this app ships, and the source each one dresses.
  *
- * Written down rather than derived, because there is nothing to derive it
- * from short of walking the module graph — but it is not allowed to go stale:
- * the first test below asserts that EVERY source file rendering a checkbox or
- * a radio falls under exactly one `owns` prefix, so a new directory cannot
- * slip through unwatched. That assertion is the whole point of the map.
+ * `page` is the real file name, and `htmlEntries()` reads `apps/web/*.html`
+ * off disk: the test below asserts the two sets are equal, so a FOURTH page
+ * cannot be silently unclaimed. That assertion is not decoration. #201 existed
+ * because nothing watched the seam between two CSS chains, and a seam guard
+ * that hardcodes its own list of chains rebuilds that defect one level up —
+ * a new entry whose sources sit under a prefix another chain already claims
+ * (`routes/`, `components/exam/`) would map to the wrong chain and pass bare.
+ *
+ * `owns` is still written by hand, because there is nothing to derive it from
+ * short of walking the module graph. It is watched from two sides instead:
+ * every control-rendering source file must fall under at least one prefix
+ * (overlaps are intended and resolved by longest prefix — `routes/exam.tsx`
+ * is the candidate's, `routes/` the organiser's), and the page set itself is
+ * read off disk.
  */
-const CHAINS: { name: string; entry: string; owns: string[] }[] = [
+const CHAINS: { name: string; page: string; owns: string[] }[] = [
   {
-    name: "candidate runtime (exam.html)",
-    entry: "exam.css",
+    name: "candidate runtime",
+    page: "exam.html",
     owns: ["components/exam/", "routes/exam.tsx"],
   },
   {
-    name: "organiser (admin.html)",
-    entry: "admin.css",
+    name: "organiser",
+    page: "admin.html",
     owns: [
       "components/testbuilder/",
       "components/authoring/",
@@ -70,15 +86,32 @@ const CHAINS: { name: string; entry: string; owns: string[] }[] = [
     ],
   },
   {
-    name: "landing (index.html)",
-    entry: "landing.css",
+    name: "landing",
+    page: "index.html",
     owns: ["sections/", "island/", "routes/landing.tsx"],
   },
 ];
 
-/** `exam.css` also carries `registration.css`, which both chains share. */
+/**
+ * EVERY stylesheet each page loads, resolved and joined — not one entry
+ * stylesheet.
+ *
+ * `admin.html` runs `admin-main.tsx`, which imports `base.css`, `admin.css`
+ * AND `testbuilder.css` side by side; reading `admin.css` alone would leave a
+ * descendant-scoped override in `testbuilder.css` invisible to every
+ * assertion below. `index.html` links its two stylesheets directly rather
+ * than running a module at all. `entryStylesheets()` covers both shapes.
+ */
 const RESOLVED: Record<string, string> = Object.fromEntries(
-  CHAINS.map((chain) => [chain.entry, readResolvedCss(resolve(STYLES_DIR, chain.entry))]),
+  CHAINS.map((chain) => [
+    chain.page,
+    // One shared `seen` set per page, so a stylesheet two of its entries
+    // reach is read once rather than twice.
+    ((seen) =>
+      entryStylesheets(chain.page)
+        .map((path) => readResolvedCss(path, seen))
+        .join("\n"))(new Set<string>()),
+  ]),
 );
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
@@ -90,10 +123,31 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-// `Choice.tsx` writes `type={multi ? "checkbox" : "radio"}`, so a literal-only
-// pattern misses the one control #201 was really about. Both forms, and the
-// expression form is matched on its content rather than on its shape.
-const CONTROL_RE = /type=(?:"(?:checkbox|radio)"|\{[^}]*["'](?:checkbox|radio)["'][^}]*\})/;
+/**
+ * A source file that renders a checkbox or a radio.
+ *
+ * Both JSX forms: the literal `type="checkbox"` and the expression form
+ * `type={multi ? "checkbox" : "radio"}`, which is what `Choice.tsx` writes —
+ * the one control #201 was really about, and the one a literal-only pattern
+ * missed on this guard's first run.
+ *
+ * WHAT A SOURCE SCAN CANNOT SEE, stated rather than implied. A `type` that
+ * comes from a variable (`type={kind}`), from a prop, or through a `{...rest}`
+ * spread never names "checkbox" or "radio" at the call site, so no regex over
+ * the source can find it. Widening the pattern to "any `type={...}`" would
+ * sweep in every text and number input instead and turn an unrelated file into
+ * a false red, which is worse than a known limit.
+ *
+ * The limit is bounded rather than open: this scan is the BREADTH net — it
+ * asks which chains have a control at all — and the two `describe` blocks at
+ * the foot of this file are the DEPTH net, measuring real rendered controls
+ * in the candidate runtime and in the organiser against their own chains, by
+ * `getAllByRole` and not by a pattern. A control typed from a variable is
+ * invisible here and visible there the moment it is rendered in a test. What
+ * would close the gap properly is a render-every-screen sweep, which this
+ * package has no harness for.
+ */
+const CONTROL_RE = /type=(?:"(?:checkbox|radio)"|\{[^}]*\b(?:checkbox|radio)\b[^}]*\})/;
 
 /** Every source file that renders a checkbox or a radio, repo-relative. */
 const CONTROL_FILES = sourceFiles(SRC_DIR)
@@ -124,6 +178,15 @@ function input(type: "checkbox" | "radio", checked = false): HTMLInputElement {
 }
 
 describe("no chain that renders a control is left on the browser default (D17, #201)", () => {
+  it("claims every page this app ships, so a fourth entry cannot go unwatched", () => {
+    // The #201 shape, one level up. A new `foo.html` whose sources sit under
+    // a prefix another chain already claims would map to the WRONG chain and
+    // pass bare; a new one under no prefix at all would be invisible to the
+    // file scan. Both are caught here, by reading the pages off disk rather
+    // than trusting the list above.
+    expect(htmlEntries()).toEqual(CHAINS.map((chain) => chain.page).sort());
+  });
+
   it("accounts for every source file that renders a checkbox or a radio", () => {
     // The map's own guard. Without it, a control added under a directory no
     // entry claims would simply not be checked by the test below — which is
@@ -131,6 +194,10 @@ describe("no chain that renders a control is left on the browser default (D17, #
     expect(CONTROL_FILES.length, "no control found anywhere: the scan is broken").toBeGreaterThan(
       5,
     );
+    // AT LEAST one prefix, not exactly one: the prefixes overlap on purpose
+    // (`routes/exam.tsx` is the candidate's and `routes/` the organiser's)
+    // and `chainOf` resolves that by longest match. What this forbids is a
+    // file under NO prefix, which is the hole that would make it unwatched.
     expect(CONTROL_FILES.filter((file) => chainOf(file) === undefined)).toEqual([]);
   });
 
@@ -147,7 +214,7 @@ describe("no chain that renders a control is left on the browser default (D17, #
   for (const type of ["checkbox", "radio"] as const) {
     it(`gives every chain that renders a ${type} its own appearance: none`, () => {
       const control = input(type);
-      const chains = [...new Set(CONTROL_FILES.map((file) => chainOf(file)?.entry))];
+      const chains = [...new Set(CONTROL_FILES.map((file) => chainOf(file)?.page))];
       const bare: string[] = [];
       for (const entry of chains) {
         if (entry === undefined) continue;
@@ -169,8 +236,8 @@ describe("no chain that renders a control is left on the browser default (D17, #
     // and reddens; this one says the same thing from the other side, so the
     // reason the landing chain carries no control pair is written down as a
     // fact rather than as a comment.
-    expect(CONTROL_FILES.filter((file) => chainOf(file)?.entry === "landing.css")).toEqual([]);
-    expect(paintsIn(input("checkbox"), "appearance", RESOLVED["landing.css"]!)).toBeUndefined();
+    expect(CONTROL_FILES.filter((file) => chainOf(file)?.page === "index.html")).toEqual([]);
+    expect(paintsIn(input("checkbox"), "appearance", RESOLVED["index.html"]!)).toBeUndefined();
   });
 
   it("paints through the chain's own names and never a palette literal", () => {
@@ -184,10 +251,10 @@ describe("no chain that renders a control is left on the browser default (D17, #
     // the runtime's is cream-and-canvas with a vermilion accent, so one
     // literal in the shared rule would be wrong on one of them.
     const checked = input("checkbox", true);
-    expect(paintsIn(checked, "background", RESOLVED["exam.css"]!)).toBe("var(--control-accent)");
-    expect(paintsIn(checked, "border", RESOLVED["exam.css"]!)).toContain("var(--control-edge)");
+    expect(paintsIn(checked, "background", RESOLVED["exam.html"]!)).toBe("var(--control-accent)");
+    expect(paintsIn(checked, "border", RESOLVED["exam.html"]!)).toContain("var(--control-edge)");
 
-    for (const entry of ["admin.css", "exam.css"] as const) {
+    for (const entry of ["admin.html", "exam.html"] as const) {
       for (const name of ["--control-accent:", "--control-accent-ink:", "--control-edge:"]) {
         expect(rootOf(RESOLVED[entry]!), `${entry} defines no ${name}`).toContain(name);
       }
@@ -198,10 +265,14 @@ describe("no chain that renders a control is left on the browser default (D17, #
     // Without this, `paintsIn` would answer `undefined` for a stylesheet that
     // failed to resolve and a deleted rule would be indistinguishable from a
     // broken reader.
-    expect(RESOLVED["exam.css"]).toContain(".exam-option-row");
-    expect(RESOLVED["exam.css"]).toContain(".text-input");
-    expect(RESOLVED["admin.css"]).toContain(".organiser__title");
-    expect(parseRuleBodies(RESOLVED["exam.css"]!).length).toBeGreaterThan(20);
+    expect(RESOLVED["exam.html"]).toContain(".exam-option-row");
+    expect(RESOLVED["exam.html"]).toContain(".text-input");
+    expect(RESOLVED["admin.html"]).toContain(".organiser__title");
+    // testbuilder.css is loaded beside admin.css by `admin-main.tsx`, not
+    // imported by it. Reading the entry rather than the stylesheet is what
+    // puts it in reach of every assertion here.
+    expect(RESOLVED["admin.html"]).toContain(".form-builder");
+    expect(parseRuleBodies(RESOLVED["exam.html"]!).length).toBeGreaterThan(20);
   });
 });
 
@@ -224,6 +295,19 @@ const SINGLE: CandidateQuestion = {
 
 const MULTIPLE: CandidateQuestion = { ...SINGLE, type: "multiple", prompt: "Pick some" };
 
+/** The authoring side's own fixture: a `single` question renders the editor's
+ *  "is correct" radios. */
+const SINGLE_QUESTION: SingleQuestion = {
+  id: "Q1",
+  type: "single",
+  prompt: "Which HTTP method is idempotent?",
+  options: [
+    { id: "a", text: "GET" },
+    { id: "b", text: "POST" },
+  ],
+  key: "a",
+};
+
 function Answer({ question }: { question: CandidateQuestion }) {
   const [value, setValue] = useState<ResponseValue | null>(null);
   return <AnswerInput question={question} value={value} disabled={false} onChange={setValue} />;
@@ -240,7 +324,7 @@ describe("the candidate's answer control is custom and still a real input", () =
       expect(controls.length).toBe(OPTIONS.length);
       for (const control of controls) {
         expect(
-          paintsIn(control, "appearance", RESOLVED["exam.css"]!),
+          paintsIn(control, "appearance", RESOLVED["exam.html"]!),
           `a candidate ${role} resolves to the UA's own painting`,
         ).toBe("none");
       }
@@ -278,7 +362,82 @@ describe("the candidate's answer control is custom and still a real input", () =
     const radios = screen.getAllByRole("radio");
     expect(radios.length).toBeGreaterThan(1);
     for (const radio of radios) {
-      expect(paintsIn(radio, "appearance", RESOLVED["exam.css"]!)).toBe("none");
+      expect(paintsIn(radio, "appearance", RESOLVED["exam.html"]!)).toBe("none");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The organiser's own controls, rendered.
+//
+// RESTORED IN FIX ROUND 3, and the reason is the point. Before the move, the
+// `D17` guard lived in `test/testbuilder/field-rows.test.tsx` and walked
+// RENDERED builder controls against the organiser's chain. The move brought
+// the candidate side's rendered coverage with it and left the organiser side
+// on a detached synthetic `<input>` alone — so a descendant-scoped
+// `.form-builder input[type="checkbox"] { appearance: auto }` would have
+// evaded the organiser half entirely while every assertion above stayed
+// green. One side quietly losing reach during a move is exactly the shape
+// `AG2` exists to catch, and the move being right does not excuse it.
+
+function Builder({ initial }: { initial: RegistrationFormSpec }) {
+  const [form, setForm] = useState<RegistrationFormSpec | undefined>(initial);
+  return (
+    <FormBuilder
+      form={form}
+      onChange={setForm}
+      checkUrl={() => Promise.reject(new Error("not used by this test file"))}
+    />
+  );
+}
+
+describe("the organiser's own controls are custom too, measured on rendered markup", () => {
+  it("every checkbox the builder renders resolves to appearance: none", () => {
+    render(<Builder initial={{ fields: [{ id: "consent", type: "consent", label: "Consent" }] }} />);
+
+    const controls = screen.getAllByRole("checkbox");
+    expect(controls.length, "the builder rendered no checkbox to measure").toBeGreaterThan(0);
+    for (const control of controls) {
+      expect(
+        paintsIn(control, "appearance", RESOLVED["admin.html"]!),
+        "an organiser checkbox resolves to the UA's own painting",
+      ).toBe("none");
+    }
+  });
+
+  it("a builder checkbox keeps its role, its checked state and its keyboard", () => {
+    render(<Builder initial={{ fields: [{ id: "consent", type: "consent", label: "Consent" }] }} />);
+
+    const required = screen.getByRole("checkbox", { name: /required/i });
+    expect(required.tagName).toBe("INPUT");
+    expect(required).toHaveAttribute("type", "checkbox");
+    expect(required).not.toHaveAttribute("tabindex", "-1");
+    expect(required).not.toBeChecked();
+
+    required.focus();
+    expect(document.activeElement).toBe(required);
+    fireEvent.click(required);
+    expect(screen.getByRole("checkbox", { name: /required/i })).toBeChecked();
+  });
+
+  it("every radio the question editor renders resolves to appearance: none", () => {
+    render(
+      <QuestionEditor
+        bankId="bnk_1"
+        workspaceId="wsp_1"
+        initial={SINGLE_QUESTION}
+        client={{ listGroups: async () => [] } as unknown as ApiClient}
+        onSaved={() => undefined}
+      />,
+    );
+
+    const controls = screen.getAllByRole("radio");
+    expect(controls.length, "the editor rendered no radio to measure").toBeGreaterThan(0);
+    for (const control of controls) {
+      expect(
+        paintsIn(control, "appearance", RESOLVED["admin.html"]!),
+        "an organiser radio resolves to the UA's own painting",
+      ).toBe("none");
     }
   });
 });
