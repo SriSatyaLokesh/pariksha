@@ -63,13 +63,15 @@
 // and `getByLabel("Workspace")` would throw. Loud rather than silently green,
 // but not "correct at every position in the run".
 //
-// WHAT THIS FILE DELIBERATELY DOES NOT ASSERT: that the page does not scroll
-// sideways. That is `D21a`'s SECOND cause ("the table was wider than the
-// page"), and the spec assigns its fix to the table itself — "fold the id
-// under the name, let one column wrap" — not to the gutter. Asserting it here
-// would be a red this task cannot honestly turn green, and turning it green by
-// weakening it is exactly what `AG2` forbids. The gutter's own claim is that
-// the action survives a table that does not fit, and that is what is measured.
+// `D21a`'S SECOND CAUSE, added by 6.5e Task 2 at the foot of this file.
+// Task 1 left it out and said so: "the table was wider than the page" is
+// fixed by the table, not by the gutter, and Task 1 could not honestly turn
+// that assertion green. Task 2 can. The test list dropped its `ID` column —
+// `D21a`'s own named example, "fold the id under the name" — and both tables
+// took the scroll container the ruling's FIRST sentence asks for, which is
+// what keeps a table that still does not fit inside its own box. So the page
+// no longer scrolls sideways at any width, and the test at the foot proves it
+// against a table deliberately forced to twice the page's width.
 
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createWorkspace, seedWorkspace, signIn } from "../seed";
@@ -438,4 +440,64 @@ for (const table of Object.keys(TABLES) as TableName[]) {
       "the gutter is no narrower with D18's width: 1% than without it, so that declaration does nothing here",
     ).toBeGreaterThan(shipped);
   });
+}
+
+// ---------------------------------------------------------------------------
+// `D21a`'s second cause: "the table was wider than the page".
+//
+// THE PREMISE IS CONSTRUCTED, for the same reason every other measurement in
+// this file constructs one: the seeded fixture is one test and three
+// questions, so at 1440px both tables fit and "the page does not scroll
+// sideways" would be a fact about the fixture. `TOO_WIDE` forces the table to
+// twice its container, which is the real shape of the production test list
+// with forty rows in it, and the assertion then has something to be about.
+//
+// AND IT CARRIES ITS OWN PROOF, in the same shape as the clipping tests: the
+// table's own scroll container must really be overflowing (`scrollWidth >
+// clientWidth`) in the same breath that the DOCUMENT is not. A page that does
+// not scroll sideways because nothing overflows anywhere would satisfy the
+// second half alone, and would pass with the scroll container deleted.
+
+for (const { label, width, height } of WIDTHS) {
+  for (const table of Object.keys(TABLES) as TableName[]) {
+    test(`${table} keeps a too-wide table inside its own box, not the page's, at ${label}`, async ({ page }) => {
+      await page.setViewportSize({ width, height });
+      await TABLES[table].open(page);
+      await page.addStyleTag({ content: TOO_WIDE });
+
+      const row = await firstRow(page, table);
+      await mark(row, "data-wide");
+
+      const measured = await row.evaluate((node) => {
+        const element = node.closest("table");
+        if (element === null) throw new Error("the measured row is not inside a table");
+        const container = element.parentElement as HTMLElement;
+        const doc = document.documentElement;
+        return {
+          containerOverflow: container.scrollWidth - container.clientWidth,
+          containerScrolls: getComputedStyle(container).overflowX,
+          pageOverflow: Math.max(
+            doc.scrollWidth - doc.clientWidth,
+            document.body.scrollWidth - doc.clientWidth,
+          ),
+        };
+      });
+
+      // The premise: the table really does not fit, and the box it does not
+      // fit inside is its own.
+      expect(
+        measured.containerScrolls,
+        "the table's parent is not a scroll container, so nothing below is about the table's own box",
+      ).toBe("auto");
+      expect(
+        measured.containerOverflow,
+        "the forced-wide table fits its container, so this measurement cannot see the rule",
+      ).toBeGreaterThan(0);
+
+      // ...and the claim: the page itself does not scroll sideways. `D3a`'s
+      // "the page itself never scrolls sideways", held at a width where
+      // shell.css's own narrow rule is not in force.
+      expect(measured.pageOverflow, `the page scrolls sideways at ${label}`).toBeLessThanOrEqual(0);
+    });
+  }
 }

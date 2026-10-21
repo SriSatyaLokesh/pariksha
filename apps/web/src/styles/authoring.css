@@ -471,6 +471,42 @@
   font-size: var(--type-body-sm-size);
 }
 
+/* The filter rail stacks ABOVE the table at phone width rather than beside
+   it, at shell.css's own 719px breakpoint so the two rails leave their
+   columns together.
+
+   Found by measurement, not by eye (6.5e Task 2). A 220px `flex: 0 0` rail
+   inside a 390px screen leaves the table roughly 80px of scrollport, and
+   `D21a`'s gutter — sticky to the inline end of that scrollport, and as wide
+   as three buttons — then covers the whole of it. `row-actions.spec.ts`
+   caught it the moment the table got the scroll container `D21a` asks for:
+   the gutter intercepted the pointer over the row's FIRST cell. Before the
+   scroll container, the gutter stuck to the page instead and the 80px
+   scrollport was just as narrow but less visible.
+
+   The rail keeps its separator; it turns through 90 degrees with the layout,
+   which is the same move shell.css makes with the nav rail's accent bar. */
+@media (max-width: 719px) {
+  .bank-browser {
+    flex-direction: column;
+    gap: var(--space-lg);
+  }
+
+  .bank-browser__rail {
+    flex: none;
+    align-self: stretch;
+    padding-inline-end: 0;
+    padding-block-end: var(--space-lg);
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--edge);
+  }
+
+  .bank-browser__main {
+    align-self: stretch;
+    width: 100%;
+  }
+}
+
 /* Fix round 1, finding 11: ImportDialog's own issues table — same rules as
    .bank-browser__table (above), not a shared mixin, because the two belong
    to different components' BEM blocks and neither should reach into the
