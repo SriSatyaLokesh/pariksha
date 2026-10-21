@@ -169,8 +169,8 @@
 }
 
 /* DESIGN.md's `text-input-focus` is "the border swaps to the accent": the
-   ring itself is base.css's, which shell.css already overrides to `--focus`
-   on this chain. */
+   ring itself is base.css's, which this file already overrides to `--focus`
+   on this chain (above). */
 :root[data-theme] .text-input:focus-visible {
   border-color: var(--focus);
 }

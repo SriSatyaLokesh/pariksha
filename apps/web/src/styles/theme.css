@@ -40,10 +40,13 @@
       needs with room (12.01:1 dark, 5.48:1 light, against each ground).
    2. The first paint. admin.html loads its module from the end of <body>, so
       a light-preferring viewer can see a dark frame before readGround() runs.
-      Not reachable today — no organiser rule reads a name below, so nothing
-      re-grounds — and the usual fix, an inline <head> script, would restate
-      readGround's seed rule in raw JS and give the contract two sources of
-      truth. 6.5c owns the control and owns this decision.
+      Reachable since 6.5e Task 1b added `:root[data-theme] body`
+      (admin.css), but harmless: `#root` is empty until `createRoot` mounts,
+      and theme.test.ts:296 holds the ground assignment ahead of that mount,
+      so no content is ever painted on the wrong ground. The usual fix, an
+      inline <head> script, would restate readGround's seed rule in raw JS
+      and give the contract two sources of truth. 6.5c owns the control and
+      owns this decision.
    3. --ground-2 and --surface-2 are the same colour on the light ground
       (both #eef4f1) and differ on dark. A surface-2 card on a ground-2 band
       reads on dark and vanishes on light, so previewing that pairing in

@@ -364,7 +364,7 @@
    read as a hard-edged rectangle one step off its own row. The wash is
    layered as a background IMAGE rather than as an inset box-shadow so it
    cannot out-specify the focus ring on a row that is both hovered and
-   focused. (The ring is `:root[data-theme] :focus-visible` in theme.css
+   focused. (The ring is `admin.css`'s `:root[data-theme] :focus-visible`
    since 6.5e Task 1b; this file's own `.home :focus-visible` was deleted as
    redundant against it. A background-image cannot out-specify a box-shadow
    whichever rule paints it, so the reasoning is unchanged by the move.) */
