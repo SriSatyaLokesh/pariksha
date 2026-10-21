@@ -11,6 +11,7 @@ import {
 } from "../../src/lib/api";
 import { OrganiserApp } from "../../src/routes/organiser";
 import { QrCode } from "../../src/components/QrCode";
+import { entryStylesheets, paintsIn, parseRuleBodies, readResolvedCss } from "../css-chain";
 
 // Task 2 fix round, Critical 2: the same comparison `qr-code.test.tsx` uses,
 // applied to what the list actually renders — proves the row passes the
@@ -57,6 +58,35 @@ const DRAFT: TestSummary = {
   reviewRequested: false,
   tags: [],
   updatedAt: 1_700_000_000_000,
+};
+
+// `D7c` — the two kinds of draft the wire already supports, and the third
+// shape they have to be told apart from. `currentVersion` is the published
+// head and `draftVersion` the editable one, so:
+//
+//   currentVersion === null                 never published
+//   draftVersion > currentVersion           v1 live, v2 being edited
+//   otherwise                               v1 live, nothing newer
+//
+// Named after the prototype's own rows so the wording in the assertions is
+// the wording a reader of the spec recognises.
+const NEVER_PUBLISHED: TestSummary = {
+  ...DRAFT,
+  id: "tst_3",
+  name: "Data structures midterm",
+  slug: "dsa-midterm",
+  currentVersion: null,
+  draftVersion: 1,
+};
+
+const CHANGED_SINCE_PUBLISH: TestSummary = {
+  ...DRAFT,
+  id: "tst_4",
+  name: "Quant practice 1",
+  slug: "quant-1",
+  state: "open",
+  currentVersion: 1,
+  draftVersion: 2,
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
@@ -424,6 +454,126 @@ describe("TestList", () => {
     fireEvent.click(screen.getByRole("button", { name: /^create test$/i }));
 
     expect(await screen.findByText(/already exists in this workspace/i)).toBeVisible();
+  });
+
+  // ---- `D7c`: State is the lifecycle, Version is the publish history ----
+
+  it("tells a never-published draft from one with changes since publish", async () => {
+    await renderList(
+      fakeClient({ tests: async () => [NEVER_PUBLISHED, CHANGED_SINCE_PUBLISH, PUBLISHED] }),
+    );
+
+    const row = async (name: string) =>
+      ((await screen.findByText(name)).closest("tr") as HTMLElement);
+
+    // Three publish histories, three sentences. The first two are the pair
+    // `D7c` exists for; the third is the control that stops "never
+    // published" from being the only string this column can produce.
+    expect(await row("Data structures midterm")).toHaveTextContent("never published");
+    expect(await row("Quant practice 1")).toHaveTextContent("v1 live · v2 draft");
+    expect(await row("Midterm")).toHaveTextContent("v1 live");
+    // ...and the one with changes pending is NOT reported as unpublished,
+    // which is the confusion the single column used to produce.
+    expect(await row("Quant practice 1")).not.toHaveTextContent("never published");
+  });
+
+  it("keeps the lifecycle and the publish history in separate columns", async () => {
+    await renderList(fakeClient({ tests: async () => [CHANGED_SINCE_PUBLISH] }));
+    await screen.findByText("Quant practice 1");
+
+    // `D7c`: "State is the lifecycle (Open / Scheduled / Draft / Closed),
+    // Version is the publish history". One cell carrying both would read as
+    // a single fact and would have to be re-sorted into two the moment
+    // either half changed on its own.
+    const state = screen.getByRole("columnheader", { name: /^state$/i });
+    const version = screen.getByRole("columnheader", { name: /^version$/i });
+    const headers = Array.from(document.querySelectorAll("table.testbuilder-list thead th"));
+    const cells = Array.from(
+      (screen.getByText("Quant practice 1").closest("tr") as HTMLElement).querySelectorAll("td"),
+    );
+
+    expect(cells[headers.indexOf(state)]).toHaveTextContent("Open");
+    expect(cells[headers.indexOf(state)]).not.toHaveTextContent("live");
+    expect(cells[headers.indexOf(version)]).toHaveTextContent("v1 live · v2 draft");
+  });
+
+  // `D7c`: "No readiness meter here — the list route loads version heads, not
+  // draft bodies, so a real 5 / 7 is one checklist call per row." An
+  // invariant, not a mechanism: it is green today and its job is to stay
+  // green. The probe that makes it mean something is rendering a meter into
+  // a row and watching this go red.
+  //
+  // The pattern carries its spaces deliberately. `PublishChecklist.tsx:230`
+  // renders the real meter as `${done} / ${total}` and the Last edited cell
+  // renders `toLocaleDateString()`, which is `11/14/2023` in en-US — a
+  // space-free `\d\/\d` would match the date on every row and this guard
+  // would be red for a reason that has nothing to do with `D7c`.
+  it("shows no readiness meter in the list", async () => {
+    await renderList(
+      fakeClient({ tests: async () => [NEVER_PUBLISHED, CHANGED_SINCE_PUBLISH, PUBLISHED] }),
+    );
+    await screen.findByText("Midterm");
+    expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull();
+  });
+
+  // The budget half of the same ruling, and the half that actually bites:
+  // thirteen rows must not become thirteen round trips. Behaviour, not text
+  // — the client is a spy and the assertion is on what the screen asked for.
+  it("loads the list with one tests() call and no checklist call", async () => {
+    const tests = vi.fn(async () => [NEVER_PUBLISHED, CHANGED_SINCE_PUBLISH, PUBLISHED]);
+    const checklist = vi.fn(async () => []);
+    render(<OrganiserApp client={fakeClient({ tests, checklist })} />);
+
+    // Home fetches `tests` for its own agenda (`D6b`), so the count is taken
+    // from the navigation onward rather than from the mount — otherwise this
+    // would be asserting Home's budget as well as the list's, and would move
+    // whenever Home did.
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    tests.mockClear();
+    await screen.findByRole("heading", { level: 1, name: "Tests" });
+    await screen.findByText("Midterm");
+
+    expect(tests).toHaveBeenCalledTimes(1);
+    // Three rows. `D7c`'s whole argument is that a readiness meter here
+    // would be one of these per row — "thirteen round trips to decorate a
+    // list" — so this is the assertion the ruling is made of.
+    expect(screen.getAllByRole("row")).toHaveLength(4);
+    expect(checklist).not.toHaveBeenCalled();
+  });
+
+  // `D1`: "Test state carries no hue — glyph and label on inherited ink; the
+  // only colour is the review flag." Asserted against the organiser's real
+  // resolved stylesheet chain and against the rendered element, so a rule
+  // that stopped matching is as red as a declaration that was deleted.
+  it("carries no hue on test state", async () => {
+    await renderList(fakeClient({ tests: async () => [DRAFT] }));
+    const badge = (await screen.findByText(/draft/i)).closest(".test-state") as HTMLElement;
+
+    const seen = new Set<string>();
+    const organiser = entryStylesheets("admin.html")
+      .map((path) => readResolvedCss(path, seen))
+      .join("\n");
+
+    // The rendered element: nothing in the chain paints it, so it inherits.
+    for (const property of ["color", "background", "background-color"]) {
+      expect(
+        paintsIn(badge, property, organiser),
+        `the state badge is painted ${property} by a rule in the organiser chain`,
+      ).toBeUndefined();
+    }
+
+    // ...and the rule set: no selector may key a colour off a state VALUE
+    // either, which the element above could not see — `draft` is the only
+    // state this mount renders.
+    const stateRules = parseRuleBodies(organiser).filter((rule) =>
+      rule.selector.includes(".test-state"),
+    );
+    expect(stateRules.length, "no .test-state rule was found at all").toBeGreaterThan(0);
+    for (const rule of stateRules) {
+      expect(rule.body, `${rule.selector} paints the state`).not.toMatch(
+        /(^|;)\s*(color|background|background-color|border-color)\s*:/,
+      );
+    }
   });
 
   it("the test list has no axe violations", async () => {

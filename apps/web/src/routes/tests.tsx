@@ -27,28 +27,61 @@ export const STATE_LABEL: Record<TestState, string> = {
 // Text plus glyph, never colour alone — the state and the "In review" badge
 // both carry one, `aria-hidden` so a screen reader hears only the label.
 //
-// The five below are still Unicode characters and are NOT this task's to
-// move (6.5d Task 6 is scoped to the "In review" diamond, both sites); they
-// go with the rest of the repo's icon-glyph sweep, filed as issue 200. The badge's
-// own glyph is `Icon name="review"` as of that task — one family, one stroke.
-const STATE_GLYPH: Record<TestState, string> = {
-  draft: "●",
-  scheduled: "◐",
-  open: "○",
-  closed: "■",
-  archived: "▢",
+// 6.5e Task 2, issue 200: the five were U+25CF U+25D0 U+25CB U+25A0 U+25A2,
+// text characters whose shape, weight and baseline belong to the reader's
+// font and whose coverage is per-OS. They are the shared `ICONS`/`Icon`
+// family now — spec §13, "one family, consistent stroke, SVG", with PRD S-11
+// carrying no iconography exception. The other 24 Unicode glyphs across 12
+// files are their own piece of work and are deliberately not swept here;
+// these are the lines this task was rewriting anyway.
+const STATE_ICON: Record<TestState, string> = {
+  draft: "state-draft",
+  scheduled: "state-scheduled",
+  open: "state-open",
+  closed: "state-closed",
+  archived: "state-archived",
 };
 
 /** The one rendering of a test's state, used by this list and by the
  * builder header (`routes/test.tsx`) — the plan asks for "text plus glyph
  * *wherever it appears*", and two copies of a label map is exactly how one
- * of them ends up saying something else. */
+ * of them ends up saying something else.
+ *
+ * `D1`: the state carries NO HUE. Glyph and label on inherited ink, and the
+ * only colour on a row is the review flag. Nothing here names a colour and
+ * nothing in the stylesheet paints `.test-state`; `test/testbuilder/
+ * test-list.test.tsx` holds both halves of that. */
 export function TestStateBadge({ state }: { state: TestState }) {
   return (
     <span className="test-state">
-      <span aria-hidden="true">{STATE_GLYPH[state]}</span> {STATE_LABEL[state]}
+      <Icon name={STATE_ICON[state]} /> {STATE_LABEL[state]}
     </span>
   );
+}
+
+/**
+ * `D7c` — the publish history, as a sentence, in its own column.
+ *
+ * The lifecycle (`TestStateBadge`) and the publish history are two facts and
+ * the prototype gives them two columns: a test can be Open with an edited
+ * draft behind it, and a single cell saying "Draft" for that is the confusion
+ * this split exists to end. The three shapes the wire already supports:
+ *
+ *   currentVersion === null        never published — nothing is live
+ *   draftVersion > currentVersion  v1 live, v2 being edited
+ *   otherwise                      v1 live, and nothing newer
+ *
+ * NO READINESS METER, deliberately (`D7c`): this route loads version heads,
+ * not draft bodies, so a real "5 / 7" would be one `GET …/checklist` per row.
+ * The meter lives in the builder until Phase 8 adds an aggregate, and
+ * `test-list.test.tsx` guards both the absence and the call budget.
+ */
+function versionSummary(test: TestSummary): string {
+  if (test.currentVersion === null) return "never published";
+  const live = `v${test.currentVersion} live`;
+  return test.draftVersion !== null && test.draftVersion > test.currentVersion
+    ? `${live} · v${test.draftVersion} draft`
+    : live;
 }
 
 type Sort = "name" | "updated" | "created";
@@ -336,7 +369,7 @@ export function TestList({
             <TextField id="test-slug" label="Slug" help={SLUG_HELP} value={slug} onChange={setSlug} />
             {createError !== undefined && (
               <p className="field-error" role="alert">
-                <span aria-hidden="true">⚠</span> <span>{createError}</span>
+                <Icon name="warn" /> <span>{createError}</span>
               </p>
             )}
             <button type="submit" className="button-primary button-primary--surface" disabled={busy}>
@@ -443,14 +476,25 @@ export function TestList({
             </CardHairline>
           )
         ) : (
+          /* `D21a`, both halves. The table sits in its OWN scroll container,
+             so `th.acts`/`td.acts` resolve their `position: sticky` against
+             this box rather than against the document — without it, at 1440px
+             nothing between the table and the viewport scrolls and the
+             transparent gutter floats over the columns to its left. And the
+             table itself is narrower than it was: the `ID` column is folded
+             under the name below, which is `D21a`'s own named example of
+             fixing the table rather than the gutter. */
+          <div className="table-scroll">
           <table className="testbuilder-list">
             <thead>
               <tr>
-                <th scope="col">ID</th>
                 <th scope="col" {...sortHeaderProps("name")}>
                   Name
                 </th>
+                {/* `D7c`: two columns, not one. State is the lifecycle;
+                    Version is the publish history. */}
                 <th scope="col">State</th>
+                <th scope="col">Version</th>
                 <th scope="col" {...sortHeaderProps("updated")}>
                   Last edited
                 </th>
@@ -459,9 +503,15 @@ export function TestList({
                 {/* `D21a`: the action gutter is the LAST column. It was the
                     sixth of seven, and a cell pinned to the inline end with a
                     column after it slides over that column's content the
-                    moment the table scrolls — which this table does. */}
+                    moment the table scrolls — which this table does.
+
+                    Clipped to the accessibility tree, matching the bank
+                    browser's own header: the column rests at `opacity: 0`, so
+                    a visible "Actions" reads as a heading over an empty
+                    column. An empty `<th>` would be worse — a screen reader
+                    announces this cell for every action in the column. */}
                 <th scope="col" className="acts">
-                  Actions
+                  <span className="visually-hidden">Actions</span>
                 </th>
               </tr>
             </thead>
@@ -472,13 +522,20 @@ export function TestList({
                 const shortLinkPath = `/t/${test.shortCode}`;
                 return (
                   <tr key={test.id}>
+                    {/* `D21a`: "fold the id under the name". The id was its
+                        own column and the table was wider than its page; it
+                        is the second line of the name cell now, which costs
+                        this table nothing in height — the row is governed by
+                        the short-link cell, not by this one — and gives back
+                        a whole column of width. It is still selectable mono
+                        text with tabular figures. */}
                     <td>
-                      <code className="test-id">{test.id}</code>
-                    </td>
-                    <td>
-                      <button type="button" className="button-link" onClick={() => onOpenTest(test.id)}>
-                        {test.name}
-                      </button>
+                      <div className="test-name">
+                        <button type="button" className="button-link" onClick={() => onOpenTest(test.id)}>
+                          {test.name}
+                        </button>
+                        <code className="test-id">{test.id}</code>
+                      </div>
                     </td>
                     <td>
                       <TestStateBadge state={test.state} />
@@ -488,6 +545,7 @@ export function TestList({
                         </span>
                       )}
                     </td>
+                    <td className="test-version">{versionSummary(test)}</td>
                     <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
                     <td>
                       <div className="field">
@@ -510,7 +568,7 @@ export function TestList({
                         ) : (
                           slugError[test.id] && (
                             <p className="field-error" role="alert">
-                              <span aria-hidden="true">⚠</span> <span>{slugError[test.id]}</span>
+                              <Icon name="warn" /> <span>{slugError[test.id]}</span>
                             </p>
                           )
                         )}
@@ -548,6 +606,7 @@ export function TestList({
               })}
             </tbody>
           </table>
+          </div>
         )}
     </>
   );

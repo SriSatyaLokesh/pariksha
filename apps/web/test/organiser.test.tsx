@@ -1543,6 +1543,55 @@ describe("the organiser shell (D3)", () => {
     expect(document.querySelector("#main-content")).toHaveClass("organiser--wide");
   });
 
+  // `D18`'s second half, which the test above does not exercise: "the toggle
+  // still restores it." Leaving the screen restoring the rail is not the same
+  // claim — a reader who wants the rail back WHILE browsing has to be able to
+  // press for it, and the width-derived default must not fight them for it.
+  //
+  // `D18` over `D7d` (6.5e ruling): the restored rail is NOT written to
+  // `localStorage`. `RailState` carries the checklist side only, so a reader
+  // who opened the rail on one bank meets the collapsed default on the next,
+  // which is what makes the default a default. Asserted from storage rather
+  // than from the module, because the claim is about what a first paint can
+  // read back.
+  it("restores the bank browser's rail when the toggle is pressed, and remembers nothing", async () => {
+    const bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    localStorage.clear();
+    renderOrganiser({ listBanks: async () => [bank] });
+    await signedIn();
+
+    const toggle = screen.getByRole("button", { name: /navigation/i });
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
+    await screen.findByRole("heading", { level: 1, name: "Reasoning aptitude" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    // The screen did not navigate: the rail opened over the browser it was
+    // collapsed for.
+    expect(screen.getByRole("heading", { level: 1, name: "Reasoning aptitude" })).toBeVisible();
+
+    // Nothing stored. A `nav` key read on a first paint would reopen the rail
+    // `D18` collapses, which is why `lib/rail-state.ts` has one key and this
+    // is the guard that keeps it at one.
+    expect(Object.keys(localStorage)).not.toContain("pariksha.nav");
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i) as string;
+      expect(localStorage.getItem(key), `${key} remembers the nav rail`).not.toMatch(/\bnav\b/);
+    }
+  });
+
   // ...and a deep link, which has no list behind it to carry a name, still
   // starts the page at <h1> rather than at the passage-groups <h2>.
   it("still starts the bank browser at <h1> when it is deep-linked", async () => {

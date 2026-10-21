@@ -300,6 +300,49 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
       expect(paintsIn(cell, "inset-inline-end", ORGANISER)).toBe("0");
     });
 
+    // `D21a`'s first clause, and the half Task 1 could not deliver: "`th.acts`,
+    // `td.acts` are `position: sticky; right: 0` INSIDE THEIR OWN SCROLL
+    // CONTAINER". Neither table had one. At 1440px nothing between the table
+    // and the viewport scrolls, so `position: sticky` resolved against the
+    // DOCUMENT and the transparent gutter floated over the columns to its
+    // left on a table wider than its page — a regression Task 1 introduced,
+    // because before it the actions sat in an ordinary cell and could not
+    // overlap anything.
+    //
+    // shell.css's `.shell__page > * { overflow-x: auto }` is inside
+    // `@media (max-width: 719px)` only, so it is not that container at any
+    // width an organiser works at. The container has to be the table's own.
+    //
+    // The pixels are in `e2e/measurement/row-actions.spec.ts`; what jsdom can
+    // say is that the table's parent really is a scroll container, read off
+    // the chain the browser assembles rather than off the markup.
+    it(`${name} puts its table inside the table's own scroll container`, async () => {
+      await open();
+      const element = document.querySelector(table);
+      expect(element, `${table} did not render`).not.toBeNull();
+      const container = (element as HTMLElement).parentElement as HTMLElement;
+
+      expect(paintsIn(container, "overflow-x", ORGANISER)).toBe("auto");
+      // ...and it is the table's OWN wrapper, not the page. A container that
+      // is also holding the create form and the filter bar would scroll
+      // those sideways with the table.
+      expect(container).not.toHaveClass("shell__page");
+      expect(container.querySelectorAll("table")).toHaveLength(1);
+    });
+
+    // The gutter's column header, same wording on both tables. With
+    // `opacity: 0` at rest a VISIBLE "Actions" reads as a heading over an
+    // empty column, so it is clipped to the accessibility tree — where a
+    // screen reader still announces it for every cell in the column, which
+    // an empty `<th>` would not.
+    it(`${name} names its action column for a screen reader and not on the page`, async () => {
+      await open();
+      const header = document.querySelector(`${table} thead th.acts`);
+      expect(header, "the action column has no header cell").not.toBeNull();
+      expect(header).toHaveTextContent("Actions");
+      expect((header as HTMLElement).querySelector(".visually-hidden")).not.toBeNull();
+    });
+
     it(`${name} keeps its action buttons focusable before they are revealed`, async () => {
       await open();
       const cell = actionCell(action);

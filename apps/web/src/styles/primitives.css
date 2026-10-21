@@ -324,6 +324,36 @@ td.acts {
   white-space: nowrap;
 }
 
+/* ...AND THE SCROLL CONTAINER THEY ARE STICKY INSIDE OF, which `D21a` names
+   in the same sentence and Phase 6.5e Task 2 is the first to build:
+   "`th.acts`, `td.acts` are `position: sticky; right: 0` INSIDE THEIR OWN
+   SCROLL CONTAINER".
+
+   Without one, `position: sticky` resolves against the nearest scrollport
+   that really scrolls, which at 1440px is the DOCUMENT — so on a table wider
+   than its page the transparent gutter floats over the columns to its left
+   instead of pinning to the table's own edge. That is a regression the
+   gutter itself introduced: before it, the actions sat in an ordinary cell
+   and could not overlap anything. shell.css has `.shell__page > *
+   { overflow-x: auto }`, but only inside `@media (max-width: 719px)`, so it
+   is not this container at any width an organiser works at — and a page-wide
+   one would scroll the create form and the filter bar sideways with the
+   table.
+
+   `overflow-x: auto` computes `overflow-y` to `auto` as well, so this box is
+   a scroll container on both axes. That is deliberate and is what makes the
+   sticky cell resolve here; it costs nothing vertically because the wrapper
+   is exactly as tall as its table. It does mean `e2e/density.ts`'s
+   `countPrimaryRows` now sees one more clip boundary per table — which is
+   why this rule waited for the task that re-measures (`AG1`).
+
+   Here rather than in a screen's stylesheet for the same reason the gutter
+   is: every table inherits it, and it names no colour, so it is safe in both
+   `admin.css`'s chain and `landing.css`'s. */
+.table-scroll {
+  overflow-x: auto;
+}
+
 /* NO GAP BETWEEN THE ACTIONS, and the deleted one is worth recording.
    This rule shipped a `margin-inline-start: var(--space-base)` on
    `td.acts > * + *`, justified as "`A10`'s 8px minimum between two touch

@@ -34,10 +34,38 @@
   text-transform: uppercase;
 }
 
+/* `D21a`: "fold the id under the name". The id was its own column while the
+   table was wider than its page; it is the second line of the name cell now.
+   `--space-xs` is the component scale's smallest step (`D15`) — the two lines
+   are one fact about one test, not two stacked rows. */
+.test-name {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+/* Still selectable mono text with tabular figures, which is what the id is
+   for; `--ink-3` because it is now the quieter half of a pair rather than a
+   column of its own. */
 .test-id {
+  color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   font-variant-numeric: tabular-nums;
+}
+
+/* `D7c`: the publish history. Mono, like every other count and id in the
+   organiser, and `--ink-2` so it reads as supporting fact beside the
+   lifecycle rather than competing with it. NO HUE on either (`D1`) — this
+   rule paints the version, which is not the state; `.test-state` is painted
+   by nothing at all and `test-list.test.tsx` holds it there. */
+.test-version {
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .test-state {

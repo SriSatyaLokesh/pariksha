@@ -467,6 +467,11 @@ export function BankBrowser({
           )}
         </section>
 
+        {/* `D21a`: the table's OWN scroll container, so `th.acts`/`td.acts`
+            resolve `position: sticky` against this box rather than against
+            the document. The same wrapper the test list takes, and the same
+            one rule in `primitives.css` paints both. */}
+        <div className="table-scroll">
         <table className="bank-browser__table">
           <thead>
             <tr>
@@ -542,6 +547,7 @@ export function BankBrowser({
             ))}
           </tbody>
         </table>
+        </div>
 
         {questions.length === 0 && <p className="bank-browser__empty">No questions match these filters yet.</p>}
       </div>

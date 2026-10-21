@@ -57,7 +57,6 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
-const ADMIN_CSS_PATH = resolve(STYLES_DIR, "admin.css");
 const BASE_CSS_PATH = resolve(STYLES_DIR, "base.css");
 // Phase 6 Task 1 (#65): the candidate runtime is a third stylesheet entry
 // (exam.css, loaded only by src/exam-main.tsx) and every colour it declares
@@ -441,6 +440,15 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // what shows through them is the page. The three exceptions carry their
   // own note.
   ".test-badge": { dark: "signal-bg", light: "signal-l-bg" },
+  // 6.5e Task 2. The test list's table fills nothing — `.shell__page` paints
+  // `--ground` under it and `.testbuilder-list` declares no background — so
+  // both of these read on the page's own ground, the same pairing
+  // `.test-badge` above already names for a span in the same row. `.test-id`
+  // arrives in this sweep now because it gained a colour: it was unpainted
+  // mono in a column of its own and is the quieter second line of the name
+  // cell since `D21a`'s id fold.
+  ".test-id": { dark: "signal-bg", light: "signal-l-bg" },
+  ".test-version": { dark: "signal-bg", light: "signal-l-bg" },
   ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
   ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
