@@ -148,6 +148,28 @@ it("blocks Phase 5 has no editor for survive the round trip", async () => {
   }
 });
 
+// Phase 7a, Task 2: the three overrides `ProctoringOverrides` (Task 1)
+// already names and the schema lacked, plus `snapshot_interval_seconds`'s
+// relaxed `minimum: 0` — "camera on, one identity photo, then stop".
+it("round-trips the three overrides Phase 7 adds, including 0 as off", async () => {
+  const doc = copyOfExample((d) => {
+    d.proctoring = {
+      profile: "strict",
+      overrides: {
+        snapshot_interval_seconds: 0,
+        camera_outage_seconds: 90,
+        multi_face_snapshots: 3,
+        require_microphone: true,
+        // Q3: pre-cut, refused by resolveProctoring, but the format still
+        // carries it so a document authored for a later phase survives.
+        face_check: true,
+      },
+    };
+  });
+  const out = await exported(await importedTestId(doc));
+  expect(out.proctoring).toEqual(doc.proctoring);
+});
+
 it("?version= exports a published version and the default exports the current one", async () => {
   const testId = await importedTestId(copyOfExample());
 
@@ -220,6 +242,18 @@ it("a document that is not a test at all is refused structurally, naming the fie
   expect(res.status).toBe(422);
   const fields = (await res.json()).error.details.issues.map((i: { field: string }) => i.field);
   expect(fields).toContain("slug");
+});
+
+it("rejects a negative snapshot interval, naming the field", async () => {
+  const res = await importTest(
+    copyOfExample((doc) => {
+      doc.proctoring = { profile: "strict", overrides: { snapshot_interval_seconds: -1 } };
+    }),
+  );
+
+  expect(res.status).toBe(422);
+  const fields = (await res.json()).error.details.issues.map((i: { field: string }) => i.field);
+  expect(fields).toContain("proctoring.overrides.snapshot_interval_seconds");
 });
 
 it("T-05: a slug already used in the workspace is 409 with the field named", async () => {

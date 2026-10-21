@@ -14,3 +14,4 @@ Short records of significant decisions: the context, what was decided, and the c
 | [0008](0008-candidate-runtime-is-a-third-request-authority.md) | The candidate runtime is a third request authority | Accepted |
 | [0009](0009-same-origin-proof-of-work-instead-of-a-hosted-captcha.md) | A same-origin proof of work instead of a hosted captcha | Accepted |
 | [0010](0010-the-organiser-moves-to-the-signal-ground.md) | The organiser moves to the Signal ground | Accepted |
+| [0011](0011-proctoring-overrides-grow-by-three.md) | Proctoring overrides grow by three, with no format bump | Accepted |

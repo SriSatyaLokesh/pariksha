@@ -195,11 +195,26 @@
             "watermark": { "type": "boolean" },
             "require_camera": { "type": "boolean" },
             "identity_photo": { "type": "boolean" },
-            "snapshot_interval_seconds": { "type": "integer", "minimum": 15 },
+            "snapshot_interval_seconds": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Seconds between camera captures. 0 turns snapshots off — camera on, one identity photo if that control is also set, then no further captures."
+            },
             "face_check": { "type": "boolean" },
+            "require_microphone": { "type": "boolean" },
             "extra_monitor_check": { "type": "boolean" },
             "violation_limit": { "type": "integer", "minimum": 1 },
             "violation_action": { "enum": ["warn_only", "warn_then_flag", "auto_submit", "lock"] },
+            "camera_outage_seconds": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How long the camera may stay dark before the outage counts as a violation."
+            },
+            "multi_face_snapshots": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "How many consecutive snapshots with more than one face before the extra-face check counts as a violation."
+            },
             "allow_calculator": { "type": "boolean" }
           },
           "additionalProperties": false
