@@ -312,7 +312,9 @@ export function specificity(selector: string): number {
  *
  * `parseRuleBodies` skips `@supports` blocks whole (it recurses into `@media`
  * only), which is what keeps this function reading the DEFAULT branch and
- * `supportsBody()` below reading the fallback. They cannot be confused.
+ * `supportsBody()` — in `test/testbuilder/field-rows.test.tsx`, which is the
+ * one file that reads a fallback — reading the fallback. They cannot be
+ * confused.
  */
 export function declaredFor(element: Element, property: string, css: string): string[] {
   const found: { weight: number; order: number; value: string }[] = [];
