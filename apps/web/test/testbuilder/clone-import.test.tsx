@@ -27,6 +27,7 @@ const MIDTERM: TestSummary = {
   slug: "reasoning-aptitude-2026",
   description: null,
   shortCode: "ab12cd",
+  closesAt: null,
   state: "draft",
   currentVersion: null,
   draftVersion: 1,
@@ -41,6 +42,7 @@ const COPY: TestSummary = {
   name: "Midterm (copy)",
   slug: "reasoning-aptitude-2026-copy",
   shortCode: "ef34gh",
+  closesAt: null,
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
@@ -114,7 +116,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 
 async function openList(client: ApiClient): Promise<{ container: HTMLElement }> {
   const view = render(<OrganiserApp client={client} />);
-  fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
   await screen.findByRole("heading", { level: 1, name: "Tests" });
   await screen.findByText("Midterm");
   return { container: view.container };

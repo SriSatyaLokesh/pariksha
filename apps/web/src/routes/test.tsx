@@ -13,8 +13,6 @@ import {
   type TestVersionRow,
   type TestVersionSummary,
 } from "../lib/api";
-import { OrganiserHeader } from "../components/OrganiserHeader";
-import { MonoCaption } from "../components/MonoCaption";
 import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
 import { TimingPanel } from "../components/testbuilder/TimingPanel";
@@ -25,20 +23,13 @@ import { VersionBanner, VersionHistory } from "../components/testbuilder/Version
 import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
 import { useDialogKeys } from "../components/useDialogKeys";
+import { readView, writeView } from "../lib/view-url";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
 // checklist and version-banner panels are later tasks' own components,
 // mounted into this same shell when they land, the same way `SectionList`
 // is mounted here now.
-
-/** The open section lives in the URL (`?section=<id>`), so a reload or a
- * shared link returns to it — read fresh on every render's first paint and
- * on `popstate` (the browser's own Back/Forward), the same convention
- * `TestList`'s own filter already follows. */
-function sectionFromUrl(): string | null {
-  return new URLSearchParams(window.location.search).get("section");
-}
 
 /** What `createTest` seeds a draft with, and what the panel edits when the
  * draft has no `timing` yet — `duration_minutes` is the one member
@@ -65,15 +56,11 @@ export function TestBuilder({
   testId,
   client,
   actor,
-  onSignOut,
-  onBack,
 }: {
   workspaceId: string;
   testId: string;
   client: ApiClient;
   actor: Actor;
-  onSignOut: () => void;
-  onBack: () => void;
 }) {
   // T-23: only an owner holds `workspace.settings`, and the workspace half
   // of the branding panel is read-only without it. The server refuses
@@ -111,7 +98,13 @@ export function TestBuilder({
   const [candidates, setCandidates] = useState<readonly CandidateRow[]>([]);
   const [draft, setDraft] = useState<TestVersionRow | null>(null);
   const [error, setError] = useState<string | undefined>(undefined);
-  const [openSectionId, setOpenSectionId] = useState<string | null>(() => sectionFromUrl());
+  // The open section lives in the URL (`?section=<id>`), so a reload or a
+  // shared link returns to it — read on first paint and on `popstate`
+  // through `readView`, which is the organiser's one query-string parser
+  // (`D5`). This screen used to carry its own two-line copy of it.
+  const [openSectionId, setOpenSectionId] = useState<string | null>(
+    () => readView(window.location.search).section ?? null,
+  );
   // Task 5 (#57, P5.4): a whole `DraftPatch` rather than a sections array —
   // the registration form is a `settings` block and saves through the same
   // debounce, the same in-flight guard and the same one route. Each panel
@@ -157,18 +150,34 @@ export function TestBuilder({
   }, [load]);
 
   useEffect(() => {
-    const onPopState = () => setOpenSectionId(sectionFromUrl());
+    const onPopState = () =>
+      setOpenSectionId(readView(window.location.search).section ?? null);
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
 
+  // Written through `writeView` as well, so `?section=` has one owner
+  // rather than a reader here and a writer there (`D5`; 6.5e takes this
+  // over). It pushes where this used to replace: an opened section is a
+  // place, and Back closing it is the behaviour the `popstate` listener
+  // above already implements — before this, Back from an open section left
+  // the builder outright and the section stayed open on the way back.
+  //
+  // The cost, plainly (fix round 1): Back now walks back through accordion
+  // toggles, so an author who opened four sections presses it four times
+  // before leaving the builder. The alternative was a `replace` option on
+  // `writeView` — a knob with one caller, which would have left the
+  // listener above describing behaviour its own writer contradicted.
+  //
+  // Rebuilding the whole view from the URL rather than from props is safe
+  // only because `organiser.tsx` writes the URL before this screen mounts.
+  // 6.5d and 6.5e must keep that invariant or pass the view in.
   function openSection(id: string | null): void {
     setOpenSectionId(id);
-    const params = new URLSearchParams(window.location.search);
-    if (id) params.set("section", id);
-    else params.delete("section");
-    const qs = params.toString();
-    window.history.replaceState(null, "", `${window.location.pathname}${qs ? `?${qs}` : ""}`);
+    const params = readView(window.location.search);
+    if (id) params.section = id;
+    else delete params.section;
+    writeView(params);
   }
 
   // Fix round (task 3 review, I4): a keystroke in a section's title or
@@ -349,178 +358,189 @@ export function TestBuilder({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <OrganiserHeader email={actor.email} onSignOut={onSignOut} onBack={onBack} backLabel="Back to tests" />
+      {/* No wrapper element here. `admin.css`'s `.organiser__panel` is
+          `display:flex; flex-direction:column; gap: var(--space-lg)` —
+          byte-identical to what `.organiser` already applies to
+          `.shell__page`, so a <div> carrying it inside the page was a
+          layout no-op (measured in Chrome at 1440 and 400: every child's
+          rect unchanged). Removing it also removes the trap of 6.5e
+          styling the builder's root as a panel by accident, and it gives
+          each panel below its own `overflow-x: auto` under 719px —
+          `overflow-x` on these children went `visible` -> `auto` in the
+          same measurement — which is one scroll container per panel, as
+          `D3a` intends, rather than one around the whole screen
+          (whole-branch review, Minor 3). */}
+      <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
 
-      <main id="main-content" className="organiser organiser--wide">
-        <MonoCaption>Test builder</MonoCaption>
-        <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
+      {test !== null && (
+        <div className="testbuilder-lifecycle">
+          <TestStateBadge state={test.state} />
 
-        {test !== null && (
-          <div className="testbuilder-lifecycle">
-            <TestStateBadge state={test.state} />
-
-            {/* UX-11: the button is in place and disabled for an Author,
-                not hidden — a control that vanishes teaches nothing, and
-                the reason has to be reachable by keyboard, which a
-                `disabled` button is not. `aria-disabled` plus a no-op
-                handler keeps it in the tab order so a reader meets the
-                explanation `aria-describedby` points at. */}
-            <button
-              type="button"
-              className="button-primary button-primary--surface"
-              aria-disabled={!canPublish || publishing || draft === null}
-              aria-describedby={canPublish ? undefined : "publish-why"}
-              onClick={() => {
-                if (canPublish && !publishing) void runChecklist();
-              }}
-            >
-              Publish
-            </button>
-            {!canPublish && <span id="publish-why">Needs an Admin — request review instead</span>}
-
-            {!canPublish && !test.reviewRequested && (
-              <button type="button" className="button-secondary" onClick={() => void onRequestReview()}>
-                Request review
-              </button>
-            )}
-            {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
-
-            {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
-              <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
-                Close
-              </button>
-            )}
-            {canPublish && test.state === "closed" && (
-              <button type="button" className="button-secondary" onClick={() => setConfirming("archive")}>
-                Archive
-              </button>
-            )}
-          </div>
-        )}
-
-        {test !== null && draft !== null && (
-          <VersionBanner
-            draftVersion={draft.version}
-            publishedVersion={test.currentVersion}
-            onOpenPublished={() => historyRef.current?.focus()}
-          />
-        )}
-
-        {error !== undefined && (
-          <p className="organiser__notice" role="alert">
-            {error}
-          </p>
-        )}
-
-        {checklist !== null && draft !== null && (
-          <PublishChecklist
-            rows={checklist}
-            version={draft.version}
-            rerunning={rerunning}
-            busy={publishing}
-            onGoTo={(row) => {
-              if (row.sectionId !== undefined) openSection(row.sectionId);
+          {/* UX-11: the button is in place and disabled for an Author,
+              not hidden — a control that vanishes teaches nothing, and
+              the reason has to be reachable by keyboard, which a
+              `disabled` button is not. `aria-disabled` plus a no-op
+              handler keeps it in the tab order so a reader meets the
+              explanation `aria-describedby` points at. */}
+          <button
+            type="button"
+            className="button-primary button-primary--surface"
+            aria-disabled={!canPublish || publishing || draft === null}
+            aria-describedby={canPublish ? undefined : "publish-why"}
+            onClick={() => {
+              if (canPublish && !publishing) void runChecklist();
             }}
-            onRerun={() => void runChecklist()}
-            onConfirm={() => void onPublish()}
-            onClose={() => setChecklist(null)}
-          />
-        )}
+          >
+            Publish
+          </button>
+          {!canPublish && <span id="publish-why">Needs an Admin — request review instead</span>}
 
-        {confirming !== null && (
-          <ConfirmTransition
-            kind={confirming}
-            busy={publishing}
-            onCancel={() => setConfirming(null)}
-            onConfirm={() => void onTransition(confirming)}
-          />
-        )}
+          {!canPublish && !test.reviewRequested && (
+            <button type="button" className="button-secondary" onClick={() => void onRequestReview()}>
+              Request review
+            </button>
+          )}
+          {test.reviewRequested && <span className="test-badge"><span aria-hidden="true">◆</span> In review</span>}
 
-        {versions.some((v) => v.publishedAt !== null) && (
-          <div ref={historyRef} tabIndex={-1}>
-            <VersionHistory versions={versions} />
-          </div>
-        )}
+          {canPublish && test.state !== "closed" && test.state !== "archived" && published && (
+            <button type="button" className="button-secondary" onClick={() => setConfirming("close")}>
+              Close
+            </button>
+          )}
+          {canPublish && test.state === "closed" && (
+            <button type="button" className="button-secondary" onClick={() => setConfirming("archive")}>
+              Archive
+            </button>
+          )}
+        </div>
+      )}
 
-        {draft === null ? (
+      {test !== null && draft !== null && (
+        <VersionBanner
+          draftVersion={draft.version}
+          publishedVersion={test.currentVersion}
+          onOpenPublished={() => historyRef.current?.focus()}
+        />
+      )}
+
+      {error !== undefined && (
+        <p className="organiser__notice" role="alert">
+          {error}
+        </p>
+      )}
+
+      {checklist !== null && draft !== null && (
+        <PublishChecklist
+          rows={checklist}
+          version={draft.version}
+          rerunning={rerunning}
+          busy={publishing}
+          onGoTo={(row) => {
+            if (row.sectionId !== undefined) openSection(row.sectionId);
+          }}
+          onRerun={() => void runChecklist()}
+          onConfirm={() => void onPublish()}
+          onClose={() => setChecklist(null)}
+        />
+      )}
+
+      {confirming !== null && (
+        <ConfirmTransition
+          kind={confirming}
+          busy={publishing}
+          onCancel={() => setConfirming(null)}
+          onConfirm={() => void onTransition(confirming)}
+        />
+      )}
+
+      {versions.some((v) => v.publishedAt !== null) && (
+        <div ref={historyRef} tabIndex={-1}>
+          <VersionHistory versions={versions} />
+        </div>
+      )}
+
+      {/* Fix round 1, Minor 1: `draft === null` is also where a refused
+          load leaves this screen, so the error above used to be
+          announced beside a "Loading…" that would never resolve. Under
+          `D5` that pair is the first thing a stale bookmark shows. The
+          notice is the whole answer when there is one. */}
+      {draft === null ? (
+        error === undefined && (
           <p className="organiser__status" role="status">
             Loading…
           </p>
-        ) : (
-          <SectionList
-            sections={draft.body.sections}
-            draw={draft.draw ?? {}}
-            setPoints={draft.setPoints ?? {}}
-            points={draft.points ?? {}}
-            onChange={saveSections}
-            openSectionId={openSectionId}
-            onOpenSection={openSection}
-            client={client}
-            workspaceId={workspaceId}
-          />
-        )}
+        )
+      ) : (
+        <SectionList
+          sections={draft.body.sections}
+          draw={draft.draw ?? {}}
+          setPoints={draft.setPoints ?? {}}
+          points={draft.points ?? {}}
+          onChange={saveSections}
+          openSectionId={openSectionId}
+          onOpenSection={openSection}
+          client={client}
+          workspaceId={workspaceId}
+        />
+      )}
 
-        {draft !== null && (
-          <TimingPanel
-            timing={draft.body.settings.timing ?? DEFAULT_TIMING}
-            sections={draft.body.sections}
-            published={published}
-            onChange={(timing) => saveSettings({ timing })}
-          />
-        )}
+      {draft !== null && (
+        <TimingPanel
+          timing={draft.body.settings.timing ?? DEFAULT_TIMING}
+          sections={draft.body.sections}
+          published={published}
+          onChange={(timing) => saveSettings({ timing })}
+        />
+      )}
 
-        {draft !== null && (
-          <AccessPanel
-            access={draft.body.settings.access ?? DEFAULT_ACCESS}
-            onChange={(access) => saveSettings({ access })}
-            candidates={candidates}
-            identityField={identityFieldOf(draft.body.settings.registration_form)}
-            canManageCandidates={canManageCandidates}
-            onImportCandidates={async (csv, opts) => {
-              const report = await client.importCandidates(workspaceId, testId, csv, opts);
-              // A dry run changed nothing, so there is nothing to re-read;
-              // a real one replaced the list, and the count the panel
-              // prints has to come from storage rather than from the
-              // report it just rendered.
-              if (!opts.dryRun && report.issues.length === 0) {
-                setCandidates(await client.candidates(workspaceId, testId));
-              }
-              return report;
-            }}
-          />
-        )}
+      {draft !== null && (
+        <AccessPanel
+          access={draft.body.settings.access ?? DEFAULT_ACCESS}
+          onChange={(access) => saveSettings({ access })}
+          candidates={candidates}
+          identityField={identityFieldOf(draft.body.settings.registration_form)}
+          canManageCandidates={canManageCandidates}
+          onImportCandidates={async (csv, opts) => {
+            const report = await client.importCandidates(workspaceId, testId, csv, opts);
+            // A dry run changed nothing, so there is nothing to re-read;
+            // a real one replaced the list, and the count the panel
+            // prints has to come from storage rather than from the
+            // report it just rendered.
+            if (!opts.dryRun && report.issues.length === 0) {
+              setCandidates(await client.candidates(workspaceId, testId));
+            }
+            return report;
+          }}
+        />
+      )}
 
-        {draft !== null && (
-          <ReleasePanel
-            release={draft.body.settings.release ?? DEFAULT_RELEASE}
-            onChange={(release) => saveSettings({ release })}
-          />
-        )}
+      {draft !== null && (
+        <ReleasePanel
+          release={draft.body.settings.release ?? DEFAULT_RELEASE}
+          onChange={(release) => saveSettings({ release })}
+        />
+      )}
 
-        {draft !== null && (
-          <BrandingPanel
-            branding={draft.body.settings.branding ?? NO_BRANDING}
-            workspaceBranding={workspaceBranding}
-            canEditWorkspace={canEditWorkspace}
-            onChange={(branding) => saveSettings({ branding })}
-            onSaveWorkspace={async (next) => {
-              setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
-            }}
-            onUploadLogo={uploadLogo}
-          />
-        )}
+      {draft !== null && (
+        <BrandingPanel
+          branding={draft.body.settings.branding ?? NO_BRANDING}
+          workspaceBranding={workspaceBranding}
+          canEditWorkspace={canEditWorkspace}
+          onChange={(branding) => saveSettings({ branding })}
+          onSaveWorkspace={async (next) => {
+            setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
+          }}
+          onUploadLogo={uploadLogo}
+        />
+      )}
 
-        {draft !== null && (
-          <FormBuilder
-            form={draft.body.settings.registration_form}
-            onChange={(registration_form) => saveSettings({ registration_form })}
-            checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
-          />
-        )}
-      </main>
+      {draft !== null && (
+        <FormBuilder
+          form={draft.body.settings.registration_form}
+          onChange={(registration_form) => saveSettings({ registration_form })}
+          checkUrl={(url) => client.checkUrl(workspaceId, testId, url)}
+        />
+      )}
     </>
   );
 }

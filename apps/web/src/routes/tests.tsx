@@ -2,8 +2,6 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSummary } from "../lib/api";
 import { ImportDialog } from "../components/authoring/ImportDialog";
 import { CardHairline } from "../components/CardHairline";
-import { MonoCaption } from "../components/MonoCaption";
-import { OrganiserHeader } from "../components/OrganiserHeader";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
 
@@ -12,7 +10,12 @@ import { QrCode } from "../components/QrCode";
 // review" badge (ADR 0007) all live here; the builder itself (sections,
 // timing, access…) is Screen 7 onward, Task 3's `test.tsx`.
 
-const STATE_LABEL: Record<TestState, string> = {
+/** The one rendering of a state's NAME, exported for the same reason
+ *  `TestStateBadge` is: Home shows a test's state as a row's reason, and a
+ *  second label map is exactly how one screen ends up saying `draft` while
+ *  the screen one rail click away says `Draft` (whole-branch review,
+ *  Minor 4). */
+export const STATE_LABEL: Record<TestState, string> = {
   draft: "Draft",
   scheduled: "Scheduled",
   open: "Open",
@@ -73,11 +76,21 @@ function filterFromSearch(search: string): UrlFilter {
   };
 }
 
+/** Built on top of the query string rather than in place of it: `D5` put
+ *  the view itself there (`?view=tests`), and a fresh `URLSearchParams`
+ *  here would drop it — and `?returnTo=` with it — on the first keystroke
+ *  in Search. This screen owns three parameters and touches only those. */
 function searchFromFilter(filter: UrlFilter): string {
-  const params = new URLSearchParams();
-  if (filter.status) params.set("status", filter.status);
-  if (filter.search) params.set("search", filter.search);
-  if (filter.sort !== "name") params.set("sort", filter.sort);
+  const params = new URLSearchParams(window.location.search);
+  const owned: [string, string][] = [
+    ["status", filter.status],
+    ["search", filter.search],
+    ["sort", filter.sort === "name" ? "" : filter.sort],
+  ];
+  for (const [key, value] of owned) {
+    if (value) params.set(key, value);
+    else params.delete(key);
+  }
   const qs = params.toString();
   return qs ? `?${qs}` : "";
 }
@@ -114,16 +127,10 @@ const NAME_MAX = 200;
 export function TestList({
   workspaceId,
   client,
-  actorEmail,
-  onSignOut,
-  onBack,
   onOpenTest,
 }: {
   workspaceId: string;
   client: ApiClient;
-  actorEmail: string;
-  onSignOut: () => void;
-  onBack: () => void;
   /** Task 3 (#55, P5.2): a test's name opens its builder (Screen 7 onward),
    * the same `onOpenBank` pattern `BankList` already follows. */
   onOpenTest: (testId: string) => void;
@@ -310,14 +317,6 @@ export function TestList({
 
   return (
     <>
-      <a className="skip-link" href="#main-content">
-        Skip to content
-      </a>
-      <OrganiserHeader email={actorEmail} onSignOut={onSignOut} onBack={onBack} backLabel="Back to dashboard" />
-
-      <main id="main-content" className="organiser organiser--wide">
-        <MonoCaption>Tests</MonoCaption>
-        <h1 className="organiser__title">Tests</h1>
 
         {error !== undefined && (
           <p className="organiser__notice" role="alert">
@@ -536,7 +535,6 @@ export function TestList({
             </tbody>
           </table>
         )}
-      </main>
     </>
   );
 }

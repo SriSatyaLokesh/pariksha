@@ -28,6 +28,7 @@ const TEST_ROW: TestSummary = {
   slug: "midterm",
   description: null,
   shortCode: "ab12cd",
+  closesAt: null,
   state: "draft",
   currentVersion: null,
   draftVersion: 1,
@@ -120,7 +121,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
 /** Dashboard -> Tests -> the builder, the only route an organiser has. */
 async function openBuilder(client: ApiClient): Promise<ReturnType<typeof render>> {
   const view = render(<OrganiserApp client={client} />);
-  fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+  fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
   fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
   await screen.findByRole("heading", { level: 1, name: "Midterm" });
   return view;
@@ -131,7 +132,7 @@ describe("the builder's lifecycle header", () => {
     const open: TestSummary = { ...TEST_ROW, state: "open", currentVersion: 1, draftVersion: 2 };
     render(<OrganiserApp client={fakeClient({ tests: async () => [open], test: async () => open })} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     const row = (await screen.findByText("Midterm")).closest("tr") as HTMLElement;
     expect(within(row).getByText("Open")).toBeVisible();
     expect(row.querySelectorAll('[aria-hidden="true"]').length).toBeGreaterThan(0);
@@ -279,8 +280,15 @@ describe("closing and archiving", () => {
   });
 
   it("Archive is offered only once the test is closed — Archived follows Closed", async () => {
-    await openBuilder(fakeClient({ test: async () => openTest }));
+    const open = await openBuilder(fakeClient({ test: async () => openTest }));
     expect(screen.queryByRole("button", { name: /^archive$/i })).toBeNull();
+
+    // Two whole apps in one test: the first has to go, and so does the URL
+    // it navigated to — `D5` put the open test in the query string, so a
+    // second `render` left to inherit `?view=test&test=tst_1` would boot
+    // straight back into the builder and never pass through Home.
+    open.unmount();
+    window.history.replaceState(null, "", "/");
 
     const closed: TestSummary = { ...openTest, state: "closed" };
     await openBuilder(fakeClient({ test: async () => closed }));

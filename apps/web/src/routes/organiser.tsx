@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Question } from "@pariksha/core";
 import {
   ApiError,
@@ -8,9 +8,11 @@ import {
   type SetupStatus,
   type Workspace,
 } from "../lib/api";
+import { OrganiserShell, type NavKey } from "../components/OrganiserShell";
+import { readView, resetViewForWorkspace, writeView, type ViewParams } from "../lib/view-url";
 import { SignIn } from "./signin";
 import { Setup } from "./setup";
-import { Dashboard } from "./dashboard";
+import { Home } from "./home";
 import { BankList } from "./banks";
 import { BankBrowser } from "./bank";
 import { QuestionScreen } from "./question";
@@ -19,10 +21,12 @@ import { TestBuilder } from "./test";
 
 // Routing, without a router.
 //
-// No router library is installed, and none is added: which screen a
-// visitor sees is not a property of the URL, it is a property of API
-// answers and, once signed in, of the one piece of state this component
-// owns itself — which bank, and which question, an Author opened.
+// No router library is installed, and none is added. Which screen a visitor
+// sees is first a property of API answers — signed in? set up? a member of
+// anything? — and only then, once those say "yes", a property of the URL:
+// `?view=tests&test=tst_8c21a4`, read on first paint and on `popstate` and
+// written by every navigation (spec §5, `D5`; `lib/view-url.ts` is the one
+// parser).
 //
 //   GET /setup/status → needed?        GET /me → signed in?
 //   ────────────────────────────────────────────────────────────
@@ -42,9 +46,10 @@ import { TestBuilder } from "./test";
 // a path — rather than reaching for a router to wire up the surface that
 // nine tasks built and no Author could open.
 //
-// The URL does carry one thing: `?returnTo=`, which survives the round trip
-// through the identity provider and is validated by lib/api's safeReturnTo
-// before it is ever put in a link.
+// The URL also carries `?returnTo=`, which survives the round trip through
+// the identity provider and is validated by lib/api's safeReturnTo before it
+// is ever put in a link. `readView` does not touch it and `writeView`
+// preserves it.
 
 type View =
   | { kind: "loading" }
@@ -55,7 +60,16 @@ type View =
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
   | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
-  | { kind: "bank"; actor: Actor; workspace: Workspace; bankId: string }
+  // `bankName` is absent exactly when the browser was deep-linked rather
+  // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
+  // not in `ViewParams` and no call in this component fetches one.
+  | {
+      kind: "bank";
+      actor: Actor;
+      workspace: Workspace;
+      bankId: string;
+      bankName?: string;
+    }
   | {
       kind: "question";
       actor: Actor;
@@ -72,6 +86,10 @@ export function OrganiserApp({
   returnTo?: string | null | undefined;
 }) {
   const [view, setView] = useState<View>({ kind: "loading" });
+  // `D4`: the membership count is free — `boot` already fetches this list to
+  // pick `workspaces[0]`. Keeping it rather than discarding everything after
+  // the first is the whole cost of the switcher.
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
 
   const boot = useCallback(async () => {
     setView({ kind: "loading" });
@@ -86,8 +104,9 @@ export function OrganiserApp({
         setView({ kind: "setup" });
         return;
       }
-      const workspaces = await client.workspaces();
-      const workspace = workspaces[0];
+      const memberships = await client.workspaces();
+      setWorkspaces(memberships);
+      const workspace = memberships[0];
       if (workspace === undefined) {
         // Signed in, setup done, but this actor belongs to nothing. Only
         // reachable if every membership was revoked between the two calls.
@@ -98,7 +117,13 @@ export function OrganiserApp({
         });
         return;
       }
-      setView({ kind: "dashboard", actor, workspace });
+      // `D5`: the first paint obeys the URL. `boot` is also what a sign-out
+      // and a completed first run re-run, and in both of those the URL is
+      // still whatever the last navigation left — which is the right answer
+      // for a reload and a harmless one for the rest, since every view it
+      // can name belongs to this actor's workspace or is refused by the
+      // screen's own fetch.
+      setView(fromUrl(actor, workspace));
     } catch (cause) {
       setView({
         kind: "error",
@@ -114,9 +139,75 @@ export function OrganiserApp({
     void boot();
   }, [boot]);
 
+  // Back and Forward. `D5`'s whole argument is that a persistent nav makes
+  // the browser's own Back button a visible problem, so the history entry
+  // every navigation pushes has to be honoured on the way back as well as
+  // on the way in. The actor and the workspace come from whatever view is
+  // current — a functional update rather than a dependency, so the listener
+  // is registered once and can never read a stale pair.
+  useEffect(() => {
+    const onPopState = () =>
+      setView((previous) =>
+        "actor" in previous ? fromUrl(previous.actor, previous.workspace) : previous,
+      );
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  /** Navigate: the URL first, then the state it names. */
+  const go = useCallback((next: View) => {
+    const params = paramsOf(next);
+    if (params !== null) writeView(params);
+    setView(next);
+  }, []);
+
   const signOut = useCallback(() => {
     void client.signOut().finally(() => void boot());
   }, [client, boot]);
+
+  // The chrome, once (`D3`). Each `case` arm below decides WHAT renders; the
+  // shell decides where, and carries the nav, the workspace, the person and
+  // the way out that every screen used to render for itself.
+  //
+  // `loading`, `error`, `signin` and `setup` are deliberately outside it: a
+  // sidebar offering Banks and Tests to a visitor who has not signed in — or
+  // to an instance that has no workspace yet — is a nav with nothing behind
+  // it, which is the lie `admin.css:99-101` refused.
+  function shell(
+    current: NavKey,
+    actor: Actor,
+    workspace: Workspace,
+    page: { title?: string; crumb?: string; wide?: boolean },
+    children: ReactNode,
+  ) {
+    return (
+      <OrganiserShell
+        current={current}
+        actor={actor}
+        workspace={workspace}
+        onNavigate={(key) => {
+          go(
+            key === "home"
+              ? { kind: "dashboard", actor, workspace }
+              : { kind: key, actor, workspace },
+          );
+        }}
+        workspaces={workspaces}
+        // `D4a`: a switch lands on Home with every id-bearing parameter
+        // gone. The URL first, then the state it names — the same order
+        // `go` uses, and for the same reason: `?view=test&test=…` left in
+        // place would ask the new workspace for the old one's test.
+        onSwitchWorkspace={(next) => {
+          resetViewForWorkspace();
+          setView({ kind: "dashboard", actor, workspace: next });
+        }}
+        onSignOut={signOut}
+        {...page}
+      >
+        {children}
+      </OrganiserShell>
+    );
+  }
 
   switch (view.kind) {
     case "loading":
@@ -147,28 +238,51 @@ export function OrganiserApp({
     case "setup":
       return <Setup client={client} onComplete={() => void boot()} />;
     case "dashboard":
-      return (
-        <Dashboard
-          actor={view.actor}
+      // The second arm that passes no `title`/`crumb`, and for the same
+      // reason as the builder: `D6` rebuilt this screen on the Signal
+      // ground (`home.css`), and `.shell__head` writes its heading in
+      // admin.css's cream-world ink. Home renders its own <h1> and its own
+      // role crumb — UX-11's "the role you hold is stated on arrival" is
+      // still on the screen, one element lower. 6.5e lifts both back into
+      // the shell when the page itself moves.
+      return shell(
+        "home",
+        view.actor,
+        view.workspace,
+        {},
+        <Home
+          client={client}
           workspace={view.workspace}
-          onSignOut={signOut}
-          onOpenBanks={() => setView({ kind: "banks", actor: view.actor, workspace: view.workspace })}
-          onOpenTests={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
-        />
+          actor={view.actor}
+          onOpenTest={(testId) =>
+            go({ kind: "test", actor: view.actor, workspace: view.workspace, testId })
+          }
+          onOpenTests={() => go({ kind: "tests", actor: view.actor, workspace: view.workspace })}
+        />,
       );
     case "tests":
-      return (
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        { title: "Tests", crumb: "Tests" },
         <TestList
           workspaceId={view.workspace.id}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "dashboard", actor: view.actor, workspace: view.workspace })}
-          onOpenTest={(testId) => setView({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
-        />
+          onOpenTest={(testId) => go({ kind: "test", actor: view.actor, workspace: view.workspace, testId })}
+        />,
       );
     case "test":
-      return (
+      // The builder fetches the test and renders `test?.name ?? "Test
+      // builder"` as its own <h1> (test.tsx), so it is the one arm that
+      // passes no `title` — a second heading above its own would be two
+      // <h1>s on one screen. 6.5d lifts it into the shell when it rebuilds
+      // that screen.
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        {},
         <TestBuilder
           workspaceId={view.workspace.id}
           testId={view.testId}
@@ -177,35 +291,47 @@ export function OrganiserApp({
           // is readable by every member and writable only by an owner, so
           // the builder needs the membership to know which it is showing.
           actor={view.actor}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "tests", actor: view.actor, workspace: view.workspace })}
-        />
+        />,
       );
     case "banks":
-      return (
+      return shell(
+        "banks",
+        view.actor,
+        view.workspace,
+        { title: "Banks", crumb: "Question banks" },
         <BankList
           workspaceId={view.workspace.id}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "dashboard", actor: view.actor, workspace: view.workspace })}
-          onOpenBank={(bankId) => setView({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId })}
-        />
+          onOpenBank={(bankId, bankName) =>
+            go({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId, bankName })
+          }
+        />,
       );
     case "bank":
-      return (
+      // Fix round 1, finding 3: the browser renders no <h1> of its own — its
+      // document outline used to start at the <h2> over the passage groups —
+      // so the shell carries its title. `BankList` already holds the name and
+      // hands it over on the way in; a deep link has no list behind it and no
+      // name to hand over, so the heading names the surface instead. Either
+      // way the page starts at <h1>.
+      return shell(
+        "banks",
+        view.actor,
+        view.workspace,
+        // `wide`: `D18` — browsing is where the page wants width, so this arm
+        // drops the 1080px clamp and opens with the rail collapsed. It is
+        // the only arm that asks; every other organiser screen was already
+        // inside `.organiser--wide` before the shell existed.
+        { title: view.bankName ?? "Bank", crumb: "Question banks", wide: true },
         <BankBrowser
           bankId={view.bankId}
           workspaceId={view.workspace.id}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "banks", actor: view.actor, workspace: view.workspace })}
           onNewQuestion={() =>
-            setView({ kind: "question", actor: view.actor, workspace: view.workspace, bankId: view.bankId })
+            go({ kind: "question", actor: view.actor, workspace: view.workspace, bankId: view.bankId })
           }
           onEditQuestion={(question: QuestionSummary) =>
-            setView({
+            go({
               kind: "question",
               actor: view.actor,
               workspace: view.workspace,
@@ -213,26 +339,102 @@ export function OrganiserApp({
               initial: question.document,
             })
           }
-        />
+        />,
       );
     case "question":
-      return (
+      return shell(
+        "banks",
+        view.actor,
+        view.workspace,
+        {
+          title: view.initial ? "Edit question" : "New question",
+          crumb: view.initial ? "Edit question" : "New question",
+        },
         <QuestionScreen
           workspaceId={view.workspace.id}
           bankId={view.bankId}
           initial={view.initial}
           client={client}
-          actorEmail={view.actor.email}
-          onSignOut={signOut}
-          onBack={() => setView({ kind: "bank", actor: view.actor, workspace: view.workspace, bankId: view.bankId })}
           // Stays on this screen after a save (`QuestionScreen`'s own
           // "Saved." status announces it) rather than navigating away —
-          // `onBack` above is the deliberate, explicit way out. A caller
-          // that wanted to know a save happened would be given one here;
+          // the rail is the deliberate, explicit way out. A caller that
+          // wanted to know a save happened would be given one here;
           // `BankBrowser` re-fetches its own list on mount, which going
-          // "Back to bank" already triggers.
+          // back to the bank already triggers.
           onSaved={() => undefined}
-        />
+        />,
       );
   }
 }
+
+/**
+ * The view the current URL names (`D5`).
+ *
+ * An id in a query string is a claim anyone can type, so a view that needs
+ * one and does not have it is **not** rendered: `?view=test` with no `test=`
+ * lands on Home rather than mounting a builder around an empty id, which is
+ * the "shell wrapped around nothing" this ruling exists to prevent. A view
+ * naming an id this actor cannot reach is the screen's own fetch to refuse —
+ * it is the only side that knows — and it refuses with an error in place of
+ * the screen.
+ *
+ * `?view=question` restores the **bank**, not the editor. Fix round 1
+ * (Important): every other screen behind a `?view=` fetches something and
+ * can therefore refuse — `QuestionScreen` does not. It takes `bankId` as a
+ * string and asks the server nothing, so a hand-typed or stale
+ * `?view=question&bank=bnk_other_workspace` used to render a complete,
+ * interactive editor around a bank nobody had checked, and the actor found
+ * out at Save. The bank browser is one step back, fetches on mount, and
+ * refuses there instead. `paramsOf` still writes `?view=question&bank=…`,
+ * so the editor remains a Back stop you can return *from*; it is only not
+ * a place a URL can put you.
+ *
+ * That also answers which question was open, which is not in `ViewParams`
+ * and is not worth amending `D5`'s parameter list to add.
+ */
+function fromUrl(actor: Actor, workspace: Workspace): View {
+  const params = readView(window.location.search);
+  const home: View = { kind: "dashboard", actor, workspace };
+  switch (params.view) {
+    case "banks":
+    case "tests":
+      return { kind: params.view, actor, workspace };
+    case "test":
+      return params.test === undefined
+        ? home
+        : { kind: "test", actor, workspace, testId: params.test };
+    case "bank":
+      return params.bank === undefined
+        ? home
+        : { kind: "bank", actor, workspace, bankId: params.bank };
+    case "question":
+      // Deliberately the bank: see the note above.
+      return params.bank === undefined
+        ? home
+        : { kind: "bank", actor, workspace, bankId: params.bank };
+    case "home":
+      return home;
+  }
+}
+
+/** …and back again. `null` for the four views that are not a place — the
+ *  boot, an error, sign-in and the first-run wizard are states of the
+ *  instance, not destinations, and none of them is navigated *to*. */
+function paramsOf(view: View): ViewParams | null {
+  switch (view.kind) {
+    case "dashboard":
+      return { view: "home" };
+    case "banks":
+    case "tests":
+      return { view: view.kind };
+    case "test":
+      return { view: "test", test: view.testId };
+    case "bank":
+      return { view: "bank", bank: view.bankId };
+    case "question":
+      return { view: "question", bank: view.bankId };
+    default:
+      return null;
+  }
+}
+

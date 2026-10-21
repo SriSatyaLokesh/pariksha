@@ -1,0 +1,587 @@
+/* The organiser's shell: top bar, rail, page (spec §5, D3, D3a; §11, D15).
+
+   Every colour here is one of theme.css's semantic names, never a palette
+   token and never a literal — that is what lets one data-theme attribute on
+   <html> re-ground the whole frame (D20). The page the shell wraps is still
+   on the cream canvas admin.css gives it; 6.5d and 6.5e move the screens
+   themselves, one at a time, which is why this file paints the chrome and
+   nothing inside it.
+
+   D15's two scales, used as a usage rule rather than new tokens. THE
+   MAPPING, written down because 6.5d and 6.5e must read D15 the same way
+   this file does or the phase ships two readings of one ruling:
+
+     inside a component  4 / 6 / 8 / 12 / 16  ->  --space-xs  (4px)
+                                                  --space-sm  (6px)
+                                                  --space-base (8px)
+                                                  --space-md  (12px)
+                                                  --space-lg  (16px)
+     page to its edges   20 / 28 / 36 / 56    ->  --space-xl  (24px)
+                                                  --space-2xl (32px)
+                                                  --space-3xl (40px)
+                                                  --space-4xl (64px)
+
+   The spec's page figures are 20 / 28 / 36 / 56 and the token set has no
+   literal of any of them; the spec also says the existing tokens cover both
+   ranges and that this is a usage rule, not new tokens. The -xl group is
+   therefore the page scale, 4-8px above each nominal figure, and declaring
+   four new tokens to hit the figures exactly would be a palette-style
+   decision taken in a stylesheet. A rule here never mixes one scale's value
+   into the other's job.
+
+   Proportions are the prototype's: rail 236px, 56px collapsed, top bar
+   56px.
+
+   HANDOFF TO 6.5d AND 6.5e, named here rather than left to be rediscovered,
+   the way theme.css names 6.5b's.
+
+   `overflow-x: auto` on every direct child of the page below 719px is what
+   delivers D3a's "the page itself never scrolls sideways" — a table wider
+   than a phone scrolls inside its own panel. The cost is real and is not a
+   bug to fix in place: overflow-x: auto computes overflow-y to auto too, so
+   each of those children becomes a block formatting context and a scroll
+   container. That CLIPS anything a child paints outside its own box at
+   narrow widths — a dropdown, a popover, a sticky table header, and already
+   a focus ring on a control flush against a panel edge. A later plan that
+   adds one of those at phone width meets this rule, and the argument it has
+   to answer is: the alternative to a clipped popover is a page that scrolls
+   sideways, which D3a refuses by name. The fix, when one is needed, is to
+   give the construct somewhere to paint (a portal, or a panel with its own
+   padding) rather than to widen the rule. */
+
+.shell {
+  --shell-rail: 236px;
+  --shell-bar: 56px;
+
+  display: grid;
+  grid-template-columns: var(--shell-rail) minmax(0, 1fr);
+  grid-template-rows: var(--shell-bar) minmax(0, 1fr);
+  min-height: 100dvh;
+}
+/* No background on .shell itself. The bar and the rail paint their own, and
+   the page between them keeps the cream canvas base.css gives <body> until
+   6.5d and 6.5e re-ground the screens. Painting --ground here would put
+   near-black behind text admin.css still writes in near-black ink. */
+
+.shell[data-rail="collapsed"] {
+  --shell-rail: 56px;
+}
+
+/* ---- Top bar ----------------------------------------------------------- */
+
+/* Sticky, because D3 says *persistent*: a nav that scrolls out of view on a
+   long test list is persistent across screens and not within one, and 6.5d
+   and 6.5e build their longest scanning surfaces inside this frame. */
+.shell__bar {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  grid-column: 1 / -1;
+  background: var(--surface);
+  border-bottom: 1px solid var(--edge);
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding-inline: var(--space-lg);
+  min-width: 0;
+}
+
+.shell__mark {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+}
+
+.shell__workspace {
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  padding-inline-start: var(--space-md);
+  border-inline-start: 1px solid var(--edge-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* D4/D4b: the switcher, above one membership. A native <select> — the
+   keyboard, the mobile picker and an accessible name for free, where a
+   custom menu is focus-management work for no gain. The label and the
+   control are one group so the bar's own gap separates the group from the
+   wordmark rather than splitting the pair. */
+.shell__switcher {
+  display: flex;
+  align-items: center;
+  gap: var(--space-base);
+  min-width: 0;
+  padding-inline-start: var(--space-md);
+  border-inline-start: 1px solid var(--edge-strong);
+}
+
+.shell__switcher-label {
+  color: var(--ink-3);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  white-space: nowrap;
+}
+
+/* 36px to match .shell__signout, not 44px: the two sit on one 56px bar and
+   a control a third taller than the one beside it reads as a mistake. The
+   hit target is met across the group — label plus select — rather than by
+   the box alone, which is the same trade .shell__signout already makes. */
+.shell__switcher-select {
+  /* A floor and a ceiling, because this is the one control in the bar whose
+     width is a stranger's data. Without the floor flexbox shrinks it to
+     nothing at 400px and the switcher stops being usable; without the
+     ceiling a 60-character workspace name takes the room Sign out needs,
+     which is the failure D4b's narrow pass already found once. The email
+     beside it carries its own ellipsis and absorbs what is left. */
+  min-width: 6rem;
+  max-width: 12rem;
+  height: 36px;
+  padding-inline: var(--space-base);
+  background: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  text-overflow: ellipsis;
+}
+
+.shell__bar-actions {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  min-width: 0;
+}
+
+.shell__email {
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 44px square: DESIGN.md's hit target, met by the box rather than by the
+   18px glyph inside it. */
+.shell__icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  background: none;
+  border: 0;
+  border-radius: var(--rounded-xs);
+  cursor: pointer;
+  color: var(--ink-2);
+  /* The label inside is visually hidden, so this size paints nothing — it
+     is declared because the contrast audit resolves a selector's own
+     font-size rather than guessing one, and a glyph is held to the same
+     bar as the text it stands in for. */
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.shell__signout {
+  flex: none;
+  height: 36px;
+  padding-inline: var(--space-md);
+  background: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* ---- Rail -------------------------------------------------------------- */
+
+/* The rail sticks under the bar rather than to the viewport, so the two
+   never overlap. align-self: start is what makes it stickable at all — a
+   grid item stretched to its row's full height has no room to move in, and
+   `position: sticky` on it is silently inert. Its own max-height then gives
+   a rail longer than the screen somewhere to scroll. */
+.shell__rail {
+  position: sticky;
+  inset-block-start: var(--shell-bar);
+  z-index: 1;
+  align-self: start;
+  max-height: calc(100dvh - var(--shell-bar));
+  background: var(--ground-2);
+  border-inline-end: 1px solid var(--edge);
+  padding-block: var(--space-md);
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.shell__nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.shell__nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  width: 100%;
+  min-height: 44px;
+  padding-inline: var(--space-lg);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.shell__nav-item:hover {
+  background: var(--wash);
+}
+
+/* Signal two of three. The bar is an element in the markup, not a border on
+   this rule, so a reader of the DOM can see that "you are here" does not
+   rest on a colour the next ground might not have. */
+.shell__nav-bar {
+  position: absolute;
+  inset-block: var(--space-sm);
+  inset-inline-start: 0;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+
+/* Signal three of three: the label carries more weight, and the ink comes up
+   from --ink-2 to --ink. Hue alone would be one signal; this is the one that
+   survives a monochrome screenshot. */
+.shell__nav-item[aria-current="page"] {
+  background: var(--accent-wash);
+  color: var(--ink);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+}
+
+/* Collapsed to 56px: the label is clipped to the accessibility tree, never
+   removed. A rail that drops its names when it narrows is an icon-only nav,
+   which is the discoverability failure D3 names. */
+.shell[data-rail="collapsed"] .shell__nav-item {
+  padding-inline: 0;
+  justify-content: center;
+  gap: 0;
+}
+
+.shell[data-rail="collapsed"] .shell__nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Page -------------------------------------------------------------- */
+
+/* Measured in a browser, not assumed. Three things here are load-bearing and
+   two of them were wrong on the first pass:
+
+   `.shell > .shell__page` rather than `.shell__page`, because admin.css's
+   .organiser rules are imported AFTER this file (an @import must precede
+   every rule, so shell.css cannot simply come last) and would otherwise win
+   on source order at equal specificity — the page kept .organiser's 16px
+   inset instead of D15's page scale.
+
+   width: 100% is the fix for the real bug, and the reason the auto margins
+   below are now harmless. A grid item whose width is `auto` AND whose inline
+   margins are `auto` is not stretched to its track: it is shrink-to-fit,
+   sized by its content and centred. With a 1400px table inside, the page
+   measured 1080px (its own .organiser--wide max-width) in a 1044px track and
+   the document scrolled sideways at every width, 400px included — the exact
+   failure D3a is about. Declaring width: 100% makes the used width definite,
+   so shrink-to-fit never runs.
+
+   margin-inline: auto then does only what it is for: absorb the free space
+   .organiser--wide's max-width leaves once the page track passes 1080px, and
+   centre. Fix round 1, finding 1: this rule briefly said `margin-inline: 0`,
+   which stretched correctly but left 124px of dead gutter at 1440 and ~600px
+   at 1920 — above the band the first measurement pass covered.
+
+   min-width: 0 lets the item take the track instead of its content's
+   min-content width. */
+.shell > .shell__page {
+  min-width: 0;
+  width: 100%;
+  margin-inline: auto;
+  padding-block: var(--space-xl);
+  padding-inline: var(--space-2xl);
+}
+
+.shell__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-base);
+}
+
+.shell__head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-md);
+  padding-block-start: var(--space-base);
+}
+
+/* On a browsing surface the head stops stacking (`D18`, `AG1`).
+   `.organiser--full` is the page that declared itself one, and a screen whose
+   whole point is width should not spend 88px of height announcing itself.
+
+   A LAYOUT change, not a spacing one: every token here is the one the column
+   already used, turned along the other axis, because `D15` is a usage rule
+   over existing values and inventing a number to hit a gate is the vice `AG2`
+   names. The crumb, the <h1> and any actions share one line, and
+   `flex-wrap` puts them back on their own lines when the line runs out, so
+   `D3a`'s narrow widths keep the stacked shape.
+
+   Measured: the head is 72px stacked (crumb 18 + gap 8 + <h1> 46) and 46px in
+   a row, which is the whole of the 16.31px the bank browser's fifth row
+   needed, and 9.69px over. `baseline` rather than `center` so the mono crumb
+   sits on the heading's own baseline instead of floating against its cap
+   height. */
+.organiser--full > .shell__head {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: baseline;
+}
+
+/* Actions go to the end of that line rather than keeping the vertical inset
+   they need under a stacked title. No organiser arm passes `actions` with
+   `wide` today; without this the first one that does would re-stack the head
+   and quietly undo the row above. */
+.organiser--full > .shell__head > .shell__head-actions {
+  margin-inline-start: auto;
+  padding-block-start: 0;
+}
+
+/* The focus ring, deferred to this plan by theme.css's header. base.css
+   paints :focus-visible with voltage, which is right for the candidate
+   runtime on cream and illegal on a Signal surface. Scoped to the bar and
+   the rail rather than to .shell, because the page inside .shell is still
+   the cream canvas this plan does not re-ground: --focus measures 1.60:1 on
+   cream, so widening this selector before 6.5d and 6.5e move the screens
+   would trade a wrong-world ring for an illegal one. Widening it to .shell
+   is their one-line change. */
+.shell__bar :focus-visible,
+.shell__rail :focus-visible {
+  outline-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+/* ---- D3a: below 719px the shell is ONE column, never a zero column ------ */
+
+/* The trap this ruling exists for: with the rail display:none, writing
+   `0 1fr` leaves a zero-wide first track that grid auto-placement drops the
+   page into, and the screen renders empty. It has been reproduced twice.
+   One track, named once. */
+@media (max-width: 719px) {
+  .shell {
+    grid-template-columns: minmax(0, 1fr);
+    /* Three rows now, because the rail is a strip in its own: bar, strip,
+       page. Leaving the two-row template would hand `minmax(0, 1fr)` to the
+       strip and auto-place the page into an implicit third row — a 44px nav
+       filling the viewport above the screen it navigates. */
+    grid-template-rows: var(--shell-bar) auto minmax(0, 1fr);
+  }
+
+  /* The rail leaves the COLUMN — which is what D3a rules and what the trap
+     above is about — and becomes a strip in its own row between the bar and
+     the page. It does not leave the screen: D3a takes the rail out of the
+     grid, it does not say navigation disappears, and until this rule only
+     the wordmark was wired to Home, so Banks and Tests were unreachable on
+     a phone. That is a worse version of the lie admin.css:99-101 refused.
+
+     A strip rather than a drawer or an icon row, for three reasons: it is
+     the SAME <nav>, so there is no second construct to keep in step with
+     aria-current and the accent bar; it needs no open/closed state, no
+     scrim, no focus trap and no Escape handler; and it keeps icon AND label
+     on every item, which an icon-only bar row would not. It costs the bar
+     nothing — the workspace name, the person and Sign out are untouched,
+     which is the constraint D4b's narrow pass left behind.
+
+     Three items at 400px: 3 x ~100px against a 400px viewport, with
+     overflow-x on the strip itself so a longer list (Phase 8's Results and
+     Grading) scrolls inside the strip rather than taking the page sideways.
+     Padding on both axes keeps the focus ring off that scroll container's
+     edges.
+
+     The strip does NOT stick, and the base rule's `position: sticky` is
+     inert here rather than load-bearing: a grid item's sticky constraint
+     rect is its grid area, and an `auto` row is exactly as tall as the
+     item, so there is no slack to move in. Persistence at phone width is
+     the bar's job alone — the strip scrolls away with the page, and the
+     wordmark in the bar remains the way Home. Restating the two
+     declarations here would have claimed otherwise (fix round 1). */
+  .shell__rail {
+    max-height: none;
+    border-inline-end: 0;
+    border-block-end: 1px solid var(--edge);
+    /* Both axes, not just the inline one. `overflow-x: auto` computes
+       `overflow-y` to `auto` as well (this file's own header says so), so
+       the strip is a scroll container on both axes and would cut the
+       `box-shadow: 0 0 0 3px` focus ring off the top and bottom of a 44px
+       item. Fix round 1. */
+    padding-block: var(--space-xs);
+    padding-inline: var(--space-base);
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .shell__nav {
+    flex-direction: row;
+    gap: var(--space-xs);
+  }
+
+  .shell__nav-item {
+    padding-inline: var(--space-md);
+    gap: var(--space-base);
+    white-space: nowrap;
+  }
+
+  /* The rail toggle collapses a column that no longer exists here. */
+  .shell__bar > .shell__icon-button:first-child {
+    display: none;
+  }
+
+  /* ...and its collapsed state must not follow the rail into the strip: a
+     viewer who collapsed the rail at desktop width and then narrowed would
+     otherwise get an icon-only nav, which is the discoverability failure
+     D3 names. Both rules are restated, because the collapsed selector is
+     more specific than the strip rules above. */
+  .shell[data-rail="collapsed"] .shell__nav-item {
+    padding-inline: var(--space-md);
+    justify-content: flex-start;
+    gap: var(--space-base);
+  }
+
+  .shell[data-rail="collapsed"] .shell__nav-label {
+    position: static;
+    width: auto;
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    clip: auto;
+  }
+
+  /* Signal two of three, re-aimed: a left bar on a horizontal strip would
+     read as a divider between items. Underline instead — same element, same
+     --accent, no hue-only signal and no new colour. */
+  .shell__nav-bar {
+    inset-block: auto 0;
+    inset-inline: var(--space-sm);
+    width: auto;
+    height: 3px;
+    border-radius: 2px 2px 0 0;
+  }
+
+  /* The bar's own minimum width, measured in Chrome rather than estimated
+     (fix round 1). At 320px the two-membership bar needed 333px and pushed
+     Sign out off the screen — a horizontal document scroll the
+     one-membership shape does not have, and WCAG 2.1 SC 1.4.10 Reflow is
+     measured at 320px. Three declarations recover 13px of it, and they are
+     the three that cost nothing at phone width:
+
+     the separator, whose only job is dividing the workspace name from the
+     wordmark, and whose name is clipped here anyway, so the select's own
+     border already does the dividing;
+
+     the select's inline padding, one step down the component scale;
+
+     the bar's gap, likewise one step down, which at this width separates
+     three items rather than four.
+
+     Measured after: 320/360/400 all at zero horizontal overflow with Sign
+     out whole and on screen, in both membership shapes, at 100% AND 200%
+     root font size. The 4rem floor is what buys the 200% case — 6rem
+     doubles to 192px and the bar overflows again at 320. */
+  .shell__bar {
+    gap: var(--space-base);
+  }
+
+  .shell__switcher {
+    padding-inline-start: 0;
+    border-inline-start: 0;
+  }
+
+  .shell__switcher-select {
+    min-width: 4rem;
+    padding-inline: var(--space-xs);
+  }
+
+  /* D4b: the "Workspace" label is clipped to the accessibility tree, never
+     removed — the select keeps its accessible name while the bar keeps Sign
+     out whole, which is what the narrow prototype pass found it losing. */
+  .shell__switcher-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* Still the page scale, one step down: --space-xl rather than --space-2xl.
+     Reaching for --space-lg here would put a component-scale value on a
+     page-to-edge job, which this file's own header forbids. */
+  .shell > .shell__page {
+    padding-inline: var(--space-xl);
+  }
+
+  /* Every panel becomes its own scroll container, so a table wider than the
+     screen scrolls inside its panel and the page itself never scrolls
+     sideways. */
+  .shell__page > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+}

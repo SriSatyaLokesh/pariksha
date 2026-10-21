@@ -34,6 +34,7 @@ const STYLES_DIR = resolve(__dirname, "../src/styles");
 const LANDING_CSS_PATH = resolve(STYLES_DIR, "landing.css");
 const EXAM_CSS_PATH = resolve(STYLES_DIR, "exam.css");
 const ADMIN_MAIN_PATH = resolve(__dirname, "../src/admin-main.tsx");
+const THEME_CSS_PATH = resolve(STYLES_DIR, "theme.css");
 
 const theme = readThemeMap();
 
@@ -127,6 +128,50 @@ describe("theme.css names both grounds (D20)", () => {
         );
       }
     }
+  });
+});
+
+// The UA's own chrome is part of the ground, and it is the half no palette
+// map can carry: scrollbars, the <select> picker and its disclosure
+// triangle, and every native form control are painted by the browser from
+// `color-scheme`, not from a custom property.
+//
+// `base.css:11` says `html { color-scheme: light }` unconditionally, which
+// was invisible while 6.5b shipped the attribute and changed no screen.
+// 6.5c put `data-theme="dark"` on a page with native chrome on it and three
+// constructs went light-scheme on a near-black ground — Home's two scrolling
+// panes, the rail, and the workspace <select>'s picker (whole-branch review,
+// Important 1).
+//
+// jsdom paints no scrollbar, so this is the invariant rather than the
+// behaviour (`AG3`); it was measured in Chrome, computed `color-scheme` on
+// <html>, `.home__scroll`, `.shell__rail` and `.shell__switcher-select`
+// reading `light`/`light` on both grounds before and `dark`/`light` after.
+// What this guard holds is that the declaration exists on BOTH blocks and
+// nowhere else in the organiser bundle, which is the thing that drifted.
+describe("the UA's own chrome follows the ground (D20)", () => {
+  it("declares color-scheme on both theme blocks", () => {
+    const rules = parseRuleBodies(readResolvedCss(THEME_CSS_PATH));
+    const schemeOf = (selector: string) =>
+      declarations(rules.find((rule) => rule.selector === selector)?.body ?? "")
+        .find((decl) => /^color-scheme\s*:/.test(decl))
+        ?.split(":")[1]
+        ?.trim();
+
+    expect(schemeOf(":root")).toBe("dark");
+    expect(schemeOf(':root[data-theme="light"]')).toBe("light");
+  });
+
+  it("leaves no stylesheet in the organiser bundle overriding it at the root", () => {
+    // base.css's `html { color-scheme: light }` is (0,0,1) and loses to
+    // `:root` at (0,1,0), so it may stay. A SECOND `:root` rule setting it
+    // would not lose, and is what this forbids.
+    const roots = parseRuleBodies(organiserCss).filter(
+      (rule) =>
+        /^:root(?!\[data-theme="light"\])/.test(rule.selector) &&
+        declarations(rule.body).some((decl) => /^color-scheme\s*:/.test(decl)),
+    );
+    expect(roots.map((rule) => rule.selector)).toEqual([":root"]);
   });
 });
 

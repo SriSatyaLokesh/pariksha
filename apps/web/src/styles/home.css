@@ -1,0 +1,598 @@
+/* Home: the agenda and the strip at its foot (spec §5, D6/D6a; §11, D21,
+   D21b, D15).
+
+   GROUND. This is the first SCREEN on the Signal ground, not only the first
+   chrome. shell.css grounds the bar and the rail and deliberately leaves the
+   page cream, because 6.5d and 6.5e re-ground the screens that already
+   exist. Home does not already exist — it is built here, and building a new
+   screen in the cream world only to rewrite it two plans later is work done
+   twice. So every colour below is one of theme.css's semantic names, and the
+   page track Home sits in takes --ground with it.
+
+   `.shell__page:has(> .home)` is how that happens, rather than a modifier
+   prop threaded through OrganiserShell: the page's own padding is outside
+   .home's box, so painting .home alone would leave a dark block inside a
+   cream gutter — two grounds on one screen. One selector, no component
+   change, and 6.5e deletes it when the page itself moves.
+
+   Home therefore passes NO title or crumb to the shell and renders its own
+   <h1> and role crumb inside .home, the way the test builder's arm already
+   does: .shell__head's heading is admin.css's cream-world ink and would be
+   illegal here.
+
+   D15's two scales, read exactly as shell.css's header writes them:
+     inside a component  --space-xs (4) / -sm (6) / -base (8) / -md (12) / -lg (16)
+     page to its edges   --space-xl (24) / -2xl (32) / -3xl (40) / -4xl (64)
+   No rule here mixes one scale's value into the other's job.
+
+   No colour literal, no --color-signal* token, no new colour. */
+
+/* ---- The page Home sits in -------------------------------------------- */
+
+/* D21: Home never scrolls. The bound is on the PAGE, not on the child —
+   the page's own padding then comes out of its own border box, so this rule
+   needs to know only the bar's height and nothing about the gutters.
+
+   It said `max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)))`
+   on `.home` until fix round 1. That was correct only because
+   `.shell > .shell__page` happens to declare `padding-block: var(--space-xl)`,
+   with nothing holding the two equal: when 6.5e re-grounds the page track,
+   a change to that padding would silently push Home past the viewport and
+   scroll the document — the one thing D21 forbids — with the whole suite
+   green. One source of truth instead of a guard over two. */
+.shell__page:has(> .home) {
+  background: var(--ground);
+  /* `100%` of the grid area, not `100dvh` minus a list of chrome. Fix
+     round 2: the subtraction was right while the shell was bar + page at
+     every width, and wrong the moment 6.5c Task 4 put the rail back on the
+     screen below 719px as a horizontal strip in its own grid row. The page
+     was then ~45px taller than its track, the grid grew past 100dvh, and
+     the document scrolled vertically at phone width — D21's one
+     prohibition — with Home's strip below the fold. Measured in Chrome at
+     360/400/719: `docVertical` 45 before, 0 after.
+
+     `.shell` already computes the track: its page row is `minmax(0, 1fr)`
+     under a `min-height: 100dvh` container, so the track IS the viewport
+     minus whatever chrome exists at this width. Asking the grid for it
+     cannot under-count, where a copied constant drifts the next time a row
+     is added. `min-height: 0` keeps the automatic minimum from putting the
+     content back into the track-sizing it was just taken out of. */
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* And the frame around it. shell.css deliberately paints no background on
+   `.shell` itself — near-black behind a cream screen's near-black ink — and
+   the rail is `align-self: start`, so the grid cell BELOW the rail shows
+   whatever `.shell` has. Against a cream page that was invisible; against
+   Home's ground it is a cream wedge under the nav, which a browser probe
+   caught and jsdom structurally cannot. --ground-2 is the rail's own fill,
+   so the column reads as one surface. Scoped to Home for the same reason
+   the rule above is: every other screen is still cream until 6.5e. */
+.shell:has(> .shell__page > .home) {
+  background: var(--ground-2);
+}
+
+/* Fills the box the rule above bounds, and never more: `flex: 1` takes the
+   page's content height and `min-height: 0` is the first link in the chain
+   that lets the two scroll areas inside actually shrink (a flex item's
+   default min-height is auto, which is its content). The other two links
+   are on `.home__panes` and `.home__scroll` below.
+
+   `overflow: hidden` stays here, and not only on the page: it is what
+   answers shell.css's documented BFC hazard. Below 719px that file gives
+   every direct child of the page `overflow-x: auto`, which would make
+   `.home` its own scroll container — a page inside the page, the exact
+   thing D21 forbids. The selector is `.shell__page > .home` (0,2,0) so it
+   beats `.shell__page > *` (0,1,0) on specificity rather than on import
+   order. */
+.shell__page > .home {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The ring, scoped the way shell.css scopes its own: --focus is the Signal
+   accent, which D1 measures at 1.60:1 on cream, so it may only be widened
+   to a surface that is actually on this ground. Home is. */
+.home :focus-visible {
+  outline-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+/* ---- Page lead --------------------------------------------------------- */
+
+.home__crumb {
+  margin: 0;
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* Clamped so the title never eats a 375px screen; the floor (28px) is what
+   the contrast gate measures. */
+.home__title {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--type-display-lg-family);
+  font-weight: var(--type-display-lg-weight);
+  font-size: clamp(1.75rem, 1.3rem + 2.5vw, var(--type-display-lg-size));
+  line-height: 1.1;
+  letter-spacing: var(--type-display-lg-letter-spacing);
+}
+
+/* D21's page lead: the two scale figures. Not pills — a pill that counts a
+   set with no rows on this page would be dead on click. */
+.home__lead {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-xs);
+  color: var(--ink-2);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+  letter-spacing: var(--type-body-md-letter-spacing);
+}
+
+.home__figure {
+  color: var(--ink);
+  font-size: var(--type-body-md-size);
+  font-weight: 600;
+  /* Tabular figures: the two counts sit beside each other and must not jump
+     a pixel when one of them changes. */
+  font-variant-numeric: tabular-nums;
+}
+
+.home__sep {
+  color: var(--ink-3);
+  font-size: var(--type-body-md-size);
+  padding-inline: var(--space-base);
+}
+
+/* ---- The two panes ----------------------------------------------------- */
+
+/* min-height: 0 on both the row and the panes is what lets the scroll areas
+   inside shrink: a flex item's default min-height is auto, which is its
+   content, and a pane that refuses to shrink pushes the strip off screen —
+   which is D21's failure mode, not its layout. */
+.home__panes {
+  /* THE FLOOR, and the one number the two layouts below both derive from.
+     144px per pane is a title (25px), the pane's own padding (24px) and
+     about two 40px rows — the point at which a pane is still usable rather
+     than a sliver. */
+  --home-pane-floor: 9rem;
+  /* What the floor comes to in THIS layout — one row of panes here, two
+     stacked below 719px. The release block at the foot of this file reads
+     this one name and so needs no layout branch of its own. */
+  --home-panes-floor: var(--home-pane-floor);
+
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: var(--space-md);
+  min-height: var(--home-panes-floor);
+  flex: 1;
+}
+
+.home__pane {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-md);
+}
+
+.home__pane-title {
+  margin: 0 0 var(--space-base);
+  color: var(--ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+}
+
+/* The only thing on this screen that scrolls. */
+.home__scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ---- Groups ------------------------------------------------------------ */
+
+.home__group + .home__group {
+  margin-block-start: var(--space-md);
+}
+
+.home__group-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-base);
+  margin: 0 0 var(--space-xs);
+}
+
+.home__group-name,
+.home__group-count {
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* Reserved so a one-digit and a two-digit count leave the header the same
+   width — the shape is identical at four items and at forty. */
+.home__group-count {
+  min-width: 2ch;
+}
+
+.home__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- One row ----------------------------------------------------------- */
+
+/* 40px, single line, in this order: time, urgency, subject, reason, action.
+   The subject takes the free space and ellipsises; nothing wraps, so the
+   row is the same height whatever it holds. */
+.home__row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-base);
+  height: 40px;
+  padding-inline: var(--space-base);
+  border-radius: var(--rounded-sm);
+  white-space: nowrap;
+}
+
+.home__row:hover {
+  background: var(--wash);
+}
+
+.home__row-time {
+  flex: none;
+  min-width: 6ch;
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  font-variant-numeric: tabular-nums;
+}
+
+/* D21b: a round dot, not a rail. A straight 3px bar inside a 9999px capsule
+   puts the component's only square edge 12px from its roundest one, so the
+   strip below and this list use one construct. */
+.home__dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--rounded-full);
+  background: var(--ink-3);
+}
+
+.home__dot[data-tone="risk"] {
+  background: var(--risk);
+}
+
+.home__dot[data-tone="warn"] {
+  background: var(--warn);
+}
+
+.home__dot[data-tone="accent"] {
+  background: var(--accent);
+}
+
+.home__row-subject {
+  min-width: 0;
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Muted, on the same line as the subject — --ink-2 rather than --ink-3
+   because this text has to stay legal while its row is receded: --ink-3 at
+   opacity 0.8 measures 3.54:1 on the dark surface and 3.52:1 on the light
+   one, which clears the 3:1 the recession is bounded by but not the 4.5:1
+   DESIGN.md asks of body text. --ink-2 clears both (5.51 / 5.07). */
+/* Gives way four times faster than the subject does. Both have `nowrap`
+   from the row, so without this the reason's min-content width is its whole
+   text and the subject absorbs every pixel of the squeeze — at 400px that
+   left the subject reading "Place…", which a browser probe caught. The
+   reason is a fixed four-word vocabulary and survives an ellipsis; a test's
+   name does not. */
+.home__row-reason {
+  flex: 0 4 auto;
+  min-width: 6ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* D21a: the reveal is opacity ALONE, never visibility, so the button stays
+   tabbable and tabbing onto one reveals it.
+
+   Out of the flow, at the row's end. In the flow it reserved ~68px of every
+   row for a control that is invisible until you reach for it, and at 400px
+   that was the difference between a readable subject and "Place…" — a
+   browser probe caught it. It fills with --surface so the revealed button
+   never sits on top of the text it covers, and it is inside the row's own
+   box, so D21a's "a row action can never be clipped" still holds. */
+.home__row-action {
+  position: absolute;
+  inset-inline-end: var(--space-base);
+  flex: none;
+  opacity: 0;
+  background: var(--surface);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-xs);
+  padding-inline: var(--space-base);
+  height: 28px;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.home__row:hover .home__row-action,
+.home__row-action:focus-visible {
+  opacity: 1;
+}
+
+/* Hover is the state that reveals the button, and the row under it is
+   --surface plus a translucent --wash. An opaque --surface fill therefore
+   read as a hard-edged rectangle one step off its own row. The wash is
+   layered as a background IMAGE rather than as an inset box-shadow so it
+   cannot out-specify `.home :focus-visible`'s ring on a row that is both
+   hovered and focused. */
+.home__row:hover .home__row-action {
+  background-image: linear-gradient(var(--wash), var(--wash));
+}
+
+/* ---- Marking, not filtering (D21) -------------------------------------- */
+
+/* Nothing moves, nothing is hidden. A marked row keeps full ink and takes
+   its pill's tone as a hairline ring; an unmatched one recedes to 0.8 AND
+   NO FURTHER, because past that its secondary text drops under the 3:1
+   DESIGN.md requires. The ring is not the only signal — the receded rows
+   and the live region say the same thing without hue. */
+.home__row[data-marked="on"] {
+  box-shadow: inset 0 0 0 1px var(--ink-3);
+}
+
+.home__row[data-marked="on"][data-tone="risk"] {
+  box-shadow: inset 0 0 0 1px var(--risk);
+}
+
+.home__row[data-marked="on"][data-tone="warn"] {
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.home__row[data-marked="on"][data-tone="accent"] {
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.home__row[data-marked="off"] {
+  opacity: 0.8;
+}
+
+/* ---- Empty states ------------------------------------------------------ */
+
+.home__empty,
+.home__more {
+  margin: var(--space-base) 0 0;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.home__empty-action {
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+  color: var(--accent);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* ---- The strip (D21, D21b) --------------------------------------------- */
+
+/* Always on screen: it is a control, and a control that scrolls away is a
+   control an organiser has to go looking for. */
+.home__strip {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-base);
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-lg);
+  padding: var(--space-base) var(--space-md);
+}
+
+.home__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-base);
+  min-height: 36px;
+  padding-inline: var(--space-md);
+  background: none;
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-full);
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* Pressed is three signals, never hue alone: the fill, the heavier label and
+   aria-pressed on the button itself. */
+.home__pill[aria-pressed="true"] {
+  background: var(--wash);
+  color: var(--ink);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+}
+
+.home__pill:disabled {
+  cursor: default;
+  color: var(--ink-3);
+  font-size: var(--type-body-sm-size);
+}
+
+.home__pill-count {
+  color: var(--ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 600;
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  font-variant-numeric: tabular-nums;
+}
+
+.home__pill:disabled .home__pill-count {
+  color: var(--ink-3);
+  font-size: var(--type-mono-sm-size);
+}
+
+.home__clear {
+  margin-inline-start: auto;
+  min-height: 36px;
+  padding-inline: var(--space-md);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+/* Not opacity: a disabled control dimmed below 3:1 is a control nobody can
+   read to learn why it is disabled. --ink-3 is legal on both grounds. */
+.home__clear:disabled {
+  cursor: default;
+  color: var(--ink-3);
+  font-size: var(--type-body-sm-size);
+}
+
+/* ---- D3a: one column below 719px --------------------------------------- */
+
+/* The panes stack, both still scroll inside themselves, and the strip is
+   still the last thing on screen. The agenda comes first because it is the
+   thing that says what to do next.
+
+   Nothing inside a row is hidden at this width. The reason is the only TEXT
+   that says which set a row is in — dropping it would leave the dot's hue
+   doing that alone, which DESIGN.md's "never colour alone" forbids. The
+   subject ellipsises instead. */
+@media (max-width: 719px) {
+  .home__panes {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: minmax(0, 1fr);
+    /* Two panes now, one above the other, so the floor is twice the one
+       above plus the gap between them — derived here rather than restated,
+       the same lesson as the page bound. */
+    --home-panes-floor: calc((2 * var(--home-pane-floor)) + var(--space-md));
+  }
+}
+
+/* ---- WCAG reflow beats D21 below this height --------------------------- */
+
+/* D21 says Home never scrolls, and it does not — at every viewport where
+   that is physically possible. Below about 660px of viewport height the
+   fixed parts (bar, page gutters, crumb/title/lead, and a strip that wraps
+   to three rows at phone width) plus the pane floor above no longer fit,
+   and `overflow: hidden` would then CLIP the panes rather than merely
+   crowd them. Clipped content is unreachable content: WCAG 2.1 SC 1.4.10
+   Reflow is specified at 320x256 CSS px and counts loss of content as a
+   failure, and this phase lands before Phase 12's WCAG 2.1 AA audit.
+
+   So reachability beats never-scrolls: the bound becomes a `min-height`,
+   `.home` is content-sized, and the page scrolls past the viewport when it
+   has to. D21's intent is unchanged above this line and is honoured as far
+   down as it can be — the panes still scroll inside themselves, and the
+   strip is still reachable, by scrolling to it rather than by clipping it
+   away.
+
+   680px is measured, not guessed: at 400px wide the narrow, stacked layout
+   with a three-row strip still clipped by 4px at 667px of viewport height
+   and cleared at 700px, so the switch sits above the crossover rather than
+   on it. On a short but WIDE viewport the `min-height` keeps the page
+   filling the screen, so nothing scrolls and no dead space opens below the
+   strip.
+
+   This is a RULING (fix round 2), not a stray value. Do not delete it
+   without replacing the reflow guarantee it carries. */
+@media (max-height: 680px) {
+  .shell__page:has(> .home) {
+    height: auto;
+    min-height: 100%;
+    overflow: visible;
+  }
+
+  /* `1 1 auto`, not `1`: `flex: 1` is a ZERO basis, and a zero basis in an
+     intrinsically-sized container makes the item's contribution its whole
+     content (CSS Flexbox §9.9.1). That is how, on the first attempt here,
+     the panes stopped being scroll containers, the entire list laid out,
+     and the page became one 3600px scroll with the strip at the bottom of
+     it. Measured, not supposed. */
+  .shell__page > .home {
+    flex: 1 1 auto;
+    overflow: visible;
+  }
+
+  /* The floor as an explicit BASIS, for the same reason: it makes the
+     panes' contribution the floor rather than their content, so the page
+     is chrome + floor + strip. `flex-grow: 1` still hands them any room
+     the page's `min-height` leaves over, so a short but wide viewport
+     fills instead of opening dead ground under the strip. */
+  .home__panes {
+    flex: 1 1 var(--home-panes-floor);
+  }
+}

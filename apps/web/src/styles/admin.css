@@ -29,6 +29,14 @@
 @import "./primitives.css";
 @import "./authoring.css";
 @import "./registration.css";
+/* Phase 6.5c Task 1 (D3): the organiser's one piece of chrome. Last in the
+   chain so its rules win over the placeholder page styling above, which
+   6.5e retires. */
+@import "./shell.css";
+/* Phase 6.5c Task 3 (D6): Home, the one screen this plan builds rather than
+   inherits. After shell.css because it grounds the page track the shell
+   leaves cream for every other screen. */
+@import "./home.css";
 
 /* ---- Page ------------------------------------------------------------- */
 
@@ -48,6 +56,16 @@
 
 .organiser--wide {
   max-width: 1080px;
+}
+
+/* `D18`: "Browsing is where the page wants width." The bank browser was the
+   one organiser screen rendered outside `.organiser--wide` until 6.5c's shell
+   wrapped every arm in the same <main>; this is its opt-out. `AG1`'s density
+   gate is what caught the clamp — `.bank-browser__main` measured 1183px on
+   `main` and 772px inside the shell, which wrapped every prompt and took the
+   row from 101px to 145px. 6.5e keeps it when it restyles that screen. */
+.organiser--full {
+  max-width: none;
 }
 
 /* Clamped so the title never eats a 375px screen; the floor (28px) is what
@@ -102,41 +120,6 @@
   line-height: var(--type-body-md-line-height);
   letter-spacing: var(--type-body-md-letter-spacing);
   margin: 0;
-}
-
-/* ---- Dashboard bar ---------------------------------------------------- */
-
-/* The same canvas-plus-hairline construction as the landing page's top nav,
-   without its link list: the organiser side has nowhere else to navigate
-   to yet, and inventing a nav for three screens would be a nav that lies. */
-.organiser-bar {
-  background: var(--color-canvas);
-  border-bottom: 1px solid var(--color-hairline);
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-md);
-  padding-block: var(--space-md);
-  padding-inline: var(--space-2xl);
-  min-height: 64px;
-}
-
-.organiser-bar__mark {
-  color: var(--color-ink);
-  font-family: var(--type-heading-md-family);
-  font-size: var(--type-heading-md-size);
-  font-weight: var(--type-heading-md-weight);
-  line-height: var(--type-heading-md-line-height);
-  letter-spacing: var(--type-heading-md-letter-spacing);
-  margin: 0;
-}
-
-.organiser-bar__actions {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: var(--space-md);
 }
 
 /* ---- Empty state ------------------------------------------------------ */

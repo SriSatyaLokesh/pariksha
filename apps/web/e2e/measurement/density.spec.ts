@@ -32,19 +32,28 @@ import {
 } from "../density";
 
 /**
- * The figures captured on `main`'s UI. See
- * `docs/superpowers/notes/2026-10-20-density-before.md` for the commit,
- * the date and what makes them invalid.
+ * The figures captured on `main`'s UI, **ratcheted** where a later plan
+ * measured better. See `docs/superpowers/notes/2026-10-20-density-before.md`
+ * for the commit, the date and what makes them invalid.
+ *
+ * A bar only ever moves in the direction that makes the gate stricter
+ * (`AG2`). 6.5c tightened `bankList` from 8 to 10 and both `BEFORE_TOP`
+ * figures below, because the shell's shared 56px bar is cheaper chrome than
+ * the per-screen `OrganiserHeader` plus margins it replaced. Nothing here
+ * was ever relaxed to make a restyle pass; if one of these goes red, that
+ * is the finding.
  */
 const BEFORE: Record<Surface, number> = {
   // Measured, not a placeholder. Every test-list row carries a 64px QR
   // code, an editable slug field with its own label and help line, and two
   // buttons — 182px of row — and the create form plus the filter bar put
-  // the first row's top at y=847 of a 900px viewport. So not one whole row
+  // the first row's top at y=786 of a 900px viewport. So not one whole row
   // is readable without scrolling. The figure is real and the gate below
   // cannot fail on it until a restyle raises it; see the note.
   testList: 0,
-  bankList: 8,
+  // 8 on `main`, 10 under 6.5c's shell: the same 44px row with 61px less
+  // chrome above it. Tightened, never loosened.
+  bankList: 10,
   bankBrowser: 5,
   questionPicker: 8,
 };
@@ -71,8 +80,8 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
 };
 
 /**
- * How far down the viewport each surface's first primary row starts on
- * `main`, captured in the same run as the other two.
+ * How far down the viewport each surface's first primary row starts,
+ * captured in the same run as the other two.
  *
  * The count and the height between them still cannot see the most likely
  * regression of the very next plan. 6.5c is the shell: a persistent sidebar
@@ -81,13 +90,71 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
  * table passes `0 >= 0` and `182 <= 182` and is a real density loss. This is
  * the number that sees it.
  *
- * 846.5px on the test list today — of a 900px viewport, which is the whole
+ * It saw it. 6.5c moved three of these four, and in both directions:
+ *
+ * - **test list 846.5 -> 785.5** and **bank list 458 -> 397**, the same
+ *   61px on both. The shell's bar is 56px where `OrganiserHeader` was 64px
+ *   plus its own margins, and the page head it replaced each screen's with
+ *   is cheaper. A ratchet may always tighten, so both are lowered.
+ * - **question picker unchanged at 495.63.** The builder arm passes no
+ *   `title`, so it renders no `.shell__head`, and the drawer is scrolled
+ *   into view rather than measured from the top of the document.
+ * - **bank browser 312.31 -> 385.31. The one bar on this branch that was
+ *   RAISED, by ruling, on evidence. Read the block over its figure below
+ *   before you touch it.**
+ *
+ * 785.5px on the test list today — of a 900px viewport, which is the whole
  * story of why that surface fits zero rows.
  */
 const BEFORE_TOP: Record<Surface, number> = {
-  testList: 846.5,
-  bankList: 458,
-  bankBrowser: 312.31,
+  // ZERO SLACK, both of these: each sits at the exact value 6.5c measured,
+  // against `toBeLessThanOrEqual`, so any added chrome above the table —
+  // 0.01px of it — goes red. That is the ratchet working, and on the two
+  // surfaces 6.5e is scheduled to rebuild it will arrive looking like a
+  // regression when it is a restyle. Re-measure and rule on the number the
+  // way the `bankBrowser` entry below does; never nudge it to get green
+  // (`AG2`).
+  testList: 785.5,
+  bankList: 397,
+  // **Raised from `main`'s 312.31, which is the one direction this file is
+  // not allowed to move a bar in (`AG2`). It was adjudicated on measurement,
+  // not nudged to get green, and the measurement is this:**
+  //
+  // `main` rendered the bank browser with NO page heading — its document
+  // outline started at `<h2>`, which 6.5c Task 1's fix round closed by giving
+  // the shell a `title` and a crumb. Two separate costs sit above the table
+  // now, and only one of them is the heading:
+  //
+  //   88px  the heading block — 72px stacked plus the 16px gap under it.
+  //         6.5c took 26px of that back by laying the head out as a single
+  //         ROW on browsing surfaces (shell.css, `.organiser--full`), which
+  //         is what returned the count to 5. The rest is the <h1> itself and
+  //         it stays: it is an accessibility fix.
+  //   11px  the shell's own chrome — 56px bar + 24px page padding = 80px
+  //         before any screen content, where `main`'s per-screen
+  //         `OrganiserHeader` spent 69px and this screen had no page padding
+  //         at all.
+  //
+  // **Deleting the heading outright does not reach `main`'s figure.** Hiding
+  // the whole block was measured at y=323.31 — still 11px over 312.31. So no
+  // surface work inside `D15` can green the old bar; it stopped measuring a
+  // regression and started measuring a property the phase chose on purpose.
+  // Hence the re-baseline, and hence only this one.
+  //
+  // **The protective bars on this surface are the other two**, and both are
+  // at `main`'s figures: `BEFORE.bankBrowser` (5 rows) and
+  // `BEFORE_HEIGHT.bankBrowser` (101px). They are what still catch a density
+  // regression here.
+  //
+  // This figure itself is a `toBeLessThanOrEqual` on the top, so it goes red
+  // at **+0.01px** like the two above — it has no slack of its own (whole-
+  // branch review, Minor 6: an earlier draft of this comment named the count
+  // as the bar that breaks first, which is wrong and this comment is the
+  // evidence for a re-baseline, so it has to be exact). The 9.69px is the
+  // slack on the SECOND line of defence: the fifth row ends at y=890.31 of
+  // 900, so a restyle that spends another 10px above the table takes
+  // `BEFORE.bankBrowser`'s count red as well — two bars, the top one first.
+  bankBrowser: 385.31,
   questionPicker: 495.63,
 };
 

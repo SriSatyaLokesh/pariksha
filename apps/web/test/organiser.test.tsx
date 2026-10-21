@@ -1,4 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { render, screen, waitFor, within, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { TestBranding } from "@pariksha/core";
@@ -13,9 +15,10 @@ import {
   type Workspace,
 } from "../src/lib/api";
 import { OrganiserApp } from "../src/routes/organiser";
+import { tokens, type TypographyName } from "../src/styles/tokens";
+import { declarations, parseRuleBodies, readResolvedCss } from "./css-chain";
 import { SignIn } from "../src/routes/signin";
 import { Setup } from "../src/routes/setup";
-import { Dashboard } from "../src/routes/dashboard";
 
 const GOOGLE: IdentityProvider = {
   id: "google",
@@ -351,81 +354,65 @@ describe("Setup (the first-run wizard)", () => {
   });
 });
 
-describe("Dashboard", () => {
-  it("names the workspace and offers a way into tests and banks", () => {
-    render(
-      <Dashboard
-        actor={ACTOR}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+// D14: Home is reached the way an organiser reaches it — by signing in —
+// rather than by rendering `Dashboard` with five props. Phase 6.5c Task 1
+// moved the workspace name, the role crumb and sign-out out of this screen
+// and into the shell, and a test that rendered the screen alone could not
+// tell whether anything still carries them.
+describe("Home (the dashboard, inside the shell)", () => {
+  function renderHome(actor: Actor = ACTOR) {
+    return render(<OrganiserApp client={fakeClient({ me: async () => actor })} />);
+  }
+
+  // Phase 6.5c Task 3 (`D6`/`D6a`): the two look-alike cards are gone and
+  // the screen is an agenda. The ways into Banks and Tests are the shell's
+  // rail, which is how twelve screens have them rather than one.
+  it("names the workspace and leads with the two scale figures", async () => {
+    renderHome();
 
     expect(
-      screen.getByRole("heading", { level: 1, name: "Placement cell" }),
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /tests/i })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: /question banks/i })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "What needs you" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Recently edited" })).toBeInTheDocument();
+    expect(screen.getByTestId("home-lead")).toHaveTextContent("0 tests");
   });
 
-  it("offers exactly one next action out of the empty state", () => {
-    render(
-      <Dashboard
-        actor={ACTOR}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+  it("offers exactly one next action out of the empty state", async () => {
+    renderHome();
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
 
     expect(
-      screen.getByRole("button", { name: /create your first test/i }),
+      await screen.findByRole("button", { name: /create your first test/i }),
     ).toBeEnabled();
   });
 
   // docs/design.md UX-11: the publish boundary is shown, not discovered —
-  // the role you hold is stated on the dashboard rather than found at the
-  // moment an action is refused.
-  it("states the role the signed-in actor holds in this workspace", () => {
-    render(
-      <Dashboard
-        actor={{
-          ...ACTOR,
-          memberships: [{ workspaceId: "wsp_1", role: "author", grants: [] }],
-        }}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+  // the role you hold is stated on arrival rather than found at the moment
+  // an action is refused. It is the shell's crumb now, which is how every
+  // screen gets it rather than only this one.
+  it("states the role the signed-in actor holds in this workspace", async () => {
+    renderHome({
+      ...ACTOR,
+      memberships: [{ workspaceId: "wsp_1", role: "author", grants: [] }],
+    });
 
-    expect(screen.getByText("Workspace · author")).toBeInTheDocument();
+    expect(await screen.findByText("Workspace · author")).toBeInTheDocument();
   });
 
   it("signs out through the client", async () => {
-    const onSignOut = vi.fn();
-    render(
-      <Dashboard actor={ACTOR} workspace={WORKSPACE} onSignOut={onSignOut} onOpenBanks={() => undefined} onOpenTests={() => undefined} />,
-    );
+    const signOut = vi.fn(async () => undefined);
+    render(<OrganiserApp client={fakeClient({ me: async () => ACTOR, signOut })} />);
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
 
     fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
-    expect(onSignOut).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
   });
 
   it("has no axe violations", async () => {
-    const { container } = render(
-      <Dashboard
-        actor={ACTOR}
-        workspace={WORKSPACE}
-        onSignOut={() => undefined}
-        onOpenBanks={() => undefined}
-        onOpenTests={() => undefined}
-      />,
-    );
+    const { container } = renderHome();
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
     expect(await axe(container)).toHaveNoViolations();
   });
 });
@@ -550,7 +537,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Question banks" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Banks" }));
     fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
     fireEvent.click(await screen.findByRole("button", { name: "New question" }));
 
@@ -576,7 +563,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeInTheDocument();
   });
@@ -598,6 +585,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
               slug: "midterm",
               description: null,
               shortCode: "ab12cd",
+              closesAt: null,
               state: "draft",
               currentVersion: null,
               draftVersion: 1,
@@ -612,6 +600,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
             slug: "midterm",
             description: null,
             shortCode: "ab12cd",
+            closesAt: null,
             state: "draft",
             currentVersion: null,
             draftVersion: 1,
@@ -638,7 +627,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
     ).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Midterm" })).toBeInTheDocument();
@@ -657,6 +646,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -701,7 +691,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
     fireEvent.click(await screen.findByRole("button", { name: /^Reasoning ·/i }));
 
@@ -727,6 +717,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -758,7 +749,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Registration form" })).toBeInTheDocument();
@@ -793,6 +784,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -844,7 +836,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     fireEvent.change(await screen.findByLabelText(/try a link/i), {
@@ -873,6 +865,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -904,7 +897,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Timing and attempts" })).toBeInTheDocument();
@@ -931,6 +924,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -962,7 +956,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Who can take this test" })).toBeInTheDocument();
@@ -987,6 +981,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -1018,7 +1013,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
     await screen.findByRole("heading", { name: "Who can take this test" });
 
@@ -1046,6 +1041,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -1104,7 +1100,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
@@ -1144,6 +1140,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -1178,7 +1175,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "The candidate list" })).toBeInTheDocument();
@@ -1201,6 +1198,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -1251,7 +1249,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "When candidates see their result" })).toBeInTheDocument();
@@ -1308,6 +1306,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       slug: "midterm",
       description: null,
       shortCode: "ab12cd",
+      closesAt: null,
       state: "draft" as const,
       currentVersion: null,
       draftVersion: 1,
@@ -1340,7 +1339,7 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       />,
     );
 
-    fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
     fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
 
     expect(await screen.findByRole("heading", { name: "Branding" })).toBeInTheDocument();
@@ -1349,5 +1348,532 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     // Still readable: an Author needs to know what their candidates see.
     expect(screen.getByLabelText(/footer text/i)).toHaveValue("Alpha College");
     expect(screen.getByLabelText(/start message/i)).toBeEnabled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6.5c Task 1 (#181, D3): the chrome is hoisted out of the eleven
+// `case` arms into one shell, so there is one sidebar for the whole
+// organiser instead of twelve copies of `OrganiserHeader`.
+//
+// D14: every assertion starts at `OrganiserApp` and clicks its way there. A
+// test that rendered `OrganiserShell` directly could not see whether any
+// screen is actually wrapped in it — which is the only thing this task does.
+const SHELL_CSS_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "../src/styles/shell.css",
+);
+
+describe("the organiser shell (D3)", () => {
+  function renderOrganiser(overrides: Partial<ApiClient> = {}) {
+    return render(<OrganiserApp client={fakeClient({ me: async () => ACTOR, ...overrides })} />);
+  }
+
+  /** Home has painted — the point every walk below starts from. */
+  function signedIn(): Promise<HTMLElement> {
+    return screen.findByRole("heading", { level: 1, name: "Placement cell" });
+  }
+
+  function nav(): HTMLElement {
+    return screen.getByRole("navigation", { name: "Organiser" });
+  }
+
+  it("shows one persistent sidebar across Home, Banks and Tests", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Banks" })).toBeVisible();
+    expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Tests" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+    expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Home" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Placement cell" })).toBeVisible();
+    expect(screen.getAllByRole("navigation", { name: "Organiser" })).toHaveLength(1);
+  });
+
+  // D3: "you are here" is three signals, never hue alone. Two of them are in
+  // the DOM and asserted here; the third — the heavier label — is a
+  // font-weight that jsdom has no layout engine to compute, and it is
+  // asserted against the shipped stylesheet in the test below this one.
+  it("marks the current screen with aria-current and an accent bar, not with hue alone", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    const home = within(nav()).getByRole("button", { name: "Home" });
+    const banks = within(nav()).getByRole("button", { name: "Banks" });
+
+    expect(home).toHaveAttribute("aria-current", "page");
+    expect(banks).not.toHaveAttribute("aria-current");
+    expect(home.querySelector(".shell__nav-bar")).not.toBeNull();
+    expect(banks.querySelector(".shell__nav-bar")).toBeNull();
+
+    fireEvent.click(banks);
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    expect(within(nav()).getByRole("button", { name: "Banks" })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
+    expect(within(nav()).getByRole("button", { name: "Home" })).not.toHaveAttribute(
+      "aria-current",
+    );
+  });
+
+  // Signal three of three. jsdom applies no external stylesheet, so this is
+  // the one signal no amount of clicking can reach — and a comment claiming
+  // it is covered is worse than no comment (fix round 1, finding 2). Read
+  // out of the file that ships, with the parser the suite already owns, and
+  // compared against the resting weight rather than against a literal: the
+  // claim D3 makes is "heavier", not "600".
+  it("gives the current rail item a heavier label than the resting one (D3)", () => {
+    const rules = parseRuleBodies(readResolvedCss(SHELL_CSS_PATH));
+    const weightOf = (selector: string): number => {
+      const body = rules.find((rule) => rule.selector === selector)?.body;
+      expect(body, `no rule for ${selector} in shell.css`).toBeDefined();
+      const declared = declarations(body as string)
+        .find((decl) => /^font-weight\s*:/.test(decl))
+        ?.split(":")[1]
+        ?.trim();
+      expect(declared, `no font-weight on ${selector}`).toBeDefined();
+      const token = /^var\(--type-([a-z0-9-]+)-weight\)$/.exec(declared as string)?.[1];
+      return token === undefined
+        ? Number(declared)
+        : (tokens.typography[token as TypographyName].fontWeight as number);
+    };
+
+    const resting = weightOf(".shell__nav-item");
+    const here = weightOf('.shell__nav-item[aria-current="page"]');
+
+    expect(resting).toBe(400);
+    expect(here).toBeGreaterThan(resting);
+  });
+
+  // Fix round 1, finding 3. The browser renders no <h1> of its own — before
+  // this, the one organiser screen whose document outline started at <h2>.
+  it("gives the bank browser an <h1> carrying the bank's own name", async () => {
+    const bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    renderOrganiser({ listBanks: async () => [bank] });
+    await signedIn();
+
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Reasoning aptitude" }),
+    ).toBeVisible();
+  });
+
+  // `D18`: "Bank browser opens with the rail collapsed. Browsing is where the
+  // page wants width; the toggle still restores it." Both halves, because
+  // neither works alone — `AG1`'s density gate measured the rail collapse as
+  // worth exactly nothing while the page was still clamped at 1080px (the
+  // grid track goes 1204px -> 1384px and both are over the clamp), and the
+  // row stayed wrapped at 145px against `main`'s 101px.
+  //
+  // The clamp half is asserted as an invariant rather than exercised (`AG3`):
+  // jsdom has no layout, so the width this buys is measured by
+  // `e2e/measurement/density.spec.ts` in a real browser instead.
+  it("opens the bank browser unclamped and with the rail collapsed", async () => {
+    const bank = {
+      id: "bnk_1",
+      name: "Reasoning aptitude",
+      description: null,
+      license: null,
+      tags: [],
+      questionCount: 0,
+      createdAt: 0,
+      updatedAt: 0,
+    };
+    renderOrganiser({ listBanks: async () => [bank] });
+    await signedIn();
+
+    const toggle = screen.getByRole("button", { name: /navigation/i });
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector("#main-content")).toHaveClass("organiser--wide");
+
+    fireEvent.click(await screen.findByRole("button", { name: /reasoning aptitude/i }));
+    await screen.findByRole("heading", { level: 1, name: "Reasoning aptitude" });
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    expect(document.querySelector("#main-content")).toHaveClass("organiser--full");
+    expect(document.querySelector("#main-content")).not.toHaveClass("organiser--wide");
+
+    // Leaving puts both back: the collapse is this screen's default, not a
+    // state the reader is left holding.
+    fireEvent.click(within(nav()).getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(document.querySelector("#main-content")).toHaveClass("organiser--wide");
+  });
+
+  // ...and a deep link, which has no list behind it to carry a name, still
+  // starts the page at <h1> rather than at the passage-groups <h2>.
+  it("still starts the bank browser at <h1> when it is deep-linked", async () => {
+    window.history.replaceState(null, "", "/?view=bank&bank=bnk_1");
+    try {
+      renderOrganiser();
+      expect(await screen.findByRole("heading", { level: 1, name: "Bank" })).toBeVisible();
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  it("does not render the sidebar on sign-in", async () => {
+    render(<OrganiserApp client={fakeClient({ me: async () => null })} />);
+
+    await screen.findByRole("heading", { level: 1, name: /sign in/i });
+    expect(screen.queryByRole("navigation", { name: "Organiser" })).toBeNull();
+  });
+
+  it("does not render the sidebar during the first-run wizard", async () => {
+    renderOrganiser({ setupStatus: async () => ({ needed: true, providers: [GOOGLE] }) });
+
+    await screen.findByLabelText(/workspace name/i);
+    expect(screen.queryByRole("navigation", { name: "Organiser" })).toBeNull();
+  });
+
+  it("omits Results and Grading entirely", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    expect(screen.queryByRole("button", { name: /results|grading/i })).toBeNull();
+  });
+
+  it("collapses the rail to icons and back, keeping every destination reachable", async () => {
+    renderOrganiser();
+    await signedIn();
+
+    const toggle = screen.getByRole("button", { name: /navigation/i });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+    // Collapsed is icons-only to the eye, never to a screen reader: the
+    // destinations keep their names and stay clickable.
+    fireEvent.click(within(nav()).getByRole("button", { name: "Tests" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("carries the workspace, the signed-in address and sign-out in the top bar", async () => {
+    const signOut = vi.fn(async () => undefined);
+    renderOrganiser({ signOut });
+    await signedIn();
+
+    expect(screen.getByText("Placement cell", { selector: ".shell__workspace" })).toBeVisible();
+    expect(screen.getByText(ACTOR.email)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /sign out/i }));
+    await waitFor(() => expect(signOut).toHaveBeenCalledTimes(1));
+  });
+
+  it("has no axe violations with a screen inside the shell", async () => {
+    const { container } = renderOrganiser();
+    await signedIn();
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 6.5c Task 4 (#181, D4/D4a/D4b): the top bar always names the
+// workspace; it becomes a *switcher* only above one membership, and a switch
+// resets the view to `?view=home`.
+//
+// D4a is the half no prototype can show and the half that ships broken:
+// under D5 the view lives in the query string as `?view=test&test=tst_8c21a4`,
+// so a switch that keeps that string asks workspace B for a test id belonging
+// to workspace A. AG3: asserted by switching with a test id in the URL, never
+// by reading the reducer.
+const NORTHFIELD: Workspace = { id: "wsp_2", name: "Northfield" };
+
+const TWO_MEMBERSHIPS: Actor = {
+  ...ACTOR,
+  memberships: [
+    { workspaceId: "wsp_1", role: "owner", grants: [] },
+    { workspaceId: "wsp_2", role: "owner", grants: [] },
+  ],
+};
+
+const MIDTERM = {
+  id: "tst_8c21a4",
+  name: "Midterm",
+  slug: "midterm",
+  description: null,
+  shortCode: "ab12cd",
+  closesAt: null,
+  state: "draft" as const,
+  currentVersion: null,
+  draftVersion: 1,
+  reviewRequested: false,
+  tags: [],
+  updatedAt: 0,
+};
+
+const MIDTERM_DRAFT = {
+  id: "ver_1",
+  testId: "tst_8c21a4",
+  version: 1,
+  body: { settings: {}, sections: [] },
+  publishedAt: null,
+  createdAt: 0,
+  draw: {},
+  setPoints: {},
+  points: {},
+};
+
+describe("the workspace switcher (D4, D4a, D4b)", () => {
+  function switcher(): HTMLElement {
+    return screen.getByRole("combobox", { name: /workspace/i });
+  }
+
+  it("names the workspace and offers no switcher at one membership", async () => {
+    render(<OrganiserApp client={fakeClient({ me: async () => ACTOR })} />);
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(screen.getByText("Placement cell", { selector: ".shell__workspace" })).toBeVisible();
+    expect(screen.queryByRole("combobox", { name: /workspace/i })).toBeNull();
+  });
+
+  it("becomes a switcher at two memberships", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(await screen.findByRole("combobox", { name: /workspace/i })).toBeVisible();
+    expect(switcher()).toHaveValue("wsp_1");
+  });
+
+  it("clears every id-bearing parameter when the workspace changes", async () => {
+    window.history.replaceState(null, "", "/?view=test&test=tst_8c21a4&panel=timing");
+    try {
+      render(
+        <OrganiserApp
+          client={fakeClient({
+            me: async () => TWO_MEMBERSHIPS,
+            workspaces: async () => [WORKSPACE, NORTHFIELD],
+            test: async () => MIDTERM,
+            draft: async () => MIDTERM_DRAFT,
+          })}
+        />,
+      );
+      await screen.findByRole("heading", { level: 1, name: "Midterm" });
+
+      fireEvent.change(switcher(), { target: { value: "wsp_2" } });
+
+      expect(await screen.findByRole("heading", { level: 1, name: "Northfield" })).toBeVisible();
+      expect(window.location.search).toBe("?view=home");
+    } finally {
+      window.history.replaceState(null, "", "/");
+    }
+  });
+
+  // The assertion that matters: not that the URL is tidy, but that no call
+  // carrying workspace A's test id is ever sent to workspace B.
+  //
+  // Walked rather than deep-linked, so there is real history behind the
+  // builder, and the walk ends on a Back press — because the entry a switch
+  // leaves behind is itself a loaded gun. `popstate` rebuilds the view from
+  // the URL against whatever workspace is CURRENT, so an entry naming
+  // workspace A's test, one press away from workspace B, is the same
+  // cross-tenant read by a slower route.
+  it("replaces the entry naming the old workspace's test, so Back cannot reopen it", async () => {
+    const carrying: string[] = [];
+    const record = (workspaceId: string, testId: string) => {
+      if (testId === "tst_8c21a4") carrying.push(workspaceId);
+      // What the server does with a stale entry, stood up here so the web
+      // side asserts the boundary rather than assuming it (whole-branch
+      // review, Minor 5). `membershipOr404` in apps/api resolves membership
+      // from the path parameter, so a test id belonging to workspace A is
+      // NOT FOUND in workspace B — a refusal, never a cross-tenant read.
+      if (testId === "tst_8c21a4" && workspaceId !== "wsp_1") {
+        throw new ApiError(404, "not_found", "That test could not be found in this workspace.");
+      }
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+          tests: async () => [MIDTERM],
+          test: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return MIDTERM;
+          },
+          draft: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return MIDTERM_DRAFT;
+          },
+          versions: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return [];
+          },
+          checklist: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return [];
+          },
+          candidates: async (workspaceId, testId) => {
+            record(workspaceId, testId);
+            return [];
+          },
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await screen.findByRole("heading", { level: 1, name: "Midterm" });
+    expect(carrying).not.toHaveLength(0);
+
+    fireEvent.change(switcher(), { target: { value: "wsp_2" } });
+    expect(await screen.findByRole("heading", { level: 1, name: "Northfield" })).toBeVisible();
+
+    // The builder's own entry is the one `resetViewForWorkspace` replaced,
+    // so Back skips straight past it to the list. Under `pushState` this
+    // press lands on `?view=test&test=tst_8c21a4` instead and the builder
+    // remounts under workspace B, which is how this assertion discriminates.
+    window.history.back();
+    expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
+
+    expect(carrying.filter((id) => id !== "wsp_1")).toEqual([]);
+  });
+
+  // The boundary the test above does NOT cover, asserted rather than left in
+  // a report's concerns list (whole-branch review, Minor 5).
+  // `resetViewForWorkspace` replaces ONE entry — the one you switched from.
+  // Navigate on after opening a test and the builder's entry is no longer
+  // the current one, so the switch cannot reach it, and Back walks into a
+  // URL still naming workspace A's test under workspace B.
+  //
+  // The request is therefore made. That is the honest shape, and it is why
+  // neither test here is named "never": what closes it is the server.
+  // `membershipOr404` resolves membership from the path parameter, so
+  // workspace A's test id is NOT FOUND in workspace B — a refusal, never a
+  // cross-tenant read — and the builder shows the refusal in place of the
+  // test. `fromUrl`'s standing answer, exercised: an id in a URL is a claim,
+  // and the screen's own fetch is the side that decides.
+  it("refuses, rather than serves, a stale entry Back reaches from deeper in the stack", async () => {
+    const carrying: string[] = [];
+    const refuseAcrossWorkspaces = (workspaceId: string, testId: string) => {
+      if (testId !== "tst_8c21a4") return;
+      carrying.push(workspaceId);
+      if (workspaceId !== "wsp_1") {
+        throw new ApiError(404, "not_found", "That test could not be found in this workspace.");
+      }
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+          tests: async () => [MIDTERM],
+          test: async (workspaceId, testId) => {
+            refuseAcrossWorkspaces(workspaceId, testId);
+            return MIDTERM;
+          },
+          draft: async (workspaceId, testId) => {
+            refuseAcrossWorkspaces(workspaceId, testId);
+            return MIDTERM_DRAFT;
+          },
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    // Tests -> the builder -> Banks. The builder's entry is now behind the
+    // current one, which is the entry the switch will replace.
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await screen.findByRole("heading", { level: 1, name: "Midterm" });
+    fireEvent.click(screen.getByRole("button", { name: "Banks" }));
+    await screen.findByRole("heading", { level: 1, name: "Banks" });
+
+    fireEvent.change(switcher(), { target: { value: "wsp_2" } });
+    await screen.findByRole("heading", { level: 1, name: "Northfield" });
+    expect(carrying.filter((id) => id !== "wsp_1")).toEqual([]);
+
+    window.history.back();
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      /could not be found in this workspace/i,
+    );
+    expect(screen.queryByRole("heading", { level: 1, name: "Midterm" })).toBeNull();
+    expect(carrying).toContain("wsp_2");
+  });
+
+  // D4b's whole argument is that a native <select> carries an accessible
+  // name for free — so the shape that can lose it is the one worth an axe
+  // pass. The existing shell axe test renders one membership and therefore
+  // never sees this control at all.
+  it("has no axe violations with the switcher rendered", async () => {
+    const { container } = render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => TWO_MEMBERSHIPS,
+          workspaces: async () => [WORKSPACE, NORTHFIELD],
+        })}
+      />,
+    );
+    await screen.findByRole("heading", { level: 1, name: "Placement cell" });
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // D3a takes the rail out of the grid below 719px. It does not say
+  // navigation disappears — and before this task only the wordmark was wired
+  // to Home, so Banks and Tests were unreachable on a phone. The rail becomes
+  // a horizontal strip at that width: the same <nav>, the same items, the
+  // same aria-current, no second construct to keep in step. The clicking
+  // half of this is already proved above ("shows one persistent sidebar");
+  // the half jsdom cannot reach is the media query, which has no layout
+  // engine to evaluate it — so the INVARIANT is asserted instead (AG3):
+  // nothing inside the narrow block takes the nav, its items or their labels
+  // off the screen.
+  it("does not hide the Organiser nav below 719px (D3a)", () => {
+    const css = readResolvedCss(SHELL_CSS_PATH);
+    const start = css.indexOf("@media (max-width: 719px)");
+    expect(start, "shell.css has no 719px block").toBeGreaterThan(-1);
+    const open = css.indexOf("{", start);
+    let depth = 1;
+    let i = open + 1;
+    while (depth > 0 && i < css.length) {
+      if (css[i] === "{") depth++;
+      else if (css[i] === "}") depth--;
+      i++;
+    }
+    const narrow = parseRuleBodies(css.slice(open + 1, i - 1));
+
+    const hidden = narrow
+      .filter((rule) => /shell__(rail|nav)/.test(rule.selector))
+      .filter((rule) =>
+        declarations(rule.body).some((decl) =>
+          /^(display\s*:\s*none|visibility\s*:\s*hidden|clip\s*:\s*rect)/.test(decl),
+        ),
+      )
+      .map((rule) => rule.selector);
+
+    expect(hidden).toEqual([]);
   });
 });

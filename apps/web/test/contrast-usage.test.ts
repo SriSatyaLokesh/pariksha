@@ -242,7 +242,6 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // and the focus ring (base.css).
   ".organiser__title": both("cream"),
   ".organiser__lead": both("cream"),
-  ".organiser-bar__mark": both("canvas"),
   ".organiser__notice": both("canvas"),
   ".organiser__status": both("canvas"),
   ".organiser-empty__title": both("canvas"),
@@ -257,6 +256,79 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".text-input": both("canvas"),
   ".registration-form__help, .registration-form__legend": both("canvas"),
   ".registration-form__error": both("canvas"),
+
+  // ---- shell.css: the organiser's chrome (Phase 6.5c Task 1, D3) --------
+  // The first rules in the organiser bundle to read theme.css's semantic
+  // names, so the first entries here that differ by ground. The bar is
+  // --surface and the rail is --ground-2; the page between them is still
+  // the cream canvas admin.css gives it, which is why every screen's own
+  // selectors above are unchanged — 6.5d and 6.5e move those.
+  ".shell__mark": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__workspace": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__email": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__icon-button": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__signout": { dark: "signal-surface", light: "signal-l-surface" },
+  // Phase 6.5c Task 4 (D4/D4b): the switcher, above one membership. Both
+  // sit on the bar, which is --surface, exactly like the name they replace.
+  // The <select>'s own options are painted by the platform's picker, not by
+  // this stylesheet, so there is nothing further to score.
+  ".shell__switcher-label": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__switcher-select": { dark: "signal-surface", light: "signal-l-surface" },
+  ".shell__nav-item": { dark: "signal-bg-2", light: "signal-l-bg-2" },
+  // The current item's fill is --accent-wash, 12% accent over the rail's
+  // own --ground-2. A 12% wash does not move the ratio enough to score
+  // against, and the ground beneath it is the honest worst case.
+  '.shell__nav-item[aria-current="page"]': {
+    dark: "signal-bg-2",
+    light: "signal-l-bg-2",
+  },
+
+  // ---- home.css: the agenda and its strip (Phase 6.5c Task 3, D6/D21) ---
+  // The first SCREEN on the Signal ground rather than the first chrome:
+  // Home is built in this plan, so it is built on the ground D1 gives the
+  // organiser instead of on the cream canvas 6.5e retires. Two backgrounds
+  // only — the page itself is --ground, and every pane and the strip at the
+  // foot fill themselves with --surface.
+  //
+  // Nothing here is scored against a recession: the audit reads a
+  // selector's declared colour, and D21's `opacity: 0.8` on an unmatched
+  // row is checked separately, by its own describe block below, because
+  // opacity is a fact about a STATE and not about a colour.
+  ".home__crumb": { dark: "signal-bg", light: "signal-l-bg" },
+  ".home__title": { dark: "signal-bg", light: "signal-l-bg" },
+  ".home__lead": { dark: "signal-bg", light: "signal-l-bg" },
+  ".home__figure": { dark: "signal-bg", light: "signal-l-bg" },
+  ".home__sep": { dark: "signal-bg", light: "signal-l-bg" },
+
+  ".home__pane-title": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__group-name, .home__group-count": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ".home__row-time": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__row-subject": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__row-reason": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__row-action": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__empty, .home__more": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__empty-action": { dark: "signal-surface", light: "signal-l-surface" },
+
+  ".home__pill": { dark: "signal-surface", light: "signal-l-surface" },
+  // Pressed fills with --wash, 6% ink over the strip's own --surface. A 6%
+  // wash does not move the ratio enough to score against, and the surface
+  // beneath it is the honest worst case — the same reading the rail's
+  // current item takes above.
+  '.home__pill[aria-pressed="true"]': {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ".home__pill:disabled": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__pill-count": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__pill:disabled .home__pill-count": {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  },
+  ".home__clear": { dark: "signal-surface", light: "signal-l-surface" },
+  ".home__clear:disabled": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- authoring.css: the prompt editor and preview pane (P4.5) ---------
   // Same palette and the same reasoning: the editor and the preview are
@@ -1116,6 +1188,100 @@ function nonTokenColourLiterals(css: string): string[] {
     .filter((match) => !/var\(\s*--color-[a-z0-9-]+\s*\)/i.test(match[1] ?? ""))
     .map((match) => match[0]);
 }
+
+// Phase 6.5c Task 3 (`D21`). The audit above reads a selector's declared
+// colour; it has no opinion about opacity, because opacity is a fact about a
+// STATE. `D21` creates exactly one such state — an unmatched row recedes to
+// `opacity: 0.8` "and no further: past that, secondary text drops under the
+// 3:1 DESIGN.md requires" — so the number is scored here, against the
+// stylesheet rather than against this file's memory of it.
+describe("the receded rows stay legal on both grounds (D21)", () => {
+  const HOME_CSS_PATH = resolve(STYLES_DIR, "home.css");
+
+  /** The recession as `home.css` really declares it. */
+  function recession(): number {
+    const body = parseRuleBodies(readResolvedCss(HOME_CSS_PATH)).find(
+      (rule) => rule.selector === '.home__row[data-marked="off"]',
+    )?.body;
+    const value = body === undefined ? null : findDeclaration(body, "opacity");
+    if (value === null) {
+      throw new Error('no opacity declared for .home__row[data-marked="off"]');
+    }
+    return Number(value);
+  }
+
+  /** `fg` at `alpha` over `bg`, as a browser composites it. */
+  function over(fg: ColorName, bg: ColorName, alpha: number): string {
+    const channels = (hex: string): number[] =>
+      [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16));
+    const [fr, fgc, fb] = channels(tokens.colors[fg]);
+    const [br, bgc, bb] = channels(tokens.colors[bg]);
+    const mix = (a: number, b: number): string =>
+      Math.round(a * alpha + b * (1 - alpha))
+        .toString(16)
+        .padStart(2, "0");
+    return `#${mix(fr ?? 0, br ?? 0)}${mix(fgc ?? 0, bgc ?? 0)}${mix(fb ?? 0, bb ?? 0)}`;
+  }
+
+  // Everything a receding row paints, and the floor each is held to: the
+  // two text colours at DESIGN.md's 4.5:1 body bar, the three urgency dots
+  // at the 3:1 a non-text graphic is held to.
+  const IN_A_ROW: { name: string; fg: Record<Ground, ColorName>; floor: number }[] = [
+    {
+      name: "the subject and its action (--ink)",
+      fg: { dark: "signal-text", light: "signal-l-text" },
+      floor: 4.5,
+    },
+    {
+      name: "the time and the reason (--ink-2)",
+      fg: { dark: "signal-text-2", light: "signal-l-text-2" },
+      floor: 4.5,
+    },
+    {
+      name: "a neutral dot (--ink-3)",
+      fg: { dark: "signal-text-3", light: "signal-l-text-3" },
+      floor: 3,
+    },
+    {
+      name: "a risk dot (--risk)",
+      fg: { dark: "signal-flag-risk", light: "signal-l-flag-risk" },
+      floor: 3,
+    },
+    {
+      name: "a review dot (--warn)",
+      fg: { dark: "signal-flag-review", light: "signal-l-flag-review" },
+      floor: 3,
+    },
+    {
+      name: "a changed dot (--accent)",
+      fg: { dark: "signal-accent", light: "signal-l-accent" },
+      floor: 3,
+    },
+  ];
+
+  const PANE: Record<Ground, ColorName> = {
+    dark: "signal-surface",
+    light: "signal-l-surface",
+  };
+
+  it("recedes to 0.8 and no further", () => {
+    expect(recession()).toBe(0.8);
+  });
+
+  for (const ground of GROUNDS) {
+    for (const part of IN_A_ROW) {
+      it(`[${ground}] ${part.name} is still legal at the recession`, () => {
+        const alpha = recession();
+        const faded = over(part.fg[ground], PANE[ground], alpha);
+        const ratio = contrastRatio(faded, tokens.colors[PANE[ground]]);
+        expect(
+          ratio,
+          `${part.fg[ground]} at ${alpha} on ${PANE[ground]} is ${ratio.toFixed(2)}:1, needs ${part.floor}:1`,
+        ).toBeGreaterThanOrEqual(part.floor);
+      });
+    }
+  }
+});
 
 describe("the organiser's standing colour guards (D1, §12)", () => {
   // Fix round 4, finding 2. The accent guard below catches a rule reaching
