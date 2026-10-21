@@ -138,3 +138,189 @@
   border-radius: var(--rounded-lg);
   padding: var(--space-xl);
 }
+
+/* ---- D16: the field row ----------------------------------------------- */
+
+/* "A row of fields is ONE grid with three tracks — label, control, help.
+   Each field is a `subgrid` spanning all three; controls are
+   `align-self: start`."
+
+   The bug this replaces: with each field its own grid, a column without help
+   let its control stretch into the space its neighbours spent on a sentence,
+   and the controls landed on different lines. A padding fix would have moved
+   that bug to the next row, and giving every field help degrades the copy
+   into filler.
+
+   The three tracks are ROW tracks and the columns are the fields. Measured
+   on the prototype: a mixed row misaligns by 20.4px without this rule and 0px
+   with it, under both the real `subgrid` and the forced fallback; a row where
+   no field has help resolves to `15px 36px 0px` — the help track collapses
+   rather than costing an empty line. jsdom performs no layout, so the pixel
+   half of that lives in e2e/measurement/field-rows.spec.ts and the
+   declarations are what test/testbuilder/field-rows.test.tsx holds.
+
+   `minmax(180px, 1fr)` rather than a fixed column count: below about 400px a
+   two-field row has nowhere to put two controls, and `auto-fit` drops it to
+   one column instead of overflowing the page sideways. */
+.field-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-rows: auto auto auto;
+  column-gap: var(--space-lg);
+  row-gap: var(--space-sm);
+  align-items: start;
+}
+
+/* `row-gap` is declared rather than inherited from the row: a subgrid child
+   takes the parent's gap unless it sets one, and `.field` (registration.css)
+   already sets `gap`, which would otherwise win here through the shorthand
+   and make the two branches below differ by a value nobody chose. */
+.field-row > .field {
+  display: grid;
+  grid-row: span 3;
+  grid-template-rows: subgrid;
+  row-gap: var(--space-sm);
+  min-width: 0;
+}
+
+.field-row > .field > * {
+  align-self: start;
+  min-width: 0;
+}
+
+/* `subgrid` needs Chrome 117+, Safari 16+, Firefox 71+. Below that each field
+   is its own three-row grid, so the third track sizes to that field's own
+   help and not to the row's: a help-free field would collapse it to zero and
+   sit a line above its neighbour. So a row that holds help anywhere RESERVES
+   one help line on every field in it — the ruling's "one empty line, never a
+   misalignment" — and a row with no help at all reserves nothing and still
+   collapses.
+
+   `:has()` is what makes that conditional, and it is wider than `subgrid` in
+   every engine but one: Firefox 71-120 has subgrid and takes the branch
+   above, and Chrome 105-116 has `:has()` and takes this one. Older than both
+   and the row degrades to what it does today, which is where it started. */
+@supports not (grid-template-rows: subgrid) {
+  .field-row > .field {
+    grid-template-rows: auto auto auto;
+  }
+
+  .field-row:has(.field-help) > .field {
+    grid-template-rows: auto auto minmax(var(--type-body-sm-line-height), auto);
+  }
+}
+
+/* D16's content rule, first home: "a UNIT ('min', 'IST', 'pts') goes INSIDE
+   the control as an affix." The other two homes already exist — a constraint
+   or consequence is `.field-help`, and a note about the whole group is one
+   paragraph under the row. */
+.field-affix {
+  position: relative;
+  display: block;
+}
+
+.field-affix > .text-input {
+  padding-inline-end: var(--space-4xl);
+}
+
+.field-affix__unit {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: var(--space-md);
+  display: flex;
+  align-items: center;
+  pointer-events: none;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* ---- D17: one checkbox and one radio for the whole product ------------- */
+
+/* "`appearance: none`, drawn in the accent with `accent-ink` glyphs, 17px,
+   custom focus ring, 4px radius for the checkbox and full round for the
+   radio. No browser default anywhere" — native controls rendered in the UA's
+   blue, which belongs to no palette this product has.
+
+   ONE RULE, TWO GROUNDS. This file is imported by admin.css (whose own
+   surfaces are still cream until 6.5e re-grounds them) AND by landing.css
+   (Signal dark). `theme.css`'s `--accent` is the DARK Signal green whichever
+   ground the viewer picked, and that is 1.60:1 on cream — D1's "an accent
+   cannot cross grounds", exactly. So the paint comes through a semantic pair,
+   `--control-accent` / `--control-accent-ink`, that each importing chain
+   defines for the ground it really renders on. D17's "one checkbox for the
+   whole product" is a rule about the CONTROL being one thing, and it still
+   is: one rule set, one geometry, one glyph. Aliasing declares no colour, so
+   DESIGN.md's front matter stays the only place a colour is declared.
+
+   Measured, each against the ground it renders on (3:1 is the bar a non-text
+   indicator clears): cream chain, fill 5.20:1 on the cream page and 5.36:1 on
+   a canvas card, glyph on fill 5.36:1; Signal chain, fill 12.01:1 on the
+   ground and 11.06:1 on a surface, glyph on fill 11.47:1.
+
+   The element stays a real `<input>` — role, checked state and keyboard all
+   come from it. Only the painting changes. */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: none;
+  display: inline-grid;
+  place-content: center;
+  inline-size: 17px;
+  block-size: 17px;
+  margin: 0;
+  background: none;
+  border: 1px solid var(--control-accent);
+  border-radius: var(--rounded-sm);
+  cursor: pointer;
+}
+
+input[type="radio"] {
+  border-radius: var(--rounded-full);
+}
+
+input[type="checkbox"]:checked,
+input[type="radio"]:checked {
+  background: var(--control-accent);
+}
+
+input[type="checkbox"]:checked::before,
+input[type="radio"]:checked::before {
+  content: "";
+  background: var(--control-accent-ink);
+}
+
+/* The tick is a clipped box rather than an SVG data URI: an inline SVG would
+   have to carry its stroke colour as a literal, which is the one thing no
+   file but DESIGN.md's front matter may do. */
+input[type="checkbox"]:checked::before {
+  inline-size: 11px;
+  block-size: 11px;
+  clip-path: polygon(14% 44%, 0 65%, 50% 100%, 100% 16%, 80% 0%, 43% 62%);
+}
+
+input[type="radio"]:checked::before {
+  inline-size: 7px;
+  block-size: 7px;
+  border-radius: var(--rounded-full);
+}
+
+/* base.css's global `:focus-visible` sets `border-radius: var(--rounded-xs)`
+   along with the ring, which would square the radio for as long as it has
+   focus. (0,1,1) beats its (0,1,0). */
+input[type="radio"]:focus-visible {
+  border-radius: var(--rounded-full);
+}
+
+/* Opacity, never a colour swap — the same reason the two buttons above give:
+   a disabled control is exempt from WCAG 1.4.3, and an opacity change keeps
+   the box out of the contrast gate rather than needing an exemption in it. */
+input[type="checkbox"]:disabled,
+input[type="radio"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

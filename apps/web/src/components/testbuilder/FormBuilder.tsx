@@ -343,63 +343,117 @@ function FieldEditor({
   const unsatisfiable = unsatisfiableValidation(field);
   const v = field.validation;
 
+  // `D16`, content: a field carries at most one `help` — a constraint or a
+  // consequence, in the help track — and at most one `unit`, which goes
+  // INSIDE the control as an affix and never into that track. Both are wired
+  // to the control through `aria-describedby` off the same `useId()` prefix
+  // every other id here uses (`D16a`), so a reader hears the unit without the
+  // affix having to be hidden from them.
   const text = (
     label: string,
     key: string,
     value: string,
     onCommit: (next: string) => void,
     type = "text",
-  ) => (
-    <div className="field" key={key}>
-      <label className="field-label" htmlFor={`${ids}-${key}`}>
-        {label}
-      </label>
+    secondary: { help?: string; unit?: string } = {},
+  ) => {
+    const describedBy = [
+      ...(secondary.unit === undefined ? [] : [`${ids}-${key}-unit`]),
+      ...(secondary.help === undefined ? [] : [`${ids}-${key}-help`]),
+    ];
+    const input = (
       <input
         className="text-input"
         id={`${ids}-${key}`}
         type={type}
         value={value}
         onChange={(event) => onCommit(event.target.value)}
+        {...(describedBy.length > 0 && { "aria-describedby": describedBy.join(" ") })}
       />
-    </div>
-  );
+    );
+    return (
+      <div className="field" key={key}>
+        <label className="field-label" htmlFor={`${ids}-${key}`}>
+          {label}
+        </label>
+        {secondary.unit === undefined ? (
+          input
+        ) : (
+          <span className="field-affix">
+            {input}
+            <span className="field-affix__unit" id={`${ids}-${key}-unit`}>
+              {secondary.unit}
+            </span>
+          </span>
+        )}
+        {secondary.help !== undefined && (
+          <p className="field-help" id={`${ids}-${key}-help`}>
+            {secondary.help}
+          </p>
+        )}
+      </div>
+    );
+  };
 
-  const number = (label: string, key: keyof FieldValidation, value: number | undefined) =>
+  const number = (
+    label: string,
+    key: keyof FieldValidation,
+    value: number | undefined,
+    unit?: string,
+  ) =>
     text(label, String(key), value === undefined ? "" : String(value), (next) =>
       onChange((f) => withValidation(f, key, next === "" ? undefined : (Number(next) as never))),
       "number",
+      unit === undefined ? {} : { unit },
     );
 
   return (
     <fieldset className="form-builder__field">
       <legend>{`Field ${index + 1}: ${field.label || "Untitled"} (${FIELD_TYPE_LABEL[field.type]})`}</legend>
 
-      <div className="field">
-        <label className="field-label" htmlFor={`${ids}-label`}>
-          Visible label
-        </label>
-        <input
-          className="text-input"
-          id={`${ids}-label`}
-          required
-          value={field.label}
-          onChange={(event) => onChange((f) => ({ ...f, label: event.target.value }))}
-        />
-      </div>
+      {/* `D16`: a row of fields is one grid, and these two belong on one —
+          what the candidate reads and what the export column is called. It is
+          also the mixed case the rule exists for: "Column name" states a
+          consequence in the help track and "Visible label" states nothing, so
+          without the subgrid the second control stretched into the space the
+          first spent on that sentence. */}
+      <div className="field-row">
+        <div className="field">
+          <label className="field-label" htmlFor={`${ids}-label`}>
+            Visible label
+          </label>
+          <input
+            className="text-input"
+            id={`${ids}-label`}
+            required
+            value={field.label}
+            onChange={(event) => onChange((f) => ({ ...f, label: event.target.value }))}
+          />
+        </div>
 
-      <div className="field">
-        <label className="field-label" htmlFor={`${ids}-id`}>
-          Column name
-        </label>
-        <input
-          className="text-input"
-          id={`${ids}-id`}
-          value={field.id}
-          onChange={(event) => {
-            const id = sanitiseId(event.target.value);
-            if (id !== "") onChange((f) => ({ ...f, id }));
-          }}
-        />
+        <div className="field">
+          <label className="field-label" htmlFor={`${ids}-id`}>
+            Column name
+          </label>
+          <input
+            className="text-input"
+            id={`${ids}-id`}
+            value={field.id}
+            aria-describedby={`${ids}-id-help`}
+            onChange={(event) => {
+              const id = sanitiseId(event.target.value);
+              if (id !== "") onChange((f) => ({ ...f, id }));
+            }}
+          />
+          {/* `sanitiseId` rewrites as the organiser types — lower-cases,
+              replaces anything else with `_` and cuts at 40. Said here
+              because a field that silently edits what was typed is the
+              "constraint or consequence" the help track is for. */}
+          <p className="field-help" id={`${ids}-id-help`}>
+            Lower-case letters, numbers and underscore, up to 40 — anything else becomes an
+            underscore as you type.
+          </p>
+        </div>
       </div>
 
       {text("Help text", "help", field.help ?? "", (next) =>
@@ -444,29 +498,35 @@ function FieldEditor({
         </>
       )}
 
+      {/* A bound and its opposite bound are one row. Neither takes help — the
+          pair is self-explaining — so this is the case where the reserved
+          help track collapses rather than costing an empty line. "chars" is a
+          UNIT and goes inside the control (`D16`, content). */}
       {(field.type === "short_text" || field.type === "long_text") && (
-        <>
-          {number("Minimum length", "min_length", v?.min_length)}
-          {number("Maximum length", "max_length", v?.max_length)}
-        </>
+        <div className="field-row">
+          {number("Minimum length", "min_length", v?.min_length, "chars")}
+          {number("Maximum length", "max_length", v?.max_length, "chars")}
+        </div>
       )}
 
       {field.type === "short_text" && (
-        <>
+        <div className="field-row">
           {text("Pattern", "pattern", v?.pattern ?? "", (next) =>
             onChange((f) => withValidation(f, "pattern", next === "" ? undefined : next)),
           )}
           {text("Pattern message", "pattern_message", v?.pattern_message ?? "", (next) =>
             onChange((f) => withValidation(f, "pattern_message", next === "" ? undefined : next)),
           )}
-        </>
+        </div>
       )}
 
       {field.type === "number" && (
         <>
-          {number("Minimum", "min", typeof v?.min === "number" ? v.min : undefined)}
-          {number("Maximum", "max", typeof v?.max === "number" ? v.max : undefined)}
-          {number("Decimal places", "decimals", v?.decimals)}
+          <div className="field-row">
+            {number("Minimum", "min", typeof v?.min === "number" ? v.min : undefined)}
+            {number("Maximum", "max", typeof v?.max === "number" ? v.max : undefined)}
+            {number("Decimal places", "decimals", v?.decimals)}
+          </div>
           <label className="form-builder__flag">
             <input
               type="checkbox"
@@ -479,14 +539,14 @@ function FieldEditor({
       )}
 
       {field.type === "date" && (
-        <>
+        <div className="field-row">
           {text("Minimum", "min", typeof v?.min === "string" ? v.min : "", (next) =>
             onChange((f) => withValidation(f, "min", next === "" ? undefined : next)), "date",
           )}
           {text("Maximum", "max", typeof v?.max === "string" ? v.max : "", (next) =>
             onChange((f) => withValidation(f, "max", next === "" ? undefined : next)), "date",
           )}
-        </>
+        </div>
       )}
 
       {field.type === "phone" && (

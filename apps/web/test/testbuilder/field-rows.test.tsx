@@ -51,20 +51,42 @@ const ADMIN_CSS = readResolvedCss(resolve(STYLES_DIR, "admin.css"));
 const LANDING_CSS = readResolvedCss(resolve(STYLES_DIR, "landing.css"));
 
 /**
+ * A selector's specificity as one comparable number.
+ *
+ * Needed, not decorative: `primitives.css` declares `.field-row > .field {
+ * display: grid }` and `registration.css`, which admin.css imports AFTER it,
+ * declares `.field { display: flex }`. Source order says flex and the cascade
+ * says grid (0,2,0 beats 0,1,0). A reader that took the last declaration
+ * would have reported the opposite of what a browser paints — it did, on the
+ * first green run, which is what this function exists because of.
+ *
+ * `:not(...)`'s own argument is not counted, and neither is a pseudo-element
+ * against the class column; neither form appears in the rules read here.
+ */
+function specificity(selector: string): number {
+  const ids = (selector.match(/#[\w-]+/g) ?? []).length;
+  const classes = (selector.match(/\.[\w-]+|\[[^\]]+\]|:(?!:)[\w-]+/g) ?? []).length;
+  const elements = (selector.match(/(?:^|[\s>+~])[a-z][\w-]*/gi) ?? []).length;
+  return ids * 10_000 + classes * 100 + elements;
+}
+
+/**
  * Every value `property` is given by a rule in `css` that really selects
- * `element`, in source order — so the last one is the one that paints.
+ * `element`, weakest-first — so the last one is the one that paints.
  *
  * `parseRuleBodies` skips `@supports` blocks whole (it recurses into `@media`
  * only), which is what keeps this function reading the DEFAULT branch and
  * `supportsBody()` below reading the fallback. They cannot be confused.
  */
 function declaredFor(element: Element, property: string, css = ADMIN_CSS): string[] {
-  const found: string[] = [];
+  const found: { weight: number; order: number; value: string }[] = [];
+  let order = 0;
   for (const rule of parseRuleBodies(css)) {
-    const selects = rule.selector
+    order += 1;
+    const weights = rule.selector
       .split(",")
       .map((part) => part.trim())
-      .some((part) => {
+      .filter((part) => {
         try {
           return element.matches(part);
         } catch {
@@ -72,19 +94,23 @@ function declaredFor(element: Element, property: string, css = ADMIN_CSS): strin
           // confirm; it must not read as one either.
           return false;
         }
-      });
-    if (!selects) continue;
+      })
+      .map(specificity);
+    if (weights.length === 0) continue;
+    const weight = Math.max(...weights);
     for (const decl of declarations(rule.body)) {
       const colon = decl.indexOf(":");
       if (colon !== -1 && decl.slice(0, colon).trim() === property) {
-        found.push(decl.slice(colon + 1).trim());
+        found.push({ weight, order, value: decl.slice(colon + 1).trim() });
       }
     }
   }
-  return found;
+  return found
+    .sort((a, b) => a.weight - b.weight || a.order - b.order)
+    .map((hit) => hit.value);
 }
 
-/** The last value `property` is given for `element`, or `undefined`. */
+/** The value `property` really paints on `element`, or `undefined`. */
 function paints(element: Element, property: string, css = ADMIN_CSS): string | undefined {
   return declaredFor(element, property, css).at(-1);
 }
@@ -408,6 +434,25 @@ describe("the guards above read the real stylesheet", () => {
     expect(ADMIN_CSS).toContain(".button-primary");
     expect(LANDING_CSS).toContain(".button-primary");
     expect(parseRuleBodies(ADMIN_CSS).length).toBeGreaterThan(20);
+  });
+
+  it("resolves the cascade by specificity, not by source order", () => {
+    // The live case: registration.css gives `.field` `display: flex` and is
+    // imported AFTER primitives.css, which gives `.field-row > .field`
+    // `display: grid`. Order says flex, the cascade says grid. A `.field`
+    // outside a row really is flex, and both answers come from the same
+    // reader — which is what makes the first one a fact and not a fixture.
+    cleanup();
+    render(
+      <div>
+        <div className="field-row">
+          <div className="field" data-testid="in-row" />
+        </div>
+        <div className="field" data-testid="alone" />
+      </div>,
+    );
+    expect(paints(screen.getByTestId("in-row"), "display")).toBe("grid");
+    expect(paints(screen.getByTestId("alone"), "display")).toBe("flex");
   });
 
   it("answers from the DOM, not from the selector text", () => {

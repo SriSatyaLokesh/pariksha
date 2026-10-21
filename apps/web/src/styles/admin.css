@@ -38,6 +38,33 @@
    leaves cream for every other screen. */
 @import "./home.css";
 
+/* D17's one checkbox and one radio are painted in primitives.css, which this
+   chain shares with landing.css. The paint comes through `--control-accent` /
+   `--control-accent-ink`, and this is the organiser chain's half of that pair.
+
+   It cannot be `var(--accent)`. theme.css maps that to the DARK Signal green
+   on `:root` and to the light one only under `data-theme="light"`, while the
+   builder's own surfaces are STILL CREAM — shell.css paints no ground on
+   `.shell` for exactly that reason, and 6.5e is the plan that re-grounds
+   them. So on a dark-ground viewer the control would be #19e68c on cream,
+   which is 1.60:1: D1's "an accent cannot cross grounds", on the one screen
+   this task touches.
+
+   `state-answered` is the cream world's own positive green — the palette
+   square that says a question HAS an answer — and a checked box says the same
+   thing about a control. It measures 5.20:1 on the cream page and 5.36:1 on a
+   canvas card, against the 3:1 a non-text indicator needs; the white glyph is
+   5.36:1 on the fill. `flag-clean` is the same hex under the integrity-report
+   name ("this row passes"), and that meaning is the one a checkbox does not
+   have, so the name chosen here is the one that is true.
+
+   When 6.5e re-grounds the builder these two lines become `var(--accent)` and
+   `var(--accent-ink)` and nothing else moves. */
+:root {
+  --control-accent: var(--color-state-answered);
+  --control-accent-ink: var(--color-canvas);
+}
+
 /* ---- Page ------------------------------------------------------------- */
 
 /* One column, centred, 560px: DESIGN.md has no measure for an application
