@@ -480,7 +480,7 @@ export function BankBrowser({
               <th scope="col">Points</th>
               <th scope="col">Last edited</th>
               <th scope="col">Used in</th>
-              <th scope="col">
+              <th scope="col" className="acts">
                 <span className="visually-hidden">Actions</span>
               </th>
             </tr>
@@ -503,7 +503,11 @@ export function BankBrowser({
                 <td>{question.points}</td>
                 <td>{new Date(question.updatedAt).toLocaleDateString()}</td>
                 <td>{question.usedInTests}</td>
-                <td>
+                {/* `D21a`: the row-action gutter, whose rule lives in
+                    primitives.css so every table inherits it. It is the LAST
+                    cell deliberately — a cell pinned to the inline end with a
+                    column after it slides over that column's content. */}
+                <td className="acts">
                   <button
                     type="button"
                     className="button-secondary"

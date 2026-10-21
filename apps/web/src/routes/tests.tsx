@@ -455,8 +455,14 @@ export function TestList({
                   Last edited
                 </th>
                 <th scope="col">Slug</th>
-                <th scope="col">Actions</th>
                 <th scope="col">Short link</th>
+                {/* `D21a`: the action gutter is the LAST column. It was the
+                    sixth of seven, and a cell pinned to the inline end with a
+                    column after it slides over that column's content the
+                    moment the table scrolls — which this table does. */}
+                <th scope="col" className="acts">
+                  Actions
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -511,14 +517,6 @@ export function TestList({
                       </div>
                     </td>
                     <td>
-                      <button type="button" className="button-secondary" onClick={() => void onClone(test)}>
-                        Duplicate
-                      </button>
-                      <button type="button" className="button-secondary" onClick={() => void onExport(test)}>
-                        Export
-                      </button>
-                    </td>
-                    <td>
                       <div className="testbuilder-shortlink">
                         <QrCode value={`${window.location.origin}${shortLinkPath}`} label="QR code for the short link" size={64} />
                         <a href={shortLinkPath}>{shortLinkPath}</a>
@@ -534,6 +532,16 @@ export function TestList({
                           {copiedId === test.id ? "Copied." : ""}
                         </p>
                       </div>
+                    </td>
+                    {/* `D21a`: the row-action gutter, whose rule lives in
+                        primitives.css so every table inherits it. */}
+                    <td className="acts">
+                      <button type="button" className="button-secondary" onClick={() => void onClone(test)}>
+                        Duplicate
+                      </button>
+                      <button type="button" className="button-secondary" onClick={() => void onExport(test)}>
+                        Export
+                      </button>
                     </td>
                   </tr>
                 );

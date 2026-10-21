@@ -237,3 +237,87 @@
   line-height: var(--type-mono-sm-line-height);
   letter-spacing: var(--type-mono-sm-letter-spacing);
 }
+
+/* ---- D21a: the row-action gutter -------------------------------------- */
+
+/* "A row action can never be clipped, in any table."
+
+   The reported defect was an action button cut off at a bank row's edge, and
+   the cause was two things at once: the action cell had no reserved width,
+   and the table was wider than the page. The first is fixed here, as a rule
+   every table inherits rather than a value each screen re-decides. The
+   second's fix is the TABLE — "fold the id under the name, let one column
+   wrap" — and belongs to the screen, not to the gutter; what this rule owes
+   a table that does not fit is that the action survives it anyway.
+
+   `width: 1%` is `D18`'s own value. On an auto-layout table it means
+   shrink-to-fit bounded below by min-content, and `white-space: nowrap` makes
+   that min-content "the buttons, side by side". So the column is as wide as
+   its actions whether or not the actions are showing, which is the whole of
+   "width always reserved" — neither declaration sits in a hover or focus
+   rule, so there is nothing for a reveal to change.
+
+   THE NOWRAP IS SCOPED TO THE GUTTER AND MUST STAY THERE. `D18` records the
+   bug a wider rule caused: "Prompts wrap and clamp to two lines; the overflow
+   bug was `white-space: nowrap` inherited from the table rules."
+   test/tables.test.tsx asserts both sides — the gutter has it, a cell holding
+   prose does not.
+
+   THE REVEAL IS `opacity` ALONE, NEVER `visibility`. `D18`'s bullet says
+   "reveal with `visibility` plus `opacity`" and `D21a`, which is later, says
+   the opposite; `D21a` is the one that can be built, because
+   `visibility: hidden` takes an element OUT of the tab order and would defeat
+   the `tr:focus-within` reveal specified in the same sentence. `opacity`
+   changes no layout, so revealing an action cannot widen a row either.
+
+   AND THE CELL IS TRANSPARENT, deliberately: an opaque sticky cell sliding
+   over a column that is scrolling under it is the same defect wearing a
+   different hat. That it names no colour is also what makes one rule safe in
+   two stylesheet chains — `primitives.css` is imported by `admin.css`, which
+   imports `theme.css`, AND by `landing.css`, which does not, so any semantic
+   colour name written here would be undefined on the landing page. The two
+   requirements have the same answer and test/tables.test.tsx holds them to it.
+
+   `inset-inline-end` rather than `right`: this file's neighbours are logical
+   throughout (`padding-inline`, `border-block-end`, `text-align: start`), and
+   the gutter belongs at the inline end of the row in any writing mode.
+
+   The gutter is the LAST cell in its row. That is markup rather than CSS and
+   cannot be enforced from here, so test/tables.test.tsx asserts it: a cell
+   pinned to the inline end with a column after it slides over that column's
+   content the moment the table scrolls. */
+
+th.acts,
+td.acts {
+  position: sticky;
+  inset-inline-end: 0;
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* `D15`, in-a-component scale, and `A10`'s 8px minimum between two touch
+   targets — the row's actions sat flush against each other before this. */
+td.acts > * + * {
+  margin-inline-start: var(--space-base);
+}
+
+/* `@media (hover: hover)` rather than bare: a pointer that cannot hover never
+   fires `tr:hover`, so a touch device would be left with a gutter it can
+   reach and cannot see. There the actions simply stand. */
+@media (hover: hover) {
+  td.acts {
+    opacity: 0;
+    transition: none;
+  }
+
+  tr:hover > td.acts,
+  tr:focus-within > td.acts {
+    opacity: 1;
+  }
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  td.acts {
+    transition: opacity 120ms ease-out;
+  }
+}
