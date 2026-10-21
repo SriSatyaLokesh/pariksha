@@ -14,6 +14,7 @@ import { axe } from "jest-axe";
 import type { RegistrationFormSpec } from "@pariksha/core";
 
 import { FormBuilder } from "../../src/components/testbuilder/FormBuilder";
+import { PANEL_KEYS } from "../../src/components/testbuilder/SettingRow";
 import type {
   Actor,
   ApiClient,
@@ -331,7 +332,13 @@ function sectionRow(): HTMLElement {
   return screen.getByRole("button", { name: /^Quantitative aptitude ·/i });
 }
 
-const PANEL_LABELS = ["Timing", "Access", "Registration", "Results", "Branding"];
+/** Derived from the union's own tuple, not written out a second time: a
+ *  sixth panel added to `PANEL_KEYS` is checked by `expectNoPanelOpen`
+ *  without anyone remembering this file. The five labels are the keys
+ *  capitalised (`SettingRow`'s `label` prop in `test.tsx`), and a future
+ *  label that is not would fail `rowFor` loudly rather than quietly
+ *  skipping a row. */
+const PANEL_LABELS = PANEL_KEYS.map((key) => key[0]!.toUpperCase() + key.slice(1));
 
 function expectNoPanelOpen(): void {
   for (const label of PANEL_LABELS) {
@@ -358,7 +365,7 @@ describe("the open setting lives in the query string (D7, D5)", () => {
   });
 
   it("puts the open panel in the query string", async () => {
-    await openBuilder({ search: "?view=test&test=tst_1" });
+    const { unmount } = await openBuilder({ search: "?view=test&test=tst_1" });
     expect(new URLSearchParams(window.location.search).get("panel")).toBeNull();
 
     fireEvent.click(rowFor("Timing"));
@@ -372,6 +379,22 @@ describe("the open setting lives in the query string (D7, D5)", () => {
     // Closing the row takes it back out rather than leaving a stale claim.
     fireEvent.click(rowFor("Timing"));
     expect(new URLSearchParams(window.location.search).get("panel")).toBeNull();
+    unmount();
+
+    // The key this write is most likely to destroy. `writeView` deletes
+    // every id it owns that the params handed to it omit, so a
+    // `togglePanel` that built a `ViewParams` from scratch rather than
+    // reading the current one would write `?panel=` and silently drop
+    // `?section=` — the open section would survive in React state and
+    // vanish from the URL, and the next reload or Back would lose it.
+    await openBuilder({ search: "?view=test&test=tst_1&section=quant" });
+    expect(new URLSearchParams(window.location.search).get("section")).toBe("quant");
+
+    fireEvent.click(rowFor("Access"));
+    const beside = new URLSearchParams(window.location.search);
+    expect(beside.get("panel")).toBe("access");
+    expect(beside.get("section")).toBe("quant");
+    expect(beside.get("test")).toBe("tst_1");
   });
 
   it("follows Back from an open panel to the closed builder", async () => {
