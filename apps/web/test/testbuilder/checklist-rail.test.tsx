@@ -620,3 +620,53 @@ describe("the rail refetches as the author works", () => {
     expect(within(rail()).getByText("5 / 5").closest("p")).toBe(readiness);
   });
 });
+
+// `D18` — ADR 0007 shipped its first half only: `review_requested` and the
+// "In review" badge. The reviewers list, per-question comments and the
+// Approved / Changes-requested marks are `docs/design.md`'s screen 10 and
+// are NOT DESIGNED, so this card names the gap and invents nothing. A card
+// that grew an Approve button here would be the builder promising a review
+// workflow that has no server, no permission and no screen behind it.
+describe("the reviewers card", () => {
+  const IN_REVIEW: TestSummary = { ...TEST_ROW, reviewRequested: true };
+  const inReview = (): ApiClient =>
+    fakeClient({ tests: async () => [IN_REVIEW], test: async () => IN_REVIEW });
+
+  it("shows the review flag and says the rest is not built", async () => {
+    await openBuilder(inReview());
+    expect(screen.getByText(/In review/)).toBeVisible();
+    expect(screen.getByText(/Comments and approvals arrive with ADR 0007's second half/)).toBeVisible();
+  });
+
+  it("offers no comment or approval control", async () => {
+    await openBuilder(inReview());
+
+    // THE CONTROL ARM, and the reason this negative means anything. The
+    // brief's sketch had no mount at all, so `queryByRole` ran against an
+    // empty document and answered `null` before the card existed and after
+    // it — a test that passes either way (`AG3`). The builder IS mounted
+    // above, and the same query mechanism, on the same screen, finds a
+    // control that is really there. Only then is the `null` below evidence.
+    expect(screen.getByRole("button", { name: /^Publish$/ })).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Approve|Comment/ })).toBeNull();
+  });
+
+  // Spec §13: "One family, consistent stroke, SVG, self-hosted or inline —
+  // PRD S-11 has no iconography exception." The badge used to carry U+25C6
+  // BLACK DIAMOND, a font-dependent character in a text node. It is now the
+  // one `ICONS`/`Icon` family, and — this is the half `D18` cares about —
+  // it still contributes NOTHING to the badge's accessible name, which is
+  // the string the list screen's own guard reads.
+  it("carries the badge's glyph as the icon family, not a text character", async () => {
+    await openBuilder(inReview());
+    const badge = screen.getByText(/In review/).closest(".test-badge") as HTMLElement;
+
+    const glyph = badge.querySelector("svg.shell__icon");
+    expect(glyph).not.toBeNull();
+    expect(glyph).toHaveAttribute("aria-hidden", "true");
+    expect(glyph?.querySelectorAll("path").length).toBeGreaterThan(0);
+    // Byte-identical to what it said before the swap: the glyph is hidden,
+    // so the name is the words and only the words.
+    expect(badge).toHaveAccessibleName("In review");
+  });
+});
