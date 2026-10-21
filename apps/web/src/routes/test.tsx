@@ -631,7 +631,7 @@ export function TestBuilder({
           // `D7b`, the other half: a row can outlive the section it names —
           // a delete is a save, and the read that clears the row is a
           // debounce and two round trips behind it. Fix round 1 moved that
-          // judgement into `hasDestination`, which is the one predicate the
+          // judgement into `destinationOf`, which is the one predicate the
           // strip and the panel both read, so a stale row stops ANNOUNCING
           // the journey rather than offering one this then declines — the
           // same defect task 3's review ruled on for field rows.

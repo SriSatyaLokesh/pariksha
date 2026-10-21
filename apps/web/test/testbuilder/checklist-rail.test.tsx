@@ -266,8 +266,9 @@ describe("the checklist rail", () => {
     // no draft this fixture ever had, says what is wrong and promises no
     // journey, exactly as a setting-level row does.
     //
-    // Fix round 1. Before it, `hasDestination` asked only whether the ROW
-    // carried a `sectionId`, so a row could announce a destination that was
+    // Fix round 1. Before it, the predicate (then `hasDestination`, now
+    // `destinationOf`) asked only whether the ROW carried a `sectionId`,
+    // so a row could announce a destination that was
     // not there and do nothing when pressed — the defect task 3's review
     // already ruled on for field rows, reaching the strip by the other door.
     expect(lights.getByText("Blocking — a pool cannot fill.")).toBeInTheDocument();
