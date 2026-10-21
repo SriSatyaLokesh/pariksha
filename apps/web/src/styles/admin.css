@@ -78,8 +78,9 @@
 
 /* THE ONE DECLARATION THAT RE-GROUNDS THE ORGANISER, and it is on `body`
    rather than on `.shell` because four screens render outside the shell:
-   `organiser.tsx`'s `loading`, `error`, `signin` and `setup` arms are a
-   bare `<main class="organiser">` on the page. shell.css's own header
+   `organiser.tsx`'s `loading`, `error`, `signin` and `setup` arms each put
+   their own bare `<main>` on the page — the first two on `.organiser`, and
+   from 6.5e Task 8 the last two on `D18`'s `.screen`. shell.css's own header
    hands this here — "the page between them keeps the cream canvas base.css
    gives <body> until 6.5d and 6.5e re-ground the screens" — and home.css
    scoped the same two fills to Home for the same stated reason.
@@ -231,8 +232,10 @@
    - `.organiser` is BOTH the shell's page (`OrganiserShell.tsx:335` renders
      `organiser ${wide ? "organiser--full" : "organiser--wide"} shell__page`
      on one <main>, so the modifier is one of two and never both) and the
-     whole page of the four arms that render OUTSIDE the shell — `loading`,
-     `error`, `signin`, `setup`. shell.css's `.shell > .shell__page` beats the padding
+     whole page of the two arms that still render OUTSIDE the shell on it —
+     `loading` and `error`. (`signin` and `setup` were the other two until
+     6.5e Task 8 moved them onto `D18`'s `.screen` below; they are a split
+     layout now, not a 560px column.) shell.css's `.shell > .shell__page` beats the padding
      and the margin below for the first set and reaches none of the second,
      so those declarations are live exactly where the shell is not.
    - `.organiser--wide`'s 1080px clamp is read BY shell.css, whose own
@@ -316,6 +319,208 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-lg);
+}
+
+/* ---- D18: the split screen (sign-in and the first-run wizard) ---------- */
+
+/* "The Signal field quieted to one masked radial glow plus a grid, carrying
+   the wordmark, a headline and three checkable facts; the form on the right.
+   Below 900px the brand half drops and the form stands alone."
+
+   These are the two arrival screens, the ones with no shell around them.
+   `organiser.tsx` keeps four arms outside `OrganiserShell`; `loading` and
+   `error` are a sentence on a page and stay on `.organiser` above, and these
+   two are this.
+
+   NOTHING IS IMPORTED FROM `signal.css` AND NOTHING MOVED OUT OF IT (`D10`).
+   6.5e Task 7 judged all twenty-one of its constructs and moved none — every
+   one is rendered by `sections/signal/` today, so taking one would drag the
+   landing palette into the organiser bundle past `theme.css`. The effect is
+   rebuilt here out of this chain's semantic names instead, and it is QUIETER
+   than the landing page's on purpose: `.signal-field` paints two radials and
+   this paints one, which is what "quieted" is.
+
+   D20a — THE GLOW IS ALLOWED TO DISAPPEAR. `theme.css:53-57` rules it:
+   `--glow` is 0.18 alpha on the dark ground and 0.03 on the light one,
+   because a green bloom on a light ground is the same illegal-adjacent move
+   `D1` refused. So the half is carried by its CONTENT on both grounds — the
+   wordmark, the headline and the three facts, all of which paint in `--ink`
+   — and the glow is ornament on one of them. A light-mode replacement
+   ornament would make the two grounds two designs, which is the thing that
+   ruling exists to forbid. */
+
+/* A GRID OF TWO REAL TRACKS, AND BELOW 900px A GRID OF ONE. This is the
+   construct `D3a`'s trap is about and the trap has now been reproduced
+   twice: with the chrome absent, a template that keeps a track for it leaves
+   a zero-wide first column, grid auto-placement drops the content into it,
+   and a complete DOM paints as a blank page. There is no `0` anywhere in
+   either template, and `test/organiser.test.tsx` holds that open by reading
+   the track list rather than by reading this comment.
+
+   The page scale, not the component scale (`D15`, and `shell.css`'s header
+   states the mapping): `--space-xl` is this screen's inset, matching the one
+   `.organiser` takes and the one `shell.css` gives its own page below 719px,
+   so every bare screen in the organiser has the same gutter.
+
+   `100dvh` and `align-items: center`: an arrival screen with one short form
+   on it is the one place in the organiser where vertical centring is right,
+   because there is nothing below the fold to scroll to. */
+.screen {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--space-3xl);
+  align-items: center;
+  min-height: 100dvh;
+  max-width: 1080px;
+  margin-inline: auto;
+  padding-block: var(--space-4xl);
+  padding-inline: var(--space-xl);
+}
+
+/* The field. `overflow: hidden` is what bounds the glow to this half — the
+   radial is deliberately larger than its box, which is how it reads as a
+   bloom rather than as a circle. `position: relative` on the children puts
+   them over both pseudo-elements without either needing a z-index. */
+.screen__brand {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+  padding-inline-end: var(--space-2xl);
+}
+
+.screen__brand > * {
+  position: relative;
+}
+
+/* One radial, off-centre and high, so the brightest point sits behind the
+   wordmark rather than behind the facts. */
+.screen__brand::before {
+  content: "";
+  position: absolute;
+  inset: -30% -20% auto -30%;
+  height: 720px;
+  pointer-events: none;
+  background: radial-gradient(
+    58% 50% at 42% 32%,
+    var(--glow-strong) 0%,
+    transparent 70%
+  );
+}
+
+/* ...and the grid, masked to the same bloom so it fades out rather than
+   ending on a line. `--wash` is the dimmest name this chain has (alpha over
+   the ground's own ink, which is why it inverts correctly on both grounds);
+   a hairline token would read as structure. */
+.screen__brand::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--wash) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--wash) 1px, transparent 1px);
+  background-size: 74px 74px;
+  mask-image: radial-gradient(
+    70% 60% at 42% 32%,
+    var(--ground) 20%,
+    transparent 78%
+  );
+}
+
+.screen__mark {
+  color: var(--ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+  letter-spacing: var(--type-heading-sm-letter-spacing);
+  margin: 0;
+}
+
+/* A <p> and not a heading: the screen's one <h1> is the form's, and a
+   heading here would start the document outline on the brand panel instead
+   of on the thing being done. */
+.screen__headline {
+  color: var(--ink);
+  font-family: var(--type-display-lg-family);
+  font-weight: var(--type-display-lg-weight);
+  font-size: clamp(1.5rem, 1.1rem + 1.6vw, 2.25rem);
+  line-height: 1.2;
+  letter-spacing: var(--type-display-lg-letter-spacing);
+  margin: 0;
+  max-width: 18ch;
+}
+
+.screen__facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-width: 46ch;
+}
+
+.screen__facts li {
+  color: var(--ink-2);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  letter-spacing: var(--type-body-sm-letter-spacing);
+}
+
+.screen__facts b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+/* The numeral is decoration of the <ol>'s own numbering — `aria-hidden` in
+   the markup — so it is set in mono beside the fact rather than replacing a
+   marker. Fixed width so three facts line up whatever the numerals are. */
+.screen__fact-n {
+  display: inline-block;
+  width: 2.5em;
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* The form half carries `.organiser__title`, `.organiser__lead` and a
+   `CardHairline` exactly as it did before the split, so the stack is the one
+   `.organiser` gave them. `--space-lg` is the component scale and this is a
+   stack inside a half rather than a page-to-edge inset; it is also the same
+   value `.organiser__panel` above uses, which is what keeps the two gaps on
+   this screen equal. */
+.screen__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  max-width: 34rem;
+}
+
+/* D18: below 900px the brand half drops and the form stands alone.
+   ONE TRACK, NAMED ONCE — never `0 minmax(0, 1fr)`, which is the shape that
+   renders an empty screen (see `.screen` above, and `shell.css:427-435`,
+   which settled the same question for the shell's own template).
+   The half that leaves is the ornamental one; nothing here touches the form,
+   and `test/organiser.test.tsx` asserts that this block hides the brand half
+   and nothing else. */
+@media (max-width: 899px) {
+  .screen {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    padding-block: var(--space-3xl);
+  }
+
+  .screen__brand {
+    display: none;
+  }
 }
 
 /* ---- D18: the import page's sticky action bar ------------------------- */

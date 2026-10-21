@@ -1,6 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { CardHairline } from "../components/CardHairline";
 import { ButtonSecondary } from "../components/ButtonSecondary";
+import { ScreenSplit } from "../components/organiser/ScreenSplit";
 import { TextField } from "../components/TextField";
 import {
   ApiError,
@@ -71,7 +72,9 @@ export function SignIn({
   }
 
   return (
-    <main id="main-content" className="organiser">
+    // `D18`: the split screen. The brand half is the same on both arrival
+    // screens; the headline is this moment and nothing else.
+    <ScreenSplit headline="Exams your institution runs, on infrastructure your institution owns.">
       <h1 className="organiser__title">Sign in</h1>
       <p className="organiser__lead">
         Organisers sign in here. Candidates do not need an account — their
@@ -136,6 +139,6 @@ export function SignIn({
           </form>
         )}
       </CardHairline>
-    </main>
+    </ScreenSplit>
   );
 }

@@ -249,11 +249,11 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // ---- admin.css: the organiser screens (P3.9, re-grounded by 6.5e T1b) --
   // `D1`: the organiser left the cream palette. `admin.css` now paints
   // `body` with `--ground` — the four arms that render OUTSIDE the shell
-  // (`loading`, `error`, `signin`, `setup`) are a bare `<main
-  // class="organiser">` on it — and every panel is a CardHairline, which
-  // fills itself with `--surface`. So the page's own type reads on the
-  // ground and a panel's type reads on the surface, which is the same
-  // two-level split the cream/canvas pair carried.
+  // (`loading`, `error`, `signin`, `setup`) each put their own bare `<main>`
+  // on it — and every panel is a CardHairline, which fills itself with
+  // `--surface`. So the page's own type reads on the ground and a panel's
+  // type reads on the surface, which is the same two-level split the
+  // cream/canvas pair carried.
   ":root[data-theme] body": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__title": { dark: "signal-bg", light: "signal-l-bg" },
   ".organiser__lead": { dark: "signal-bg", light: "signal-l-bg" },
@@ -267,6 +267,21 @@ const SURFACE: Record<string, SurfaceEntry> = {
     dark: "signal-surface",
     light: "signal-l-surface",
   },
+  // `D18`'s split screen (6.5e Task 8). THE GROUND, named rather than
+  // guessed: the brand half fills NOTHING. Its two pseudo-elements paint a
+  // radial `--glow-strong` and a `--wash` grid, both of them alpha over
+  // whatever is behind, and what is behind is `:root[data-theme] body`'s
+  // `--ground`. The form half fills nothing either — its only filled box is
+  // the CardHairline inside it, whose own type is scored through
+  // `.organiser__notice` / `.organiser__status` above. So every selector
+  // here reads on the ground, which is also why `D20a` costs this screen no
+  // contrast: the glow going near-invisible on the light ground changes the
+  // background these five are measured against by nothing at all.
+  ".screen__mark": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__headline": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__facts li": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__facts b": { dark: "signal-bg", light: "signal-l-bg" },
+  ".screen__fact-n": { dark: "signal-bg", light: "signal-l-bg" },
   // registration.css, which admin.css and exam.css both import (Phase 6
   // Task 6, #70): one renderer, so one stylesheet, read on canvas in both
   // places — the candidate's `.exam-register-panel` fills itself with
@@ -697,6 +712,11 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ":root[data-theme] .registration-form__error": { px: 14, weight: 400 },
   ":root[data-theme] .rendered--stem": { px: 18, weight: 400 },
   ":root[data-theme] .prompt-editor__tool": { px: 12, weight: 400 },
+
+  // `D18`'s split screen (6.5e Task 8). The <b> that opens each fact names
+  // the mechanism and changes nothing but weight and ink, so its size is the
+  // body-sm scale `.screen__facts li` sets on the line it sits in.
+  ".screen__facts b": { px: 14, weight: 600 },
 
   // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
   // The builder's facts, consequences and summaries are <p> elements that
