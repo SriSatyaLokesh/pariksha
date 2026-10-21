@@ -436,8 +436,9 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     expect(declarations(body)).toContain("box-shadow: 0 0 0 3px var(--accent-wash)");
 
     // ...and the voltage ring base.css paints is not what wins here. The
-    // organiser rule is (0,1,1) against base.css's (0,1,0), so it wins in
-    // either chunk order — which is the whole point of writing it that way.
+    // organiser rule is (0,3,0) against base.css's (0,1,0), so it wins in
+    // either chunk order — which is the whole point of writing it that way,
+    // and the whole reason Task 1b's body tie shipped past a green suite.
     expect(css).not.toMatch(/:root\[data-theme\] :focus-visible \{[^}]*voltage/);
   });
 

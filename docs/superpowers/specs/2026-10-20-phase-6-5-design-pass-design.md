@@ -499,6 +499,55 @@ and the open question they frame cannot be answered as posed. Before building on
 > **Cost if wrong.** Roughly a week of test work dragged behind `D3`. The lighter reading —
 > mechanical prop-drop only — was offered and refused.
 
+*Pointer, not an amendment — `D14`'s rule stands as written; its example and its cost estimate do not.*
+**The named instance was already closed when this plan started** (6.5e preflight, 2026-10-21).
+`bank-browser.test.tsx` "renders `BankBrowser` directly 13 times" was true when the spec was written and
+is now **zero**: 6.5c migrated the file in `1a8e9f2`, because `D3` deleted the props those renders
+passed, and its header at `:161-166` records the migration in exactly those terms. It renders
+`OrganiserApp` once, through `openBankList`/`openBrowser` at `:168-181`. This is the **sixth** figure in
+this spec produced by a method that was never checked against what it claimed to measure — after `D8`'s
+63 font-size literals, `D16a`'s duplicate ids, `D13`'s 56px/11-row figures, §1's voltage counts and
+§8's `#179` shapes.
+
+**But the rule is very much alive, and the work is not where the example put it.** Measured across
+`apps/web/test/authoring/` and `apps/web/test/testbuilder/` (9,498 lines today, not 7,551 — the
+directories grew through 6.5c and 6.5d):
+
+| file | direct component mounts |
+| --- | --- |
+| `testbuilder/timing.test.tsx` | 27 |
+| `testbuilder/release-branding.test.tsx` | 22 |
+| `testbuilder/form-builder.test.tsx` | 21 |
+| `authoring/reorder.test.tsx` | 21 |
+| `testbuilder/access.test.tsx` | 19 |
+| `testbuilder/sections.test.tsx` | 18 |
+| `testbuilder/candidate-list.test.tsx` | 11 |
+| `authoring/import-dialog.test.tsx` | 5 |
+| `authoring/render.test.tsx` | 5 |
+| `authoring/choice-editor.test.tsx` | 4 |
+| `testbuilder/qr-code.test.tsx` | 4 |
+| `testbuilder/url-check.test.tsx` | 3 |
+| eleven others | 1-2 each |
+
+**Scoping ruling made at 6.5e preflight, and flagged to the owner rather than buried.** `D14` as
+written binds the **file**: "any test file this phase edits is rewritten to click from `OrganiserApp`".
+Read literally, 6.5e's shuffle task — which adds a handful of tests to `sections.test.tsx` — would owe a
+rewrite of that file's eighteen unrelated mounts, and its question-picker task would owe more. 6.5e
+instead migrates **the mounts a task's own change touches**, inventories the rest, and leaves them.
+
+The reason is that `D14`'s own justification has been spent. The ruling rests on "`D3` deletes props
+those tests pass, so they must be touched anyway" — and that was true for `bank-browser.test.tsx`,
+which is why 6.5c migrated it for free alongside work that had to happen. 6.5c has now deleted those
+props; the remaining files compile untouched. So the rewrite no longer rides along with anything: it is
+standalone work of roughly 160 mounts, which is precisely the "roughly a week of test work" this
+ruling's own **Cost if wrong** paragraph priced — and 6.5e's tasks are sized for a restyle, not for a
+week of test migration each.
+
+This is a narrowing of a locked owner's ruling and the owner should see it. It is **not** the lighter
+reading that was offered and refused — that was "mechanical prop-drop only", which would have migrated
+nothing. The inventory above is filed as its own piece of work rather than dropped, on the same footing
+as issue 200.
+
 ### D15 — two spacing scales
 
 > **Ruling.** **Inside** a component: 4 / 6 / 8 / 12 / 16. **Between** the page and its edges:

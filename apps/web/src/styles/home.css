@@ -363,8 +363,11 @@
    --surface plus a translucent --wash. An opaque --surface fill therefore
    read as a hard-edged rectangle one step off its own row. The wash is
    layered as a background IMAGE rather than as an inset box-shadow so it
-   cannot out-specify `.home :focus-visible`'s ring on a row that is both
-   hovered and focused. */
+   cannot out-specify the focus ring on a row that is both hovered and
+   focused. (The ring is `:root[data-theme] :focus-visible` in theme.css
+   since 6.5e Task 1b; this file's own `.home :focus-visible` was deleted as
+   redundant against it. A background-image cannot out-specify a box-shadow
+   whichever rule paints it, so the reasoning is unchanged by the move.) */
 .home__row:hover .home__row-action {
   background-image: linear-gradient(var(--wash), var(--wash));
 }
