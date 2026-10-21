@@ -538,6 +538,18 @@ duplicate id defeats it before the grid is involved. The builder uses `useId()` 
 per-panel prefix) for every `id`, `for` and `aria-describedby`; a section panel and a settings panel
 are both repeated constructs, so this is not hypothetical.
 
+*Pointer, not an amendment — `D16a` stands as written.* **The shipped builder already satisfies it**
+(6.5d Task 5 preflight, 2026-10-21). The duplicate-id measurement above was taken on the
+**prototype**, where three frames render one `screen()`; it was never taken against `apps/web`. In
+the shipped tree every repeated construct already derives its ids from `useId()` —
+`AccessPanel.tsx:105`, `BrandingPanel.tsx:77` and `FormBuilder.tsx:342` each hold `const ids =
+useId()` and build every `id`, `for` and `aria-describedby` from it, and the authoring components do
+the same. The only literal `id=` left in either directory is `PublishChecklist.tsx`'s
+`checklist-rail-heading`, which labels a singleton rail and is not a field. So `D16a`'s id work is
+**closed as already satisfied**, like `D8`'s sweep before it, and Task 5's id tests are regression
+guards on behaviour that already holds rather than a fix. The rule itself still binds every control
+the task adds.
+
 **Verified against both branches.** Every live row measures **0px** spread on labels and on control
 tops; the deliberately broken proof row measures **20.4px**. The `@supports not (subgrid)` path was
 forced on and re-measured: still 0px on every live row. A row whose fields all lack help resolves its
