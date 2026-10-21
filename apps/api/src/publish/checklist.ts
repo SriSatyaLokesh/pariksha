@@ -426,7 +426,7 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
-  // Phase 7a Task 6 (`Q1c`): proctoring's three rows. All three are
+  // Phase 7a Task 6 (`Q1c`): proctoring's four rows. All four are
   // advisory — Phase 7 adds no blocking row. `resolveProctoring` is the
   // one reader every Phase 7 consumer resolves settings through (`Q1`),
   // so this reads it the same way the candidate-side gates do rather than
@@ -437,12 +437,38 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
   // enforces fullscreen and watermarking but watches nothing. The row that
   // was going to block instead — a `lock` with no way to reach the
   // organiser — stays advisory for a narrower reason below.
+  //
+  // This is the one place in this branch that reads `profile`, and it is
+  // deliberate, not a crack in `Q1`. `Q1`'s ban is on a reader deciding
+  // what to *enforce* by asking "which profile is this?" instead of
+  // asking `resolveProctoring`; this row is advice about the organiser's
+  // *selection* — "you chose the preset whose defining control you then
+  // switched off" — which cannot be said at all without naming the
+  // preset they picked. It is not a licence for an enforcement reader to
+  // do the same: nothing downstream of this row may branch on `profile`
+  // to decide what a candidate is held to.
   if (proctoring.profile === "strict" && !proctoring.requireCamera) {
     rows.push({
       id: "proctoring_strict_no_camera",
       severity: "advisory",
       field: "proctoring.overrides.require_camera",
       message: "strict without a camera requirement observes nothing a candidate can see",
+    });
+  }
+
+  // `Q11b`: without `require_camera`, `getUserMedia` for video is never
+  // called at all — no permission prompt, no indicator, no capture. An
+  // organiser who asked for an identity photo or periodic snapshots with
+  // the camera off has asked for something nothing can take, and
+  // `proctoringRequirements` (`@pariksha/core`) already refuses to promise
+  // it to the candidate for the same reason. This is where the organiser
+  // is told, since nothing in the candidate-facing sentences can say it.
+  if (!proctoring.requireCamera && (proctoring.identityPhoto || proctoring.snapshotIntervalSeconds > 0)) {
+    rows.push({
+      id: "proctoring_capture_without_camera",
+      severity: "advisory",
+      field: "proctoring.overrides.require_camera",
+      message: "images or an identity photo are requested but there is no camera to take them, so nothing will be captured",
     });
   }
 

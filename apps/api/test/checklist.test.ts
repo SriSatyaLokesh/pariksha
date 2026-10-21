@@ -427,6 +427,30 @@ it("advises on Strict without a camera, and never blocks", async () => {
   expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
 });
 
+it("advises when a capture is requested with no camera to take it, and never blocks", async () => {
+  await saveDraft({
+    settings: {
+      proctoring: {
+        profile: "standard",
+        overrides: { require_camera: false, identity_photo: true },
+      },
+    },
+  });
+  const list = await rows();
+  expect(list.find((r) => r.id === "proctoring_capture_without_camera")).toMatchObject({
+    severity: "advisory",
+    field: "proctoring.overrides.require_camera",
+  });
+  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+});
+
+it("is silent about capture without a camera when nothing is asking for one", async () => {
+  await saveDraft({
+    settings: { proctoring: { profile: "standard", overrides: { require_camera: false } } },
+  });
+  expect(ids(await rows())).not.toContain("proctoring_capture_without_camera");
+});
+
 it("states images, megabytes and uploads per candidate on an expensive configuration", async () => {
   await saveDraft({
     settings: {
