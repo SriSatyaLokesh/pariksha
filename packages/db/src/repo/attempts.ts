@@ -160,23 +160,36 @@ export const getAttempt = scoped(
   },
 );
 
+/** The closed set `setIntegrity` ever writes. The **writer's** input is
+ *  typed to it because this is the only place a value is produced; the
+ *  reader (`getAttempt`'s `integrityFlag`) stays `string` — the database
+ *  can hold anything, and a reader that claims otherwise is worse than one
+ *  that admits it does not know. */
+export type IntegrityFlag = "clean" | "review" | "high_risk";
+
 /**
  * Sets the integrity verdict and whether this attempt was observed —
  * proctoring's axis, independent of `flag` (grading's). Phase 7e computes
  * `integrityFlag` from `observed` and other signals; this is only the
  * writer, which is why it never touches `flag`.
+ *
+ * `updated` says whether a row was actually written, the way `DbClient.run`
+ * reports for every other writer in this file — a later plan's recompute
+ * needs to tell a written verdict from a no-op against an attempt that was
+ * since deleted.
  */
 export const setIntegrity = scoped(
   "setIntegrity",
   async (
     db: DbClient,
     workspaceId: string,
-    input: { attemptId: string; integrityFlag: string; observed: boolean },
-  ): Promise<void> => {
-    await db.run(
+    input: { attemptId: string; integrityFlag: IntegrityFlag; observed: boolean },
+  ): Promise<{ updated: boolean }> => {
+    const { changes } = await db.run(
       "UPDATE attempt SET integrity_flag = ?, observed = ? WHERE workspace_id = ? AND id = ?",
       [input.integrityFlag, input.observed ? 1 : 0, workspaceId, input.attemptId],
     );
+    return { updated: changes > 0 };
   },
 );
 

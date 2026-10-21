@@ -286,11 +286,12 @@ it("keeps a scoring_blocked flag through an integrity update", async () => {
   const id = await attempt(alpha, { candidateId, tokenHash: "integrity-blocked" });
   await db.run("UPDATE attempt SET flag = ? WHERE id = ?", ["scoring_blocked", id]);
 
-  await setIntegrity(db, alpha.workspaceId, {
+  const result = await setIntegrity(db, alpha.workspaceId, {
     attemptId: id,
     integrityFlag: "high_risk",
     observed: false,
   });
+  expect(result).toEqual({ updated: true });
 
   const row = await getAttempt(db, alpha.workspaceId, id);
   expect(row?.flag).toBe("scoring_blocked");
@@ -298,6 +299,19 @@ it("keeps a scoring_blocked flag through an integrity update", async () => {
   // Not merely falsy: SQLite stores this as 0, and `toBe(false)` would pass
   // on a raw 0 just as readily as on a real boolean.
   expect(row?.observed).toBe(false);
+});
+
+// Task 7 (whole-branch review): a later plan's recompute needs to tell a
+// written verdict from a no-op against an attempt that no longer exists —
+// `DbClient.run`'s `changes` already says this for every other writer in
+// this file, and `setIntegrity` was the one that discarded it.
+it("setIntegrity reports no update against an attempt that does not exist", async () => {
+  const result = await setIntegrity(db, alpha.workspaceId, {
+    attemptId: "att_does_not_exist",
+    integrityFlag: "review",
+    observed: true,
+  });
+  expect(result).toEqual({ updated: false });
 });
 
 it("defaults a fresh attempt to clean and observed", async () => {
