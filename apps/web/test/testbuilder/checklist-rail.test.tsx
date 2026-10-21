@@ -257,9 +257,23 @@ describe("the checklist rail", () => {
     // One light per row, every time — the strip is the rows, not a selection
     // from them.
     expect(lights.getAllByRole("listitem")).toHaveLength(7);
-    // ...but only the three that name a section are controls. A light for a
-    // setting-level row has nowhere to go, so it is not something to press.
-    expect(lights.getAllByRole("button")).toHaveLength(3);
+
+    // ...but only a row that names a section the draft STILL HAS is a
+    // control. Three of the seven name a section and all three are lit — the
+    // count above does not move — and the one naming `Section B`, which is in
+    // no draft this fixture ever had, says what is wrong and promises no
+    // journey, exactly as a setting-level row does.
+    //
+    // Fix round 1. Before it, `hasDestination` asked only whether the ROW
+    // carried a `sectionId`, so a row could announce a destination that was
+    // not there and do nothing when pressed — the defect task 3's review
+    // already ruled on for field rows, reaching the strip by the other door.
+    expect(lights.getByText("Blocking — a pool cannot fill.")).toBeInTheDocument();
+    expect(
+      lights.getByText('Blocking — section "Quantitative aptitude" has no questions. Go to quant.'),
+    ).toBeInTheDocument();
+    expect(lights.getByText("Advisory — sets have unequal total points. Go to reasoning.")).toBeInTheDocument();
+    expect(lights.getAllByRole("button")).toHaveLength(2);
     expect(screen.queryByRole("button", { name: /re-run the checks/i })).toBeNull();
 
     fireEvent.click(pin());
@@ -273,9 +287,11 @@ describe("the checklist rail", () => {
     await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
     fireEvent.click(collapse());
 
-    expect(
-      screen.getByRole("button", { name: /Blocking — a pool cannot fill\. Go to Section B\./ }),
-    ).toBeVisible();
+    // A row naming a section the draft does not have is in the same case as
+    // a setting-level row: it states the problem and promises nothing (fix
+    // round 1 — it used to read "Go to Section B" and then not go).
+    expect(screen.getByText("Blocking — a pool cannot fill.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /a pool cannot fill/ })).toBeNull();
 
     // A row that names a setting field says what is wrong and promises no
     // journey, because there is none to make: `onGoTo` opens a section and
@@ -307,7 +323,7 @@ describe("the checklist rail", () => {
     expect(screen.queryByRole("button", { name: /re-run the checks/i })).toBeNull();
 
     // Tabbing into the strip floats it too — a keyboard reader never hovers.
-    fireEvent.focus(screen.getByRole("button", { name: /Blocking — a pool cannot fill\. Go to Section B\./ }));
+    fireEvent.focus(screen.getByRole("button", { name: /Go to quant\./ }));
     expect(screen.getByRole("button", { name: /re-run the checks/i })).toBeVisible();
   });
 
@@ -487,14 +503,48 @@ describe("the rail refetches as the author works", () => {
     fireEvent.click(within(screen.getByRole("dialog", { name: /delete this section/i })).getByRole("button", { name: /^delete$/i }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /^Quantitative aptitude/ })).toBeNull());
 
-    // The light still offers the journey, because the rail is still holding
-    // the rows it was given. Pressing it must not take the builder to a
-    // section that is not there — a `?section=` naming nothing opens nothing
-    // AND suppresses every setting panel (`panelFromUrl`), so the reader is
-    // left on a screen with no spine and no settings.
-    fireEvent.click(screen.getByRole("button", { name: /Go to quant\./ }));
+    // The row is still in the rail, because the rail is still holding what it
+    // was given — but there is now nothing to press. A `?section=` naming
+    // nothing opens nothing AND suppresses every setting panel
+    // (`panelFromUrl`), so a control that offered that journey and then
+    // declined it would be the same keyboard-reachable lie as a field row
+    // dressed as a destination (fix round 1).
+    expect(within(rail()).getByText(/section "Quantitative aptitude" has no questions/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Go to quant\./ })).toBeNull();
 
+    // Nowhere was navigated to, and the builder is where it was.
     expect(new URLSearchParams(window.location.search).get("section")).toBeNull();
     expect(screen.getByRole("heading", { name: /^sections$/i })).toBeVisible();
+  });
+
+  // Concern 3, answered in its narrow form: `D7b` makes the rail change under
+  // the reader, so the one string that summarises what moved says so. ONLY
+  // that string — a strip announcing every row while an author types would be
+  // worse than silence — and `aria-atomic`, because without it a reader hears
+  // the half that changed ("2 must fix") with nothing to measure it against.
+  it("announces the readiness figure, and only it, when a save moves the rows", async () => {
+    const advisory = ROWS.filter((row) => row.severity === "advisory");
+    let reads = 0;
+    const checklist = vi.fn(async () => {
+      reads += 1;
+      return reads === 1 ? ROWS : advisory;
+    });
+    await openBuilder(fakeClient({ checklist, patchDraft: echo }));
+    await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
+
+    const readiness = within(rail()).getByText("5 / 7").closest("p");
+    expect(readiness).toHaveAttribute("aria-live", "polite");
+    expect(readiness).toHaveAttribute("aria-atomic", "true");
+    // The rows themselves are not a live region: nothing else in the rail
+    // announces, which is the whole of the budget this feature gets.
+    expect(rail().querySelectorAll("[aria-live]")).toHaveLength(1);
+
+    typeSeveralEdits();
+    await settle();
+
+    // The same element, with the new figure in it — an announcement, not a
+    // region that unmounted and came back.
+    await waitFor(() => expect(within(rail()).getByText("5 / 5")).toBeVisible());
+    expect(within(rail()).getByText("5 / 5").closest("p")).toBe(readiness);
   });
 });

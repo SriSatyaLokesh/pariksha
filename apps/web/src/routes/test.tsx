@@ -572,30 +572,26 @@ export function TestBuilder({
         <PublishChecklist
           railRef={railRef}
           rows={checklist}
+          // `D7b` fix round 1: the rows and the sections answer questions
+          // asked at different moments — the rows were read before the
+          // author's last keystroke — so the rail is handed both and decides
+          // which rows still lead anywhere.
+          sectionIds={draft.body.sections.map((section) => section.id)}
           version={draft.version}
           rerunning={rerunning}
           busy={publishing}
           state={rail.checklist}
           onState={setChecklistRail}
+          // `D7b`, the other half: a row can outlive the section it names —
+          // a delete is a save, and the read that clears the row is a
+          // debounce and two round trips behind it. Fix round 1 moved that
+          // judgement into `hasDestination`, which is the one predicate the
+          // strip and the panel both read, so a stale row stops ANNOUNCING
+          // the journey rather than offering one this then declines — the
+          // same defect task 3's review ruled on for field rows. Nothing
+          // reaches here that the rail did not just find a destination for.
           onGoTo={(row) => {
-            // `D7b`, the other half: the rows are a reading of a moment, and
-            // one can outlive the section it names — a delete is a save, and
-            // the refetch that corrects the rail is a debounce and two round
-            // trips behind the click. `?section=` naming nothing opens
-            // nothing AND suppresses every setting panel (`panelFromUrl`),
-            // so following a stale row would leave the reader on a builder
-            // with no open section and no settings and nothing saying why.
-            //
-            // ponytail: the guard is here and not in `openSection`, which
-            // `SectionList` calls with an id it has only just added —
-            // `draft` in this closure is still the pre-add one, and a
-            // membership test there would refuse to open a brand-new
-            // section. Upgrade path: give `PublishChecklist` the live
-            // section ids so a stale row stops announcing a journey at all,
-            // rather than announcing one this ignores.
-            if (row.sectionId === undefined) return;
-            if (!draft.body.sections.some((section) => section.id === row.sectionId)) return;
-            openSection(row.sectionId);
+            if (row.sectionId !== undefined) openSection(row.sectionId);
           }}
           onRerun={() => void runChecklist()}
           onConfirm={() => void onPublish()}

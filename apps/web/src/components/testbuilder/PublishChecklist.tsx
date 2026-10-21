@@ -59,14 +59,25 @@ const SEVERITY_GLYPH: Readonly<Record<ChecklistRow["severity"], string>> = {
  * fixture. One predicate, read by the strip and by the panel below, so the
  * two cannot disagree about which rows are reachable.
  *
+ * `D7b` fix round 1: and a row that names a section the draft NO LONGER HAS
+ * is in exactly that case, by the other door. The rail's rows are a reading
+ * of a moment and one can outlive the section it names — deleting a section
+ * is a save, and the read that clears the row is a debounce and two round
+ * trips behind the delete. So the question is not "does this row carry a
+ * `sectionId`" but "is that section still there to open", which is why this
+ * takes the live ids: a `?section=` naming nothing opens nothing AND
+ * suppresses every setting panel (`test.tsx`'s `panelFromUrl`), so following
+ * a stale row leaves the reader on a builder with no open section, no
+ * settings, and nothing saying why.
+ *
  * The settings now have addressable rows of their own (`D7`, Task 1), so
  * routing a field row to the panel that owns it is a real option and a
  * strictly better answer than this one. It needs a field -> `PanelKey` map
  * that only the gate's own field names can justify, and that is a ruling
  * about the gate's vocabulary rather than about this component. Until then
  * the honest rendering is: say the problem, promise no journey. */
-function hasDestination(row: ChecklistRow): boolean {
-  return row.sectionId !== undefined;
+function hasDestination(row: ChecklistRow, sectionIds: readonly string[]): boolean {
+  return row.sectionId !== undefined && sectionIds.includes(row.sectionId);
 }
 
 /** What a light is called. Three colours cannot carry three meanings on
@@ -75,9 +86,9 @@ function hasDestination(row: ChecklistRow): boolean {
  *  what carries it: what is wrong, and — when there is one — where to go.
  *  The words after the dash are the server's; only the severity and the
  *  destination are this file's. */
-function lightName(row: ChecklistRow): string {
+function lightName(row: ChecklistRow, sectionIds: readonly string[]): string {
   const severity = row.severity === "blocking" ? "Blocking" : "Advisory";
-  return hasDestination(row)
+  return hasDestination(row, sectionIds)
     ? `${severity} — ${row.message}. Go to ${row.sectionId}.`
     : `${severity} — ${row.message}.`;
 }
@@ -94,6 +105,7 @@ function keyOf(row: ChecklistRow): string {
 export function PublishChecklist({
   railRef,
   rows,
+  sectionIds,
   version,
   rerunning,
   state,
@@ -110,6 +122,10 @@ export function PublishChecklist({
   /** `null` until the screen's own load answers. Not `[]`: an empty array is
    *  "every check passed", which is the opposite claim. */
   rows: readonly ChecklistRow[] | null;
+  /** The sections the draft has **right now**, which is a different question
+   * from the one the rows answer: they were read before the author's last
+   * keystroke. `hasDestination` above says why the difference matters. */
+  sectionIds: readonly string[];
   /** The version number publishing would freeze — named on the button, so
    * the confirmation says what it does rather than "OK". */
   version: number;
@@ -159,7 +175,17 @@ export function PublishChecklist({
         </h2>
 
         {rows !== null && (
-          <p className="checklist-rail__readiness">
+          /* `D7b`: the rail changes under the reader now — once per settled
+             save burst — so the one string that summarises what moved
+             announces itself. ONLY this string: the rows are not a live
+             region, because a strip announcing every row while an author
+             types would be worse than silence, and this is the whole of the
+             announcement budget the feature gets.
+
+             `aria-atomic`, because the figure and its qualifier are separate
+             nodes: without it a reader hears whichever half changed ("2 must
+             fix") with nothing to measure it against. */
+          <p className="checklist-rail__readiness" aria-live="polite" aria-atomic="true">
             {rows.length === 0 ? (
               <strong>All clear</strong>
             ) : (
@@ -215,7 +241,7 @@ export function PublishChecklist({
             </li>
           ) : (
             rows.map((row) =>
-              hasDestination(row) ? (
+              hasDestination(row, sectionIds) ? (
                 <li key={keyOf(row)}>
                   <button
                     type="button"
@@ -223,13 +249,13 @@ export function PublishChecklist({
                     data-severity={row.severity}
                     onClick={() => onGoTo(row)}
                   >
-                    <span className="visually-hidden">{lightName(row)}</span>
+                    <span className="visually-hidden">{lightName(row, sectionIds)}</span>
                   </button>
                 </li>
               ) : (
                 <li key={keyOf(row)}>
                   <span className="checklist-rail__light" data-severity={row.severity}>
-                    <span className="visually-hidden">{lightName(row)}</span>
+                    <span className="visually-hidden">{lightName(row, sectionIds)}</span>
                   </span>
                 </li>
               ),
@@ -261,7 +287,7 @@ export function PublishChecklist({
                       predicate answers it in both places. The field is still
                       stated, because it is how the organiser finds the
                       setting; it is simply not dressed as a journey. */}
-                  {hasDestination(row) ? (
+                  {hasDestination(row, sectionIds) ? (
                     <button type="button" className="button-link" onClick={() => onGoTo(row)}>
                       Go to {row.sectionId}
                     </button>
