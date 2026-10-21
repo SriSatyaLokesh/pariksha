@@ -117,6 +117,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* `D19`: each section's own shuffle state, on its collapsed row. A chip
+   rather than a sixth clause in UX-12's sentence — it is a switch's state,
+   not a figure, and it reads at a glance down a column of rows. Bordered
+   with --edge-strong rather than --edge: the border is the only thing
+   making this read as a chip rather than as one more line of row text, so
+   it carries meaning and takes the 3:1 tone (DESIGN.md). `align-self`
+   because .section-row is a column flex container, in which a block child
+   would stretch the chip the whole width of the row. */
+.section-row__chip {
+  align-self: start;
+  margin: 0;
+  padding: var(--space-xs) var(--space-base);
+  border: 1px solid var(--edge-strong);
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
 .section-row__draw {
   color: var(--ink-3);
   font-family: var(--type-mono-sm-family);

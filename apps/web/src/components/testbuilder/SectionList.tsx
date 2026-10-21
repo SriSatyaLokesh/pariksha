@@ -110,6 +110,17 @@ function collapsedLabel(
   return `${section.title || "Untitled section"} · ${section.source.kind} · ${countLabel(section, draw)} · ${pointsLabel(points[section.id])} · ${timeLabel(section)}`;
 }
 
+/** `D19`: the half of shuffling that exists, on the collapsed row. Reads
+ * `shuffle_questions` — whose schema default is `true` (schemas/test-1.json,
+ * `$defs/section`) — and never writes it: a chip that wrote back what it
+ * renders would flip every draft relying on that default the moment the
+ * screen opened. Both states are worded, not only the on one: a chip that
+ * vanishes when shuffling is off is indistinguishable from one that failed
+ * to render, and colour alone would carry the difference otherwise. */
+function shuffleChipLabel(section: StoredSection): string {
+  return (section.shuffle_questions ?? true) ? "Questions shuffled" : "Questions in order";
+}
+
 function replaceAt<T>(items: readonly T[], index: number, value: T): T[] {
   return items.map((item, i) => (i === index ? value : item));
 }
@@ -171,6 +182,7 @@ export function SectionList({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ section: StoredSection; index: number } | null>(null);
   const [picker, setPicker] = useState<{ sectionId: string; setIndex?: number } | null>(null);
+  const sectionOrderId = useId();
 
   // Fix round (task 3 review, I9): Escape, initial focus and returning
   // focus to the control that opened each dialog.
@@ -279,6 +291,12 @@ export function SectionList({
                 {collapsedLabel(section, draw, points)}
               </button>
 
+              {/* `D19`: outside the summary button on purpose. The button's
+                  accessible name is UX-12's fixed sentence, and folding a
+                  sixth fact into it would change what a screen reader hears
+                  for every row. */}
+              <p className="section-row__chip">{shuffleChipLabel(section)}</p>
+
               {/* Fix round (task 3 review, I2): UX-15's live draw — "N drawn
                   from M matching" — is the normal-case sentence
                   (docs/design.md:225); the shortfall warning beside it is
@@ -361,6 +379,32 @@ export function SectionList({
       <button type="button" className="button-secondary" onClick={addSection}>
         Add section
       </button>
+
+      {/* `D19`'s other half, and the reason it is drawn at all. Shuffling the
+          ORDER OF THE SECTIONS is not supported: `pariksha/test@1` has no
+          `shuffle_sections` field, adding one is a format bump, and it needs
+          a ruling on whether per-section time limits still hold when the
+          order varies. That is a feature and an ADR, not a design control —
+          so the control renders disabled and says so, which gives it a home
+          for the day it lands and stops anyone drawing a toggle that does
+          nothing. It holds no state and reaches no handler, so there is
+          nothing here for a patch to carry.
+
+          The sentence below is persistent text rather than a tooltip or a
+          `title`, for the same reason every other consequence on this screen
+          is: a disabled input takes no focus, so a description hung off it
+          is one a keyboard or touch user may never hear. */}
+      <fieldset className="shuffle-group">
+        <legend>Section order</legend>
+        <div className="shuffle-group__row">
+          <input type="checkbox" id={sectionOrderId} checked={false} disabled readOnly />
+          <label htmlFor={sectionOrderId}>Order of the sections themselves</label>
+        </div>
+        <p className="shuffle-group__fact">
+          Not supported today — every candidate sees these sections in the order above. Varying it needs a new field
+          in the test format and a decision about per-section time limits.
+        </p>
+      </fieldset>
 
       {picker && (
         <QuestionPickerDrawer
