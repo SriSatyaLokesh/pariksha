@@ -376,30 +376,34 @@ export function TestBuilder({
         // own order, words and severities (#64). Nothing here re-counts or
         // re-sorts them; `PublishChecklist` counts, and counts only what it
         // was given.
-        await Promise.all([
-          (async () => {
-            try {
-              const fresh = await client.draft(workspaceId, testId);
-              if (saveSeq.current !== seq) return;
-              setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
-            } catch {
-              // The save itself landed; only the derived figures are a beat
-              // behind, and the next settled burst corrects them. Reporting a
-              // failure over a save that succeeded would be the worse lie.
-            }
-          })(),
-          (async () => {
-            try {
-              const rows = await client.checklist(workspaceId, testId);
-              if (saveSeq.current !== seq) return;
-              setChecklist(rows);
-            } catch {
-              // A rail that emptied itself on a read that did not answer
-              // would be a louder lie than one a beat stale, so the rows it
-              // is holding stay up until a read succeeds.
-            }
-          })(),
-        ]);
+        //
+        // No join over the two, deliberately (fix round 2 re-review). An
+        // `await Promise.all([…])` here would be inert — nothing follows it,
+        // and each chain already applies its own answer from inside itself —
+        // but it is the one line a later reader could mistake for the
+        // coupling this round removed. Two statements say what happens.
+        void (async () => {
+          try {
+            const fresh = await client.draft(workspaceId, testId);
+            if (saveSeq.current !== seq) return;
+            setDraft((prev) => (prev === null ? prev : { ...fresh, body: prev.body }));
+          } catch {
+            // The save itself landed; only the derived figures are a beat
+            // behind, and the next settled burst corrects them. Reporting a
+            // failure over a save that succeeded would be the worse lie.
+          }
+        })();
+        void (async () => {
+          try {
+            const rows = await client.checklist(workspaceId, testId);
+            if (saveSeq.current !== seq) return;
+            setChecklist(rows);
+          } catch {
+            // A rail that emptied itself on a read that did not answer
+            // would be a louder lie than one a beat stale, so the rows it
+            // is holding stay up until a read succeeds.
+          }
+        })();
       })();
     }, 250);
     return () => clearTimeout(timer);
