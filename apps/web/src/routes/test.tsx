@@ -36,6 +36,7 @@ import { PublishChecklist } from "../components/testbuilder/PublishChecklist";
 import { TestStateBadge } from "./tests";
 import { useDialogKeys } from "../components/useDialogKeys";
 import { readView, writeView } from "../lib/view-url";
+import { readRailState, writeRailState, type RailState } from "../lib/rail-state";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -117,10 +118,20 @@ export function TestBuilder({
   const [test, setTest] = useState<TestSummary | null>(null);
   const [versions, setVersions] = useState<readonly TestVersionSummary[]>([]);
   const [confirming, setConfirming] = useState<"close" | "archive" | null>(null);
-  // Task 13 (#64, P5.11): `null` is "the checklist is not open". Publish
-  // opens it rather than publishing (UX-17: "a publish checklist, not a
-  // publish button"), and confirming inside it is what calls the route.
+  // Task 13 (#64, P5.11), re-sited by 6.5d's `D7`: `null` is "not read
+  // yet", NOT "not open" — the checklist is a rail that is present from the
+  // first paint, so this is filled by `load` below rather than by the
+  // Publish button. `[]` would be the opposite claim ("every check passed")
+  // and is what the rail prints once the load answers with no rows.
+  // UX-17 survives the move: Publish still re-runs the checks and sends the
+  // reader to the rail, and confirming inside the rail is what calls the
+  // route.
   const [checklist, setChecklist] = useState<readonly ChecklistRow[] | null>(null);
+  // `D7a`/`D7d`: which side the viewer left the checklist rail on, per
+  // viewer. Only the checklist side is stored — `rail-state.ts`'s own header
+  // says why the nav side is not.
+  const [rail, setRail] = useState<RailState>(readRailState);
+  const railRef = useRef<HTMLElement>(null);
   const [rerunning, setRerunning] = useState(false);
   const [publishing, setPublishing] = useState(false);
   // UX-18 (Task 7): a test with a published version behind it is the case
@@ -167,9 +178,19 @@ export function TestBuilder({
 
   const historyRef = useRef<HTMLDivElement>(null);
 
+  /** The one writer of the rail's state, so the stored value and the
+   *  rendered one cannot drift. Auto-retraction (`D7a`) goes through here
+   *  too: a reader who opened a section meant the page to make room, and
+   *  that is a preference worth remembering. */
+  const setChecklistRail = useCallback((next: RailState["checklist"]) => {
+    const state: RailState = { checklist: next };
+    setRail(state);
+    writeRailState(state);
+  }, []);
+
   const load = useCallback(async () => {
     try {
-      const [summary, version, branding, listed, history] = await Promise.all([
+      const [summary, version, branding, listed, history, rows] = await Promise.all([
         client.test(workspaceId, testId),
         client.draft(workspaceId, testId),
         // An Author cannot write workspace branding but can read it — the
@@ -181,12 +202,19 @@ export function TestBuilder({
         // collecting a 403 that would fail this whole load.
         canManageCandidates ? client.candidates(workspaceId, testId) : Promise.resolve([]),
         client.versions(workspaceId, testId),
+        // `D7`: the rail is present from the first paint, so its rows are
+        // part of the screen's own load rather than something the Publish
+        // button fetches. `requires("tests.edit")` on the route, which is
+        // exactly who reaches this screen, so no role has to opt out of it
+        // the way `candidates` above does.
+        client.checklist(workspaceId, testId),
       ]);
       setTest(summary);
       setVersions(history);
       setWorkspaceBranding(branding);
       setCandidates(listed);
       setDraft(version);
+      setChecklist(rows);
       setError(undefined);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "The test could not be loaded.");
@@ -224,6 +252,11 @@ export function TestBuilder({
   // 6.5d and 6.5e must keep that invariant or pass the view in.
   function openSection(id: string | null): void {
     setOpenSectionId(id);
+    // `D7a`: "Opening a section or a setting retracts both sides
+    // automatically." The nav side is `OrganiserShell`'s own state under
+    // `D18` and 6.5c owns it; this is the checklist side. A convenience and
+    // never a lock — the pin in the rail still docks it straight back.
+    if (id !== null) setChecklistRail("lights");
     const params = readView(window.location.search);
     if (id) params.section = id;
     else delete params.section;
@@ -238,6 +271,7 @@ export function TestBuilder({
   function togglePanel(id: PanelKey): void {
     const next = openPanel === id ? null : id;
     setOpenPanel(next);
+    if (next !== null) setChecklistRail("lights");
     const params = readView(window.location.search);
     if (next) params.panel = next;
     else delete params.panel;
@@ -355,8 +389,8 @@ export function TestBuilder({
     setPending((prev) => ({ ...prev, settings: { ...prev?.settings, ...settings } }));
   }
 
-  /** Opens the checklist (and re-runs it from inside). The rows are the
-   * server's — this screen never computes one. */
+  /** Re-runs the checks — from the Publish button, and from inside the rail.
+   * The rows are the server's; this screen never computes one. */
   async function runChecklist(): Promise<void> {
     setRerunning(true);
     try {
@@ -373,7 +407,6 @@ export function TestBuilder({
     setPublishing(true);
     try {
       setTest(await client.publishTest(workspaceId, testId));
-      setChecklist(null);
       setError(undefined);
       // The publish opened the next numbered draft server-side (UX-18), so
       // the whole screen is re-read rather than patched up field by field:
@@ -452,7 +485,15 @@ export function TestBuilder({
             aria-disabled={!canPublish || publishing || draft === null}
             aria-describedby={canPublish ? undefined : "publish-why"}
             onClick={() => {
-              if (canPublish && !publishing) void runChecklist();
+              if (!canPublish || publishing) return;
+              // UX-17 is unchanged by `D7`'s move: this still opens the
+              // checklist rather than publishing. What "open" means is now
+              // "re-read it, dock the rail, and take the reader there" —
+              // the rows were already on screen, and a control whose whole
+              // effect is elsewhere on the page has to move focus with it.
+              void runChecklist();
+              setChecklistRail("docked");
+              railRef.current?.focus();
             }}
           >
             Publish
@@ -479,6 +520,31 @@ export function TestBuilder({
         </div>
       )}
 
+      {/* `D7`: the rail, before the spine rather than after it. A direct
+          child of `.shell__page`, deliberately — testbuilder.css lays the
+          builder's page out as two columns and puts this one in the second,
+          and a wrapper around the spine would take shell.css's phone-width
+          `overflow-x: auto` off each panel and give it to the wrapper
+          instead, which is the per-panel scroll container `D3a` wants.
+          Early in the document order, because a rail a keyboard reader
+          reaches only after the whole builder is a rail they never reach. */}
+      {draft !== null && (
+        <PublishChecklist
+          railRef={railRef}
+          rows={checklist}
+          version={draft.version}
+          rerunning={rerunning}
+          busy={publishing}
+          state={rail.checklist}
+          onState={setChecklistRail}
+          onGoTo={(row) => {
+            if (row.sectionId !== undefined) openSection(row.sectionId);
+          }}
+          onRerun={() => void runChecklist()}
+          onConfirm={() => void onPublish()}
+        />
+      )}
+
       {test !== null && draft !== null && (
         <VersionBanner
           draftVersion={draft.version}
@@ -491,21 +557,6 @@ export function TestBuilder({
         <p className="organiser__notice" role="alert">
           {error}
         </p>
-      )}
-
-      {checklist !== null && draft !== null && (
-        <PublishChecklist
-          rows={checklist}
-          version={draft.version}
-          rerunning={rerunning}
-          busy={publishing}
-          onGoTo={(row) => {
-            if (row.sectionId !== undefined) openSection(row.sectionId);
-          }}
-          onRerun={() => void runChecklist()}
-          onConfirm={() => void onPublish()}
-          onClose={() => setChecklist(null)}
-        />
       )}
 
       {confirming !== null && (

@@ -586,3 +586,282 @@
 .setting-row__body {
   padding-block: var(--space-base) var(--space-lg);
 }
+
+/* Phase 6.5d Task 3 (spec `D7`, `D7a`): the publish checklist as a right
+   rail — present from the first paint, collapsing to a 52px strip of
+   indicator lights, and floating the full panel back OVER the page rather
+   than reflowing what is being edited.
+
+   THE PAGE BECOMES TWO COLUMNS, and `:has()` is how, rather than a modifier
+   prop threaded through `OrganiserShell` — the same move home.css makes for
+   the same reason (`.shell__page:has(> .home)`), and it keeps every builder
+   construct a DIRECT child of `.shell__page`. That last part is load-bearing
+   and is not a style choice: shell.css gives `.shell__page > *` its own
+   `overflow-x: auto` below 719px, which is what delivers `D3a`'s "the page
+   itself never scrolls sideways", and a wrapper around the spine would move
+   that from each panel onto the wrapper.
+
+   `grid-row: 1 / span 40` is how the rail spans the page. `1 / -1` does not
+   work here: with no `grid-template-rows` the explicit grid has one line, so
+   `-1` resolves back to line 1 and the span collapses to a single row — the
+   rail would then be as tall as the <h1> beside it and `position: sticky`
+   would have no slack to move in. The tracks past the content are `auto` and
+   therefore zero-height, so the span costs nothing.
+   ponytail: a builder page with more than 40 direct children loses the
+   rail's sticky slack (it would stop sticking, not break); raise the span,
+   or give the page explicit rows, if one ever grows that long.
+
+   `D15`, as shell.css's header maps it: the rail is a construct, so every
+   value inside it is from the in-a-component scale. The gap between the two
+   COLUMNS is a page-to-edge measurement and takes --space-xl.
+
+   `D12` — the builder is an EDITING surface, so `AG1`'s density gate does
+   not govern this; nothing here is packed to win a row count. */
+
+.shell__page:has(> .checklist-rail) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--space-xl);
+  align-content: start;
+}
+
+.shell__page:has(> .checklist-rail) > * {
+  grid-column: 1;
+  min-width: 0;
+}
+
+.shell__page > .checklist-rail {
+  grid-column: 2;
+  grid-row: 1 / span 40;
+  align-self: start;
+  /* Under the shell's own 56px bar plus the page's top inset, so the rail
+     and the bar never overlap. The bar's height is shell.css's --shell-bar,
+     which is declared on `.shell` and therefore inherits down to here. */
+  position: sticky;
+  inset-block-start: calc(var(--shell-bar) + var(--space-xl));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+}
+
+/* The docked rail is a panel; the collapsed one is a 52px strip (`D7a`). */
+.checklist-rail[data-state="docked"] {
+  width: 20rem;
+  border-inline-start: 1px solid var(--color-hairline);
+  padding-inline-start: var(--space-md);
+}
+
+.checklist-rail[data-state="lights"] {
+  width: 52px;
+  align-items: center;
+}
+
+.checklist-rail__head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.checklist-rail[data-state="docked"] .checklist-rail__head {
+  flex-direction: row;
+  align-items: baseline;
+  gap: var(--space-base);
+}
+
+.checklist-rail__heading {
+  margin: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+/* Clipped to the accessibility tree, never removed: a 52px strip has no
+   room for the words and a strip with no name is an unlabelled region. */
+.checklist-rail[data-state="lights"] .checklist-rail__heading {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* `D7c`: the readiness figure lives here, and the digits line up because the
+   figure is read against itself as the organiser works. */
+.checklist-rail__readiness {
+  margin: 0;
+  margin-inline-end: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.checklist-rail[data-state="lights"] .checklist-rail__readiness {
+  margin-inline-end: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  text-align: center;
+}
+
+.checklist-rail__count {
+  color: var(--color-muted);
+}
+
+/* The count is the figure's own qualifier; at 52px there is no room for it
+   and the readiness figure carries the strip alone. The accessible name of
+   each light still states blocking or advisory, so nothing is lost but
+   space. */
+.checklist-rail[data-state="lights"] .checklist-rail__count {
+  display: none;
+}
+
+/* 44px square, the hit target, met by the box rather than by the 18px glyph
+   inside it — the same trade `.shell__icon-button` makes. */
+.checklist-rail__pin {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: var(--color-ink-soft);
+}
+
+.checklist-rail__lights {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  overflow-y: auto;
+}
+
+/* One light per row. The hit target is the 44px box; the dot inside it is
+   12px, which is what a strip of them reads as at a glance. Colour is the
+   GLANCE and never the meaning — each light's accessible name states the
+   severity and the destination in words (PublishChecklist.tsx), because
+   three hues cannot carry three meanings on their own and a reader who sees
+   none of them would be left with an unlabelled dot. */
+.checklist-rail__light {
+  display: block;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  padding: 16px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  background-clip: content-box;
+  border-radius: 50%;
+}
+
+.checklist-rail__light[data-severity="blocking"] {
+  background-color: var(--risk);
+}
+
+.checklist-rail__light[data-severity="advisory"] {
+  background-color: var(--warn);
+}
+
+/* Dimmed, because a passing check is the absence of work: it is there to be
+   counted, not to be looked at. */
+.checklist-rail__light[data-severity="passing"] {
+  background-color: var(--accent);
+  opacity: 0.45;
+}
+
+.checklist-rail__panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-md);
+  min-width: 0;
+  overflow-y: auto;
+}
+
+/* `D7a`'s hard requirement: the floating panel "must never reflow what is
+   being edited". Out of flow is how, and `fixed` rather than `absolute` is
+   WHICH out of flow — below 719px shell.css gives every direct child of the
+   page `overflow-x: auto`, which computes `overflow-y` to `auto` too and
+   makes this rail a scroll container that would clip an absolutely
+   positioned panel at exactly the width where there is least room to spare.
+   A fixed box's containing block is the viewport, which is outside that
+   scroll container, so it is not clipped — shell.css's own prescription
+   ("give the construct somewhere to paint ... rather than widen the rule"),
+   with the viewport as the somewhere. No ancestor of this rail declares
+   `transform`, `filter` or `contain`, which are what would pull a fixed box
+   back into the page and re-arm the clip. */
+.checklist-rail[data-state="lights"] .checklist-rail__panel {
+  position: fixed;
+  inset-block-start: calc(var(--shell-bar) + var(--space-xl));
+  inset-inline-end: calc(var(--space-2xl) + 52px + var(--space-md));
+  z-index: 3;
+  width: 20rem;
+  max-width: calc(100vw - (2 * var(--space-xl)));
+  max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+  background: var(--color-paper);
+  border: 1px solid var(--color-hairline-strong);
+  padding: var(--space-md);
+}
+
+/* ---- D3a: below 719px there is one column, so the rail is a band -------- */
+
+@media (max-width: 719px) {
+  /* One column, and the rail back in the flow at the top of it — a 52px
+     strip beside a 320px page would take a sixth of the screen from the
+     thing being edited. The lights lie along the band instead of down it,
+     the way shell.css turns the nav rail into a strip at this width. */
+  .shell__page:has(> .checklist-rail) {
+    display: flex;
+  }
+
+  .shell__page > .checklist-rail {
+    position: static;
+    max-height: none;
+  }
+
+  .checklist-rail[data-state="docked"],
+  .checklist-rail[data-state="lights"] {
+    width: auto;
+    align-items: stretch;
+    border-inline-start: 0;
+    padding-inline-start: 0;
+    border-block-end: 1px solid var(--color-hairline);
+  }
+
+  .checklist-rail__head,
+  .checklist-rail[data-state="docked"] .checklist-rail__head {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-base);
+  }
+
+  .checklist-rail[data-state="lights"] .checklist-rail__readiness {
+    margin-inline-end: auto;
+    text-align: start;
+  }
+
+  .checklist-rail__lights {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-start;
+  }
+
+  /* The panel still floats over the page rather than opening it: this is the
+     width where reflowing the spine costs the most. Anchored to the page's
+     own gutters, so the whole box is inside the viewport at 320px. */
+  .checklist-rail[data-state="lights"] .checklist-rail__panel {
+    inset-inline: var(--space-xl);
+    width: auto;
+  }
+}

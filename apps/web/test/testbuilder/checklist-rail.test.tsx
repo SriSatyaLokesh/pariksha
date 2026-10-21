@@ -284,7 +284,10 @@ describe("the checklist rail", () => {
     await waitFor(() => expect(within(rail()).getByText("5 / 7")).toBeVisible());
     expect(rail()).toHaveAttribute("data-state", "docked");
 
-    fireEvent.click(screen.getByRole("button", { name: /quantitative aptitude/i }));
+    // The section's own summary button, anchored at the start of its name:
+    // the reorder controls beside it are "Move section Quantitative aptitude
+    // up" and would match a looser pattern.
+    fireEvent.click(screen.getByRole("button", { name: /^Quantitative aptitude/ }));
 
     // The checklist side retracts. The nav side is `OrganiserShell`'s own
     // state and 6.5c owns `D18`'s rule for it, so this file asserts that its
