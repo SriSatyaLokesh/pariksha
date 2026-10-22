@@ -7,12 +7,16 @@
 
 import { describe, expect, it } from "vitest";
 import {
+  anyProctoringControlActive,
   FAILURE_EVENTS,
   isViolation,
+  KB_PER_MB,
   PROCTORING_DEFAULTS,
   PROCTORING_EVENTS,
   proctoringRequirements,
   resolveProctoring,
+  snapshotCost,
+  SNAPSHOT_KB,
   VIOLATION_EVENTS,
 } from "../src/index.js";
 
@@ -182,6 +186,120 @@ describe("proctoringRequirements", () => {
     );
     expect(lines.join(" ")).not.toMatch(/photo/i);
     expect(lines.join(" ")).not.toMatch(/every 60 seconds/i);
+  });
+
+  // Line 339 — no core test turned this sentence on before. `requireCamera`
+  // is the only other field with its own dedicated line; microphone gets
+  // the same treatment.
+  it("names the microphone when required", () => {
+    const lines = proctoringRequirements(
+      resolveProctoring({ profile: "strict", overrides: { require_microphone: true } }),
+    );
+    expect(lines.join(" ")).toMatch(/microphone/i);
+  });
+});
+
+// Review finding 7 (whole-branch): the one "is any proctoring control
+// active" predicate `proctoringRequirements` and `ProctoringLayer` both
+// read. Untested directly in core before this — only indirectly through
+// `proctoringRequirements`'s browser/window-leave lines.
+describe("anyProctoringControlActive", () => {
+  it("is false when every control is off", () => {
+    expect(anyProctoringControlActive(resolveProctoring({ profile: "off" }))).toBe(false);
+  });
+
+  it("is true when a boolean control is on", () => {
+    expect(
+      anyProctoringControlActive(resolveProctoring({ profile: "off", overrides: { desktop_only: true } })),
+    ).toBe(true);
+  });
+
+  // The one non-boolean field in the predicate: `snapshotIntervalSeconds > 0`,
+  // not mere truthiness.
+  it("is true when the snapshot interval is set, even with every boolean control off", () => {
+    expect(
+      anyProctoringControlActive(
+        resolveProctoring({ profile: "off", overrides: { snapshot_interval_seconds: 60 } }),
+      ),
+    ).toBe(true);
+  });
+});
+
+// `snapshotCost` had no test anywhere in `packages/core/test` before this —
+// it was only exercised through `apps/web` and `apps/api`, invisible to
+// core's own coverage gate. These pin the function's own doc comment: the
+// three early-return guards, the arithmetic, and the floor.
+describe("snapshotCost", () => {
+  it("returns null when duration is not set yet", () => {
+    const resolved = resolveProctoring({ profile: "strict" });
+    expect(snapshotCost({ durationMinutes: null, resolved })).toBeNull();
+  });
+
+  // Load-bearing (`Q11b`, branch-review Finding 1): `require_camera: false`
+  // means `getUserMedia` is never called for video, so nothing is ever
+  // captured regardless of the interval. A non-zero interval and a real
+  // duration beside the `false` prove the guard — not an interval that was
+  // going to be null anyway.
+  it("returns null when require_camera is false, even with a real interval and duration", () => {
+    const resolved = resolveProctoring({
+      profile: "strict",
+      overrides: { require_camera: false, snapshot_interval_seconds: 60 },
+    });
+    expect(snapshotCost({ durationMinutes: 60, resolved })).toBeNull();
+  });
+
+  it("returns a real object for the same interval and duration when the camera is required", () => {
+    const resolved = resolveProctoring({ profile: "strict" });
+    expect(snapshotCost({ durationMinutes: 60, resolved })).not.toBeNull();
+  });
+
+  it("returns null when the snapshot interval is 0", () => {
+    const resolved = resolveProctoring({
+      profile: "strict",
+      overrides: { snapshot_interval_seconds: 0 },
+    });
+    expect(snapshotCost({ durationMinutes: 60, resolved })).toBeNull();
+  });
+
+  it("returns null when the snapshot interval is negative", () => {
+    const resolved = resolveProctoring({
+      profile: "strict",
+      overrides: { snapshot_interval_seconds: -1 },
+    });
+    expect(snapshotCost({ durationMinutes: 60, resolved })).toBeNull();
+  });
+
+  // The two worked examples named in the function's own doc comment and in
+  // the file-header comment above `SNAPSHOT_KB`: 180 min at a 15 s interval
+  // is exactly 18 MB (prints "18", no trailing ".0"); 60 min at 60 s is
+  // exactly 1.5 MB. Computed from the exported constants, not hardcoded
+  // 25/1000, so a change to either constant moves these with it.
+  it("computes images, uploads and megabytes for 180 minutes at a 15s interval (18 MB)", () => {
+    const resolved = resolveProctoring({ profile: "strict" });
+    const result = snapshotCost({ durationMinutes: 180, resolved: { ...resolved, snapshotIntervalSeconds: 15 } });
+    const images = 720;
+    expect(result).toEqual({ images, uploads: images, megabytes: (images * SNAPSHOT_KB) / KB_PER_MB });
+    expect(String(result?.megabytes)).toBe("18");
+  });
+
+  it("computes images, uploads and megabytes for 60 minutes at a 60s interval (1.5 MB)", () => {
+    const resolved = resolveProctoring({ profile: "strict" });
+    const result = snapshotCost({ durationMinutes: 60, resolved });
+    const images = 60;
+    expect(result).toEqual({ images, uploads: images, megabytes: (images * SNAPSHOT_KB) / KB_PER_MB });
+    expect(String(result?.megabytes)).toBe("1.5");
+  });
+
+  // The floor: a duration that does not divide evenly rounds down, not to
+  // the nearest or up. 10 minutes at a 7s interval is 85.71... images, not 86.
+  it("floors a duration that does not divide evenly by the interval", () => {
+    const resolved = resolveProctoring({
+      profile: "strict",
+      overrides: { snapshot_interval_seconds: 7 },
+    });
+    const result = snapshotCost({ durationMinutes: 10, resolved });
+    expect(result?.images).toBe(85);
+    expect(result?.uploads).toBe(85);
   });
 });
 

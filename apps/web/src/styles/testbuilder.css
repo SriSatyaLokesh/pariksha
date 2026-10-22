@@ -513,7 +513,16 @@
   padding: var(--space-md);
 }
 
-.form-builder__field > legend {
+/* Branch-review Finding 8: `.proctoring-panel__group > legend` joins here
+   rather than repeating these four declarations in its own rule below —
+   unlike the Task 1 CSS tidy declined for `.proctoring-panel` itself
+   (per-family grouping, a real reason not to merge), this legend rule is
+   byte-identical to this one, and the file already joins across families
+   when the declarations really are identical (see `.sets-panel__assignment
+   > legend, .shuffle-group > legend` and `.release-panel__legend,
+   .branding-panel__figure` below). */
+.form-builder__field > legend,
+.proctoring-panel__group > legend {
   padding-inline: var(--space-xs);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
@@ -1178,3 +1187,41 @@
     max-height: 60dvh;
   }
 }
+
+/* Phase 7b Task 1 (`Q8`): the sixth row's panel. This rule sets no colour of
+   its own, the same as `.timing-panel`/`.access-panel`/`.release-panel`
+   above, so it needs no SURFACE entry either. */
+.proctoring-panel {
+  display: flex;
+  flex-direction: column;
+  /* `--space-lg` rather than the `--space-sm` its sibling panels use between
+     their own blocks: this panel stacks THREE field-row groups where the
+     others stack one, and `D12` gives an editing surface air. At `--space-sm`
+     the gap between two groups reads the same as the gap between two fields
+     inside a group, which is the one distinction the grouping exists to make. */
+  gap: var(--space-lg);
+}
+
+/* Phase 7b Task 2 (`Q8`): the three groups — gating, camera and microphone,
+   consequences. `.field-row` is `primitives.css`'s existing D16 primitive
+   (R2, progress.md): this rule only wraps it in the bordered, no-fill box
+   `.timing-panel__group` / `.access-panel__group` / `.form-builder__field`
+   already use for a fieldset of related controls, so it is a repeat of
+   their pattern rather than a new one. No `color:` declaration — only a
+   border and spacing, like its three siblings — so it needs no SURFACE
+   entry either; `.field-help`, which carries the group's one note, already
+   has one. The group's note sits OUTSIDE `.field-row`, as its own
+   paragraph, which is `D16`'s "one note under the row" read literally:
+   inside the grid it would be a sixteenth field with nowhere of its own to
+   sit, and it is not help for any one control. */
+.proctoring-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--edge);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+/* `> legend`'s rule moved to join `.form-builder__field > legend` above
+   (branch-review Finding 8) — it was a byte-identical copy. */

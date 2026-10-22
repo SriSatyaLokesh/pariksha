@@ -7,6 +7,22 @@
 export type ProctoringProfile = "off" | "standard" | "strict";
 export type ViolationAction = "warn_only" | "warn_then_flag" | "auto_submit" | "lock";
 
+// Phase 7b Task 4 (`Q11a`): one JPEG snapshot's size, publicly stated
+// already at `apps/web/src/sections/signal/Tail.tsx:125` ("320×240 JPEG
+// snapshots, about 25 KB each") — not a guess invented for this figure.
+// `KB_PER_MB` is decimal (SI), not the binary 1024: it is the only
+// conversion that reproduces both worked examples with no rounding fudge
+// — 180 min at a 15 s interval is exactly 18 MB, and the design spec's
+// 60 min at 60 s is exactly 1.5 MB. Binary MiB rounds one of the two to
+// a different figure.
+//
+// Moved here from `apps/api/src/publish/checklist.ts` (where this comment
+// originated) because `apps/web`'s `snapshot-cost.ts` needs the same two
+// numbers and cannot import across apps — one promise, one source, two
+// readers (`R2`, task-4-brief.md ruling).
+export const SNAPSHOT_KB = 25;
+export const KB_PER_MB = 1000;
+
 /** Every field present, no optionals. This is what every reader consumes. */
 export interface ResolvedProctoring {
   profile: ProctoringProfile;
@@ -36,6 +52,18 @@ export type ProctoringOverrides = Partial<{
   extra_monitor_check: boolean; violation_limit: number; violation_action: ViolationAction;
   camera_outage_seconds: number; multi_face_snapshots: number; allow_calculator: boolean;
 }>;
+
+// Phase 7b branch-review Finding 9: the one place these three display names
+// live. `ProctoringPanel.tsx` (the control) and `SettingRow.tsx` (the
+// collapsed row) used to carry two mechanisms for the same three strings —
+// a table here would have made one of them redundant from the start, and a
+// reader who grepped for the word a screen actually shows ("Strict") could
+// not find the capitalising function that produced it.
+export const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
+  off: "Off",
+  standard: "Standard",
+  strict: "Strict",
+};
 
 // The defaults table (phase-7a brief). This task fixes it; later plans only
 // read it. Two rulings worth remembering while reading it:
@@ -180,6 +208,52 @@ export function anyProctoringControlActive(resolved: ResolvedProctoring): boolea
     resolved.requireMicrophone ||
     resolved.extraMonitorCheck
   );
+}
+
+/**
+ * `Q11`: per candidate, never a total — the product does not know the
+ * headcount.
+ *
+ * Counts interval snapshots only; the identity photo sits inside the "≈"
+ * (`R1`, task-4-brief.md's ruling over the brief's own contradictory "+1"
+ * test). `images = floor(durationMinutes * 60 / snapshotIntervalSeconds)`
+ * is the one arithmetic both `apps/web`'s panel/row and
+ * `apps/api/src/publish/checklist.ts`'s `proctoring_snapshot_cost` row
+ * read — moved here (Phase 7b branch-review Finding 6) so a rounding or
+ * floor change can no longer diverge between the two readers the way two
+ * copies of the same expression could.
+ *
+ * The division is guarded before it runs, not sanitised after:
+ * `durationMinutes: null` (no duration set yet, #179's shape) returns
+ * `null` immediately. `!resolved.requireCamera` returns `null` too — `Q11b`
+ * is explicit that `require_camera: false` means `getUserMedia` is never
+ * called for video at all, so there is no stream to snapshot and nothing is
+ * ever captured regardless of what the interval says (branch-review
+ * Finding 1: this used to be true of the panel's *images* clause but not
+ * of this function, so a camera-off Strict test stated a non-zero cost for
+ * images it also said it would never take). And
+ * `snapshotIntervalSeconds <= 0` (snapshots off, `Q11b` — 0 means off,
+ * including a document whose interval is unset and resolves to 0) returns
+ * `null` before `60 * 60 / 0` can ever produce `Infinity`.
+ */
+export function snapshotCost(input: {
+  durationMinutes: number | null;
+  resolved: ResolvedProctoring;
+}): { images: number; megabytes: number; uploads: number } | null {
+  const { durationMinutes, resolved } = input;
+  if (durationMinutes === null) return null;
+  if (!resolved.requireCamera) return null;
+  if (resolved.snapshotIntervalSeconds <= 0) return null;
+
+  const images = Math.floor((durationMinutes * 60) / resolved.snapshotIntervalSeconds);
+  // Decimal MB, rounded to one place; a plain JS number drops the trailing
+  // ".0" on its own, so 18.0 prints as "18" and 1.46… prints as "1.5".
+  const megabytes = Math.round(((images * SNAPSHOT_KB) / KB_PER_MB) * 10) / 10;
+  // One upload per snapshot. Named beside megabytes because requests, not
+  // bytes, are the ceiling that actually stops a test (`Q4`'s worst case:
+  // 216,000 Worker requests across 300 candidates against a free-plan
+  // 100,000/day limit) — the megabytes figure alone is reassuring and wrong.
+  return { images, megabytes, uploads: images };
 }
 
 /**

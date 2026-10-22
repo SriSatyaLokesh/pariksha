@@ -48,6 +48,12 @@ export const ICONS: Record<string, string[]> = {
   ],
   results: ["M3.4 16.6h13.2", "M6.2 16.6v-4.4", "M10 16.6V7", "M13.8 16.6v-6.6"],
   branding: ["M10 3.2c0 0 4.6 5.2 4.6 8.4a4.6 4.6 0 0 1-9.2 0C5.4 8.4 10 3.2 10 3.2Z"],
+  /* Phase 7b Task 1 (`Q8`): the sixth setting, an eye for the thing every
+     proctoring control watches. */
+  proctoring: [
+    "M2.6 10c1.6-3.4 4.6-5.4 7.4-5.4s5.8 2 7.4 5.4c-1.6 3.4-4.6 5.4-7.4 5.4S4.2 13.4 2.6 10Z",
+    "M10 12.2a2.2 2.2 0 1 0 0-4.4 2.2 2.2 0 0 0 0 4.4Z",
+  ],
   /* 6.5d Task 6: the "In review" badge, on the builder header and the test
      list. It replaces U+25C6 BLACK DIAMOND — a text character whose shape,
      weight and baseline are the reader's font's business, which is the

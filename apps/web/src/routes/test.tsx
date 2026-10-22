@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { can } from "@pariksha/core";
-import type { TestAccess, TestBranding, TestRelease, TestTiming } from "@pariksha/core";
+import type {
+  ProctoringOverrides,
+  ProctoringProfile,
+  TestAccess,
+  TestBranding,
+  TestRelease,
+  TestTiming,
+} from "@pariksha/core";
 import {
   ApiError,
   type Actor,
@@ -19,12 +26,14 @@ import { TimingPanel } from "../components/testbuilder/TimingPanel";
 import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
+import { ProctoringPanel } from "../components/testbuilder/ProctoringPanel";
 import {
   PANEL_KEYS,
   SettingRow,
   accessSummary,
   brandingSummary,
   identityFieldOf,
+  proctoringSummary,
   registrationSummary,
   resultsSummary,
   timingSummary,
@@ -63,6 +72,15 @@ const DEFAULT_ACCESS: TestAccess = { mode: "link_code" };
 const DEFAULT_RELEASE: TestRelease = { when: "on_submit" };
 
 const NO_BRANDING: TestBranding = {};
+
+/** `ProctoringPanel`'s `value` is required (unlike the draft's own optional
+ * `proctoring` block), so a draft that has never set one gets the same
+ * thing `resolveProctoring(undefined)` would resolve against anyway — the
+ * `off` profile, no overrides. */
+const DEFAULT_PROCTORING: { profile: ProctoringProfile; overrides: ProctoringOverrides } = {
+  profile: "off",
+  overrides: {},
+};
 
 /**
  * Which setting the URL says is open (`D7` in `D5`'s query string).
@@ -818,6 +836,35 @@ export function TestBuilder({
                 setWorkspaceBranding(await client.saveWorkspaceBranding(workspaceId, next));
               }}
               onUploadLogo={uploadLogo}
+            />
+          </SettingRow>
+
+          <SettingRow
+            id="proctoring"
+            icon={<Icon name="proctoring" />}
+            label="Proctoring"
+            summary={proctoringSummary(
+              draft.body.settings.proctoring,
+              draft.body.settings.timing?.duration_minutes ?? null,
+            )}
+            open={openPanel === "proctoring"}
+            onToggle={togglePanel}
+          >
+            <ProctoringPanel
+              // `ProctoringPanel`'s `value` requires both members — unlike
+              // the draft's own `proctoring` block, which (like every
+              // settings block here) may be present with either left
+              // unset. Each is defaulted on its own rather than falling
+              // back to `DEFAULT_PROCTORING` wholesale, which would also
+              // discard a stored `overrides` beside a missing `profile` —
+              // the same per-field care `DEFAULT_PROCTORING`'s own members
+              // match anyway.
+              value={{
+                profile: draft.body.settings.proctoring?.profile ?? DEFAULT_PROCTORING.profile,
+                overrides: draft.body.settings.proctoring?.overrides ?? DEFAULT_PROCTORING.overrides,
+              }}
+              durationMinutes={draft.body.settings.timing?.duration_minutes ?? null}
+              onChange={(proctoring) => saveSettings({ proctoring })}
             />
           </SettingRow>
         </section>

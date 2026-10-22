@@ -21,6 +21,7 @@
 import {
   describeAllowlists,
   resolveProctoring,
+  snapshotCost,
   validateTest,
   type ImportIssue,
   type Question,
@@ -66,19 +67,15 @@ export interface ChecklistInput {
 
 const DAY_MS = 86_400_000;
 
-// Phase 7a Task 6 (`Q11a`): one JPEG snapshot's size, publicly stated
-// already at `apps/web/src/sections/signal/Tail.tsx:125` ("320×240 JPEG
-// snapshots, about 25 KB each") — not a guess invented for this row.
-// `KB_PER_MB` is decimal (SI), not the binary 1024: it is the only
-// conversion that reproduces both worked examples with no rounding fudge
-// — 180 min at a 15 s interval is exactly 18 MB, and the design spec's
-// 60 min at 60 s is exactly 1.5 MB. Binary MiB rounds one of the two to
-// a different figure.
-const SNAPSHOT_KB = 25;
-const KB_PER_MB = 1000;
-// `Q1c`: the cost row fires once a candidate's snapshots cross 200 images.
-// Strict's own default (60 s interval over a 60-minute test = 60 images)
-// stays under it and stays silent — that silence is intended, not a gap.
+// `snapshotCost` itself (not just `SNAPSHOT_KB`/`KB_PER_MB`) moved to
+// `@pariksha/core` (Phase 7b branch-review Finding 6 — Task 4's `R2` had
+// moved only the two constants, which left this file and `apps/web`'s
+// panel each carrying their own copy of the floor/rounding arithmetic, a
+// promise that could still diverge between them with no test to catch it).
+// Imported above rather than retyped. `Q1c`: the cost row fires once a
+// candidate's snapshots cross 200 images. Strict's own default (60 s
+// interval over a 60-minute test = 60 images) stays under it and stays
+// silent — that silence is intended, not a gap.
 const SNAPSHOT_COST_THRESHOLD_IMAGES = 200;
 
 /**
@@ -480,23 +477,27 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
   // without that extra photo, so it sits inside the "≈" instead. Uploads
   // are named beside megabytes (`Q11`) because on the deployment target
   // requests, not bytes, are the ceiling that actually stops a test.
-  if (proctoring.snapshotIntervalSeconds > 0) {
-    const durationMinutes = settings.timing?.duration_minutes ?? 0;
-    const images = Math.floor((durationMinutes * 60) / proctoring.snapshotIntervalSeconds);
-    if (images > SNAPSHOT_COST_THRESHOLD_IMAGES) {
-      // Rounded to one decimal place and let `${}` drop a trailing ".0" —
-      // plain JS numbers never carry one, so 18.0 prints as "18" and 1.46…
-      // prints as "1.5".
-      const megabytes = Math.round(((images * SNAPSHOT_KB) / KB_PER_MB) * 10) / 10;
-      rows.push({
-        id: "proctoring_snapshot_cost",
-        severity: "advisory",
-        field: "proctoring.overrides.snapshot_interval_seconds",
-        message:
-          `this interval costs ≈ ${images} images · ≈ ${megabytes} MB · ≈ ${images} uploads per candidate` +
-          " — uploads are the free-tier ceiling that actually stops a test, not the megabytes",
-      });
-    }
+  //
+  // `snapshotCost` carries its own `!requireCamera` guard (`Q11b` — no
+  // camera means no stream and nothing captured, branch-review Finding 1):
+  // this row used to fire on the interval alone, so a Strict document with
+  // `require_camera: false` could state a non-zero image/MB/upload cost in
+  // the same checklist that also says, two rows up, that nothing will be
+  // captured. Routing through the shared function fixes both readers from
+  // the one place they share.
+  const cost = snapshotCost({
+    durationMinutes: settings.timing?.duration_minutes ?? null,
+    resolved: proctoring,
+  });
+  if (cost !== null && cost.images > SNAPSHOT_COST_THRESHOLD_IMAGES) {
+    rows.push({
+      id: "proctoring_snapshot_cost",
+      severity: "advisory",
+      field: "proctoring.overrides.snapshot_interval_seconds",
+      message:
+        `this interval costs ≈ ${cost.images} images · ≈ ${cost.megabytes} MB · ≈ ${cost.images} uploads per candidate` +
+        " — uploads are the free-tier ceiling that actually stops a test, not the megabytes",
+    });
   }
 
   // This was going to be the one blocking row in Phase 7 — a `lock` has no

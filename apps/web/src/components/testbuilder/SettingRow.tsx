@@ -1,19 +1,25 @@
 import { useId, type ReactNode } from "react";
-import type {
-  FormField,
-  RegistrationFormSpec,
-  TestAccess,
-  TestBranding,
-  TestRelease,
-  TestTiming,
+import {
+  resolveProctoring,
+  snapshotCost,
+  PROFILE_LABEL,
+  type FormField,
+  type ProctoringOverrides,
+  type ProctoringProfile,
+  type RegistrationFormSpec,
+  type TestAccess,
+  type TestBranding,
+  type TestRelease,
+  type TestTiming,
 } from "@pariksha/core";
 import { MODE_LABEL } from "./AccessPanel";
 import { SHOW_LABEL, WHEN_LABEL } from "./ReleasePanel";
 import { isZone } from "./TimingPanel";
 
-// Phase 6.5d Task 1, spec D7: the five settings — timing, access,
-// registration form, results, branding — collapse into one panel of rows
-// that each state their own setting, opening in place, one at a time.
+// Phase 6.5d Task 1, spec D7: the settings — timing, access, registration
+// form, results, branding, and (Phase 7b, `Q8`) proctoring — collapse into
+// one panel of rows that each state their own setting, opening in place,
+// one at a time.
 //
 // The panels themselves are consumed unchanged: each becomes this
 // component's `children`. What changed is where they live and when they
@@ -34,12 +40,23 @@ import { isZone } from "./TimingPanel";
 // dropped from the line, because a row that omits what is unset reads
 // identically to a row whose author never scrolled far enough.
 
-/** The five, as a value as well as a type (6.5d Task 2): `?panel=` carries
+/** The six, as a value as well as a type (6.5d Task 2): `?panel=` carries
  *  one of them, and `view-url.ts` deliberately does not validate — "an id
  *  in a URL is a claim anyone can type" — so the screen that owns the union
  *  checks the claim against it. Derived rather than written twice, because
  *  a list that can drift from the type is the drift. */
-export const PANEL_KEYS = ["timing", "access", "registration", "results", "branding"] as const;
+export const PANEL_KEYS = [
+  "timing",
+  "access",
+  "registration",
+  "results",
+  "branding",
+  // `Q8` (phase-7-proctoring-design.md §11): the sixth row. Proctoring is a
+  // test-level setting beside timing, access and branding in
+  // schemas/test-1.json, so it joins the one panel rather than getting a
+  // screen of its own.
+  "proctoring",
+] as const;
 
 export type PanelKey = (typeof PANEL_KEYS)[number];
 
@@ -117,7 +134,7 @@ export function SettingRow({
 }
 
 // ---------------------------------------------------------------------------
-// The five summaries. Each takes exactly the draft it states and nothing
+// The six summaries. Each takes exactly the draft it states and nothing
 // else, so there is nowhere for a stale copy to live.
 
 /** "24 Oct 09:00 IST", or `null` when the stored string is not a time this
@@ -267,4 +284,58 @@ export function brandingSummary(branding: TestBranding, workspaceBranding: TestB
     state(branding.start_message, "start message"),
     state(branding.finish_message, "finish message"),
   ].join(" · ");
+}
+
+// Phase 7b Task 1 (`Q8`): the sixth row. `proctoringSummary` is called with
+// the draft's own `proctoring` block (possibly absent), and resolves it the
+// same way the runtime does — through `resolveProctoring`, never by reading
+// the raw overrides — so the row cannot say something the runtime would not
+// do. `Q1`: nothing here branches on `resolved.profile` to decide what the
+// row says is ENFORCED; the one read of it below only picks the word
+// printed ("Strict", or the short-circuit to "Off") and the plain label
+// ("Off") itself is what every other clause would already say if spelled
+// out — no camera, no images, `PROCTORING_DEFAULTS.off`'s own
+// `violationLimit`/`violationAction` — so the short form states the same
+// value the long form would, just without repeating "off" four times.
+//
+// Task 1 shipped the first four clauses `Q8`'s own example states —
+// "Strict · camera required · images every 60 s · warns at 5 violations" —
+// and stopped there. Task 4 appends the fifth, "≈ 1.5 MB per candidate",
+// through `snapshotCost` — and only when it resolves: `durationMinutes`
+// absent, no camera required (`Q11b` — branch-review Finding 1; `images`
+// above already reads the same way), or snapshots off, means there is
+// nothing to cost, and the row says four clauses rather than a fifth that
+// is empty or a dangling trailing " · " (`R3`, task-4-brief.md). A
+// `durationMinutes` of exactly `0` is not one of those cases — `0` is a
+// real duration as far as this function is concerned, and resolves to
+// "≈ 0 MB per candidate" rather than silence; it does not arise today
+// because `$defs/timing.duration_minutes` is `minimum: 1`.
+const VIOLATION_CLAUSE: Readonly<
+  Record<ReturnType<typeof resolveProctoring>["violationAction"], (limit: number) => string>
+> = {
+  warn_only: () => "warns only",
+  warn_then_flag: (limit) => `warns at ${plural(limit, "violation")}`,
+  auto_submit: (limit) => `auto-submits at ${plural(limit, "violation")}`,
+  lock: (limit) => `locks at ${plural(limit, "violation")}`,
+};
+
+export function proctoringSummary(
+  value: { profile?: ProctoringProfile; overrides?: ProctoringOverrides } | undefined,
+  durationMinutes: number | null,
+): string {
+  const resolved = resolveProctoring(value);
+  if (resolved.profile === "off") return "Off";
+  const images =
+    resolved.requireCamera && resolved.snapshotIntervalSeconds > 0
+      ? `images every ${resolved.snapshotIntervalSeconds} s`
+      : "no images";
+  const clauses = [
+    PROFILE_LABEL[resolved.profile],
+    resolved.requireCamera ? "camera required" : "no camera",
+    images,
+    VIOLATION_CLAUSE[resolved.violationAction](resolved.violationLimit),
+  ];
+  const cost = snapshotCost({ durationMinutes, resolved });
+  if (cost !== null) clauses.push(`≈ ${cost.megabytes} MB per candidate`);
+  return clauses.join(" · ");
 }
