@@ -154,6 +154,10 @@ export interface ReleasedResult {
   passed: boolean | null;
   /** Questions still waiting on a person, so the score may yet rise. */
   pending: string[];
+  /** `K6`/`K7`: the figure `counted_attempt` names, present only once no
+   *  attempts remain and the server has decided to disclose it — `null`
+   *  `attemptId` is `"average"`, which belongs to no single attempt. */
+  counted?: { percent: number; attemptId: string | null; of: number };
   sections?: { sectionId: string; title: string; points: number; max: number }[];
   review?: {
     questionId: string;

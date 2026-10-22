@@ -9,7 +9,14 @@
 
 import { afterAll, beforeEach, expect, it } from "vitest";
 import { closeClient } from "@pariksha/db";
-import type { AttemptScore, Question, ResponseValue, TestRelease } from "@pariksha/core";
+import type {
+  AttemptScore,
+  CountedAttempt,
+  Question,
+  ReleaseShow,
+  ResponseValue,
+  TestRelease,
+} from "@pariksha/core";
 import type { EmailMessage } from "../../src/email/adapter.js";
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
@@ -214,6 +221,83 @@ it("AC-16: a `when` the schema never minted releases nothing at all", () => {
   expect(
     releasedResult(odd({ when: "whenever", show: "full_review" }), SCORE, KEYED, {}, T, 0),
   ).toBeNull();
+});
+
+// --- K6/K7: the counted figure ------------------------------------------
+//
+// `releasedResult`'s `counted` parameter is supplied by the caller (ruling
+// 2) — there is no route to exercise here, only the gate's own decision of
+// whether to disclose what the caller handed it. Called directly, exactly
+// as the two allowlist tests above already do.
+
+/** Two attempts: this one (72%) and a later, higher one (81%) — enough to
+ *  tell `"highest"` from `"latest"` apart and to give the suppression test
+ *  below something a real reader would actually see once it stops being
+ *  suppressed (its own positive control, `E-R5`). */
+const COUNTED_ATTEMPTS = [
+  { attemptId: "att_1", percent: 72, submittedAt: T },
+  { attemptId: "att_2", percent: 81, submittedAt: T + 60_000 },
+];
+
+function releasedResultFor(options: {
+  attemptsRemaining: number;
+  countedAttempt?: CountedAttempt;
+  show?: ReleaseShow;
+}): ReturnType<typeof releasedResult> {
+  const release: TestRelease = { when: "on_submit", show: options.show ?? "score_only" };
+  return releasedResult(
+    release,
+    SCORE,
+    KEYED,
+    {},
+    T,
+    options.attemptsRemaining,
+    { logic: "Logic" },
+    options.countedAttempt === undefined
+      ? undefined
+      : { mode: options.countedAttempt, attempts: COUNTED_ATTEMPTS },
+  );
+}
+
+it("omits the counted figure while attempts remain", () => {
+  const body = releasedResultFor({ attemptsRemaining: 1, countedAttempt: "highest" });
+  expect(body).not.toHaveProperty("counted");
+});
+
+it("includes it on the last attempt — the control for the assertion above", () => {
+  const body = releasedResultFor({ attemptsRemaining: 0, countedAttempt: "highest" });
+  expect(body?.counted).toEqual({ percent: 81, attemptId: "att_2", of: 2 });
+});
+
+it("omits it when nothing is released at all, even on the last attempt", () => {
+  // `release.when: "never"` carries nothing but the receipt — not even a
+  // `show`, so there is no level for the counted figure to be "governed
+  // by the same show as" (ruling 2). The whole body is null, which is a
+  // stronger omission than a missing key.
+  const body = releasedResult(
+    { when: "never" },
+    SCORE,
+    KEYED,
+    {},
+    T,
+    0,
+    { logic: "Logic" },
+    { mode: "highest", attempts: COUNTED_ATTEMPTS },
+  );
+  expect(body).toBeNull();
+});
+
+it("omits it under counted_attempt: latest, where it equals this attempt", () => {
+  const body = releasedResultFor({ attemptsRemaining: 0, countedAttempt: "latest" });
+  expect(body).not.toHaveProperty("counted");
+});
+
+it("omits it when no caller has supplied prior attempts at all", () => {
+  // The production routes do not yet pass `counted` through (it is wired
+  // once a reader needs it) — `releasedResult` must still answer with a
+  // complete, counted-free payload rather than throw.
+  const body = releasedResultFor({ attemptsRemaining: 0 });
+  expect(body).not.toHaveProperty("counted");
 });
 
 // --- the degrade ruling --------------------------------------------------

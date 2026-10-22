@@ -18,8 +18,11 @@ import type { ReleasedResult } from "../../lib/run";
 
 /** A number the candidate will compare against another number, so it is
  *  rendered through the same `toLocaleString` the rest of the runtime
- *  uses rather than with a stray `toFixed`. */
-const points = (value: number): string =>
+ *  uses rather than with a stray `toFixed`. Exported for `Receipt.tsx`'s
+ *  "This attempt" / "Counted for your result" lines (`K7`), which format
+ *  the same percentages beside this component rather than growing a
+ *  second copy of this rounding. */
+export const points = (value: number): string =>
   value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
 
 /** The answer a candidate gave, or a correct one, as text.

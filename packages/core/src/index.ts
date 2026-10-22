@@ -99,3 +99,11 @@ export * from "./registration.js";
 // gates, the camera, the consequences — resolves through this instead of
 // branching on `profile` itself.
 export * from "./proctoring.js";
+
+// Phase 8a Task 3 (`K6`): `countedScore()` turns a candidate's attempt
+// scores and `timing.counted_attempt` into the one counted figure —
+// `CountedAttempt` itself is already public off `types.js`, above. The
+// candidate's own result page (`apps/api/src/run/release.ts`, `K7`), the
+// organiser's results CSV and the analytics screen (8c) all call this
+// rather than growing three readings of "best"/"latest"/"average".
+export * from "./counted.js";
