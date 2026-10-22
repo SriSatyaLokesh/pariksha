@@ -484,6 +484,17 @@ describe("M1: the loss reason tracks the live condition, not the first one seen"
 // browser freezes a dead `<video>` on — manufactured coverage for a period
 // nobody watched. `camera_lost`/`camera_restored` already records the gap;
 // an interval capture during it no longer fires at all.
+//
+// This file's end-to-end assertion, kept for the behaviour. It is NOT where
+// M2's guard is pinned, and the controller's `Q10a` probe is why that is
+// written down: this harness installs fake timers only AFTER the render, so
+// the capture interval is a REAL timer here and `advanceTimersByTimeAsync`
+// never pumps it — the count is zero whether the guard exists or not. An
+// ended track also tears `liveStream` down, which removes the capture effect
+// entirely, so even a working harness would be proving the wrong thing. The
+// guard's own pin, with its positive control, is
+// `snapshot-schedule.test.tsx`'s "M2" describe, on a MUTED track: the one
+// condition that leaves the stream live and the effect mounted.
 describe("M2: no interval capture during a frameless camera outage", () => {
   it("takes no interval snapshot while the track is ended, across several cadences", async () => {
     const reasons = captureSnapshotReasons();
@@ -498,6 +509,7 @@ describe("M2: no interval capture during a frameless camera outage", () => {
     vi.useRealTimers();
     expect(reasons().filter((reason) => reason === "interval")).toHaveLength(0);
   });
+
 });
 
 // Whole-branch review, finding L1: a reconnect that resolves after this

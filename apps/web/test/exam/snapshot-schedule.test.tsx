@@ -119,8 +119,15 @@ function fakeTrack(): MediaStreamTrack {
   return Object.assign(new EventTarget(), { kind: "video", stop: vi.fn() }) as unknown as MediaStreamTrack;
 }
 
+/** The track the current `fakeStream()` handed out. Module-scoped because
+ *  the M2 pin below has to dispatch `mute` at the SAME track production
+ *  code is listening on, and `installCamera` builds it behind a
+ *  `getUserMedia` this file never sees the return value of. */
+let cameraTrack: MediaStreamTrack;
+
 function fakeStream(): MediaStream {
   const track = fakeTrack();
+  cameraTrack = track;
   return { getVideoTracks: () => [track], getTracks: () => [track] } as unknown as MediaStream;
 }
 
@@ -365,5 +372,40 @@ describe("the capture schedule (AC-20)", () => {
     expect(sent()).toContain("snapshot_failed");
     await user.click(screen.getByRole("radio", { name: /Option A/ }));
     expect(screen.getByRole("radio", { name: /Option A/ })).toBeChecked();
+  });
+});
+
+/** Whole-branch review, finding M2 — the guard's real pin.
+ *
+ *  A frameless outage must not manufacture coverage out of the frozen last
+ *  frame a real browser keeps showing on a dead `<video>`. `camera-loss.
+ *  test.tsx` asserts the end-to-end behaviour for an ENDED track, but it
+ *  cannot pin the guard: an ended track also tears `liveStream` down, so
+ *  the capture effect unmounts and a guard inside it is never reached. A
+ *  MUTED track is the condition that leaves the stream live and the effect
+ *  mounted — the only one where the guard itself is load-bearing.
+ *
+ *  Its own control is in the test: the pre-mute count must be non-zero
+ *  before "the count did not move" means the capture stopped rather than
+ *  that this harness never captured. */
+describe("M2: a muted camera takes no interval snapshot", () => {
+  it("stops the capture schedule while the track is muted", async () => {
+    const uploads = captureUploads();
+    const intervals = () => uploads().filter((u) => u.reason === "interval").length;
+    await startStrictAttempt({ snapshotIntervalSeconds: 60 });
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
+    });
+    const before = intervals();
+    expect(before).toBeGreaterThan(0);
+
+    act(() => {
+      cameraTrack.dispatchEvent(new Event("mute"));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    });
+    expect(intervals()).toBe(before);
   });
 });
