@@ -15,7 +15,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Receipt as ReceiptPayload, ReleasedResult } from "../../lib/run";
-import { points, ResultView } from "./ResultView";
+import { AttemptFigures, ResultView } from "./ResultView";
 
 /** What a candidate is told when there is no result to show — here rather
  *  than in two files, because `ResultCode`'s return visit lands on exactly
@@ -111,25 +111,10 @@ export function Receipt({
           </p>
         )}
 
-        {/* K7: this attempt's own figure, named, ahead of `ResultView`'s own
-            total — and the counted one beneath it, only when the server has
-            already decided to disclose it (`released.counted` is absent
-            while attempts remain, and under `counted_attempt: "latest"`,
-            where it would just repeat this line). Exact copy, fixed by that
-            ruling. */}
-        {released && (
-          <p className="exam-attempt-figures">
-            This attempt: {points(released.percent)}%
-            {released.counted && (
-              <>
-                <br />
-                Counted for your result: {points(released.counted.percent)}%, your{" "}
-                {released.counted.attemptId === null ? "average" : "best"} of{" "}
-                {String(released.counted.of)}
-              </>
-            )}
-          </p>
-        )}
+        {/* K7: this attempt's own figure, and the counted one beneath it —
+            `AttemptFigures` in `ResultView.tsx`, shared with `ResultCode`'s
+            return visit (`B-1`). */}
+        {released && <AttemptFigures result={released} />}
 
         {released && <ResultView result={released} />}
 
