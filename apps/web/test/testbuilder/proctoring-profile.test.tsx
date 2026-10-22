@@ -132,6 +132,16 @@ describe("the profile rewrites the controls, visibly (Q8a)", () => {
       expect(await screen.findByText(/2 settings/)).toBeVisible();
     });
 
+    // Fix round 1, finding 3: the singular branch ("1 setting differs",
+    // not "1 settings differ") is real code in the component but was never
+    // exercised by a test with exactly one override.
+    it("reads grammatically with exactly one setting overridden", async () => {
+      await openProctoringPanel({ profile: "strict", overrides: { require_camera: false } });
+      user.selectOptions(screen.getByLabelText(/Profile/i), "standard");
+      expect(await screen.findByText(/1 setting differs from Strict/)).toBeVisible();
+      expect(screen.queryByText(/1 settings/)).toBeNull();
+    });
+
     // Positive control for the "no ask" test below (R2): `role="alertdialog"`
     // does not exist anywhere else in this app, so its `null` only means
     // something once this proves the same query matches when a dialog is
@@ -199,6 +209,31 @@ describe("the profile rewrites the controls, visibly (Q8a)", () => {
       fireEvent.keyDown(dialog, { key: "Escape" });
       expect(screen.queryByRole("alertdialog")).toBeNull();
       expect(trigger).toHaveFocus();
+    });
+
+    // Fix round 1, finding 1: the dialog claims `aria-modal="true"`, which
+    // is only honest if Tab really cannot leave it — `useDialogKeys`'s own
+    // rule, and the repo's precedent (`submit.test.tsx`'s identical test
+    // for `SubmitDialog`). Forward from the last control wraps to the
+    // first; Shift+Tab from the first wraps to the last. Neither the
+    // initial-focus/Escape/focus-return test above nor `axe` would catch
+    // `trapTab` being silently dropped — this is the behavioural test that
+    // does.
+    it("Tab is trapped inside the confirmation, because it claims aria-modal", async () => {
+      await openProctoringPanel({ profile: "strict", overrides: { require_camera: false } });
+      user.selectOptions(screen.getByLabelText(/Profile/i), "standard");
+
+      const dialog = await screen.findByRole("alertdialog");
+      const stops = within(dialog).getAllByRole("button");
+      const first = stops[0] as HTMLElement;
+      const last = stops[stops.length - 1] as HTMLElement;
+
+      last.focus();
+      fireEvent.keyDown(last, { key: "Tab" });
+      expect(document.activeElement).toBe(first);
+
+      fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(last);
     });
   });
 

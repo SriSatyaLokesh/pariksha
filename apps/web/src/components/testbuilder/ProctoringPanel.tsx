@@ -323,8 +323,10 @@ export function ProctoringPanel({
   const [pendingProfile, setPendingProfile] = useState<ProctoringProfile | null>(null);
   // Counted against the OLD profile — `value.profile`, unchanged while the
   // dialog is open — so "2 settings" names what the organiser's own edits
-  // were, not what the new profile happens to differ on.
-  const pendingChangeCount = overriddenKeys(value.profile, value.overrides).length;
+  // were, not what the new profile happens to differ on. `overridden` above
+  // is already exactly this set (fix round 1, finding 2): read it rather
+  // than recomputing `overriddenKeys` a second time with the same arguments.
+  const pendingChangeCount = overridden.size;
 
   function cancelProfileChange(): void {
     setPendingProfile(null);
@@ -341,7 +343,7 @@ export function ProctoringPanel({
 
   function selectProfile(nextProfile: ProctoringProfile): void {
     if (nextProfile === value.profile) return;
-    if (overriddenKeys(value.profile, value.overrides).length === 0) {
+    if (overridden.size === 0) {
       // Nothing to lose — clears unconditionally (`Q8a`), but there is
       // nothing visible to confirm.
       onChange({ profile: nextProfile, overrides: {} });
