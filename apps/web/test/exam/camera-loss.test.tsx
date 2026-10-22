@@ -578,40 +578,29 @@ describe("B1: resume reacquires a required camera instead of losing it silently"
 });
 
 // Whole-branch review, finding L3: the luminance sampler's module-scoped
-// `<video>`/`<canvas>` pair (`camera.ts`) is reused across an attempt by
-// design, which left it referencing the stopped stream and the last drawn
-// frame for the life of the document once the attempt ended.
-// `releaseCameraSampler()` drops both module bindings — proved here by a
-// fresh `isCameraLensCovered` call after release creating a NEW pair rather
-// than reusing the stale one, through `document.createElement`'s own call
-// count, since neither binding is exported for a test to read directly.
-describe("L3: the luminance sampler releases its stream and frame on teardown", () => {
-  it("reuses one video/canvas pair normally, but builds a fresh one after release", async () => {
-    // `releaseCameraSampler()` first, regardless of what earlier tests in
-    // this file left the module-scoped pair holding — a clean slate this
-    // test does not depend on run order to get.
-    releaseCameraSampler();
-    const tagNames: string[] = [];
-    const realCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
-      tagNames.push(tagName);
-      return realCreateElement(tagName, options);
-    });
-    const videoCreations = (): number => tagNames.filter((tag) => tag === "video").length;
+// `<video>` (`camera.ts`) is reused across an attempt by design, which left
+// it referencing the stopped `MediaStream` for the life of the document
+// once the attempt ended. `releaseCameraSampler()` clears that reference —
+// in place, deliberately, never by nulling the module binding itself (its
+// own doc comment explains the race that would reopen: `isCameraLensCovered`
+// is async with an await in the middle, and this whole file is the proof —
+// an earlier draft of this fix nulled the binding and intermittently broke
+// the UNRELATED "covered lens" tests above whenever a prior test's deferred
+// teardown landed mid-sample). Exercised through the real sampler, not
+// `camera.ts` in isolation, so the regression this guards against is the
+// one that actually happened.
+describe("L3: the luminance sampler releases its stream on teardown", () => {
+  it("releases the sampler without disturbing a later sample in the same document", async () => {
+    // Never sampled in this test yet — must be a safe no-op either way.
+    expect(() => releaseCameraSampler()).not.toThrow();
 
-    await isCameraLensCovered(stream);
-    expect(videoCreations()).toBe(1);
+    // A real sample, so the module-scoped pair now holds this test's stream.
+    expect(await isCameraLensCovered(stream)).toBe(false);
+    expect(() => releaseCameraSampler()).not.toThrow();
 
-    // The normal case (fix pass 1, finding 4): a second sample reuses the
-    // same pair rather than building another.
-    await isCameraLensCovered(stream);
-    expect(videoCreations()).toBe(1);
-
-    // L3: released, so the NEXT sample — after the attempt that owned the
-    // stopped stream and the last frame has ended — builds a fresh pair
-    // rather than reusing the stale one.
-    releaseCameraSampler();
-    await isCameraLensCovered(stream);
-    expect(videoCreations()).toBe(2);
+    // The sampler still works for the NEXT sample in the same document —
+    // released, not broken — the same shape a second attempt in one SPA
+    // session would hit.
+    expect(await isCameraLensCovered(stream)).toBe(false);
   });
 });

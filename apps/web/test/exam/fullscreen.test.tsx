@@ -47,7 +47,13 @@ import { RESULT_STUB } from "./run-client-stub";
 const NOW = 1_760_000_000_000;
 const EVENTS_PATH = "/api/v1/run/attempt/events";
 
-const strictResolved: ResolvedProctoring = resolveProctoring({ profile: "strict" });
+// `requireCamera: false` — this file is not about the camera, and every
+// test here reaches the runner through `client.resume()`. B1 (whole-branch
+// review) made the resume path really try `acquireCamera()` whenever
+// `requireCamera` is true, which this file's fixtures never stub; left at
+// Strict's own default, every test below would hit the lost-camera overlay
+// instead of the fullscreen/window-leave one it is actually testing.
+const strictResolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), requireCamera: false };
 
 const question: CandidateQuestion = {
   id: "q1",
