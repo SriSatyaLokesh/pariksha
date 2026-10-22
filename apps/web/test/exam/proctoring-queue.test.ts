@@ -66,6 +66,45 @@ describe("createProctoringQueue", () => {
     q.stop();
   });
 
+  // T2-R2 is "one marker per GAP, not per failure", and the test above
+  // cannot see the difference: `toContain` is satisfied by one marker or
+  // by two hundred.
+  //
+  // What counts is markers the server RECEIVES, not batches the client
+  // attempted. A rejected send delivered nothing, so the marker it
+  // carried was never told to anyone — counting attempts instead of
+  // deliveries reports three gaps where the server saw one. The first
+  // draft of this test made exactly that mistake and failed against
+  // correct code.
+  it("delivers exactly one proctoring_unavailable across a long outage, not one per failed send", async () => {
+    const FAILURES = 3;
+    const send = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("500"))
+      .mockRejectedValueOnce(new Error("500"))
+      .mockRejectedValueOnce(new Error("500"))
+      .mockResolvedValue(OK);
+    const q = createProctoringQueue({ send, onCount: () => {}, flushMs: 10 });
+    q.push("window_blur");
+    await vi.advanceTimersByTimeAsync(100);
+    // Everything from the first resolved call onward actually reached the server.
+    const delivered = send.mock.calls
+      .slice(FAILURES)
+      .flatMap((call) => call[0] as QueuedEvent[])
+      .filter((event) => event.type === "proctoring_unavailable");
+    expect(delivered).toHaveLength(1);
+
+    // And the gap is cleared once told: later traffic carries no second marker.
+    q.push("window_blur");
+    await vi.advanceTimersByTimeAsync(40);
+    const after = send.mock.calls
+      .slice(-1)
+      .flatMap((call) => call[0] as QueuedEvent[])
+      .filter((event) => event.type === "proctoring_unavailable");
+    expect(after).toHaveLength(0);
+    q.stop();
+  });
+
   // T2-R1: `buffered()` is part of the returned object precisely so the
   // bound above is something a test can read at all.
   it("buffered() reports what is actually waiting, net of what a successful flush drained", async () => {
