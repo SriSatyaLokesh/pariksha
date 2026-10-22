@@ -16,6 +16,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { SaveBanner } from "../../src/components/exam/SaveBanner";
 import { SAVE_DEBOUNCE_MS, queueStorageKey, type SaveState } from "../../src/lib/queue";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
@@ -180,6 +181,8 @@ const paper: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 interface Saved {

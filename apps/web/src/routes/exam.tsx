@@ -13,6 +13,7 @@
 // exam-taker under a clock downloads only what they are about to use.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PROCTORING_DEFAULTS, type ResolvedProctoring } from "@pariksha/core";
 import type {
   AttemptPaper,
   CandidateQuestion,
@@ -31,6 +32,7 @@ import {
 } from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
+import { ProctoringErrorBoundary, ProctoringLayer } from "../components/exam/ProctoringLayer";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
@@ -42,12 +44,14 @@ import { ResultCode } from "../components/exam/ResultCode";
 
 /**
  * The PRD's supported-device rule, as a pure function — no camera, no
- * permission prompt, and no gate. `docs/ROADMAP.md` gives Phase 7 "device
- * and browser gating" and "the camera requirement"; `C-01` puts the
- * *button* on the landing page, which is this phase. So this reports and
- * never blocks: a candidate on an unsupported browser can still press
- * Start today, and will be refused by Phase 7 rather than by a dead button
- * with no explanation.
+ * permission prompt. `docs/ROADMAP.md` gives Phase 7 "device and browser
+ * gating"; this is that gate (`Q9b`, extending the function 7a's `C-01`
+ * shipped rather than joining it with a second one). `refused` is the one
+ * thing that blocks Start — `desktop_only` is on *and* this device fails
+ * it (`Q1a`: a supported configuration a phone may take when it is off, so
+ * nothing here refuses on its account). Every finding is still reported
+ * honestly regardless of `desktopOnly` — R3/`Q9c` — a 390px screen under
+ * `desktop_only: false` shows `ok: false` and is still admitted.
  */
 export interface DeviceFinding {
   label: string;
@@ -59,51 +63,77 @@ export interface DeviceFinding {
 const MIN_WIDTH = 1024;
 
 /** `P-02`: latest two versions of Chrome, Edge and Firefox on desktop;
- * Safari on macOS. Version numbers are deliberately not checked — a
- * browser lies about them, the check would go stale on its own, and the
- * honest thing to report is the family. */
+ * Safari on macOS and iOS. Version numbers are deliberately not checked —
+ * a browser lies about them, the check would go stale on its own, and the
+ * honest thing to report is the family. Safari's own two markers
+ * (`Version/`, `Mac OS X`) are checked for presence rather than adjacency:
+ * a real phone's UA reads "...Version/17.0 Mobile/15E148 Safari/604.1...",
+ * which an adjacent-only pattern missed. */
 function browserName(userAgent: string): string | null {
   if (/\bEdg\//.test(userAgent)) return "Edge";
   if (/\bFirefox\//.test(userAgent)) return "Firefox";
   if (/\bChrome\//.test(userAgent)) return "Chrome";
-  if (/\bVersion\/[\d.]+ Safari\//.test(userAgent) && /Mac OS X/.test(userAgent)) return "Safari";
+  if (/\bSafari\//.test(userAgent) && /Version\/[\d.]+/.test(userAgent) && /Mac OS X/.test(userAgent)) {
+    return "Safari";
+  }
   return null;
 }
 
-export function deviceReport(): { ok: boolean; findings: DeviceFinding[] } {
+export function deviceReport(resolved: ResolvedProctoring): {
+  ok: boolean;
+  /** `desktop_only` is on AND this device fails it — the only thing that
+   *  blocks a start (R3). Never derived from `ok`: a finding may be
+   *  `ok: false` (an honest report) without refusing anything. */
+  refused: boolean;
+  findings: DeviceFinding[];
+} {
   const width = window.innerWidth;
   // `?.` because a jsdom or an embedded webview may not implement it, and a
   // device check that throws is worse than one that reports a failure.
   const finePointer = window.matchMedia?.("(pointer: fine)").matches ?? false;
   const browser = browserName(navigator.userAgent);
 
+  const screenOk = width >= MIN_WIDTH;
+  const pointerOk = finePointer;
+  const browserOk = browser !== null;
+
   const findings: DeviceFinding[] = [
     {
       label: "Screen",
-      ok: width >= MIN_WIDTH,
-      detail:
-        width >= MIN_WIDTH
-          ? `${String(width)} pixels wide.`
-          : `${String(width)} pixels wide. This test expects a laptop or desktop, at least ${String(MIN_WIDTH)} pixels.`,
+      ok: screenOk,
+      detail: screenOk
+        ? `${String(width)} pixels wide.`
+        : resolved.desktopOnly
+          ? `${String(width)} pixels wide. This test expects a laptop or desktop, at least ${String(MIN_WIDTH)} pixels.`
+          : `${String(width)} pixels wide.`,
     },
     {
       label: "Pointer",
-      ok: finePointer,
-      detail: finePointer
+      ok: pointerOk,
+      detail: pointerOk
         ? "A mouse or trackpad was detected."
-        : "No mouse or trackpad was detected. Touch-only devices are not supported.",
+        : resolved.desktopOnly
+          ? "No mouse or trackpad was detected. Touch-only devices are not supported."
+          : "No mouse or trackpad was detected.",
     },
     {
+      // `Q9c`: no device class here, matching `proctoringRequirements`'s
+      // own browser line — Chrome, Edge and Firefox are not desktop-only
+      // products and Safari runs on iOS too, so naming one is false
+      // whenever `desktop_only` is off.
       label: "Browser",
-      ok: browser !== null,
-      detail:
-        browser === null
-          ? "Not recognised. Use the latest Chrome, Edge or Firefox on a laptop or desktop, or Safari on a Mac."
-          : `${browser}, which is supported.`,
+      ok: browserOk,
+      detail: browserOk
+        ? `${String(browser)}, which is supported.`
+        : "Not recognised. Use a fully updated Chrome, Edge, Firefox or Safari.",
     },
   ];
 
-  return { ok: findings.every((finding) => finding.ok), findings };
+  return {
+    ok: findings.every((finding) => finding.ok),
+    refused: resolved.desktopOnly && (!screenOk || !pointerOk),
+    findings,
+  };
 }
 
 // --- the landing page ----------------------------------------------------
@@ -147,6 +177,23 @@ export function ExamLanding({
 }) {
   const [report, setReport] = useState<ReturnType<typeof deviceReport> | null>(null);
   const notice = STATE_NOTICE[test.state];
+
+  // `Q1b`: the landing payload ships the resolved REQUIREMENT SENTENCES,
+  // never the raw resolved flags — `profile` is carried for display only
+  // and no reader may branch on it (`Q1`). Whether this test is
+  // desktop-only is read off the one line `proctoringRequirements` already
+  // emits for it (rendered in the Requirements section below), not
+  // re-derived from `profile`.
+  const desktopOnly = test.proctoring.requirements.some((line) => /\b(desktop|laptop)\b/i.test(line));
+  // `deviceReport` only reads `resolved.desktopOnly` from here on — the
+  // landing payload carries no more of `ResolvedProctoring` than that one
+  // boolean (`Q1b` again), so the rest of this object is `off`'s inert
+  // defaults, never consulted.
+  const resolved: ResolvedProctoring = { ...PROCTORING_DEFAULTS.off, desktopOnly };
+  // Review finding 1: computed once, from the device the page is already
+  // running on — not from `report`, which stays `null` until "Check my
+  // device" is clicked and must not be able to gate Start.
+  const [refused] = useState(() => deviceReport(resolved).refused);
 
   return (
     <div className="exam-landing">
@@ -240,7 +287,7 @@ export function ExamLanding({
         )}
 
         <div className="exam-landing-actions">
-          <button type="button" onClick={() => setReport(deviceReport())}>
+          <button type="button" onClick={() => setReport(deviceReport(resolved))}>
             Check my device
           </button>
           {/* WCAG 2.5.3: the accessible name is a SUPERSET of the visible
@@ -252,7 +299,8 @@ export function ExamLanding({
             type="button"
             className="exam-start"
             aria-label={`Start ${test.name}`}
-            disabled={test.state !== "open"}
+            aria-describedby="exam-device-blocked"
+            disabled={test.state !== "open" || refused}
             onClick={onStart}
           >
             Start
@@ -271,6 +319,19 @@ export function ExamLanding({
             </button>
           )}
         </div>
+
+        {/* A disabled control is not a reason — a candidate who cannot tell
+            `aria-disabled` from a slow network cannot do anything about
+            either. `aria-describedby` on Start ties this to the button's
+            accessible description, always, not only once refused — the
+            element itself is present from first render exactly like its
+            sibling below, and only its *contents* vary with `refused`, for
+            the same reason that one's comment gives: a live region a
+            screen reader has never seen is a live region it does not
+            announce. */}
+        <p id="exam-device-blocked" className="exam-device-blocked" role="status">
+          {refused && "This test needs a laptop or desktop computer."}
+        </p>
 
         {/* Present from first render rather than inserted with its content:
             a live region a screen reader has never seen is a live region it
@@ -575,89 +636,109 @@ function AttemptView({
   }, [client, onFinished, queue]);
 
   return (
-    <Runner
-      paper={{ ...paper, responses, maxIndex }}
-      index={index}
-      onIndex={setIndex}
-      marked={marked}
-      onToggleMark={toggleMark}
-      // A cleared answer is a **save of null**, not a local forget: the
-      // server holds the old value until something replaces it, and an
-      // absent row and a null row mean different things to Phase 8.
-      onClear={(questionId) => {
-        save(questionId, null);
-      }}
-      questionSlot={questionSlot}
-      clockSlot={
-        <Clock
-          anchor={anchor}
-          warnAtMinutes={paper.warnAtMinutes}
-          onZero={() => {
-            // **Drain before submitting.** The queue may be holding
-            // answers the candidate made in time; submitting first would
-            // close the attempt and every one of them would come back a
-            // 409. `C-07`'s auto-submit is whichever of this and the
-            // server's next request happens first, so being a moment late
-            // here costs nothing and being early costs answers.
-            //
-            // Task 11: the drain, then the submission the drain was for.
-            // Whichever of this and the server's own materialisation gets
-            // there first wins; the other is a no-op, because
-            // `finishAttempt` writes only `WHERE submitted_at IS NULL`.
-            void finish(true);
-          }}
-          onSectionZero={() => {
-            // `C-07` on the client: when the section's clock runs out the
-            // candidate is moved to the first question of the next one.
-            // The server's half is the refusal that names it.
-            const next = firstOfNextSection(paper, index);
-            if (next !== null) setIndex(next);
-          }}
-        />
-      }
-      bannerSlot={<SaveBanner state={saveState} />}
-      submitSlot={
-        <>
-          <button
-            type="button"
-            className="exam-submit"
-            // WCAG 2.5.3: the accessible name is a superset of the
-            // visible label. "Submit" is what the eye wants; a
-            // screen-reader user arriving from a button list needs to
-            // hear what it ends.
-            aria-label="Submit test and finish"
-            disabled={submitting === "sending"}
-            onClick={() => {
-              setSubmitting("confirming");
+    <>
+      {/* `Q2c`/`AG4`: a sibling of `Runner`, never its parent — the
+          boundary below catches whatever the layer's own work throws
+          without taking the paper's own subtree down with it.
+          `paper.proctoring` is now carried by **every** response that
+          builds a paper, `/start`'s mint included: it is a pure function
+          of the attempt's settings, so resolving it costs no read, and
+          omitting it from the mint left a candidate unproctored until
+          their first reload. The guard below stays because an older
+          cached payload can still arrive without it. */}
+      {paper.proctoring && (
+        <ProctoringErrorBoundary>
+          <ProctoringLayer
+            attemptId={paper.attemptId}
+            proctoring={paper.proctoring}
+            initialViolations={paper.violations ?? 0}
+          />
+        </ProctoringErrorBoundary>
+      )}
+      <Runner
+        paper={{ ...paper, responses, maxIndex }}
+        index={index}
+        onIndex={setIndex}
+        marked={marked}
+        onToggleMark={toggleMark}
+        // A cleared answer is a **save of null**, not a local forget: the
+        // server holds the old value until something replaces it, and an
+        // absent row and a null row mean different things to Phase 8.
+        onClear={(questionId) => {
+          save(questionId, null);
+        }}
+        questionSlot={questionSlot}
+        clockSlot={
+          <Clock
+            anchor={anchor}
+            warnAtMinutes={paper.warnAtMinutes}
+            onZero={() => {
+              // **Drain before submitting.** The queue may be holding
+              // answers the candidate made in time; submitting first would
+              // close the attempt and every one of them would come back a
+              // 409. `C-07`'s auto-submit is whichever of this and the
+              // server's next request happens first, so being a moment late
+              // here costs nothing and being early costs answers.
+              //
+              // Task 11: the drain, then the submission the drain was for.
+              // Whichever of this and the server's own materialisation gets
+              // there first wins; the other is a no-op, because
+              // `finishAttempt` writes only `WHERE submitted_at IS NULL`.
+              void finish(true);
             }}
-          >
-            Submit test
-          </button>
-          {submitting !== "idle" && (
-            <SubmitDialog
-              unanswered={
-                flatQuestions(paper).filter((question) => (responses[question.id] ?? null) === null)
-                  .length
-              }
-              marked={marked.size}
-              total={flatQuestions(paper).length}
-              pending={submitting === "sending"}
-              onConfirm={() => {
-                void finish();
+            onSectionZero={() => {
+              // `C-07` on the client: when the section's clock runs out the
+              // candidate is moved to the first question of the next one.
+              // The server's half is the refusal that names it.
+              const next = firstOfNextSection(paper, index);
+              if (next !== null) setIndex(next);
+            }}
+          />
+        }
+        bannerSlot={<SaveBanner state={saveState} />}
+        submitSlot={
+          <>
+            <button
+              type="button"
+              className="exam-submit"
+              // WCAG 2.5.3: the accessible name is a superset of the
+              // visible label. "Submit" is what the eye wants; a
+              // screen-reader user arriving from a button list needs to
+              // hear what it ends.
+              aria-label="Submit test and finish"
+              disabled={submitting === "sending"}
+              onClick={() => {
+                setSubmitting("confirming");
               }}
-              onCancel={() => {
-                setSubmitting("idle");
-              }}
-            />
-          )}
-          {submitError !== null && (
-            <p className="exam-submit-error" role="alert">
-              {submitError}
-            </p>
-          )}
-        </>
-      }
-    />
+            >
+              Submit test
+            </button>
+            {submitting !== "idle" && (
+              <SubmitDialog
+                unanswered={
+                  flatQuestions(paper).filter((question) => (responses[question.id] ?? null) === null)
+                    .length
+                }
+                marked={marked.size}
+                total={flatQuestions(paper).length}
+                pending={submitting === "sending"}
+                onConfirm={() => {
+                  void finish();
+                }}
+                onCancel={() => {
+                  setSubmitting("idle");
+                }}
+              />
+            )}
+            {submitError !== null && (
+              <p className="exam-submit-error" role="alert">
+                {submitError}
+              </p>
+            )}
+          </>
+        }
+      />
+    </>
   );
 }
 

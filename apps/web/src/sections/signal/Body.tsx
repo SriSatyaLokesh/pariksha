@@ -148,10 +148,9 @@ export function SignalIntegrity() {
           <div>
             <p>
               Strict proctoring takes a 320×240 snapshot about every sixty
-              seconds, counts faces on the device itself, and stores no
-              biometric template. Nothing is streamed. Nothing is recorded.
-              Snapshots sit in your own private bucket behind links that expire
-              in ten minutes.
+              seconds and stores no biometric template. Nothing is streamed.
+              Nothing is recorded. Snapshots sit in your own private bucket
+              behind links that expire in ten minutes.
             </p>
             <p>
               Tab switches, fullscreen exits and copy attempts are logged, and
@@ -306,7 +305,7 @@ const COMPARISON: { need: string; form: string; paid: string; ours: string }[] =
       need: "Video or audio recorded",
       form: "—",
       paid: "Varies by vendor",
-      ours: "Never. Snapshots only, faces counted on-device",
+      ours: "Never. Snapshots only",
     },
     {
       need: "Who decides a candidate cheated",

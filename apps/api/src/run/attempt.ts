@@ -47,6 +47,7 @@ import {
   appendAudit,
   countAttemptsForCandidate,
   countAttemptsForVersion,
+  countViolations,
   consumeAuthToken,
   createAttempt,
   getCandidateById,
@@ -68,6 +69,7 @@ import {
   type NavigationMode,
   type PassageGroup,
   type Question,
+  type ResolvedProctoring,
   type ResponseValue,
   type Section,
   type SetAssignment,
@@ -227,6 +229,21 @@ export interface AttemptPaper {
   /** `AC-13`'s anchor: the browser's countdown is a delta from this. */
   serverNow: number;
   submittedAt: number | null;
+  /**
+   * Phase 7c Task 1 (`Q7a`), fixed in the Task 5 follow-up round: **both
+   * required, set by `paperFrom` for every caller**. `proctoring` is
+   * `resolvedProctoringOf(settings)` — a pure function of the `settings`
+   * `paperFrom` already receives, so resolving it costs nothing extra and
+   * there is no excuse for a caller to go without it; a candidate whose
+   * first paint skips it sits unproctored until something reloads the
+   * page. `violations` is `0` from `paperFrom`, because that is the only
+   * value a just-minted attempt can have and counting it there would
+   * spend a read for a constant. `GET /attempt` alone overrides it with
+   * `countViolations`'s authoritative figure on resume — see that
+   * handler.
+   */
+  proctoring: ResolvedProctoring;
+  violations: number;
 }
 
 // --- reading the version's settings ------------------------------------
@@ -234,12 +251,22 @@ export interface AttemptPaper {
 // `allow_calculator` is a control under `proctoring.overrides`, and `Q1`
 // means every such control has one reader: `resolveProctoring`, never a
 // second ad-hoc path that reaches into the same key. `settings` arrives
-// `unknown` here (it is read straight off a stored row), so the narrowing
-// below is to `Test["proctoring"]` — the real shape this package already
-// models it as — rather than a local interface re-describing one field
-// of it.
-const allowCalculator = (settings: unknown): boolean =>
-  resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring).allowCalculator;
+// `unknown` here (it is read straight off a stored row — `AttemptRecord.
+// settings`, `packages/db/src/repo/candidate-entry.ts` — not through the
+// typed `PublishedTest.settings` a landing-payload reader gets for free),
+// so the narrowing below is to `Test["proctoring"]` — the real shape this
+// package already models it as — rather than a local interface
+// re-describing one field of it. This is a genuine boundary cast, not a
+// workaround for a looser local type: there is no `Test`-typed value to
+// read here, only a JSON column.
+//
+// **Exported** (Phase 7c Task 1 fix round) so every reader of an
+// attempt's stored settings shares the one cast — `routes/proctoring.ts`
+// used to carry a second, identical one inline.
+export const resolvedProctoringOf = (settings: unknown): ResolvedProctoring =>
+  resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring);
+
+const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(settings).allowCalculator;
 
 // --- refusals ----------------------------------------------------------
 
@@ -531,6 +558,14 @@ export function paperFrom(input: {
     allowCalculator: allowCalculator(input.settings),
     serverNow: input.now,
     submittedAt: input.submittedAt,
+    // `resolvedProctoringOf` is a pure read of `input.settings`, already
+    // fetched for `timingOf` above — free for every caller, which is why
+    // this is set here rather than left to `/start` and `GET /attempt`
+    // separately. `violations` is `0`: the only value a paper drawn from
+    // scratch can hold: `GET /attempt` is the one caller that overrides it
+    // with a real count, after this call returns.
+    proctoring: resolvedProctoringOf(input.settings),
+    violations: 0,
   };
 }
 
@@ -818,8 +853,24 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     const rows = await listResponses(deps.db, attempt.workspaceId, attempt.attemptId);
     const responses: Record<string, ResponseValue | null> = {};
     for (const row of rows) responses[row.questionId] = row.value as ResponseValue | null;
-    return c.json(
-      paperFrom({
+
+    // Phase 7c Task 1 (`Q7a`), fixed in the Task 5 follow-up round:
+    // `violations` is the authoritative count, the same figure
+    // `POST /attempt/events` answers with — a client-side tally resets on
+    // reload, so this read is the candidate's only trustworthy source for
+    // "Warning 2 of 5" after one. `proctoring` needs no separate read
+    // here: `paperFrom` below resolves it from `attempt.settings` for
+    // every caller now, and a second call here would answer the same
+    // object (`Q1`: never the raw overrides, never a branch on `profile`).
+    const violations = await countViolations(deps.db, attempt.workspaceId, attempt.attemptId);
+
+    // Typed against `AttemptPaper` itself, not an inline object literal.
+    // `violations` is the one field this still overrides: `paperFrom` sets
+    // it to `0`, correct for a just-minted paper, but this call is never
+    // that — an attempt reaching `GET /attempt` already exists, and its
+    // real count is the whole point of resuming (`Q7a`).
+    const payload: AttemptPaper = {
+      ...paperFrom({
         // Task 8's seed, off the rows this read already returned — so it
         // is free, and so a browser that has lost its counter cannot
         // restart below what the server holds.
@@ -835,7 +886,9 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         responses,
         now,
       }),
-    );
+      violations,
+    };
+    return c.json(payload);
   });
 
   /**

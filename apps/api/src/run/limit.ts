@@ -37,6 +37,10 @@
 //     addresses sprayed at one test, and thousands of codes aimed at one
 //     inbox — and a single ceiling that stopped the second would refuse
 //     the hall long before it stopped the first.
+//   * `attempt_events` (`Q7c`) counts **every** request too, keyed per
+//     attempt: the proctoring ingest is an endpoint a candidate's browser
+//     can call in a loop, and each call writes a batch of rows regardless
+//     of outcome, so there is no "miss" to charge instead.
 //
 // **Never per IP** — a hall behind one NAT is one address, and a botnet is
 // a thousand. Every bucket is keyed by the thing being attacked (a test
@@ -91,6 +95,13 @@ export const LIMITS = {
   /** Short codes that resolved to nothing — **instance-wide**, not per
    *  code, per minute. See the header: a sweep never repeats a code. */
   short_link: { limit: 300, windowMs: 60_000 },
+  /** Proctoring events, per **attempt**, per five minutes (`Q7c`, Phase
+   *  7c Task 1). Ten events a request and 120 requests is 1,200 rows in
+   *  five minutes — far past any legitimate candidate's traffic (the
+   *  busiest real source is `window_blur`/`visibility_hidden` on tab
+   *  switches) and nowhere near the daily write budget `appendEvents`'s
+   *  own cap already protects. */
+  attempt_events: { limit: 120, windowMs: 5 * 60_000 },
 } as const;
 
 export type LimitKind = keyof typeof LIMITS;

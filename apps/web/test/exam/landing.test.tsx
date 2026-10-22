@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { ExamApp, REGISTRATION_TOKEN_KEY, deviceReport } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -25,14 +26,24 @@ const landingFixture: LandingPayload = {
   rules: "A candidate cannot go back to an earlier question.",
   // A real Standard resolution, not the empty array `resolveProctoring`
   // would never actually produce for this profile — copied from
-  // `apps/api/test/run/landing.test.ts`'s own assertion of the same three
+  // `apps/api/test/run/landing.test.ts`'s own assertion of the same four
   // sentences, so the two cannot drift apart.
+  //
+  // Phase 7c Task 5 (`T5-R3`): `blockCopyPaste` gets a sentence of its own
+  // now (`proctoringRequirements`, `packages/core/src/proctoring.ts`) and
+  // Standard defaults it `true` — this is the fixture that pins the
+  // sentence it adds, deliberately broken by this task's diff.
   proctoring: {
     profile: "standard",
     requirements: [
       "This test must be taken on a desktop or laptop, not a phone or tablet.",
       "Use a fully updated Chrome, Edge, Firefox or Safari.",
+      // Whole-branch review, finding 3: copied verbatim from
+      // `apps/api/test/run/landing.test.ts`'s own assertion so the two
+      // cannot drift apart.
+      "Leaving this browser tab or window is logged.",
       "The test runs in fullscreen. Leaving it is logged.",
+      "Copying, pasting and right-click are disabled, and attempts are logged.",
     ],
   },
   accessMode: "link_code",
@@ -88,6 +99,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A passing desktop, stubbed explicitly. Review finding 1: Start is now
+ *  genuinely gated on the device at mount (`device-gate.test.tsx` owns
+ *  that gate itself) rather than only after "Check my device" is clicked,
+ *  so any test here that wants Start enabled by default — because it is
+ *  testing something else entirely — has to stand on a device that
+ *  actually passes, the same as `landingFixture`'s Standard profile
+ *  (`desktop_only: true`) requires. jsdom's own defaults (no
+ *  `matchMedia`) fail the pointer check otherwise. */
+function stubCompliantDevice(): void {
+  vi.stubGlobal("innerWidth", 1440);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("pointer: fine"),
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  vi.stubGlobal("navigator", {
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+  });
+}
+
 it("C-01: name, duration, question count, sections, rules and the window", async () => {
   await mount();
   for (const text of [
@@ -133,6 +165,11 @@ it("every section is listed with its own question count", async () => {
 });
 
 it("C-01: 'Check my device' reports before the window opens and does not block starting", async () => {
+  // A passing desktop, stubbed explicitly: a refused device additionally
+  // disables Start (`device-gate.test.tsx` owns that gate), so this test
+  // pins a compliant device to isolate what it actually checks — that the
+  // window, not the device, is why Start is disabled here.
+  stubCompliantDevice();
   await mount({ ...landingFixture, state: "scheduled", opensAt: NOW + DAY });
   // No @testing-library/user-event in this workspace, by a decision this
   // repo already made and documented (`test/authoring/reorder.test.tsx:44`):
@@ -142,13 +179,19 @@ it("C-01: 'Check my device' reports before the window opens and does not block s
   const check = screen.getByRole("button", { name: /check my device/i });
   check.focus();
   fireEvent.click(check);
-  expect(await screen.findByRole("status")).toHaveTextContent(/screen|browser/i);
-  // The window, not the device: the report never disables the button and
-  // never enables it (Phase 7 owns the gate).
+  // Two live regions share this page since Task 3 (`#exam-device-blocked`
+  // is now unconditionally mounted too, review round 1 finding 1), so a
+  // bare singular role query is ambiguous here — find the one the device
+  // findings actually landed in.
+  const statuses = await screen.findAllByRole("status");
+  expect(statuses.some((el) => /screen|browser/i.test(el.textContent ?? ""))).toBe(true);
+  // The window, not a compliant device: a passing report never disables
+  // the button and never enables it either — the window still rules.
   expect(screen.getByRole("button", { name: /start/i })).toBeDisabled();
 });
 
 it("the start button is enabled only while the test is open", async () => {
+  stubCompliantDevice();
   await mount();
   expect(screen.getByRole("button", { name: /start/i })).toBeEnabled();
 });
@@ -160,6 +203,7 @@ it("Start without a registration token opens registration rather than minting an
   // a 4xx on the first live run, caught by nothing. The token comes from
   // `sessionStorage`, and there is none here — so Start is now the way IN
   // to registration (Task 6) rather than a dead end.
+  stubCompliantDevice();
   sessionStorage.removeItem(REGISTRATION_TOKEN_KEY);
   await mount();
   fireEvent.click(screen.getByRole("button", { name: /start/i }));
@@ -257,15 +301,16 @@ describe("deviceReport", () => {
 
   it("passes a wide screen with a mouse on a supported browser", () => {
     stub(1440, true, "Mozilla/5.0 (Windows NT 10.0) Chrome/130.0.0.0 Safari/537.36");
-    const report = deviceReport();
+    const report = deviceReport(PROCTORING_DEFAULTS.standard);
     expect(report.ok).toBe(true);
+    expect(report.refused).toBe(false);
     expect(report.findings.map((f) => f.label)).toEqual(["Screen", "Pointer", "Browser"]);
     expect(report.findings.every((f) => f.ok)).toBe(true);
   });
 
   it("fails a phone on both the screen and the pointer, and names which", () => {
     stub(390, false, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Version/17.0 Mobile/15E148 Safari/604.1");
-    const report = deviceReport();
+    const report = deviceReport(PROCTORING_DEFAULTS.standard);
     expect(report.ok).toBe(false);
     const failed = report.findings.filter((f) => !f.ok).map((f) => f.label);
     expect(failed).toContain("Screen");
@@ -274,7 +319,7 @@ describe("deviceReport", () => {
 
   it("names an unsupported browser rather than reporting it as fine", () => {
     stub(1440, true, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Lynx/2.9");
-    const browser = deviceReport().findings.find((f) => f.label === "Browser");
+    const browser = deviceReport(PROCTORING_DEFAULTS.standard).findings.find((f) => f.label === "Browser");
     expect(browser?.ok).toBe(false);
     expect(browser?.detail).toMatch(/Chrome|Edge|Firefox|Safari/);
   });

@@ -125,6 +125,10 @@ it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", 
   ).toEqual([
     "GET /api/v1/run/attempt",
     "GET /api/v1/run/attempt/media/:key",
+    // Phase 7c Task 1 (`Q7`): the proctoring event ingest. Same scope as
+    // the save path below — the cookie names the attempt, and the row
+    // written is scoped to it.
+    "POST /api/v1/run/attempt/events",
     // Task 11 (#75, P6.11): ending it. Takes no body at all, so there is
     // nothing beside the cookie for the server to choose between.
     "POST /api/v1/run/attempt/submit",

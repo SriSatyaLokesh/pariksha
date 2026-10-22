@@ -47,8 +47,40 @@ const maxWorkers = Math.min(availableParallelism(), 4);
  */
 const proxy = { "/api": { target: "http://127.0.0.1:8787" } };
 
+/**
+ * T-02's candidate URL, `/<workspace-slug>/<test-slug>` — the same narrow
+ * pattern (`apps/api/src/index.ts`'s `CANDIDATE_URL`) the deployed Worker
+ * rewrites to the exam shell: the organiser's own slug charset
+ * (`^[a-z0-9][a-z0-9-]*$`), no dot, which is what keeps it off a real
+ * asset path (`/assets/index-k5IQwTyP.css` is two segments too).
+ */
+const CANDIDATE_URL = /^\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\/?$/;
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    {
+      name: "candidate-url-rewrite",
+      // `vite preview` has no file behind T-02's candidate URL either, and
+      // unlike the deployed Worker it has no Worker-level rewrite to
+      // answer it with — Vite's own SPA fallback would serve `index.html`
+      // (the organiser's landing bundle), not `exam.html`. Phase 7c Task 4
+      // is the first spec to need the real candidate runtime through a
+      // real browser (`e2e/proctoring.spec.ts`, for the Fullscreen API
+      // jsdom cannot provide at all), so this is where the gap was found.
+      // A plugin hook, not a `preview` option — `configurePreviewServer`
+      // only exists on this surface. Preview only — never part of the
+      // built `dist/` this serves, and never read by the deployed Worker,
+      // which has its own `CANDIDATE_URL` already.
+      configurePreviewServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          const path = req.url?.split("?")[0] ?? "";
+          if (CANDIDATE_URL.test(path)) req.url = "/exam.html";
+          next();
+        });
+      },
+    },
+  ],
   server: { proxy },
   preview: { proxy },
   build: {

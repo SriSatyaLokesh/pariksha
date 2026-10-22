@@ -45,6 +45,7 @@ import type { EmailMessage } from "../../src/email/adapter.js";
 import { forCandidate, type CandidateQuestion } from "../../src/run/scrub.js";
 import { POW_DIFFICULTY_BITS } from "../../src/run/pow.js";
 import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
+import { EVENTS_PATH } from "../../src/routes/proctoring.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { CONSENT, DAY, iso, seedTest, seedWorkspace } from "./fixtures.js";
 import { startAttemptFor } from "./paper-fixtures.js";
@@ -394,6 +395,21 @@ record(
 
 record("GET /api/v1/run/attempt", await (await app.request("/api/v1/run/attempt", { headers: { cookie: A.cookie } })).clone().text());
 
+// Phase 7c Task 1: the proctoring event ingest. `attempt`-authority, so it
+// joins the scan the same way `/attempt/answer` does — scanned for the
+// same reason `GET /attempt` now carries `violations` and the resolved
+// object: both ride a cookie-scoped route, neither a public one.
+record(
+  `POST ${EVENTS_PATH}`,
+  await (
+    await app.request(EVENTS_PATH, {
+      method: "POST",
+      headers: { cookie: A.cookie, "content-type": "application/json" },
+      body: JSON.stringify({ events: [{ type: "window_blur", clientTs: 1 }] }),
+    })
+  ).clone().text(),
+);
+
 // The media on A's own paper, and a key outside it.
 const mediaKey = A.paper.sections[0]!.questions[0]!.media?.[0]?.src ?? "";
 await deps.storage.put(`media/${workspaceId}/sentinel-diagram.png`, new TextEncoder().encode("PNG"), {
@@ -504,10 +520,11 @@ it("AC-22: every candidate-reachable endpoint is covered by this scan", () => {
   // Bumped deliberately. A route `ROUTE_AUTH` later marks `attempt`,
   // `entry`, or candidate-`public` grows this number; the fixed literal is
   // what makes that growth a visible diff instead of a silent pass.
-  // 16 until `GET /attempt/result` was deleted (final review, drift
+  // Was 16 until `GET /attempt/result` was deleted (final review, drift
   // Important): a strict subset of `POST /attempt/submit`'s answer,
-  // behind a second release-gate read, with no client.
-  expect(CANDIDATE_ENDPOINTS.length).toBe(15);
+  // behind a second release-gate read, with no client. Back to 16 with
+  // Phase 7c Task 1's `POST /api/v1/run/attempt/events` (`Q7`).
+  expect(CANDIDATE_ENDPOINTS.length).toBe(16);
   expect(new Set(seen.keys())).toEqual(new Set(CANDIDATE_ENDPOINTS.map(([e]) => e)));
 });
 

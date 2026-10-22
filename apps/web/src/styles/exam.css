@@ -178,6 +178,17 @@
   margin: 32px 0;
 }
 
+/* No colour set here — `Start`'s own disabled styling already carries
+   that (contrast-usage.test.ts's two SURFACE entries for
+   `.exam-landing-actions button:disabled`), so this sentence inherits the
+   page's ink rather than adding a second colour-setting selector for the
+   same state. */
+.exam-device-blocked {
+  margin: -16px 0 24px;
+  max-width: 64ch;
+  font-weight: 500;
+}
+
 .exam-landing-actions button {
   min-height: 44px;
   padding: 0 24px;
@@ -1431,4 +1442,159 @@
 .exam-review-explanation {
   margin-top: 8px;
   max-width: 64ch;
+}
+
+/* The proctoring warning count (Phase 7c Task 2, `Q7a`). `ProctoringLayer`
+   mounts as `Runner`'s sibling, not its parent, so this surface sits over
+   the paper rather than inside its layout — `fixed`, never part of the
+   document flow, which is also what `D8`'s "the candidate runtime's
+   layout does not move" needs: a count line must not reflow the paper
+   whether or not it is even mounted. DESIGN.md names this exact surface
+   by hand: cream fill, 2px voltage border is the same pair
+   `.exam-option-row.is-selected` already proves against WCAG — reused
+   rather than invented. `ProctoringOverlay` (Task 4) replaces this with
+   the richer presentation; this stays plain on purpose (R5) and nothing
+   here animates, matching the rest of this file. */
+.exam-proctoring-count {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  margin: 0;
+  padding: 8px 12px;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--color-voltage);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+}
+
+.exam-proctoring-count:empty {
+  display: none;
+}
+
+/* `Watermark` (Phase 7c Task 5, `Q9`) — identity and the time, tiled over
+   the paper. `fixed`, off the normal flow, same as `.exam-proctoring-count`
+   above and for the same reason (`D8`): nothing here reflows the runner,
+   mounted or not. `inset: -10vmax` grows the box well past the viewport on
+   every side so the `rotate()` below leaves no uncovered corner at any real
+   window size, and `overflow: hidden` keeps the excess from ever scrolling
+   into view.
+
+   `pointer-events: none` and `user-select: none` are the two properties
+   `T5-R2` names directly: jsdom applies no stylesheet, so a unit test
+   cannot see either here and proves them instead against this file's own
+   resolved chain (`test/css-chain.ts`'s `paintsIn`). `z-index: 10` sits
+   below the count line and the overlay (both 20+) — a candidate's actual
+   warnings still win the floor over a deterrent that needs no clicks.
+
+   `D1`: voltage, the runtime's own accent, at 20px/700 — `contrast-usage.
+   test.ts`'s large-text floor (`>=18.66px` at `weight: 700`), so the 3:1
+   bar applies rather than 4.5:1; voltage-on-cream measures 3.86:1, already
+   proved by `.exam-landing-hero h1`'s own entry. `opacity` make it faint
+   without touching the colour the contrast sweep reads — the same split
+   that file's own header draws between a declared colour and a state. */
+.exam-watermark {
+  position: fixed;
+  inset: -10vmax;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 48px 64px;
+  padding: 24px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.08;
+  transform: rotate(-24deg);
+  color: var(--color-voltage);
+  font-family: var(--type-mono-sm-family);
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* `ProctoringOverlay` (Phase 7c Task 4, `Q2b`/`P-03`/`P-04`) — the overlay
+   `ProctoringLayer` renders over the paper when fullscreen is required and
+   not held, or when a window-leave warning is up. `D8`: `fixed`, off the
+   normal flow, covering the runner without a single property of its own
+   layout changing — the scrim and the dialog are the only two new boxes
+   on the page, and the runner underneath is marked `inert`/`aria-hidden`
+   by `ProctoringLayer` itself (`Q2a`, `T4-R2`), not by anything here.
+   z-index above `.exam-proctoring-count` and `.exam-submit-confirm` (both
+   20): this is the one surface that must sit over everything else in the
+   runner, including them.
+
+   Voltage, not the organiser's Signal green — the candidate's overlays
+   take the runtime's own accent (handoff §4, "an accent may not cross
+   grounds"). The scrim is `--color-ink` at 60% over whatever the paper
+   already painted, the one legal alpha form this file's header names. */
+.exam-proctoring-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgb(from var(--color-ink) r g b / 0.6);
+}
+
+.exam-proctoring-dialog {
+  width: min(480px, 100%);
+  padding: 24px;
+  border: 2px solid var(--color-voltage);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  /* The title and message below both carry their own (equal-or-larger)
+     type; this is the conservative baseline `contrast-usage.test.ts`
+     resolves this selector's own `color` declaration against — the same
+     reason `.exam-confirm` states one below. */
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.exam-proctoring-overlay-title {
+  margin: 0 0 8px;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-proctoring-overlay-message {
+  margin: 0;
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+}
+
+.exam-proctoring-overlay-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+/* The remedy control — the same voltage-deep-on-cream pair `.exam-submit`
+   and `.exam-register-submit` already prove against WCAG, reused rather
+   than invented. */
+.exam-proctoring-overlay-action {
+  min-height: 44px;
+  padding: 0 24px;
+  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border-radius: var(--rounded-md);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
 }

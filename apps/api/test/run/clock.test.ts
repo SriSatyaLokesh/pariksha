@@ -504,26 +504,29 @@ it("after a submission a save is refused as already submitted, and nothing is st
 
 // --- the budgets, re-measured with the clock on the routes --------------
 
-it("GET /attempt costs 2 inside the window and 3 on the read that materialises the timeout", async () => {
+it("GET /attempt costs 3 inside the window and 4 on the read that materialises the timeout", async () => {
+  // Phase 7c Task 1 moved these from 2/3 to 3/4: `countViolations`
+  // (`Q7a`'s authoritative count) is one more read on every path, not
+  // only the one that also closes the attempt.
   const inside = countingDeps(deps);
   await resumeOn(mine.cookie, createApp(inside.deps));
-  expect(inside.counts().total).toBe(2);
+  expect(inside.counts().total).toBe(3);
 
   clock = deadlineAt + 60_000;
   const expired = countingDeps(deps);
   await resumeOn(mine.cookie, createApp(expired.deps));
   expect(expired.counts().total).toBe(ROUTE_BUDGETS["/api/v1/run/attempt"]);
-  expect(expired.counts().db).toBe(3);
+  expect(expired.counts().db).toBe(4);
   expect(expired.counts().storage).toBe(0);
 
-  // And the write happens once, ever: the next read is back to 2.
+  // And the write happens once, ever: the next read is back to 3.
   const again = countingDeps(deps);
   await resumeOn(mine.cookie, createApp(again.deps));
-  expect(again.counts().total).toBe(2);
+  expect(again.counts().total).toBe(3);
 });
 
-it("the declared budget for GET /attempt is exactly 3", () => {
-  expect(ROUTE_BUDGETS["/api/v1/run/attempt"]).toBe(3);
+it("the declared budget for GET /attempt is exactly 4", () => {
+  expect(ROUTE_BUDGETS["/api/v1/run/attempt"]).toBe(4);
 });
 
 it("a save that also moves the clock's section is still one read and one write", async () => {

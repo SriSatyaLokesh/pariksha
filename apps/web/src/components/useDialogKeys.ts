@@ -34,6 +34,16 @@ import { useEffect, useRef, type KeyboardEvent } from "react";
  * earned `aria-modal="true"`, and the candidate's calculator — an overlay
  * over a live attempt, under a clock, with no second device to fall back on
  * — is one.
+ *
+ * `dismissible` is the same shape of opt-in, added for Phase 7c Task 4's
+ * `ProctoringOverlay` (`T4-R1`). `Q2b` is explicit that the candidate's
+ * proctoring overlay has **no Escape handler** — "an overlay a keystroke
+ * dismisses is not a proctoring control". Passing a no-op `onClose` to get
+ * that would be a writer with no reader, indistinguishable from an
+ * oversight; copying this hook's five lines a second time is worse, which
+ * is the whole reason this file exists ("a second copy of five lines of
+ * focus handling is how two dialogs end up disagreeing about Escape").
+ * Default `true` is every existing caller's behaviour unchanged.
  */
 const FOCUSABLE =
   'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
@@ -41,10 +51,11 @@ const FOCUSABLE =
 export function useDialogKeys<T extends HTMLElement>(
   active: boolean,
   onClose: () => void,
-  options?: { trapTab?: boolean },
+  options?: { trapTab?: boolean; dismissible?: boolean },
 ) {
   const dialogRef = useRef<T>(null);
   const trapTab = options?.trapTab ?? false;
+  const dismissible = options?.dismissible ?? true;
 
   useEffect(() => {
     if (!active) return;
@@ -58,7 +69,7 @@ export function useDialogKeys<T extends HTMLElement>(
   return {
     dialogRef,
     onKeyDown: (event: KeyboardEvent): void => {
-      if (event.key === "Escape") {
+      if (dismissible && event.key === "Escape") {
         onClose();
         return;
       }

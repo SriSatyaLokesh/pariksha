@@ -214,6 +214,13 @@ rediscovered as bugs.
   against a Miniflare D1 binding. A focused run or a `--filter=@pariksha/db` can be entirely
   green while the branch is red — this happened in 7a and cost a fix round.
 - `apps/web`'s vitest is capped at `maxWorkers: min(availableParallelism(), 4)`. Not a knob.
+- **A stale `dist/` in `@pariksha/core` or `@pariksha/db` makes a 7a export import as `undefined`.** A
+  clone whose packages were built before 7a landed resolves `PROCTORING_EVENTS`, `resolveProctoring`
+  and friends to `undefined` **through the package boundary**, and the failure surfaces far from its
+  cause — in 7c it was an opaque `TypeError` thrown inside zod by `z.enum(undefined)`, with a stack
+  trace pointing at the route file. Every remaining plan imports 7a exports the same way. Before
+  debugging anything of that shape:
+  `SITE_URL='https://pariksha.example' npx turbo run build --filter=@pariksha/core --filter=@pariksha/db`.
 - **`findBy*`/`waitFor` carry their own 1 s `asyncUtilTimeout`**, independent of the 10 s
   `testTimeout`, and it is the bar an async query actually fails against. Also not a knob — fix
   the test's approach.
