@@ -76,7 +76,14 @@ const paper: AttemptPaper = {
   allowCalculator: true,
   serverNow: NOW,
   submittedAt: null,
-  proctoring: PROCTORING_DEFAULTS.off,
+  // Whole-branch review (point 7, minor): `allowCalculator` above and
+  // `proctoring.allowCalculator` are the same fact twice (`paperFrom`
+  // derives both from one `resolveProctoring` call) — `off`'s own
+  // `allowCalculator` is `false`, which this fixture's top-level `true`
+  // disagreed with, a paper the server could never actually produce. A
+  // real resolution can still override just this one key regardless of
+  // profile (`allow_calculator`), which is what this is.
+  proctoring: { ...PROCTORING_DEFAULTS.off, allowCalculator: true },
   violations: 0,
 };
 

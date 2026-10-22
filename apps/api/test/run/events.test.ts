@@ -206,3 +206,49 @@ it("the response and a later resume report the same authoritative count", async 
   const resumed = (await (await get("/api/v1/run/attempt", attemptCookie)).json()) as AttemptPaper;
   expect(resumed.violations).toBe(ingest.violations);
 });
+
+// Whole-branch review, finding 6: `detail` was unvalidated and unbounded at
+// this trust boundary.
+it("refuses a detail payload past the serialised bound", async () => {
+  const res = await post(
+    EVENTS_PATH,
+    { events: [{ type: "window_blur", detail: { awayMs: "x".repeat(600) }, clientTs: 1 }] },
+    attemptCookie,
+  );
+  expect(res.status).toBe(400);
+});
+
+it("accepts the real shapes this phase emits, well under the bound", async () => {
+  const res = await post(
+    EVENTS_PATH,
+    { events: [{ type: "window_blur", detail: { awayMs: 4200 }, clientTs: 1 }] },
+    attemptCookie,
+  );
+  expect(res.status).toBe(200);
+});
+
+// Whole-branch review, finding 9: unlike `/attempt/answer`, a submitted
+// attempt is a silent no-op here, not a 409 — a stale tab's flush must
+// never surface anything to the candidate (`AG1`), and must not grow the
+// figure Phase 8's review page will read.
+it("writes nothing and still answers the current count once the attempt is submitted", async () => {
+  await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 1 }] }, attemptCookie);
+  const submitRes = await app.request("/api/v1/run/attempt/submit", {
+    method: "POST",
+    headers: { cookie: attemptCookie },
+  });
+  expect(submitRes.status).toBe(200);
+
+  const res = await post(
+    EVENTS_PATH,
+    { events: [{ type: "window_blur", clientTs: 2 }] },
+    attemptCookie,
+  );
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
+
+  const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM event", []);
+  // The one pre-submission event, and nothing from the post-submission
+  // request.
+  expect(Number(rows[0]?.n)).toBe(1);
+});

@@ -4,7 +4,7 @@
 // 0002 budgets it at one D1 write plus at most one R2 call, so `upsertResponse`
 // is a single statement and nothing here loops a query over questions.
 
-import { isViolation, type ProctoringEventType } from "@pariksha/core";
+import { VIOLATION_EVENTS } from "@pariksha/core";
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
@@ -429,25 +429,30 @@ export const appendEvents = scoped(
   },
 );
 
+/** Review finding 8: `VIOLATION_EVENTS` as SQL placeholders — generated
+ *  once from the same set `isViolation()` reads, so the violation
+ *  vocabulary still has exactly one definition. */
+const VIOLATION_TYPES = [...VIOLATION_EVENTS];
+const VIOLATION_PLACEHOLDERS = VIOLATION_TYPES.map(() => "?").join(", ");
+
 /**
  * `Q7a`/`Q2`: the server-side violation count a candidate's response is
- * judged by — every stored event whose type `isViolation()` admits, for
- * this attempt. One statement, reading only the `type` column, so a long
- * attempt's event history is never pulled over the wire for its own sake.
- *
- * `type` is stored as `string` — `appendEvents` writes whatever its caller
- * sends — but every row the ingest route writes was validated against
- * `PROCTORING_EVENTS` before the insert, so the cast here is a boundary
- * cast on trusted data, not a narrowing of what the column can hold.
+ * judged by. Review finding 8: this used to `SELECT type` for every event
+ * row the attempt ever had and filter in JS — a result set that grows with
+ * the attempt's whole history and was pulled over the wire on every
+ * `GET /api/v1/run/attempt` and every ingest POST, to count a number
+ * bounded by 5. One `COUNT(*)`, one row back, same one subrequest
+ * (`event_attempt_idx` already covers it) — the projection was the
+ * problem, not the index.
  */
 export const countViolations = scoped(
   "countViolations",
   async (db: DbClient, workspaceId: string, attemptId: string): Promise<number> => {
-    const rows = await db.query<{ type: string }>(
-      "SELECT type FROM event WHERE workspace_id = ? AND attempt_id = ?",
-      [workspaceId, attemptId],
+    const rows = await db.query<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM event WHERE workspace_id = ? AND attempt_id = ? AND type IN (${VIOLATION_PLACEHOLDERS})`,
+      [workspaceId, attemptId, ...VIOLATION_TYPES],
     );
-    return rows.filter((row) => isViolation(row.type as ProctoringEventType)).length;
+    return Number(rows[0]?.n ?? 0);
   },
 );
 

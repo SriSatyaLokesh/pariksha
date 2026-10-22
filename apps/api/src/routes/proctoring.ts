@@ -45,9 +45,27 @@ export const MAX_EVENTS_PER_REQUEST = 10;
  *  place. */
 export const EVENTS_PATH = "/api/v1/run/attempt/events";
 
+/** Review finding 6: `detail` was unbounded at this trust boundary — every
+ *  shape this phase's emitters actually produce is `Record<string, never>`
+ *  or `{ awayMs: number | null }` (`@pariksha/core`'s own doc comments), so
+ *  a few hundred bytes covers all of them with room to spare. Not a
+ *  re-litigation of `R3` (`detail`'s shape stays `z.unknown()` here,
+ *  deliberately, per that ruling) — nothing has ever bounded its size. */
+const MAX_DETAIL_BYTES = 512;
+
 const eventItem = z.object({
   type: z.enum(PROCTORING_EVENTS),
-  detail: z.unknown().optional(),
+  detail: z
+    .unknown()
+    .optional()
+    .refine((detail) => {
+      if (detail === undefined) return true;
+      try {
+        return JSON.stringify(detail).length <= MAX_DETAIL_BYTES;
+      } catch {
+        return false; // unserialisable (e.g. circular) is refused, not ignored
+      }
+    }, `detail must serialise to at most ${String(MAX_DETAIL_BYTES)} bytes`),
   clientTs: z.number(),
 });
 
@@ -75,11 +93,25 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // attempt's flapping browser must not cost another candidate theirs.
     await limitOrThrow(deps, "attempt_events", attempt.attemptId);
 
-    await appendEvents(deps.db, attempt.workspaceId, {
-      attemptId: attempt.attemptId,
-      events: parsed.data.events,
-      serverTs: deps.now(),
-    });
+    // Review finding 9: `attemptContext` deliberately resolves a submitted
+    // attempt (the receipt and the result read through the same cookie),
+    // but whether a *write* is still allowed is this route's question — the
+    // same question `/attempt/answer` asks and refuses with a 409. This
+    // route answers it differently, on purpose: a stale tab's 5-second
+    // flush, or a candidate's own script, posting after submission is a
+    // silent no-op that still answers the current count, not a 409.
+    // `/answer` refuses loudly because the candidate must be told their
+    // answer was not saved; a proctoring event never surfaces anything to
+    // the candidate (`AG1`), and a 409 here would make the fail-open queue
+    // retry a write that can never succeed again until its 100-item buffer
+    // fills.
+    if (attempt.submittedAt === null) {
+      await appendEvents(deps.db, attempt.workspaceId, {
+        attemptId: attempt.attemptId,
+        events: parsed.data.events,
+        serverTs: deps.now(),
+      });
+    }
 
     const violations = await countViolations(deps.db, attempt.workspaceId, attempt.attemptId);
     // `Q1`: `limit` and `action` come from the resolved object, never from
