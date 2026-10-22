@@ -17,7 +17,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { PROCTORING_DEFAULTS } from "@pariksha/core";
+import { PROCTORING_DEFAULTS, proctoringRequirements, resolveProctoring } from "@pariksha/core";
 import { deviceReport, ExamApp } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -177,9 +177,19 @@ async function openCandidateLanding(
   fireEvent.click(screen.getByRole("button", { name: /check my device/i }));
 }
 
+// Review round 1, finding 2: `exam.tsx`'s `desktopOnly` extraction parses
+// `proctoringRequirements`'s real sentence, not a string this file invents.
+// Driving the gate with the pinned production sentence means a reworded
+// sentence at the `packages/core` end breaks *this test* rather than
+// silently stopping the gate from firing in production — the shape of the
+// defect the spec cites as `#186`. `resolveProctoring({ profile: "strict"
+// })` is `desktop_only: true` by default (`PROCTORING_DEFAULTS.strict`),
+// so this is the one line that line actually ships.
+const STRICT_DESKTOP_REQUIREMENTS = proctoringRequirements(resolveProctoring({ profile: "strict" }));
+
 it("blocks the start button and explains, rather than failing silently", async () => {
   await openCandidateLanding(
-    { proctoring: { profile: "strict", requirements: ["A laptop or desktop computer."] } },
+    { proctoring: { profile: "strict", requirements: STRICT_DESKTOP_REQUIREMENTS } },
     { device: SIGNATURES[0] },
   );
   expect(await screen.findByText(/This test needs a laptop or desktop computer\./)).toBeVisible();
@@ -192,7 +202,7 @@ it("blocks the start button and explains, rather than failing silently", async (
 
 it("a compliant device on the same strict test starts clean", async () => {
   await openCandidateLanding(
-    { proctoring: { profile: "strict", requirements: ["A laptop or desktop computer."] } },
+    { proctoring: { profile: "strict", requirements: STRICT_DESKTOP_REQUIREMENTS } },
     { device: SIGNATURES[3] }, // "laptop"
   );
   expect(screen.queryByText(/This test needs a laptop or desktop computer\./)).toBeNull();
@@ -201,9 +211,23 @@ it("a compliant device on the same strict test starts clean", async () => {
 
 it("the blocked landing page has no axe violations", async () => {
   await openCandidateLanding(
-    { proctoring: { profile: "strict", requirements: ["A laptop or desktop computer."] } },
+    { proctoring: { profile: "strict", requirements: STRICT_DESKTOP_REQUIREMENTS } },
     { device: SIGNATURES[0] },
   );
   await screen.findByText(/This test needs a laptop or desktop computer\./);
   expect(await axe(document.body)).toHaveNoViolations();
+});
+
+it("the device-blocked live region exists from first render, not only once refused", async () => {
+  // Review round 1, finding 1: a region mounted only when `blocked` turns
+  // true is a region no screen reader has registered yet when it does —
+  // reworded from `{blocked && <p role="status">...}` to an always-mounted
+  // region whose *contents* vary. No device stub and no click: this proves
+  // the element exists before either, which `openCandidateLanding`'s own
+  // click would hide a regression on.
+  const { container } = render(<ExamApp client={clientFor(landingFixture)} />);
+  await screen.findByRole("heading", { level: 1 });
+  const region = container.querySelector("#exam-device-blocked");
+  expect(region).not.toBeNull();
+  expect(region).toHaveTextContent("");
 });

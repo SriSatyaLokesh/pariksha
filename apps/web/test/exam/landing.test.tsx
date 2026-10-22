@@ -158,7 +158,12 @@ it("C-01: 'Check my device' reports before the window opens and does not block s
   const check = screen.getByRole("button", { name: /check my device/i });
   check.focus();
   fireEvent.click(check);
-  expect(await screen.findByRole("status")).toHaveTextContent(/screen|browser/i);
+  // Two live regions share this page since Task 3 (`#exam-device-blocked`
+  // is now unconditionally mounted too, review round 1 finding 1), so a
+  // bare singular role query is ambiguous here — find the one the device
+  // findings actually landed in.
+  const statuses = await screen.findAllByRole("status");
+  expect(statuses.some((el) => /screen|browser/i.test(el.textContent ?? ""))).toBe(true);
   // The window, not a compliant device: a passing report never disables
   // the button and never enables it either — the window still rules.
   expect(screen.getByRole("button", { name: /start/i })).toBeDisabled();

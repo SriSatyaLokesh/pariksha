@@ -296,7 +296,7 @@ export function ExamLanding({
             type="button"
             className="exam-start"
             aria-label={`Start ${test.name}`}
-            aria-describedby={blocked ? "exam-device-blocked" : undefined}
+            aria-describedby="exam-device-blocked"
             disabled={test.state !== "open" || blocked}
             onClick={onStart}
           >
@@ -317,17 +317,18 @@ export function ExamLanding({
           )}
         </div>
 
-        {/* A disabled control is not a reason — a candidate who cannot
-            tell `aria-disabled` from a slow network cannot do anything
-            about either. `aria-describedby` on Start ties this to the
-            button's accessible description, and `role="status"` means it
-            is also announced the moment "Check my device" produces a
-            refusal, not only found by a screen reader that goes looking. */}
-        {blocked && (
-          <p id="exam-device-blocked" className="exam-device-blocked" role="status">
-            This test needs a laptop or desktop computer.
-          </p>
-        )}
+        {/* A disabled control is not a reason — a candidate who cannot tell
+            `aria-disabled` from a slow network cannot do anything about
+            either. `aria-describedby` on Start ties this to the button's
+            accessible description, always, not only once refused — the
+            element itself is present from first render exactly like its
+            sibling below, and only its *contents* vary with `blocked`, for
+            the same reason that one's comment gives: a live region a
+            screen reader has never seen is a live region it does not
+            announce. */}
+        <p id="exam-device-blocked" className="exam-device-blocked" role="status">
+          {blocked && "This test needs a laptop or desktop computer."}
+        </p>
 
         {/* Present from first render rather than inserted with its content:
             a live region a screen reader has never seen is a live region it
