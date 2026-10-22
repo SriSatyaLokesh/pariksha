@@ -188,14 +188,13 @@ export interface Bank {
 
 // Test-format types, mirroring schemas/test-1.json's `$defs/section`,
 // `sourceFixed`, `sourcePool`, `sourceSets`, `scoring`, `access`,
-// `release`, `form`, `formField` and `validation` exactly. Only what
-// question selection and import validation need: `retention` is in the
-// schema but no rule in this package reads it, so it is not modelled here
-// yet. Add it when a phase needs it.
+// `release`, `form`, `formField` and `validation` exactly.
 // `registration_form` was the first to be claimed, by Task 5 (#57, P5.4);
-// `timing` by Task 7 (#59, P5.6), `branding` by Task 10 (#61, P5.8), and
+// `timing` by Task 7 (#59, P5.6), `branding` by Task 10 (#61, P5.8),
 // `proctoring` by Phase 7a Task 4 — `resolveProctoring` (`@pariksha/core`)
-// is the one reader every Phase 7 screen resolves it through (`Q1`).
+// is the one reader every Phase 7 screen resolves it through (`Q1`) — and
+// `retention` by Phase 8a Task 5 (`K28`): `resolveRetention` (`cost.ts`)
+// applies S-13's defaults the same way.
 
 export interface SourceFixed {
   kind: "fixed";
@@ -449,6 +448,16 @@ export const SHOW_CONSEQUENCE: Readonly<Record<ReleaseShow, string>> = {
   full_review: "All of that, plus the correct answers and the explanations — use it only once the test has closed for everyone.",
 };
 
+/** `K28`: S-13's deletion schedule. Both fields are days, both optional —
+ *  `resolveRetention` (`cost.ts`) is the one reader that applies the
+ *  defaults (snapshots 90 days, personal data and answers 12 months) when
+ *  either, or both, are unset. Mirrors `schemas/test-1.json`'s `retention`
+ *  exactly. */
+export interface TestRetention {
+  personal_data_days?: number;
+  snapshots_days?: number;
+}
+
 export interface Test {
   "$schema"?: string;
   format: "pariksha/test@1";
@@ -483,6 +492,9 @@ export interface Test {
   registration_form?: RegistrationFormSpec;
   release?: TestRelease;
   branding?: TestBranding;
+  /** `K28`: S-13's deletion schedule. See `resolveRetention` (`cost.ts`)
+   *  for the defaults applied when either field is unset. */
+  retention?: TestRetention;
   consent?: TestConsent;
   /** `Q1`: `profile` supplies defaults for `overrides`'s fifteen keys and
    *  has no independent effect of its own — `resolveProctoring` is the one

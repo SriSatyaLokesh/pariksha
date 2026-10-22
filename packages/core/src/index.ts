@@ -114,3 +114,10 @@ export * from "./counted.js";
 // paginated routes return (`K38`: a route that reached its bound always
 // returns a cursor).
 export * from "./csv.js";
+
+// Phase 8a Task 5 (`K28`, `K35`): `resolveRetention` applies S-13's deletion
+// defaults over `Test.retention` (`types.js`), and `estimateCost` composes
+// `snapshotCost` (above) into the one per-candidate request/byte estimate
+// the Results panel, the webhook panel (8d), the free-tier dashboard (8e)
+// and the publish checklist all read.
+export * from "./cost.js";
