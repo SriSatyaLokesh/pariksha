@@ -40,7 +40,7 @@ export function ResultsPanel({
   onRetentionChange: (next: TestRetention) => void;
   /** Absent on `node` (`K36`) — never `null`. Composed by `estimateCost`,
    *  not re-derived here. */
-  cost?: CostEstimate;
+  cost?: CostEstimate | undefined;
 }) {
   const ids = useId();
   const resolved = resolveRetention(retention);
