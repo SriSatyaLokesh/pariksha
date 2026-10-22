@@ -42,7 +42,7 @@
 // asserts is gone.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import {
   proctoringRequirements,
   resolveProctoring,
@@ -50,6 +50,7 @@ import {
   type ResolvedProctoring,
 } from "@pariksha/core";
 import { ExamApp, writeRegistrationToken } from "../../src/routes/exam";
+import { isCameraLensCovered, releaseCameraSampler } from "../../src/lib/camera";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -450,5 +451,167 @@ describe("camera_lost's violation snapshot (Task 4 review finding B)", () => {
     });
     await screen.findByRole("alertdialog");
     expect(reasons()).not.toContain("violation");
+  });
+});
+
+// Whole-branch review, finding M1: the loss reason used to latch
+// first-writer-wins, but every recovery door is keyed on it — an
+// escalation between reasons left no door that matched, stranding the
+// overlay forever on a camera that had actually come back to life a
+// different way. Fixed: a DIFFERENT reason re-stamps `cameraLostReasonRef`
+// (the latest signal is what recovery must match); a DUPLICATE one is
+// still a no-op.
+describe("M1: the loss reason tracks the live condition, not the first one seen", () => {
+  it("escalates muted -> ended, and still recovers through the ended door", async () => {
+    await startStrictAttempt({});
+    act(() => {
+      track.dispatchEvent(new Event("mute"));
+    });
+    await screen.findByRole("alertdialog");
+
+    // The same track now also ends — pre-fix, the reason stays "muted"
+    // forever: `unmute` can never fire on a now-`ended` track, and
+    // `devicechange`'s own recovery is refused because the reason it
+    // checks is not "ended".
+    endCameraTrack();
+    restoreCamera();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  });
+});
+
+// Whole-branch review, finding M2: the capture schedule used to keep
+// firing during a frameless outage, uploading N copies of the frame a real
+// browser freezes a dead `<video>` on — manufactured coverage for a period
+// nobody watched. `camera_lost`/`camera_restored` already records the gap;
+// an interval capture during it no longer fires at all.
+describe("M2: no interval capture during a frameless camera outage", () => {
+  it("takes no interval snapshot while the track is ended, across several cadences", async () => {
+    const reasons = captureSnapshotReasons();
+    // Strict's own default interval (`PROCTORING_DEFAULTS.strict.
+    // snapshotIntervalSeconds`) is 60 s — five minutes is five would-be
+    // captures pre-fix.
+    await startStrictAttempt({});
+    endCameraTrack();
+    await screen.findByRole("alertdialog");
+    vi.useFakeTimers();
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    vi.useRealTimers();
+    expect(reasons().filter((reason) => reason === "interval")).toHaveLength(0);
+  });
+});
+
+// Whole-branch review, finding L1: a reconnect that resolves after this
+// layer has already unmounted used to acquire a live stream nothing would
+// ever stop — the camera light staying on past the attempt. Fixed: the
+// liveness effect's own cleanup flags the reconnect as cancelled, and a
+// stream that arrives after that is stopped on arrival instead of stored.
+describe("L1: a reconnect resolving after unmount stops its own stream", () => {
+  it("stops the track a devicechange reconnect hands back after the layer has torn down", async () => {
+    await startStrictAttempt({});
+    endCameraTrack();
+    await screen.findByRole("alertdialog");
+
+    // An object holder, not a bare `let` — a plain reassigned-only-inside-a-
+    // closure variable narrows to `null` for TypeScript at the read below.
+    const reconnect: { resolve: ((stream: MediaStream) => void) | null } = { resolve: null };
+    const newTrack = makeTrack();
+    const newStream = makeStream(newTrack);
+    // Overrides the `beforeEach` fixture's synchronously-resolving
+    // `getUserMedia` with one this test resolves by hand, strictly after
+    // the unmount below — the one ordering `endCameraTrack`+`restoreCamera`
+    // (both synchronous) cannot exercise on their own.
+    (mediaDevices as unknown as { getUserMedia: () => Promise<MediaStream> }).getUserMedia = vi.fn(
+      () => new Promise<MediaStream>((resolve) => {
+        reconnect.resolve = resolve;
+      }),
+    );
+    act(() => {
+      mediaDevices.dispatchEvent(new Event("devicechange"));
+    });
+
+    // The layer tears down while the reconnect above is still in flight.
+    cleanup();
+
+    reconnect.resolve?.(newStream);
+    await waitFor(() => expect(newTrack.stop).toHaveBeenCalledTimes(1));
+  });
+});
+
+// Whole-branch review, finding B1 (BLOCKING): a reload used to end
+// proctoring for the rest of the attempt, silently — `routes/exam.tsx`'s
+// resume path never re-acquired the camera at all. Fixed: resume now calls
+// the same `acquireCamera()` the start gate uses; a refusal is not a second
+// start gate (the attempt row already exists) but `ProctoringLayer`'s own
+// lost-camera condition, reused rather than rebuilt.
+describe("B1: resume reacquires a required camera instead of losing it silently", () => {
+  async function resumeStrictAttempt(): Promise<void> {
+    stubDesktop();
+    const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: false };
+    const resumedPaper = paperFixture(resolved);
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "strict" as ProctoringProfile, requirements: proctoringRequirements(resolved) },
+    };
+    render(
+      <ExamApp client={{ ...clientFor(test, resumedPaper), resume: () => Promise.resolve(resumedPaper) }} />,
+    );
+    await screen.findByRole("navigation", { name: /question palette/i });
+  }
+
+  it("reacquires the camera on resume — a lost track afterward still raises the overlay", async () => {
+    await resumeStrictAttempt();
+    expect(screen.queryByRole("alertdialog")).toBeNull();
+    // Proves the layer is actually watching a LIVE stream post-resume, not
+    // merely that nothing crashed — the same liveness path `camera-loss`'s
+    // own first describe block exercises after a fresh start.
+    endCameraTrack();
+    expect(await screen.findByRole("alertdialog", {}, { timeout: 5000 })).toHaveAccessibleName(/camera/i);
+  });
+
+  it("raises the lost-camera overlay immediately when a required camera cannot be reacquired", async () => {
+    getUserMediaSucceeds = false;
+    const sent = captureEvents();
+    await resumeStrictAttempt();
+    expect(await screen.findByRole("alertdialog")).toHaveAccessibleName(/camera/i);
+    expect(sent()).toContain("camera_lost");
+  });
+});
+
+// Whole-branch review, finding L3: the luminance sampler's module-scoped
+// `<video>`/`<canvas>` pair (`camera.ts`) is reused across an attempt by
+// design, which left it referencing the stopped stream and the last drawn
+// frame for the life of the document once the attempt ended.
+// `releaseCameraSampler()` drops both module bindings — proved here by a
+// fresh `isCameraLensCovered` call after release creating a NEW pair rather
+// than reusing the stale one, through `document.createElement`'s own call
+// count, since neither binding is exported for a test to read directly.
+describe("L3: the luminance sampler releases its stream and frame on teardown", () => {
+  it("reuses one video/canvas pair normally, but builds a fresh one after release", async () => {
+    // `releaseCameraSampler()` first, regardless of what earlier tests in
+    // this file left the module-scoped pair holding — a clean slate this
+    // test does not depend on run order to get.
+    releaseCameraSampler();
+    const tagNames: string[] = [];
+    const realCreateElement = document.createElement.bind(document);
+    vi.spyOn(document, "createElement").mockImplementation((tagName: string, options?: ElementCreationOptions) => {
+      tagNames.push(tagName);
+      return realCreateElement(tagName, options);
+    });
+    const videoCreations = (): number => tagNames.filter((tag) => tag === "video").length;
+
+    await isCameraLensCovered(stream);
+    expect(videoCreations()).toBe(1);
+
+    // The normal case (fix pass 1, finding 4): a second sample reuses the
+    // same pair rather than building another.
+    await isCameraLensCovered(stream);
+    expect(videoCreations()).toBe(1);
+
+    // L3: released, so the NEXT sample — after the attempt that owned the
+    // stopped stream and the last frame has ended — builds a fresh pair
+    // rather than reusing the stale one.
+    releaseCameraSampler();
+    await isCameraLensCovered(stream);
+    expect(videoCreations()).toBe(2);
   });
 });

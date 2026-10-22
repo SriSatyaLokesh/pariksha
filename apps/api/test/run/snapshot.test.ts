@@ -20,6 +20,7 @@ import {
 import { createApp, ROUTE_AUTH, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { REGISTRATION_KIND, REGISTRATION_TTL_MS, registrationHash } from "../../src/run/entry.js";
+import { LIMITS } from "../../src/run/limit.js";
 import { SNAPSHOT_PATH } from "../../src/routes/proctoring.js";
 import type { AttemptPaper } from "../../src/run/attempt.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
@@ -226,9 +227,9 @@ it("answers 401 without an attempt cookie", async () => {
   expect((await postBytes(`${SNAPSHOT_PATH}?reason=interval`, jpegFixture)).status).toBe(401);
 });
 
-// --- `Q4e`: measured, not estimated -----------------------------------------
+// --- `Q4e`/`B3`: measured, not estimated -------------------------------------
 
-it("the route's budget is measured at exactly 3, and its authority is the attempt", async () => {
+it("the route's budget is measured at exactly 4, and its authority is the attempt", async () => {
   const counting = countingDeps(deps);
   const res = await postBytes(
     `${SNAPSHOT_PATH}?reason=interval`,
@@ -238,9 +239,48 @@ it("the route's budget is measured at exactly 3, and its authority is the attemp
     createApp(counting.deps),
   );
   expect(res.status).toBe(200);
-  // The attempt join, the one `put`, and `recordSnapshot`'s one insert.
+  // The attempt join, `attempt_snapshot`'s rate token (`B3`), the one
+  // `put`, and `recordSnapshot`'s one insert.
   expect(counting.counts().total).toBe(ROUTE_BUDGETS[SNAPSHOT_PATH]);
-  expect(counting.counts().total).toBe(3);
-  expect(counting.counts()).toMatchObject({ db: 2, storage: 1 });
+  expect(counting.counts().total).toBe(4);
+  expect(counting.counts()).toMatchObject({ db: 3, storage: 1 });
   expect(ROUTE_AUTH[`POST ${SNAPSHOT_PATH}`]).toBe("attempt");
+});
+
+// --- `B2` (whole-branch review): the submitted-attempt guard ----------------
+
+// Mirrors `/attempt/events`' own test of the same name/shape
+// (`test/run/events.test.ts`) — same reasoning, same silent no-op rather
+// than `/answer`'s 409 (`AG1`).
+it("writes nothing and still answers 200 once the attempt is submitted", async () => {
+  const submitRes = await app.request("/api/v1/run/attempt/submit", {
+    method: "POST",
+    headers: { cookie: attemptCookie },
+  });
+  expect(submitRes.status).toBe(200);
+
+  const res = await postBytes(`${SNAPSHOT_PATH}?reason=interval`, jpegFixture, attemptCookie);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ stored: true });
+  expect(await listSnapshots(attemptId)).toHaveLength(0);
+});
+
+// --- `B3` (whole-branch review): the rate limit -----------------------------
+
+/** `access.test.ts`'s own `fillBucket` — puts the attempt's snapshot
+ *  bucket at its ceiling without making 300 real requests. */
+async function fillSnapshotBucket(id: string): Promise<void> {
+  await deps.db.run("DELETE FROM rate_limit WHERE bucket = ?", [`attempt_snapshot:${id}`]);
+  await deps.db.run("INSERT INTO rate_limit (bucket, window_start, count) VALUES (?, ?, ?)", [
+    `attempt_snapshot:${id}`,
+    T,
+    LIMITS.attempt_snapshot.limit,
+  ]);
+}
+
+it("refuses once the per-attempt snapshot bucket is empty", async () => {
+  await fillSnapshotBucket(attemptId);
+  const res = await postBytes(`${SNAPSHOT_PATH}?reason=interval`, jpegFixture, attemptCookie);
+  expect(res.status).toBe(429);
+  expect(await listSnapshots(attemptId)).toHaveLength(0);
 });

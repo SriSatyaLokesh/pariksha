@@ -318,6 +318,40 @@ describe("the identity photo (Q11a)", () => {
     });
   });
 
+  // Whole-branch review, finding M3: the identity photo's upload used to
+  // be awaited before the paper rendered — a slow POST held the loading
+  // view hostage with the server clock already running. Fixed: the
+  // capture still happens before the first question, the upload no longer
+  // blocks reaching it.
+  it("renders the first question before a slow identity upload ever resolves (M3)", async () => {
+    installFakeCanvas();
+    // An object holder, not a bare `let` — a plain reassigned-only-inside-a-
+    // closure variable narrows to `null` for TypeScript at the read below.
+    const upload: { resolve: (() => void) | null } = { resolve: null };
+    vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url.includes("/attempt/snapshot")) {
+        return new Promise<Response>((resolve) => {
+          upload.resolve = () => {
+            resolve({ ok: true, json: () => Promise.resolve({ stored: true }) } as Response);
+          };
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ violations: 0, limit: 5, action: "warn_then_flag" }),
+      } as Response);
+    });
+    await withCamera({ frames: true }, async () => {
+      // `startStrictAttempt` itself awaits the question palette heading —
+      // reaching it below proves that wait did not depend on
+      // `upload.resolve`, which is deliberately never called until after.
+      await startStrictAttempt({ identityPhoto: true });
+    });
+    expect(upload.resolve).not.toBeNull();
+    upload.resolve?.();
+  });
+
   it("stops the camera track once the attempt view unmounts", async () => {
     installFakeCanvas();
     captureUploads();
