@@ -191,10 +191,23 @@ beforeEach(() => {
   track = makeTrack();
   stream = makeStream(track);
 
-  const getUserMedia = (): Promise<MediaStream> =>
-    getUserMediaSucceeds
-      ? Promise.resolve(stream)
-      : Promise.reject(Object.assign(new Error("no camera"), { name: "NotFoundError" }));
+  // Fix pass 1 (Task 3 review Finding 1): a NEW track/stream on every
+  // call, never the same objects handed back twice — `acquireCamera()` is
+  // a pure function of `getUserMedia()` in production, and reusing one
+  // module-scoped pair here is exactly what let a recovery that discards
+  // the new stream and keeps watching the dead one pass this suite: the
+  // stub could not tell "swapped to a new live stream" from "kept using
+  // the old one". `track`/`stream` always point at whichever pair was
+  // acquired most recently, so `endCameraTrack()` below operates on the
+  // CURRENT one.
+  const getUserMedia = (): Promise<MediaStream> => {
+    if (!getUserMediaSucceeds) {
+      return Promise.reject(Object.assign(new Error("no camera"), { name: "NotFoundError" }));
+    }
+    track = makeTrack();
+    stream = makeStream(track);
+    return Promise.resolve(stream);
+  };
   mediaDevices = Object.assign(new EventTarget(), { getUserMedia }) as unknown as MediaDevices;
   Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: mediaDevices });
 
@@ -269,7 +282,12 @@ function blackenCameraFrames(): void {
 
 /** The return trip for an ended track — the real signal is `devicechange`,
  *  not a poll (`ProctoringLayer.tsx`'s own comment on `onDeviceChange`), so
- *  this makes the next `getUserMedia()` succeed and then fires it. */
+ *  this makes the next `getUserMedia()` succeed and then fires it.
+ *  `onDeviceChange` calls `acquireCamera()` internally, which (via the
+ *  `beforeEach` fixture above) hands back a genuinely NEW `track`/`stream` —
+ *  callers that need to prove the layer reconnected to THIS one, not the
+ *  dead one it replaced, read the module-scoped `track` after this call
+ *  returns. */
 function restoreCamera(): void {
   frameIsBlack = false;
   getUserMediaSucceeds = true;
@@ -307,6 +325,26 @@ function captureEvents(): () => string[] {
   return () => types;
 }
 
+/** Fix pass 1, finding 3 (Task 4 review finding B). `snapshot-schedule.test.tsx`'s
+ *  own `captureUploads`, trimmed to this file's needs: records every `reason`
+ *  posted to Task 1's snapshot route. The events route answers a harmless
+ *  200 so a `camera_lost` push never fails a test that is not about it. */
+function captureSnapshotReasons(): () => string[] {
+  const reasons: string[] = [];
+  vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/attempt/snapshot")) {
+      reasons.push(new URL(url, "http://localhost").searchParams.get("reason") ?? "");
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ stored: true }) } as Response);
+    }
+    return Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ violations: 1, limit: 5, action: "warn_then_flag" }),
+    } as Response);
+  });
+  return () => reasons;
+}
+
 describe("camera liveness blocks the paper indefinitely (P-05, AC-19, Q2)", () => {
   it("raises the overlay within 5 s of the track ending, and keeps it up", async () => {
     await startStrictAttempt({});
@@ -337,6 +375,24 @@ describe("camera liveness blocks the paper indefinitely (P-05, AC-19, Q2)", () =
     await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
   });
 
+  // Fix pass 1, finding 1 (Task 3 review Finding 1, BLOCKING): the overlay
+  // clearing is not proof the layer reconnected — the old code cleared it
+  // while still watching the dead track. The decisive signal is whether
+  // the NEW stream's own track is what the layer is actually listening to
+  // afterward: `restoreCamera()` now hands back a genuinely different
+  // `track` object (the `beforeEach` fixture above), so if `endCameraTrack`
+  // worked once, it must work again on this one for the layer to really
+  // have reconnected rather than merely declared victory.
+  it("reconnects to the NEW stream, not the dead one — the new track's own ended event raises the overlay again", async () => {
+    await startStrictAttempt({});
+    endCameraTrack();
+    await screen.findByRole("alertdialog");
+    restoreCamera();
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    endCameraTrack(); // now acts on the NEW track `restoreCamera()` just produced
+    expect(await screen.findByRole("alertdialog", {}, { timeout: 5000 })).toHaveAccessibleName(/camera/i);
+  });
+
   // Q2a — the answer and the clock survive.
   it("keeps the typed answer and lets the timer run behind the block", async () => {
     await startStrictAttempt({});
@@ -359,5 +415,40 @@ describe("camera liveness blocks the paper indefinitely (P-05, AC-19, Q2)", () =
     vi.useRealTimers();
     restoreCamera();
     await waitFor(() => expect(sent()).toEqual(expect.arrayContaining(["camera_lost", "camera_restored"])));
+  });
+});
+
+// Fix pass 1, finding 3 (Task 4 review finding B, ruled): `camera_lost`
+// takes its one violation snapshot only for "covered" — the track stays
+// `live` with a drawable frame, which `isCameraLensCovered` itself depends
+// on to detect the condition at all. "ended"/"muted" leave no frame to
+// capture and stay exception-only. Previously untested either way (the
+// review's own finding); pinned here so a later change cannot flip any of
+// the three silently.
+describe("camera_lost's violation snapshot (Task 4 review finding B)", () => {
+  it("takes a violation snapshot for a covered lens — a frame exists to capture", async () => {
+    const reasons = captureSnapshotReasons();
+    await startStrictAttempt({});
+    blackenCameraFrames();
+    await screen.findByRole("alertdialog");
+    expect(reasons()).toContain("violation");
+  });
+
+  it("takes no violation snapshot when the track ends — no frame exists", async () => {
+    const reasons = captureSnapshotReasons();
+    await startStrictAttempt({});
+    endCameraTrack();
+    await screen.findByRole("alertdialog");
+    expect(reasons()).not.toContain("violation");
+  });
+
+  it("takes no violation snapshot when the track mutes — no frame exists", async () => {
+    const reasons = captureSnapshotReasons();
+    await startStrictAttempt({});
+    act(() => {
+      track.dispatchEvent(new Event("mute"));
+    });
+    await screen.findByRole("alertdialog");
+    expect(reasons()).not.toContain("violation");
   });
 });
