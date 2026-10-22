@@ -41,6 +41,10 @@
 //     attempt: the proctoring ingest is an endpoint a candidate's browser
 //     can call in a loop, and each call writes a batch of rows regardless
 //     of outcome, so there is no "miss" to charge instead.
+//   * `attempt_snapshot` (`B3`) is the same shape and the same window,
+//     keyed per attempt too — and harder in cost, since each call also
+//     writes an R2 object, not just D1 rows. See its own entry in `LIMITS`
+//     for the arithmetic.
 //
 // **Never per IP** — a hall behind one NAT is one address, and a botnet is
 // a thousand. Every bucket is keyed by the thing being attacked (a test
@@ -102,6 +106,44 @@ export const LIMITS = {
    *  switches) and nowhere near the daily write budget `appendEvents`'s
    *  own cap already protects. */
   attempt_events: { limit: 120, windowMs: 5 * 60_000 },
+  /** Proctoring snapshots, per **attempt**, per five minutes — the SAME
+   *  window as `attempt_events` above, deliberately (`B3`, whole-branch
+   *  review, Phase 7d Task 1 follow-up): `MAX_WINDOW_MS` below is the
+   *  longest window any bucket counts over, and every sweep pays for
+   *  whichever bucket owns it, so this does not widen it past
+   *  `email_code_address`'s own 10 minutes for every OTHER kind in this
+   *  table. Harder than `attempt_events` in cost, not in window: each call
+   *  here also writes an R2 object of up to `SNAPSHOT_MAX_BYTES`, not just
+   *  D1 rows.
+   *
+   *  The organiser-facing interval control (`ProctoringPanel.tsx`'s
+   *  `NumberField`) enforces no floor above zero, but the one cadence this
+   *  codebase actually ships, tests and budgets against is Strict's own
+   *  default, `PROCTORING_DEFAULTS.strict.snapshotIntervalSeconds = 60`
+   *  (`@pariksha/core`): `checklist.ts`'s own 200-image advisory threshold
+   *  is calibrated to stay silent against exactly this cadence (`Q1c`). At
+   *  60 s, five honest minutes is 300 / 60 = 5 interval captures. Add one
+   *  identity photo (once, at the start). Violation snapshots are the
+   *  wildcard — `ProctoringLayer.tsx` pairs every one with a
+   *  `push`/`pushImmediate` into the SAME `attempt_events` queue this
+   *  module already rate-limits at 120 REQUESTS per five minutes per
+   *  attempt: 5 + 1 + 120 = 126.
+   *
+   *  Read that 120 as a calibration point, not as a proof. It bounds
+   *  requests, not violations — `appendEvents` batches up to ten events per
+   *  request, and a departure snapshots on leaving but pushes on returning,
+   *  so a pathological attempt could drive far more violations through far
+   *  fewer requests. The number below is defensible because it clears real
+   *  traffic by a wide margin and refuses an abusive client quickly, not
+   *  because 126 is a ceiling anything enforces. An organiser who sets
+   *  `snapshot_interval_seconds` below about two seconds (the control's own
+   *  floor is zero) will exceed it legitimately; that is the signal to raise
+   *  this, and `Q1c`'s 200-image advisory is what would flag it first.
+   *  Rounded up to 150 for
+   *  headroom — comfortably clear of real traffic and, against the
+   *  review's own abuse scenario (~20 requests/second), refusing within
+   *  about 8 seconds rather than never. */
+  attempt_snapshot: { limit: 150, windowMs: 5 * 60_000 },
 } as const;
 
 export type LimitKind = keyof typeof LIMITS;

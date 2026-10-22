@@ -47,7 +47,13 @@ import { RESULT_STUB } from "./run-client-stub";
 const NOW = 1_760_000_000_000;
 const EVENTS_PATH = "/api/v1/run/attempt/events";
 
-const strictResolved: ResolvedProctoring = resolveProctoring({ profile: "strict" });
+// `requireCamera: false` — this file is not about the camera, and every
+// test here reaches the runner through `client.resume()`. B1 (whole-branch
+// review) made the resume path really try `acquireCamera()` whenever
+// `requireCamera` is true, which this file's fixtures never stub; left at
+// Strict's own default, every test below would hit the lost-camera overlay
+// instead of the fullscreen/window-leave one it is actually testing.
+const strictResolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), requireCamera: false };
 
 const question: CandidateQuestion = {
   id: "q1",
@@ -357,8 +363,18 @@ describe("ProctoringOverlay: window-leave (P-04)", () => {
     const beacon = vi.fn(() => true);
     Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: beacon });
     await openAttempt({ proctoring: strictResolved });
-    fireEvent(window, new Event("blur")); // departure starts, no focus back
-    fireEvent(window, new Event("pagehide"));
+    // Fix pass 1, finding 6 (Task 4 review finding D): wrapped in `act`,
+    // matching every sibling test in this block — without it, this was a
+    // listener-registration race (`openAttempt` resolves via an async
+    // boundary before `ProctoringLayer`'s window-leave effect is guaranteed
+    // to have run as a passive effect of that same commit), not a real
+    // double-send: diagnosed and ruled out, see the task 4 review. Not
+    // `waitFor` on the assertion below — that would mask a genuine
+    // double-send rather than close the race.
+    await act(async () => {
+      fireEvent(window, new Event("blur")); // departure starts, no focus back
+      fireEvent(window, new Event("pagehide"));
+    });
     expect(beacon).toHaveBeenCalledTimes(1);
     const [url, body] = beacon.mock.calls[0] as unknown as [string, Blob];
     expect(url).toBe(EVENTS_PATH);

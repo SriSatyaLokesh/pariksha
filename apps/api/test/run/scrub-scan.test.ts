@@ -45,7 +45,7 @@ import type { EmailMessage } from "../../src/email/adapter.js";
 import { forCandidate, type CandidateQuestion } from "../../src/run/scrub.js";
 import { POW_DIFFICULTY_BITS } from "../../src/run/pow.js";
 import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
-import { EVENTS_PATH } from "../../src/routes/proctoring.js";
+import { EVENTS_PATH, SNAPSHOT_PATH } from "../../src/routes/proctoring.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { CONSENT, DAY, iso, seedTest, seedWorkspace } from "./fixtures.js";
 import { startAttemptFor } from "./paper-fixtures.js";
@@ -410,6 +410,20 @@ record(
   ).clone().text(),
 );
 
+// Phase 7d Task 1: the snapshot route. `attempt`-authority, so it joins
+// the scan the same way `/attempt/events` does — the response carries no
+// key at all (`Q4a`), which is exactly what this scan exists to check.
+record(
+  `POST ${SNAPSHOT_PATH}`,
+  await (
+    await app.request(`${SNAPSHOT_PATH}?reason=interval`, {
+      method: "POST",
+      headers: { cookie: A.cookie, "content-type": "image/jpeg" },
+      body: new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]),
+    })
+  ).clone().text(),
+);
+
 // The media on A's own paper, and a key outside it.
 const mediaKey = A.paper.sections[0]!.questions[0]!.media?.[0]?.src ?? "";
 await deps.storage.put(`media/${workspaceId}/sentinel-diagram.png`, new TextEncoder().encode("PNG"), {
@@ -523,8 +537,9 @@ it("AC-22: every candidate-reachable endpoint is covered by this scan", () => {
   // Was 16 until `GET /attempt/result` was deleted (final review, drift
   // Important): a strict subset of `POST /attempt/submit`'s answer,
   // behind a second release-gate read, with no client. Back to 16 with
-  // Phase 7c Task 1's `POST /api/v1/run/attempt/events` (`Q7`).
-  expect(CANDIDATE_ENDPOINTS.length).toBe(16);
+  // Phase 7c Task 1's `POST /api/v1/run/attempt/events` (`Q7`). **17** with
+  // Phase 7d Task 1's `POST /api/v1/run/attempt/snapshot` (`Q4`).
+  expect(CANDIDATE_ENDPOINTS.length).toBe(17);
   expect(new Set(seen.keys())).toEqual(new Set(CANDIDATE_ENDPOINTS.map(([e]) => e)));
 });
 

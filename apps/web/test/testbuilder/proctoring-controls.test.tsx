@@ -140,21 +140,30 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
     expect(control).toHaveAccessibleDescription(/Phase 8/);
   });
 
-  // A positive control beside it, per the standing ruling (progress.md, "a
-  // negative assertion needs a positive control"): the enabled checkboxes
-  // right beside the disabled one prove `toBeDisabled()` can fail — they
-  // are not disabled, and the assertion below is run against them too, the
-  // other way round, to show it is really reading the attribute.
-  it("leaves every other checkbox enabled, so the disabled assertion above is not vacuous", async () => {
+  // `Q12b`/#209: the microphone control gets the identical treatment as
+  // face check above — same disabled styling, same accessible-description
+  // voice.
+  it("names the phase in the microphone's own accessible description", async () => {
+    await openProctoringPanel({});
+    const control = screen.getByLabelText(/Require a microphone/i);
+    expect(control).toBeDisabled();
+    expect(control).toHaveAccessibleDescription(/Phase 8/);
+  });
+
+  // A positive control beside the two disabled assertions above, per the
+  // standing ruling (progress.md, "a negative assertion needs a positive
+  // control"): an enabled checkbox right beside them proves `toBeDisabled()`
+  // can fail — it is not disabled, and the assertion below is run against
+  // it too, the other way round, to show it is really reading the attribute.
+  it("leaves every other checkbox enabled, so the disabled assertions above are not vacuous", async () => {
     await openProctoringPanel({});
     expect(screen.getByLabelText(/Require a camera/i)).not.toBeDisabled();
-    expect(screen.getByLabelText(/Require a microphone/i)).not.toBeDisabled();
   });
 
   it("uses no browser-default checkbox or radio", async () => {
     await openProctoringPanel({});
     const boxes = screen.getAllByRole("checkbox");
-    expect(boxes.length).toBe(10); // nine editable + the disabled face-check box
+    expect(boxes.length).toBe(10); // eight editable + the two disabled boxes (face check, microphone)
     for (const el of boxes) {
       expect(paintsIn(el, "appearance", ADMIN_CSS)).toBe("none");
     }
@@ -169,16 +178,17 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
 // in the branch green. This table drives each control the way an organiser
 // would and asserts the key in the resulting `onChange` payload.
 //
-// Fourteen of the panel's fifteen override keys are driven below — nine
-// checkboxes, four number boxes, one select. The fifteenth, `face_check`,
-// ships permanently `disabled` (`Q3` — Phase 8 feature, pre-cut in Phase
-// 7), so there is no organiser gesture that can drive it; "checking %s
-// writes true" above has nothing to click. Its label and accessible
-// description are pinned by "names the phase in the face check's own
-// accessible description" above, and what it renders as checked — the raw
-// imported document value, never the resolved (always-`false`) one — is
-// exercised by `proctoring-profile.test.tsx`'s profile-change coverage of
-// the same key.
+// Thirteen of the panel's fifteen override keys are driven below — eight
+// checkboxes, four number boxes, one select. The other two, `face_check`
+// and `require_microphone`, ship permanently `disabled` (`Q3` and `Q12b`/
+// #209 — Phase 8 features, pre-cut in Phase 7), so there is no organiser
+// gesture that can drive either; "checking %s writes true" above has
+// nothing to click for them. Their labels and accessible descriptions are
+// pinned by "names the phase in the face check's/microphone's own
+// accessible description" above, and what each renders as checked — the
+// raw imported document value, never the resolved (always-`false`) one —
+// is exercised by `proctoring-profile.test.tsx`'s profile-change coverage
+// of the same keys.
 describe("each override key is written by the control its label names (branch-review Finding 2)", () => {
   it.each([
     ["Block phones and tablets", "desktop_only"],
@@ -189,7 +199,6 @@ describe("each override key is written by the control its label names (branch-re
     ["Allow the calculator", "allow_calculator"],
     ["Require a camera", "require_camera"],
     ["Identity photo", "identity_photo"],
-    ["Require a microphone", "require_microphone"],
   ] as const)("checking %s writes override.%s = true", async (label, key) => {
     const onChange = vi.fn();
     await openProctoringPanel({}, { onChange });

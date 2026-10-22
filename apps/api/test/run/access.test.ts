@@ -830,6 +830,10 @@ it("S-07: every anti-abuse ceiling and window is pinned to a literal", () => {
     short_link: { limit: 300, windowMs: 60_000 },
     // Phase 7c Task 1 (`Q7c`): the proctoring event ingest, per attempt.
     attempt_events: { limit: 120, windowMs: 300_000 },
+    // `B3` (whole-branch review): the proctoring snapshot route, per
+    // attempt, same window as `attempt_events` — see
+    // `LIMITS.attempt_snapshot`'s own comment for the arithmetic.
+    attempt_snapshot: { limit: 150, windowMs: 300_000 },
   });
 });
 
