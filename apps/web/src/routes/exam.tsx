@@ -190,7 +190,10 @@ export function ExamLanding({
   // boolean (`Q1b` again), so the rest of this object is `off`'s inert
   // defaults, never consulted.
   const resolved: ResolvedProctoring = { ...PROCTORING_DEFAULTS.off, desktopOnly };
-  const blocked = report?.refused ?? false;
+  // Review finding 1: computed once, from the device the page is already
+  // running on — not from `report`, which stays `null` until "Check my
+  // device" is clicked and must not be able to gate Start.
+  const [refused] = useState(() => deviceReport(resolved).refused);
 
   return (
     <div className="exam-landing">
@@ -297,7 +300,7 @@ export function ExamLanding({
             className="exam-start"
             aria-label={`Start ${test.name}`}
             aria-describedby="exam-device-blocked"
-            disabled={test.state !== "open" || blocked}
+            disabled={test.state !== "open" || refused}
             onClick={onStart}
           >
             Start
@@ -322,12 +325,12 @@ export function ExamLanding({
             either. `aria-describedby` on Start ties this to the button's
             accessible description, always, not only once refused — the
             element itself is present from first render exactly like its
-            sibling below, and only its *contents* vary with `blocked`, for
+            sibling below, and only its *contents* vary with `refused`, for
             the same reason that one's comment gives: a live region a
             screen reader has never seen is a live region it does not
             announce. */}
         <p id="exam-device-blocked" className="exam-device-blocked" role="status">
-          {blocked && "This test needs a laptop or desktop computer."}
+          {refused && "This test needs a laptop or desktop computer."}
         </p>
 
         {/* Present from first render rather than inserted with its content:

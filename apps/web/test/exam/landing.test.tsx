@@ -38,6 +38,10 @@ const landingFixture: LandingPayload = {
     requirements: [
       "This test must be taken on a desktop or laptop, not a phone or tablet.",
       "Use a fully updated Chrome, Edge, Firefox or Safari.",
+      // Whole-branch review, finding 3: copied verbatim from
+      // `apps/api/test/run/landing.test.ts`'s own assertion so the two
+      // cannot drift apart.
+      "Leaving this browser tab or window is logged.",
       "The test runs in fullscreen. Leaving it is logged.",
       "Copying, pasting and right-click are disabled, and attempts are logged.",
     ],
@@ -95,6 +99,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+/** A passing desktop, stubbed explicitly. Review finding 1: Start is now
+ *  genuinely gated on the device at mount (`device-gate.test.tsx` owns
+ *  that gate itself) rather than only after "Check my device" is clicked,
+ *  so any test here that wants Start enabled by default — because it is
+ *  testing something else entirely — has to stand on a device that
+ *  actually passes, the same as `landingFixture`'s Standard profile
+ *  (`desktop_only: true`) requires. jsdom's own defaults (no
+ *  `matchMedia`) fail the pointer check otherwise. */
+function stubCompliantDevice(): void {
+  vi.stubGlobal("innerWidth", 1440);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("pointer: fine"),
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  vi.stubGlobal("navigator", {
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+  });
+}
+
 it("C-01: name, duration, question count, sections, rules and the window", async () => {
   await mount();
   for (const text of [
@@ -140,21 +165,11 @@ it("every section is listed with its own question count", async () => {
 });
 
 it("C-01: 'Check my device' reports before the window opens and does not block starting", async () => {
-  // A passing desktop, stubbed explicitly: Phase 7c Task 3 now *does* let
-  // a refused device additionally disable Start (`device-gate.test.tsx`
-  // owns that), so this test pins a compliant device to isolate what it
-  // actually checks — that the window, not the device, is why Start is
-  // disabled here.
-  vi.stubGlobal("innerWidth", 1440);
-  vi.stubGlobal("matchMedia", (query: string) => ({
-    matches: query.includes("pointer: fine"),
-    media: query,
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-  }));
-  vi.stubGlobal("navigator", {
-    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
-  });
+  // A passing desktop, stubbed explicitly: a refused device additionally
+  // disables Start (`device-gate.test.tsx` owns that gate), so this test
+  // pins a compliant device to isolate what it actually checks — that the
+  // window, not the device, is why Start is disabled here.
+  stubCompliantDevice();
   await mount({ ...landingFixture, state: "scheduled", opensAt: NOW + DAY });
   // No @testing-library/user-event in this workspace, by a decision this
   // repo already made and documented (`test/authoring/reorder.test.tsx:44`):
@@ -176,6 +191,7 @@ it("C-01: 'Check my device' reports before the window opens and does not block s
 });
 
 it("the start button is enabled only while the test is open", async () => {
+  stubCompliantDevice();
   await mount();
   expect(screen.getByRole("button", { name: /start/i })).toBeEnabled();
 });
@@ -187,6 +203,7 @@ it("Start without a registration token opens registration rather than minting an
   // a 4xx on the first live run, caught by nothing. The token comes from
   // `sessionStorage`, and there is none here — so Start is now the way IN
   // to registration (Task 6) rather than a dead end.
+  stubCompliantDevice();
   sessionStorage.removeItem(REGISTRATION_TOKEN_KEY);
   await mount();
   fireEvent.click(screen.getByRole("button", { name: /start/i }));

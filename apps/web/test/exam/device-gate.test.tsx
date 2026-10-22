@@ -218,6 +218,26 @@ it("the blocked landing page has no axe violations", async () => {
   expect(await axe(document.body)).toHaveNoViolations();
 });
 
+// Whole-branch review, finding 1 (BLOCKING) — the probe. `blocked` used to
+// read `report?.refused`, and `report` stays `null` until "Check my
+// device" is clicked (`openCandidateLanding` above always clicks it, which
+// is exactly why no existing test saw this). A phone candidate who simply
+// taps Start on a desktop-only test must be refused without ever pressing
+// the optional button.
+it("refuses Start on a desktop-only test without clicking Check my device", async () => {
+  stubDevice(SIGNATURES[0]); // Android phone
+  render(
+    <ExamApp
+      client={clientFor({
+        ...landingFixture,
+        proctoring: { profile: "strict", requirements: STRICT_DESKTOP_REQUIREMENTS },
+      })}
+    />,
+  );
+  await screen.findByRole("heading", { level: 1 });
+  expect(screen.getByRole("button", { name: /Start/ })).toBeDisabled();
+});
+
 it("the device-blocked live region exists from first render, not only once refused", async () => {
   // Review round 1, finding 1: a region mounted only when `blocked` turns
   // true is a region no screen reader has registered yet when it does —
