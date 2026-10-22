@@ -43,12 +43,13 @@
  *   signal returns first rather than twice.
  *
  * There is no dedicated override for "monitor window-leave" in 7a's
- * fifteen keys, so this reads `requireFullscreen`/`requireCamera`/
- * `blockCopyPaste`/`watermark`/`extraMonitorCheck`/`requireMicrophone`/
- * `snapshotIntervalSeconds` — the same "is anything at all required"
- * question `proctoringRequirements` already asks — rather than branching
- * on `profile` (`Q1`). An `off` test, where every one of those is false,
- * gets no window-leave monitoring either.
+ * fifteen keys, so this reads `anyProctoringControlActive` (`@pariksha/core`,
+ * review finding 7's fix) — the single exported predicate
+ * `proctoringRequirements` also gates its browser and window-leave
+ * sentences on, so the two cannot read "is anything at all required"
+ * differently again — rather than branching on `profile` (`Q1`). An `off`
+ * test, where every control is false, gets no window-leave monitoring
+ * either.
  *
  * Task 5 adds the last three controls in 7c's gate list (`Q9`/`P-08`):
  *
@@ -67,17 +68,18 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Component } from "react";
-import type {
-  ContextmenuBlockedDetail,
-  CopyBlockedDetail,
-  ExtraMonitorDetail,
-  FullscreenExitDetail,
-  FullscreenRestoreDetail,
-  PasteBlockedDetail,
-  ProctoringEventType,
-  ResolvedProctoring,
-  VisibilityHiddenDetail,
-  WindowBlurDetail,
+import {
+  anyProctoringControlActive,
+  type ContextmenuBlockedDetail,
+  type CopyBlockedDetail,
+  type ExtraMonitorDetail,
+  type FullscreenExitDetail,
+  type FullscreenRestoreDetail,
+  type PasteBlockedDetail,
+  type ProctoringEventType,
+  type ResolvedProctoring,
+  type VisibilityHiddenDetail,
+  type WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
 import { ProctoringOverlay } from "./ProctoringOverlay";
@@ -105,6 +107,22 @@ async function sendEvents(events: QueuedEvent[]): Promise<EventsResponse> {
   });
   if (!res.ok) throw new Error(`events request failed: ${String(res.status)}`);
   return (await res.json()) as EventsResponse;
+}
+
+/** Review finding 5's fix — `navigator.sendBeacon`, for the one event a
+ *  normal `fetch` cannot be trusted to land: the page is already
+ *  unloading, and the browser (not this tab) is responsible for delivering
+ *  it afterward. Guarded, not assumed (older WebViews lack it) — a `false`
+ *  return (absent, or the browser's own queue refused it) tells the caller
+ *  to fall back to the buffered queue instead, same as before this fix. */
+function sendBeaconEvent(type: ProctoringEventType, detail: unknown): boolean {
+  if (typeof navigator === "undefined" || typeof navigator.sendBeacon !== "function") return false;
+  try {
+    const body = JSON.stringify({ events: [{ type, detail, clientTs: Date.now() }] });
+    return navigator.sendBeacon(EVENTS_PATH, new Blob([body], { type: "application/json" }));
+  } catch {
+    return false; // Q2: degrade, never throw.
+  }
 }
 
 export interface ProctoringLayerProps {
@@ -151,6 +169,16 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
     action: proctoring.violationAction,
   });
 
+  /** Review finding 4: `count` is only ever assigned from a server
+   *  response, so the window-leave overlay below must not show a figure
+   *  from *before* the server has answered this departure — the first
+   *  violation of an attempt rendered "Warning 0 of 5" (`initialViolations`
+   *  is `0`), and a down ingest kept it there for the rest of the attempt.
+   *  Set `false` the moment a departure ends (below), `true` the moment
+   *  this effect's own `onCount` next runs — never seeded optimistically
+   *  (`Q7a` stays true: the server is still the only counter). */
+  const [leaveCountKnown, setLeaveCountKnown] = useState(true);
+
   /**
    * The live queue — owned by the effect below, not by `useMemo`.
    *
@@ -190,6 +218,7 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
         // `stopped` check one layer down.
         if (queueRef.current !== queue) return;
         setCount({ violations, limit, action });
+        setLeaveCountKnown(true);
       },
       flushMs: FLUSH_MS,
     });
@@ -218,6 +247,14 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
   const fullscreenEnforced = proctoring.requireFullscreen && fullscreenApiAvailable.current;
 
   const [inFullscreen, setInFullscreen] = useState(() => fullscreenAtMount.current ?? false);
+  // Review finding (minor) J: the push used to live inside the
+  // `setInFullscreen` updater, and React (StrictMode deliberately,
+  // `exam-main.tsx` really renders it) may invoke an updater more than
+  // once — which emitted two `fullscreen_exit` events in development for
+  // one real exit. `inFullscreenRef` mirrors the state so "did this
+  // actually change" is decided once, outside any updater, the same shape
+  // the window-leave effect below already uses (`awayAtRef`).
+  const inFullscreenRef = useRef(fullscreenAtMount.current ?? false);
 
   useEffect(() => {
     if (!fullscreenEnforced) return;
@@ -228,18 +265,17 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
       } catch {
         return; // Q2: degrade rather than guess at a value that cannot be read.
       }
-      setInFullscreen((prev) => {
-        if (prev === next) return prev;
-        if (next) {
-          queueRef.current?.push("fullscreen_restore", {} satisfies FullscreenRestoreDetail);
-        } else {
-          // `pushImmediate`, not `push`: a violation whose count the
-          // overlay is about to show needs to reach the server sooner
-          // than the next flush interval (`FLUSH_MS`'s own doc comment).
-          void queueRef.current?.pushImmediate("fullscreen_exit", {} satisfies FullscreenExitDetail);
-        }
-        return next;
-      });
+      if (inFullscreenRef.current === next) return;
+      inFullscreenRef.current = next;
+      if (next) {
+        queueRef.current?.push("fullscreen_restore", {} satisfies FullscreenRestoreDetail);
+      } else {
+        // `pushImmediate`, not `push`: a violation whose count the
+        // overlay is about to show needs to reach the server sooner
+        // than the next flush interval (`FLUSH_MS`'s own doc comment).
+        void queueRef.current?.pushImmediate("fullscreen_exit", {} satisfies FullscreenExitDetail);
+      }
+      setInFullscreen(next);
     }
     document.addEventListener("fullscreenchange", onChange);
     return () => {
@@ -263,19 +299,10 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
 
   // ---- window-leave (`P-04`) -----------------------------------------------
 
-  /** There is no dedicated override for "monitor window-leave" among 7a's
-   *  fifteen keys — this asks the same "is anything at all required"
-   *  question `proctoringRequirements` already asks, rather than branching
-   *  on `profile` (`Q1`; see the file header). An `off` test monitors
-   *  nothing. */
-  const anyControlActive =
-    proctoring.requireFullscreen ||
-    proctoring.requireCamera ||
-    proctoring.blockCopyPaste ||
-    proctoring.watermark ||
-    proctoring.extraMonitorCheck ||
-    proctoring.requireMicrophone ||
-    proctoring.snapshotIntervalSeconds > 0;
+  /** Review finding 7's fix: the single exported predicate, not a second
+   *  local derivation that can drift from `proctoringRequirements`'s own
+   *  (see the file header). An `off` test monitors nothing. */
+  const anyControlActive = anyProctoringControlActive(proctoring);
 
   /** One shared departure, not two — `T4-R4`: a tab switch commonly fires
    *  both `blur`/`focus` and `visibilitychange` for the same departure,
@@ -296,6 +323,10 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
       if (pending === null) return; // a return with no matching departure
       const awayMs = Date.now() - pending.startedAt;
       setLeaveWarning({ awayMs });
+      // Review finding 4: this departure's own count has not been
+      // confirmed by the server yet — `leaveCountKnown` flips back to
+      // `true` from the queue's own `onCount`, never seeded here.
+      setLeaveCountKnown(false);
       void queueRef.current?.pushImmediate(
         type,
         type === "window_blur"
@@ -323,7 +354,17 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
       const pending = awayAtRef.current;
       awayAtRef.current = null;
       if (pending === null) return;
-      queueRef.current?.push(pending.type, { awayMs: null } satisfies WindowBlurDetail);
+      const detail: WindowBlurDetail = { awayMs: null };
+      // Review finding 5: `push` alone only enqueues — the sole flush is
+      // the 5-second interval, which gets no further tick on an unloading
+      // page, and `T4-R4`'s promised `awayMs: null` event was lost outright
+      // on a closed tab rather than merely delayed. `sendBeacon` is queued
+      // by the browser itself and still sent after the page is gone; kept
+      // guarded and falling back to the buffered queue (same as before this
+      // fix) when it is absent, never thrown (`AG1`/`AG4`).
+      if (!sendBeaconEvent(pending.type, detail)) {
+        queueRef.current?.push(pending.type, detail);
+      }
     }
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);
@@ -380,11 +421,19 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
    *  Management permission dialog mid-exam (`Q2` hazard) — is never made.
    *  `try/catch` is the same `Q2` degrade every other read in this file
    *  takes: an unreadable `screen` is not evidence of a second monitor. */
+  // Review finding (minor) J, same class as the fullscreen updater above:
+  // this effect has no cleanup, so StrictMode's dev-only phantom
+  // mount/unmount/remount re-runs its body and pushed `extra_monitor`
+  // twice for one real check. `extraMonitorPushed` makes the push happen
+  // at most once per mounted instance, the same single-fire guarantee the
+  // updater fix above gives the fullscreen check.
+  const extraMonitorPushed = useRef(false);
   useEffect(() => {
-    if (!proctoring.extraMonitorCheck) return;
+    if (!proctoring.extraMonitorCheck || extraMonitorPushed.current) return;
     try {
       const extended = (window.screen as Screen & { isExtended?: boolean }).isExtended;
       if (extended) {
+        extraMonitorPushed.current = true;
         void queueRef.current?.pushImmediate("extra_monitor", {} satisfies ExtraMonitorDetail);
       }
     } catch {
@@ -455,7 +504,17 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
         leaveWarning !== null && (
           <ProctoringOverlay
             title="Leaving the test window is not allowed"
-            message={`Leaving the test window is not allowed. Warning ${String(count.violations)} of ${String(count.limit)}.`}
+            // Review finding 4: `count` is the pre-flush figure until the
+            // server answers this departure — showing it regardless read
+            // "Warning 0 of 5" for the first violation of an attempt, and
+            // kept doing so for the rest of the attempt if the ingest was
+            // down. No figure at all until `leaveCountKnown` says the
+            // server has actually answered.
+            message={
+              leaveCountKnown
+                ? `Leaving the test window is not allowed. Warning ${String(count.violations)} of ${String(count.limit)}.`
+                : "Leaving the test window is not allowed."
+            }
             onAcknowledge={() => {
               setLeaveWarning(null);
             }}

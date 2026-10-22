@@ -297,6 +297,23 @@ describe("ProctoringOverlay: window-leave (P-04)", () => {
     ).toBeVisible();
   });
 
+  // Review finding 4 — `findByText`/`getByText` both retry past the
+  // intermediate render, so this is the one assertion that cannot: no
+  // `act(async …)`/`await` between the departure and the check, so the
+  // fetch mock's promise has not resolved yet and `count` is still
+  // whatever it was before this departure (`0` here, the attempt's first
+  // violation) — the sentence must not show that stale figure.
+  it("shows no figure until the server has answered this departure", async () => {
+    mockViolations = 1;
+    await openAttempt({ proctoring: strictResolved });
+    fireEvent(window, new Event("blur"));
+    fireEvent(window, new Event("focus"));
+    expect(screen.getByText("Leaving the test window is not allowed.")).toBeVisible();
+    expect(screen.queryByText(/Warning \d+ of \d+\./)).toBeNull();
+    // The server answers on the next tick; the figure appears once it does.
+    await screen.findByText(/Leaving the test window is not allowed\. Warning 1 of 5\./);
+  });
+
   it("reports one event per departure even when blur+focus and visibilitychange both fire", async () => {
     mockViolations = 2;
     const calls: unknown[] = [];
@@ -330,6 +347,24 @@ describe("ProctoringOverlay: window-leave (P-04)", () => {
     expect(violationEvents).toHaveLength(1);
 
     delete (document as { hidden?: unknown }).hidden;
+  });
+
+  // Review finding 5 — `T4-R4` promised the departure survives an unload
+  // with `awayMs: null`; the 5-second flush interval gets no further tick
+  // on an unloading page, so `pagehide` has to reach the server by a
+  // transport the browser itself finishes delivering.
+  it("sends the pending departure via sendBeacon on pagehide", async () => {
+    const beacon = vi.fn(() => true);
+    Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: beacon });
+    await openAttempt({ proctoring: strictResolved });
+    fireEvent(window, new Event("blur")); // departure starts, no focus back
+    fireEvent(window, new Event("pagehide"));
+    expect(beacon).toHaveBeenCalledTimes(1);
+    const [url, body] = beacon.mock.calls[0] as unknown as [string, Blob];
+    expect(url).toBe(EVENTS_PATH);
+    const payload = JSON.parse(await body.text()) as { events: { type: string; detail: unknown }[] };
+    expect(payload.events).toEqual([{ type: "window_blur", detail: { awayMs: null }, clientTs: expect.any(Number) }]);
+    delete (navigator as { sendBeacon?: unknown }).sendBeacon;
   });
 });
 
