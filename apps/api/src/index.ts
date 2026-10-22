@@ -6,11 +6,13 @@ import type {
   ExecutionContext,
   Fetcher,
   R2Bucket,
+  ScheduledController,
 } from "@cloudflare/workers-types";
 import { d1Client } from "@pariksha/db";
 import { r2BindingAdapter } from "@pariksha/storage";
 import { createApp, type AppDeps } from "./app.js";
 import { parseEnv } from "./env.js";
+import { runScheduled } from "./scheduled.js";
 
 interface WorkerEnv {
   DB: D1Database;
@@ -36,14 +38,17 @@ let app: ReturnType<typeof createApp> | undefined;
  */
 const CANDIDATE_URL = /^\/[a-z0-9][a-z0-9-]*\/[a-z0-9][a-z0-9-]*\/?$/;
 
-function boot(env: WorkerEnv): ReturnType<typeof createApp> {
-  const deps: AppDeps = {
+function deps(env: WorkerEnv): AppDeps {
+  return {
     db: d1Client(env.DB),
     storage: r2BindingAdapter(env.FILES),
     now: () => Date.now(),
     env: parseEnv(env as unknown as Record<string, unknown>, "workers"),
   };
-  return createApp(deps);
+}
+
+function boot(env: WorkerEnv): ReturnType<typeof createApp> {
+  return createApp(deps(env));
 }
 
 export default {
@@ -91,5 +96,19 @@ export default {
     // type: `@cloudflare/workers-types` and @types/node each define
     // `Request` and `Response`, and this file is compiled with both.
     return env.ASSETS.fetch(served as never) as unknown as Promise<Response>;
+  },
+
+  // `deploy/cloudflare/wrangler.toml`'s nightly `crons` entry had no handler
+  // until this export existed (its own comment says so). `runScheduled`
+  // (K27) is the whole implementation on purpose — this ships registering
+  // no jobs; 8b, 8d and 8e each append one. `ctx.waitUntil` because
+  // `runScheduled`'s promise resolving is the only thing keeping the
+  // isolate alive once this method returns.
+  scheduled(
+    controller: ScheduledController,
+    env: WorkerEnv,
+    ctx: ExecutionContext,
+  ): void {
+    ctx.waitUntil(runScheduled(controller.cron, deps(env)).then(() => {}));
   },
 };
