@@ -33,6 +33,7 @@ import {
 import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
 import { ProctoringErrorBoundary, ProctoringLayer } from "../components/exam/ProctoringLayer";
+import { acquireCamera, captureJpeg } from "../lib/camera";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
@@ -78,6 +79,43 @@ function browserName(userAgent: string): string | null {
   }
   return null;
 }
+
+// --- the camera start gate (`P-05`/`Q2a`) --------------------------------
+
+/**
+ * `Q1b`'s own rule, applied to one line rather than two: the landing
+ * payload ships the resolved REQUIREMENT SENTENCES, never `requireCamera`
+ * itself, so this reads the one sentence `proctoringRequirements` always
+ * emits when it is true — "A working camera is required for the whole
+ * test." — the same way `ExamLanding`'s own `desktopOnly` extraction reads
+ * `/\b(desktop|laptop)\b/i` off its sentence rather than being handed the
+ * raw flag. Driven off the real production sentence in every test that
+ * exercises it (`camera-gate.test.tsx`), not a string a test invents, for
+ * the same reason `device-gate.test.tsx`'s own note gives: a reworded
+ * sentence at the `packages/core` end should break the gate visibly, not
+ * leave it silently never firing.
+ */
+function requiresCamera(test: LandingPayload): boolean {
+  return test.proctoring.requirements.some((line) => /camera/i.test(line));
+}
+
+/** Task 1's upload route — the body is the raw JPEG bytes, no key comes
+ *  back (`Q4a`). `credentials: "same-origin"`, the same posture
+ *  `ProctoringLayer`'s own `sendEvents` takes: the attempt cookie is what
+ *  authenticates this, not a bearer token this module holds. */
+async function uploadSnapshot(blob: Blob, reason: "identity"): Promise<void> {
+  const res = await fetch(`/api/v1/run/attempt/snapshot?reason=${reason}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "image/jpeg" },
+    body: blob,
+  });
+  if (!res.ok) throw new Error(`snapshot upload failed: ${String(res.status)}`);
+}
+
+/** The one sentence a refused gate shows — Q2a's "learns it before the
+ *  timer starts" posture, on the one screen a denial can still happen on. */
+const CAMERA_GATE_MESSAGE = "This test needs a working camera to start. Allow camera access and try again.";
 
 export function deviceReport(resolved: ResolvedProctoring): {
   ok: boolean;
@@ -167,6 +205,7 @@ export function ExamLanding({
   test,
   onStart,
   onResult,
+  cameraError,
 }: {
   test: LandingPayload;
   onStart?: () => void;
@@ -174,6 +213,10 @@ export function ExamLanding({
    *  keeps — the one on their invitation — so the return visit a week
    *  later starts here, on a test that has usually closed by then. */
   onResult?: () => void;
+  /** `P-05`/`Q2a`: set by `ExamApp` when a required camera refused to
+   *  start — never by this component, which has no camera of its own to
+   *  ask. `null` on first render and after a successful start. */
+  cameraError?: string | null;
 }) {
   const [report, setReport] = useState<ReturnType<typeof deviceReport> | null>(null);
   const notice = STATE_NOTICE[test.state];
@@ -333,6 +376,16 @@ export function ExamLanding({
           {refused && "This test needs a laptop or desktop computer."}
         </p>
 
+        {/* `P-05`/`Q2a`: the start gate's own live region, present from
+            first render for the same reason the device one above is —
+            mounted once, contents vary. Separate from `exam-device-blocked`
+            rather than sharing it: the two refusals are independent (a
+            compliant device and a denied camera can both be true at once)
+            and `aria-describedby` on Start already names the device one. */}
+        <p className="exam-camera-blocked" role="status">
+          {cameraError}
+        </p>
+
         {/* Present from first render rather than inserted with its content:
             a live region a screen reader has never seen is a live region it
             does not announce. */}
@@ -369,7 +422,19 @@ type View =
   | { kind: "error"; message: string }
   | { kind: "landing"; test: LandingPayload }
   | { kind: "register"; test: LandingPayload }
-  | { kind: "attempt"; paper: AttemptPaper }
+  | {
+      kind: "attempt";
+      paper: AttemptPaper;
+      /** `P-05`'s own stream, handed on to `ProctoringLayer` so its
+       *  existing lifecycle effect is what stops the tracks when the
+       *  attempt ends — never stopped right after the identity photo,
+       *  which would turn the camera light off mid-test on a Strict paper
+       *  that still has a camera requirement for the rest of it. `null` on
+       *  every resumed attempt: a reload loses whatever `getUserMedia`
+       *  handed the previous page load, and there is nothing here to stop.
+       */
+      cameraStream: MediaStream | null;
+    }
   /** `C-09`: no cookie, no attempt, just a reference and an address. */
   | { kind: "result-code"; test: LandingPayload }
   | { kind: "finished"; receipt: ReceiptPayload; released: ReleasedResult | null };
@@ -413,6 +478,7 @@ function AttemptView({
   paper,
   client,
   onFinished,
+  cameraStream,
 }: {
   paper: AttemptPaper;
   client: RunClient;
@@ -420,6 +486,10 @@ function AttemptView({
    *  in `Runner`, because it is the thing that ends the attempt and
    *  `Runner` is a layout. */
   onFinished: (answer: { receipt: ReceiptPayload; released: ReleasedResult | null }) => void;
+  /** The start gate's own stream (`View`'s own doc comment), threaded
+   *  straight through to `ProctoringLayer` — this component owns no camera
+   *  logic of its own. */
+  cameraStream: MediaStream | null;
 }) {
   /**
    * The first question this candidate may still write to.
@@ -652,6 +722,7 @@ function AttemptView({
             attemptId={paper.attemptId}
             proctoring={paper.proctoring}
             initialViolations={paper.violations ?? 0}
+            cameraStream={cameraStream}
           />
         </ProctoringErrorBoundary>
       )}
@@ -744,18 +815,73 @@ function AttemptView({
 
 export function ExamApp({ client }: { client: RunClient }) {
   const [view, setView] = useState<View>({ kind: "loading" });
+  /** `P-05`/`Q2a`: the one piece of state a refused gate leaves behind —
+   *  `null` whenever nothing has been refused yet, including on first
+   *  render and after a start that never needed a camera at all. */
+  const [cameraError, setCameraError] = useState<string | null>(null);
 
   /**
    * Spend the registration token. Both callers pass one they have just
    * read or just been handed, so there is no branch here for not having
    * one — `/start` is the only thing that mints an attempt.
+   *
+   * `test` is the landing payload either caller already holds — `Q1b`'s
+   * requirement sentences are read off it, never off a resolved flag this
+   * module is never handed (`LandingPayload.proctoring` carries sentences
+   * only, by design; see `requiresCamera`'s own doc comment).
+   *
+   * `P-05`/`Q2a`: **the gate runs before `client.start` is ever called.**
+   * This is what makes it a start gate and not an answering gate — a
+   * refusal here mints no attempt row, so no candidate is ever stranded
+   * mid-paper by it (`AG1` carves out exactly this one required-camera
+   * case; every other proctoring failure in this phase degrades instead).
    */
   const startWith = useCallback(
-    async (registrationToken: string) => {
+    async (registrationToken: string, test: LandingPayload) => {
+      setCameraError(null);
+
+      let camera: { ok: true; stream: MediaStream } | null = null;
+      if (requiresCamera(test)) {
+        const acquired = await acquireCamera();
+        if (!acquired.ok) {
+          // Refused before `client.start` is ever reached — no attempt
+          // row, nothing to resume into, and Start stays pressable again
+          // once the candidate allows the camera.
+          setCameraError(CAMERA_GATE_MESSAGE);
+          setView({ kind: "landing", test });
+          return;
+        }
+        camera = acquired;
+      }
+
       setView({ kind: "loading" });
       try {
-        setView({ kind: "attempt", paper: await client.start(registrationToken) });
+        const paper = await client.start(registrationToken);
+        // `Q11b`'s own identity-photo gate, read off the RESOLVED paper
+        // this time (not the landing payload's sentences) — `/start` is
+        // the first point this module holds `ResolvedProctoring` at all.
+        // `AG1`: a capture or an upload failure degrades — the candidate
+        // still reaches the paper either way, which is why this is inside
+        // its own `try` rather than the outer one.
+        if (camera && paper.proctoring?.identityPhoto) {
+          try {
+            const blob = await captureJpeg(camera.stream);
+            if (blob) await uploadSnapshot(blob, "identity");
+          } catch {
+            /* AG1: no photo this time is not a reason to hold the paper
+               back — Task 1's route already writes `faceCount: null`
+               regardless, and nothing downstream depends on this row
+               existing. */
+          }
+        }
+        setView({ kind: "attempt", paper, cameraStream: camera?.stream ?? null });
       } catch (error) {
+        // The attempt never minted — nothing to hand a camera stream to,
+        // so it is stopped here rather than leaked to a view that will
+        // never render `ProctoringLayer`.
+        camera?.stream.getTracks().forEach((track) => {
+          track.stop();
+        });
         setView({
           kind: "error",
           message: error instanceof Error ? error.message : "This test could not be started.",
@@ -797,7 +923,10 @@ export function ExamApp({ client }: { client: RunClient }) {
           setView({ kind: "finished", receipt, released });
           return;
         }
-        setView({ kind: "attempt", paper: resumed });
+        // `cameraStream: null` — a reload loses whatever `getUserMedia`
+        // handed the page before it (`View`'s own doc comment); there is
+        // nothing here to hand `ProctoringLayer`.
+        setView({ kind: "attempt", paper: resumed, cameraStream: null });
         return;
       }
       const test = await client.landing();
@@ -840,6 +969,7 @@ export function ExamApp({ client }: { client: RunClient }) {
       <AttemptView
         paper={view.paper}
         client={client}
+        cameraStream={view.cameraStream}
         onFinished={({ receipt, released }) => {
           setView({ kind: "finished", receipt, released });
         }}
@@ -867,7 +997,7 @@ export function ExamApp({ client }: { client: RunClient }) {
           // not cost the candidate the token they just paid a proof of
           // work for.
           writeRegistrationToken(registrationToken);
-          void startWith(registrationToken);
+          void startWith(registrationToken, view.test);
         }}
       />
     );
@@ -875,6 +1005,7 @@ export function ExamApp({ client }: { client: RunClient }) {
   return (
     <ExamLanding
       test={view.test}
+      cameraError={cameraError}
       onResult={() => {
         setView({ kind: "result-code", test: view.test });
       }}
@@ -886,7 +1017,7 @@ export function ExamApp({ client }: { client: RunClient }) {
           setView({ kind: "register", test: view.test });
           return;
         }
-        void startWith(registrationToken);
+        void startWith(registrationToken, view.test);
       }}
     />
   );

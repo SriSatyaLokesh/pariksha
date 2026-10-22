@@ -132,9 +132,29 @@ export interface ProctoringLayerProps {
    *  Never recomputed here; this is what Review Focus 3's remount test
    *  reads before the queue has ever flushed anything of its own. */
   initialViolations: number;
+  /**
+   * Phase 7d Task 2 (`P-05`): the live stream the start gate already
+   * acquired, minted once in `routes/exam.tsx`'s `startWith` and handed
+   * down rather than reacquired here — asking twice would prompt a
+   * candidate a second time for a permission already granted. `null` on
+   * every resumed attempt, where nothing survived the reload to hand over.
+   * Stopped in this component's own queue-lifecycle effect below ("Stop the
+   * tracks"): that effect already owns "the thing that lives exactly as
+   * long as the attempt", and a `MediaStream` left running is the same
+   * camera-light-stays-on defect a forgotten `setInterval` would be.
+   * Optional (default `null`) so every caller that mounts this with no
+   * camera in play — `proctoring-layer-lifecycle.test.tsx` included — need
+   * not pass one.
+   */
+  cameraStream?: MediaStream | null;
 }
 
-export function ProctoringLayer({ attemptId, proctoring, initialViolations }: ProctoringLayerProps) {
+export function ProctoringLayer({
+  attemptId,
+  proctoring,
+  initialViolations,
+  cameraStream = null,
+}: ProctoringLayerProps) {
   /**
    * The paper's fullscreen state **at the moment this layer first
    * renders** — captured once and kept, not read-and-discarded. Task 4's
@@ -224,10 +244,22 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
     });
     queueRef.current = queue;
     // `stop()` on unmount, and nowhere else — this view lives exactly as
-    // long as the attempt.
+    // long as the attempt. "Stop the tracks" rides the same cleanup: this
+    // effect is already the one place that owns "runs for exactly the
+    // attempt's lifetime", and a `MediaStream` left running after unmount
+    // is the same forgotten-resource defect a leaked `setInterval` would
+    // be. `cameraStream` is read directly rather than added to the
+    // dependency array below, the same posture this effect already takes
+    // with `proctoring` (its own comment, two lines down): both are fixed
+    // for the life of one attempt, so a changed value would mean a second
+    // attempt and therefore a remount with a fresh `attemptId`, which this
+    // effect already re-runs on.
     return () => {
       queueRef.current = null;
       queue.stop();
+      cameraStream?.getTracks().forEach((track) => {
+        track.stop();
+      });
     };
     // One queue per attempt — the same rule the save queue follows in
     // `AttemptView` below: a new attempt id is a new attempt and a new
