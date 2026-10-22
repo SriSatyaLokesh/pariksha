@@ -31,6 +31,7 @@ import {
 } from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
+import { ProctoringErrorBoundary, ProctoringLayer } from "../components/exam/ProctoringLayer";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
@@ -575,89 +576,107 @@ function AttemptView({
   }, [client, onFinished, queue]);
 
   return (
-    <Runner
-      paper={{ ...paper, responses, maxIndex }}
-      index={index}
-      onIndex={setIndex}
-      marked={marked}
-      onToggleMark={toggleMark}
-      // A cleared answer is a **save of null**, not a local forget: the
-      // server holds the old value until something replaces it, and an
-      // absent row and a null row mean different things to Phase 8.
-      onClear={(questionId) => {
-        save(questionId, null);
-      }}
-      questionSlot={questionSlot}
-      clockSlot={
-        <Clock
-          anchor={anchor}
-          warnAtMinutes={paper.warnAtMinutes}
-          onZero={() => {
-            // **Drain before submitting.** The queue may be holding
-            // answers the candidate made in time; submitting first would
-            // close the attempt and every one of them would come back a
-            // 409. `C-07`'s auto-submit is whichever of this and the
-            // server's next request happens first, so being a moment late
-            // here costs nothing and being early costs answers.
-            //
-            // Task 11: the drain, then the submission the drain was for.
-            // Whichever of this and the server's own materialisation gets
-            // there first wins; the other is a no-op, because
-            // `finishAttempt` writes only `WHERE submitted_at IS NULL`.
-            void finish(true);
-          }}
-          onSectionZero={() => {
-            // `C-07` on the client: when the section's clock runs out the
-            // candidate is moved to the first question of the next one.
-            // The server's half is the refusal that names it.
-            const next = firstOfNextSection(paper, index);
-            if (next !== null) setIndex(next);
-          }}
-        />
-      }
-      bannerSlot={<SaveBanner state={saveState} />}
-      submitSlot={
-        <>
-          <button
-            type="button"
-            className="exam-submit"
-            // WCAG 2.5.3: the accessible name is a superset of the
-            // visible label. "Submit" is what the eye wants; a
-            // screen-reader user arriving from a button list needs to
-            // hear what it ends.
-            aria-label="Submit test and finish"
-            disabled={submitting === "sending"}
-            onClick={() => {
-              setSubmitting("confirming");
+    <>
+      {/* `Q2c`/`AG4`: a sibling of `Runner`, never its parent — the
+          boundary below catches whatever the layer's own work throws
+          without taking the paper's own subtree down with it. Mounted
+          only once the server has actually resolved this attempt's
+          proctoring (`/start`'s own response never carries it — a
+          just-minted attempt's violation count is always zero, Phase 7c
+          Task 1's own doc comment on `AttemptPaper.proctoring`). */}
+      {paper.proctoring && (
+        <ProctoringErrorBoundary>
+          <ProctoringLayer
+            attemptId={paper.attemptId}
+            proctoring={paper.proctoring}
+            initialViolations={paper.violations ?? 0}
+          />
+        </ProctoringErrorBoundary>
+      )}
+      <Runner
+        paper={{ ...paper, responses, maxIndex }}
+        index={index}
+        onIndex={setIndex}
+        marked={marked}
+        onToggleMark={toggleMark}
+        // A cleared answer is a **save of null**, not a local forget: the
+        // server holds the old value until something replaces it, and an
+        // absent row and a null row mean different things to Phase 8.
+        onClear={(questionId) => {
+          save(questionId, null);
+        }}
+        questionSlot={questionSlot}
+        clockSlot={
+          <Clock
+            anchor={anchor}
+            warnAtMinutes={paper.warnAtMinutes}
+            onZero={() => {
+              // **Drain before submitting.** The queue may be holding
+              // answers the candidate made in time; submitting first would
+              // close the attempt and every one of them would come back a
+              // 409. `C-07`'s auto-submit is whichever of this and the
+              // server's next request happens first, so being a moment late
+              // here costs nothing and being early costs answers.
+              //
+              // Task 11: the drain, then the submission the drain was for.
+              // Whichever of this and the server's own materialisation gets
+              // there first wins; the other is a no-op, because
+              // `finishAttempt` writes only `WHERE submitted_at IS NULL`.
+              void finish(true);
             }}
-          >
-            Submit test
-          </button>
-          {submitting !== "idle" && (
-            <SubmitDialog
-              unanswered={
-                flatQuestions(paper).filter((question) => (responses[question.id] ?? null) === null)
-                  .length
-              }
-              marked={marked.size}
-              total={flatQuestions(paper).length}
-              pending={submitting === "sending"}
-              onConfirm={() => {
-                void finish();
+            onSectionZero={() => {
+              // `C-07` on the client: when the section's clock runs out the
+              // candidate is moved to the first question of the next one.
+              // The server's half is the refusal that names it.
+              const next = firstOfNextSection(paper, index);
+              if (next !== null) setIndex(next);
+            }}
+          />
+        }
+        bannerSlot={<SaveBanner state={saveState} />}
+        submitSlot={
+          <>
+            <button
+              type="button"
+              className="exam-submit"
+              // WCAG 2.5.3: the accessible name is a superset of the
+              // visible label. "Submit" is what the eye wants; a
+              // screen-reader user arriving from a button list needs to
+              // hear what it ends.
+              aria-label="Submit test and finish"
+              disabled={submitting === "sending"}
+              onClick={() => {
+                setSubmitting("confirming");
               }}
-              onCancel={() => {
-                setSubmitting("idle");
-              }}
-            />
-          )}
-          {submitError !== null && (
-            <p className="exam-submit-error" role="alert">
-              {submitError}
-            </p>
-          )}
-        </>
-      }
-    />
+            >
+              Submit test
+            </button>
+            {submitting !== "idle" && (
+              <SubmitDialog
+                unanswered={
+                  flatQuestions(paper).filter((question) => (responses[question.id] ?? null) === null)
+                    .length
+                }
+                marked={marked.size}
+                total={flatQuestions(paper).length}
+                pending={submitting === "sending"}
+                onConfirm={() => {
+                  void finish();
+                }}
+                onCancel={() => {
+                  setSubmitting("idle");
+                }}
+              />
+            )}
+            {submitError !== null && (
+              <p className="exam-submit-error" role="alert">
+                {submitError}
+              </p>
+            )}
+          </>
+        }
+      />
+    </>
   );
 }
 

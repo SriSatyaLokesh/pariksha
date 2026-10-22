@@ -29,7 +29,7 @@
  * carried for the screens branch is gone with them.
  */
 
-import type { QuestionType, ResponseValue } from "@pariksha/core";
+import type { QuestionType, ResolvedProctoring, ResponseValue } from "@pariksha/core";
 
 /**
  * One question as a candidate sees it: the prompt and the choices, and
@@ -106,4 +106,16 @@ export interface AttemptPaper {
   allowCalculator: boolean;
   serverNow: number;
   submittedAt: number | null;
+  /**
+   * Phase 7c Task 2, mirroring `apps/api/src/run/attempt.ts`'s own
+   * `AttemptPaper` field for field: `apps/api`'s doc comment there is the
+   * authority on why these two are optional. **Only `GET /attempt`
+   * carries them** — `/start`'s mint response does not, because a
+   * just-minted attempt's violation count is always zero and computing it
+   * there would spend a read for a number that can never be anything
+   * else. `ProctoringLayer` (`components/exam/ProctoringLayer.tsx`) reads
+   * both and does not mount at all when `proctoring` is absent.
+   */
+  proctoring?: ResolvedProctoring;
+  violations?: number;
 }

@@ -1432,3 +1432,37 @@
   margin-top: 8px;
   max-width: 64ch;
 }
+
+/* The proctoring warning count (Phase 7c Task 2, `Q7a`). `ProctoringLayer`
+   mounts as `Runner`'s sibling, not its parent, so this surface sits over
+   the paper rather than inside its layout — `fixed`, never part of the
+   document flow, which is also what `D8`'s "the candidate runtime's
+   layout does not move" needs: a count line must not reflow the paper
+   whether or not it is even mounted. DESIGN.md names this exact surface
+   by hand: cream fill, 2px voltage border is the same pair
+   `.exam-option-row.is-selected` already proves against WCAG — reused
+   rather than invented. `ProctoringOverlay` (Task 4) replaces this with
+   the richer presentation; this stays plain on purpose (R5) and nothing
+   here animates, matching the rest of this file. */
+.exam-proctoring-count {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 20;
+  margin: 0;
+  padding: 8px 12px;
+  border-width: 2px;
+  border-style: solid;
+  border-color: var(--color-voltage);
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+}
+
+.exam-proctoring-count:empty {
+  display: none;
+}
