@@ -48,9 +48,10 @@ import { useDialogKeys } from "../useDialogKeys";
 // or consequence goes in a field's own help line, and an explanation of the
 // WHOLE GROUP is one note under the row — never help per field, which is
 // what would otherwise repeat the same sentence five or six times. `Q3`'s
-// face-check copy is the one deliberate exception: it is not a group fact,
-// it is the reason ONE control is unusable, and `D16a` requires every id
-// that copy is reached by to come from this instance's own `useId()`.
+// face-check copy and `Q12b`'s microphone copy (#209) are the two
+// deliberate exceptions: each is not a group fact, it is the reason ONE
+// control is unusable, and `D16a` requires every id that copy is reached by
+// to come from this instance's own `useId()`.
 //
 // `R2` (pre-flight ruling, progress.md): `.field-row` / `.field` /
 // `.field-row > .field > *` are `primitives.css:194-233`'s existing D16
@@ -74,7 +75,6 @@ type BoolOverrideKey = Extract<
   | "watermark"
   | "require_camera"
   | "identity_photo"
-  | "require_microphone"
   | "extra_monitor_check"
   | "allow_calculator"
 >;
@@ -315,6 +315,8 @@ export function ProctoringPanel({
 
   const faceCheckHelpId = `${ids}-face_check-help`;
   const faceCheckMarker = fieldMarker("face_check");
+  const requireMicrophoneHelpId = `${ids}-require_microphone-help`;
+  const requireMicrophoneMarker = fieldMarker("require_microphone");
   const violationActionMarker = fieldMarker("violation_action");
 
   const headingId = `${ids}-heading`;
@@ -458,9 +460,34 @@ export function ProctoringPanel({
             </p>
             {faceCheckMarker?.node}
           </div>,
-          checkboxField("require_microphone", "Require a microphone", resolved.requireMicrophone),
+          // `Q12b`/#209: pre-cut and shipped disabled, the same treatment as
+          // `face_check` above. The raw document value is shown, not
+          // `resolved.requireMicrophone` (always `false` — the enforcement
+          // refusal is `resolveProctoring`'s, not a fact about what an
+          // imported document holds), so a document authored for Phase 8
+          // round-trips visibly even though nothing here can act on it yet.
+          <div className="field" key="require_microphone">
+            <label className="field-label" htmlFor={`${ids}-require_microphone`}>
+              Require a microphone
+            </label>
+            <input
+              type="checkbox"
+              id={`${ids}-require_microphone`}
+              checked={value.overrides.require_microphone ?? false}
+              disabled
+              aria-describedby={
+                requireMicrophoneMarker === undefined
+                  ? requireMicrophoneHelpId
+                  : `${requireMicrophoneHelpId} ${requireMicrophoneMarker.id}`
+              }
+            />
+            <p className="field-help" id={requireMicrophoneHelpId}>
+              Microphone noise monitoring ships in Phase 8. This control is disabled until then.
+            </p>
+            {requireMicrophoneMarker?.node}
+          </div>,
         ],
-        "A camera or microphone only starts if one of these needs it, and turning either off removes its indicator for the candidate too. Snapshots stop entirely at an interval of 0; the microphone's level is monitored and nothing is ever recorded or stored.",
+        "A camera or microphone only starts if one of these needs it, and turning either off removes its indicator for the candidate too. Snapshots stop entirely at an interval of 0.",
       )}
 
       {group(

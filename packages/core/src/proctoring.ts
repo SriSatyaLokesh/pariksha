@@ -36,6 +36,8 @@ export interface ResolvedProctoring {
   snapshotIntervalSeconds: number;
   /** Always resolves false in Phase 7: the control is pre-cut (`Q3`). */
   faceCheck: boolean;
+  /** Always resolves false in Phase 7: the control is pre-cut (`Q12b`,
+   *  issue #209). */
   requireMicrophone: boolean;
   extraMonitorCheck: boolean;
   violationLimit: number;
@@ -75,6 +77,9 @@ export const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
 //   preset. `lock` is opt-in.
 // - `face_check` is `false` on every row. `Q3` pre-cut it; see
 //   `resolveProctoring` below for why it is refused even when overridden.
+// - `require_microphone` is `false` on every row too, for the same reason:
+//   `Q12b`'s noise monitoring is pre-cut (issue #209), and `resolveProctoring`
+//   refuses the override below exactly as it refuses `face_check`'s.
 export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedProctoring>> = {
   off: {
     profile: "off",
@@ -178,7 +183,12 @@ export function resolveProctoring(
     // not an omission, a deliberate `false` regardless of profile or
     // override, so nothing in Phase 7 can act on it.
     faceCheck: false,
-    requireMicrophone: overrideOr(overrides, "require_microphone", defaults.requireMicrophone),
+    // #209: pre-cut, same as `faceCheck` immediately above. Accepted and
+    // round-tripped (Task 2) so a document authored for Phase 8 survives,
+    // but resolution refuses it outright — not an omission, a deliberate
+    // `false` regardless of profile or override, so nothing in Phase 7 can
+    // act on it.
+    requireMicrophone: false,
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
     violationLimit: overrideOr(overrides, "violation_limit", defaults.violationLimit),
     violationAction: overrideOr(overrides, "violation_action", defaults.violationAction),
