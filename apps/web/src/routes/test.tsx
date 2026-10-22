@@ -24,7 +24,7 @@ import { SectionList } from "../components/testbuilder/SectionList";
 import { FormBuilder } from "../components/testbuilder/FormBuilder";
 import { TimingPanel } from "../components/testbuilder/TimingPanel";
 import { AccessPanel } from "../components/testbuilder/AccessPanel";
-import { ReleasePanel } from "../components/testbuilder/ReleasePanel";
+import { ResultsPanel } from "../components/testbuilder/ResultsPanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 import { ProctoringPanel } from "../components/testbuilder/ProctoringPanel";
 import {
@@ -813,9 +813,16 @@ export function TestBuilder({
             open={openPanel === "results"}
             onToggle={togglePanel}
           >
-            <ReleasePanel
+            <ResultsPanel
               release={draft.body.settings.release ?? DEFAULT_RELEASE}
-              onChange={(release) => saveSettings({ release })}
+              onReleaseChange={(release) => saveSettings({ release })}
+              retention={draft.body.settings.retention}
+              onRetentionChange={(retention) => saveSettings({ retention })}
+              // No route emits a cost figure yet (`K35`'s estimator has no
+              // caller until 8d/8e/the publish checklist thread it
+              // through) — omitted here, not a stray `undefined`, which is
+              // also `K36`'s own shape on `node`: absent is correct on
+              // both targets until one exists.
             />
           </SettingRow>
 

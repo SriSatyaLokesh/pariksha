@@ -1216,7 +1216,13 @@ describe("OrganiserApp routes on state, not on a URL", () => {
   // them, reads workspace branding at all, or knows which actor is
   // looking — the last of which is what makes the workspace half
   // read-only for an Author.
-  it("reaches the release and branding panels from the app's own entry point", async () => {
+  //
+  // Phase 8a Task 5 (`K28`), a tenth: `routes/test.tsx` rendered the bare
+  // `ReleasePanel` here, so every retention field `ResultsPanel.tsx`
+  // (`results-panel.test.tsx`) built was reachable from no running page at
+  // all — a component with no caller. This walks the app to the same
+  // "Results" row and proves the retention fields are on it.
+  it("reaches the release, retention and branding panels from the app's own entry point", async () => {
     const TEST_ROW = {
       id: "tst_1",
       name: "Midterm",
@@ -1279,6 +1285,22 @@ describe("OrganiserApp routes on state, not on a URL", () => {
 
     await openSetting("Results");
     expect(await screen.findByRole("heading", { name: "When candidates see their result" })).toBeInTheDocument();
+
+    // `K28`: the two retention integers join this same row, with S-13's
+    // defaults applied when the draft sets neither.
+    expect(screen.getByLabelText(/Delete snapshots after/i)).toHaveValue(90);
+    expect(screen.getByLabelText(/Delete personal data and answers after/i)).toHaveValue(365);
+    fireEvent.change(screen.getByLabelText(/Delete snapshots after/i), { target: { value: "30" } });
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
+    expect(patchDraft.mock.calls[0]).toEqual([
+      "wsp_1",
+      "tst_1",
+      { settings: { retention: { snapshots_days: 30 } } },
+    ]);
+    // Reset so the branding assertions below can keep reading `calls[0]`
+    // as the first write they themselves trigger.
+    patchDraft.mockClear();
+
     // One at a time (`D7`), so the branding panel is reached by its own row
     // rather than found already mounted beside this one.
     await openSetting("Branding");
