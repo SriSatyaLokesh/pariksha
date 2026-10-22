@@ -122,7 +122,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Does Pariksha record video of candidates?",
     answer:
-      "Pariksha does not record video or audio of candidates. Strict proctoring instead takes 320×240 JPEG snapshots, about 25 KB each, every sixty seconds and on each violation, stored in a private bucket behind signed URLs that expire in ten minutes. Face counting runs on-device and stores no biometric template.",
+      "Pariksha does not record video or audio of candidates. Strict proctoring instead takes 320×240 JPEG snapshots, about 25 KB each, every sixty seconds and on each violation, stored in a private bucket behind signed URLs that expire in ten minutes. No biometric template is produced or stored.",
   },
   {
     question: "Is Pariksha better than Google Forms for an exam?",

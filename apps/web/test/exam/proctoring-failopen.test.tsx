@@ -3,7 +3,7 @@
 //
 // **R3's correction.** The brief's own draft threw from `window.matchMedia`
 // — but `window.matchMedia?.("(pointer: fine)")` already runs at
-// `routes/exam.tsx:77`, inside `deviceReport()`, on the **landing page**,
+// `routes/exam.tsx:93`, inside `deviceReport()`, on the **landing page**,
 // before `ProctoringLayer` ever mounts. A mock that throws there would
 // prove only that the boundary survives a throw from a screen it was never
 // wrapped around; `openAttempt` below reaches the attempt view directly

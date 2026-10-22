@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { ExamApp, REGISTRATION_TOKEN_KEY, deviceReport } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -133,6 +134,21 @@ it("every section is listed with its own question count", async () => {
 });
 
 it("C-01: 'Check my device' reports before the window opens and does not block starting", async () => {
+  // A passing desktop, stubbed explicitly: Phase 7c Task 3 now *does* let
+  // a refused device additionally disable Start (`device-gate.test.tsx`
+  // owns that), so this test pins a compliant device to isolate what it
+  // actually checks — that the window, not the device, is why Start is
+  // disabled here.
+  vi.stubGlobal("innerWidth", 1440);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("pointer: fine"),
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+  vi.stubGlobal("navigator", {
+    userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0.0.0 Safari/537.36",
+  });
   await mount({ ...landingFixture, state: "scheduled", opensAt: NOW + DAY });
   // No @testing-library/user-event in this workspace, by a decision this
   // repo already made and documented (`test/authoring/reorder.test.tsx:44`):
@@ -143,8 +159,8 @@ it("C-01: 'Check my device' reports before the window opens and does not block s
   check.focus();
   fireEvent.click(check);
   expect(await screen.findByRole("status")).toHaveTextContent(/screen|browser/i);
-  // The window, not the device: the report never disables the button and
-  // never enables it (Phase 7 owns the gate).
+  // The window, not a compliant device: a passing report never disables
+  // the button and never enables it either — the window still rules.
   expect(screen.getByRole("button", { name: /start/i })).toBeDisabled();
 });
 
@@ -257,15 +273,16 @@ describe("deviceReport", () => {
 
   it("passes a wide screen with a mouse on a supported browser", () => {
     stub(1440, true, "Mozilla/5.0 (Windows NT 10.0) Chrome/130.0.0.0 Safari/537.36");
-    const report = deviceReport();
+    const report = deviceReport(PROCTORING_DEFAULTS.standard);
     expect(report.ok).toBe(true);
+    expect(report.refused).toBe(false);
     expect(report.findings.map((f) => f.label)).toEqual(["Screen", "Pointer", "Browser"]);
     expect(report.findings.every((f) => f.ok)).toBe(true);
   });
 
   it("fails a phone on both the screen and the pointer, and names which", () => {
     stub(390, false, "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0) Version/17.0 Mobile/15E148 Safari/604.1");
-    const report = deviceReport();
+    const report = deviceReport(PROCTORING_DEFAULTS.standard);
     expect(report.ok).toBe(false);
     const failed = report.findings.filter((f) => !f.ok).map((f) => f.label);
     expect(failed).toContain("Screen");
@@ -274,7 +291,7 @@ describe("deviceReport", () => {
 
   it("names an unsupported browser rather than reporting it as fine", () => {
     stub(1440, true, "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Lynx/2.9");
-    const browser = deviceReport().findings.find((f) => f.label === "Browser");
+    const browser = deviceReport(PROCTORING_DEFAULTS.standard).findings.find((f) => f.label === "Browser");
     expect(browser?.ok).toBe(false);
     expect(browser?.detail).toMatch(/Chrome|Edge|Firefox|Safari/);
   });

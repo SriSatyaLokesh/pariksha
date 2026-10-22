@@ -178,6 +178,17 @@
   margin: 32px 0;
 }
 
+/* No colour set here — `Start`'s own disabled styling already carries
+   that (contrast-usage.test.ts's two SURFACE entries for
+   `.exam-landing-actions button:disabled`), so this sentence inherits the
+   page's ink rather than adding a second colour-setting selector for the
+   same state. */
+.exam-device-blocked {
+  margin: -16px 0 24px;
+  max-width: 64ch;
+  font-weight: 500;
+}
+
 .exam-landing-actions button {
   min-height: 44px;
   padding: 0 24px;
