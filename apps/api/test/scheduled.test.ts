@@ -7,6 +7,14 @@ import { testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
 
+// Snapshotted at module load — before any `beforeEach` below has run.
+// `beforeEach` applies to every test in this file regardless of where it
+// is declared relative to them, so reading `SCHEDULED_JOBS` directly from
+// inside a test reads an array the hook already emptied: the assertion
+// would pass no matter what shipped. This constant is the registry as the
+// module actually exported it.
+const shippedWith = [...SCHEDULED_JOBS];
+
 function fake(name: string, cron: string): ScheduledJob {
   return { name, cron, run: vi.fn(async () => ({ summary: name })) };
 }
@@ -25,7 +33,7 @@ function throwing(name: string, cron: string): ScheduledJob {
 // must edit this line, which is how the registry's contents stay visible
 // rather than accumulating unseen.
 it("ships with no jobs registered", async () => {
-  expect(SCHEDULED_JOBS).toEqual([]); // 8b, 8d and 8e each change this line
+  expect(shippedWith).toEqual([]); // 8b, 8d and 8e each change this line
 });
 
 beforeEach(() => {
