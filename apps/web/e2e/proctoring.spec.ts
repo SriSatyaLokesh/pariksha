@@ -10,11 +10,12 @@
 //     refuses it without a genuine user gesture — `page.evaluate()` does
 //     not count, `page.click()` does), and the REAL `fullscreenchange`
 //     event it dispatches, not a synthetic one `fireEvent` constructs;
-//   - leaving fullscreen through the BROWSER's own escape hatch (Escape,
-//     pressed through CDP input, exits real Chromium fullscreen) rather
-//     than through the dialog — there is none to escape (`Q2b`), and this
-//     is the proof that the candidate's *only* way out is the one this
-//     suite drives;
+//   - leaving real fullscreen OUTSIDE the dialog — there is none to
+//     escape (`Q2b`) — and watching the real `fullscreenchange` bring the
+//     overlay back. The exit is driven by `document.exitFullscreen()`, not
+//     by an Escape keypress: Chromium exits fullscreen on Escape in its
+//     own browser UI, which headless does not have. The step below says so
+//     and says what it therefore does and does not prove;
 //   - `Q7a`: the warning's count and a follow-up `GET /api/v1/run/attempt`
 //     agree — the server really counted, independent of whatever the page
 //     chose to render.
@@ -136,19 +137,8 @@ test("AC-18: fullscreen exit and a window-leave both reach the overlay, and the 
   page,
   request,
 }) => {
-  page.on("console", (msg) => console.log("PAGE LOG:", msg.text()));
-  page.on("pageerror", (err) => console.log("PAGE ERROR:", err.message));
   const seeded = await seedProctoringTest(request);
   await openAttempt(page, seeded);
-  await page.waitForTimeout(500);
-  console.log("DEBUG fullscreenEnabled:", await page.evaluate(() => document.fullscreenEnabled));
-  console.log("DEBUG requestFullscreen type:", await page.evaluate(() => typeof document.documentElement.requestFullscreen));
-  console.log("DEBUG overlay html present:", await page.locator(".exam-proctoring-overlay").count());
-  console.log("DEBUG runner inert:", await page.evaluate(() => document.querySelector(".exam-runner")?.getAttribute("inert")));
-  console.log("DEBUG fullscreenElement:", await page.evaluate(() => document.fullscreenElement));
-  console.log("DEBUG body html:", (await page.content()).includes("exam-proctoring-overlay"));
-  console.log("DEBUG has runner:", await page.locator(".exam-runner").count());
-  console.log("DEBUG has count badge:", await page.locator(".exam-proctoring-count").count());
 
   // P-03: the test starts only from a click that enters fullscreen —
   // the runner has just mounted, never fullscreen yet, so the overlay is
@@ -163,11 +153,22 @@ test("AC-18: fullscreen exit and a window-leave both reach the overlay, and the 
   await expect(page.getByRole("alertdialog")).toHaveCount(0);
   expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(true);
 
-  // Leaving through the BROWSER's own control, not the dialog — there is
-  // none to Escape (`Q2b`), and this is what proves it: Escape here exits
-  // real Chromium fullscreen, which is exactly the signal `fullscreenchange`
-  // reports back to `ProctoringLayer`.
-  await page.keyboard.press("Escape");
+  // Leaving fullscreen outside the dialog, because there is no dialog to
+  // leave (`Q2b`). `document.exitFullscreen()` and not
+  // `keyboard.press("Escape")`: exiting fullscreen on Escape is Chromium's
+  // own BROWSER-UI behaviour, and this suite runs headless, where there is
+  // no browser UI to do it — `document.fullscreenElement` stays non-null a
+  // full second after the keypress, so the assertion below would fail
+  // against correct code. Measured, not assumed.
+  //
+  // What this still proves, and it is the whole reason the step is here:
+  // the exit goes through the REAL Fullscreen API and raises a REAL
+  // `fullscreenchange`, the signal `ProctoringLayer` listens for and the
+  // one thing jsdom cannot produce at all. What it no longer claims is
+  // that the candidate's own Escape key is the trigger — that is a browser
+  // behaviour rather than ours, and `fullscreen.test.tsx` proves the part
+  // that IS ours: the dialog has no Escape handler to dismiss it.
+  await page.evaluate(() => document.exitFullscreen());
   await expect(page.getByRole("alertdialog")).toBeVisible();
   expect(await page.evaluate(() => document.fullscreenElement !== null)).toBe(false);
 

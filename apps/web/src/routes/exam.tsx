@@ -636,11 +636,13 @@ function AttemptView({
     <>
       {/* `Q2c`/`AG4`: a sibling of `Runner`, never its parent — the
           boundary below catches whatever the layer's own work throws
-          without taking the paper's own subtree down with it. Mounted
-          only once the server has actually resolved this attempt's
-          proctoring (`/start`'s own response never carries it — a
-          just-minted attempt's violation count is always zero, Phase 7c
-          Task 1's own doc comment on `AttemptPaper.proctoring`). */}
+          without taking the paper's own subtree down with it.
+          `paper.proctoring` is now carried by **every** response that
+          builds a paper, `/start`'s mint included: it is a pure function
+          of the attempt's settings, so resolving it costs no read, and
+          omitting it from the mint left a candidate unproctored until
+          their first reload. The guard below stays because an older
+          cached payload can still arrive without it. */}
       {paper.proctoring && (
         <ProctoringErrorBoundary>
           <ProctoringLayer
