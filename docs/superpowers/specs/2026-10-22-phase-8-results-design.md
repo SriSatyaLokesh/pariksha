@@ -768,19 +768,26 @@ execution rather than deferred at planning.**
 > is one plan each, and the handoff precedent is that a plan re-checked against a merged dependency
 > is normal work rather than waste.
 
-**`K41` (owner) — 8a does not merge until `0008` and `0010` are applied to the live database.**
+**`K41` (owner) — `0010` is applied to the live database *before* 8a merges, not after.**
 
-> Ruling: applying both migrations is an explicit, blocking item in 8a's definition of done, run by
-> the owner (`node deploy/cloudflare/setup.mjs` — the sandbox classifier refuses it for the agent),
-> with the resulting `wrangler.toml` committed. Every later plan may then assume the columns exist
-> — **why:** `0008` added `attempt.integrity_flag` and `observed` in 7a and **has still never been
-> applied**. Nothing on `main` reads them, so nothing is broken today — but Phase 8 reads them on
-> the monitor, the review page, the analytics screen and the results CSV, and `0010` lands on top.
-> `deploy.yml` applies no migrations by design, so without a gate the failure is a deployed
-> `D1_ERROR: no such column` rather than a red test, and it surfaces in whichever plan deploys
-> first rather than in the one that caused it — **cost if wrong:** 8a's merge waits on one command.
-> Three handoffs in a row have carried this as an outstanding note; a gate is what stops it
-> becoming a fourth.
+> Ruling: applying the migration is an explicit, blocking item in 8a's definition of done, run by
+> the owner (`node deploy/cloudflare/setup.mjs` — the sandbox classifier refuses it for the agent).
+> The agent's own pre-merge evidence is the two free checks `CLAUDE.md` names:
+> `node deploy/cloudflare/setup.mjs --dry-run` (the whole flow twice against an in-memory
+> Cloudflare, asserting the second run is a no-op) and `pnpm --filter @pariksha/api test`, whose
+> `worker.test.ts` runs the real Worker entry against **Miniflare — D1's own engine locally**.
+> After the merge, `GET /api/v1/health` must answer a `migrations` count equal to the number of
+> files in `packages/db/migrations/sqlite/` — **why:** `deploy.yml` redeploys `main` on every push
+> and applies **no** migrations, so a merge ships code whose schema is not there yet. This has
+> already happened on this repository: **`0008` merged with Phase 7a and went four days unapplied**,
+> and every live `attempt` select failed with `no such column` until setup was run on **2026-10-22**.
+> `CLAUDE.md` now carries this as a repository-wide rule, and `K41` is this phase's instance of it —
+> **cost if wrong:** a deployed 500 on a live instance rather than a red test, surfacing in whichever
+> plan deploys first rather than in the one that caused it.
+>
+> **`0008` is applied as of 2026-10-22** and is no longer outstanding. `attempt.integrity_flag` and
+> `observed` exist in production; the plans may assume them. `0010` is the only migration this phase
+> gates on.
 
 ### What is shared across plans
 
