@@ -487,7 +487,14 @@ export function ProctoringPanel({
             {requireMicrophoneMarker?.node}
           </div>,
         ],
-        "A camera or microphone only starts if one of these needs it, and turning either off removes its indicator for the candidate too. Snapshots stop entirely at an interval of 0.",
+        // L4 (whole-branch review): the microphone clauses promised a
+        // control that cannot act — `resolveProctoring` hardcodes
+        // `requireMicrophone: false` and `middleware/security.ts` denies
+        // the capability at the browser level (`Q12b`, issue 209). Dropped
+        // rather than reworded to something still true but vaguer: there
+        // is no path by which a candidate is told a microphone is
+        // required, so the note says only what the camera control does.
+        "A camera only starts if one of these needs it, and turning it off removes its indicator for the candidate too. Snapshots stop entirely at an interval of 0.",
       )}
 
       {group(

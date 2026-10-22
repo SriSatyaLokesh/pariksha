@@ -82,7 +82,7 @@ import {
   type WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
-import { acquireCamera, captureJpeg, isCameraLensCovered } from "../../lib/camera";
+import { acquireCamera, captureJpeg, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
 import { ProctoringOverlay } from "./ProctoringOverlay";
 import { Watermark } from "./Watermark";
 
@@ -368,6 +368,12 @@ export function ProctoringLayer({
         liveStreamRef.current?.getTracks().forEach((track) => {
           track.stop();
         });
+        // L3: the luminance sampler's own module-scoped `<video>`/
+        // `<canvas>` pair outlives this component by design (`camera.ts`'s
+        // own doc comment) — released here, beside the track stop, so
+        // neither the stopped stream reference nor the last drawn frame
+        // survives past the attempt that produced them.
+        releaseCameraSampler();
       }, 0);
     };
     // One queue per attempt — the same rule the save queue follows in
@@ -569,44 +575,73 @@ export function ProctoringLayer({
   const cameraLostReasonRef = useRef<CameraLostDetail["reason"] | null>(null);
   const cameraLostAtRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (!liveStream) return;
-
-    function reportLost(reason: CameraLostDetail["reason"]): void {
-      if (cameraLostRef.current) return;
-      cameraLostRef.current = true;
+  /**
+   * M1 (whole-branch review): first-writer-wins is right for a DUPLICATE
+   * signal of the same loss, but it also used to swallow a genuine
+   * ESCALATION between reasons — "muted" then "ended" (a shutter, then the
+   * cable pulled), or "covered" then "ended" — and every reason has exactly
+   * one recovery door (`onUnmute` below, `onDeviceChange`, the sampler).
+   * Stranded forever was the failure mode: the reason stayed "muted" while
+   * the track was actually `ended`, so no door ever matched. A different
+   * reason now re-stamps `cameraLostReasonRef` (the latest signal is what
+   * recovery must match) without re-stamping `cameraLostAtRef` or
+   * re-pushing the event — it is still the SAME outage, continuously lost
+   * since the first report, not a second one. Hoisted to component scope
+   * (not nested in the liveness effect below) so B1's mount-time check —
+   * reached with no stream at all — can call the same function.
+   */
+  function reportLost(reason: CameraLostDetail["reason"]): void {
+    if (cameraLostRef.current) {
       cameraLostReasonRef.current = reason;
-      cameraLostAtRef.current = Date.now();
-      setCameraLost(true);
-      // `pushImmediate`, not `push`: `AC-19`'s own 5 s bound is about the
-      // overlay, but the organiser's own count (`Q6`) should not lag a
-      // flush interval behind a block that is already up.
-      void queueRef.current?.pushImmediate("camera_lost", { reason } satisfies CameraLostDetail);
-      // `AC-20`'s snapshot deliberately does not fire for "ended"/"muted" —
-      // neither leaves a frame to capture, and Task 3's own overlay (below)
-      // is already the phase's one `AG1` exception. Fix pass 1, finding 3
-      // (Task 4 review finding B): "covered" is different — the track
-      // stays `live` with a drawable frame (`isCameraLensCovered` above
-      // depends on exactly that to detect the condition at all), so a
-      // capture here is both obtainable and the single most useful
-      // evidence a `camera_lost` event can ever produce.
-      if (reason === "covered" && liveStreamRef.current) {
-        void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
-      }
+      return;
     }
+    cameraLostRef.current = true;
+    cameraLostReasonRef.current = reason;
+    cameraLostAtRef.current = Date.now();
+    setCameraLost(true);
+    // `pushImmediate`, not `push`: `AC-19`'s own 5 s bound is about the
+    // overlay, but the organiser's own count (`Q6`) should not lag a
+    // flush interval behind a block that is already up.
+    void queueRef.current?.pushImmediate("camera_lost", { reason } satisfies CameraLostDetail);
+    // `AC-20`'s snapshot deliberately does not fire for "ended"/"muted" —
+    // neither leaves a frame to capture, and Task 3's own overlay (below)
+    // is already the phase's one `AG1` exception. Fix pass 1, finding 3
+    // (Task 4 review finding B): "covered" is different — the track
+    // stays `live` with a drawable frame (`isCameraLensCovered` above
+    // depends on exactly that to detect the condition at all), so a
+    // capture here is both obtainable and the single most useful
+    // evidence a `camera_lost` event can ever produce.
+    if (reason === "covered" && liveStreamRef.current) {
+      void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+    }
+  }
 
-    function reportRestored(): void {
-      if (!cameraLostRef.current) return;
-      cameraLostRef.current = false;
-      cameraLostReasonRef.current = null;
-      const startedAt = cameraLostAtRef.current;
-      cameraLostAtRef.current = null;
-      setCameraLost(false);
-      void queueRef.current?.pushImmediate(
-        "camera_restored",
-        { outageMs: startedAt !== null ? Date.now() - startedAt : 0 } satisfies CameraRestoredDetail,
-      );
-    }
+  function reportRestored(): void {
+    if (!cameraLostRef.current) return;
+    cameraLostRef.current = false;
+    cameraLostReasonRef.current = null;
+    const startedAt = cameraLostAtRef.current;
+    cameraLostAtRef.current = null;
+    setCameraLost(false);
+    void queueRef.current?.pushImmediate(
+      "camera_restored",
+      { outageMs: startedAt !== null ? Date.now() - startedAt : 0 } satisfies CameraRestoredDetail,
+    );
+  }
+
+  useEffect(() => {
+    // B1 (whole-branch review, BLOCKING): a resumed attempt reaches this
+    // component with no stream at all whenever `routes/exam.tsx`'s own
+    // reacquisition on resume was refused (the camera is genuinely gone) —
+    // and, in principle, a start-gate landing payload whose sentences
+    // missed "camera" while the resolved paper still requires one. Neither
+    // is `P-05`'s start gate: the attempt row already exists, so this is
+    // Task 3's own lost-camera condition, reused rather than rebuilt —
+    // `reportLost` raises the SAME overlay and records the SAME event a
+    // mid-attempt loss would, rather than leaving the rest of the attempt
+    // silently unproctored.
+    if (!liveStream && !proctoring.requireCamera) return;
+    if (!liveStream) reportLost("ended");
 
     function onEnded(): void {
       reportLost("ended");
@@ -621,7 +656,7 @@ export function ProctoringLayer({
       if (cameraLostReasonRef.current === "muted") reportRestored();
     }
 
-    const tracks = liveStream.getVideoTracks();
+    const tracks = liveStream ? liveStream.getVideoTracks() : [];
     tracks.forEach((track) => {
       track.addEventListener?.("ended", onEnded);
       track.addEventListener?.("mute", onMute);
@@ -642,15 +677,35 @@ export function ProctoringLayer({
       else if (track.muted) reportLost("muted");
     });
 
+    // L1 (whole-branch review): a reconnect that resolves after this
+    // effect's own cleanup has already run acquires a stream nothing will
+    // ever stop — the queue-lifecycle effect's deferred stop (above) only
+    // ever sees the stream that was live AT THAT MOMENT, never one that
+    // arrives afterward. Flipped in the cleanup below, read in the `.then`.
+    let cancelled = false;
+
     // The unplug's own return trip. A real `MediaStreamTrack` never leaves
     // `ended` once it arrives there — there is no event this file, or any
     // file, can listen for on the dead track itself — so the only way back
     // is a fresh `getUserMedia`. `devicechange` is the browser's own signal
     // that a camera just appeared or disappeared, not a guess dressed up as
-    // a poll.
+    // a poll. Also the recovery path for B1's "no stream at all" case —
+    // reaching this point at all already proved `proctoring.requireCamera`,
+    // and `reportLost("ended")` above primes the reason this checks.
     function onDeviceChange(): void {
       if (!cameraLostRef.current || cameraLostReasonRef.current !== "ended") return;
       void acquireCamera().then((result) => {
+        if (cancelled) {
+          // L1: this layer tore down while the reconnect was in flight —
+          // stop the hardware track this resolved rather than leaving the
+          // camera light on for the life of the document.
+          if (result.ok) {
+            result.stream.getTracks().forEach((track) => {
+              track.stop();
+            });
+          }
+          return;
+        }
         if (result.ok) {
           // Fix pass 1, finding 1 (Task 3 review Finding 1, BLOCKING):
           // `result.stream` is a brand-new `MediaStream` — `replaceStream`
@@ -675,30 +730,36 @@ export function ProctoringLayer({
     // lost for a reason this sample cannot speak to (`ended`/`muted`) —
     // drawing from a genuinely dead track proves nothing either way, and
     // only `onDeviceChange`/`onUnmute` above are the real signal for those.
-    const sampleTimer = setInterval(() => {
-      if (cameraLostRef.current && cameraLostReasonRef.current !== "covered") return;
-      void isCameraLensCovered(liveStream).then((covered) => {
-        if (covered === null) return; // Q2: an unreadable frame is not a violation.
-        if (covered) reportLost("covered");
-        else reportRestored();
-      });
-    }, CAMERA_SAMPLE_MS);
+    // Also simply absent whenever there is no `liveStream` to sample (B1).
+    const sampleTimer = liveStream
+      ? setInterval(() => {
+          if (cameraLostRef.current && cameraLostReasonRef.current !== "covered") return;
+          void isCameraLensCovered(liveStream).then((covered) => {
+            if (covered === null) return; // Q2: an unreadable frame is not a violation.
+            if (covered) reportLost("covered");
+            else reportRestored();
+          });
+        }, CAMERA_SAMPLE_MS)
+      : null;
 
     return () => {
+      cancelled = true;
       tracks.forEach((track) => {
         track.removeEventListener?.("ended", onEnded);
         track.removeEventListener?.("mute", onMute);
         track.removeEventListener?.("unmute", onUnmute);
       });
       navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
-      clearInterval(sampleTimer);
+      if (sampleTimer !== null) clearInterval(sampleTimer);
     };
     // Fix pass 1, finding 1: `liveStream`, not the `cameraStream` prop — a
     // successful reconnect now genuinely changes which stream this effect
     // watches mid-attempt (`replaceStream` above), so this dependency array
     // intentionally re-runs the effect on that swap, tearing down the old
-    // track's listeners and attaching fresh ones to the new track.
-  }, [liveStream]);
+    // track's listeners and attaching fresh ones to the new track. B1:
+    // `proctoring.requireCamera` is added because it is now this effect's
+    // own gate for running at all when there is no stream.
+  }, [liveStream, proctoring.requireCamera]);
 
   // ---- the capture schedule (`AC-20`/`Q11b`/`Q4d`, Phase 7d Task 4) --------
 
@@ -745,6 +806,18 @@ export function ProctoringLayer({
     const timer = setInterval(() => {
       const due = nextSnapshotAtRef.current;
       if (due === null || Date.now() < due) return;
+      // M2 (whole-branch review): a frameless outage ("ended"/"muted")
+      // must not manufacture coverage from the frozen last frame a real
+      // browser keeps showing on a dead `<video>` — `camera_lost`/
+      // `camera_restored` already records the gap, and 7e's own
+      // `observed: false` is the designed way to flag the resulting
+      // shortfall, not twenty photographs of the moment the camera died.
+      // "covered" keeps capturing: the track stays live with a real (if
+      // dark) frame, the same exception `reportLost`'s own violation
+      // snapshot above takes. `due` is deliberately left unadvanced while
+      // skipped, so the first capture once restored still fires at once —
+      // fix pass 1, finding 2's own "resumes from the moment it happens".
+      if (cameraLostRef.current && cameraLostReasonRef.current !== "covered") return;
       // Fix pass 1, finding 2: resets from NOW, not from `due` — see the
       // doc comment above. One capture per return, never a drained backlog.
       nextSnapshotAtRef.current = Date.now() + intervalMs;

@@ -98,6 +98,27 @@ const COVERED_LENS_THRESHOLD = 10;
 let sampleVideo: HTMLVideoElement | null = null;
 let sampleCanvas: HTMLCanvasElement | null = null;
 
+/**
+ * L3 (whole-branch review): the module-scoped pair above is reused across
+ * an attempt's whole luminance-sampling lifetime by design (its own doc
+ * comment), which means it otherwise keeps `sampleVideo.srcObject`
+ * referencing the stopped `MediaStream` and `sampleCanvas` holding the last
+ * drawn frame for the life of the document, not just the attempt. Not an
+ * `AG2` violation on a plain reading — nothing here is recorded, stored or
+ * uploaded — but `ProctoringLayer`'s own queue-lifecycle cleanup (the one
+ * place that already owns "runs for exactly the attempt's lifetime") calls
+ * this beside the track stop so neither survives past it. Dropped, not just
+ * detached: `isCameraLensCovered` only sets a freshly created canvas's
+ * dimensions (`if (!sampleCanvas)`, above), so clearing it in place rather
+ * than nulling the module binding would leave a 0×0 canvas behind for the
+ * next attempt in the same document to silently sample nothing from.
+ */
+export function releaseCameraSampler(): void {
+  if (sampleVideo) sampleVideo.srcObject = null;
+  sampleVideo = null;
+  sampleCanvas = null;
+}
+
 export async function isCameraLensCovered(stream: MediaStream): Promise<boolean | null> {
   if (stream.getVideoTracks().length === 0) return null;
 

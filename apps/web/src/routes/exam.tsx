@@ -429,9 +429,15 @@ type View =
        *  existing lifecycle effect is what stops the tracks when the
        *  attempt ends — never stopped right after the identity photo,
        *  which would turn the camera light off mid-test on a Strict paper
-       *  that still has a camera requirement for the rest of it. `null` on
-       *  every resumed attempt: a reload loses whatever `getUserMedia`
-       *  handed the previous page load, and there is nothing here to stop.
+       *  that still has a camera requirement for the rest of it. A reload
+       *  loses whatever `getUserMedia` handed the previous page load (`boot`'s
+       *  own comment), so on a resumed attempt this is the freshly
+       *  reacquired stream when `proctoring.requireCamera` and the
+       *  reacquisition succeeded (B1) — `null` otherwise, including every
+       *  resume where no camera is required at all. `null` while required is
+       *  not a second start gate: `ProctoringLayer` reads `proctoring.
+       *  requireCamera` against a `null` stream as the lost-camera condition
+       *  it already has an overlay for.
        */
       cameraStream: MediaStream | null;
     }
@@ -887,7 +893,14 @@ export function ExamApp({ client }: { client: RunClient }) {
         if (camera && paper.proctoring?.identityPhoto) {
           try {
             const blob = await captureJpeg(camera.stream);
-            if (blob) await uploadSnapshot(blob, "identity");
+            // M3: the CAPTURE happens before the first question (`Q11a`) —
+            // the UPLOAD does not need to, and awaiting it here held the
+            // loading view hostage to a slow POST with the server-authoritative
+            // clock already running. `AG1`'s only stated exception is a
+            // required camera that is absent, not a slow one; a failed
+            // upload degrades exactly like every other snapshot failure in
+            // this phase (nothing surfaces to the candidate).
+            if (blob) void uploadSnapshot(blob, "identity").catch(() => undefined);
           } catch {
             /* AG1: no photo this time is not a reason to hold the paper
                back — Task 1's route already writes `faceCount: null`
@@ -944,10 +957,20 @@ export function ExamApp({ client }: { client: RunClient }) {
           setView({ kind: "finished", receipt, released });
           return;
         }
-        // `cameraStream: null` — a reload loses whatever `getUserMedia`
-        // handed the page before it (`View`'s own doc comment); there is
-        // nothing here to hand `ProctoringLayer`.
-        setView({ kind: "attempt", paper: resumed, cameraStream: null });
+        // B1: a reload loses whatever `getUserMedia` handed the page before
+        // it (`View`'s own doc comment) — reacquired here, the same
+        // `acquireCamera()` the start gate uses, before this already-minted
+        // attempt ever renders. A refusal here is NOT `P-05`'s start gate
+        // (there is no landing page to bounce a refusal back to for an
+        // attempt already in progress, `Q2`'s own exception) — it is
+        // `ProctoringLayer`'s own lost-camera overlay, reused rather than
+        // rebuilt, that raises and records it from `cameraStream: null`.
+        let resumedCameraStream: MediaStream | null = null;
+        if (resumed.proctoring.requireCamera) {
+          const acquired = await acquireCamera();
+          if (acquired.ok) resumedCameraStream = acquired.stream;
+        }
+        setView({ kind: "attempt", paper: resumed, cameraStream: resumedCameraStream });
         return;
       }
       const test = await client.landing();

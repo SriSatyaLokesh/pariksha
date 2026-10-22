@@ -159,6 +159,13 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       throw new ApiError(400, "invalid_request", "reason must be interval, violation or identity.");
     }
 
+    // `B3` (whole-branch review): the one candidate-reachable route that
+    // writes to object storage, previously uncapped. Keyed per attempt,
+    // the same posture `/attempt/events`' own `attempt_events` bucket
+    // takes just above — see `LIMITS.attempt_snapshot` in `run/limit.ts`
+    // for the arithmetic behind the cap.
+    await limitOrThrow(deps, "attempt_snapshot", attempt.attemptId);
+
     // `Q4b`/`D-R8`: the declared content type, before a byte of the body is
     // read — a client can set this header to anything, so it is checked
     // again against the bytes themselves below.
@@ -172,6 +179,17 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // JPEG — the magic bytes, not the header a client fully controls.
     if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
       throw new ApiError(415, "unsupported_media_type", "That is not a JPEG image.");
+    }
+
+    // `B2` (whole-branch review): mirrors `/attempt/events`' own guard
+    // above, same reasoning — `attemptContext` deliberately resolves a
+    // submitted attempt, but whether a WRITE is still allowed is this
+    // route's own question. A silent no-op, not `/answer`'s 409: a
+    // proctoring failure must never surface anything to the candidate
+    // (`AG1`), and this route previously kept writing R2 objects and
+    // `snapshot` rows against an attempt that was already over.
+    if (attempt.submittedAt !== null) {
+      return c.json({ stored: true });
     }
 
     const takenAt = deps.now();
