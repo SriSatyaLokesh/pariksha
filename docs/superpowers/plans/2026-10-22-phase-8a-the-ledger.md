@@ -877,6 +877,13 @@ git commit -m "feat(db): the organiser's set-based attempt reads (K9)"
 
 **`#186`** — `branding.finish_message` has a writer (`BrandingPanel.tsx:267`), is stored, exported and re-imported, and **no candidate will ever see it**. It is test content, not candidate data, so it needs no scrub exception — confirm that against `scrub-scan.test.ts` rather than assuming it.
 
+**`checklist.ts` is changing underneath this task.** Issue
+[#214](https://github.com/SriSatyaLokesh/pariksha/issues/214) lands right after 7d and **removes**
+`checklist.ts:510`'s `proctoring_lock_without_recourse` branch, because `violation_action`'s
+`lock` and `auto_submit` have no consumer anywhere — verified: nothing branches on
+`resolved.violationAction`. So the file will have **three** advisory rows, not the four the spec's
+§5 pre-flight recorded. Rebase onto that before adding the blocking row; do not re-add the branch.
+
 **`#179`** — a published version with no `duration_minutes` advertises a 0-minute test on the landing page and then 409s on `/start`. The right fix is that such a version is **not publishable**: a blocking checklist row, not an advisory one. Phase 7 added four advisory rows and no blocking one; this is the phase's first.
 
 - [ ] **Step 1: Write the failing `#186` test, from `ExamApp`**

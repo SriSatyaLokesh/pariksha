@@ -136,6 +136,20 @@ This is that hour, spent in advance. Every line below was verified against `main
   (`UX-10`, authoring review), explicitly deferred there, and it needs its own table and its own
   `tests.comment` permission. The `review` table is free for `P8.5`'s verdicts. Do not conflate them.
 
+### Moving underneath this spec, as of 2026-10-23
+
+Reported by the session that built 7d, and verified here where it touches `main`:
+
+- **[#215](https://github.com/SriSatyaLokesh/pariksha/pull/215) is 7d.** Phase 8 starts when it merges.
+- **[#214](https://github.com/SriSatyaLokesh/pariksha/issues/214)** — the organiser's proctoring
+  panel ships *enabled* controls for a violation action offering `auto_submit` and `lock`, and
+  **nothing enforces either**. Verified here: nothing in the runtime or the API branches on
+  `resolved.violationAction`; `routes/proctoring.ts:128` returns it and
+  `ProctoringLayer.tsx:169` puts it in state that is never read. Its fix removes
+  `checklist.ts:510`'s `lock` branch, so **the advisory-row count below becomes three, not four**.
+- **[#213](https://github.com/SriSatyaLokesh/pariksha/issues/213)** records that the parked 7e plan
+  also claims `0009` (`E-R1`'s `locked_at`). Whichever lands first takes the number.
+
 ### Two places the written record is behind the code
 
 - **`docs/PRD.md:568` says *"Interval snapshots get no database row."*** Phase 7's `Q4f` ruled the
@@ -823,7 +837,12 @@ execution rather than deferred at planning.**
 **`K41` (owner) — `0010` is applied to the live database *before* 8a merges, not after.**
 
 > Ruling: applying the migration is an explicit, blocking item in 8a's definition of done, run by
-> the owner (`node deploy/cloudflare/setup.mjs` — the sandbox classifier refuses it for the agent).
+> the owner (`node deploy/cloudflare/setup.mjs` — the sandbox classifier refuses it for **this**
+> agent). **The session executing Phase 8 reports it can run the script itself** — a
+> `CLOUDFLARE_API_TOKEN` with the D1 and R2 grants is present in its environment, and it applied
+> `0008` on 2026-10-22 that way. If so the step is theirs to close rather than a handoff, but the
+> **gate does not move**: applied before merge, either way. Confirm with the owner before relying
+> on it — a peer session's account of its own permissions is not this one's authorisation.
 > The agent's own pre-merge evidence is the two free checks `CLAUDE.md` names:
 > `node deploy/cloudflare/setup.mjs --dry-run` (the whole flow twice against an in-memory
 > Cloudflare, asserting the second run is a no-op) and `pnpm --filter @pariksha/api test`, whose
