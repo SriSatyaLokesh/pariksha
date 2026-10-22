@@ -187,7 +187,10 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       attemptId: attempt.attemptId,
       storageKey,
       takenAt,
-      reason: reason as SnapshotReason,
+      // No cast: `recordSnapshot` takes a `string`, and the closed-set check
+      // above is what actually narrows this — an assertion here asserted
+      // nothing (`@typescript-eslint/no-unnecessary-type-assertion`).
+      reason,
     });
 
     // `Q4a`: the response carries no key at all.
