@@ -433,12 +433,20 @@ describe("camera liveness blocks the paper indefinitely (P-05, AC-19, Q2)", () =
 // review's own finding); pinned here so a later change cannot flip any of
 // the three silently.
 describe("camera_lost's violation snapshot (Task 4 review finding B)", () => {
+  // The overlay and the upload are two INDEPENDENT consequences of one
+  // detection: `reportLost("covered")` sets the state the dialog renders
+  // from, and separately fires `captureAndUpload`, which awaits
+  // `video.play()`, draws a canvas, encodes a blob and only then `fetch`es.
+  // Awaiting the dialog says nothing about the upload — it wins that race on
+  // an idle machine and loses it under load, which is why this test failed
+  // three times in one day and passed every isolated re-run. `waitFor` waits
+  // for the thing actually being asserted.
   it("takes a violation snapshot for a covered lens — a frame exists to capture", async () => {
     const reasons = captureSnapshotReasons();
     await startStrictAttempt({});
     blackenCameraFrames();
     await screen.findByRole("alertdialog");
-    expect(reasons()).toContain("violation");
+    await waitFor(() => expect(reasons()).toContain("violation"));
   });
 
   it("takes no violation snapshot when the track ends — no frame exists", async () => {
@@ -446,6 +454,11 @@ describe("camera_lost's violation snapshot (Task 4 review finding B)", () => {
     await startStrictAttempt({});
     endCameraTrack();
     await screen.findByRole("alertdialog");
+    // `act` first, for the same reason the positive case needs `waitFor`:
+    // asserting an absence the instant the dialog appears would pass even
+    // with an upload still in flight. This gives that path its chance, so
+    // "no violation snapshot" is a finding rather than a head start.
+    await act(async () => {});
     expect(reasons()).not.toContain("violation");
   });
 
@@ -456,6 +469,11 @@ describe("camera_lost's violation snapshot (Task 4 review finding B)", () => {
       track.dispatchEvent(new Event("mute"));
     });
     await screen.findByRole("alertdialog");
+    // `act` first, for the same reason the positive case needs `waitFor`:
+    // asserting an absence the instant the dialog appears would pass even
+    // with an upload still in flight. This gives that path its chance, so
+    // "no violation snapshot" is a finding rather than a head start.
+    await act(async () => {});
     expect(reasons()).not.toContain("violation");
   });
 });
