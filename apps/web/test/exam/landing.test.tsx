@@ -26,14 +26,20 @@ const landingFixture: LandingPayload = {
   rules: "A candidate cannot go back to an earlier question.",
   // A real Standard resolution, not the empty array `resolveProctoring`
   // would never actually produce for this profile — copied from
-  // `apps/api/test/run/landing.test.ts`'s own assertion of the same three
+  // `apps/api/test/run/landing.test.ts`'s own assertion of the same four
   // sentences, so the two cannot drift apart.
+  //
+  // Phase 7c Task 5 (`T5-R3`): `blockCopyPaste` gets a sentence of its own
+  // now (`proctoringRequirements`, `packages/core/src/proctoring.ts`) and
+  // Standard defaults it `true` — this is the fixture that pins the
+  // sentence it adds, deliberately broken by this task's diff.
   proctoring: {
     profile: "standard",
     requirements: [
       "This test must be taken on a desktop or laptop, not a phone or tablet.",
       "Use a fully updated Chrome, Edge, Firefox or Safari.",
       "The test runs in fullscreen. Leaving it is logged.",
+      "Copying, pasting and right-click are disabled, and attempts are logged.",
     ],
   },
   accessMode: "link_code",

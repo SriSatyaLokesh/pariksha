@@ -1478,6 +1478,48 @@
   display: none;
 }
 
+/* `Watermark` (Phase 7c Task 5, `Q9`) — identity and the time, tiled over
+   the paper. `fixed`, off the normal flow, same as `.exam-proctoring-count`
+   above and for the same reason (`D8`): nothing here reflows the runner,
+   mounted or not. `inset: -10vmax` grows the box well past the viewport on
+   every side so the `rotate()` below leaves no uncovered corner at any real
+   window size, and `overflow: hidden` keeps the excess from ever scrolling
+   into view.
+
+   `pointer-events: none` and `user-select: none` are the two properties
+   `T5-R2` names directly: jsdom applies no stylesheet, so a unit test
+   cannot see either here and proves them instead against this file's own
+   resolved chain (`test/css-chain.ts`'s `paintsIn`). `z-index: 10` sits
+   below the count line and the overlay (both 20+) — a candidate's actual
+   warnings still win the floor over a deterrent that needs no clicks.
+
+   `D1`: voltage, the runtime's own accent, at 20px/700 — `contrast-usage.
+   test.ts`'s large-text floor (`>=18.66px` at `weight: 700`), so the 3:1
+   bar applies rather than 4.5:1; voltage-on-cream measures 3.86:1, already
+   proved by `.exam-landing-hero h1`'s own entry. `opacity` make it faint
+   without touching the colour the contrast sweep reads — the same split
+   that file's own header draws between a declared colour and a state. */
+.exam-watermark {
+  position: fixed;
+  inset: -10vmax;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 48px 64px;
+  padding: 24px;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.08;
+  transform: rotate(-24deg);
+  color: var(--color-voltage);
+  font-family: var(--type-mono-sm-family);
+  font-size: 20px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 /* `ProctoringOverlay` (Phase 7c Task 4, `Q2b`/`P-03`/`P-04`) — the overlay
    `ProctoringLayer` renders over the paper when fullscreen is required and
    not held, or when a window-leave warning is up. `D8`: `fixed`, off the

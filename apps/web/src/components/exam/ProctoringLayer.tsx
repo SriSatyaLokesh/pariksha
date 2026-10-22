@@ -49,19 +49,39 @@
  * question `proctoringRequirements` already asks — rather than branching
  * on `profile` (`Q1`). An `off` test, where every one of those is false,
  * gets no window-leave monitoring either.
+ *
+ * Task 5 adds the last three controls in 7c's gate list (`Q9`/`P-08`):
+ *
+ * - **Copy, paste and the context menu**, gated on `blockCopyPaste` —
+ *   `preventDefault()` on all three and one `pushImmediate`d event each,
+ *   the same honesty `Watermark`'s own doc comment names: this deters, it
+ *   does not disable a determined candidate's browser.
+ * - **The watermark**, gated on `watermark` — `Watermark.tsx` is the whole
+ *   of it; this file only decides whether to mount it.
+ * - **The extra-monitor check** (`P-08`), gated on `extraMonitorCheck` —
+ *   read once at mount, never polled and never `getScreenDetails()`'d: the
+ *   one call in that API surface that raises a Window Management
+ *   permission dialog mid-exam, which is a `Q2` hazard this task's own
+ *   ruling refuses.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Component } from "react";
 import type {
+  ContextmenuBlockedDetail,
+  CopyBlockedDetail,
+  ExtraMonitorDetail,
   FullscreenExitDetail,
   FullscreenRestoreDetail,
+  PasteBlockedDetail,
+  ProctoringEventType,
   ResolvedProctoring,
   VisibilityHiddenDetail,
   WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
 import { ProctoringOverlay } from "./ProctoringOverlay";
+import { Watermark } from "./Watermark";
 
 /** Mirrors `EVENTS_PATH` in `apps/api/src/routes/proctoring.ts` — a
  *  server-only module this bundle cannot import across the app boundary. */
@@ -317,6 +337,61 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
     };
   }, [anyControlActive]);
 
+  // ---- copy, paste and the context menu (`Q9`, 7c Task 5) ------------------
+
+  /** `Q9`: the same honesty as the watermark below — `preventDefault()` on
+   *  three events and a recorded one, nothing more. `document`, not the
+   *  runner's own root: a candidate can paste into a text-answer field
+   *  anywhere in the paper, and a listener scoped to one element would miss
+   *  every other one. `pushImmediate`, not `push`: the ambient count line
+   *  (`.exam-proctoring-count`) is the one surface that shows a blocked
+   *  paste without a click of the candidate's own, and that line should
+   *  not wait out `FLUSH_MS` to catch up with what already happened. */
+  useEffect(() => {
+    if (!proctoring.blockCopyPaste) return;
+    function blocked(type: ProctoringEventType) {
+      return (event: Event): void => {
+        event.preventDefault();
+        void queueRef.current?.pushImmediate(
+          type,
+          {} satisfies CopyBlockedDetail | PasteBlockedDetail | ContextmenuBlockedDetail,
+        );
+      };
+    }
+    const onCopy = blocked("copy_blocked");
+    const onPaste = blocked("paste_blocked");
+    const onContextMenu = blocked("contextmenu_blocked");
+    document.addEventListener("copy", onCopy);
+    document.addEventListener("paste", onPaste);
+    document.addEventListener("contextmenu", onContextMenu);
+    return () => {
+      document.removeEventListener("copy", onCopy);
+      document.removeEventListener("paste", onPaste);
+      document.removeEventListener("contextmenu", onContextMenu);
+    };
+  }, [proctoring.blockCopyPaste]);
+
+  // ---- extra monitor (`P-08`) -----------------------------------------------
+
+  /** Read once, at mount, and never again — there is no `screen` change
+   *  event this reacts to, and `P-08`'s own ruling is "read, never prompt":
+   *  `window.screen.isExtended` where the browser exposes it, nothing where
+   *  it does not, and `getScreenDetails()` — the call that raises a Window
+   *  Management permission dialog mid-exam (`Q2` hazard) — is never made.
+   *  `try/catch` is the same `Q2` degrade every other read in this file
+   *  takes: an unreadable `screen` is not evidence of a second monitor. */
+  useEffect(() => {
+    if (!proctoring.extraMonitorCheck) return;
+    try {
+      const extended = (window.screen as Screen & { isExtended?: boolean }).isExtended;
+      if (extended) {
+        void queueRef.current?.pushImmediate("extra_monitor", {} satisfies ExtraMonitorDetail);
+      }
+    } catch {
+      /* Q2: degrade — an unreadable screen is not a violation */
+    }
+  }, [proctoring.extraMonitorCheck]);
+
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 
   const fullscreenBlocked = fullscreenEnforced && !inFullscreen;
@@ -355,6 +430,7 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
 
   return (
     <>
+      {proctoring.watermark && <Watermark attemptId={attemptId} />}
       <div className="exam-proctoring-count" role="status" aria-live="polite">
         {/* Plain on purpose (R5 / `T4-R6`): `ProctoringOverlay` below
             consumes this same `count` state rather than keeping a second

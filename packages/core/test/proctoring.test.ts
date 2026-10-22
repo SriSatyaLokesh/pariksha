@@ -151,6 +151,25 @@ describe("proctoringRequirements", () => {
     expect(lines.join(" ")).not.toMatch(/every/i);
   });
 
+  // Phase 7c Task 5 (`T5-R3`): blocked paste and the watermark get the
+  // same before-the-timer sentence a camera does.
+  it("names copy/paste blocking and the watermark when each is on", () => {
+    const lines = proctoringRequirements(resolveProctoring({ profile: "strict" }));
+    expect(lines.join(" ")).toMatch(/pasting/i);
+    expect(lines.join(" ")).toMatch(/watermark/i);
+  });
+
+  it("omits both when neither is on", () => {
+    const lines = proctoringRequirements(
+      resolveProctoring({
+        profile: "strict",
+        overrides: { block_copy_paste: false, watermark: false },
+      }),
+    );
+    expect(lines.join(" ")).not.toMatch(/pasting/i);
+    expect(lines.join(" ")).not.toMatch(/watermark/i);
+  });
+
   // `Q11b`: no camera requirement means no stream is ever acquired, so a
   // document asking for an identity photo or snapshots without a camera
   // must not tell the candidate a capture is coming — nothing can take it.

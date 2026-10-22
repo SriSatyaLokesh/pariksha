@@ -164,10 +164,16 @@ export function resolveProctoring(
  * `Q1b`: plain sentences for the start page, from the same object the
  * runtime enforces — a candidate who will be denied for having no camera
  * learns it before the timer, not from a drifted second copy of this list.
+ * `T5-R3` (7c Task 5): `blockCopyPaste` and `watermark` get a sentence here
+ * too — the same reason a camera does: the candidate learns what is
+ * enforced before the timer starts, not after a paste is refused or their
+ * name shows up across the page. Standard defaults `blockCopyPaste` true,
+ * so this is the sentence that changes Standard's resolved list.
  *
- * Fixed order: desktop, browser, fullscreen, camera, identity photo,
- * images, microphone, extra monitor. A disabled control contributes no
- * line. The browser line itself is backed by no override — it is emitted
+ * Fixed order: desktop, browser, fullscreen, copy/paste, watermark, camera,
+ * identity photo, images, microphone, extra monitor — `ResolvedProctoring`'s
+ * own field order. A disabled control contributes no line. The browser line
+ * itself is backed by no override — it is emitted
  * only when at least one other requirement is enabled (derived from
  * whether any other line was produced, not from `profile`), so Off still
  * produces an empty list. Identity photo and images are additionally
@@ -186,6 +192,8 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
   const anyOtherRequirement =
     resolved.desktopOnly ||
     resolved.requireFullscreen ||
+    resolved.blockCopyPaste ||
+    resolved.watermark ||
     resolved.requireCamera ||
     resolved.identityPhoto ||
     resolved.snapshotIntervalSeconds > 0 ||
@@ -204,6 +212,12 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
 
   if (resolved.requireFullscreen) {
     lines.push("The test runs in fullscreen. Leaving it is logged.");
+  }
+  if (resolved.blockCopyPaste) {
+    lines.push("Copying, pasting and right-click are disabled, and attempts are logged.");
+  }
+  if (resolved.watermark) {
+    lines.push("Your name and the time are shown as a watermark across the page.");
   }
   if (resolved.requireCamera) {
     lines.push("A working camera is required for the whole test.");
@@ -311,3 +325,16 @@ export interface WindowBlurDetail {
   awayMs: number | null;
 }
 export type VisibilityHiddenDetail = WindowBlurDetail;
+
+/**
+ * `T5-R4` (7c Task 5): the four this task emits — `copy_blocked`,
+ * `paste_blocked` and `contextmenu_blocked` need nothing beyond the
+ * envelope itself, the same as the fullscreen pair above; `extra_monitor`
+ * carries no payload either — `P-08`'s own ruling is read-only
+ * (`window.screen.isExtended`), so there is no second fact to attach
+ * beyond the event having fired.
+ */
+export type CopyBlockedDetail = Record<string, never>;
+export type PasteBlockedDetail = Record<string, never>;
+export type ContextmenuBlockedDetail = Record<string, never>;
+export type ExtraMonitorDetail = Record<string, never>;

@@ -38,6 +38,11 @@ it("C-01: the landing payload carries everything the page shows", async () => {
         "This test must be taken on a desktop or laptop, not a phone or tablet.",
         "Use a fully updated Chrome, Edge, Firefox or Safari.",
         "The test runs in fullscreen. Leaving it is logged.",
+        // Phase 7c Task 5 (`T5-R3`): `blockCopyPaste` gets its own sentence
+        // now and Standard defaults it `true` — copied verbatim from
+        // `apps/web/test/exam/landing.test.tsx`'s `landingFixture` so the
+        // two cannot drift apart.
+        "Copying, pasting and right-click are disabled, and attempts are logged.",
       ],
     },
     accessMode: "link_code",
