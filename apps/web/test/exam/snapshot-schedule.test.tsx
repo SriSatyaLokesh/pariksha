@@ -375,21 +375,36 @@ describe("the capture schedule (AC-20)", () => {
   });
 });
 
-/** Whole-branch review, finding M2 — the guard's real pin.
+/** Whole-branch review, finding M2 — the guard's pin, for both conditions.
  *
  *  A frameless outage must not manufacture coverage out of the frozen last
- *  frame a real browser keeps showing on a dead `<video>`. `camera-loss.
- *  test.tsx` asserts the end-to-end behaviour for an ENDED track, but it
- *  cannot pin the guard: an ended track also tears `liveStream` down, so
- *  the capture effect unmounts and a guard inside it is never reached. A
- *  MUTED track is the condition that leaves the stream live and the effect
- *  mounted — the only one where the guard itself is load-bearing.
+ *  frame a real browser keeps showing on a dead `<video>`: `camera_lost` and
+ *  `camera_restored` already record the gap, and 7e's `observed: false` is
+ *  the designed way to say "nobody was watching" — not twenty photographs of
+ *  the moment the camera died.
  *
- *  Its own control is in the test: the pre-mute count must be non-zero
- *  before "the count did not move" means the capture stopped rather than
- *  that this harness never captured. */
-describe("M2: a muted camera takes no interval snapshot", () => {
-  it("stops the capture schedule while the track is muted", async () => {
+ *  It is pinned HERE rather than in `camera-loss.test.tsx` for one mechanical
+ *  reason: this file fakes timers in its `beforeEach`, before anything
+ *  renders, so the capture `setInterval` is a fake timer and
+ *  `advanceTimersByTimeAsync` pumps it. That file installs them inside the
+ *  test, after the render, where the capture timer is real and never fires —
+ *  an assertion there passes whether the guard exists or not, which the
+ *  controller's `Q10a` probe demonstrated.
+ *
+ *  Both conditions are load-bearing, and the re-review corrected the record
+ *  on this: an ended track does NOT tear `liveStream` down (`replaceStream`
+ *  has one call site and only ever takes a NEW stream), so the capture effect
+ *  stays mounted through an outage of either kind and the guard inside it is
+ *  the only thing stopping the schedule.
+ *
+ *  Each test carries its own positive control: the pre-outage count must be
+ *  non-zero, or "the count did not move" would mean this harness never
+ *  captured rather than that the outage stopped it. */
+describe("M2: a frameless outage takes no interval snapshot", () => {
+  /** Runs the schedule, interrupts it with `break`, and returns the counts
+   *  either side. One body for two conditions — they differ only in the
+   *  event the track fires. */
+  async function countsAcross(breakCamera: () => void): Promise<{ before: number; after: number }> {
     const uploads = captureUploads();
     const intervals = () => uploads().filter((u) => u.reason === "interval").length;
     await startStrictAttempt({ snapshotIntervalSeconds: 60 });
@@ -398,14 +413,30 @@ describe("M2: a muted camera takes no interval snapshot", () => {
       await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
     });
     const before = intervals();
-    expect(before).toBeGreaterThan(0);
 
-    act(() => {
-      cameraTrack.dispatchEvent(new Event("mute"));
-    });
+    act(breakCamera);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
     });
-    expect(intervals()).toBe(before);
+    return { before, after: intervals() };
+  }
+
+  it("stops the capture schedule while the track is muted", async () => {
+    const { before, after } = await countsAcross(() => {
+      cameraTrack.dispatchEvent(new Event("mute"));
+    });
+    expect(before).toBeGreaterThan(0);
+    expect(after).toBe(before);
+  });
+
+  it("stops the capture schedule while the track is ended", async () => {
+    const { before, after } = await countsAcross(() => {
+      // `camera-loss.test.tsx`'s own `endCameraTrack`: `readyState` first,
+      // because production reads it, then the event production listens for.
+      (cameraTrack as unknown as { readyState: MediaStreamTrackState }).readyState = "ended";
+      cameraTrack.dispatchEvent(new Event("ended"));
+    });
+    expect(before).toBeGreaterThan(0);
+    expect(after).toBe(before);
   });
 });

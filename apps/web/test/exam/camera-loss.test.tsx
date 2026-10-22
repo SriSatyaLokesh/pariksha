@@ -479,38 +479,15 @@ describe("M1: the loss reason tracks the live condition, not the first one seen"
   });
 });
 
-// Whole-branch review, finding M2: the capture schedule used to keep
-// firing during a frameless outage, uploading N copies of the frame a real
-// browser freezes a dead `<video>` on — manufactured coverage for a period
-// nobody watched. `camera_lost`/`camera_restored` already records the gap;
-// an interval capture during it no longer fires at all.
-//
-// This file's end-to-end assertion, kept for the behaviour. It is NOT where
-// M2's guard is pinned, and the controller's `Q10a` probe is why that is
-// written down: this harness installs fake timers only AFTER the render, so
-// the capture interval is a REAL timer here and `advanceTimersByTimeAsync`
-// never pumps it — the count is zero whether the guard exists or not. An
-// ended track also tears `liveStream` down, which removes the capture effect
-// entirely, so even a working harness would be proving the wrong thing. The
-// guard's own pin, with its positive control, is
-// `snapshot-schedule.test.tsx`'s "M2" describe, on a MUTED track: the one
-// condition that leaves the stream live and the effect mounted.
-describe("M2: no interval capture during a frameless camera outage", () => {
-  it("takes no interval snapshot while the track is ended, across several cadences", async () => {
-    const reasons = captureSnapshotReasons();
-    // Strict's own default interval (`PROCTORING_DEFAULTS.strict.
-    // snapshotIntervalSeconds`) is 60 s — five minutes is five would-be
-    // captures pre-fix.
-    await startStrictAttempt({});
-    endCameraTrack();
-    await screen.findByRole("alertdialog");
-    vi.useFakeTimers();
-    await vi.advanceTimersByTimeAsync(5 * 60_000);
-    vi.useRealTimers();
-    expect(reasons().filter((reason) => reason === "interval")).toHaveLength(0);
-  });
-
-});
+// Whole-branch review, finding M2 is NOT pinned in this file, deliberately.
+// An assertion lived here and the controller's `Q10a` probe found it passed
+// with M2's own guard deleted: this file installs fake timers only inside the
+// tests that need them, strictly AFTER the render, so the capture
+// `setInterval` created during render is a REAL timer and
+// `advanceTimersByTimeAsync` never pumps it. The interval count was zero
+// either way. `snapshot-schedule.test.tsx` fakes timers in its `beforeEach`,
+// before anything renders, which is why M2's pin — both the ended track and
+// the muted one — lives there instead.
 
 // Whole-branch review, finding L1: a reconnect that resolves after this
 // layer has already unmounted used to acquire a live stream nothing would
@@ -586,6 +563,33 @@ describe("B1: resume reacquires a required camera instead of losing it silently"
     await resumeStrictAttempt();
     expect(await screen.findByRole("alertdialog")).toHaveAccessibleName(/camera/i);
     expect(sent()).toContain("camera_lost");
+  });
+
+  // Re-review finding N1 (merge blocker). B1's reacquisition read
+  // `resumed.proctoring.requireCamera` without the `?.` this same file
+  // carries at its render site, and for the reason written there: an older
+  // cached payload can still arrive without `proctoring` at all. The deref
+  // threw into `boot`'s catch, so a perfectly resumable attempt was refused
+  // with "This test could not be started." — a worse outcome than the
+  // unproctored resume B1 was raised to fix.
+  it("resumes an older cached payload that carries no proctoring block at all", async () => {
+    stubDesktop();
+    const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: false };
+    // The shape a pre-7a client cached: a paper with no `proctoring` key.
+    const { proctoring: _dropped, ...legacyPaper } = paperFixture(resolved);
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "strict" as ProctoringProfile, requirements: proctoringRequirements(resolved) },
+    };
+    render(
+      <ExamApp
+        client={{
+          ...clientFor(test, paperFixture(resolved)),
+          resume: () => Promise.resolve(legacyPaper as AttemptPaper),
+        }}
+      />,
+    );
+    expect(await screen.findByRole("navigation", { name: /question palette/i })).toBeInTheDocument();
   });
 });
 

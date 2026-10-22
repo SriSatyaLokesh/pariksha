@@ -144,6 +144,16 @@ export async function isCameraLensCovered(stream: MediaStream): Promise<boolean 
     /* AG1: same degrade `captureJpeg` takes on a refused autoplay. */
   }
 
+  // `releaseCameraSampler()` can land while the `await` above is suspended —
+  // that is the whole race the release was redesigned around. It clears
+  // `srcObject`, which does NOT throw here; it makes the `drawImage` below a
+  // no-op, leaving a transparent (or stale) canvas whose luma reads 0 — a
+  // FALSE `"covered"` violation, with its overlay, its event and its
+  // snapshot, against a candidate whose attempt has just ended. Abandoning
+  // the sample is the honest answer and the one `Q2` already names: an
+  // unreadable frame is not a violation either way.
+  if (sampleVideo.srcObject !== stream) return null;
+
   if (!sampleCanvas) {
     sampleCanvas = document.createElement("canvas");
     sampleCanvas.width = LUMINANCE_SAMPLE_WIDTH;

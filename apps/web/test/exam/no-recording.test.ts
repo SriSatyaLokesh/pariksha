@@ -49,7 +49,9 @@ function publicJsFiles(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
     if (statSync(full).isDirectory()) publicJsFiles(full, out);
-    else if (/\.js$/.test(full)) out.push(full);
+    // `.mjs` too: #209's audio worklet is the file this scan exists to
+    // catch, and a worklet is exactly the thing shipped as an ES module.
+    else if (/\.m?js$/.test(full)) out.push(full);
   }
   return out;
 }

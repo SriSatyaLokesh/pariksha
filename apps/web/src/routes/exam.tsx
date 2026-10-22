@@ -987,7 +987,12 @@ export function ExamApp({ client }: { client: RunClient }) {
         // `cameraStream` alone (`View`'s own doc comment on the flag).
         let resumedCameraStream: MediaStream | null = null;
         let resumedCameraUnavailable = false;
-        if (resumed.proctoring.requireCamera) {
+        // `?.`, matching the `paper.proctoring &&` guard this file already
+        // carries at the render site above and its own reason: an older
+        // cached payload can still arrive without `proctoring`. Unguarded,
+        // the deref throws into `boot`'s catch and a perfectly resumable
+        // attempt is refused with "This test could not be started."
+        if (resumed.proctoring?.requireCamera) {
           const acquired = await acquireCamera();
           if (acquired.ok) resumedCameraStream = acquired.stream;
           else resumedCameraUnavailable = true;

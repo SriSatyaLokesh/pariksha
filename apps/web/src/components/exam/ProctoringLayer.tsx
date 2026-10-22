@@ -383,9 +383,12 @@ export function ProctoringLayer({
         });
         // L3: the luminance sampler's own module-scoped `<video>`/
         // `<canvas>` pair outlives this component by design (`camera.ts`'s
-        // own doc comment) — released here, beside the track stop, so
-        // neither the stopped stream reference nor the last drawn frame
-        // survives past the attempt that produced them.
+        // own doc comment) — released here, beside the track stop, so the
+        // stopped STREAM reference does not survive the attempt that
+        // produced it. The last drawn frame deliberately does survive, a
+        // few KB of stale 32x24 pixels on the shared canvas; `camera.ts`
+        // records why, and nothing reads that canvas without first drawing
+        // over it from a live stream.
         releaseCameraSampler();
       }, 0);
     };

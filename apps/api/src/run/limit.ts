@@ -126,10 +126,20 @@ export const LIMITS = {
    *  identity photo (once, at the start). Violation snapshots are the
    *  wildcard — `ProctoringLayer.tsx` pairs every one with a
    *  `push`/`pushImmediate` into the SAME `attempt_events` queue this
-   *  module already rate-limits at 120 requests per five minutes per
-   *  attempt — so this route cannot see more violation-driven traffic
-   *  than that bucket already tolerates: 5 + 1 + 120 = 126, the busiest
-   *  honest attempt's own ceiling for this window. Rounded up to 150 for
+   *  module already rate-limits at 120 REQUESTS per five minutes per
+   *  attempt: 5 + 1 + 120 = 126.
+   *
+   *  Read that 120 as a calibration point, not as a proof. It bounds
+   *  requests, not violations — `appendEvents` batches up to ten events per
+   *  request, and a departure snapshots on leaving but pushes on returning,
+   *  so a pathological attempt could drive far more violations through far
+   *  fewer requests. The number below is defensible because it clears real
+   *  traffic by a wide margin and refuses an abusive client quickly, not
+   *  because 126 is a ceiling anything enforces. An organiser who sets
+   *  `snapshot_interval_seconds` below about two seconds (the control's own
+   *  floor is zero) will exceed it legitimately; that is the signal to raise
+   *  this, and `Q1c`'s 200-image advisory is what would flag it first.
+   *  Rounded up to 150 for
    *  headroom — comfortably clear of real traffic and, against the
    *  review's own abuse scenario (~20 requests/second), refusing within
    *  about 8 seconds rather than never. */
