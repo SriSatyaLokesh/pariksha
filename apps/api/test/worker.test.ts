@@ -5,10 +5,11 @@
 // (#160). Miniflare embeds D1's own implementation, so this is where the two
 // table-rebuild migrations are first proved rather than reasoned about.
 
-import { env, SELF } from "cloudflare:test";
+import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { expect, it } from "vitest";
 import { d1Client, migrate } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
+import worker from "../src/index";
 
 const binding = () => d1Client((env as { DB: D1Database }).DB);
 
@@ -275,4 +276,36 @@ it("a deeper miss still answers with the static 404 page, not the shell", async 
 
   expect(res.status).toBe(404);
   expect(await res.text()).toContain("fixture-404");
+});
+
+// The `scheduled` export, against the real Workers runtime.
+//
+// Every other test here drives `SELF.fetch`, which exercises the `fetch`
+// export and nothing else. `scheduled` is a SEPARATE entry point, and
+// `deploy/cloudflare/wrangler.toml` already declares `crons = ["17 3 * * *"]`
+// — so an export that fails to bind is invisible to every suite in this repo
+// until a production night, which is the one failure a cron cannot report.
+//
+// `SELF.scheduled(...)` is NOT the way in: the controller has to cross the
+// loopback boundary and fails with `DataCloneError: Could not serialize
+// object of type "LoopbackServiceStub"`. The handler is called directly
+// instead, with `createExecutionContext`/`waitOnExecutionContext` — which is
+// also the only way to await the `ctx.waitUntil` the handler defers its work
+// into, and therefore the only way a job's failure could ever surface here.
+//
+// The registry ships empty (`SCHEDULED_JOBS`), so this asserts the handler
+// is reachable, binds, and settles — not that any job ran. That is the whole
+// claim worth making today, and it is the one that stops being true silently.
+it("the worker entry accepts a scheduled invocation over the same bindings", async () => {
+  await migrate(d1Client(env.DB as unknown as D1Database));
+
+  const ctx = createExecutionContext();
+  worker.scheduled(
+    { cron: "17 3 * * *", scheduledTime: Date.now(), noRetry: () => {} },
+    env as unknown as Parameters<typeof worker.scheduled>[1],
+    ctx,
+  );
+  // Without this the test passes on a handler that defers everything and
+  // never settles — `waitUntil`'s promise is exactly what would be missed.
+  await waitOnExecutionContext(ctx);
 });

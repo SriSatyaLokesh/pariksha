@@ -15,7 +15,16 @@ export interface ScheduledJob {
   run(deps: AppDeps): Promise<{ summary: string }>;
 }
 
-/** Ships EMPTY. 8b, 8d and 8e each append one entry. */
+/**
+ * Ships EMPTY. 8b, 8d and 8e each append one entry.
+ *
+ * **Order is declaration order, and that is a guarantee, not an accident** —
+ * `runScheduled` iterates this array as written. Three plans append here
+ * blind and in parallel, so the rule has to be stated rather than inferred:
+ * a job must not depend on another job's writes within the same run. If one
+ * ever genuinely must follow another, say so at the registration site; do
+ * not rely on where a merge happened to put the lines.
+ */
 export const SCHEDULED_JOBS: ScheduledJob[] = [];
 
 /**
