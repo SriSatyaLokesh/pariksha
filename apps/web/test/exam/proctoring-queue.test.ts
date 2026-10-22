@@ -97,6 +97,31 @@ describe("createProctoringQueue", () => {
     q.stop();
   });
 
+  // Finding 3 (review fix round 1): `pushImmediate` is part of the
+  // brief's required interface and its one documented claim — "flushes
+  // now, not on the interval" — had no test anywhere. `flushMs` here is
+  // long enough that nothing would reach `send` by the time the await
+  // settles unless `pushImmediate` really does flush synchronously with
+  // the call, not on the next tick.
+  it("pushImmediate sends right away, without waiting for the interval", async () => {
+    const send = vi.fn().mockResolvedValue(OK);
+    const q = createProctoringQueue({ send, onCount: () => {}, flushMs: 10_000 });
+    await q.pushImmediate("violation_limit_reached");
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ type: "violation_limit_reached" }),
+    ]);
+    q.stop();
+  });
+
+  it("pushImmediate still resolves (fail-open) when the send it triggers rejects", async () => {
+    const send = vi.fn().mockRejectedValue(new Error("500"));
+    const q = createProctoringQueue({ send, onCount: () => {}, flushMs: 10_000 });
+    await expect(q.pushImmediate("attempt_locked")).resolves.toBeUndefined();
+    expect(q.buffered()).toBe(1);
+    q.stop();
+  });
+
   it("stop() halts the interval: nothing is sent after it", async () => {
     const send = vi.fn().mockResolvedValue(OK);
     const q = createProctoringQueue({ send, onCount: () => {}, flushMs: 10 });

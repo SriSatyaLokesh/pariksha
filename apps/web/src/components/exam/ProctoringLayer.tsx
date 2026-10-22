@@ -19,7 +19,7 @@
  * never recomputed locally (`Q7a`).
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Component } from "react";
 import type { ResolvedProctoring } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
@@ -59,25 +59,32 @@ export interface ProctoringLayerProps {
 
 export function ProctoringLayer({ attemptId, proctoring, initialViolations }: ProctoringLayerProps) {
   /**
-   * The paper's fullscreen state **at the moment this layer mounts** —
-   * read directly, not behind a try/catch. Mount is the only time this
-   * can be captured: Task 4's `fullscreenchange` listener attaches after
-   * this render and only ever sees a *change* from here forward, so
-   * whether the candidate was already fullscreen when the attempt opened
-   * is lost the instant this line does not run. `document.fullscreenElement`
-   * is also exactly the API `fullscreen_exit`/`fullscreen_restore` are
-   * built on (`Q7b`), so this is the layer's own first touch of it rather
-   * than a borrowed probe.
+   * The paper's fullscreen state **at the moment this layer first
+   * renders** — captured once and kept, not read-and-discarded. Task 4's
+   * `fullscreenchange` listener attaches later and only ever sees a
+   * *change* from that point forward, so whether the candidate was
+   * already fullscreen when the attempt opened is lost unless something
+   * captures it before that listener exists — this is where. The `=== null`
+   * guard is the lazy-init idiom for "compute on the first render only",
+   * without a second render a `useState` initialiser would not add here
+   * either but a plain unconditional call during every render would.
+   * `document.fullscreenElement` is also exactly the API
+   * `fullscreen_exit`/`fullscreen_restore` are built on (`Q7b`), so this
+   * is the layer's own first touch of it rather than a borrowed probe.
    *
-   * This is `AG4`'s signal path, deliberately — not `routes/exam.tsx`'s
-   * `window.matchMedia?.("(pointer: fine)")` device check, which runs on
-   * the landing page before this component exists and would prove only
-   * that the boundary survives a throw from somewhere it was never
-   * mounted to protect. `ProctoringErrorBoundary`, around this component,
-   * is what is meant to survive a throw from this line; the fail-open
-   * test exercises exactly that.
+   * Read directly, not behind a try/catch. This is `AG4`'s own signal
+   * path — not `routes/exam.tsx`'s `window.matchMedia?.("(pointer:
+   * fine)")` device check, which runs on the landing page before this
+   * component exists and would prove only that the boundary survives a
+   * throw from somewhere it was never mounted to protect.
+   * `ProctoringErrorBoundary`, around this component, is what is meant to
+   * survive a throw from this line; the fail-open test exercises exactly
+   * that.
    */
-  if ("fullscreenElement" in document) void document.fullscreenElement;
+  const fullscreenAtMount = useRef<boolean | null>(null);
+  if (fullscreenAtMount.current === null) {
+    fullscreenAtMount.current = "fullscreenElement" in document ? document.fullscreenElement !== null : false;
+  }
 
   const [count, setCount] = useState({
     violations: initialViolations,
@@ -85,38 +92,59 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
     action: proctoring.violationAction,
   });
 
-  const mounted = useRef(true);
+  /**
+   * The live queue — owned by the effect below, not by `useMemo`.
+   *
+   * `useMemo` is a cache React is free to drop and recreate on its own
+   * schedule; it is the wrong place to construct an object that owns a
+   * running `setInterval`. `routes/exam.tsx`'s own save queue carries the
+   * exact warning this component used to miss: "calling it in an
+   * effect's cleanup would kill the queue on mount under `StrictMode`"
+   * (and `exam-main.tsx` really does render `<StrictMode>`). Built with
+   * `useMemo` and stopped in a *separate* effect's cleanup, the two
+   * disagree about which render owns the interval the moment
+   * StrictMode's dev-only double mount/unmount/remount runs: the
+   * `useMemo`-cached queue (and its one `setInterval`) survives the
+   * phantom unmount untouched by the memo, but the phantom cleanup still
+   * calls `queue.stop()` on it — and nothing recreates the interval on
+   * the phantom remount, because `useMemo`'s factory does not re-run for
+   * an unchanged `attemptId`. The queue silently never flushes again, in
+   * development only, with no test the wiser.
+   *
+   * Owning construction and teardown in the **same** effect fixes it:
+   * each `setup → cleanup → setup` cycle creates and destroys its own
+   * queue, and whichever one survives once the dust settles has a live
+   * interval. `queueRef` is also the handle Tasks 4 and 5 push and
+   * `pushImmediate` into from their own effects in this same file.
+   */
+  const queueRef = useRef<ReturnType<typeof createProctoringQueue> | null>(null);
 
-  const queue = useMemo(
-    () =>
-      createProctoringQueue({
-        send: sendEvents,
-        onCount: (violations, limit, action) => {
-          // No state update after unmount: the queue's own `send` can
-          // still be in flight when `stop()` runs, so this guard is the
-          // one place that matters even though `stop()` also halts the
-          // interval that would schedule a new pass.
-          if (!mounted.current) return;
-          setCount({ violations, limit, action });
-        },
-        flushMs: FLUSH_MS,
-      }),
+  useEffect(() => {
+    const queue = createProctoringQueue({
+      send: sendEvents,
+      onCount: (violations, limit, action) => {
+        // Checked against the ref, not a boolean: a state update from
+        // *this* queue instance only lands while it is still the live
+        // one. A stale closure from a queue this same effect has already
+        // replaced or stopped — StrictMode's phantom cycle, or a real
+        // unmount — is a no-op here, alongside the queue's own internal
+        // `stopped` check one layer down.
+        if (queueRef.current !== queue) return;
+        setCount({ violations, limit, action });
+      },
+      flushMs: FLUSH_MS,
+    });
+    queueRef.current = queue;
+    // `stop()` on unmount, and nowhere else — this view lives exactly as
+    // long as the attempt.
+    return () => {
+      queueRef.current = null;
+      queue.stop();
+    };
     // One queue per attempt — the same rule the save queue follows in
     // `AttemptView` below: a new attempt id is a new attempt and a new
     // queue. `proctoring` is fixed for the life of one attempt already.
-    [attemptId],
-  );
-
-  useEffect(() => {
-    mounted.current = true;
-    // `stop()` on unmount, and nowhere else — this view lives exactly as
-    // long as the attempt, the same reasoning `queue.ts`'s save queue
-    // documents for its own `close()`.
-    return () => {
-      mounted.current = false;
-      queue.stop();
-    };
-  }, [queue]);
+  }, [attemptId]);
 
   return (
     <div className="exam-proctoring-count" role="status" aria-live="polite">
