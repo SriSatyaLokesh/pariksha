@@ -695,6 +695,14 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // Phase 7c Task 2 (`Q7a`): the proctoring warning count — cream fill,
   // the same pair `.exam-option-row.is-selected` already proves.
   ".exam-proctoring-count": both("cream"),
+  // Phase 7c Task 4 (`Q2b`/`P-03`/`P-04`): `ProctoringOverlay`. The dialog
+  // fills itself with cream, the same pair as the count line above; its
+  // remedy action fills itself with voltage-deep, the same pair
+  // `.exam-submit` already proves. The scrim and the heading/message
+  // declare no `color` of their own (the message inherits the dialog's
+  // ink), so neither needs an entry.
+  ".exam-proctoring-dialog": both("cream"),
+  ".exam-proctoring-overlay-action": both("voltage-deep"),
 
   // ---- exam.css: the answer block (Phase 6 Task 7, #71) ------------------
   // The runner's own ground is the cream base.css paints on <body>; every

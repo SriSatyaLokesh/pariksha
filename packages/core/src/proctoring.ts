@@ -285,3 +285,29 @@ export const FAILURE_EVENTS: ReadonlySet<ProctoringEventType> = new Set([
 export function isViolation(type: ProctoringEventType): boolean {
   return VIOLATION_EVENTS.has(type);
 }
+
+/**
+ * `Q7b`: the detail shape each event this phase's gate task (7c Task 4)
+ * emits. The handoff's open question 2 assigns shape-declaring to whoever
+ * emits an event — 7d declares camera/snapshot/noise, 7e the lifecycle
+ * ones. The wire stays `z.unknown()` in `apps/api/src/routes/proctoring.ts`
+ * by that same route's own comment ("belongs to the plan that emits each
+ * event, not to the route that merely stores whatever it is handed") — this
+ * is the producer's own contract for what it puts in the field, not a
+ * schema change.
+ *
+ * `fullscreen_exit`/`fullscreen_restore` pair up and need nothing beyond
+ * the event envelope itself. `window_blur`/`visibility_hidden` do not pair
+ * with a second event (`T4-R4`'s ruling): the duration is carried on the
+ * leave event itself, sent once the candidate returns — `null` when a page
+ * unload flushed the queue before a return was ever observed.
+ */
+export type FullscreenExitDetail = Record<string, never>;
+export type FullscreenRestoreDetail = Record<string, never>;
+export interface WindowBlurDetail {
+  /** `Date.now()` on return minus `Date.now()` when the departure started;
+   *  `null` when the queue flushed this event before a return happened
+   *  (the page unloaded while away). */
+  awayMs: number | null;
+}
+export type VisibilityHiddenDetail = WindowBlurDetail;

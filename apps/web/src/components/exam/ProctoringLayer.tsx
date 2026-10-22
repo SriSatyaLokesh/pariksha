@@ -1,6 +1,6 @@
 /*
  * The signal layer that cannot break the runner (Phase 7c Task 2,
- * `Q2`/`Q2c`/`AG4`).
+ * `Q2`/`Q2c`/`AG4`; Task 4 extends it with fullscreen and window-leave).
  *
  * `AttemptView` (`routes/exam.tsx`) mounts `ProctoringLayer` as a
  * **sibling** of `Runner`, inside `ProctoringErrorBoundary` — never as
@@ -11,18 +11,57 @@
  * flow in CSS (`exam.css`) for the same reason D8 names directly — a
  * count line must not reflow the paper whether or not it is even mounted.
  *
- * This task wires no DOM listener — Tasks 4 and 5 do, by extending this
- * file. What ships here is the lifecycle every one of those listeners
- * will call into: `createProctoringQueue`, the transport that batches to
- * `Q7`'s ingest route, and the minimal count line Review Focus 3 asks
- * for ("Warning 2 of 5"), read off the server's own accumulated count and
- * never recomputed locally (`Q7a`).
+ * Task 2 shipped the lifecycle every listener here calls into:
+ * `createProctoringQueue`, the transport that batches to `Q7`'s ingest
+ * route, and the minimal count line Review Focus 3 asks for ("Warning 2
+ * of 5"), read off the server's own accumulated count and never
+ * recomputed locally (`Q7a`). `T4-R6`: that line stays exactly as Task 2
+ * built it (Task 2's own existing tests read it); `ProctoringOverlay`
+ * consumes the same `count` state rather than keeping a second one.
+ *
+ * Task 4 adds two listeners, both gated so a stack limitation degrades
+ * rather than blocks (`Q2`/`Q1a`):
+ *
+ * - **Fullscreen** (`P-03`), gated on `proctoring.requireFullscreen` AND
+ *   the Fullscreen API actually existing (`typeof
+ *   document.documentElement.requestFullscreen === "function"`, checked
+ *   once). jsdom ships no Fullscreen API at all, which is also exactly
+ *   `Q1a`'s iOS Safari case — "fullscreen has no `requestFullscreen` on
+ *   most elements" — so "API absent" degrades to "the control never
+ *   fires" on both. The mount-time state is Task 2's own
+ *   `fullscreenAtMount` ref (`T4-R6`) — this file reads it rather than
+ *   re-deriving it, since a `fullscreenchange` listener attached here
+ *   only ever sees a change from the moment it attaches.
+ *
+ * - **Window-leave** (`P-04`), `blur`/`focus` and `visibilitychange`
+ *   together. Neither `window_blur` nor `visibility_hidden` has a
+ *   "returned" counterpart in the closed union (`T4-R4`): the departure
+ *   starts a timer and emits nothing; the return sends one event carrying
+ *   `awayMs`, never a second. One shared timer, not two — a tab switch
+ *   commonly fires both `blur`+`focus` and `visibilitychange` for the
+ *   same departure, and a shared ref reports it once under whichever
+ *   signal returns first rather than twice.
+ *
+ * There is no dedicated override for "monitor window-leave" in 7a's
+ * fifteen keys, so this reads `requireFullscreen`/`requireCamera`/
+ * `blockCopyPaste`/`watermark`/`extraMonitorCheck`/`requireMicrophone`/
+ * `snapshotIntervalSeconds` — the same "is anything at all required"
+ * question `proctoringRequirements` already asks — rather than branching
+ * on `profile` (`Q1`). An `off` test, where every one of those is false,
+ * gets no window-leave monitoring either.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Component } from "react";
-import type { ResolvedProctoring } from "@pariksha/core";
+import type {
+  FullscreenExitDetail,
+  FullscreenRestoreDetail,
+  ResolvedProctoring,
+  VisibilityHiddenDetail,
+  WindowBlurDetail,
+} from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
+import { ProctoringOverlay } from "./ProctoringOverlay";
 
 /** Mirrors `EVENTS_PATH` in `apps/api/src/routes/proctoring.ts` — a
  *  server-only module this bundle cannot import across the app boundary. */
@@ -146,16 +185,208 @@ export function ProctoringLayer({ attemptId, proctoring, initialViolations }: Pr
     // queue. `proctoring` is fixed for the life of one attempt already.
   }, [attemptId]);
 
+  // ---- fullscreen (`P-03`) -------------------------------------------------
+
+  /** Checked once: jsdom ships no Fullscreen API at all (no
+   *  `fullscreenElement` getter, no `requestFullscreen`), which is also
+   *  exactly `Q1a`'s iOS Safari case — "absent" degrades the control to
+   *  never firing, on both, rather than a false violation. */
+  const fullscreenApiAvailable = useRef<boolean | null>(null);
+  if (fullscreenApiAvailable.current === null) {
+    fullscreenApiAvailable.current = typeof document.documentElement.requestFullscreen === "function";
+  }
+  const fullscreenEnforced = proctoring.requireFullscreen && fullscreenApiAvailable.current;
+
+  const [inFullscreen, setInFullscreen] = useState(() => fullscreenAtMount.current ?? false);
+
+  useEffect(() => {
+    if (!fullscreenEnforced) return;
+    function onChange(): void {
+      let next: boolean;
+      try {
+        next = document.fullscreenElement !== null;
+      } catch {
+        return; // Q2: degrade rather than guess at a value that cannot be read.
+      }
+      setInFullscreen((prev) => {
+        if (prev === next) return prev;
+        if (next) {
+          queueRef.current?.push("fullscreen_restore", {} satisfies FullscreenRestoreDetail);
+        } else {
+          // `pushImmediate`, not `push`: a violation whose count the
+          // overlay is about to show needs to reach the server sooner
+          // than the next flush interval (`FLUSH_MS`'s own doc comment).
+          void queueRef.current?.pushImmediate("fullscreen_exit", {} satisfies FullscreenExitDetail);
+        }
+        return next;
+      });
+    }
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+    };
+  }, [fullscreenEnforced]);
+
+  /** The overlay's own remedy control (`Q2b`) — and `P-03`'s "the test
+   *  starts only from a click that enters fullscreen": a browser refuses
+   *  `requestFullscreen()` without a user gesture reaching it directly. */
+  function enterFullscreen(): void {
+    try {
+      void document.documentElement.requestFullscreen().catch(() => {
+        // Q2: the browser refused (a permissions policy, the gesture
+        // didn't reach it in time, …) — the overlay simply stays up.
+      });
+    } catch {
+      /* same degrade, for a call that throws synchronously instead */
+    }
+  }
+
+  // ---- window-leave (`P-04`) -----------------------------------------------
+
+  /** There is no dedicated override for "monitor window-leave" among 7a's
+   *  fifteen keys — this asks the same "is anything at all required"
+   *  question `proctoringRequirements` already asks, rather than branching
+   *  on `profile` (`Q1`; see the file header). An `off` test monitors
+   *  nothing. */
+  const anyControlActive =
+    proctoring.requireFullscreen ||
+    proctoring.requireCamera ||
+    proctoring.blockCopyPaste ||
+    proctoring.watermark ||
+    proctoring.extraMonitorCheck ||
+    proctoring.requireMicrophone ||
+    proctoring.snapshotIntervalSeconds > 0;
+
+  /** One shared departure, not two — `T4-R4`: a tab switch commonly fires
+   *  both `blur`/`focus` and `visibilitychange` for the same departure,
+   *  and this reports it once, under whichever signal returns first,
+   *  rather than twice. The `type` travels with it so a page that
+   *  unloads mid-departure (below) can still name which signal it was. */
+  const awayAtRef = useRef<{ startedAt: number; type: "window_blur" | "visibility_hidden" } | null>(null);
+  const [leaveWarning, setLeaveWarning] = useState<WindowBlurDetail | null>(null);
+
+  useEffect(() => {
+    if (!anyControlActive) return;
+    function startAway(type: "window_blur" | "visibility_hidden"): void {
+      if (awayAtRef.current === null) awayAtRef.current = { startedAt: Date.now(), type };
+    }
+    function endAway(type: "window_blur" | "visibility_hidden"): void {
+      const pending = awayAtRef.current;
+      awayAtRef.current = null;
+      if (pending === null) return; // a return with no matching departure
+      const awayMs = Date.now() - pending.startedAt;
+      setLeaveWarning({ awayMs });
+      void queueRef.current?.pushImmediate(
+        type,
+        type === "window_blur"
+          ? ({ awayMs } satisfies WindowBlurDetail)
+          : ({ awayMs } satisfies VisibilityHiddenDetail),
+      );
+    }
+    function onBlur(): void {
+      startAway("window_blur");
+    }
+    function onFocus(): void {
+      endAway("window_blur");
+    }
+    function onVisibility(): void {
+      if (document.hidden) startAway("visibility_hidden");
+      else endAway("visibility_hidden");
+    }
+    // `T4-R4`'s unload clause: a page that dies mid-departure never gets a
+    // `focus`/`visibilitychange`-back to defer to, so the only way it
+    // isn't silently lost is pushing it here, duration unknown
+    // (`awayMs: null`) — `push`, not `pushImmediate`, since there is no
+    // reason to believe a fresh network round trip started during teardown
+    // completes; this only needs to reach the queue's own buffer.
+    function onPageHide(): void {
+      const pending = awayAtRef.current;
+      awayAtRef.current = null;
+      if (pending === null) return;
+      queueRef.current?.push(pending.type, { awayMs: null } satisfies WindowBlurDetail);
+    }
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("pagehide", onPageHide);
+    };
+  }, [anyControlActive]);
+
+  // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
+
+  const fullscreenBlocked = fullscreenEnforced && !inFullscreen;
+  const overlayOpen = fullscreenBlocked || leaveWarning !== null;
+
+  useEffect(() => {
+    // `ProctoringLayer` mounts as `Runner`'s sibling, never its parent
+    // (`Q2c`'s own doc comment) — marking the covered region is a direct
+    // DOM reach to its root rather than a prop threaded through
+    // `routes/exam.tsx`. `Q2a`'s real requirement is that `Runner` stays
+    // MOUNTED; this never removes it, only marks it unreachable to
+    // assistive tech and keyboard focus for as long as the overlay is up
+    // (`T4-R2`). Q2: if the region cannot be found, the overlay still
+    // visually covers the paper (`exam.css`) regardless — this degrades,
+    // it does not strand anyone.
+    function setRunnerHidden(hidden: boolean): void {
+      try {
+        const runner = document.querySelector<HTMLElement>(".exam-runner");
+        if (!runner) return;
+        if (hidden) {
+          runner.setAttribute("inert", "");
+          runner.setAttribute("aria-hidden", "true");
+        } else {
+          runner.removeAttribute("inert");
+          runner.removeAttribute("aria-hidden");
+        }
+      } catch {
+        /* degrade */
+      }
+    }
+    setRunnerHidden(overlayOpen);
+    return () => {
+      setRunnerHidden(false);
+    };
+  }, [overlayOpen]);
+
   return (
-    <div className="exam-proctoring-count" role="status" aria-live="polite">
-      {/* Plain on purpose (R5): `ProctoringOverlay`'s richer presentation
-          is Task 4's, built on this line rather than duplicating it. */}
-      {count.violations > 0 && (
-        <span>
-          Warning {count.violations} of {count.limit}
-        </span>
+    <>
+      <div className="exam-proctoring-count" role="status" aria-live="polite">
+        {/* Plain on purpose (R5 / `T4-R6`): `ProctoringOverlay` below
+            consumes this same `count` state rather than keeping a second
+            one that could disagree with it, and this line stays exactly
+            as Task 2 built it. */}
+        {count.violations > 0 && (
+          <span>
+            Warning {count.violations} of {count.limit}
+          </span>
+        )}
+      </div>
+      {/* Fullscreen wins the floor over a leave warning — it is indefinite
+          and still wrong; the leave warning is already resolved (the
+          candidate is back) and only needs acknowledging. */}
+      {fullscreenBlocked ? (
+        <ProctoringOverlay
+          title="Fullscreen required"
+          message="This test runs in fullscreen. Your answers and the timer are unaffected while this is up — select Enter fullscreen to continue."
+          action={{ label: "Enter fullscreen", onClick: enterFullscreen }}
+        />
+      ) : (
+        leaveWarning !== null && (
+          <ProctoringOverlay
+            title="Leaving the test window is not allowed"
+            message={`Leaving the test window is not allowed. Warning ${String(count.violations)} of ${String(count.limit)}.`}
+            onAcknowledge={() => {
+              setLeaveWarning(null);
+            }}
+          />
+        )
       )}
-    </div>
+    </>
   );
 }
 
