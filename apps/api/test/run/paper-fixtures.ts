@@ -486,6 +486,18 @@ const RELEASES: {
     attempts: 2,
     counted: "highest",
   },
+  // `M-1`'s negative control: `counted_attempt` set and this the last
+  // attempt (so `countedFor`'s own gate would allow the read) but
+  // `release.when: "never"` — `releasedResult` never discloses anything
+  // here, so the fix is that `attemptFiguresForCandidate` must not be
+  // read either. `rel-counted` above is the positive control: the same
+  // shape, released, where the read does happen.
+  {
+    slug: "rel-never-counted",
+    release: { when: "never" },
+    attempts: 2,
+    counted: "highest",
+  },
 ];
 
 export async function seedResultTests(

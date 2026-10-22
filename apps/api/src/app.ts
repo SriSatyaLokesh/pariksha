@@ -460,7 +460,12 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // audit row, and — Phase 8a Task 3 (`K6`/`K7`) — `attemptFiguresForCandidate`'s
   // one read of this candidate's own prior attempts, paid only on the last
   // attempt of a test whose `counted_attempt` is set to anything but
-  // `"latest"` (`apps/api/test/run/release.test.ts`'s "K7, live" test
+  // `"latest"` **and** whose release actually discloses something (`show
+  // !== null`, M-1 — a `release.when: "never"` test on the same
+  // last-attempt shape stays at the common path's 6, measured by
+  // `"rel-never-counted"`'s own test in `submit.test.ts`, with
+  // `"rel-counted"` below as its released, 7-paying twin)
+  // (`apps/api/test/run/release.test.ts`'s "K7, live" test
   // measures this exact combination). A second press writes nothing — the
   // row the cookie resolved already carries the score and the stamp — but
   // it is not free: it still pays the join, the answers and the attempt

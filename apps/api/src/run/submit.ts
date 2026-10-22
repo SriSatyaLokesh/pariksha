@@ -166,12 +166,16 @@ const titlesOf = (layout: PinnedLayout): Record<string, string> =>
 
 /**
  * `K6`/`K7`'s `counted` argument to `releasedResult`, read only when it
- * could actually be used. Mirrors `releasedResult`'s own gate
- * (`attemptsRemaining === 0`, never under `"latest"`) exactly, so this
- * route never pays `attemptFiguresForCandidate`'s subrequest for a result
- * `releasedResult` is guaranteed to discard (`K9`) — the one other read of
- * this candidate's prior attempts, and the one this route's `/submit`
- * budget is measured with on the path that takes it.
+ * could actually be used. Mirrors `releasedResult`'s own `countedFieldOf`
+ * gate (`attemptsRemaining === 0`, never under `"latest"`) exactly.
+ *
+ * **This function alone does not keep the read off a discarded result**
+ * (`M-1`): `releasedResult`'s own `show === null` gate — `release.when:
+ * "never"`, or an `on_date` that has not arrived — sits one level up, in
+ * `servedShow`, which this function is never told. Both call sites below
+ * check `show === null` before calling this at all, which is what keeps
+ * this route from paying `attemptFiguresForCandidate`'s subrequest for a
+ * result `releasedResult` is guaranteed to discard (`K9`).
  */
 async function countedFor(
   deps: AppDeps,
@@ -261,6 +265,12 @@ export async function submitAttempt(
   const attemptsRemaining = Math.max(0, attemptsAllowed - attemptNo);
 
   const release = releaseOf(attempt.settings);
+  // `releasedResult`'s own gate, computed once here so neither branch
+  // below pays `countedFor`'s read (and `full_review`'s bank read) for a
+  // result `releasedResult` is guaranteed to discard (`M-1`): a `show` of
+  // `null` — `release.when: "never"`, or an `on_date` that has not arrived
+  // — means nothing downstream of it is ever used.
+  const show = servedShow(release, attemptsRemaining, now);
   // `attempt.settings` is the pinned version's own `settings_json`, joined
   // on `test_version_id` — so an organiser rewriting the draft mid-window
   // cannot change what a candidate already sitting the paper is told.
@@ -304,20 +314,22 @@ export async function submitAttempt(
               // The bank is read **only** when a review is going to be
               // built, which is the one level that needs the key. Every
               // other level, and every un-released test, pays nothing.
-              servedShow(release, attemptsRemaining, now) === "full_review"
+              show === "full_review"
                 ? paperOrder(layout, await liveQuestions(deps, attempt.workspaceId))
                 : [],
               responses,
               now,
               attemptsRemaining,
               titles,
-              await countedFor(
-                deps,
-                attempt.workspaceId,
-                attempt.candidateId,
-                timing.counted_attempt,
-                attemptsRemaining,
-              ),
+              show === null
+                ? undefined
+                : await countedFor(
+                    deps,
+                    attempt.workspaceId,
+                    attempt.candidateId,
+                    timing.counted_attempt,
+                    attemptsRemaining,
+                  ),
             ),
     };
   }
@@ -397,13 +409,15 @@ export async function submitAttempt(
             now,
             attemptsRemaining,
             titles,
-            await countedFor(
-              deps,
-              attempt.workspaceId,
-              attempt.candidateId,
-              timing.counted_attempt,
-              attemptsRemaining,
-            ),
+            show === null
+              ? undefined
+              : await countedFor(
+                  deps,
+                  attempt.workspaceId,
+                  attempt.candidateId,
+                  timing.counted_attempt,
+                  attemptsRemaining,
+                ),
           ),
   };
 }

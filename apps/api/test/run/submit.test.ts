@@ -413,6 +413,30 @@ it("the worst case — a counted_attempt test's last attempt at full_review — 
   expect(counting.counts().total).toBe(ROUTE_BUDGETS[SUBMIT_PATH]);
 });
 
+it("M-1: a release.when: 'never' test's last attempt does not pay the counted read, even with counted_attempt set", async () => {
+  // `rel-never-counted`: the same shape as `rel-counted` above — two
+  // attempts, `counted_attempt: "highest"`, this the last one, so
+  // `countedFor`'s own gate would allow the read — except `release.when`
+  // is `never`, so `releasedResult` discloses nothing at all and the read
+  // must not happen either (`M-1`). Without the fix this cost **7**, the
+  // same as `rel-counted`'s worst case; with it, it costs the same **6**
+  // as the common `full_review`/no-`counted_attempt` path above, because
+  // `rescoreAttempt` still reads the bank to score regardless of
+  // disclosure. `rel-counted` above is this test's positive control: the
+  // released twin where the read does happen.
+  const first = await sat("rel-never-counted");
+  await answer(first.cookie, first.firstId, { kind: "option", option: "a" });
+  await submit(first.cookie);
+
+  const second = await sat("rel-never-counted", { candidateId: first.candidateId });
+  await answer(second.cookie, second.firstId, { kind: "option", option: "a" });
+  const counting = countingDeps(deps);
+  const res = await submit(second.cookie, createApp(counting.deps));
+  expect(res.status).toBe(200);
+  expect((await res.json()).released).toBeNull();
+  expect(counting.counts().total).toBe(6);
+});
+
 it("a second press costs 3, and 4 when a full review is served", async () => {
   // The one Task 11 path with no measurement, and the comments on both
   // sides of it claimed 1. It is 3: `listResponses` and
