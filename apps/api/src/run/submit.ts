@@ -37,7 +37,6 @@ import {
   workspaceQuestions,
 } from "@pariksha/db";
 import {
-  scoreAttempt,
   type AttemptScore,
   type Question,
   type ResponseValue,
@@ -52,6 +51,7 @@ import type { PinnedLayout } from "./attempt.js";
 import { TIMING_DEFAULTS, timingOf } from "./clock.js";
 import { MatchBudgetExceeded, matchStrict } from "./bounded.js";
 import { releasedResult, servedShow, type ReleasedResult } from "./release.js";
+import { rescoreAttempt } from "./rescore.js";
 
 /** Which of the three ended the attempt. `limit` is reserved for Phase 7's
  *  proctoring cut-off; nothing mints it yet. */
@@ -83,12 +83,14 @@ export interface Receipt {
  *  the bound refused. Also the audit action, prefixed. */
 const BLOCKED = "scoring_blocked";
 
-const scoringOf = (settings: unknown): TestScoring =>
+/** Exported for `rescore.ts` (`K5`) — the one other reader of this
+ *  attempt's `settings` blob. */
+export const scoringOf = (settings: unknown): TestScoring =>
   (settings as { scoring?: TestScoring }).scoring ?? {};
 
 /** `scoring.default_mode` / `negative_fraction`, with the engine's own
  *  fallbacks. `resolveScoring` applies a question's override on top. */
-const defaultsOf = (scoring: TestScoring): ScoringDefaults => ({
+export const defaultsOf = (scoring: TestScoring): ScoringDefaults => ({
   mode: scoring.default_mode ?? "all_or_nothing",
   negativeFraction: scoring.negative_fraction ?? 0,
 });
@@ -124,7 +126,8 @@ function runnable(pattern: string): boolean {
  *  author-written pattern; a question the bank no longer holds is the
  *  other case, and it is here rather than in `/start`'s stale-version net
  *  because the paper was pinned when it still existed. */
-function blockedQuestions(
+/** Exported for `rescore.ts` (`K5`). */
+export function blockedQuestions(
   layout: PinnedLayout,
   byId: ReadonlyMap<string, Question>,
 ): { questionId: string; reason: string }[] {
@@ -177,7 +180,8 @@ function paperOrder(
 /** The live documents for the questions this paper pinned, keyed by row
  *  id. One read of the workspace's bank, never one read per question — the
  *  same statement `/start` draws the paper from. */
-async function liveQuestions(
+/** Exported for `rescore.ts` (`K5`) and `resultFor`, below. */
+export async function liveQuestions(
   deps: AppDeps,
   workspaceId: string,
 ): Promise<Map<string, Question>> {
@@ -286,66 +290,16 @@ export async function submitAttempt(
     };
   }
 
-  const byId = await liveQuestions(deps, attempt.workspaceId);
-  const blocked = blockedQuestions(layout, byId);
-  const blockedIds = new Set(blocked.map((one) => one.questionId));
-
-  const questionsBySection = layout.sections.map((section) => ({
-    sectionId: section.sectionId,
-    questions: section.questionIds.flatMap((id) => {
-      const q = byId.get(id);
-      return q === undefined ? [] : [q];
-    }),
-  }));
-  const scoring = scoringOf(attempt.settings);
-  // **A blocked question is never handed to the grader.** Grading one
-  // scores the candidate *wrong* — `compilePattern` returns `null` and
-  // `matchBlank` answers "did not match" — and under `scoring.mode:
-  // "negative"` that takes marks off for a regex the organiser typed, on
-  // the same question this `AttemptScore` simultaneously lists as
-  // pending. `bounded.ts`'s header says precisely this must not happen. A
-  // blank response scores 0 and never loses points **in any mode**
-  // (`grade/result.ts`), so the question still costs its points and still
-  // counts towards `max` — the ruling `bounded.test.ts` pins — without
-  // ever moving the total in either direction.
-  const graded: Record<string, ResponseValue | null> = { ...responses };
-  for (const id of blockedIds) graded[id] = null;
-
-  let score: AttemptScore | null;
-  try {
-    const scored = scoreAttempt({
-      questionsBySection,
-      responses: graded,
-      // Phase 8 owns rubric awards; nothing has recorded one yet, so every
-      // manual question is pending and that is the whole of `awards`.
-      awards: {},
-      defaults: defaultsOf(scoring),
-      ...(scoring.pass_mark_percent === undefined
-        ? {}
-        : { passMarkPercent: scoring.pass_mark_percent }),
-    });
-    // A blocked question joins the manual ones: awaiting a human, not
-    // wrong. Deduplicated, because a manual question cannot also be a
-    // `fill_blank` but a deleted one can already be neither.
-    score = { ...scored, pending: [...new Set([...scored.pending, ...blockedIds])] };
-  } catch (error) {
-    // **The attempt completes anyway**, which is rule 3 of the header and
-    // the plan's own property. The pre-scan above knows two ways a
-    // question can be ungradeable; the grading engine can still throw for
-    // a third nobody anticipated — a stored document whose shape a grader
-    // does not survive. Letting that out is a 500 with `finishAttempt`
-    // never reached: no stamp, no receipt, and a retry that fails
-    // identically, so the candidate cannot submit at all. Instead the
-    // attempt is stamped with **no score**, flagged, and the audit row
-    // tells the organiser what threw. `questionId: "*"` is the whole
-    // paper, because a throw out of the engine does not say which
-    // question it came from.
-    score = null;
-    blocked.push({
-      questionId: "*",
-      reason: `the grading engine threw: ${error instanceof Error ? error.message : String(error)}`,
-    });
-  }
+  // `K5`: the one scoring path, shared with grading and regrade (8b).
+  // `awards: {}` is `submitAttempt`'s whole contribution — nothing has
+  // recorded a rubric award yet, so every manual question is pending.
+  const { score, blocked, questions: byId } = await rescoreAttempt(deps, {
+    workspaceId: attempt.workspaceId,
+    layout,
+    settings: attempt.settings,
+    responses,
+    awards: {},
+  });
 
   // The deadline, not the moment somebody noticed — see the header.
   const submittedAt = reason === "timeout" ? attempt.deadlineAt : now;
