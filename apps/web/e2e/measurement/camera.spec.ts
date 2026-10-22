@@ -162,11 +162,18 @@ test("P-06/Q11a: the identity photo is really 320×240 JPEG, under 60 KB (D-R1, 
   // `fetch()` call whose body is a `Blob` (Playwright's CDP capture does
   // not retain it) — `page.route` intercepts the request before it leaves
   // the browser instead, which does.
-  let captured: Buffer | null = null;
-  let contentType: string | undefined;
+  // Collected into an array rather than a `let … | null`: TypeScript
+  // narrows a `let` that only the route callback ever assigns, so the use
+  // site below would need a cast to read it back. An array also lets the
+  // assertion be the stronger one — exactly one identity snapshot, not
+  // merely "something arrived".
+  const captured: Buffer[] = [];
+  const contentTypes: string[] = [];
   await page.route("**/attempt/snapshot**", async (route) => {
-    captured = route.request().postDataBuffer();
-    contentType = route.request().headers()["content-type"];
+    const body = route.request().postDataBuffer();
+    if (body !== null) captured.push(body);
+    const header = route.request().headers()["content-type"];
+    if (header !== undefined) contentTypes.push(header);
     await route.continue();
   });
 
@@ -180,9 +187,9 @@ test("P-06/Q11a: the identity photo is really 320×240 JPEG, under 60 KB (D-R1, 
   // suite in this package uses.
   await expect(page.getByRole("navigation", { name: /question palette/i })).toBeVisible();
 
-  expect(contentType).toBe("image/jpeg");
-  expect(captured, "the snapshot request carried no body").not.toBeNull();
-  const bytes = captured as Buffer;
+  expect(captured, "expected exactly one identity snapshot upload").toHaveLength(1);
+  expect(contentTypes).toEqual(["image/jpeg"]);
+  const bytes = captured[0]!;
 
   console.log(`CAMERA identity photo: ${String(bytes.length)} bytes (${(bytes.length / 1024).toFixed(2)} KB)`);
 
