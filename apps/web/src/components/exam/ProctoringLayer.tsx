@@ -82,13 +82,54 @@ import {
   type WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
-import { acquireCamera, isCameraLensCovered } from "../../lib/camera";
+import { acquireCamera, captureJpeg, isCameraLensCovered } from "../../lib/camera";
 import { ProctoringOverlay } from "./ProctoringOverlay";
 import { Watermark } from "./Watermark";
 
 /** Mirrors `EVENTS_PATH` in `apps/api/src/routes/proctoring.ts` — a
  *  server-only module this bundle cannot import across the app boundary. */
 const EVENTS_PATH = "/api/v1/run/attempt/events";
+
+/** Mirrors `routes/exam.tsx`'s own `uploadSnapshot` (the identity photo's
+ *  upload, against Task 1's `POST /api/v1/run/attempt/snapshot`) rather
+ *  than importing it — a component importing from a route runs the
+ *  dependency the wrong way round, and the function is three lines. */
+async function uploadSnapshot(blob: Blob, reason: "interval" | "violation"): Promise<void> {
+  const res = await fetch(`/api/v1/run/attempt/snapshot?reason=${reason}`, {
+    method: "POST",
+    credentials: "same-origin",
+    headers: { "content-type": "image/jpeg" },
+    body: blob,
+  });
+  if (!res.ok) throw new Error(`snapshot upload failed: ${String(res.status)}`);
+}
+
+/**
+ * The capture schedule's one upload path, shared by the interval timer and
+ * every violation snapshot below (`AC-20`, `Q4d`).
+ *
+ * `AG1`: a capture that produces nothing (`captureJpeg`'s own `null` —
+ * jsdom's baseline with no canvas stubbed, or a refused frame) is not a
+ * stack failure, and reports nothing — only a reached-but-refused UPLOAD
+ * is one. `Q4d`: that failure never shows the candidate anything and never
+ * blocks the paper — one `snapshot_failed` event, nothing else. `queue` is
+ * passed in rather than read off a ref, so this plain async function needs
+ * no closure over component state to be called from any of this file's
+ * effects.
+ */
+async function captureAndUpload(
+  stream: MediaStream,
+  reason: "interval" | "violation",
+  queue: ReturnType<typeof createProctoringQueue> | null,
+): Promise<void> {
+  const blob = await captureJpeg(stream).catch(() => null);
+  if (!blob) return;
+  try {
+    await uploadSnapshot(blob, reason);
+  } catch {
+    queue?.push("snapshot_failed");
+  }
+}
 
 /** How often the buffer flushes on its own. `pushImmediate` (the queue's
  *  own escape hatch) is for a violation whose action a candidate needs to
@@ -336,6 +377,8 @@ export function ProctoringLayer({
         // overlay is about to show needs to reach the server sooner
         // than the next flush interval (`FLUSH_MS`'s own doc comment).
         void queueRef.current?.pushImmediate("fullscreen_exit", {} satisfies FullscreenExitDetail);
+        // `AC-20`: one snapshot per violation, alongside the event itself.
+        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
       }
       setInFullscreen(next);
     }
@@ -377,7 +420,16 @@ export function ProctoringLayer({
   useEffect(() => {
     if (!anyControlActive) return;
     function startAway(type: "window_blur" | "visibility_hidden"): void {
-      if (awayAtRef.current === null) awayAtRef.current = { startedAt: Date.now(), type };
+      if (awayAtRef.current === null) {
+        awayAtRef.current = { startedAt: Date.now(), type };
+        // `AC-20`: the snapshot belongs to the moment the violation
+        // actually happens, not the moment the queue's own event is
+        // pushed — `endAway` below only pushes `window_blur`/
+        // `visibility_hidden` once the candidate RETURNS (`T4-R4`'s own
+        // "no returned counterpart" rule), which a departure that never
+        // ends (a closed tab) would never reach at all.
+        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
+      }
     }
     function endAway(type: "window_blur" | "visibility_hidden"): void {
       const pending = awayAtRef.current;
@@ -486,6 +538,10 @@ export function ProctoringLayer({
       // overlay, but the organiser's own count (`Q6`) should not lag a
       // flush interval behind a block that is already up.
       void queueRef.current?.pushImmediate("camera_lost", { reason } satisfies CameraLostDetail);
+      // `AC-20`'s snapshot deliberately does not fire here: the camera is
+      // the one thing this event says is unavailable, and Task 3's own
+      // overlay (below) is already the phase's one `AG1` exception —
+      // this does not stack a second camera read on top of it.
     }
 
     function reportRestored(): void {
@@ -567,6 +623,52 @@ export function ProctoringLayer({
     // to mid-attempt.
   }, [cameraStream]);
 
+  // ---- the capture schedule (`AC-20`/`Q11b`/`Q4d`, Phase 7d Task 4) --------
+
+  /**
+   * How often the schedule checks whether a capture is due — not the
+   * capture cadence itself. **Review Focus 4 (`D-R10`):** a tab throttled
+   * for twenty minutes stops this tick from firing at all for that whole
+   * span (`clock.test.tsx`'s own technique — `Date` moves, the timer
+   * functions do not — is what the test file for this proves it with);
+   * counting *ticks* would under-count every candidate who ever switched
+   * windows. So `nextSnapshotAtRef` is a wall-clock timestamp, compared
+   * against `Date.now()` on every tick, not incremented once per fire.
+   *
+   * One second, not `snapshotIntervalSeconds * 1000`: a fine check
+   * granularity is what lets a throttled tab catch up within a handful of
+   * real ticks once it returns, rather than waiting out a whole interval
+   * for the first catch-up fire. `due += intervalMs` (never `due = now +
+   * intervalMs`) is what keeps a backlog to one capture per tick instead
+   * of flooding the network from inside a single callback — several
+   * overdue periods drain one per subsequent tick until the schedule is
+   * caught up, never all at once.
+   */
+  const SNAPSHOT_CHECK_MS = 1_000;
+  const nextSnapshotAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    // `Q11b`: `snapshotIntervalSeconds: 0` is no capture timer at all —
+    // not a timer whose upload is skipped, not a capture that is
+    // discarded, no timer.
+    if (!cameraStream || proctoring.snapshotIntervalSeconds <= 0) return;
+    const intervalMs = proctoring.snapshotIntervalSeconds * 1000;
+    nextSnapshotAtRef.current = Date.now() + intervalMs;
+    const timer = setInterval(() => {
+      const due = nextSnapshotAtRef.current;
+      if (due === null || Date.now() < due) return;
+      nextSnapshotAtRef.current = due + intervalMs;
+      void captureAndUpload(cameraStream, "interval", queueRef.current);
+    }, SNAPSHOT_CHECK_MS);
+    return () => {
+      clearInterval(timer);
+      nextSnapshotAtRef.current = null;
+    };
+    // `cameraStream` is fixed for the life of one attempt (the queue
+    // effect's own comment above) — only `snapshotIntervalSeconds`
+    // genuinely varies this effect's behaviour mid-file, never mid-attempt.
+  }, [cameraStream, proctoring.snapshotIntervalSeconds]);
+
   // ---- copy, paste and the context menu (`Q9`, 7c Task 5) ------------------
 
   /** `Q9`: the same honesty as the watermark below — `preventDefault()` on
@@ -586,6 +688,8 @@ export function ProctoringLayer({
           type,
           {} satisfies CopyBlockedDetail | PasteBlockedDetail | ContextmenuBlockedDetail,
         );
+        // `AC-20`: one snapshot per violation.
+        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
       };
     }
     const onCopy = blocked("copy_blocked");
@@ -624,6 +728,8 @@ export function ProctoringLayer({
       if (extended) {
         extraMonitorPushed.current = true;
         void queueRef.current?.pushImmediate("extra_monitor", {} satisfies ExtraMonitorDetail);
+        // `AC-20`: one snapshot per violation.
+        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
       }
     } catch {
       /* Q2: degrade — an unreadable screen is not a violation */
