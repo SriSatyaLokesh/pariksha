@@ -1185,6 +1185,11 @@
 .proctoring-panel {
   display: flex;
   flex-direction: column;
+  /* `--space-lg` rather than the `--space-sm` its sibling panels use between
+     their own blocks: this panel stacks THREE field-row groups where the
+     others stack one, and `D12` gives an editing surface air. At `--space-sm`
+     the gap between two groups reads the same as the gap between two fields
+     inside a group, which is the one distinction the grouping exists to make. */
   gap: var(--space-lg);
 }
 
