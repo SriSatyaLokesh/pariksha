@@ -160,3 +160,69 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
     }
   });
 });
+
+// Branch-review Finding 2: every assertion above reads a label, a DOM
+// attribute or a rendered value — none of them clicks a checkbox, picks a
+// select option, or reads which KEY an `onChange` payload carries.
+// Swapping the override key two controls write (e.g. wiring "Watermark the
+// paper" to `block_copy_paste` instead of `watermark`) left all 2166 tests
+// in the branch green. This table drives each control the way an organiser
+// would and asserts the key in the resulting `onChange` payload.
+//
+// Fourteen of the panel's fifteen override keys are driven below — nine
+// checkboxes, four number boxes, one select. The fifteenth, `face_check`,
+// ships permanently `disabled` (`Q3` — Phase 8 feature, pre-cut in Phase
+// 7), so there is no organiser gesture that can drive it; "checking %s
+// writes true" above has nothing to click. Its label and accessible
+// description are pinned by "names the phase in the face check's own
+// accessible description" above, and what it renders as checked — the raw
+// imported document value, never the resolved (always-`false`) one — is
+// exercised by `proctoring-profile.test.tsx`'s profile-change coverage of
+// the same key.
+describe("each override key is written by the control its label names (branch-review Finding 2)", () => {
+  it.each([
+    ["Block phones and tablets", "desktop_only"],
+    ["Require fullscreen", "require_fullscreen"],
+    ["Block copy and paste", "block_copy_paste"],
+    ["Watermark the paper", "watermark"],
+    ["Detect extra monitors", "extra_monitor_check"],
+    ["Allow the calculator", "allow_calculator"],
+    ["Require a camera", "require_camera"],
+    ["Identity photo", "identity_photo"],
+    ["Require a microphone", "require_microphone"],
+  ] as const)("checking %s writes override.%s = true", async (label, key) => {
+    const onChange = vi.fn();
+    await openProctoringPanel({}, { onChange });
+    user.click(screen.getByLabelText(new RegExp(label, "i")));
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ overrides: expect.objectContaining({ [key]: true }) }),
+    );
+  });
+
+  it.each([
+    ["Images every", "snapshot_interval_seconds", "45"],
+    ["Warn after", "violation_limit", "7"],
+    ["Camera may be lost for", "camera_outage_seconds", "90"],
+    ["Flag on faces in", "multi_face_snapshots", "4"],
+  ] as const)("typing into %s writes override.%s", async (label, key, typed) => {
+    const onChange = vi.fn();
+    await openProctoringPanel({ profile: "strict", overrides: {} }, { onChange });
+    const el = screen.getByLabelText(new RegExp(label, "i")) as HTMLInputElement;
+    user.clear(el);
+    user.type(el, typed);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ overrides: expect.objectContaining({ [key]: Number(typed) }) }),
+    );
+  });
+
+  it("selecting an option in When the limit is reached writes override.violation_action", async () => {
+    const onChange = vi.fn();
+    await openProctoringPanel({}, { onChange });
+    fireEvent.change(screen.getByLabelText(/When the limit is reached/i), {
+      target: { value: "lock" },
+    });
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ overrides: expect.objectContaining({ violation_action: "lock" }) }),
+    );
+  });
+});
