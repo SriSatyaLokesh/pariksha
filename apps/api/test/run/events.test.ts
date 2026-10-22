@@ -32,9 +32,14 @@ const app = createApp(deps);
 const workspaceId = await seedWorkspace(deps, SLUG.workspace, "Gamma Inc");
 const q = await seedBank(deps, workspaceId);
 
-// Standard profile — `limit: 5, action: "warn_then_flag"` and
+// Standard profile — `limit: 5, action: "warn_only"` and
 // `requireFullscreen: true, faceCheck: false` are what `PROCTORING_DEFAULTS.
 // standard` resolves to, and what every assertion below is pinned against.
+//
+// `action` was `warn_then_flag` until #214: `resolveProctoring` now refuses
+// every action but `warn_only`, because nothing in this phase consumes one.
+// The route still answers with it — the field is real and 7e's successor
+// (#213) is what makes it mean something again.
 await seedTest(deps, workspaceId, {
   name: "Proctored",
   slug: SLUG.test,
@@ -122,7 +127,7 @@ it("writes events and answers with the authoritative count", async () => {
     attemptCookie,
   );
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_only" });
 });
 
 it("counts only violation types toward the figure", async () => {
@@ -260,7 +265,7 @@ it("writes nothing and still answers the current count once the attempt is submi
     attemptCookie,
   );
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_only" });
 
   const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM event", []);
   // The one pre-submission event, and nothing from the post-submission
