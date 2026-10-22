@@ -1337,6 +1337,15 @@
   margin: 24px 0 0;
 }
 
+/* `K7`: the candidate's own two figures, directly above `.exam-result`'s
+   rule on both the finish page and the return visit (M-2) — tabular like
+   `.exam-score` below, since this is the same percentage read twice. */
+.exam-attempt-figures {
+  max-width: 64ch;
+  margin: 0 0 24px;
+  font-variant-numeric: tabular-nums;
+}
+
 .exam-result {
   margin-top: 32px;
   padding-top: 24px;
