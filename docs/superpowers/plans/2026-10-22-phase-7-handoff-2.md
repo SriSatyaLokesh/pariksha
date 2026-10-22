@@ -15,7 +15,7 @@ whoever picks this up in a new session.
 | plan | state |
 | --- | --- |
 | **7a — the contract** | **Merged** as [#205](https://github.com/SriSatyaLokesh/pariksha/pull/205), squashed to `16fc4f5`. |
-| **7b — the editor** | **Feature-complete.** Branch `phase-7b/the-editor`, pushed, at `2f372c1`. Five tasks, all task-reviewed and fixed; whole-branch review returned *fix first* with 12 findings; all 12 addressed in one fix wave. **A scoped re-review of that wave was in flight when this session ended.** No PR opened yet. |
+| **7b — the editor** | **Done.** [PR #207](https://github.com/SriSatyaLokesh/pariksha/pull/207), branch `phase-7b/the-editor` at `2f372c1`. Five tasks, all task-reviewed and fixed; whole-branch review returned *fix first* with 12 findings; all 12 addressed in one fix wave and the scoped re-review of that wave came back clean. **Awaiting the owner's merge** — a merge to `main` is theirs. |
 | **7c — the gates** | **Tasks 1–3 complete and reviewed.** Task 4 is **committed as WIP and unverified** (`1c0c9a2`). Task 5 not started, but fully pre-flighted with rulings recorded. Branch `phase-7c/the-gates`, pushed. |
 | 7d — the eye | Not started. Needs 7c's queue, layer and `ProctoringOverlay` — all three exist on the 7c branch. |
 | 7e — the consequences | Not started. Needs 7a, 7c and 7d. |
@@ -30,7 +30,7 @@ review verdict, and every probe with its verbatim failure line.
 
 | clone | branch | at | next action |
 | --- | --- | --- | --- |
-| `pariksha-wt2` | `phase-7b/the-editor` | `2f372c1` | Re-run the scoped re-review of `9c76ee4..2f372c1`, then open the PR. |
+| `pariksha-wt2` | `phase-7b/the-editor` | `2f372c1` | Nothing. PR #207 is open and reviewed; the clone is free for 7d. |
 | `pariksha-wt1` | `phase-7c/the-gates` | `1c0c9a2` | **Verify Task 4 first** — it was committed mid-task to survive the session boundary and has never been run. Then review it, then Task 5. |
 
 **`1c0c9a2` is unverified.** It was committed because an uncommitted implementer tree is
