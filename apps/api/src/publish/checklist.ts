@@ -22,6 +22,8 @@ import {
   describeAllowlists,
   resolveProctoring,
   validateTest,
+  KB_PER_MB,
+  SNAPSHOT_KB,
   type ImportIssue,
   type Question,
   type Test,
@@ -66,16 +68,10 @@ export interface ChecklistInput {
 
 const DAY_MS = 86_400_000;
 
-// Phase 7a Task 6 (`Q11a`): one JPEG snapshot's size, publicly stated
-// already at `apps/web/src/sections/signal/Tail.tsx:125` ("320×240 JPEG
-// snapshots, about 25 KB each") — not a guess invented for this row.
-// `KB_PER_MB` is decimal (SI), not the binary 1024: it is the only
-// conversion that reproduces both worked examples with no rounding fudge
-// — 180 min at a 15 s interval is exactly 18 MB, and the design spec's
-// 60 min at 60 s is exactly 1.5 MB. Binary MiB rounds one of the two to
-// a different figure.
-const SNAPSHOT_KB = 25;
-const KB_PER_MB = 1000;
+// `SNAPSHOT_KB`/`KB_PER_MB` moved to `@pariksha/core` (Phase 7b Task 4,
+// `R2`): `apps/web`'s `snapshot-cost.ts` needs the same two numbers and
+// cannot import across apps. Imported above rather than retyped — see
+// `packages/core/src/proctoring.ts` for the comment this one used to carry.
 // `Q1c`: the cost row fires once a candidate's snapshots cross 200 images.
 // Strict's own default (60 s interval over a 60-minute test = 60 images)
 // stays under it and stays silent — that silence is intended, not a gap.

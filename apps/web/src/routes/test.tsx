@@ -843,7 +843,10 @@ export function TestBuilder({
             id="proctoring"
             icon={<Icon name="proctoring" />}
             label="Proctoring"
-            summary={proctoringSummary(draft.body.settings.proctoring)}
+            summary={proctoringSummary(
+              draft.body.settings.proctoring,
+              draft.body.settings.timing?.duration_minutes ?? null,
+            )}
             open={openPanel === "proctoring"}
             onToggle={togglePanel}
           >

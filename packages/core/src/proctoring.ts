@@ -7,6 +7,22 @@
 export type ProctoringProfile = "off" | "standard" | "strict";
 export type ViolationAction = "warn_only" | "warn_then_flag" | "auto_submit" | "lock";
 
+// Phase 7b Task 4 (`Q11a`): one JPEG snapshot's size, publicly stated
+// already at `apps/web/src/sections/signal/Tail.tsx:125` ("320×240 JPEG
+// snapshots, about 25 KB each") — not a guess invented for this figure.
+// `KB_PER_MB` is decimal (SI), not the binary 1024: it is the only
+// conversion that reproduces both worked examples with no rounding fudge
+// — 180 min at a 15 s interval is exactly 18 MB, and the design spec's
+// 60 min at 60 s is exactly 1.5 MB. Binary MiB rounds one of the two to
+// a different figure.
+//
+// Moved here from `apps/api/src/publish/checklist.ts` (where this comment
+// originated) because `apps/web`'s `snapshot-cost.ts` needs the same two
+// numbers and cannot import across apps — one promise, one source, two
+// readers (`R2`, task-4-brief.md ruling).
+export const SNAPSHOT_KB = 25;
+export const KB_PER_MB = 1000;
+
 /** Every field present, no optionals. This is what every reader consumes. */
 export interface ResolvedProctoring {
   profile: ProctoringProfile;

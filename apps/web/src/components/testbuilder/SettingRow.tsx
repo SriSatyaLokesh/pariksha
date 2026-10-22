@@ -13,6 +13,7 @@ import {
 import { MODE_LABEL } from "./AccessPanel";
 import { SHOW_LABEL, WHEN_LABEL } from "./ReleasePanel";
 import { isZone } from "./TimingPanel";
+import { snapshotCost } from "../../lib/snapshot-cost";
 
 // Phase 6.5d Task 1, spec D7: the five settings — timing, access,
 // registration form, results, branding — collapse into one panel of rows
@@ -295,10 +296,13 @@ export function brandingSummary(branding: TestBranding, workspaceBranding: TestB
 // `violationLimit`/`violationAction` — so the short form states the same
 // value the long form would, just without repeating "off" four times.
 //
-// Task 1 ships the first four clauses `Q8`'s own example states —
+// Task 1 shipped the first four clauses `Q8`'s own example states —
 // "Strict · camera required · images every 60 s · warns at 5 violations" —
-// and stops there. The fifth, "≈ 1.5 MB per candidate", needs
-// `snapshotCost` (Task 4) and is appended by that task, not stubbed here.
+// and stopped there. Task 4 appends the fifth, "≈ 1.5 MB per candidate",
+// through `snapshotCost` — and only when it resolves: `durationMinutes`
+// absent or 0, or snapshots off, means there is nothing to cost, and the
+// row says four clauses rather than a fifth that is empty or a dangling
+// trailing " · " (`R3`, task-4-brief.md).
 function profileLabel(profile: ProctoringProfile): string {
   return profile.charAt(0).toUpperCase() + profile.slice(1);
 }
@@ -314,6 +318,7 @@ const VIOLATION_CLAUSE: Readonly<
 
 export function proctoringSummary(
   value: { profile?: ProctoringProfile; overrides?: ProctoringOverrides } | undefined,
+  durationMinutes: number | null,
 ): string {
   const resolved = resolveProctoring(value);
   if (resolved.profile === "off") return "Off";
@@ -321,10 +326,13 @@ export function proctoringSummary(
     resolved.requireCamera && resolved.snapshotIntervalSeconds > 0
       ? `images every ${resolved.snapshotIntervalSeconds} s`
       : "no images";
-  return [
+  const clauses = [
     profileLabel(resolved.profile),
     resolved.requireCamera ? "camera required" : "no camera",
     images,
     VIOLATION_CLAUSE[resolved.violationAction](resolved.violationLimit),
-  ].join(" · ");
+  ];
+  const cost = snapshotCost({ durationMinutes, resolved });
+  if (cost !== null) clauses.push(`≈ ${cost.megabytes} MB per candidate`);
+  return clauses.join(" · ");
 }

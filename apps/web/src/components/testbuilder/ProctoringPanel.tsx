@@ -8,6 +8,7 @@ import {
   type ViolationAction,
 } from "@pariksha/core";
 import { useDialogKeys } from "../useDialogKeys";
+import { snapshotCost } from "../../lib/snapshot-cost";
 
 // Phase 7b Task 2 (`Q8`): the fifteen overrides, in the three groups `Q8`
 // names — gating, camera and microphone, consequences. Task 1 shipped the
@@ -225,11 +226,17 @@ export function ProctoringPanel({
   durationMinutes: number | null;
   onChange: (next: { profile: ProctoringProfile; overrides: ProctoringOverrides }) => void;
 }): JSX.Element {
-  // Task 4's cost clause reads this; nothing here does yet.
-  void durationMinutes;
-
   const ids = useId();
   const resolved = resolveProctoring(value);
+
+  // `Q11`/`Q11a` (Task 4): the cost of the settings as entered, per
+  // candidate — never a total, the product does not know the headcount.
+  // `snapshotCost` already guards the division: `durationMinutes === null`
+  // and `snapshotIntervalSeconds <= 0` both come back `null` before any
+  // arithmetic runs. Snapshots off reads as nothing to say (`Q11b` — off
+  // means off, all the way down) rather than reusing the "set a duration"
+  // sentence for a reason that is not about the duration at all.
+  const cost = snapshotCost({ durationMinutes, resolved });
 
   // Task 3 (`Q8a`): which of the fifteen overrides currently differ from
   // THIS profile's own defaults — computed once per render, read by every
@@ -498,6 +505,24 @@ export function ProctoringPanel({
         ],
         "A violation counts toward the limit above; a camera outage or a crowded snapshot marks the attempt for review instead — two different axes, never added together. Locking needs an organiser to reopen the attempt.",
       )}
+
+      {/* `Q11`: the cost, on the screen. Reuses `.field-help` — the same
+          muted, body-sm note every group above already carries for its own
+          note, already repainted for the Signal ground in both modes
+          (`admin.css`'s `:root[data-theme] .field-help`) — rather than a
+          new selector `contrast-usage.test.ts` would need two fresh
+          SURFACE entries for. `durationMinutes !== null` picks between the
+          two messages: a missing duration says so in words (#179's shape),
+          while snapshots off (`cost === null` but a duration IS set) says
+          nothing, since there is no missing input to name and no cost to
+          state. */}
+      {cost !== null ? (
+        <p className="field-help">
+          {`≈ ${String(cost.images)} images · ≈ ${String(cost.megabytes)} MB · ≈ ${String(cost.uploads)} uploads per candidate`}
+        </p>
+      ) : durationMinutes === null ? (
+        <p className="field-help">Set a duration under Timing to see what this costs.</p>
+      ) : null}
     </section>
   );
 }
