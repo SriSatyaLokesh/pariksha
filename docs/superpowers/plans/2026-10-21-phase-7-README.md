@@ -7,6 +7,12 @@ a costed advisory.
 The spec covers five independently shippable subsystems, so it is five plans. Each produces working,
 testable software on its own.
 
+> **7a is merged** (2026-10-22, [#205](https://github.com/SriSatyaLokesh/pariksha/pull/205)). Before
+> running any of the remaining four, read
+> [the Phase 7 handoff](2026-10-22-phase-7-handoff.md) — it records what 7a actually shipped where
+> that differs from what these plans were written against, what is still open, and the traps this
+> phase has already paid for.
+
 **Rebased onto 6.5e (#203) on 2026-10-22, and re-checked against it.** Phase 6.5 is complete — a
 (#196), b (#195), c (#199), d (#202), e (#203) and f (#198) are all on `main`. What the re-check
 found:
