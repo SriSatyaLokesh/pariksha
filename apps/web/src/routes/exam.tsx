@@ -617,6 +617,27 @@ function AttemptView({
     return off;
   }, [queue]);
 
+  /**
+   * Phase 7d Task 2 review finding 2 (LOW, closed here): `ProctoringLayer`
+   * is the only thing that stops `cameraStream`'s tracks, and it mounts
+   * only behind `paper.proctoring` below. Every `/start` response carries
+   * that field now, so this is defensive against a stale cached payload
+   * without it — a real `cameraStream` with nowhere to be stopped would
+   * otherwise leave the camera light on for the rest of the tab's life.
+   * Scoped to exactly that fallback (`!paper.proctoring`): when
+   * `ProctoringLayer` is mounted it already owns this, and a second
+   * `stop()` call here would be redundant, not wrong, but there is no
+   * reason to duplicate it.
+   */
+  useEffect(() => {
+    if (paper.proctoring) return;
+    return () => {
+      cameraStream?.getTracks().forEach((track) => {
+        track.stop();
+      });
+    };
+  }, [paper.proctoring, cameraStream]);
+
   /** The answer blocks for all twelve types (Task 7), each change both
    * shown at once and queued for the server. The local state is not the
    * record: the queue is, and what it holds survives a reload. */

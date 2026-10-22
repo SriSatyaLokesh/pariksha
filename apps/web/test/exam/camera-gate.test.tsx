@@ -326,6 +326,15 @@ describe("the identity photo (Q11a)", () => {
       const view = await startStrictAttempt({ identityPhoto: false });
       expect(track.stop).not.toHaveBeenCalled();
       view.unmount();
+      // Phase 7d Task 2 review finding 1 (closed in Task 3): the stop is
+      // now deferred by one tick — `ProctoringLayer`'s own
+      // `cameraStopTimerRef` comment explains why — so a StrictMode phantom
+      // remount can cancel it before it ever reaches the real hardware
+      // track. A real unmount has no following remount to cancel it, so it
+      // still fires, just not on this exact synchronous line.
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
       expect(track.stop).toHaveBeenCalledTimes(1);
     });
   });

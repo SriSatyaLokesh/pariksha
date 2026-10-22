@@ -63,6 +63,69 @@ export async function acquireCamera(): Promise<
 }
 
 /**
+ * `P-05`/`AC-19`/`Q2`'s Review Focus 3 — a covered lens, not an unplugged
+ * camera: the track stays `live` and keeps firing no events at all, so
+ * `track.onended`/`track.muted` (`ProctoringLayer`'s other signal) can
+ * never see it. This draws the same kind of frame `captureJpeg` does, at a
+ * much smaller size (nothing here is kept or uploaded), and answers only
+ * whether the lens reads covered rather than handing back a number a caller
+ * would have to know how to read.
+ *
+ * `null`, not `false`, when the frame cannot be sampled at all — jsdom with
+ * no stubbed canvas (`captureJpeg`'s own baseline) included. A frame this
+ * cannot read is not evidence of anything either way (`AG1`): the caller's
+ * job is to treat `null` as "skip this tick", never as "covered".
+ */
+const LUMINANCE_SAMPLE_WIDTH = 32;
+const LUMINANCE_SAMPLE_HEIGHT = 24;
+
+/** Below this average 0–255 luma, a sampled frame reads as a covered lens
+ *  rather than a dim room — comfortable headroom under a real face lit by
+ *  nothing but a monitor, well above the near-zero a taped-over lens
+ *  actually produces. */
+const COVERED_LENS_THRESHOLD = 10;
+
+export async function isCameraLensCovered(stream: MediaStream): Promise<boolean | null> {
+  if (stream.getVideoTracks().length === 0) return null;
+
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.srcObject = stream;
+  try {
+    await video.play();
+  } catch {
+    /* AG1: same degrade `captureJpeg` takes on a refused autoplay. */
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = LUMINANCE_SAMPLE_WIDTH;
+  canvas.height = LUMINANCE_SAMPLE_HEIGHT;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(video, 0, 0, LUMINANCE_SAMPLE_WIDTH, LUMINANCE_SAMPLE_HEIGHT);
+
+  let pixels: Uint8ClampedArray;
+  try {
+    pixels = ctx.getImageData(0, 0, LUMINANCE_SAMPLE_WIDTH, LUMINANCE_SAMPLE_HEIGHT).data;
+  } catch {
+    return null; // Q2: an unreadable frame is not a violation either way.
+  }
+
+  let total = 0;
+  const pixelCount = pixels.length / 4;
+  if (pixelCount === 0) return null;
+  for (let i = 0; i < pixels.length; i += 4) {
+    // ITU-R BT.601 luma — the standard grayscale weighting, not an even
+    // average across the three channels: the eye does not perceive them
+    // as equally bright, and an even average would misjudge a real
+    // picture's brightness against this threshold.
+    total += 0.299 * (pixels[i] ?? 0) + 0.587 * (pixels[i + 1] ?? 0) + 0.114 * (pixels[i + 2] ?? 0);
+  }
+  return total / pixelCount < COVERED_LENS_THRESHOLD;
+}
+
+/**
  * One frame, drawn onto a 320×240 canvas and encoded to a JPEG — `AG2`:
  * nothing is retained beyond the returned `Blob`, and this never starts a
  * `MediaRecorder`.

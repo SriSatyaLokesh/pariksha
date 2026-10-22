@@ -86,3 +86,62 @@ describe("ProctoringLayer: queue lifecycle under StrictMode", () => {
     expect(trace).toEqual(["create(1)", "stop(1)", "create(2)", "stop(2)"]);
   });
 });
+
+// Phase 7d Task 2 review finding 1 (MEDIUM, CONFIRMED — closed in Task 3):
+// `cameraStream` is a prop, not something the queue-lifecycle effect builds,
+// so it is the SAME object across the phantom mount→cleanup→mount above —
+// unlike `queue`, nothing here recreates it. The old, unconditional
+// `track.stop()` in that effect's cleanup killed the one real hardware
+// track on the phantom cleanup, permanently (a stopped `MediaStreamTrack`
+// never comes back), with no test the wiser because no test in this file
+// passed a `cameraStream` at all. Pinned here, beside the queue's own trace,
+// because it is the same StrictMode cycle doing the damage.
+function fakeTrack(): MediaStreamTrack {
+  return Object.assign(new EventTarget(), {
+    kind: "video",
+    readyState: "live",
+    muted: false,
+    stop: vi.fn(),
+  }) as unknown as MediaStreamTrack;
+}
+
+function fakeStream(forTrack: MediaStreamTrack): MediaStream {
+  return {
+    getVideoTracks: () => [forTrack],
+    getTracks: () => [forTrack],
+  } as unknown as MediaStream;
+}
+
+describe("ProctoringLayer: the camera survives a StrictMode phantom remount", () => {
+  it("does not stop the real track on the phantom cleanup, only on a real unmount", async () => {
+    const track = fakeTrack();
+    const stream = fakeStream(track);
+    const { unmount } = render(
+      <StrictMode>
+        <ProctoringLayer
+          attemptId="att_strict02"
+          proctoring={resolveProctoring({ profile: "strict" })}
+          initialViolations={0}
+          cameraStream={stream}
+        />
+      </StrictMode>,
+    );
+
+    // The phantom mount→cleanup→mount above already ran, synchronously, by
+    // the time `render()` returned — if the old, unconditional
+    // `track.stop()` were still here, this would already be true, and no
+    // real camera would survive even one more render under StrictMode in
+    // dev.
+    expect(track.stop).not.toHaveBeenCalled();
+
+    unmount();
+    // The deferred-stop timer (`ProctoringLayer`'s own `cameraStopTimerRef`)
+    // fires on the next tick, not this one — the same wait
+    // `camera-gate.test.tsx`'s own unmount test now takes, for the same
+    // reason.
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    expect(track.stop).toHaveBeenCalledTimes(1);
+  });
+});

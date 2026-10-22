@@ -82,6 +82,7 @@ import {
   type WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
+import { acquireCamera, isCameraLensCovered } from "../../lib/camera";
 import { ProctoringOverlay } from "./ProctoringOverlay";
 import { Watermark } from "./Watermark";
 
@@ -226,7 +227,29 @@ export function ProctoringLayer({
    */
   const queueRef = useRef<ReturnType<typeof createProctoringQueue> | null>(null);
 
+  /**
+   * Phase 7d Task 2 review finding 1 (MEDIUM, closed here): `cameraStream`
+   * is a prop, not something this effect builds — unlike `queue` (recreated
+   * fresh every run, the comment above), it is the SAME object across
+   * StrictMode's phantom mount→cleanup→mount, so the unconditional
+   * `track.stop()` this cleanup used to call killed the one real hardware
+   * track for good on the phantom cleanup, and nothing on the phantom
+   * remount could ever get it back (a stopped `MediaStreamTrack` stays
+   * stopped). Stopping is deferred by one tick rather than skipped
+   * outright: the phantom cycle's own remount runs synchronously,
+   * within the same commit, before this timer ever fires, so its setup
+   * below cancels the stop; a genuine unmount has no following setup to
+   * cancel it, so the timer fires and the camera light actually goes off.
+   * No effect on production builds, where StrictMode's double-invoke is
+   * stripped and this timer always fires on the very next tick.
+   */
+  const cameraStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
+    if (cameraStopTimerRef.current !== null) {
+      clearTimeout(cameraStopTimerRef.current);
+      cameraStopTimerRef.current = null;
+    }
     const queue = createProctoringQueue({
       send: sendEvents,
       onCount: (violations, limit, action) => {
@@ -257,9 +280,16 @@ export function ProctoringLayer({
     return () => {
       queueRef.current = null;
       queue.stop();
-      cameraStream?.getTracks().forEach((track) => {
-        track.stop();
-      });
+      // Deferred, not immediate — see `cameraStopTimerRef`'s own comment
+      // above. `attemptId` never changes without a real remount (the
+      // dependency array below), so the only thing that can cancel this
+      // is StrictMode's own phantom setup, which runs first.
+      cameraStopTimerRef.current = setTimeout(() => {
+        cameraStopTimerRef.current = null;
+        cameraStream?.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }, 0);
     };
     // One queue per attempt — the same rule the save queue follows in
     // `AttemptView` below: a new attempt id is a new attempt and a new
@@ -410,6 +440,133 @@ export function ProctoringLayer({
     };
   }, [anyControlActive]);
 
+  // ---- camera liveness (`P-05`/`AC-19`/`Q2` — the phase's one `AG1`
+  // exception) ---------------------------------------------------------------
+
+  /** `Q6`: the outage this pair brackets, carried on `camera_restored` the
+   *  same way `WindowBlurDetail.awayMs` carries a window-leave's. Declared
+   *  locally rather than in `@pariksha/core` — the wire stays `z.unknown()`
+   *  there (`proctoring.ts`'s own comment: shape-declaring belongs to
+   *  whoever emits the event), and nothing outside this file reads either
+   *  shape. */
+  interface CameraLostDetail {
+    reason: "ended" | "muted" | "covered";
+  }
+  interface CameraRestoredDetail {
+    outageMs: number;
+  }
+
+  /** At most every five seconds while the camera reads fine — Review Focus
+   *  3's own luminance sample, cheap enough to run for the whole attempt.
+   *  Comfortably under the ceiling rather than pinned to it: Task 4's own
+   *  interval capture (once it exists) is the natural thing to ride instead
+   *  of sampling twice, and a shorter standalone cadence costs little while
+   *  it doesn't. */
+  const CAMERA_SAMPLE_MS = 1_000;
+
+  const [cameraLost, setCameraLost] = useState(false);
+  /** Decided once, outside any event handler, the same shape
+   *  `inFullscreenRef`/`awayAtRef` already use above — a duplicate
+   *  `ended`/`mute` for one real loss must not re-stamp `cameraLostAtRef`
+   *  or double-report. */
+  const cameraLostRef = useRef(false);
+  const cameraLostReasonRef = useRef<CameraLostDetail["reason"] | null>(null);
+  const cameraLostAtRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!cameraStream) return;
+
+    function reportLost(reason: CameraLostDetail["reason"]): void {
+      if (cameraLostRef.current) return;
+      cameraLostRef.current = true;
+      cameraLostReasonRef.current = reason;
+      cameraLostAtRef.current = Date.now();
+      setCameraLost(true);
+      // `pushImmediate`, not `push`: `AC-19`'s own 5 s bound is about the
+      // overlay, but the organiser's own count (`Q6`) should not lag a
+      // flush interval behind a block that is already up.
+      void queueRef.current?.pushImmediate("camera_lost", { reason } satisfies CameraLostDetail);
+    }
+
+    function reportRestored(): void {
+      if (!cameraLostRef.current) return;
+      cameraLostRef.current = false;
+      cameraLostReasonRef.current = null;
+      const startedAt = cameraLostAtRef.current;
+      cameraLostAtRef.current = null;
+      setCameraLost(false);
+      void queueRef.current?.pushImmediate(
+        "camera_restored",
+        { outageMs: startedAt !== null ? Date.now() - startedAt : 0 } satisfies CameraRestoredDetail,
+      );
+    }
+
+    function onEnded(): void {
+      reportLost("ended");
+    }
+    function onMute(): void {
+      reportLost("muted");
+    }
+    function onUnmute(): void {
+      // A `mute`/`unmute` pair is the browser's own signal for a track that
+      // stayed open throughout — a stream `devicechange` reconnected (the
+      // `ended` case below) never unmutes, it only ever ends.
+      if (cameraLostReasonRef.current === "muted") reportRestored();
+    }
+
+    const tracks = cameraStream.getVideoTracks();
+    tracks.forEach((track) => {
+      track.addEventListener?.("ended", onEnded);
+      track.addEventListener?.("mute", onMute);
+      track.addEventListener?.("unmute", onUnmute);
+    });
+
+    // The unplug's own return trip. A real `MediaStreamTrack` never leaves
+    // `ended` once it arrives there — there is no event this file, or any
+    // file, can listen for on the dead track itself — so the only way back
+    // is a fresh `getUserMedia`. `devicechange` is the browser's own signal
+    // that a camera just appeared or disappeared, not a guess dressed up as
+    // a poll.
+    function onDeviceChange(): void {
+      if (!cameraLostRef.current || cameraLostReasonRef.current !== "ended") return;
+      void acquireCamera().then((result) => {
+        if (result.ok) reportRestored();
+        // Q2: still gone. The next `devicechange` (or the next sample
+        // tick, for a covered lens discovered later) tries again.
+      });
+    }
+    navigator.mediaDevices?.addEventListener?.("devicechange", onDeviceChange);
+
+    // Review Focus 3 — a covered lens, not an ended track: the track stays
+    // `live` and fires nothing at all while every frame reads as a covered
+    // lens, which `onended`/`onmute` can never see. Skipped entirely while
+    // lost for a reason this sample cannot speak to (`ended`/`muted`) —
+    // drawing from a genuinely dead track proves nothing either way, and
+    // only `onDeviceChange`/`onUnmute` above are the real signal for those.
+    const sampleTimer = setInterval(() => {
+      if (cameraLostRef.current && cameraLostReasonRef.current !== "covered") return;
+      void isCameraLensCovered(cameraStream).then((covered) => {
+        if (covered === null) return; // Q2: an unreadable frame is not a violation.
+        if (covered) reportLost("covered");
+        else reportRestored();
+      });
+    }, CAMERA_SAMPLE_MS);
+
+    return () => {
+      tracks.forEach((track) => {
+        track.removeEventListener?.("ended", onEnded);
+        track.removeEventListener?.("mute", onMute);
+        track.removeEventListener?.("unmute", onUnmute);
+      });
+      navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
+      clearInterval(sampleTimer);
+    };
+    // `cameraStream` is fixed for the life of one attempt (the queue
+    // effect's own comment) — a changed value is a new attempt and a
+    // remount with a fresh `attemptId`, not a dependency this effect reacts
+    // to mid-attempt.
+  }, [cameraStream]);
+
   // ---- copy, paste and the context menu (`Q9`, 7c Task 5) ------------------
 
   /** `Q9`: the same honesty as the watermark below — `preventDefault()` on
@@ -476,7 +633,7 @@ export function ProctoringLayer({
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 
   const fullscreenBlocked = fullscreenEnforced && !inFullscreen;
-  const overlayOpen = fullscreenBlocked || leaveWarning !== null;
+  const overlayOpen = cameraLost || fullscreenBlocked || leaveWarning !== null;
 
   useEffect(() => {
     // `ProctoringLayer` mounts as `Runner`'s sibling, never its parent
@@ -523,10 +680,19 @@ export function ProctoringLayer({
           </span>
         )}
       </div>
-      {/* Fullscreen wins the floor over a leave warning — it is indefinite
-          and still wrong; the leave warning is already resolved (the
-          candidate is back) and only needs acknowledging. */}
-      {fullscreenBlocked ? (
+      {/* The camera wins the floor over everything else — `Q2`'s one
+          deliberate `AG1` exception, and the only one of the three with no
+          control at all: no "Enter fullscreen", no "Continue", nothing a
+          candidate can press to make it go away. Fullscreen still wins over
+          a leave warning — it is indefinite and still wrong; the leave
+          warning is already resolved (the candidate is back) and only
+          needs acknowledging. */}
+      {cameraLost ? (
+        <ProctoringOverlay
+          title="Camera connection lost"
+          message="This test requires a working camera for the whole attempt. Reconnect or uncover your camera — your answers and the timer are unaffected while this is up, and it clears itself the moment the camera is back."
+        />
+      ) : fullscreenBlocked ? (
         <ProctoringOverlay
           title="Fullscreen required"
           message="This test runs in fullscreen. Your answers and the timer are unaffected while this is up — select Enter fullscreen to continue."
