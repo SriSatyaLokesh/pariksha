@@ -28,6 +28,11 @@
 // `startStrictAttempt` harness records 55-65 uploads when the interval is
 // on, so a reason the zero-interval assertion could pass "for free" (a
 // harness that never records anything) is ruled out by the test before it.
+//
+// **Fix pass 1, finding 2.** The hidden-tab test's own expected count
+// changed — see its doc comment. Catching up on return now costs one
+// capture, not the whole missed backlog; the clean 60-minute case above is
+// unaffected and still asserts the original 55-65.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen } from "@testing-library/react";
@@ -295,15 +300,38 @@ describe("the capture schedule (AC-20)", () => {
     expect(intervals.length).toBeLessThanOrEqual(65);
   });
 
-  // Review Focus 4 — a throttled hidden tab must not under-count.
-  it("keeps the count inside the window when the tab is hidden for twenty minutes", async () => {
+  // Review Focus 4 — a throttled hidden tab must not under-count the
+  // minutes it WAS watching, and (fix pass 1, finding 2; Task 4 review
+  // finding A, ruled) must not pretend to have watched the twenty it
+  // missed either.
+  //
+  // The brief's own prose ("one capture on return, not twenty") and this
+  // test's original assertion (`toBeGreaterThanOrEqual(55)`) could not both
+  // hold: a true single-capture catch-up lands near 41, not 55-65 — the
+  // old assertion only passed because the implementation drained the WHOLE
+  // missed backlog (~20 captures in a burst right after return) rather
+  // than taking one. Ruled: one capture on return is correct. Manufacturing
+  // ~20 photographs of the moment the tab came back does not create
+  // coverage for the twenty minutes nobody was watching — it fills that
+  // gap with evidence of the wrong moment, and `visibility_hidden` (a
+  // counted violation on every hide) already records the gap honestly.
+  // 7e's `expectedSnapshots`/`observed` mechanism is the designed place to
+  // surface the resulting shortfall; this test does not reach 7e, so it
+  // only pins the count a fixed catch-up now produces: ~40 (40 real
+  // minutes watched at a 60 s cadence, plus the one catch-up shot) —
+  // nowhere near `AC-20`'s 55-65 floor, which describes an attempt that
+  // was actually watched for sixty minutes and is deliberately NOT widened
+  // here (`AG5`) to cover one that was not.
+  it("takes one catch-up snapshot on return, not a backlog burst, after a twenty-minute hide", async () => {
     const uploads = captureUploads();
     await startStrictAttempt({ snapshotIntervalSeconds: 60 });
     await hideTabFor(20 * 60 * 1000); // timers throttled, wall clock advances
     await act(async () => {
       await vi.advanceTimersByTimeAsync(40 * 60 * 1000);
     });
-    expect(uploads().filter((u) => u.reason === "interval").length).toBeGreaterThanOrEqual(55);
+    const intervals = uploads().filter((u) => u.reason === "interval").length;
+    expect(intervals).toBeGreaterThanOrEqual(38);
+    expect(intervals).toBeLessThanOrEqual(42);
   });
 
   // Q11b — off means no timer.
