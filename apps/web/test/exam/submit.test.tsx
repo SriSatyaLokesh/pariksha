@@ -17,6 +17,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type {
@@ -90,6 +91,8 @@ const paper: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 const landing: LandingPayload = {

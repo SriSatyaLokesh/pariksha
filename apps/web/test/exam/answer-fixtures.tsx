@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import type { AttemptPaper } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
@@ -135,6 +136,10 @@ export const examPaper: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  // These answer screens never touch proctoring; `off` is `paperFrom`'s
+  // own real resolution of a test with no `proctoring` block at all.
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 export const landingPayload: LandingPayload = {

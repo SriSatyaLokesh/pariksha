@@ -549,6 +549,19 @@ it("allowCalculator comes from proctoring.overrides, in both directions", async 
   expect((await paperOf(await startFresh("paper"))).allowCalculator).toBe(false);
 });
 
+// Task 5 follow-up round: the bug this guards against is `proctoring`
+// silently missing from `/start`'s payload, the way `violations` legitimately
+// does. A bare `toBeDefined()` would pass against `{}`, so the control below
+// is positive — `sets5`'s own `proctoring.overrides.allow_calculator: true`
+// has to survive resolution into the object this route actually ships.
+it("/start's payload carries proctoring, resolved from the version's settings", async () => {
+  const paper = await paperOf(await startFresh("sets5"));
+  expect(paper.proctoring.allowCalculator).toBe(true);
+  // A just-minted attempt's count can only ever be zero (`GET /attempt`
+  // is the one route that overrides it with a real one, on resume).
+  expect(paper.violations).toBe(0);
+});
+
 // --- T-14: how many attempts, and when ---------------------------------
 
 it("T-14: a second attempt on a one-attempt test is 409 before any layout is computed", async () => {

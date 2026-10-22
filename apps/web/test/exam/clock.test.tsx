@@ -19,6 +19,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
@@ -417,6 +418,8 @@ const resumedPaper: AttemptPaper = {
   allowCalculator: false,
   serverNow: 1_760_000_000_000,
   submittedAt: null,
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 /** A `per_section` paper of two typable questions per section, one

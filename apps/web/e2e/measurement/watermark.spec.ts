@@ -22,13 +22,6 @@
 // attempts with two different `watermark` values, so it keeps a small local
 // copy rather than reach into a helper this task does not own.
 //
-// ONE PRE-EXISTING GAP, found running this file and NOT a Task 5 defect:
-// `openAttempt` below reloads once after registering, because a freshly
-// started attempt's first paint mounts no `ProctoringLayer` at all —
-// confirmed against Task 4's own untouched `e2e/proctoring.spec.ts`, which
-// fails the identical way on a commit this task's diff never reaches. See
-// `openAttempt`'s own comment for the root cause.
-//
 // Placed in `measurement/` for the reason every file here gives
 // (`field-rows.spec.ts`'s header, at length): Playwright runs files in
 // sorted-path order under `workers: 1`, and anything sorting before
@@ -110,37 +103,13 @@ async function seedWatermarkTest(
   return { workspaceSlug: slug, testSlug, accessCode };
 }
 
-/**
- * Landing → access code → (no registration fields) → the runner → **one
- * reload**.
- *
- * A pre-existing gap, found running this file and confirmed against Task
- * 4's own untouched `e2e/proctoring.spec.ts` (same symptom, same root
- * cause, on a commit this task's diff never reaches): `POST /start`'s own
- * response carries no `proctoring` field (`routes/exam.tsx`'s own doc
- * comment on the mount gate says so), and nothing in `ExamApp` re-fetches
- * one after a fresh start — only `boot()`'s single `client.resume()` call
- * does, and that runs once, before `start` is ever called. So a candidate's
- * FIRST paint after registering mounts no `ProctoringLayer` at all: no
- * watermark, no fullscreen enforcement, nothing — until something reloads
- * the page and `boot()` runs again, this time against `GET /attempt`,
- * which does carry it.
- *
- * Out of this task's file list (`routes/exam.tsx` is not in it) and not
- * this task's defect to fix blind in the same diff that reports it. The
- * reload below is what every real candidate who is not on that exact first
- * paint already does — this file measures the shape `D8` actually claims,
- * on the attempt as a browser really renders it a moment later, rather than
- * leaving the measurement unrunnable behind a gap Task 5 did not open.
- */
+/** Landing → access code → (no registration fields) → the runner. */
 async function openAttempt(page: Page, seeded: SeededAttempt): Promise<void> {
   await page.goto(`/${seeded.workspaceSlug}/${seeded.testSlug}`);
   await page.getByRole("button", { name: /^start/i }).click();
   await page.getByLabel("Access code").fill(seeded.accessCode);
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /register and start/i }).click();
-  await expect(page.getByRole("navigation", { name: /question palette/i })).toBeVisible();
-  await page.reload();
   await expect(page.getByRole("navigation", { name: /question palette/i })).toBeVisible();
 }
 

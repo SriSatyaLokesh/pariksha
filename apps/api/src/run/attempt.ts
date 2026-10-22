@@ -230,16 +230,20 @@ export interface AttemptPaper {
   serverNow: number;
   submittedAt: number | null;
   /**
-   * Phase 7c Task 1 (`Q7a`). **Optional, not missing by accident**: only
-   * `GET /attempt` carries these two — `/start`'s mint response does not,
-   * because a just-minted attempt's violation count is always zero and
-   * computing it there would spend a read for a number that can never be
-   * anything else. `GET /attempt`'s handler always sets both; a reader
-   * resuming a fresh attempt (the only caller that sees `/start`'s
-   * response) should not rely on either being present.
+   * Phase 7c Task 1 (`Q7a`), fixed in the Task 5 follow-up round: **both
+   * required, set by `paperFrom` for every caller**. `proctoring` is
+   * `resolvedProctoringOf(settings)` — a pure function of the `settings`
+   * `paperFrom` already receives, so resolving it costs nothing extra and
+   * there is no excuse for a caller to go without it; a candidate whose
+   * first paint skips it sits unproctored until something reloads the
+   * page. `violations` is `0` from `paperFrom`, because that is the only
+   * value a just-minted attempt can have and counting it there would
+   * spend a read for a constant. `GET /attempt` alone overrides it with
+   * `countViolations`'s authoritative figure on resume — see that
+   * handler.
    */
-  proctoring?: ResolvedProctoring;
-  violations?: number;
+  proctoring: ResolvedProctoring;
+  violations: number;
 }
 
 // --- reading the version's settings ------------------------------------
@@ -554,6 +558,14 @@ export function paperFrom(input: {
     allowCalculator: allowCalculator(input.settings),
     serverNow: input.now,
     submittedAt: input.submittedAt,
+    // `resolvedProctoringOf` is a pure read of `input.settings`, already
+    // fetched for `timingOf` above — free for every caller, which is why
+    // this is set here rather than left to `/start` and `GET /attempt`
+    // separately. `violations` is `0`: the only value a paper drawn from
+    // scratch can hold: `GET /attempt` is the one caller that overrides it
+    // with a real count, after this call returns.
+    proctoring: resolvedProctoringOf(input.settings),
+    violations: 0,
   };
 }
 
@@ -842,20 +854,21 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     const responses: Record<string, ResponseValue | null> = {};
     for (const row of rows) responses[row.questionId] = row.value as ResponseValue | null;
 
-    // Phase 7c Task 1: `Q7a`'s authoritative count, the same figure
+    // Phase 7c Task 1 (`Q7a`), fixed in the Task 5 follow-up round:
+    // `violations` is the authoritative count, the same figure
     // `POST /attempt/events` answers with — a client-side tally resets on
     // reload, so this read is the candidate's only trustworthy source for
-    // "Warning 2 of 5" after one. `proctoring` is the resolved object
-    // (`Q1`: never the raw overrides, never a branch on `profile`) — safe
-    // to ship here because this route is `attempt`-authority, unlike the
-    // public landing payload (`LandingPayload.proctoring` stays sentences
-    // only).
+    // "Warning 2 of 5" after one. `proctoring` needs no separate read
+    // here: `paperFrom` below resolves it from `attempt.settings` for
+    // every caller now, and a second call here would answer the same
+    // object (`Q1`: never the raw overrides, never a branch on `profile`).
     const violations = await countViolations(deps.db, attempt.workspaceId, attempt.attemptId);
-    const proctoring = resolvedProctoringOf(attempt.settings);
 
-    // Typed against `AttemptPaper` itself, not an inline object literal —
-    // the two optional fields below are exactly the ones `/start` leaves
-    // out, so this is the one place that always sets them.
+    // Typed against `AttemptPaper` itself, not an inline object literal.
+    // `violations` is the one field this still overrides: `paperFrom` sets
+    // it to `0`, correct for a just-minted paper, but this call is never
+    // that — an attempt reaching `GET /attempt` already exists, and its
+    // real count is the whole point of resuming (`Q7a`).
     const payload: AttemptPaper = {
       ...paperFrom({
         // Task 8's seed, off the rows this read already returned — so it
@@ -873,7 +886,6 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         responses,
         now,
       }),
-      proctoring,
       violations,
     };
     return c.json(payload);

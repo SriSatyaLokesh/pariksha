@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { CONSENT_REQUIRED_MESSAGE, type RegistrationFormSpec } from "@pariksha/core";
+import { CONSENT_REQUIRED_MESSAGE, PROCTORING_DEFAULTS, type RegistrationFormSpec } from "@pariksha/core";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import {
   BOT_CHECK_MESSAGE,
@@ -76,6 +76,8 @@ const paper: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 const formPayload: RegistrationPayload = { consent: null, form };

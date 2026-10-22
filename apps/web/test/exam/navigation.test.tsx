@@ -20,6 +20,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { Runner, lockedIndices, paletteStates } from "../../src/components/exam/Runner";
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
@@ -67,6 +68,8 @@ const base: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 const paperWith = (over: Partial<AttemptPaper>): AttemptPaper => ({ ...base, ...over });

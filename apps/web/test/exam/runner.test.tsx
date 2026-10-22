@@ -5,6 +5,7 @@ import { axe } from "jest-axe";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, resolve } from "node:path";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { declarations, parseRuleBodies, readResolvedCss } from "../css-chain";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
 import { Runner, firstOfNextSection } from "../../src/components/exam/Runner";
@@ -75,6 +76,8 @@ const paper: AttemptPaper = {
   allowCalculator: true,
   serverNow: NOW,
   submittedAt: null,
+  proctoring: PROCTORING_DEFAULTS.off,
+  violations: 0,
 };
 
 type Props = ComponentProps<typeof Runner>;
