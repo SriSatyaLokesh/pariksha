@@ -111,6 +111,16 @@ it("a test whose window is over is still reachable, as closed", async () => {
   expect(await json("/api/v1/run/alpha/shut")).toMatchObject({ state: "closed" });
 });
 
+// #179: `buildChecklist`'s blocking `timing_missing` row refuses this at
+// the publish route, so the only way here is the direct write the fixture
+// uses. `durationMinutes: timing.duration_minutes ?? 0` used to answer this
+// request with a 0-minute test; failing loud is the fix (`run.ts:138`).
+it("#179: a published version with no duration fails loud rather than advertising a 0-minute test", async () => {
+  const res = await app.request("/api/v1/run/alpha/no-duration-landing");
+  expect(res.status).toBe(500);
+  expect((await res.json()).error.code).toBe("internal_error");
+});
+
 it("S-10: the landing payload names no question, key, code or internal id", async () => {
   const text = await (await app.request("/api/v1/run/alpha/aptitude")).text();
   for (const leak of ["LOG-001", "qst_", "wsp_", "tst_", "ver_", "OPENSESAME", "access_code"]) {

@@ -152,10 +152,22 @@ function landingPayload(test: PublishedTest, now: number): LandingPayload {
     timeLimitMinutes: section.time_limit_minutes ?? null,
   }));
 
+  // #179: `buildChecklist`'s `timing_missing` row now refuses to publish any
+  // version with no duration (or `duration_minutes < 1`), so a *published*
+  // version's duration is never missing here — `?? 0` used to let this very
+  // route advertise the 0-minute test #179 closed the publish gate against.
+  // Failing loud on the one route that could still be handed a version from
+  // before that gate existed (a direct write, never the publish route) is
+  // truer than silently printing a number nobody chose.
+  const durationMinutes = timing.duration_minutes;
+  if (durationMinutes === undefined || durationMinutes < 1) {
+    throw new Error("unreachable: #179 refuses to publish a version with no duration");
+  }
+
   return {
     name: test.name,
     description: test.description,
-    durationMinutes: timing.duration_minutes ?? 0,
+    durationMinutes,
     questionCount: sections.reduce((total, section) => total + section.questionCount, 0),
     sections,
     // `rules` is not a field of `pariksha/test@1`. The one rule a candidate
