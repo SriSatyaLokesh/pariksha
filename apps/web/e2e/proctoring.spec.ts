@@ -112,14 +112,24 @@ async function seedProctoringTest(request: APIRequestContext): Promise<SeededAtt
   return { workspaceSlug: "proctoring-e2e", testSlug, accessCode };
 }
 
-/** Landing → access code → (no registration fields) → the runner. */
+/**
+ * Landing → access code → (no registration fields) → the runner.
+ *
+ * Waits for the fullscreen dialog, not the question palette: `seedProctoringTest`
+ * always turns `require_fullscreen` on, and `ProctoringLayer` now mounts on
+ * the attempt's first paint (Task 5's fix), so the gate is already covering
+ * the runner — `inert` and `aria-hidden` (`ProctoringLayer.tsx`'s own
+ * `setRunnerHidden`) — the instant this resolves. The palette is still
+ * there underneath (P-03: the runner stays mounted), just not in the
+ * accessibility tree a `getByRole` query reads until fullscreen is entered.
+ */
 async function openAttempt(page: Page, seeded: SeededAttempt): Promise<void> {
   await page.goto(`/${seeded.workspaceSlug}/${seeded.testSlug}`);
   await page.getByRole("button", { name: /^start/i }).click();
   await page.getByLabel("Access code").fill(seeded.accessCode);
   await page.getByRole("button", { name: /continue/i }).click();
   await page.getByRole("button", { name: /register and start/i }).click();
-  await expect(page.getByRole("navigation", { name: /question palette/i })).toBeVisible();
+  await expect(page.getByRole("alertdialog")).toBeVisible();
 }
 
 test("AC-18: fullscreen exit and a window-leave both reach the overlay, and the server counts both", async ({
