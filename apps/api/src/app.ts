@@ -26,6 +26,7 @@ import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
+import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
 import type { EmailSender } from "./email/adapter.js";
 
@@ -405,16 +406,22 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `listResponses`. The paper is not rebuilt — it is the column
   // `/start` pinned — so this number is flat in the size of the paper.
   //
-  // Phase 6 Task 9 (#73, P6.9) moved it from 2 to **3**, exactly as this
-  // line warned it would. There is no sweeper in this phase, so the first
-  // read past `deadline_at + late_sync_grace_seconds` is what materialises
-  // the timeout submission (`C-07`), and that is one `finishAttempt`
-  // write. An ordinary resume inside the window still costs 2, and so
-  // does every later read of the attempt it closed — the write happens
-  // once, ever (`WHERE submitted_at IS NULL`). 3 is the ceiling, measured
-  // on exactly that path in `test/run/clock.test.ts`, under the same "pin
-  // the most expensive path" rule every number above follows.
-  "/api/v1/run/attempt": 3,
+  // Phase 6 Task 9 (#73, P6.9) moved it from 2 to 3, exactly as this line
+  // warned it would. There is no sweeper in this phase, so the first read
+  // past `deadline_at + late_sync_grace_seconds` is what materialises the
+  // timeout submission (`C-07`), and that is one `finishAttempt` write. An
+  // ordinary resume inside the window still costs 2, and so does every
+  // later read of the attempt it closed — the write happens once, ever
+  // (`WHERE submitted_at IS NULL`).
+  //
+  // Phase 7c Task 1 moved it from 3 to **4**: `Q7a`'s authoritative
+  // violation count (`countViolations`) is one more read, on every path,
+  // because a candidate's "Warning 2 of 5" has to be right whether or not
+  // this read also happens to be the one that closes the attempt. 4 is
+  // the ceiling, measured on the timeout-materialising path in
+  // `test/run/clock.test.ts`, under the same "pin the most expensive
+  // path" rule every number above follows.
+  "/api/v1/run/attempt": 4,
   // Phase 6 Task 8 (#72, P6.8): saving one answer — the hot path, and the
   // one route in this product a candidate calls hundreds of times.
   // Measured at **2** in `test/run/answer.test.ts`: the attempt join the
@@ -459,6 +466,15 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // A number above 6 means the bank is being read per question, which is
   // the failure this line exists to catch on a 50-subrequest ceiling.
   "/api/v1/run/attempt/submit": 6,
+  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
+  // **4** in `test/run/events.test.ts`'s own counting test: the attempt
+  // join the cookie resolves through, the `attempt_events` rate token,
+  // `appendEvents`'s one batched insert (capped at 10 rows a request, so
+  // this number is flat in how many events the request actually carries),
+  // and `countViolations`'s one read for the response's authoritative
+  // count. An empty `events` array costs one less — `appendEvents` is a
+  // no-op on it — so 4 is the ceiling, not the floor.
+  "/api/v1/run/attempt/events": 4,
   // `C-09`, the return visit. `/code` is **4**: the address limiter, its
   // sweep, the attempt lookup and the token insert — plus the message
   // itself, which is not a subrequest in this count unless `deps.http`
@@ -690,6 +706,11 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // bounded by the one row the cookie resolved, and neither takes an
   // identifier of any kind in its body.
   "POST /api/v1/run/attempt/submit": "attempt",
+  // Phase 7c Task 1 (`Q7`): the proctoring event ingest. `attempt` for the
+  // same reason `/answer` is — the only thing a candidate's browser holds
+  // past `/start` is the attempt cookie, and the row it writes is scoped
+  // to the attempt that cookie names.
+  "POST /api/v1/run/attempt/events": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",
@@ -793,6 +814,14 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 7c Task 1: mounted **before** `runRoutes`, and that is
+  // load-bearing in exactly the way `attemptRoutes`' own position inside
+  // `runRoutes` is (see that file's header) — `POST /attempt/events` is
+  // two path segments, the same shape as `GET /:workspaceSlug/:testSlug`,
+  // and Hono tries handlers in registration order. Mounted after, the
+  // landing route's catch-all would answer first and this route would
+  // never be reached.
+  app.route("/api/v1/run", proctoringRoutes(deps));
   app.route("/api/v1/run", runRoutes(deps));
 
   return app;

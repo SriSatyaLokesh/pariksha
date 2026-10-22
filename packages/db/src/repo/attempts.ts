@@ -4,6 +4,7 @@
 // 0002 budgets it at one D1 write plus at most one R2 call, so `upsertResponse`
 // is a single statement and nothing here loops a query over questions.
 
+import { isViolation, type ProctoringEventType } from "@pariksha/core";
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
@@ -425,6 +426,28 @@ export const appendEvents = scoped(
       params,
     );
     return { written: input.events.length };
+  },
+);
+
+/**
+ * `Q7a`/`Q2`: the server-side violation count a candidate's response is
+ * judged by — every stored event whose type `isViolation()` admits, for
+ * this attempt. One statement, reading only the `type` column, so a long
+ * attempt's event history is never pulled over the wire for its own sake.
+ *
+ * `type` is stored as `string` — `appendEvents` writes whatever its caller
+ * sends — but every row the ingest route writes was validated against
+ * `PROCTORING_EVENTS` before the insert, so the cast here is a boundary
+ * cast on trusted data, not a narrowing of what the column can hold.
+ */
+export const countViolations = scoped(
+  "countViolations",
+  async (db: DbClient, workspaceId: string, attemptId: string): Promise<number> => {
+    const rows = await db.query<{ type: string }>(
+      "SELECT type FROM event WHERE workspace_id = ? AND attempt_id = ?",
+      [workspaceId, attemptId],
+    );
+    return rows.filter((row) => isViolation(row.type as ProctoringEventType)).length;
   },
 );
 

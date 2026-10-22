@@ -47,6 +47,7 @@ import {
   appendAudit,
   countAttemptsForCandidate,
   countAttemptsForVersion,
+  countViolations,
   consumeAuthToken,
   createAttempt,
   getCandidateById,
@@ -68,6 +69,7 @@ import {
   type NavigationMode,
   type PassageGroup,
   type Question,
+  type ResolvedProctoring,
   type ResponseValue,
   type Section,
   type SetAssignment,
@@ -238,8 +240,10 @@ export interface AttemptPaper {
 // below is to `Test["proctoring"]` — the real shape this package already
 // models it as — rather than a local interface re-describing one field
 // of it.
-const allowCalculator = (settings: unknown): boolean =>
-  resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring).allowCalculator;
+const resolvedProctoringOf = (settings: unknown): ResolvedProctoring =>
+  resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring);
+
+const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(settings).allowCalculator;
 
 // --- refusals ----------------------------------------------------------
 
@@ -818,8 +822,20 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     const rows = await listResponses(deps.db, attempt.workspaceId, attempt.attemptId);
     const responses: Record<string, ResponseValue | null> = {};
     for (const row of rows) responses[row.questionId] = row.value as ResponseValue | null;
-    return c.json(
-      paperFrom({
+
+    // Phase 7c Task 1: `Q7a`'s authoritative count, the same figure
+    // `POST /attempt/events` answers with — a client-side tally resets on
+    // reload, so this read is the candidate's only trustworthy source for
+    // "Warning 2 of 5" after one. `proctoring` is the resolved object
+    // (`Q1`: never the raw overrides, never a branch on `profile`) — safe
+    // to ship here because this route is `attempt`-authority, unlike the
+    // public landing payload (`LandingPayload.proctoring` stays sentences
+    // only).
+    const violations = await countViolations(deps.db, attempt.workspaceId, attempt.attemptId);
+    const proctoring = resolvedProctoringOf(attempt.settings);
+
+    return c.json({
+      ...paperFrom({
         // Task 8's seed, off the rows this read already returned — so it
         // is free, and so a browser that has lost its counter cannot
         // restart below what the server holds.
@@ -835,7 +851,9 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         responses,
         now,
       }),
-    );
+      proctoring,
+      violations,
+    });
   });
 
   /**

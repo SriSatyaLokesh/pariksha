@@ -828,6 +828,8 @@ it("S-07: every anti-abuse ceiling and window is pinned to a literal", () => {
     email_code_address: { limit: 5, windowMs: 600_000 },
     result_code: { limit: 20, windowMs: 600_000 },
     short_link: { limit: 300, windowMs: 60_000 },
+    // Phase 7c Task 1 (`Q7c`): the proctoring event ingest, per attempt.
+    attempt_events: { limit: 120, windowMs: 300_000 },
   });
 });
 
