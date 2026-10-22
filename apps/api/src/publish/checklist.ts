@@ -18,7 +18,14 @@
 // the publish checklist is where emptiness becomes an error rather than a
 // nag").
 
-import { describeAllowlists, validateTest, type ImportIssue, type Question, type Test } from "@pariksha/core";
+import {
+  describeAllowlists,
+  resolveProctoring,
+  validateTest,
+  type ImportIssue,
+  type Question,
+  type Test,
+} from "@pariksha/core";
 import type { StoredSection, TestDocumentBody, TestRow } from "@pariksha/db";
 
 export type ChecklistSeverity = "blocking" | "advisory";
@@ -58,6 +65,21 @@ export interface ChecklistInput {
 }
 
 const DAY_MS = 86_400_000;
+
+// Phase 7a Task 6 (`Q11a`): one JPEG snapshot's size, publicly stated
+// already at `apps/web/src/sections/signal/Tail.tsx:125` ("320×240 JPEG
+// snapshots, about 25 KB each") — not a guess invented for this row.
+// `KB_PER_MB` is decimal (SI), not the binary 1024: it is the only
+// conversion that reproduces both worked examples with no rounding fudge
+// — 180 min at a 15 s interval is exactly 18 MB, and the design spec's
+// 60 min at 60 s is exactly 1.5 MB. Binary MiB rounds one of the two to
+// a different figure.
+const SNAPSHOT_KB = 25;
+const KB_PER_MB = 1000;
+// `Q1c`: the cost row fires once a candidate's snapshots cross 200 images.
+// Strict's own default (60 s interval over a 60-minute test = 60 images)
+// stays under it and stays silent — that silence is intended, not a gap.
+const SNAPSHOT_COST_THRESHOLD_IMAGES = 200;
 
 /**
  * How `validateTest`'s issues become rows. Matched in order on `field`,
@@ -401,6 +423,95 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
       severity: "advisory",
       field: "access.candidate_list",
       message: `${input.candidates.withoutSet} of ${input.candidates.total} candidates have no set, and cannot start`,
+    });
+  }
+
+  // Phase 7a Task 6 (`Q1c`): proctoring's four rows. All four are
+  // advisory — Phase 7 adds no blocking row. `resolveProctoring` is the
+  // one reader every Phase 7 consumer resolves settings through (`Q1`),
+  // so this reads it the same way the candidate-side gates do rather than
+  // branching on `profile` itself.
+  const proctoring = resolveProctoring(settings.proctoring);
+
+  // Strict's whole point is a camera-observed candidate; without one it
+  // enforces fullscreen and watermarking but watches nothing. The row that
+  // was going to block instead — a `lock` with no way to reach the
+  // organiser — stays advisory for a narrower reason below.
+  //
+  // This is the one place in this branch that reads `profile`, and it is
+  // deliberate, not a crack in `Q1`. `Q1`'s ban is on a reader deciding
+  // what to *enforce* by asking "which profile is this?" instead of
+  // asking `resolveProctoring`; this row is advice about the organiser's
+  // *selection* — "you chose the preset whose defining control you then
+  // switched off" — which cannot be said at all without naming the
+  // preset they picked. It is not a licence for an enforcement reader to
+  // do the same: nothing downstream of this row may branch on `profile`
+  // to decide what a candidate is held to.
+  if (proctoring.profile === "strict" && !proctoring.requireCamera) {
+    rows.push({
+      id: "proctoring_strict_no_camera",
+      severity: "advisory",
+      field: "proctoring.overrides.require_camera",
+      message: "strict without a camera requirement observes nothing a candidate can see",
+    });
+  }
+
+  // `Q11b`: without `require_camera`, `getUserMedia` for video is never
+  // called at all — no permission prompt, no indicator, no capture. An
+  // organiser who asked for an identity photo or periodic snapshots with
+  // the camera off has asked for something nothing can take, and
+  // `proctoringRequirements` (`@pariksha/core`) already refuses to promise
+  // it to the candidate for the same reason. This is where the organiser
+  // is told, since nothing in the candidate-facing sentences can say it.
+  if (!proctoring.requireCamera && (proctoring.identityPhoto || proctoring.snapshotIntervalSeconds > 0)) {
+    rows.push({
+      id: "proctoring_capture_without_camera",
+      severity: "advisory",
+      field: "proctoring.overrides.require_camera",
+      message: "images or an identity photo are requested but there is no camera to take them, so nothing will be captured",
+    });
+  }
+
+  // `Q11`/`Q11a`: states the organiser's own arithmetic back to them before
+  // they pay for it. Images are the snapshot interval's count alone — no
+  // +1 for the identity photo, despite Step 3's prose in the brief; the
+  // brief's own two worked assertions (720/18 MB/720 for 180 min at 15 s,
+  // and the design spec's ≈60/≈1.5 MB/≈60 for 60 min at 60 s) both land
+  // without that extra photo, so it sits inside the "≈" instead. Uploads
+  // are named beside megabytes (`Q11`) because on the deployment target
+  // requests, not bytes, are the ceiling that actually stops a test.
+  if (proctoring.snapshotIntervalSeconds > 0) {
+    const durationMinutes = settings.timing?.duration_minutes ?? 0;
+    const images = Math.floor((durationMinutes * 60) / proctoring.snapshotIntervalSeconds);
+    if (images > SNAPSHOT_COST_THRESHOLD_IMAGES) {
+      // Rounded to one decimal place and let `${}` drop a trailing ".0" —
+      // plain JS numbers never carry one, so 18.0 prints as "18" and 1.46…
+      // prints as "1.5".
+      const megabytes = Math.round(((images * SNAPSHOT_KB) / KB_PER_MB) * 10) / 10;
+      rows.push({
+        id: "proctoring_snapshot_cost",
+        severity: "advisory",
+        field: "proctoring.overrides.snapshot_interval_seconds",
+        message:
+          `this interval costs ≈ ${images} images · ≈ ${megabytes} MB · ≈ ${images} uploads per candidate` +
+          " — uploads are the free-tier ceiling that actually stops a test, not the megabytes",
+      });
+    }
+  }
+
+  // This was going to be the one blocking row in Phase 7 — a `lock` has no
+  // way out but an organiser opening the attempt, and an organiser who
+  // cannot be reached is a candidate stuck for good. It stays advisory
+  // because nothing in the schema names where to reach that organiser: no
+  // support-email, reply-to or from-address field exists anywhere yet, and
+  // inventing one belongs to whoever owns organiser contact details, not
+  // this task.
+  if (proctoring.violationAction === "lock") {
+    rows.push({
+      id: "proctoring_lock_without_recourse",
+      severity: "advisory",
+      field: "proctoring.overrides.violation_action",
+      message: "a locked attempt clears only when an organiser opens it — phase 8 adds the monitor",
     });
   }
 

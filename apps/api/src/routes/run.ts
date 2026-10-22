@@ -33,7 +33,10 @@ import {
   NAVIGATION_CONSEQUENCE,
   normaliseEmail,
   normaliseUniqueValue,
+  proctoringRequirements,
+  resolveProctoring,
   type AccessMode,
+  type ProctoringProfile,
   type Section,
   type TestAccess,
   type TestTiming,
@@ -61,11 +64,6 @@ import { resultRoutes } from "../run/result.js";
 import { clientIp, emailInDomains, ipInRanges } from "../run/net.js";
 import { identityField } from "../import/candidates.js";
 
-/** The `proctoring` block is in `schemas/test-1.json` but not modelled in
- * `@pariksha/core` ("not modelled here yet. Add each when a phase needs
- * it."), and Phase 6 needs exactly one field of it. */
-type ProctoringProfile = "off" | "standard" | "strict";
-
 export interface LandingPayload {
   name: string;
   description: string | null;
@@ -73,7 +71,15 @@ export interface LandingPayload {
   questionCount: number;
   sections: { id: string; title: string; questionCount: number; timeLimitMinutes: number | null }[];
   rules: string | null;
-  proctoring: ProctoringProfile;
+  /**
+   * The resolved requirements the runtime will enforce, never the resolved
+   * object itself: this payload is reachable by anyone holding the link,
+   * and the resolved object (with its `violationLimit`) rides
+   * `GET /api/v1/run/attempt` instead, which is `attempt`-authority
+   * (`AC-22`). `profile` is carried only for display — no reader may
+   * branch on it (`Q1`).
+   */
+  proctoring: { profile: ProctoringProfile; requirements: string[] };
   accessMode: AccessMode;
   /**
    * Whether the organiser uploaded a candidate list — so the gate's own
@@ -138,7 +144,7 @@ function landingPayload(test: PublishedTest, now: number): LandingPayload {
     primary_colour?: string;
     footer_text?: string;
   };
-  const proctoring = (test.settings as { proctoring?: { profile?: ProctoringProfile } }).proctoring;
+  const resolvedProctoring = resolveProctoring(test.settings.proctoring);
   const sections = test.sections.map((section) => ({
     id: section.id,
     title: section.title,
@@ -158,7 +164,10 @@ function landingPayload(test: PublishedTest, now: number): LandingPayload {
     // once here, in the builder and in the publish checklist, rather than
     // worded a third way.
     rules: NAVIGATION_CONSEQUENCE[timing.navigation ?? "free"],
-    proctoring: proctoring?.profile ?? "off",
+    proctoring: {
+      profile: resolvedProctoring.profile,
+      requirements: proctoringRequirements(resolvedProctoring),
+    },
     // No `access` block at all still renders a gate; which one Task 2 owns.
     accessMode: test.settings.access?.mode ?? "link_code",
     // The boolean, never the file name the organiser uploaded.

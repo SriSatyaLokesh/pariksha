@@ -1,0 +1,28 @@
+-- Phase 7a Task 3 (Q6): the two columns an attempt needs to carry an
+-- *integrity* verdict, separate from the grading verdict `flag` already
+-- carries.
+--
+-- `flag` is NOT NULL and `apps/api/src/run/submit.ts:357` already writes
+-- "scoring_blocked" into it when a `bounded.ts` refusal blocks scoring.
+-- Overloading that one column for proctoring would mean every integrity
+-- recompute risks erasing a grading state — so `integrity_flag` is its own
+-- column, and `setIntegrity` (packages/db/src/repo/attempts.ts) never
+-- touches `flag`. Nothing in this plan computes `integrity_flag`; 7e does.
+--
+-- `observed` is whether proctoring was watching this attempt at all — a
+-- different question from whether it was clean.
+--
+-- `DEFAULT 'clean'` and `DEFAULT 1` are both literal DEFAULTs, which is what
+-- SQLite requires to add a NOT NULL column with `ALTER TABLE ... ADD`
+-- (the reason 0004, 0005, 0006 and 0007 record), and they are also the
+-- right backfill: an attempt already in flight when this migration runs has
+-- raised no integrity signal yet, so "clean" and "watched" is the honest
+-- reading, not a guess standing in for missing data.
+--
+-- Two statements, not one: D1 accepts only one `ADD COLUMN` per `ALTER
+-- TABLE`, same as 0007.
+--
+-- No PRAGMA of any kind: D1 ignores every one but `defer_foreign_keys` and
+-- `no-d1-hostile-sql.test.ts` refuses the rest.
+ALTER TABLE `attempt` ADD `integrity_flag` text DEFAULT 'clean' NOT NULL;--> statement-breakpoint
+ALTER TABLE `attempt` ADD `observed` integer DEFAULT 1 NOT NULL;

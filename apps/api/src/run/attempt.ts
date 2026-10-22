@@ -63,6 +63,7 @@ import {
   assignSet,
   layoutForAttempt,
   PoolTooSmallError,
+  resolveProctoring,
   type AttemptLayout,
   type NavigationMode,
   type PassageGroup,
@@ -70,6 +71,7 @@ import {
   type ResponseValue,
   type Section,
   type SetAssignment,
+  type Test,
   type TestTiming,
 } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
@@ -229,12 +231,15 @@ export interface AttemptPaper {
 
 // --- reading the version's settings ------------------------------------
 
-interface Proctoring {
-  overrides?: { allow_calculator?: boolean };
-}
-
+// `allow_calculator` is a control under `proctoring.overrides`, and `Q1`
+// means every such control has one reader: `resolveProctoring`, never a
+// second ad-hoc path that reaches into the same key. `settings` arrives
+// `unknown` here (it is read straight off a stored row), so the narrowing
+// below is to `Test["proctoring"]` — the real shape this package already
+// models it as — rather than a local interface re-describing one field
+// of it.
 const allowCalculator = (settings: unknown): boolean =>
-  (settings as { proctoring?: Proctoring }).proctoring?.overrides?.allow_calculator ?? false;
+  resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring).allowCalculator;
 
 // --- refusals ----------------------------------------------------------
 

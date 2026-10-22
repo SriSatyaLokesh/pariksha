@@ -91,3 +91,11 @@ export * from "./permissions.js";
 // matcher is injected because a bounded one needs a host this pure package
 // does not have (#129).
 export * from "./registration.js";
+
+// Phase 7a Task 1 (`Q1`): `resolveProctoring()` turns a `profile` and its
+// overrides into one fully-populated `ResolvedProctoring`, and
+// `proctoringRequirements` (`Q1b`) turns that into the start page's plain
+// sentences. Every later Phase 7 reader — the editor, the candidate-side
+// gates, the camera, the consequences — resolves through this instead of
+// branching on `profile` itself.
+export * from "./proctoring.js";

@@ -40,7 +40,7 @@ const landingFixture: LandingPayload = {
   questionCount: 1,
   sections: [{ id: "logic", title: "Logic", questionCount: 1, timeLimitMinutes: null }],
   rules: null,
-  proctoring: "off",
+  proctoring: { profile: "off", requirements: [] },
   accessMode: "link_code",
   state: "open",
   opensAt: null,

@@ -120,10 +120,12 @@ Pick a `profile` — `off`, `standard` or `strict` — then change individual co
 | Override | Values |
 | --- | --- |
 | `desktop_only`, `require_fullscreen`, `block_copy_paste`, `watermark` | `true` / `false` |
-| `require_camera`, `identity_photo`, `face_check`, `extra_monitor_check` | `true` / `false` (Strict controls) |
-| `snapshot_interval_seconds` | ≥ 15 |
+| `require_camera`, `identity_photo`, `face_check`, `require_microphone`, `extra_monitor_check` | `true` / `false` (Strict controls) |
+| `snapshot_interval_seconds` | ≥ 0, where 0 means off — no capture timer, no uploads |
 | `violation_limit` | A count, default 5 |
 | `violation_action` | `warn_only`, `warn_then_flag`, `auto_submit`, `lock` |
+| `camera_outage_seconds` | ≥ 1, how long the camera may stay dark before the attempt is marked `high_risk` |
+| `multi_face_snapshots` | ≥ 1, consecutive multi-face snapshots before the attempt is marked `high_risk` |
 | `allow_calculator` | `true` / `false` |
 
 Browser checks deter and record; they cannot prove or prevent cheating — a second phone is invisible to all of them. Pariksha flags attempts for a human to judge and never disqualifies anyone by itself, except the `auto_submit` and `lock` actions an organiser explicitly chose.

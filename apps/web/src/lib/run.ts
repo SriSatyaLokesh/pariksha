@@ -11,11 +11,17 @@
 // `ApiClient` has and for the same reason: nothing here may need a deployed
 // Worker to be believed.
 
-import type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent } from "@pariksha/core";
+import type {
+  AccessMode,
+  FieldIssue,
+  ProctoringProfile,
+  RegistrationFormSpec,
+  TestConsent,
+} from "@pariksha/core";
 import type { AttemptPaper } from "./paper.js";
 import type { QueuedSave, SaveOutcome } from "./queue.js";
 
-export type { AccessMode, FieldIssue, RegistrationFormSpec, TestConsent };
+export type { AccessMode, FieldIssue, ProctoringProfile, RegistrationFormSpec, TestConsent };
 export type { AttemptPaper, CandidateQuestion, PaperSection } from "./paper.js";
 export type { QueuedSave, SaveOutcome, SaveState } from "./queue.js";
 
@@ -31,7 +37,9 @@ export interface LandingPayload {
   questionCount: number;
   sections: { id: string; title: string; questionCount: number; timeLimitMinutes: number | null }[];
   rules: string | null;
-  proctoring: "off" | "standard" | "strict";
+  /** The resolved requirements the runtime will enforce — `profile` is
+   *  carried only for display; no reader may branch on it (`Q1`). */
+  proctoring: { profile: ProctoringProfile; requirements: string[] };
   accessMode: AccessMode;
   state: TestState;
   opensAt: number | null;

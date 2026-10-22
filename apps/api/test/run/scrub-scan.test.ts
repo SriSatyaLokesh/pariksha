@@ -222,6 +222,25 @@ for (const r of RELEASES) {
   });
 }
 
+// Task 4: `profile` supplies defaults only, and the landing payload ships
+// the resolved requirement sentences, never the override object itself — an
+// override such as `violation_limit` would tell a candidate exactly how
+// many violations they have left before the product reacts.
+await seedTest(deps, workspaceId, {
+  name: "Strict overrides",
+  slug: "strict-overrides",
+  body: {
+    settings: {
+      timing: openWindow,
+      access: { mode: "link_code", access_code: "OPEN2" },
+      proctoring: { profile: "strict", overrides: { violation_limit: 3 } },
+    },
+    sections: [
+      { id: "only", title: "Only", shuffle_questions: false, source: { kind: "fixed", questions: [q["SNT-SINGLE"] as string] } },
+    ],
+  },
+});
+
 // One tiny, fast-expiring test for the deadline refusal.
 await seedTest(deps, workspaceId, {
   name: "Timeout",
@@ -545,6 +564,13 @@ it("a candidate's own attempt and candidate ids are present; another candidate's
   for (const sentinel of ["__OTHERCANDIDATE__", "__OTHERROLL__", "__OTHEREMAIL__"]) {
     expect(mine, sentinel).not.toContain(sentinel);
   }
+});
+
+it("ships requirements as sentences and never an override object", async () => {
+  const res = await app.request("/api/v1/run/alpha/strict-overrides");
+  const body = (await res.json()) as { proctoring: { profile: string; requirements: unknown[] } };
+  expect(body.proctoring.requirements.every((s) => typeof s === "string")).toBe(true);
+  expect(JSON.stringify(body)).not.toMatch(/violation_limit/);
 });
 
 it("the access code and the full registration form values never ride a response", () => {

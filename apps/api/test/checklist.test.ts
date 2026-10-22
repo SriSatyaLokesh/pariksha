@@ -412,6 +412,77 @@ it("every row names a field a screen can navigate to", async () => {
   }
 });
 
+// --- proctoring advisories (Phase 7a Task 6, Q1c) -----------------------
+//
+// All three are advisory — Phase 7 adds no blocking row (`Q1c`). The lock
+// row that was going to block has nowhere to send an organiser: no
+// support-email, reply-to or from-address field exists anywhere in the
+// schema yet, and inventing one belongs to whoever owns organiser contact
+// details, not this task.
+
+it("advises on Strict without a camera, and never blocks", async () => {
+  await saveDraft({ settings: { proctoring: { profile: "strict", overrides: { require_camera: false } } } });
+  const list = await rows();
+  expect(list.find((r) => r.id === "proctoring_strict_no_camera")?.severity).toBe("advisory");
+  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+});
+
+it("advises when a capture is requested with no camera to take it, and never blocks", async () => {
+  await saveDraft({
+    settings: {
+      proctoring: {
+        profile: "standard",
+        overrides: { require_camera: false, identity_photo: true },
+      },
+    },
+  });
+  const list = await rows();
+  expect(list.find((r) => r.id === "proctoring_capture_without_camera")).toMatchObject({
+    severity: "advisory",
+    field: "proctoring.overrides.require_camera",
+  });
+  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+});
+
+it("is silent about capture without a camera when nothing is asking for one", async () => {
+  await saveDraft({
+    settings: { proctoring: { profile: "standard", overrides: { require_camera: false } } },
+  });
+  expect(ids(await rows())).not.toContain("proctoring_capture_without_camera");
+});
+
+it("states images, megabytes and uploads per candidate on an expensive configuration", async () => {
+  await saveDraft({
+    settings: {
+      timing: { duration_minutes: 180, opens_at: past, closes_at: future },
+      proctoring: { profile: "strict", overrides: { snapshot_interval_seconds: 15 } },
+    },
+  });
+  const row = (await rows()).find((r) => r.id === "proctoring_snapshot_cost");
+  expect(row?.message).toMatch(/720 images.*18 MB.*720 uploads/);
+});
+
+it("is silent about cost when snapshots are off", async () => {
+  await saveDraft({
+    settings: { proctoring: { profile: "strict", overrides: { snapshot_interval_seconds: 0 } } },
+  });
+  expect(ids(await rows())).not.toContain("proctoring_snapshot_cost");
+});
+
+// This was nearly the one blocking row Phase 7 added — a `lock` has no way
+// out but an organiser opening the attempt — and is deliberately advisory
+// instead, for the reason stated above. Both halves of that ruling need a
+// row of their own: present, and never blocking.
+it("a lock with no way to reach the organiser is advisory, and never blocks", async () => {
+  await saveDraft({ settings: { proctoring: { profile: "standard", overrides: { violation_action: "lock" } } } });
+  const list = await rows();
+  expect(list.find((r) => r.id === "proctoring_lock_without_recourse")).toMatchObject({
+    severity: "advisory",
+    message: expect.stringContaining("phase 8"),
+  });
+  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+});
+
 it("measures the real subrequest cost of the checklist route, flat in candidates and sections", async () => {
   await uploadCandidates("email,set\none@ac.in,\ntwo@ac.in,\nthree@ac.in,\nfour@ac.in,\n");
 

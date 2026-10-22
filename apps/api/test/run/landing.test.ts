@@ -32,7 +32,14 @@ it("C-01: the landing payload carries everything the page shows", async () => {
       { id: "numeracy", title: "Numeracy", questionCount: 10, timeLimitMinutes: null },
       { id: "verbal", title: "Verbal", questionCount: 3, timeLimitMinutes: null },
     ],
-    proctoring: "standard",
+    proctoring: {
+      profile: "standard",
+      requirements: [
+        "This test must be taken on a desktop or laptop, not a phone or tablet.",
+        "Use a fully updated Chrome, Edge, Firefox or Safari.",
+        "The test runs in fullscreen. Leaving it is logged.",
+      ],
+    },
     accessMode: "link_code",
     timezone: "Asia/Kolkata",
     state: "open",
@@ -74,7 +81,7 @@ it("defaults a test with no window to an open one, and reports no dates", async 
     // No `access` block at all: the document makes it optional and the
     // server answers with the mode a candidate then meets.
     accessMode: "link_code",
-    proctoring: "off",
+    proctoring: { profile: "off", requirements: [] },
     timezone: "UTC",
   });
 });

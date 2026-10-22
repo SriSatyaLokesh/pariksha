@@ -35,6 +35,7 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0005_cold_list.sql",
     "0006_candid_registration.sql",
     "0007_attempt_progress.sql",
+    "0008_attempt_integrity.sql",
   ]);
 
   // The four table rebuilds are the statements D1 could reject, so the test
@@ -55,6 +56,12 @@ it("every migration applies against the Miniflare D1 binding", async () => {
   expect(await sql("candidate")).toContain("`consent_version` text,");
   expect(await sql("candidate")).not.toContain("`consent_version` text NOT NULL");
   expect(await sql("candidate_test_external_uq")).toContain("`test_id`,`external_id`");
+  // 0008: an ADD COLUMN is also a statement D1 could reject — it accepts
+  // only one per ALTER TABLE, which is why the migration is two statements
+  // and not one — so this proves both columns actually exist against the
+  // real engine rather than trusting the runner's bookkeeping.
+  expect(await sql("attempt")).toContain("`integrity_flag` text");
+  expect(await sql("attempt")).toContain("`observed` integer");
 });
 
 it("a second run applies nothing", async () => {
@@ -125,7 +132,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 8,
+    migrations: 9,
   });
 });
 

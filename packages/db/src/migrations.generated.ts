@@ -132,6 +132,10 @@ export const sqliteMigrations: Migration[] = [
     "-- Phase 6 Task 5 (#69, P6.5): the two columns an attempt needs to carry a\n-- candidate's progress, and only two.\n--\n-- `max_index` is the furthest flat question index reached. It carries both\n-- navigation rules at once -- `linear` refuses a target below it, and the\n-- current section is the one that index falls in -- so section locking needs\n-- no column of its own. `section_started_at` is what a per-section deadline\n-- is measured from.\n--\n-- Hand-written rather than taken from `drizzle-kit generate` verbatim, for\n-- the reason 0004, 0005 and 0006 record: SQLite refuses `ALTER TABLE ... ADD\n-- ... NOT NULL` unless a literal DEFAULT comes with it. `DEFAULT 0` is that\n-- literal, and it is also the right value for every attempt already in\n-- flight -- an attempt written before this migration has reached no index it\n-- can prove, so the safest reading is the first question.\n--\n-- No PRAGMA foreign_keys: D1 ignores it silently and\n-- `no-d1-hostile-sql.test.ts` refuses it.\nALTER TABLE `attempt` ADD `max_index` integer DEFAULT 0 NOT NULL;",
     "ALTER TABLE `attempt` ADD `section_started_at` integer;",
   ] },
+  { name: "0008_attempt_integrity.sql", statements: [
+    "-- Phase 7a Task 3 (Q6): the two columns an attempt needs to carry an\n-- *integrity* verdict, separate from the grading verdict `flag` already\n-- carries.\n--\n-- `flag` is NOT NULL and `apps/api/src/run/submit.ts:357` already writes\n-- \"scoring_blocked\" into it when a `bounded.ts` refusal blocks scoring.\n-- Overloading that one column for proctoring would mean every integrity\n-- recompute risks erasing a grading state — so `integrity_flag` is its own\n-- column, and `setIntegrity` (packages/db/src/repo/attempts.ts) never\n-- touches `flag`. Nothing in this plan computes `integrity_flag`; 7e does.\n--\n-- `observed` is whether proctoring was watching this attempt at all — a\n-- different question from whether it was clean.\n--\n-- `DEFAULT 'clean'` and `DEFAULT 1` are both literal DEFAULTs, which is what\n-- SQLite requires to add a NOT NULL column with `ALTER TABLE ... ADD`\n-- (the reason 0004, 0005, 0006 and 0007 record), and they are also the\n-- right backfill: an attempt already in flight when this migration runs has\n-- raised no integrity signal yet, so \"clean\" and \"watched\" is the honest\n-- reading, not a guess standing in for missing data.\n--\n-- Two statements, not one: D1 accepts only one `ADD COLUMN` per `ALTER\n-- TABLE`, same as 0007.\n--\n-- No PRAGMA of any kind: D1 ignores every one but `defer_foreign_keys` and\n-- `no-d1-hostile-sql.test.ts` refuses the rest.\nALTER TABLE `attempt` ADD `integrity_flag` text DEFAULT 'clean' NOT NULL;",
+    "ALTER TABLE `attempt` ADD `observed` integer DEFAULT 1 NOT NULL;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -245,5 +249,9 @@ export const pgMigrations: Migration[] = [
   { name: "0007_attempt_progress.sql", statements: [
     "-- Phase 6 Task 5 (#69, P6.5): the sqlite/0007_attempt_progress.sql sibling.\n-- Postgres needs no DEFAULT to add a NOT NULL column to a populated table,\n-- but it carries the same one so the two dialects agree on what an attempt\n-- written before this migration has reached.\nALTER TABLE \"attempt\" ADD COLUMN \"max_index\" integer DEFAULT 0 NOT NULL;",
     "ALTER TABLE \"attempt\" ADD COLUMN \"section_started_at\" bigint;",
+  ] },
+  { name: "0008_attempt_integrity.sql", statements: [
+    "-- Phase 7a Task 3 (Q6): the sqlite/0008_attempt_integrity.sql sibling.\n-- Postgres needs no DEFAULT to add a NOT NULL column to a populated table,\n-- but it carries the same ones so an attempt written before this migration\n-- reads back \"clean\" and watched on both dialects, not just SQLite.\nALTER TABLE \"attempt\" ADD COLUMN \"integrity_flag\" text DEFAULT 'clean' NOT NULL;",
+    "ALTER TABLE \"attempt\" ADD COLUMN \"observed\" boolean DEFAULT true NOT NULL;",
   ] },
 ];

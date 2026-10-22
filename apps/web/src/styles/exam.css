@@ -135,7 +135,8 @@
 }
 
 .exam-landing-sections ul,
-.exam-device-report ul {
+.exam-device-report ul,
+.exam-landing-requirements ul {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -163,6 +164,11 @@
 
 .exam-landing-rules p {
   max-width: 64ch;
+}
+
+.exam-landing-requirements li {
+  max-width: 64ch;
+  padding: 4px 0;
 }
 
 .exam-landing-actions {

@@ -251,6 +251,9 @@ export const attempt = sqliteTable(
     tokenHash: text("token_hash").notNull(),
     maxIndex: integer("max_index").notNull(),
     sectionStartedAt: integer("section_started_at"),
+    // Phase 7a Task 3 (Q6): a separate axis from `flag` (grading).
+    integrityFlag: text("integrity_flag").notNull(),
+    observed: integer("observed", { mode: "boolean" }).notNull(),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),
