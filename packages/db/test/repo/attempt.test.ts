@@ -313,16 +313,30 @@ it("one statement returns every submitted, scored attempt as a figure", async ()
 
 it("excludes an attempt that has not been submitted", async () => {
   const candidateId = await candidateIn(alpha);
-  await attempt(alpha, { candidateId, tokenHash: "live-one" });
-  expect(await attemptFiguresForCandidate(db, alpha.workspaceId, candidateId)).toEqual([]);
+  const live = await attempt(alpha, { candidateId, tokenHash: "live-one" });
+  // Positive control: a submitted, scored sibling attempt for the same
+  // candidate is read back, so the negative below is the join excluding
+  // `live` specifically, not the statement returning nothing at all.
+  const scored = await attempt(alpha, { candidateId, tokenHash: "live-one-scored", submittedAt: NOW });
+  await score(scored, 60);
+
+  const figures = await attemptFiguresForCandidate(db, alpha.workspaceId, candidateId);
+  expect(figures.map((f) => f.attemptId)).toEqual([scored]);
+  expect(figures.map((f) => f.attemptId)).not.toContain(live);
 });
 
 it("excludes a submitted attempt the engine never scored", async () => {
   const candidateId = await candidateIn(alpha);
   // Submitted (`finishAttempt` ran) but `score` stayed null — the
   // ungradeable-engine case `submit.ts` documents.
-  await attempt(alpha, { candidateId, tokenHash: "unscored", submittedAt: NOW });
-  expect(await attemptFiguresForCandidate(db, alpha.workspaceId, candidateId)).toEqual([]);
+  const unscored = await attempt(alpha, { candidateId, tokenHash: "unscored", submittedAt: NOW });
+  // Positive control beside it: a submitted attempt the engine did score.
+  const scored = await attempt(alpha, { candidateId, tokenHash: "unscored-sibling-scored", submittedAt: NOW });
+  await score(scored, 60);
+
+  const figures = await attemptFiguresForCandidate(db, alpha.workspaceId, candidateId);
+  expect(figures.map((f) => f.attemptId)).toEqual([scored]);
+  expect(figures.map((f) => f.attemptId)).not.toContain(unscored);
 });
 
 it("another candidate's attempts are not read against this one", async () => {
@@ -330,7 +344,15 @@ it("another candidate's attempts are not read against this one", async () => {
   const theirs = await candidateIn(alpha);
   const theirAttempt = await attempt(alpha, { candidateId: theirs, tokenHash: "theirs-scored", submittedAt: NOW });
   await score(theirAttempt, 90);
-  expect(await attemptFiguresForCandidate(db, alpha.workspaceId, mine)).toEqual([]);
+  // Positive control: my own scored attempt is read back through the same
+  // call, so the negative below is the candidate boundary, not an empty
+  // table.
+  const myAttempt = await attempt(alpha, { candidateId: mine, tokenHash: "mine-scored", submittedAt: NOW });
+  await score(myAttempt, 55);
+
+  const figures = await attemptFiguresForCandidate(db, alpha.workspaceId, mine);
+  expect(figures.map((f) => f.attemptId)).toEqual([myAttempt]);
+  expect(figures.map((f) => f.attemptId)).not.toContain(theirAttempt);
 });
 
 // --- integrity_flag / observed (Phase 7a Task 3, Q6) --------------------
