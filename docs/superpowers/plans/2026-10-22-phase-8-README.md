@@ -184,11 +184,45 @@ subrequests).
 
 **A third cut stops and asks.**
 
+## Starting from here
+
+Written for whoever picks this up — including a session in another clone, which **will not have
+the planning ledger** (`.superpowers/` is git-ignored and does not travel). Everything needed is
+committed; this section is the entry point.
+
+1. **Confirm 7d is merged.** `git log --oneline main | grep -i "7d\|the eye"`. Nothing in Phase 8
+   starts before it (`K43`). If it is not merged, finish that first.
+2. **Pull `main` and park on it.** The plans and the spec are on `main` as of this PR.
+3. **Re-verify the spec's §5 pre-flight against the head you cut from.** It was true at `243ba07`;
+   7d moves things. This is the cheapest hour in the phase and 7a proved it — seven of its plan's
+   own file paths and helper names did not match the tree. **Record what moved** before dispatching
+   Task 1.
+4. **Re-check 8f against what 7d actually shipped**, not against 7d's plan. 8f was written from
+   7d's plan plus handoff-3's description of the cut, because 7d was unmerged and in another clone
+   when these plans were written. Specifically: that `resolveProctoring` hardcodes
+   `requireMicrophone: false` where 8f assumes, that the organiser control ships disabled, and that
+   the `AG2`/`AG3` source scans exist in the shape 8f must keep green. Twenty minutes, not a
+   re-plan.
+5. **Run 8a alone, to completion and merge**, including `K41`'s blocking migration step. Every
+   other plan consumes its interfaces.
+6. **Then 8b, 8d, 8e and 8f.** They are independent of each other. Parallel clones are safe for
+   **editing** and unsafe for **verification** — use `--no-file-parallelism` for any full-suite
+   run, and never two full suites at once (a documented 37-failure cascade across 5 unrelated
+   files, three times, each a different subset).
+7. **Then 8c**, which needs 8b's `latestVerdicts`.
+
+**Size 8d honestly before starting it.** Its own header says this and it bears repeating: the
+`webhook` and `api_key` *tables* exist and **nothing else does** — no repo function, no route, no
+screen for either. It is two plans' worth of work in one. Split it rather than quietly dropping the
+CRUD.
+
+**8g is deferred — do not execute it.** Its banner says why and what changed underneath it.
+
 ## Execution
 
 `superpowers:subagent-driven-development`: one fresh implementer per task, a fresh reviewer after
 each, then a whole-branch review on the most capable model, one fix wave, one scoped re-review.
-Every subagent invokes the **ponytail** skill before anything else. 8b, 8c, 8e and 8g paint — use
+Every subagent invokes the **ponytail** skill before anything else. 8b, 8c and 8e paint — use
 **ui-ux-pro-max** for the styling work in those.
 
 What earned its keep in Phase 7 and is not optional here:
