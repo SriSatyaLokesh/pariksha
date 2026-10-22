@@ -484,7 +484,24 @@ it("every one of the twelve question types reaches the candidate in its own scru
   // The unit is on the paper; the value and the tolerance are the key,
   // and a tolerance is half the answer on a numeric question.
   expect(shown("T-numeric")).toMatchObject({ unit: "kg" });
-  expect(JSON.stringify(shown("T-numeric"))).not.toContain("42");
+  // The id is excluded from the haystack, and that is not a loosening.
+  //
+  // `id` is server-minted, random, and deliberately candidate-facing — the
+  // S-10 test below says so outright, because `response.question_id` stores
+  // it. It is also the only part of this object the scrub cannot be about.
+  // Leave it in and the needle "42" is matched by any id that happens to
+  // contain those two digits, which a base36 id does roughly one run in a
+  // hundred: a deploy of `main` failed on exactly that, with
+  // `expected '{"id":"qst_1z9cc42adtww","type":"nume…' not to contain '42'`.
+  //
+  // This is the only scrub assertion in the file whose needle is bare
+  // digits; every other one ("SECRET", `"key"`, "explanation") cannot
+  // collide with a lowercase-alphanumeric id.
+  const { id: _candidateFacingId, ...numericWithoutId } = shown("T-numeric") ?? {};
+  expect(JSON.stringify(numericWithoutId), "the answer and its tolerance").not.toContain("42");
+  // The control: the key really does carry 42, so the assertion above is
+  // about scrubbing rather than about a value that was never there.
+  expect(JSON.stringify(ALL_TYPES)).toContain("42");
   expect(shown("T-short")).toMatchObject({ maxLength: 200 });
   expect(shown("T-long")).toMatchObject({ maxLength: 2000 });
 
