@@ -68,4 +68,38 @@ describe("csvFilename", () => {
       "math-final_results_20261022-1435.csv",
     );
   });
+
+  // `civilFromDays` is a hand transcription of Hinnant's algorithm, which
+  // `packages/core`'s purity gate forces on us in place of `Date` (see the
+  // function's own comment). A transcription is right or wrong per BRANCH,
+  // not overall, and one date exercises only one path: March-to-December,
+  // non-leap, mid-month. These are the branches that date could not reach.
+  //
+  // `Date.UTC` is the oracle deliberately — the thing under test is whether
+  // the arithmetic agrees with the platform's own calendar, so comparing it
+  // to a hand-written expectation would only pin my arithmetic against my
+  // arithmetic.
+  it.each([
+    // The year-rollback branch: Hinnant's era starts in March, so January
+    // and February belong to the PREVIOUS era-year and the final
+    // `y + (m <= 2 ? 1 : 0)` is what puts them back. Wrong, and every
+    // January export lands in the wrong year.
+    ["January, the year-rollback branch", Date.UTC(2026, 0, 1, 0, 0), "20260101-0000"],
+    ["February, the same branch", Date.UTC(2026, 1, 28, 23, 59), "20260228-2359"],
+    // A real leap day. 2028 is a leap year; 29 February exists only if the
+    // `yoe / 4` and `yoe / 100` corrections are both right.
+    ["a leap day", Date.UTC(2028, 1, 29, 12, 0), "20280229-1200"],
+    // 2100 is NOT a leap year (divisible by 100, not by 400) — the century
+    // rule, which a naive `% 4` gets wrong and which no test in 2026 would
+    // otherwise reach.
+    ["the day after a skipped leap day", Date.UTC(2100, 2, 1, 6, 30), "21000301-0630"],
+    // Month end into month start, and the last minute of a year.
+    ["a month end", Date.UTC(2026, 6, 31, 23, 59), "20260731-2359"],
+    ["the last minute of a year", Date.UTC(2026, 11, 31, 23, 59), "20261231-2359"],
+    // The epoch itself: `z === 0`, the boundary of the documented
+    // non-negative assumption.
+    ["the epoch", 0, "19700101-0000"],
+  ])("formats %s in UTC", (_label, at, expected) => {
+    expect(csvFilename("s", "results", at)).toBe(`s_results_${expected}.csv`);
+  });
 });
