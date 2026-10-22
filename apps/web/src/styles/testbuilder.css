@@ -1179,14 +1179,39 @@
   }
 }
 
-/* Phase 7b Task 1 (`Q8`): the sixth row's panel. Shell only — the
-   note it carries reuses `.field-help` (registration.css), already covered
-   by contrast-usage.test.ts, rather than a new coloured selector for one
-   sentence Task 2 replaces. This rule sets no colour of its own, the same
-   as `.timing-panel`/`.access-panel`/`.release-panel` above, so it needs no
-   SURFACE entry either. */
+/* Phase 7b Task 1 (`Q8`): the sixth row's panel. This rule sets no colour of
+   its own, the same as `.timing-panel`/`.access-panel`/`.release-panel`
+   above, so it needs no SURFACE entry either. */
 .proctoring-panel {
   display: flex;
   flex-direction: column;
+  gap: var(--space-lg);
+}
+
+/* Phase 7b Task 2 (`Q8`): the three groups — gating, camera and microphone,
+   consequences. `.field-row` is `primitives.css`'s existing D16 primitive
+   (R2, progress.md): this rule only wraps it in the bordered, no-fill box
+   `.timing-panel__group` / `.access-panel__group` / `.form-builder__field`
+   already use for a fieldset of related controls, so it is a repeat of
+   their pattern rather than a new one. No `color:` declaration — only a
+   border and spacing, like its three siblings — so it needs no SURFACE
+   entry either; `.field-help`, which carries the group's one note, already
+   has one. The group's note sits OUTSIDE `.field-row`, as its own
+   paragraph, which is `D16`'s "one note under the row" read literally:
+   inside the grid it would be a sixteenth field with nowhere of its own to
+   sit, and it is not help for any one control. */
+.proctoring-panel__group {
+  display: flex;
+  flex-direction: column;
   gap: var(--space-sm);
+  border: 1px solid var(--edge);
+  margin: 0;
+  padding: var(--space-md);
+}
+
+.proctoring-panel__group > legend {
+  padding-inline: var(--space-xs);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
 }
