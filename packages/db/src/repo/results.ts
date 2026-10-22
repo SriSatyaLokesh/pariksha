@@ -85,8 +85,16 @@ function toAttemptSummary(db: DbClient, row: AttemptSummaryRecord): AttemptSumma
 }
 
 /**
- * Every attempt against any version of a test, newest-start-first — `K9`:
- * one statement, whatever the cohort size. `violations` and `answered` are
+ * Every attempt against any version of a test, **oldest-start-first** —
+ * `K9`: one statement, whatever the cohort size.
+ *
+ * `ORDER BY a.started_at ASC, a.id ASC` is deliberate and the docstring
+ * said the opposite until Task 7's review caught it. Ascending with the id
+ * as a tiebreaker is what makes the cursor a stable keyset: a page boundary
+ * cannot shift under an attempt that starts while an organiser is paging,
+ * and two attempts starting in the same millisecond still have one defined
+ * order. A newest-first list would want its own cursor, not this one — so
+ * reverse at the surface that wants it, never here. `violations` and `answered` are
  * correlated subqueries in the **same** statement (portable SQL: a scalar
  * subquery correlated on the outer row, no dialect-specific JSON syntax),
  * not a second query per row.
