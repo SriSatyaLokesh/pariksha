@@ -117,9 +117,22 @@ export default {
   ): void {
     ctx.waitUntil(
       runScheduled(controller.cron, deps(env)).then(({ failed }) => {
-        if (failed.length > 0) {
-          throw new Error(`scheduled: ${String(failed.length)} job(s) failed: ${failed.join(", ")}`);
-        }
+        if (failed.length === 0) return;
+        // `noRetry()` BEFORE the throw, and it is the whole reason this is
+        // not simply a rejected promise.
+        //
+        // A rejecting `waitUntil` marks the cron invocation failed, which is
+        // what M-3 wanted — but it also makes it **retriable**, and
+        // Cloudflare re-runs the whole scheduled event. Every job that
+        // already succeeded tonight would run a second time. That is exactly
+        // the hazard `K27`'s per-job isolation ring-fences inside
+        // `runScheduled`, reintroduced one level up by reporting the
+        // failure. Found by the fix wave's own re-review.
+        //
+        // So: report the failure, refuse the retry. A nightly job that
+        // fails is a visible failed invocation, not a duplicated run.
+        controller.noRetry();
+        throw new Error(`scheduled: ${String(failed.length)} job(s) failed: ${failed.join(", ")}`);
       }),
     );
   },
