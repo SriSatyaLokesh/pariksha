@@ -14,7 +14,7 @@ import {
   newId,
   resolvePublishedTest,
 } from "@pariksha/db";
-import type { ResolvedProctoring, ViolationAction } from "@pariksha/core";
+import type { ViolationAction } from "@pariksha/core";
 import { createApp, ROUTE_AUTH, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { REGISTRATION_KIND, REGISTRATION_TTL_MS, registrationHash } from "../../src/run/entry.js";
@@ -103,11 +103,6 @@ interface EventsResponse {
   action: ViolationAction;
 }
 
-interface AttemptWithProctoring extends AttemptPaper {
-  proctoring: ResolvedProctoring;
-  violations: number;
-}
-
 let attemptCookie = "";
 
 beforeEach(async () => {
@@ -143,7 +138,7 @@ it("counts only violation types toward the figure", async () => {
     attemptCookie,
   );
   const res = await get("/api/v1/run/attempt", attemptCookie);
-  expect(((await res.json()) as AttemptWithProctoring).violations).toBe(1);
+  expect(((await res.json()) as AttemptPaper).violations).toBe(1);
 });
 
 // Review Focus 2 — the cap is real, not advisory.
@@ -163,7 +158,7 @@ it("answers 401 without an attempt cookie", async () => {
 });
 
 it("ships the resolved proctoring object on the attempt", async () => {
-  const body = (await (await get("/api/v1/run/attempt", attemptCookie)).json()) as AttemptWithProctoring;
+  const body = (await (await get("/api/v1/run/attempt", attemptCookie)).json()) as AttemptPaper;
   expect(body.proctoring).toMatchObject({ requireFullscreen: true, faceCheck: false });
 });
 
@@ -208,6 +203,6 @@ it("the response and a later resume report the same authoritative count", async 
   const ingest = (await (
     await post(EVENTS_PATH, { events: [{ type: "copy_blocked", clientTs: 1 }] }, attemptCookie)
   ).json()) as EventsResponse;
-  const resumed = (await (await get("/api/v1/run/attempt", attemptCookie)).json()) as AttemptWithProctoring;
+  const resumed = (await (await get("/api/v1/run/attempt", attemptCookie)).json()) as AttemptPaper;
   expect(resumed.violations).toBe(ingest.violations);
 });

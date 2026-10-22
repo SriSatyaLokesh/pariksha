@@ -814,13 +814,13 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
-  // Phase 7c Task 1: mounted **before** `runRoutes`, and that is
-  // load-bearing in exactly the way `attemptRoutes`' own position inside
-  // `runRoutes` is (see that file's header) — `POST /attempt/events` is
-  // two path segments, the same shape as `GET /:workspaceSlug/:testSlug`,
-  // and Hono tries handlers in registration order. Mounted after, the
-  // landing route's catch-all would answer first and this route would
-  // never be reached.
+  // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
+  // other `/api/v1/run/attempt/*` routes rather than out of necessity —
+  // `POST /attempt/events` is a different HTTP method from the landing
+  // catch-all (`GET /:workspaceSlug/:testSlug`), so the two never collide
+  // in Hono's route table regardless of registration order. Unlike
+  // `attemptRoutes`' position inside `runRoutes` (see that file's
+  // header), swapping this pair would not break anything.
   app.route("/api/v1/run", proctoringRoutes(deps));
   app.route("/api/v1/run", runRoutes(deps));
 

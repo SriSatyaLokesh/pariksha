@@ -229,6 +229,17 @@ export interface AttemptPaper {
   /** `AC-13`'s anchor: the browser's countdown is a delta from this. */
   serverNow: number;
   submittedAt: number | null;
+  /**
+   * Phase 7c Task 1 (`Q7a`). **Optional, not missing by accident**: only
+   * `GET /attempt` carries these two — `/start`'s mint response does not,
+   * because a just-minted attempt's violation count is always zero and
+   * computing it there would spend a read for a number that can never be
+   * anything else. `GET /attempt`'s handler always sets both; a reader
+   * resuming a fresh attempt (the only caller that sees `/start`'s
+   * response) should not rely on either being present.
+   */
+  proctoring?: ResolvedProctoring;
+  violations?: number;
 }
 
 // --- reading the version's settings ------------------------------------
@@ -236,11 +247,19 @@ export interface AttemptPaper {
 // `allow_calculator` is a control under `proctoring.overrides`, and `Q1`
 // means every such control has one reader: `resolveProctoring`, never a
 // second ad-hoc path that reaches into the same key. `settings` arrives
-// `unknown` here (it is read straight off a stored row), so the narrowing
-// below is to `Test["proctoring"]` — the real shape this package already
-// models it as — rather than a local interface re-describing one field
-// of it.
-const resolvedProctoringOf = (settings: unknown): ResolvedProctoring =>
+// `unknown` here (it is read straight off a stored row — `AttemptRecord.
+// settings`, `packages/db/src/repo/candidate-entry.ts` — not through the
+// typed `PublishedTest.settings` a landing-payload reader gets for free),
+// so the narrowing below is to `Test["proctoring"]` — the real shape this
+// package already models it as — rather than a local interface
+// re-describing one field of it. This is a genuine boundary cast, not a
+// workaround for a looser local type: there is no `Test`-typed value to
+// read here, only a JSON column.
+//
+// **Exported** (Phase 7c Task 1 fix round) so every reader of an
+// attempt's stored settings shares the one cast — `routes/proctoring.ts`
+// used to carry a second, identical one inline.
+export const resolvedProctoringOf = (settings: unknown): ResolvedProctoring =>
   resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring);
 
 const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(settings).allowCalculator;
@@ -834,7 +853,10 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     const violations = await countViolations(deps.db, attempt.workspaceId, attempt.attemptId);
     const proctoring = resolvedProctoringOf(attempt.settings);
 
-    return c.json({
+    // Typed against `AttemptPaper` itself, not an inline object literal —
+    // the two optional fields below are exactly the ones `/start` leaves
+    // out, so this is the one place that always sets them.
+    const payload: AttemptPaper = {
       ...paperFrom({
         // Task 8's seed, off the rows this read already returned — so it
         // is free, and so a browser that has lost its counter cannot
@@ -853,7 +875,8 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
       }),
       proctoring,
       violations,
-    });
+    };
+    return c.json(payload);
   });
 
   /**

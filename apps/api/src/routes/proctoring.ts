@@ -27,11 +27,12 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { appendEvents, countViolations } from "@pariksha/db";
-import { PROCTORING_EVENTS, resolveProctoring, type Test } from "@pariksha/core";
+import { PROCTORING_EVENTS } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
 import { limitOrThrow } from "../run/limit.js";
+import { resolvedProctoringOf } from "../run/attempt.js";
 
 /** `Q7`: the cap `appendEvents` already documents and the daily write
  *  budget it protects. Real, not advisory — refused before the request
@@ -82,10 +83,10 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
 
     const violations = await countViolations(deps.db, attempt.workspaceId, attempt.attemptId);
     // `Q1`: `limit` and `action` come from the resolved object, never from
-    // the raw overrides and never from a branch on `profile`.
-    const resolved = resolveProctoring(
-      (attempt.settings as { proctoring?: Test["proctoring"] }).proctoring,
-    );
+    // the raw overrides and never from a branch on `profile`. The same
+    // `resolvedProctoringOf` helper `GET /attempt` uses — one boundary
+    // cast from the stored, `unknown` settings column, not two.
+    const resolved = resolvedProctoringOf(attempt.settings);
 
     return c.json({ violations, limit: resolved.violationLimit, action: resolved.violationAction });
   });
