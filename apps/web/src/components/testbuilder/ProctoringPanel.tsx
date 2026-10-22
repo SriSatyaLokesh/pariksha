@@ -48,7 +48,7 @@ import { useDialogKeys } from "../useDialogKeys";
 // or consequence goes in a field's own help line, and an explanation of the
 // WHOLE GROUP is one note under the row — never help per field, which is
 // what would otherwise repeat the same sentence five or six times. `Q3`'s
-// face-check copy and `Q12b`'s microphone copy (#209) are the two
+// face-check copy and `Q12b`'s microphone copy (issue 209) are the two
 // deliberate exceptions: each is not a group fact, it is the reason ONE
 // control is unusable, and `D16a` requires every id that copy is reached by
 // to come from this instance's own `useId()`.
@@ -460,7 +460,7 @@ export function ProctoringPanel({
             </p>
             {faceCheckMarker?.node}
           </div>,
-          // `Q12b`/#209: pre-cut and shipped disabled, the same treatment as
+          // `Q12b` (issue 209): pre-cut and shipped disabled, the same treatment as
           // `face_check` above. The raw document value is shown, not
           // `resolved.requireMicrophone` (always `false` — the enforcement
           // refusal is `resolveProctoring`'s, not a fact about what an
