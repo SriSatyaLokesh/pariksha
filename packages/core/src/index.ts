@@ -107,3 +107,10 @@ export * from "./proctoring.js";
 // organiser's results CSV and the analytics screen (8c) all call this
 // rather than growing three readings of "best"/"latest"/"average".
 export * from "./counted.js";
+
+// Phase 8a Task 4 (`K8`): `toCsv()` is the one CSV serialiser every export
+// route builds its file through, `csvFilename()` is R-10's exact filename
+// shape, and `CsvPage` is the one page-of-an-export shape 8c and 8e's
+// paginated routes return (`K38`: a route that reached its bound always
+// returns a cursor).
+export * from "./csv.js";
