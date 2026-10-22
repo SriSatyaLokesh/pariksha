@@ -809,7 +809,7 @@ export function TestBuilder({
             id="results"
             icon={<Icon name="results" />}
             label="Results"
-            summary={resultsSummary(draft.body.settings.release ?? DEFAULT_RELEASE)}
+            summary={resultsSummary(draft.body.settings.release ?? DEFAULT_RELEASE, draft.body.settings.retention)}
             open={openPanel === "results"}
             onToggle={togglePanel}
           >
