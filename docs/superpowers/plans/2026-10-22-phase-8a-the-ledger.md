@@ -877,6 +877,13 @@ git commit -m "feat(db): the organiser's set-based attempt reads (K9)"
 
 **`#186`** — `branding.finish_message` has a writer (`BrandingPanel.tsx:267`), is stored, exported and re-imported, and **no candidate will ever see it**. It is test content, not candidate data, so it needs no scrub exception — confirm that against `scrub-scan.test.ts` rather than assuming it.
 
+**`checklist.ts` is changing underneath this task.** Issue
+[#214](https://github.com/SriSatyaLokesh/pariksha/issues/214) lands right after 7d and **removes**
+`checklist.ts:510`'s `proctoring_lock_without_recourse` branch, because `violation_action`'s
+`lock` and `auto_submit` have no consumer anywhere — verified: nothing branches on
+`resolved.violationAction`. So the file will have **three** advisory rows, not the four the spec's
+§5 pre-flight recorded. Rebase onto that before adding the blocking row; do not re-add the branch.
+
 **`#179`** — a published version with no `duration_minutes` advertises a 0-minute test on the landing page and then 409s on `/start`. The right fix is that such a version is **not publishable**: a blocking checklist row, not an advisory one. Phase 7 added four advisory rows and no blocking one; this is the phase's first.
 
 - [ ] **Step 1: Write the failing `#186` test, from `ExamApp`**
@@ -973,11 +980,17 @@ is a no-op. The second includes `worker.test.ts`, the real Worker entry against 
 is D1's own engine running locally** — that is where a migration is proved, because no test in this
 repository reaches Cloudflare.
 
-**The owner's step**, which the sandbox classifier refuses for the agent:
+**Applying it — the executing agent's step, confirmed by the owner on 2026-10-23:**
 
 ```
-! node deploy/cloudflare/setup.mjs
+node deploy/cloudflare/setup.mjs
 ```
+
+**Narrow authorisation, not a general licence.** `CLAUDE.md` lists this among the commands that
+touch the live account and bills it, and that stands. It is authorised for **this migration, as
+part of this task's definition of done** — once, deliberately, after the dry run above is clean.
+Never to "try something", and never extended to `wrangler d1 execute --remote`, `wrangler deploy`,
+`wrangler r2 object put/delete` or `wrangler secret put`.
 
 **After the merge, check the count.** `GET /api/v1/health` answers `{"migrations":N}`, and **N must
 equal the number of files in `packages/db/migrations/sqlite/`** — eleven once `0009` lands, twelve

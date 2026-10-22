@@ -16,6 +16,23 @@
 
 **Issues:** #209, #84.
 
+## Carried from the 7d session, 2026-10-23
+
+Three facts from the session that built 7d, two of them verified here against `main`:
+
+- **The `AG2`/`AG3` scans live in `apps/web/test/exam/no-recording.test.ts`**, and its
+  `publicJsFiles` walker **matched `.js` only** until 7d changed it to `.m?js`. A worklet is
+  exactly the file `#209` adds to `apps/web/public/`, so the scan could have passed over the one
+  new file it exists to police. **Keep the `.m?js` form**; do not revert it, and the `Q10a` probe
+  must plant its `MediaRecorder` in a `.mjs` file at least once to prove the widened walker works.
+- **The violation action select ships *disabled*** (issue
+  [#214](https://github.com/SriSatyaLokesh/pariksha/issues/214), landing as its own PR right after
+  7d). `resolveProctoring` will refuse `auto_submit` and `lock`, which have no consumer —
+  **verified here:** nothing in `apps/web/src/components/exam/` or `apps/api/src/run/` branches on
+  `count.action` or `resolved.violationAction` at all. Assume the select is disabled, not live.
+- `resolveProctoring` does hardcode `requireMicrophone: false` beside `faceCheck: false`, and the
+  organiser control ships disabled naming `#209` — the two things this plan's Task 2 inverts.
+
 ## Global Constraints
 
 **8a's Global Constraints apply in full and are not repeated.** These are this plan's additions, and most are traps Phase 7 already paid for.

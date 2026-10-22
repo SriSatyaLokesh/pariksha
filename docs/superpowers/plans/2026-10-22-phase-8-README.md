@@ -68,7 +68,7 @@ broadcast columns `0009` no longer carries.
         8g ── DEFERRED with 7e (depends on a, b, d)
 ```
 
-## Before 8a merges — the owner's blocking step
+## Before 8a merges — the blocking migration step
 
 **`K41`, which `CLAUDE.md` now carries as a repository-wide rule.** `deploy.yml` redeploys `main`
 on every push and applies **no** migrations; `node deploy/cloudflare/setup.mjs` applies them and a
@@ -89,11 +89,17 @@ node deploy/cloudflare/setup.mjs --dry-run     # the whole flow twice, in memory
 pnpm --filter @pariksha/api test               # includes worker.test.ts, against Miniflare
 ```
 
-The owner's step, which the sandbox classifier refuses for the agent:
+Applying it — **the executing agent's step, confirmed by the owner on 2026-10-23**, no longer a
+handoff:
 
 ```
-! node deploy/cloudflare/setup.mjs
+node deploy/cloudflare/setup.mjs
 ```
+
+**Narrow authorisation.** `CLAUDE.md` lists this among the commands that touch the live account,
+and that stands. Authorised for **this migration as part of 8a's definition of done** — once, after
+a clean dry run. Not for anything else, and not extended to the other `wrangler` commands that
+table names.
 
 **After the merge, check the count.** `GET /api/v1/health` answers `{"migrations":N}`, and **N must
 equal the number of files in `packages/db/migrations/sqlite/`**. A mismatch means the deploy shipped
