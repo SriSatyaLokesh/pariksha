@@ -41,6 +41,8 @@ export interface ResolvedProctoring {
   requireMicrophone: boolean;
   extraMonitorCheck: boolean;
   violationLimit: number;
+  /** Always resolves "warn_only" in Phase 7: `auto_submit`, `lock` and the
+   *  flag half of `warn_then_flag` are pre-cut (issue #214). */
   violationAction: ViolationAction;
   cameraOutageSeconds: number;
   multiFaceSnapshots: number;
@@ -70,16 +72,20 @@ export const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
 // The defaults table (phase-7a brief). This task fixes it; later plans only
 // read it. Two rulings worth remembering while reading it:
 //
-// - Strict does not default `violation_action` to `lock`. `lock`'s only way
-//   out is an organiser opening the attempt, and Strict already blocks
-//   indefinitely on a dead camera (`Q2`) — defaulting to `lock` too would
-//   stack the phase's two sharpest edges on an organiser who just picked a
-//   preset. `lock` is opt-in.
+// - Strict never defaulted `violation_action` to `lock` even before issue
+//   #214 below made the whole table `warn_only`: `lock`'s only way out is an
+//   organiser opening the attempt, and Strict already blocks indefinitely on
+//   a dead camera (`Q2`) — stacking the phase's two sharpest edges on an
+//   organiser who just picked a preset was never the plan.
 // - `face_check` is `false` on every row. `Q3` pre-cut it; see
 //   `resolveProctoring` below for why it is refused even when overridden.
 // - `require_microphone` is `false` on every row too, for the same reason:
 //   `Q12b`'s noise monitoring is pre-cut (issue #209), and `resolveProctoring`
 //   refuses the override below exactly as it refuses `face_check`'s.
+// - `violation_action` is `warn_only` on every row too, Standard and Strict
+//   included — issue #214: the consequence half of Phase 7 (auto-submit,
+//   lock, the flag half of `warn_then_flag`) is deferred to #213, and
+//   `resolveProctoring` refuses the override below the same way.
 export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedProctoring>> = {
   off: {
     profile: "off",
@@ -112,7 +118,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     requireMicrophone: false,
     extraMonitorCheck: false,
     violationLimit: 5,
-    violationAction: "warn_then_flag",
+    violationAction: "warn_only",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
     allowCalculator: false,
@@ -130,7 +136,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     requireMicrophone: false,
     extraMonitorCheck: true,
     violationLimit: 5,
-    violationAction: "warn_then_flag",
+    violationAction: "warn_only",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
     allowCalculator: false,
@@ -191,7 +197,15 @@ export function resolveProctoring(
     requireMicrophone: false,
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
     violationLimit: overrideOr(overrides, "violation_limit", defaults.violationLimit),
-    violationAction: overrideOr(overrides, "violation_action", defaults.violationAction),
+    // #214: pre-cut, same shape as `faceCheck`/`requireMicrophone` above.
+    // Accepted and round-tripped (the select in `ProctoringPanel.tsx` still
+    // shows the raw document value) so a document authored for #213
+    // survives, but resolution refuses it outright — `auto_submit`, `lock`
+    // and the flag half of `warn_then_flag` have no consumer in this phase,
+    // so nothing may resolve to them regardless of profile or override.
+    // `violation_limit` above is untouched: the count and the candidate's
+    // warning against it are real.
+    violationAction: "warn_only",
     cameraOutageSeconds: overrideOr(overrides, "camera_outage_seconds", defaults.cameraOutageSeconds),
     multiFaceSnapshots: overrideOr(overrides, "multi_face_snapshots", defaults.multiFaceSnapshots),
     allowCalculator: overrideOr(overrides, "allow_calculator", defaults.allowCalculator),

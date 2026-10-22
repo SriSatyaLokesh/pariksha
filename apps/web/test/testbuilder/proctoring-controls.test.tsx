@@ -150,7 +150,19 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
     expect(control).toHaveAccessibleDescription(/Phase 8/);
   });
 
-  // A positive control beside the two disabled assertions above, per the
+  // Issue 214: the violation-action select gets the same disabled
+  // treatment as face check and the microphone above — the organiser can
+  // still read every value this control holds (the raw document value, not
+  // the resolved one), but cannot drive it, because nothing in this phase
+  // enforces auto-submit, lock or the flag half of warn_then_flag.
+  it("names the issue in the violation action's own accessible description", async () => {
+    await openProctoringPanel({});
+    const control = screen.getByLabelText(/When the limit is reached/i);
+    expect(control).toBeDisabled();
+    expect(control).toHaveAccessibleDescription(/214/);
+  });
+
+  // A positive control beside the three disabled assertions above, per the
   // standing ruling (progress.md, "a negative assertion needs a positive
   // control"): an enabled checkbox right beside them proves `toBeDisabled()`
   // can fail — it is not disabled, and the assertion below is run against
@@ -178,17 +190,19 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
 // in the branch green. This table drives each control the way an organiser
 // would and asserts the key in the resulting `onChange` payload.
 //
-// Thirteen of the panel's fifteen override keys are driven below — eight
-// checkboxes, four number boxes, one select. The other two, `face_check`
-// and `require_microphone`, ship permanently `disabled` (`Q3` and `Q12b`/
-// #209 — Phase 8 features, pre-cut in Phase 7), so there is no organiser
-// gesture that can drive either; "checking %s writes true" above has
-// nothing to click for them. Their labels and accessible descriptions are
-// pinned by "names the phase in the face check's/microphone's own
-// accessible description" above, and what each renders as checked — the
-// raw imported document value, never the resolved (always-`false`) one —
-// is exercised by `proctoring-profile.test.tsx`'s profile-change coverage
-// of the same keys.
+// Twelve of the panel's fifteen override keys are driven below — eight
+// checkboxes, four number boxes. The other three, `face_check`,
+// `require_microphone` and `violation_action`, ship permanently `disabled`
+// (`Q3`, `Q12b`/#209, and issue 214 — all pre-cut, the first two Phase 8
+// features and the third a consequence this phase does not enforce), so
+// there is no organiser gesture that can drive any of them; "checking %s
+// writes true" above has nothing to click for them, and the select has
+// nothing above either. Their labels and accessible descriptions are
+// pinned by "names the phase/issue in the face check's/microphone's/
+// violation action's own accessible description" above, and what each
+// renders — the raw imported document value, never the resolved one — is
+// exercised by `proctoring-profile.test.tsx`'s profile-change coverage of
+// the same keys.
 describe("each override key is written by the control its label names (branch-review Finding 2)", () => {
   it.each([
     ["Block phones and tablets", "desktop_only"],
@@ -224,14 +238,19 @@ describe("each override key is written by the control its label names (branch-re
     );
   });
 
-  it("selecting an option in When the limit is reached writes override.violation_action", async () => {
+  // Issue 214: this used to be "selecting an option in When the limit is
+  // reached writes override.violation_action" — the control drove an
+  // override nothing enforced. It carries no `onChange` at all now, the
+  // same shape `face_check`/`require_microphone` already have above, so
+  // there is no handler left for even a `fireEvent.change` dispatched
+  // straight at it (bypassing `disabled`, the way a real click or keyboard
+  // interaction could not) to reach.
+  it("writes nothing when the disabled When the limit is reached select is driven", async () => {
     const onChange = vi.fn();
     await openProctoringPanel({}, { onChange });
     fireEvent.change(screen.getByLabelText(/When the limit is reached/i), {
       target: { value: "lock" },
     });
-    expect(onChange).toHaveBeenLastCalledWith(
-      expect.objectContaining({ overrides: expect.objectContaining({ violation_action: "lock" }) }),
-    );
+    expect(onChange).not.toHaveBeenCalled();
   });
 });

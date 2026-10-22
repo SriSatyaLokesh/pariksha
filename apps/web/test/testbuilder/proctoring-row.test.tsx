@@ -215,9 +215,12 @@ describe("proctoring is the sixth setting row (Q8)", () => {
 
 // Branch-review Finding 3: the only summary assertion above
 // (`/Strict · camera required · images every 60 s/`) stops before the cost
-// clause and the four `VIOLATION_CLAUSE` strings, rendered from a draft
-// with no `timing` block — so deleting R3's entire deferred cost clause,
-// or any of the four violation-action strings, left the suite green.
+// clause and the violation-action clause, rendered from a draft with no
+// `timing` block — so deleting R3's entire deferred cost clause, or the
+// violation clause itself, left the suite green. Issue 214 later cut the
+// four-way violation-action table down to the one true consequence
+// (`violationClause`, `SettingRow.tsx`) — the `it.each` below now pins that
+// every document value states that same one clause.
 // `proctoringSummary` is exported and pure, so these need no render, no
 // `OrganiserApp`, and no fake client at all.
 describe("proctoringSummary states its full resolved setting (branch-review Finding 3)", () => {
@@ -243,17 +246,22 @@ describe("proctoringSummary states its full resolved setting (branch-review Find
     );
   });
 
+  // Issue 214: `resolveProctoring` refuses `violation_action` outright, so
+  // the summary states the one consequence this phase actually enforces —
+  // "warns at N violations" — no matter which of the four the document
+  // holds. This replaces the old one-string-per-action table, which
+  // promised a candidate an auto-submit or a lock the build cannot do.
   it.each([
-    ["warn_only", "warns only"],
-    ["warn_then_flag", "warns at 5 violations"],
-    ["auto_submit", "auto-submits at 5 violations"],
-    ["lock", "locks at 5 violations"],
-  ] satisfies [ViolationAction, string][])(
-    "states the %s violation action",
-    (violation_action, clause) => {
+    ["warn_only"],
+    ["warn_then_flag"],
+    ["auto_submit"],
+    ["lock"],
+  ] satisfies [ViolationAction][])(
+    "states only 'warns at 5 violations' regardless of the document's %s",
+    (violation_action) => {
       expect(
         proctoringSummary({ profile: "strict", overrides: { violation_action } }, null),
-      ).toContain(clause);
+      ).toBe("Strict · camera required · images every 60 s · warns at 5 violations");
     },
   );
 });
