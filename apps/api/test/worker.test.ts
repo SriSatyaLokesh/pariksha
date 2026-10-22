@@ -36,6 +36,7 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0006_candid_registration.sql",
     "0007_attempt_progress.sql",
     "0008_attempt_integrity.sql",
+    "0009_results_and_delivery.sql",
   ]);
 
   // The four table rebuilds are the statements D1 could reject, so the test
@@ -62,6 +63,12 @@ it("every migration applies against the Miniflare D1 binding", async () => {
   // real engine rather than trusting the runner's bookkeeping.
   expect(await sql("attempt")).toContain("`integrity_flag` text");
   expect(await sql("attempt")).toContain("`observed` integer");
+  // 0009 (K10, K42, K43): a CREATE TABLE and two CREATE INDEXes, proved
+  // against the real engine rather than trusted from the bundle.
+  expect(await sql("webhook_delivery")).toContain("`webhook_id` text");
+  expect(await sql("response_workspace_question_idx")).toContain(
+    "`workspace_id`,`question_id`",
+  );
 });
 
 it("a second run applies nothing", async () => {
@@ -132,7 +139,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 9,
+    migrations: 10,
   });
 });
 
