@@ -26,13 +26,14 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { appendEvents, countViolations } from "@pariksha/db";
+import { appendEvents, countViolations, recordSnapshot } from "@pariksha/db";
 import { PROCTORING_EVENTS } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
 import { limitOrThrow } from "../run/limit.js";
 import { resolvedProctoringOf } from "../run/attempt.js";
+import { readBodyWithLimit } from "./media.js";
 
 /** `Q7`: the cap `appendEvents` already documents and the daily write
  *  budget it protects. Real, not advisory — refused before the request
@@ -77,6 +78,26 @@ const eventItem = z.object({
 const eventsRequest = z.object({
   events: z.array(eventItem).max(MAX_EVENTS_PER_REQUEST),
 });
+
+// --- Task 1 (`Q4`): the snapshot route --------------------------------
+
+/** `ROUTE_BUDGETS` and `ROUTE_AUTH` key on this literally, the same reason
+ *  `EVENTS_PATH` exists. */
+export const SNAPSHOT_PATH = "/api/v1/run/attempt/snapshot";
+
+/**
+ * `Q4b`/`D-R8`: ten times the 25 KB `SNAPSHOT_KB` `apps/api/src/publish/
+ * checklist.ts` pins and `apps/web/src/sections/signal/Tail.tsx` states
+ * publicly — slack for a weak encoder, nowhere near a video. `AG2` ("no
+ * video or audio is ever recorded or stored") is enforced HERE, at the
+ * trust boundary: `Q4` costed and refused a presigned PUT specifically
+ * because this route is the only place that *can* bound what a
+ * candidate's browser posts.
+ */
+export const SNAPSHOT_MAX_BYTES = 256 * 1024;
+
+const SNAPSHOT_REASONS = new Set(["interval", "violation", "identity"]);
+export type SnapshotReason = "interval" | "violation" | "identity";
 
 export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
@@ -126,6 +147,51 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     const resolved = resolvedProctoringOf(attempt.settings);
 
     return c.json({ violations, limit: resolved.violationLimit, action: resolved.violationAction });
+  });
+
+  routes.post("/attempt/snapshot", attemptContext(deps), async (c) => {
+    const attempt = c.get("attempt");
+
+    // Refused before storage or the database is touched, the same order
+    // `/attempt/events`' closed-set check already keeps.
+    const reason = c.req.query("reason") ?? "";
+    if (!SNAPSHOT_REASONS.has(reason)) {
+      throw new ApiError(400, "invalid_request", "reason must be interval, violation or identity.");
+    }
+
+    // `Q4b`/`D-R8`: the declared content type, before a byte of the body is
+    // read — a client can set this header to anything, so it is checked
+    // again against the bytes themselves below.
+    if ((c.req.header("content-type") ?? "") !== "image/jpeg") {
+      throw new ApiError(415, "unsupported_media_type", "Only a JPEG snapshot is accepted.");
+    }
+
+    const body = await readBodyWithLimit(c.req.raw, SNAPSHOT_MAX_BYTES, "A snapshot");
+    const bytes = new Uint8Array(body);
+    // `D-R8`: a declared `image/jpeg` with a body that is not actually a
+    // JPEG — the magic bytes, not the header a client fully controls.
+    if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) {
+      throw new ApiError(415, "unsupported_media_type", "That is not a JPEG image.");
+    }
+
+    const takenAt = deps.now();
+    // `Q4a`: minted server-side, from the attempt the cookie names — no
+    // workspace id anywhere in it.
+    const storageKey = `snapshot/${attempt.attemptId}/${String(takenAt)}-${reason}.jpg`;
+
+    // `Q4f`: the row is written only once the object it names really
+    // exists. A `put` that throws (R2 down) reaches no further — no row,
+    // and the thrown error becomes the 500 `errorEnvelope` answers.
+    await deps.storage.put(storageKey, bytes, { contentType: "image/jpeg" });
+    await recordSnapshot(deps.db, attempt.workspaceId, {
+      attemptId: attempt.attemptId,
+      storageKey,
+      takenAt,
+      reason: reason as SnapshotReason,
+    });
+
+    // `Q4a`: the response carries no key at all.
+    return c.json({ stored: true });
   });
 
   return routes;

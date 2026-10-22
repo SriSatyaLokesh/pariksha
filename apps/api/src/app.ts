@@ -475,6 +475,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // count. An empty `events` array costs one less — `appendEvents` is a
   // no-op on it — so 4 is the ceiling, not the floor.
   "/api/v1/run/attempt/events": 4,
+  // Phase 7d Task 1 (`Q4e`): the snapshot route. Measured at **3** in
+  // `test/run/snapshot.test.ts`'s own counting test: the attempt join the
+  // cookie resolves through, the one `put`, and `recordSnapshot`'s one
+  // insert — in that order (`Q4f`). The reason, content-type and
+  // magic-byte refusals all happen before any of the three, so a refused
+  // snapshot costs strictly less, never more.
+  "/api/v1/run/attempt/snapshot": 3,
   // `C-09`, the return visit. `/code` is **4**: the address limiter, its
   // sweep, the attempt lookup and the token insert — plus the message
   // itself, which is not a subrequest in this count unless `deps.http`
@@ -711,6 +718,11 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // past `/start` is the attempt cookie, and the row it writes is scoped
   // to the attempt that cookie names.
   "POST /api/v1/run/attempt/events": "attempt",
+  // Phase 7d Task 1 (`Q4`): the snapshot route. `attempt` for the same
+  // reason `/events` is — the only credential a candidate's browser holds
+  // past `/start` is the attempt cookie, and the row and object this
+  // route writes are both scoped to the attempt that cookie names.
+  "POST /api/v1/run/attempt/snapshot": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",

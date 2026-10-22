@@ -129,6 +129,10 @@ it("the attempt set is a literal allowlist — the 256-bit token, as a cookie", 
     // the save path below — the cookie names the attempt, and the row
     // written is scoped to it.
     "POST /api/v1/run/attempt/events",
+    // Phase 7d Task 1 (`Q4`): the snapshot route. Same scope as `/events`
+    // — the cookie names the attempt, and the row and object this route
+    // writes are both scoped to it.
+    "POST /api/v1/run/attempt/snapshot",
     // Task 11 (#75, P6.11): ending it. Takes no body at all, so there is
     // nothing beside the cookie for the server to choose between.
     "POST /api/v1/run/attempt/submit",

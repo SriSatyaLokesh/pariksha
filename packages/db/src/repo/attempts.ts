@@ -456,6 +456,36 @@ export const countViolations = scoped(
   },
 );
 
+/**
+ * `Q4f`: call this only after the object `input.storageKey` names has
+ * actually been written — that ordering is the route's job, not this
+ * function's, the same way `upsertResponse` trusts its caller on sequencing.
+ * A `put` that fails must never reach this far.
+ *
+ * `faceCount` is written `null`, always: `Q3` pre-cut on-device face
+ * counting, so nothing here ever has a number to put in it.
+ *
+ * `reason` is `string`, not a closed union — the same trust boundary
+ * `appendEvents`'s `type` draws. The route validates the three allowed
+ * values (`interval` / `violation` / `identity`) before this is ever
+ * called, so a bad value here would be this package's own bug, not a
+ * candidate's input reaching the database unchecked.
+ */
+export const recordSnapshot = scoped(
+  "recordSnapshot",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; storageKey: string; takenAt: number; reason: string },
+  ): Promise<void> => {
+    await db.run(
+      "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason, face_count) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [newId("snp"), workspaceId, input.attemptId, input.storageKey, input.takenAt, input.reason, null],
+    );
+  },
+);
+
 const RESPONSE_COLUMNS =
   "question_id, value_json, client_seq, saved_at, points";
 
