@@ -34,7 +34,7 @@
 // directly, the way the brief's own snippet does.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { resolveProctoring, type ResolvedProctoring } from "@pariksha/core";
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
@@ -103,6 +103,22 @@ function clientFor(paper: AttemptPaper): RunClient {
 async function openAttempt(opts: { proctoring: ResolvedProctoring }): Promise<void> {
   render(<ExamApp client={clientFor(paperFixture(opts))} />);
   await screen.findByRole("navigation", { name: /question palette/i });
+  // The palette's commit is NOT the same instant as `ProctoringLayer`'s
+  // effects running. Every gate in this file is a listener that effect
+  // installs on `document` (`ProctoringLayer.tsx`'s copy/paste/contextmenu
+  // block, the fullscreen and visibility handlers), and `findByRole`
+  // resolves on the commit while React's scheduler flushes passive effects
+  // afterwards. Under load that gap is wide enough to fire an event into a
+  // document with no listener on it yet — which is how
+  // `expect(ev.defaultPrevented).toBe(true)` went red on a `main` deploy
+  // (run 39842762555, `blocking.test.tsx:188`) having passed locally.
+  //
+  // An empty `act` is the narrow fix: it flushes exactly those pending
+  // effects and nothing else. A probe event would have been the obvious
+  // alternative and is wrong here — the queue it would push to is the same
+  // one `captureEvents()` reads, so the readiness check would corrupt the
+  // assertions it exists to protect.
+  await act(async () => {});
 }
 
 /** Stubs `fetch` for the events route and records every event TYPE posted

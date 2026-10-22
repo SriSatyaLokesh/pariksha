@@ -262,6 +262,12 @@ async function startStrictAttempt(opts: { identityPhoto?: boolean }): Promise<vo
   await screen.findByRole("heading", { level: 1 });
   await user.click(await screen.findByRole("button", { name: /Start/ }));
   await screen.findByRole("navigation", { name: /question palette/i });
+  // Same reason as `blocking.test.tsx`'s own `openAttempt`: the palette's
+  // commit is not the instant `ProctoringLayer`'s effects run, and every
+  // signal this file dispatches lands on a listener one of those effects
+  // installs. `findByRole` resolves on the commit; React flushes passive
+  // effects afterwards. An empty `act` closes that gap and nothing else.
+  await act(async () => {});
 }
 
 /** The unplug — `track.onended` (`P-05`'s first signal). Synchronous, inside
