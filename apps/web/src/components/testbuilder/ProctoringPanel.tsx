@@ -1,19 +1,45 @@
 import { useId, useState, type JSX, type ReactNode } from "react";
 import {
   resolveProctoring,
+  PROCTORING_DEFAULTS,
   type ProctoringOverrides,
   type ProctoringProfile,
+  type ResolvedProctoring,
   type ViolationAction,
 } from "@pariksha/core";
+import { useDialogKeys } from "../useDialogKeys";
 
 // Phase 7b Task 2 (`Q8`): the fifteen overrides, in the three groups `Q8`
 // names — gating, camera and microphone, consequences. Task 1 shipped the
-// shell this fills; Task 3 adds the profile control itself and the "changed
-// from its profile default" marker, which is why every field below still
-// has a reserved, empty help track (`.field-row`'s own geometry) rather than
-// one filled with field-specific copy — Task 3 needs that slot. `Q8a`'s
-// "profile is the panel's first control" is Task 3's to build, not this
-// one's.
+// shell this fills; Task 3 (`Q8a`) adds the profile control itself, the
+// "changed from its profile default" marker, and the confirmation that
+// fires when changing the profile would discard a real edit.
+//
+// Task 3's two additions, in the field-row's own vocabulary (`D16`): the
+// marker is a CONSTRAINT about one field — "this no longer matches the
+// profile" — so it lives in that field's own help track, never in a
+// fifteen-times-repeated group note. `R1` (task-3-brief.md): no group is
+// named for an individual control (Task 2 shipped exactly two kinds —
+// the three `<fieldset>`s and the panel's own `role="group"`), so the
+// marker is wired through `aria-describedby` from this instance's own
+// `useId()` rather than reached by a `getByRole("group", { name })` query
+// that nothing here could ever satisfy.
+//
+// "Differs" (`overriddenKeys` below) is the same presence discipline
+// `overrideOr` applies in `packages/core/src/proctoring.ts`: `key in
+// overrides && overrides[key] !== undefined`, computed against
+// `PROCTORING_DEFAULTS[profile]` field by field. An absent key, or one
+// explicitly set to `undefined`, is not a difference — and `0` or `false`
+// are real values that can differ from a `true`/non-zero default just as
+// much as the reverse. Never `||`, never a bare `??`.
+//
+// The confirmation (`R2`, `R3`): changing the profile always clears the
+// overrides (`Q8a`'s ruling), and asks first, naming the count, only when
+// at least one override actually differs from the OLD profile's defaults —
+// an override present but already equal to what it is about to lose is not
+// a change and is not counted. Unlike the candidate's Q2b overlay, this
+// dialog takes Escape: it is a cancellable confirmation on the organiser's
+// own surface, not a condition the candidate must resolve.
 //
 // `D16`'s content rule, applied three times over: a UNIT goes inside the
 // control as an affix (`seconds`, `violations`, `snapshots`), a constraint
@@ -56,6 +82,62 @@ type NumberOverrideKey = Extract<
   "snapshot_interval_seconds" | "violation_limit" | "camera_outage_seconds" | "multi_face_snapshots"
 >;
 
+const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
+  off: "Off",
+  standard: "Standard",
+  strict: "Strict",
+};
+
+/** Every override key's resolved counterpart, so one generic function can
+ *  read `PROCTORING_DEFAULTS[profile]` for any of the fifteen without
+ *  fifteen hand-written branches. `face_check` is included on the same
+ *  footing as the other fourteen — it accepts and round-trips an override
+ *  (Task 2's comment on the field below), so whether IT differs from its
+ *  profile default is answerable the same way, even though resolution
+ *  itself refuses to act on it (`Q3`). This table does not touch which
+ *  value the checkbox renders — that stays `value.overrides.face_check`,
+ *  per the brief's own standing ruling. */
+const OVERRIDE_KEY_TO_RESOLVED: Readonly<Record<keyof ProctoringOverrides, keyof ResolvedProctoring>> = {
+  desktop_only: "desktopOnly",
+  require_fullscreen: "requireFullscreen",
+  block_copy_paste: "blockCopyPaste",
+  watermark: "watermark",
+  require_camera: "requireCamera",
+  identity_photo: "identityPhoto",
+  snapshot_interval_seconds: "snapshotIntervalSeconds",
+  face_check: "faceCheck",
+  require_microphone: "requireMicrophone",
+  extra_monitor_check: "extraMonitorCheck",
+  violation_limit: "violationLimit",
+  violation_action: "violationAction",
+  camera_outage_seconds: "cameraOutageSeconds",
+  multi_face_snapshots: "multiFaceSnapshots",
+  allow_calculator: "allowCalculator",
+};
+
+/**
+ * The override keys that actually differ from `profile`'s own defaults —
+ * what Task 3's marker marks, and what the confirmation dialog counts.
+ * Same presence rule as `overrideOr` (`packages/core/src/proctoring.ts`):
+ * `key in overrides && overrides[key] !== undefined`. An absent key, or an
+ * explicit `undefined`, is not a difference; `snapshot_interval_seconds: 0`
+ * is a real value and is compared on equal footing with every other one.
+ * A pure function of `(profile, overrides)` rather than a method closed
+ * over `value`, so the confirmation can ask "what would change AWAY FROM
+ * the profile being left" without needing a second copy once `onChange`
+ * has already moved `value.profile` on.
+ */
+function overriddenKeys(
+  profile: ProctoringProfile,
+  overrides: ProctoringOverrides,
+): (keyof ProctoringOverrides)[] {
+  const defaults = PROCTORING_DEFAULTS[profile];
+  return (Object.keys(OVERRIDE_KEY_TO_RESOLVED) as (keyof ProctoringOverrides)[]).filter((key) => {
+    if (!(key in overrides) || overrides[key] === undefined) return false;
+    return overrides[key] !== defaults[OVERRIDE_KEY_TO_RESOLVED[key]];
+  });
+}
+
 const VIOLATION_ACTION_LABEL: Readonly<Record<ViolationAction, string>> = {
   warn_only: "Warn only",
   warn_then_flag: "Warn, then flag",
@@ -85,6 +167,7 @@ function NumberField({
   unit,
   value,
   onCommit,
+  marker,
 }: {
   id: string;
   label: string;
@@ -92,9 +175,17 @@ function NumberField({
   unit: string;
   value: number;
   onCommit: (value: number) => void;
+  /** Task 3: the "changed from Strict" help paragraph, when this field's
+   *  override differs from its profile default — `undefined` otherwise, so
+   *  an unmarked field carries no second id. Rendered by the caller (so the
+   *  marker's own id and text stay in one place, `fieldHelp` below) and
+   *  passed in whole, the same shape `TimingPanel.tsx`'s `NumberField`
+   *  takes `children` for its own facts. */
+  marker?: { id: string; node: ReactNode } | undefined;
 }): JSX.Element {
   const [blank, setBlank] = useState(false);
   const unitId = `${id}-unit`;
+  const describedBy = marker === undefined ? unitId : `${unitId} ${marker.id}`;
   return (
     <div className="field">
       <label className="field-label" htmlFor={id}>
@@ -107,7 +198,7 @@ function NumberField({
           type="number"
           min={min}
           value={blank ? "" : value}
-          aria-describedby={unitId}
+          aria-describedby={describedBy}
           onChange={(event) => {
             const next = event.target.value;
             setBlank(next === "");
@@ -120,6 +211,7 @@ function NumberField({
           {unit}
         </span>
       </span>
+      {marker?.node}
     </div>
   );
 }
@@ -139,6 +231,11 @@ export function ProctoringPanel({
   const ids = useId();
   const resolved = resolveProctoring(value);
 
+  // Task 3 (`Q8a`): which of the fifteen overrides currently differ from
+  // THIS profile's own defaults — computed once per render, read by every
+  // field below to decide whether it carries a marker.
+  const overridden = new Set(overriddenKeys(value.profile, value.overrides));
+
   /** Writes one override key through explicitly — `next` and all, never
    *  merged through `||` or dropped by a bare `??`. Same shape as
    *  `TimingPanel.tsx`'s `withKey` and `AccessPanel.tsx`'s `omit`: a fresh
@@ -149,8 +246,26 @@ export function ProctoringPanel({
     onChange({ profile: value.profile, overrides });
   }
 
+  /** `R1`: the marker lives in the field's own help track, reached through
+   *  `aria-describedby` from this instance's `useId()` — never a named
+   *  `role="group"` nothing here renders. `undefined` when `key` is not in
+   *  `overridden`, so an unmarked field adds no id and no paragraph. */
+  function fieldMarker(key: keyof ProctoringOverrides): { id: string; node: ReactNode } | undefined {
+    if (!overridden.has(key)) return undefined;
+    const id = `${ids}-${key}-marker`;
+    return {
+      id,
+      node: (
+        <p className="field-help" id={id}>
+          {`changed from ${PROFILE_LABEL[value.profile]}`}
+        </p>
+      ),
+    };
+  }
+
   function checkboxField(key: BoolOverrideKey, label: string, checked: boolean): JSX.Element {
     const fieldId = `${ids}-${key}`;
+    const marker = fieldMarker(key);
     return (
       <div className="field" key={key}>
         <label className="field-label" htmlFor={fieldId}>
@@ -160,8 +275,10 @@ export function ProctoringPanel({
           type="checkbox"
           id={fieldId}
           checked={checked}
+          aria-describedby={marker?.id}
           onChange={(event) => setOverride(key, event.target.checked)}
         />
+        {marker?.node}
       </div>
     );
   }
@@ -176,6 +293,7 @@ export function ProctoringPanel({
         unit={unit}
         value={value}
         onCommit={(next) => setOverride(key, next)}
+        marker={fieldMarker(key)}
       />
     );
   }
@@ -191,12 +309,98 @@ export function ProctoringPanel({
   }
 
   const faceCheckHelpId = `${ids}-face_check-help`;
+  const faceCheckMarker = fieldMarker("face_check");
+  const violationActionMarker = fieldMarker("violation_action");
 
   const headingId = `${ids}-heading`;
+
+  // `Q8a`: the profile is the panel's first control and it rewrites the
+  // rest. `pendingProfile` holds the profile the organiser just picked
+  // while the confirmation is open; `null` means no confirmation is in
+  // flight (and nothing has changed yet — the select's own `value` still
+  // reads `value.profile` until the organiser confirms or the dialog is
+  // cancelled, since `onChange` is not called either way until then).
+  const [pendingProfile, setPendingProfile] = useState<ProctoringProfile | null>(null);
+  // Counted against the OLD profile — `value.profile`, unchanged while the
+  // dialog is open — so "2 settings" names what the organiser's own edits
+  // were, not what the new profile happens to differ on.
+  const pendingChangeCount = overriddenKeys(value.profile, value.overrides).length;
+
+  function cancelProfileChange(): void {
+    setPendingProfile(null);
+  }
+
+  // `R3`: this is the organiser's own cancellable confirmation of a
+  // destructive edit, not the candidate's Q2b condition-to-resolve — it
+  // takes Escape (the hook's default), and earns `trapTab`/`aria-modal`
+  // because it traps Tab, the same rule `useDialogKeys`'s own header note
+  // states and `SubmitDialog.tsx`/`Calculator.tsx` already apply.
+  const confirmDialog = useDialogKeys<HTMLDivElement>(pendingProfile !== null, cancelProfileChange, {
+    trapTab: true,
+  });
+
+  function selectProfile(nextProfile: ProctoringProfile): void {
+    if (nextProfile === value.profile) return;
+    if (overriddenKeys(value.profile, value.overrides).length === 0) {
+      // Nothing to lose — clears unconditionally (`Q8a`), but there is
+      // nothing visible to confirm.
+      onChange({ profile: nextProfile, overrides: {} });
+      return;
+    }
+    setPendingProfile(nextProfile);
+  }
+
+  function confirmProfileChange(): void {
+    if (pendingProfile === null) return;
+    onChange({ profile: pendingProfile, overrides: {} });
+    setPendingProfile(null);
+  }
+
+  const profileConfirmHeadingId = `${ids}-profile-confirm-heading`;
 
   return (
     <section className="proctoring-panel" role="group" aria-labelledby={headingId}>
       <h2 id={headingId}>Proctoring</h2>
+
+      <div className="field">
+        <label className="field-label" htmlFor={`${ids}-profile`}>
+          Profile
+        </label>
+        <select
+          className="text-input"
+          id={`${ids}-profile`}
+          value={value.profile}
+          onChange={(event) => selectProfile(event.target.value as ProctoringProfile)}
+        >
+          {(Object.keys(PROFILE_LABEL) as ProctoringProfile[]).map((profile) => (
+            <option key={profile} value={profile}>
+              {PROFILE_LABEL[profile]}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {pendingProfile !== null && (
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={profileConfirmHeadingId}
+          ref={confirmDialog.dialogRef}
+          tabIndex={-1}
+          onKeyDown={confirmDialog.onKeyDown}
+        >
+          <h3 id={profileConfirmHeadingId}>{`Change the profile to ${PROFILE_LABEL[pendingProfile]}?`}</h3>
+          <p>
+            {`${String(pendingChangeCount)} ${pendingChangeCount === 1 ? "setting differs" : "settings differ"} from ${PROFILE_LABEL[value.profile]} and will be reset to ${PROFILE_LABEL[pendingProfile]}'s defaults.`}
+          </p>
+          <button type="button" className="button-secondary" onClick={cancelProfileChange}>
+            Cancel
+          </button>
+          <button type="button" className="button-primary" onClick={confirmProfileChange}>
+            Change profile
+          </button>
+        </div>
+      )}
 
       {group(
         "Gating",
@@ -238,11 +442,14 @@ export function ProctoringPanel({
               id={`${ids}-face_check`}
               checked={value.overrides.face_check ?? false}
               disabled
-              aria-describedby={faceCheckHelpId}
+              aria-describedby={
+                faceCheckMarker === undefined ? faceCheckHelpId : `${faceCheckHelpId} ${faceCheckMarker.id}`
+              }
             />
             <p className="field-help" id={faceCheckHelpId}>
               On-device face counting ships in Phase 8. This control is disabled until then.
             </p>
+            {faceCheckMarker?.node}
           </div>,
           checkboxField("require_microphone", "Require a microphone", resolved.requireMicrophone),
         ],
@@ -261,6 +468,7 @@ export function ProctoringPanel({
               className="text-input"
               id={`${ids}-violation_action`}
               value={resolved.violationAction}
+              aria-describedby={violationActionMarker?.id}
               onChange={(event) => setOverride("violation_action", event.target.value as ViolationAction)}
             >
               {(Object.keys(VIOLATION_ACTION_LABEL) as ViolationAction[]).map((action) => (
@@ -269,6 +477,7 @@ export function ProctoringPanel({
                 </option>
               ))}
             </select>
+            {violationActionMarker?.node}
           </div>,
           numberField(
             "camera_outage_seconds",
