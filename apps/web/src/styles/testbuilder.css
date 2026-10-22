@@ -513,7 +513,16 @@
   padding: var(--space-md);
 }
 
-.form-builder__field > legend {
+/* Branch-review Finding 8: `.proctoring-panel__group > legend` joins here
+   rather than repeating these four declarations in its own rule below —
+   unlike the Task 1 CSS tidy declined for `.proctoring-panel` itself
+   (per-family grouping, a real reason not to merge), this legend rule is
+   byte-identical to this one, and the file already joins across families
+   when the declarations really are identical (see `.sets-panel__assignment
+   > legend, .shuffle-group > legend` and `.release-panel__legend,
+   .branding-panel__figure` below). */
+.form-builder__field > legend,
+.proctoring-panel__group > legend {
   padding-inline: var(--space-xs);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
@@ -1214,9 +1223,5 @@
   padding: var(--space-md);
 }
 
-.proctoring-panel__group > legend {
-  padding-inline: var(--space-xs);
-  font-family: var(--type-mono-sm-family);
-  font-size: var(--type-mono-sm-size);
-  letter-spacing: var(--type-mono-sm-letter-spacing);
-}
+/* `> legend`'s rule moved to join `.form-builder__field > legend` above
+   (branch-review Finding 8) — it was a byte-identical copy. */

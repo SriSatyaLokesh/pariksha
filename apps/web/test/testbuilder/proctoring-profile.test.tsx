@@ -32,7 +32,6 @@
 import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
-import { axe } from "jest-axe";
 import type { ProctoringOverrides, ProctoringProfile } from "@pariksha/core";
 
 import { ProctoringPanel } from "../../src/components/testbuilder/ProctoringPanel";
@@ -237,20 +236,10 @@ describe("the profile rewrites the controls, visibly (Q8a)", () => {
     });
   });
 
-  it("the panel has no axe violations", async () => {
-    const { container } = await (async () => {
-      const result = render(<Harness profile="strict" overrides={{ require_camera: false }} />);
-      await screen.findByRole("group", { name: /Proctoring/i });
-      return result;
-    })();
-    expect(await axe(container)).toHaveNoViolations();
-  });
-
-  it("the confirmation dialog has no axe violations either", async () => {
-    const { container } = render(<Harness profile="strict" overrides={{ require_camera: false }} />);
-    await screen.findByRole("group", { name: /Proctoring/i });
-    user.selectOptions(screen.getByLabelText(/Profile/i), "standard");
-    await screen.findByRole("alertdialog");
-    expect(await axe(container)).toHaveNoViolations();
-  });
+  // Branch-review Finding 10: the panel-clean and dialog-open `axe` passes
+  // that used to live here rendered the identical props
+  // (`profile="strict" overrides={{ require_camera: false }}`)
+  // `proctoring-a11y.test.tsx` renders for its own panel-clean and
+  // dialog-open passes — Task 5 is the file that owns this gate, so the
+  // two here were strictly subsumed and are gone; see that file instead.
 });
