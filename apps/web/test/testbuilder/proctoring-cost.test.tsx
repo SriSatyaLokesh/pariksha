@@ -35,13 +35,13 @@ import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
 import {
   PROCTORING_DEFAULTS,
+  snapshotCost,
   type ProctoringOverrides,
   type ProctoringProfile,
   type ResolvedProctoring,
 } from "@pariksha/core";
 
 import { ProctoringPanel } from "../../src/components/testbuilder/ProctoringPanel";
-import { snapshotCost } from "../../src/lib/snapshot-cost";
 
 type Proctoring = { profile: ProctoringProfile; overrides: ProctoringOverrides };
 
@@ -81,6 +81,17 @@ describe("snapshotCost (Q11, R1)", () => {
   // Review Focus 3 — #179's shape: a test with no duration.
   it("returns null rather than NaN when the test has no duration", () => {
     expect(snapshotCost({ durationMinutes: null, resolved: strictResolved })).toBeNull();
+  });
+
+  // Branch-review Finding 1: `require_camera: false` means `getUserMedia`
+  // is never called for video at all (`Q11b`) — no stream, nothing to
+  // snapshot — regardless of what the interval says. Strict's own interval
+  // (60 s over a 60-minute test) would otherwise price a camera that is
+  // never on.
+  it("returns null when there is no camera, even with a real interval and duration", () => {
+    expect(
+      snapshotCost({ durationMinutes: 60, resolved: { ...strictResolved, requireCamera: false } }),
+    ).toBeNull();
   });
 
   // The spec's own 180-minute, 15 s-interval worked example (§14, `Q11`),
@@ -154,10 +165,28 @@ describe("the panel states the cost, on the screen (Q11)", () => {
     expect(screen.queryByText(/Set a duration/i)).toBeNull();
   });
 
-  // The row-level clause (`R3`): Task 1's summary gains a fifth clause once
-  // `snapshotCost` can resolve one. Reached the same way Task 1's own
-  // `proctoring-row.test.tsx` reaches the row, confirming the two layers
-  // (panel body, collapsed row) agree on the same figure.
+  // Branch-review Finding 1: no camera means nothing captured (`Q11b`), so
+  // the panel states neither message — the same state `snapshotCost`'s own
+  // unit test above covers, confirmed here at the rendered level too
+  // (positive control: the test right above proves the same query matches
+  // once the figure IS shown).
+  it("renders neither message when the camera is off, even with a duration set", async () => {
+    await openProctoringPanel(
+      { profile: "strict", overrides: { require_camera: false } },
+      { durationMinutes: 60 },
+    );
+    expect(screen.queryByText(/per candidate/)).toBeNull();
+    expect(screen.queryByText(/Set a duration/i)).toBeNull();
+  });
+
+  // Branch-review Finding 7: this used to claim its render "confirms the
+  // two layers (panel body, collapsed row) agree on the same figure" — it
+  // renders `ProctoringPanel` directly and never touches `SettingRow` or
+  // `proctoringSummary`, so it confirms nothing about the row. The row's
+  // own summary string is asserted directly, with no render at all, in
+  // `proctoring-row.test.tsx`'s `proctoringSummary` suite; the shared
+  // figure the two surfaces cannot disagree on is `snapshotCost` itself,
+  // now the one function both of them call (branch-review Finding 6).
   it("live-updates as the organiser sets a duration", async () => {
     const onChange = () => undefined;
     const { rerender } = render(

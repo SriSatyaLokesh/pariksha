@@ -1,14 +1,15 @@
 import { useId, useState, type JSX, type ReactNode } from "react";
 import {
   resolveProctoring,
+  snapshotCost,
   PROCTORING_DEFAULTS,
+  PROFILE_LABEL,
   type ProctoringOverrides,
   type ProctoringProfile,
   type ResolvedProctoring,
   type ViolationAction,
 } from "@pariksha/core";
 import { useDialogKeys } from "../useDialogKeys";
-import { snapshotCost } from "../../lib/snapshot-cost";
 
 // Phase 7b Task 2 (`Q8`): the fifteen overrides, in the three groups `Q8`
 // names — gating, camera and microphone, consequences. Task 1 shipped the
@@ -82,12 +83,6 @@ type NumberOverrideKey = Extract<
   keyof ProctoringOverrides,
   "snapshot_interval_seconds" | "violation_limit" | "camera_outage_seconds" | "multi_face_snapshots"
 >;
-
-const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
-  off: "Off",
-  standard: "Standard",
-  strict: "Strict",
-};
 
 /** Every override key's resolved counterpart, so one generic function can
  *  read `PROCTORING_DEFAULTS[profile]` for any of the fifteen without
@@ -231,8 +226,11 @@ export function ProctoringPanel({
 
   // `Q11`/`Q11a` (Task 4): the cost of the settings as entered, per
   // candidate — never a total, the product does not know the headcount.
-  // `snapshotCost` already guards the division: `durationMinutes === null`
-  // and `snapshotIntervalSeconds <= 0` both come back `null` before any
+  // `snapshotCost` (moved to `@pariksha/core`, branch-review Finding 6)
+  // already guards the division: `durationMinutes === null`,
+  // `!resolved.requireCamera` (`Q11b` — no camera means no stream and
+  // nothing captured, branch-review Finding 1) and
+  // `snapshotIntervalSeconds <= 0` all come back `null` before any
   // arithmetic runs. Snapshots off reads as nothing to say (`Q11b` — off
   // means off, all the way down) rather than reusing the "set a duration"
   // sentence for a reason that is not about the duration at all.
@@ -513,16 +511,31 @@ export function ProctoringPanel({
           new selector `contrast-usage.test.ts` would need two fresh
           SURFACE entries for. `durationMinutes !== null` picks between the
           two messages: a missing duration says so in words (#179's shape),
-          while snapshots off (`cost === null` but a duration IS set) says
-          nothing, since there is no missing input to name and no cost to
-          state. */}
-      {cost !== null ? (
-        <p className="field-help">
-          {`≈ ${String(cost.images)} images · ≈ ${String(cost.megabytes)} MB · ≈ ${String(cost.uploads)} uploads per candidate`}
-        </p>
-      ) : durationMinutes === null ? (
-        <p className="field-help">Set a duration under Timing to see what this costs.</p>
-      ) : null}
+          while no cost for any other reason (no camera, or snapshots off)
+          says nothing, since there is no missing input to name and no cost
+          to state.
+
+          `role="status"`, mounted unconditionally (branch-review Finding
+          4): every other computed fact this builder states as the organiser
+          edits — `AccessPanel`'s two, `BrandingPanel`'s one,
+          `SectionList`'s undo row, `FormBuilder`'s link check — carries a
+          live region, and this is the same shape: a figure that moves when
+          the interval, the camera or the duration changes, with no other
+          way for a screen-reader organiser to learn it moved. Named, same
+          reason as `AccessPanel`'s two regions: this panel also carries the
+          "changed from {Profile}" marker, reachable only on focus, so a
+          region announcing on its own needs a name to be told apart from
+          it. Mounted unconditionally rather than only while it has
+          something to say — a live region that only exists once it is
+          populated announces nothing the first time it is populated,
+          which is 7c's sibling bug to this one. */}
+      <p role="status" aria-label="Snapshot cost" className="field-help">
+        {cost !== null
+          ? `≈ ${String(cost.images)} images · ≈ ${String(cost.megabytes)} MB · ≈ ${String(cost.uploads)} uploads per candidate`
+          : durationMinutes === null
+            ? "Set a duration under Timing to see what this costs."
+            : ""}
+      </p>
     </section>
   );
 }

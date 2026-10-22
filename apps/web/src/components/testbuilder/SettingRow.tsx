@@ -1,6 +1,8 @@
 import { useId, type ReactNode } from "react";
 import {
   resolveProctoring,
+  snapshotCost,
+  PROFILE_LABEL,
   type FormField,
   type ProctoringOverrides,
   type ProctoringProfile,
@@ -13,11 +15,11 @@ import {
 import { MODE_LABEL } from "./AccessPanel";
 import { SHOW_LABEL, WHEN_LABEL } from "./ReleasePanel";
 import { isZone } from "./TimingPanel";
-import { snapshotCost } from "../../lib/snapshot-cost";
 
-// Phase 6.5d Task 1, spec D7: the five settings — timing, access,
-// registration form, results, branding — collapse into one panel of rows
-// that each state their own setting, opening in place, one at a time.
+// Phase 6.5d Task 1, spec D7: the settings — timing, access, registration
+// form, results, branding, and (Phase 7b, `Q8`) proctoring — collapse into
+// one panel of rows that each state their own setting, opening in place,
+// one at a time.
 //
 // The panels themselves are consumed unchanged: each becomes this
 // component's `children`. What changed is where they live and when they
@@ -38,7 +40,7 @@ import { snapshotCost } from "../../lib/snapshot-cost";
 // dropped from the line, because a row that omits what is unset reads
 // identically to a row whose author never scrolled far enough.
 
-/** The five, as a value as well as a type (6.5d Task 2): `?panel=` carries
+/** The six, as a value as well as a type (6.5d Task 2): `?panel=` carries
  *  one of them, and `view-url.ts` deliberately does not validate — "an id
  *  in a URL is a claim anyone can type" — so the screen that owns the union
  *  checks the claim against it. Derived rather than written twice, because
@@ -132,7 +134,7 @@ export function SettingRow({
 }
 
 // ---------------------------------------------------------------------------
-// The five summaries. Each takes exactly the draft it states and nothing
+// The six summaries. Each takes exactly the draft it states and nothing
 // else, so there is nowhere for a stale copy to live.
 
 /** "24 Oct 09:00 IST", or `null` when the stored string is not a time this
@@ -300,13 +302,14 @@ export function brandingSummary(branding: TestBranding, workspaceBranding: TestB
 // "Strict · camera required · images every 60 s · warns at 5 violations" —
 // and stopped there. Task 4 appends the fifth, "≈ 1.5 MB per candidate",
 // through `snapshotCost` — and only when it resolves: `durationMinutes`
-// absent or 0, or snapshots off, means there is nothing to cost, and the
-// row says four clauses rather than a fifth that is empty or a dangling
-// trailing " · " (`R3`, task-4-brief.md).
-function profileLabel(profile: ProctoringProfile): string {
-  return profile.charAt(0).toUpperCase() + profile.slice(1);
-}
-
+// absent, no camera required (`Q11b` — branch-review Finding 1; `images`
+// above already reads the same way), or snapshots off, means there is
+// nothing to cost, and the row says four clauses rather than a fifth that
+// is empty or a dangling trailing " · " (`R3`, task-4-brief.md). A
+// `durationMinutes` of exactly `0` is not one of those cases — `0` is a
+// real duration as far as this function is concerned, and resolves to
+// "≈ 0 MB per candidate" rather than silence; it does not arise today
+// because `$defs/timing.duration_minutes` is `minimum: 1`.
 const VIOLATION_CLAUSE: Readonly<
   Record<ReturnType<typeof resolveProctoring>["violationAction"], (limit: number) => string>
 > = {
@@ -327,7 +330,7 @@ export function proctoringSummary(
       ? `images every ${resolved.snapshotIntervalSeconds} s`
       : "no images";
   const clauses = [
-    profileLabel(resolved.profile),
+    PROFILE_LABEL[resolved.profile],
     resolved.requireCamera ? "camera required" : "no camera",
     images,
     VIOLATION_CLAUSE[resolved.violationAction](resolved.violationLimit),

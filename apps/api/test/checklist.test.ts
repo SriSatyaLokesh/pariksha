@@ -469,6 +469,25 @@ it("is silent about cost when snapshots are off", async () => {
   expect(ids(await rows())).not.toContain("proctoring_snapshot_cost");
 });
 
+// Branch-review Finding 1's second place: this row used to gate on the
+// interval alone, so a camera-off configuration past the 200-image
+// threshold stated a cost for images `Q11b` says nothing will ever take —
+// in the same checklist that also fires `proctoring_capture_without_camera`
+// two rows up, saying exactly that. Same shared `snapshotCost` guard that
+// fixes the web panel and row fixes this one.
+it("is silent about cost when there is no camera to take it, even past the image threshold", async () => {
+  await saveDraft({
+    settings: {
+      timing: { duration_minutes: 180, opens_at: past, closes_at: future },
+      proctoring: {
+        profile: "strict",
+        overrides: { require_camera: false, snapshot_interval_seconds: 15 },
+      },
+    },
+  });
+  expect(ids(await rows())).not.toContain("proctoring_snapshot_cost");
+});
+
 // This was nearly the one blocking row Phase 7 added — a `lock` has no way
 // out but an organiser opening the attempt — and is deliberately advisory
 // instead, for the reason stated above. Both halves of that ruling need a

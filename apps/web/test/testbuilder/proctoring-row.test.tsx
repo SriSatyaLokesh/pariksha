@@ -16,6 +16,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
+import type { ViolationAction } from "@pariksha/core";
 import type {
   Actor,
   ApiClient,
@@ -24,6 +25,7 @@ import type {
   Workspace,
 } from "../../src/lib/api";
 import { OrganiserApp } from "../../src/routes/organiser";
+import { proctoringSummary } from "../../src/components/testbuilder/SettingRow";
 
 const user = { click: (element: Element) => fireEvent.click(element) };
 
@@ -209,4 +211,49 @@ describe("proctoring is the sixth setting row (Q8)", () => {
     await openBuilder({}, { panel: "proctoring" });
     expect(await screen.findByRole("group", { name: /Proctoring/ })).toBeVisible();
   });
+});
+
+// Branch-review Finding 3: the only summary assertion above
+// (`/Strict · camera required · images every 60 s/`) stops before the cost
+// clause and the four `VIOLATION_CLAUSE` strings, rendered from a draft
+// with no `timing` block — so deleting R3's entire deferred cost clause,
+// or any of the four violation-action strings, left the suite green.
+// `proctoringSummary` is exported and pure, so these need no render, no
+// `OrganiserApp`, and no fake client at all.
+describe("proctoringSummary states its full resolved setting (branch-review Finding 3)", () => {
+  it("states all five clauses for Strict with a duration — the cost clause present", () => {
+    expect(proctoringSummary({ profile: "strict", overrides: {} }, 60)).toBe(
+      "Strict · camera required · images every 60 s · warns at 5 violations · ≈ 1.5 MB per candidate",
+    );
+  });
+
+  // Branch-review Finding 1: no camera means `snapshotCost` returns `null`
+  // (`Q11b` — no stream, nothing captured), and the row must not state a
+  // cost for images it also says it will never take, nor leave a dangling
+  // " · " where the fifth clause would have been.
+  it("drops the cost clause along with the images clause when the camera is off", () => {
+    expect(proctoringSummary({ profile: "strict", overrides: { require_camera: false } }, 60)).toBe(
+      "Strict · no camera · no images · warns at 5 violations",
+    );
+  });
+
+  it("omits the cost clause, with no dangling separator, when there is no duration yet", () => {
+    expect(proctoringSummary({ profile: "strict", overrides: {} }, null)).toBe(
+      "Strict · camera required · images every 60 s · warns at 5 violations",
+    );
+  });
+
+  it.each([
+    ["warn_only", "warns only"],
+    ["warn_then_flag", "warns at 5 violations"],
+    ["auto_submit", "auto-submits at 5 violations"],
+    ["lock", "locks at 5 violations"],
+  ] satisfies [ViolationAction, string][])(
+    "states the %s violation action",
+    (violation_action, clause) => {
+      expect(
+        proctoringSummary({ profile: "strict", overrides: { violation_action } }, null),
+      ).toContain(clause);
+    },
+  );
 });
