@@ -423,7 +423,8 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
-  // Phase 7a Task 6 (`Q1c`): proctoring's four rows. All four are
+  // Phase 7a Task 6 (`Q1c`): proctoring's three rows (issue 214 removed the
+  // fourth, `proctoring_lock_without_recourse` — see below). All three are
   // advisory — Phase 7 adds no blocking row. `resolveProctoring` is the
   // one reader every Phase 7 consumer resolves settings through (`Q1`),
   // so this reads it the same way the candidate-side gates do rather than
@@ -431,9 +432,7 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
   const proctoring = resolveProctoring(settings.proctoring);
 
   // Strict's whole point is a camera-observed candidate; without one it
-  // enforces fullscreen and watermarking but watches nothing. The row that
-  // was going to block instead — a `lock` with no way to reach the
-  // organiser — stays advisory for a narrower reason below.
+  // enforces fullscreen and watermarking but watches nothing.
   //
   // This is the one place in this branch that reads `profile`, and it is
   // deliberate, not a crack in `Q1`. `Q1`'s ban is on a reader deciding
@@ -500,21 +499,10 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
-  // This was going to be the one blocking row in Phase 7 — a `lock` has no
-  // way out but an organiser opening the attempt, and an organiser who
-  // cannot be reached is a candidate stuck for good. It stays advisory
-  // because nothing in the schema names where to reach that organiser: no
-  // support-email, reply-to or from-address field exists anywhere yet, and
-  // inventing one belongs to whoever owns organiser contact details, not
-  // this task.
-  if (proctoring.violationAction === "lock") {
-    rows.push({
-      id: "proctoring_lock_without_recourse",
-      severity: "advisory",
-      field: "proctoring.overrides.violation_action",
-      message: "a locked attempt clears only when an organiser opens it — phase 8 adds the monitor",
-    });
-  }
-
+  // Issue 214: this used to be the `proctoring_lock_without_recourse` row —
+  // advisory when `violationAction === "lock"`, since a locked attempt had
+  // no way out but an organiser opening it. `resolveProctoring` now refuses
+  // `lock` outright (it always resolves `"warn_only"`), so the branch is
+  // unreachable and goes with it; see issue 213 for where it comes back.
   return rows;
 }

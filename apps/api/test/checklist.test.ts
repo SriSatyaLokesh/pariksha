@@ -414,11 +414,11 @@ it("every row names a field a screen can navigate to", async () => {
 
 // --- proctoring advisories (Phase 7a Task 6, Q1c) -----------------------
 //
-// All three are advisory — Phase 7 adds no blocking row (`Q1c`). The lock
-// row that was going to block has nowhere to send an organiser: no
-// support-email, reply-to or from-address field exists anywhere in the
-// schema yet, and inventing one belongs to whoever owns organiser contact
-// details, not this task.
+// All three are advisory — Phase 7 adds no blocking row (`Q1c`). A fourth,
+// `proctoring_lock_without_recourse`, used to fire on `violation_action:
+// "lock"`; issue 214 made `resolveProctoring` refuse `lock` outright (it
+// always resolves `"warn_only"`), so that branch — and its row — are gone.
+// The test below pins the row's absence rather than its advisory severity.
 
 it("advises on Strict without a camera, and never blocks", async () => {
   await saveDraft({ settings: { proctoring: { profile: "strict", overrides: { require_camera: false } } } });
@@ -488,18 +488,15 @@ it("is silent about cost when there is no camera to take it, even past the image
   expect(ids(await rows())).not.toContain("proctoring_snapshot_cost");
 });
 
-// This was nearly the one blocking row Phase 7 added — a `lock` has no way
-// out but an organiser opening the attempt — and is deliberately advisory
-// instead, for the reason stated above. Both halves of that ruling need a
-// row of their own: present, and never blocking.
-it("a lock with no way to reach the organiser is advisory, and never blocks", async () => {
+// Issue 214: this used to be "a lock with no way to reach the organiser is
+// advisory, and never blocks" — `proctoring_lock_without_recourse` fired on
+// `violation_action: "lock"`. `resolveProctoring` refuses `lock` outright
+// now, so the row is gone even though the document still holds the value
+// it used to fire on — pinning the row's absence, not just its severity.
+it("never advises on a lock without recourse, because resolveProctoring refuses lock outright", async () => {
   await saveDraft({ settings: { proctoring: { profile: "standard", overrides: { violation_action: "lock" } } } });
-  const list = await rows();
-  expect(list.find((r) => r.id === "proctoring_lock_without_recourse")).toMatchObject({
-    severity: "advisory",
-    message: expect.stringContaining("phase 8"),
-  });
-  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+  const list = ids(await rows());
+  expect(list).not.toContain("proctoring_lock_without_recourse");
 });
 
 it("measures the real subrequest cost of the checklist route, flat in candidates and sections", async () => {

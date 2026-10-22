@@ -71,7 +71,7 @@ describe("resolveProctoring", () => {
       requireMicrophone: false,
       extraMonitorCheck: false,
       violationLimit: 5,
-      violationAction: "warn_then_flag",
+      violationAction: "warn_only",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
       allowCalculator: false,
@@ -92,7 +92,7 @@ describe("resolveProctoring", () => {
       requireMicrophone: false,
       extraMonitorCheck: true,
       violationLimit: 5,
-      violationAction: "warn_then_flag",
+      violationAction: "warn_only",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
       allowCalculator: false,
@@ -103,7 +103,6 @@ describe("resolveProctoring", () => {
     const r = resolveProctoring({ profile: "strict" });
     expect(r.requireCamera).toBe(true);
     expect(r.snapshotIntervalSeconds).toBe(60);
-    expect(r.violationAction).toBe("warn_then_flag");
   });
 
   // Review Focus 2 — the `||` trap. 0 is a value, not an absence.
@@ -139,6 +138,24 @@ describe("resolveProctoring", () => {
     expect(r.desktopOnly).toBe(true);
     expect(r.requireMicrophone).toBe(false);
   });
+
+  // Issue #214 — pre-cut the same way Q3/Q12b cut faceCheck/requireMicrophone.
+  // Positive control first: the same override object resolves every OTHER
+  // control it sets, proving the input is real and the query is right,
+  // before the negative assertion that violationAction alone is refused —
+  // each of its three live siblings (`auto_submit`, `lock`, the document
+  // asking for `warn_then_flag`) is tried in turn.
+  it.each(["warn_then_flag", "auto_submit", "lock"] as const)(
+    "resolves violationAction warn_only even when the document asks for %s, leaving its sibling overrides honoured",
+    (violation_action) => {
+      const r = resolveProctoring({
+        profile: "off",
+        overrides: { violation_action, desktop_only: true },
+      });
+      expect(r.desktopOnly).toBe(true);
+      expect(r.violationAction).toBe("warn_only");
+    },
+  );
 
   it("has no undefined on any key for any profile", () => {
     for (const profile of ["off", "standard", "strict"] as const) {

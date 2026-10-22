@@ -48,10 +48,11 @@ import { useDialogKeys } from "../useDialogKeys";
 // or consequence goes in a field's own help line, and an explanation of the
 // WHOLE GROUP is one note under the row — never help per field, which is
 // what would otherwise repeat the same sentence five or six times. `Q3`'s
-// face-check copy and `Q12b`'s microphone copy (issue 209) are the two
-// deliberate exceptions: each is not a group fact, it is the reason ONE
-// control is unusable, and `D16a` requires every id that copy is reached by
-// to come from this instance's own `useId()`.
+// face-check copy, `Q12b`'s microphone copy (issue 209) and the
+// violation-action copy (issue 214) are the three deliberate exceptions:
+// each is not a group fact, it is the reason ONE control is unusable, and
+// `D16a` requires every id that copy is reached by to come from this
+// instance's own `useId()`.
 //
 // `R2` (pre-flight ruling, progress.md): `.field-row` / `.field` /
 // `.field-row > .field > *` are `primitives.css:194-233`'s existing D16
@@ -317,6 +318,7 @@ export function ProctoringPanel({
   const faceCheckMarker = fieldMarker("face_check");
   const requireMicrophoneHelpId = `${ids}-require_microphone-help`;
   const requireMicrophoneMarker = fieldMarker("require_microphone");
+  const violationActionHelpId = `${ids}-violation_action-help`;
   const violationActionMarker = fieldMarker("violation_action");
 
   const headingId = `${ids}-heading`;
@@ -501,6 +503,13 @@ export function ProctoringPanel({
         "Consequences",
         [
           numberField("violation_limit", "Warn after", 1, "violations", resolved.violationLimit),
+          // Issue 214: pre-cut and shipped disabled, the same treatment as
+          // `face_check` and `require_microphone` above. The raw document
+          // value is shown, not `resolved.violationAction` (always
+          // "warn_only" — the enforcement refusal is `resolveProctoring`'s,
+          // not a fact about what an imported document holds), so a
+          // document authored for issue 213 round-trips visibly even
+          // though nothing here can act on it yet.
           <div className="field" key="violation_action">
             <label className="field-label" htmlFor={`${ids}-violation_action`}>
               When the limit is reached
@@ -508,9 +517,13 @@ export function ProctoringPanel({
             <select
               className="text-input"
               id={`${ids}-violation_action`}
-              value={resolved.violationAction}
-              aria-describedby={violationActionMarker?.id}
-              onChange={(event) => setOverride("violation_action", event.target.value as ViolationAction)}
+              value={value.overrides.violation_action ?? "warn_only"}
+              disabled
+              aria-describedby={
+                violationActionMarker === undefined
+                  ? violationActionHelpId
+                  : `${violationActionHelpId} ${violationActionMarker.id}`
+              }
             >
               {(Object.keys(VIOLATION_ACTION_LABEL) as ViolationAction[]).map((action) => (
                 <option key={action} value={action}>
@@ -518,6 +531,10 @@ export function ProctoringPanel({
                 </option>
               ))}
             </select>
+            <p className="field-help" id={violationActionHelpId}>
+              Only the warning above is enforced. Auto-submit, locking and flagging are not built
+              yet — see issue 214. This control is disabled until then.
+            </p>
             {violationActionMarker?.node}
           </div>,
           numberField(
@@ -535,7 +552,7 @@ export function ProctoringPanel({
             resolved.multiFaceSnapshots,
           ),
         ],
-        "A violation counts toward the limit above; a camera outage or a crowded snapshot marks the attempt for review instead — two different axes, never added together. Locking needs an organiser to reopen the attempt.",
+        "A violation counts toward the limit above; a camera outage or a crowded snapshot marks the attempt for review instead — two different axes, never added together.",
       )}
 
       {/* `Q11`: the cost, on the screen. Reuses `.field-help` — the same

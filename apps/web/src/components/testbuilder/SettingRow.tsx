@@ -310,14 +310,16 @@ export function brandingSummary(branding: TestBranding, workspaceBranding: TestB
 // real duration as far as this function is concerned, and resolves to
 // "≈ 0 MB per candidate" rather than silence; it does not arise today
 // because `$defs/timing.duration_minutes` is `minimum: 1`.
-const VIOLATION_CLAUSE: Readonly<
-  Record<ReturnType<typeof resolveProctoring>["violationAction"], (limit: number) => string>
-> = {
-  warn_only: () => "warns only",
-  warn_then_flag: (limit) => `warns at ${plural(limit, "violation")}`,
-  auto_submit: (limit) => `auto-submits at ${plural(limit, "violation")}`,
-  lock: (limit) => `locks at ${plural(limit, "violation")}`,
-};
+// Issue 214: `resolved.violationAction` is always `"warn_only"` now —
+// `resolveProctoring` refuses `auto_submit`, `lock` and the flag half of
+// `warn_then_flag`, the same refusal `ProctoringPanel.tsx`'s disabled
+// select states to the organiser. The four-way `VIOLATION_CLAUSE` table
+// this replaced promised a candidate an auto-submit or a lock the build
+// cannot do; stating only the one true consequence needs no map of the
+// action at all, just the limit that drives the candidate's real warning.
+function violationClause(limit: number): string {
+  return `warns at ${plural(limit, "violation")}`;
+}
 
 export function proctoringSummary(
   value: { profile?: ProctoringProfile; overrides?: ProctoringOverrides } | undefined,
@@ -333,7 +335,7 @@ export function proctoringSummary(
     PROFILE_LABEL[resolved.profile],
     resolved.requireCamera ? "camera required" : "no camera",
     images,
-    VIOLATION_CLAUSE[resolved.violationAction](resolved.violationLimit),
+    violationClause(resolved.violationLimit),
   ];
   const cost = snapshotCost({ durationMinutes, resolved });
   if (cost !== null) clauses.push(`≈ ${cost.megabytes} MB per candidate`);
