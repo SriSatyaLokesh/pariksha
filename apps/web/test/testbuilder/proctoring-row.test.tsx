@@ -184,11 +184,25 @@ describe("proctoring is the sixth setting row (Q8)", () => {
   });
 
   // Review Focus 5 — one at a time, and a hand-typed key resolves deterministically.
+  //
+  // Fix round 1: the brief's own `queryByRole("group", { name: /Timing/ })`
+  // can never match anything, open or closed — `TimingPanel` (like every
+  // other existing panel) renders `<section aria-labelledby>` with no
+  // explicit `role`, which computes to ARIA `region`, not `group`.
+  // `ProctoringPanel` is the one panel that declares `role="group"`; the
+  // other five stay `region`. A `null` expectation against a role nothing
+  // ever has passes whether or not one-at-a-time actually works, so this
+  // queries Timing's panel the way it really computes: role `region`, named
+  // by its own `<h2>` ("Timing and attempts").
   it("retracts an open settings panel when proctoring opens", async () => {
     await openBuilder({});
     await user.click(screen.getByRole("button", { name: /Timing/ }));
+    // The control half of the assertion: Timing's panel really is on
+    // screen right after opening it, so the `null` below is retraction and
+    // not just a query that never matches.
+    expect(screen.getByRole("region", { name: /Timing/ })).toBeVisible();
     await user.click(screen.getByRole("button", { name: /Proctoring/ }));
-    expect(screen.queryByRole("group", { name: /Timing/ })).toBeNull();
+    expect(screen.queryByRole("region", { name: /Timing/ })).toBeNull();
   });
 
   it("opens from ?panel=proctoring", async () => {
