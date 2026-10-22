@@ -61,7 +61,12 @@ const eventItem = z.object({
     .refine((detail) => {
       if (detail === undefined) return true;
       try {
-        return JSON.stringify(detail).length <= MAX_DETAIL_BYTES;
+        // `TextEncoder`, not `.length`: a JS string's length is UTF-16 code
+        // units and D1 stores TEXT as UTF-8, so a `detail` of non-ASCII
+        // characters would land up to three times over this cap while
+        // measuring as under it. The constant is named in bytes; measure
+        // bytes.
+        return new TextEncoder().encode(JSON.stringify(detail)).length <= MAX_DETAIL_BYTES;
       } catch {
         return false; // unserialisable (e.g. circular) is refused, not ignored
       }

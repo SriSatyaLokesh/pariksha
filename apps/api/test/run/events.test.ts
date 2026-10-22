@@ -218,6 +218,21 @@ it("refuses a detail payload past the serialised bound", async () => {
   expect(res.status).toBe(400);
 });
 
+// Re-review of that fix: the bound was measured with `String.length`, which
+// counts UTF-16 code units, while D1 stores TEXT as UTF-8. A payload of
+// non-ASCII characters measured as under the cap and landed at up to three
+// times it. 300 `e`-acutes are 300 code units (under 512) and 600 bytes
+// (over it), so this test fails against the `.length` version and passes
+// against the `TextEncoder` one.
+it("measures the bound in UTF-8 bytes, not UTF-16 code units", async () => {
+  const detail = { awayMs: "é".repeat(300) };
+  expect(JSON.stringify(detail).length).toBeLessThan(512);
+  expect(new TextEncoder().encode(JSON.stringify(detail)).length).toBeGreaterThan(512);
+
+  const res = await post(EVENTS_PATH, { events: [{ type: "window_blur", detail, clientTs: 1 }] }, attemptCookie);
+  expect(res.status).toBe(400);
+});
+
 it("accepts the real shapes this phase emits, well under the bound", async () => {
   const res = await post(
     EVENTS_PATH,
