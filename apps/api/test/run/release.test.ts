@@ -293,11 +293,71 @@ it("omits it under counted_attempt: latest, where it equals this attempt", () =>
 });
 
 it("omits it when no caller has supplied prior attempts at all", () => {
-  // The production routes do not yet pass `counted` through (it is wired
-  // once a reader needs it) — `releasedResult` must still answer with a
-  // complete, counted-free payload rather than throw.
+  // A test with no `counted_attempt` set (`submit.ts`'s `countedFor`
+  // passes `undefined` in exactly this case) — `releasedResult` must still
+  // answer with a complete, counted-free payload rather than throw.
   const body = releasedResultFor({ attemptsRemaining: 0 });
   expect(body).not.toHaveProperty("counted");
+});
+
+// --- K6/K7, live: the route itself reads prior attempts, only once -------
+//
+// The tests above prove `releasedResult` when handed data; they would not
+// notice `apps/api/src/run/submit.ts` never actually reading any. This
+// drives the real `/submit` route across two real attempts and checks the
+// figure that comes back is a real prior attempt's, read through
+// `attemptFiguresForCandidate` (`packages/db`) — not a stub, and not an
+// echo of this attempt's own score.
+
+it("K7, live: absent on attempt 1 of 2, and correct — naming the PRIOR attempt — on attempt 2", async () => {
+  // The first attempt scores higher (both questions right); the second,
+  // deliberately lower (one). If `counted` on the second response ever
+  // matched *that* response's own `percent` instead of the first
+  // attempt's, this would still pass by accident — scoring them apart is
+  // what makes the assertion below mean "read a prior attempt" rather
+  // than "echoed this one".
+  const started = await startAttemptFor(deps, app, "rel-counted", { roll: "CTD" });
+  const firstPaper = started.paper as AttemptPaper;
+  const logicId = firstPaper.sections[0]!.questions[0]!.id;
+  const quantId = firstPaper.sections[1]!.questions[0]!.id;
+  const answerRight = (cookie: string, questionId: string) =>
+    app.request(ANSWER_PATH, {
+      method: "PUT",
+      headers: { cookie, "content-type": "application/json" },
+      body: JSON.stringify({
+        questionId,
+        value: { kind: "option", option: "a" },
+        clientSeq: 1,
+      }),
+    });
+
+  await answerRight(started.cookie, logicId);
+  await answerRight(started.cookie, quantId);
+  const firstBody = (await (
+    await app.request(SUBMIT_PATH, { method: "POST", headers: { cookie: started.cookie } })
+  ).json()) as { released: Released | null };
+  expect(firstBody.released).not.toHaveProperty("counted");
+  expect(firstBody.released?.percent).toBeCloseTo(57.14, 2);
+
+  const second = await startAttemptFor(deps, app, "rel-counted", {
+    candidateId: started.candidateId,
+  });
+  await answerRight(second.cookie, logicId);
+  const counting = countingDeps(deps);
+  const countedApp = createApp(counting.deps);
+  const secondBody = (await (
+    await countedApp.request(SUBMIT_PATH, { method: "POST", headers: { cookie: second.cookie } })
+  ).json()) as { released: Released | null };
+
+  expect(secondBody.released?.percent).toBeCloseTo(28.57, 2);
+  expect(secondBody.released?.counted).toEqual({
+    percent: firstBody.released!.percent,
+    attemptId: firstPaper.attemptId,
+    of: 2,
+  });
+  // `rel-counted` is the combination declared most expensive: `full_review`
+  // (the bank, for the key) plus this read, on the last attempt.
+  expect(counting.counts().total, SUBMIT_PATH).toBe(ROUTE_BUDGETS[SUBMIT_PATH]);
 });
 
 // --- the degrade ruling --------------------------------------------------
@@ -449,10 +509,20 @@ it("S-07: the guess limiter is keyed on the attempt the reference resolved to", 
 // --- the budgets ---------------------------------------------------------
 
 it("every Task 11 route spends exactly its declared budget", async () => {
-  // A fresh address: `email_code_address` allows five codes per inbox per
-  // ten minutes, and the C-09 tests above have spent `EMAIL`'s.
+  // `/verify` goes through `resultFor`, same as the finish page — so its
+  // worst case is `rel-counted`'s **last** attempt (`full_review`, two
+  // attempts, `counted_attempt: "highest"`), not `rel-review`'s only one.
+  // `/code` does not call `resultFor` and costs the same either way.
   const budgetEmail = "budget@vce.ac.in";
-  const ref = await sitWithEmail("rel-review", budgetEmail);
+  const first = await sit("rel-counted", { roll: "BUDGET1" });
+  const candidateId = await candidateOf(first.paper);
+  await deps.db.run("UPDATE candidate SET form_values_json = ? WHERE id = ?", [
+    deps.db.jsonParam({ roll: "BUDGET1", email: budgetEmail }),
+    candidateId,
+  ]);
+  const second = await sit("rel-counted", { candidateId });
+  const ref = second.paper.attemptId;
+
   const codeCount = countingDeps(deps);
   const codeApp = createApp({ ...codeCount.deps, email: deps.email });
   expect(
@@ -469,14 +539,15 @@ it("every Task 11 route spends exactly its declared budget", async () => {
   const code = codeFrom();
   const verifyCount = countingDeps(deps);
   const verifyApp = createApp(verifyCount.deps);
-  expect(
-    (
-      await verifyApp.request(VERIFY_PATH, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ attemptRef: ref, email: budgetEmail, code }),
-      })
-    ).status,
-  ).toBe(200);
+  const verifyRes = await verifyApp.request(VERIFY_PATH, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ attemptRef: ref, email: budgetEmail, code }),
+  });
+  expect(verifyRes.status).toBe(200);
+  // The worst case is real, not assumed: this is also the last attempt of
+  // a `counted_attempt` test, so the body it actually paid 7 for carries
+  // the figure.
+  expect((await verifyRes.json()) as { counted?: unknown }).toHaveProperty("counted");
   expect(verifyCount.counts().total, VERIFY_PATH).toBe(ROUTE_BUDGETS[VERIFY_PATH]);
 });

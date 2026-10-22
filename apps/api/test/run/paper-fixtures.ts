@@ -21,7 +21,7 @@ import {
   REGISTRATION_TTL_MS,
   registrationHash,
 } from "../../src/run/entry.js";
-import type { Question, SetAssignment, SingleQuestion } from "@pariksha/core";
+import type { CountedAttempt, Question, SetAssignment, SingleQuestion } from "@pariksha/core";
 import type { AppDeps } from "../../src/app.js";
 import { FIXED_NOW } from "../deps.js";
 import { CONSENT, DAY, iso, seedTest } from "./fixtures.js";
@@ -461,7 +461,12 @@ export const RESULT_FORM = {
 /** The release settings each case needs, one published test per case —
  *  `release.when` and `release.show` are version settings, so they cannot
  *  be varied on one test without republishing it mid-suite. */
-const RELEASES: { slug: string; release: Record<string, unknown>; attempts?: number }[] = [
+const RELEASES: {
+  slug: string;
+  release: Record<string, unknown>;
+  attempts?: number;
+  counted?: CountedAttempt;
+}[] = [
   { slug: "rel-never", release: { when: "never" } },
   { slug: "rel-score", release: { when: "on_submit", show: "score_only" } },
   { slug: "rel-sections", release: { when: "on_submit", show: "score_and_sections" } },
@@ -471,6 +476,16 @@ const RELEASES: { slug: string; release: Record<string, unknown>; attempts?: num
   { slug: "rel-review-3", release: { when: "on_submit", show: "full_review" }, attempts: 3 },
   { slug: "rel-later", release: { when: "on_date", at: iso(FIXED_NOW + DAY), show: "score_only" } },
   { slug: "rel-undated", release: { when: "on_date", show: "score_only" } },
+  // `K6`/`K7`, live: two attempts, `counted_attempt: "highest"`, released at
+  // `full_review` — the one combination that pays both the bank read and
+  // `attemptFiguresForCandidate`'s read at once, which is what the
+  // `/submit` and `/verify` budgets are measured against.
+  {
+    slug: "rel-counted",
+    release: { when: "on_submit", show: "full_review" },
+    attempts: 2,
+    counted: "highest",
+  },
 ];
 
 export async function seedResultTests(
@@ -488,6 +503,7 @@ export async function seedResultTests(
             ...paperTiming,
             navigation: "free",
             ...(one.attempts === undefined ? {} : { attempts_allowed: one.attempts }),
+            ...(one.counted === undefined ? {} : { counted_attempt: one.counted }),
           },
           access: gated,
           registration_form: RESULT_FORM,

@@ -9,6 +9,7 @@
 
 import { afterAll, beforeEach, expect, it } from "vitest";
 import {
+  attemptFiguresForCandidate,
   closeClient,
   countAttemptsForCandidate,
   countAttemptsForVersion,
@@ -273,6 +274,63 @@ it("another candidate's attempts are not counted against this one", async () => 
   const theirs = await candidateIn(alpha);
   await attempt(alpha, { candidateId: theirs, tokenHash: "theirs" });
   expect((await countAttemptsForCandidate(db, alpha.workspaceId, mine, NOW)).count).toBe(0);
+});
+
+// --- attemptFiguresForCandidate (K6/K7) ---------------------------------
+
+/** Stamps a submitted attempt's score — `attempt()` writes `submitted_at`
+ *  but never a score, and `K6`'s figures need one to read. */
+async function score(id: string, percent: number): Promise<void> {
+  await db.run("UPDATE attempt SET score_json = ? WHERE id = ?", [
+    db.jsonParam({ percent, total: percent, max: 100, passed: null, pending: [], perQuestion: {}, sections: [] }),
+    id,
+  ]);
+}
+
+it("one statement returns every submitted, scored attempt as a figure", async () => {
+  const candidateId = await candidateIn(alpha);
+  const first = await attempt(alpha, {
+    candidateId,
+    tokenHash: "fig-1",
+    submittedAt: NOW - 2 * MINUTE,
+  });
+  await score(first, 72);
+  const second = await attempt(alpha, { candidateId, tokenHash: "fig-2", submittedAt: NOW - MINUTE });
+  await score(second, 81);
+
+  const counting = countingClient(db);
+  const figures = await attemptFiguresForCandidate(counting.db, alpha.workspaceId, candidateId);
+
+  expect(counting.count()).toBe(1);
+  expect(figures).toEqual(
+    expect.arrayContaining([
+      { attemptId: first, percent: 72, submittedAt: NOW - 2 * MINUTE },
+      { attemptId: second, percent: 81, submittedAt: NOW - MINUTE },
+    ]),
+  );
+  expect(figures).toHaveLength(2);
+});
+
+it("excludes an attempt that has not been submitted", async () => {
+  const candidateId = await candidateIn(alpha);
+  await attempt(alpha, { candidateId, tokenHash: "live-one" });
+  expect(await attemptFiguresForCandidate(db, alpha.workspaceId, candidateId)).toEqual([]);
+});
+
+it("excludes a submitted attempt the engine never scored", async () => {
+  const candidateId = await candidateIn(alpha);
+  // Submitted (`finishAttempt` ran) but `score` stayed null — the
+  // ungradeable-engine case `submit.ts` documents.
+  await attempt(alpha, { candidateId, tokenHash: "unscored", submittedAt: NOW });
+  expect(await attemptFiguresForCandidate(db, alpha.workspaceId, candidateId)).toEqual([]);
+});
+
+it("another candidate's attempts are not read against this one", async () => {
+  const mine = await candidateIn(alpha);
+  const theirs = await candidateIn(alpha);
+  const theirAttempt = await attempt(alpha, { candidateId: theirs, tokenHash: "theirs-scored", submittedAt: NOW });
+  await score(theirAttempt, 90);
+  expect(await attemptFiguresForCandidate(db, alpha.workspaceId, mine)).toEqual([]);
 });
 
 // --- integrity_flag / observed (Phase 7a Task 3, Q6) --------------------

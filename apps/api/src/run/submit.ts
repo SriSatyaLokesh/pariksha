@@ -31,13 +31,16 @@
 
 import {
   appendAudit,
+  attemptFiguresForCandidate,
   countAttemptsForCandidate,
   finishAttempt,
   listResponses,
   workspaceQuestions,
 } from "@pariksha/db";
 import {
+  type AttemptFigure,
   type AttemptScore,
+  type CountedAttempt,
   type Question,
   type ResponseValue,
   type ScoringDefaults,
@@ -160,6 +163,28 @@ export function blockedQuestions(
 /** Section id to the title the candidate reads, off the pinned paper. */
 const titlesOf = (layout: PinnedLayout): Record<string, string> =>
   Object.fromEntries(layout.paper.map((section) => [section.id, section.title]));
+
+/**
+ * `K6`/`K7`'s `counted` argument to `releasedResult`, read only when it
+ * could actually be used. Mirrors `releasedResult`'s own gate
+ * (`attemptsRemaining === 0`, never under `"latest"`) exactly, so this
+ * route never pays `attemptFiguresForCandidate`'s subrequest for a result
+ * `releasedResult` is guaranteed to discard (`K9`) — the one other read of
+ * this candidate's prior attempts, and the one this route's `/submit`
+ * budget is measured with on the path that takes it.
+ */
+async function countedFor(
+  deps: AppDeps,
+  workspaceId: string,
+  candidateId: string,
+  countedAttempt: CountedAttempt | undefined,
+  attemptsRemaining: number,
+): Promise<{ mode: CountedAttempt; attempts: readonly AttemptFigure[] } | undefined> {
+  if (attemptsRemaining > 0 || countedAttempt === undefined || countedAttempt === "latest") {
+    return undefined;
+  }
+  return { mode: countedAttempt, attempts: await attemptFiguresForCandidate(deps.db, workspaceId, candidateId) };
+}
 
 /** The live documents for this paper's questions, in the order the
  *  candidate saw them — which is the order a review reads in. A question
@@ -286,6 +311,13 @@ export async function submitAttempt(
               now,
               attemptsRemaining,
               titles,
+              await countedFor(
+                deps,
+                attempt.workspaceId,
+                attempt.candidateId,
+                timing.counted_attempt,
+                attemptsRemaining,
+              ),
             ),
     };
   }
@@ -365,6 +397,13 @@ export async function submitAttempt(
             now,
             attemptsRemaining,
             titles,
+            await countedFor(
+              deps,
+              attempt.workspaceId,
+              attempt.candidateId,
+              timing.counted_attempt,
+              attemptsRemaining,
+            ),
           ),
   };
 }
@@ -432,5 +471,6 @@ export async function resultFor(
     now,
     attemptsRemaining,
     titlesOf(attempt.layout),
+    await countedFor(deps, attempt.workspaceId, attempt.candidateId, timing.counted_attempt, attemptsRemaining),
   );
 }
