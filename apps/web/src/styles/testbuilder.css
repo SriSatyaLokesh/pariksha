@@ -1178,3 +1178,15 @@
     max-height: 60dvh;
   }
 }
+
+/* Phase 7b Task 1 (`Q8`): the sixth row's panel. Shell only — the
+   note it carries reuses `.field-help` (registration.css), already covered
+   by contrast-usage.test.ts, rather than a new coloured selector for one
+   sentence Task 2 replaces. This rule sets no colour of its own, the same
+   as `.timing-panel`/`.access-panel`/`.release-panel` above, so it needs no
+   SURFACE entry either. */
+.proctoring-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
