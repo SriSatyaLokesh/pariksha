@@ -37,6 +37,11 @@ it("C-01: the landing payload carries everything the page shows", async () => {
       requirements: [
         "This test must be taken on a desktop or laptop, not a phone or tablet.",
         "Use a fully updated Chrome, Edge, Firefox or Safari.",
+        // Whole-branch review, finding 3: window-leave is monitored and
+        // counted whenever any control is active, not only under
+        // `requireFullscreen` — this sentence is gated on that same
+        // predicate, so the candidate is told before it is enforced.
+        "Leaving this browser tab or window is logged.",
         "The test runs in fullscreen. Leaving it is logged.",
         // Phase 7c Task 5 (`T5-R3`): `blockCopyPaste` gets its own sentence
         // now and Standard defaults it `true` — copied verbatim from

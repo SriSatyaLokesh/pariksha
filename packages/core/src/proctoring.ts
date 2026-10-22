@@ -161,35 +161,15 @@ export function resolveProctoring(
 }
 
 /**
- * `Q1b`: plain sentences for the start page, from the same object the
- * runtime enforces — a candidate who will be denied for having no camera
- * learns it before the timer, not from a drifted second copy of this list.
- * `T5-R3` (7c Task 5): `blockCopyPaste` and `watermark` get a sentence here
- * too — the same reason a camera does: the candidate learns what is
- * enforced before the timer starts, not after a paste is refused or their
- * name shows up across the page. Standard defaults `blockCopyPaste` true,
- * so this is the sentence that changes Standard's resolved list.
- *
- * Fixed order: desktop, browser, fullscreen, copy/paste, watermark, camera,
- * identity photo, images, microphone, extra monitor — `ResolvedProctoring`'s
- * own field order. A disabled control contributes no line. The browser line
- * itself is backed by no override — it is emitted
- * only when at least one other requirement is enabled (derived from
- * whether any other line was produced, not from `profile`), so Off still
- * produces an empty list. Identity photo and images are additionally
- * gated on `requireCamera`: neither capture can happen without it
- * (`Q11b`), so a document that asks for one without the other promises
- * nothing here — see the checklist's `proctoring_capture_without_camera`
- * row for where that organiser is told instead.
+ * Review finding 7 (whole-branch): the one "is any proctoring control
+ * active" fact, read by both packages that need to ask it —
+ * `proctoringRequirements` below (the browser line and the window-leave
+ * line) and `ProctoringLayer` (whether to monitor window-leave at all).
+ * One definition, here, rather than two expressions that can read
+ * differently the moment someone adds a control to one and not the other.
  */
-export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
-  const lines: string[] = [];
-
-  if (resolved.desktopOnly) {
-    lines.push("This test must be taken on a desktop or laptop, not a phone or tablet.");
-  }
-
-  const anyOtherRequirement =
+export function anyProctoringControlActive(resolved: ResolvedProctoring): boolean {
+  return (
     resolved.desktopOnly ||
     resolved.requireFullscreen ||
     resolved.blockCopyPaste ||
@@ -198,8 +178,46 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
     resolved.identityPhoto ||
     resolved.snapshotIntervalSeconds > 0 ||
     resolved.requireMicrophone ||
-    resolved.extraMonitorCheck;
-  if (anyOtherRequirement) {
+    resolved.extraMonitorCheck
+  );
+}
+
+/**
+ * `Q1b`: plain sentences for the start page, from the same object the
+ * runtime enforces — a candidate who will be denied for having no camera
+ * learns it before the timer, not from a drifted second copy of this list.
+ * `T5-R3` (7c Task 5): `blockCopyPaste` and `watermark` get a sentence here
+ * too — the same reason a camera does: the candidate learns what is
+ * enforced before the timer starts, not after a paste is refused or their
+ * watermark shows up across the page. Standard defaults `blockCopyPaste`
+ * true, so this is the sentence that changes Standard's resolved list.
+ * Review finding 3: window-leave is monitored and counted whenever
+ * `anyProctoringControlActive` is true, not only under
+ * `requireFullscreen` — the sentence below is gated on that same
+ * predicate, so the two cannot diverge again.
+ *
+ * Fixed order: desktop, browser, window-leave, fullscreen, copy/paste,
+ * watermark, camera, identity photo, images, microphone, extra monitor —
+ * `ResolvedProctoring`'s own field order, with the two sentences that have
+ * no dedicated field (browser, window-leave) ahead of it. A disabled
+ * control contributes no line. The browser and window-leave lines are
+ * backed by no override of their own — both are emitted only when
+ * `anyProctoringControlActive` is true, so Off still produces an empty
+ * list. Identity photo and images are additionally gated on
+ * `requireCamera`: neither capture can happen without it (`Q11b`), so a
+ * document that asks for one without the other promises nothing here —
+ * see the checklist's `proctoring_capture_without_camera` row for where
+ * that organiser is told instead.
+ */
+export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
+  const lines: string[] = [];
+
+  if (resolved.desktopOnly) {
+    lines.push("This test must be taken on a desktop or laptop, not a phone or tablet.");
+  }
+
+  const anyControlActive = anyProctoringControlActive(resolved);
+  if (anyControlActive) {
     // No device clause here — `desktopOnly` is the only line that names a
     // device, and it already fires whenever a device is actually required
     // (the only time it is true). `desktop_only` is a supported
@@ -208,6 +226,11 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
     // false, the same false claim Task 11 deliberately removed from
     // `apps/web/src/routes/exam.tsx`'s device check.
     lines.push("Use a fully updated Chrome, Edge, Firefox or Safari.");
+    // Review finding 3: `window_blur`/`visibility_hidden` are monitored
+    // and counted whenever any control is active (`ProctoringLayer`), not
+    // only under `requireFullscreen` — this line keeps that true for the
+    // candidate as well as for the runtime.
+    lines.push("Leaving this browser tab or window is logged.");
   }
 
   if (resolved.requireFullscreen) {
@@ -217,7 +240,7 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
     lines.push("Copying, pasting and right-click are disabled, and attempts are logged.");
   }
   if (resolved.watermark) {
-    lines.push("Your name and the time are shown as a watermark across the page.");
+    lines.push("Your attempt id and the time are shown as a watermark across the page.");
   }
   if (resolved.requireCamera) {
     lines.push("A working camera is required for the whole test.");
@@ -242,7 +265,10 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
     lines.push("A working microphone is required for the whole test.");
   }
   if (resolved.extraMonitorCheck) {
-    lines.push("A second monitor is not allowed and is checked for.");
+    // Review finding 2: nothing refuses or blocks on `extra_monitor` — it
+    // is recorded and counted as a violation, never more than that.
+    // "Not allowed" overclaimed; this says what the code actually does.
+    lines.push("A second monitor is checked for and recorded.");
   }
 
   return lines;
