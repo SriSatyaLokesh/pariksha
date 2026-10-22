@@ -980,11 +980,17 @@ is a no-op. The second includes `worker.test.ts`, the real Worker entry against 
 is D1's own engine running locally** — that is where a migration is proved, because no test in this
 repository reaches Cloudflare.
 
-**The owner's step**, which the sandbox classifier refuses for the agent:
+**Applying it — the executing agent's step, confirmed by the owner on 2026-10-23:**
 
 ```
-! node deploy/cloudflare/setup.mjs
+node deploy/cloudflare/setup.mjs
 ```
+
+**Narrow authorisation, not a general licence.** `CLAUDE.md` lists this among the commands that
+touch the live account and bills it, and that stands. It is authorised for **this migration, as
+part of this task's definition of done** — once, deliberately, after the dry run above is clean.
+Never to "try something", and never extended to `wrangler d1 execute --remote`, `wrangler deploy`,
+`wrangler r2 object put/delete` or `wrangler secret put`.
 
 **After the merge, check the count.** `GET /api/v1/health` answers `{"migrations":N}`, and **N must
 equal the number of files in `packages/db/migrations/sqlite/`** — eleven once `0009` lands, twelve

@@ -836,13 +836,19 @@ execution rather than deferred at planning.**
 
 **`K41` (owner) — `0010` is applied to the live database *before* 8a merges, not after.**
 
-> Ruling: applying the migration is an explicit, blocking item in 8a's definition of done, run by
-> the owner (`node deploy/cloudflare/setup.mjs` — the sandbox classifier refuses it for **this**
-> agent). **The session executing Phase 8 reports it can run the script itself** — a
-> `CLOUDFLARE_API_TOKEN` with the D1 and R2 grants is present in its environment, and it applied
-> `0008` on 2026-10-22 that way. If so the step is theirs to close rather than a handoff, but the
-> **gate does not move**: applied before merge, either way. Confirm with the owner before relying
-> on it — a peer session's account of its own permissions is not this one's authorisation.
+> Ruling: applying the migration is an explicit, blocking item in 8a's definition of done, and
+> **the executing agent runs it** — `node deploy/cloudflare/setup.mjs`, with a
+> `CLOUDFLARE_API_TOKEN` carrying the D1 and R2 grants. **Confirmed by the owner on 2026-10-23**;
+> it is no longer a handoff. The **gate does not move**: `0009` is applied *before* 8a merges,
+> whoever runs it.
+>
+> **This is a narrow authorisation, not a general licence.** `CLAUDE.md` lists `setup.mjs` among
+> the commands that touch the live account and bills it, and that stands. It is authorised **for
+> applying this phase's migration as part of 8a's definition of done**, once, deliberately. Every
+> other use is still the thing `CLAUDE.md` forbids: never run it "to try something", and
+> `--dry-run` remains the default for all verification. The same ruling does **not** extend to
+> `wrangler d1 execute --remote`, `wrangler deploy`, `wrangler r2 object put/delete` or
+> `wrangler secret put`.
 > The agent's own pre-merge evidence is the two free checks `CLAUDE.md` names:
 > `node deploy/cloudflare/setup.mjs --dry-run` (the whole flow twice against an in-memory
 > Cloudflare, asserting the second run is a no-op) and `pnpm --filter @pariksha/api test`, whose
