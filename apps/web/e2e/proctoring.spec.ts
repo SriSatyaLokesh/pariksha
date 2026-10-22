@@ -35,7 +35,7 @@
 // independent request.
 
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { createWorkspace } from "./seed.ts";
+import { createWorkspace } from "./seed";
 
 interface SeededAttempt {
   workspaceSlug: string;
