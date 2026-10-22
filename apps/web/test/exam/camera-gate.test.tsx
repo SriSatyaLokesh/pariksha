@@ -219,7 +219,29 @@ async function openCandidateStart(opts: {
  *  one, independent of `requireCamera` (`Q11b`'s own distinction).
  *  Returns the render result so a caller that needs to unmount (checking
  *  "Stop the tracks") can. */
+/** Strict resolves `desktopOnly: true`, and 7c's branch-review fix made the
+ *  device gate decide **at mount** instead of only after the candidate
+ *  clicks "Check my device" — so a Strict attempt now cannot start at all
+ *  unless the environment reads as a desktop. jsdom's `matchMedia` answers
+ *  `matches: false` to every query, including `pointer: fine`, so without
+ *  this the gate correctly refuses and Start stays disabled.
+ *
+ *  Only `innerWidth` and `matchMedia` are stubbed, deliberately:
+ *  `device-gate.test.tsx` also replaces `navigator` wholesale, which would
+ *  take `navigator.mediaDevices` — the thing this file exists to install —
+ *  down with it. jsdom's own UA is not a phone UA, so it needs no stub. */
+function stubDesktop(): void {
+  vi.stubGlobal("innerWidth", 1440);
+  vi.stubGlobal("matchMedia", (query: string) => ({
+    matches: query.includes("pointer: fine"),
+    media: query,
+    addEventListener: () => undefined,
+    removeEventListener: () => undefined,
+  }));
+}
+
 async function startStrictAttempt(opts: { identityPhoto: boolean }): Promise<ReturnType<typeof render>> {
+  stubDesktop();
   const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: opts.identityPhoto };
   const test: LandingPayload = {
     ...landingFixture,
