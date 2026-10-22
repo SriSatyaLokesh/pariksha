@@ -41,7 +41,7 @@ beforeEach(() => {
 });
 
 it("runs no job for an unknown cron", async () => {
-  expect(await runScheduled("* * * * *", deps)).toEqual({ ran: [] });
+  expect(await runScheduled("* * * * *", deps)).toEqual({ ran: [], failed: [] });
 });
 
 it("runs every job registered for a matching cron", async () => {
@@ -51,7 +51,12 @@ it("runs every job registered for a matching cron", async () => {
     fake("c", "*/5 * * * *"),
   );
 
-  expect((await runScheduled("17 3 * * *", deps)).ran).toEqual(["a", "b"]);
+  const result = await runScheduled("17 3 * * *", deps);
+  expect(result.ran).toEqual(["a", "b"]);
+  // Positive control beside the negative below (`one job throwing does not
+  // stop the others`): nothing threw here, so `failed` is empty — not a
+  // vacuous `toEqual([])` on its own (`M-5`'s standard).
+  expect(result.failed).toEqual([]);
 });
 
 // The positive control for the throw test below: without this, a reader
@@ -64,7 +69,11 @@ it("one job throwing does not stop the others", async () => {
 
   const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
-  expect((await runScheduled("17 3 * * *", deps)).ran).toEqual(["b"]);
+  const result = await runScheduled("17 3 * * *", deps);
+  expect(result.ran).toEqual(["b"]);
+  // `M-3`: the caller (`index.ts`'s `scheduled`) needs the failed job's
+  // name to make the cron invocation itself report failure.
+  expect(result.failed).toEqual(["a"]);
   expect(a.run).toHaveBeenCalledTimes(1);
   expect(b.run).toHaveBeenCalledTimes(1);
   // The throw is observable, not swallowed: logged with the job name and

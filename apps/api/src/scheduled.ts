@@ -29,21 +29,28 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [];
 
 /**
  * Runs every job registered for `cron`, in order. One job throwing is
- * caught, logged and skipped — never left to reject the handler, which
- * would take every job after it down too and (per Workers' retry behaviour)
- * re-run the ones that already succeeded.
+ * caught, logged and skipped, never left to reject this function — that
+ * would take every job after it down too and (per Workers' retry
+ * behaviour) re-run the ones that already succeeded.
+ *
+ * `failed` names what it caught (`M-3`): every job still runs regardless
+ * of whether an earlier one threw (`K27`'s isolation — unchanged by this),
+ * but the caller now has what it needs to make the cron invocation itself
+ * report failure to Cloudflare instead of a silent 100% on the dashboard.
  */
 export async function runScheduled(
   cron: string,
   deps: AppDeps,
-): Promise<{ ran: string[] }> {
+): Promise<{ ran: string[]; failed: string[] }> {
   const ran: string[] = [];
+  const failed: string[] = [];
   for (const job of SCHEDULED_JOBS) {
     if (job.cron !== cron) continue;
     try {
       await job.run(deps);
       ran.push(job.name);
     } catch (err) {
+      failed.push(job.name);
       console.error(
         JSON.stringify({
           level: "error",
@@ -55,5 +62,5 @@ export async function runScheduled(
       );
     }
   }
-  return { ran };
+  return { ran, failed };
 }

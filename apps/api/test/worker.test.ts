@@ -10,6 +10,7 @@ import { expect, it } from "vitest";
 import { d1Client, migrate } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
+import { SCHEDULED_JOBS } from "../src/scheduled.js";
 
 const binding = () => d1Client((env as { DB: D1Database }).DB);
 
@@ -293,19 +294,36 @@ it("a deeper miss still answers with the static 404 page, not the shell", async 
 // also the only way to await the `ctx.waitUntil` the handler defers its work
 // into, and therefore the only way a job's failure could ever surface here.
 //
-// The registry ships empty (`SCHEDULED_JOBS`), so this asserts the handler
-// is reachable, binds, and settles — not that any job ran. That is the whole
-// claim worth making today, and it is the one that stops being true silently.
+// `M-4`: reaching the end of this test without throwing used to be the
+// whole claim, and it would have held just as well with `ctx.waitUntil`
+// never called, `runScheduled` never invoked, or `scheduled`'s body
+// emptied outright. With `M-3` done, a job's failure crosses `ctx.waitUntil`
+// as a rejection, which is an outcome this test can actually assert on —
+// so it registers one throwing job (matching the nightly cron, removed in
+// `finally` so the registry really does ship empty for every other test),
+// and the proof the whole real path ran — registry lookup, `deps(env)`,
+// `ctx.waitUntil`, this file's own D1 binding threaded all the way through
+// — is that rejection reaching here, naming the job that threw.
 it("the worker entry accepts a scheduled invocation over the same bindings", async () => {
   await migrate(d1Client(env.DB as unknown as D1Database));
 
-  const ctx = createExecutionContext();
-  worker.scheduled(
-    { cron: "17 3 * * *", scheduledTime: Date.now(), noRetry: () => {} },
-    env as unknown as Parameters<typeof worker.scheduled>[1],
-    ctx,
-  );
-  // Without this the test passes on a handler that defers everything and
-  // never settles — `waitUntil`'s promise is exactly what would be missed.
-  await waitOnExecutionContext(ctx);
+  const probe = {
+    name: "m4-probe",
+    cron: "17 3 * * *",
+    run: () => Promise.reject(new Error("m4-probe blew up")),
+  };
+  SCHEDULED_JOBS.push(probe);
+  try {
+    const ctx = createExecutionContext();
+    worker.scheduled(
+      { cron: "17 3 * * *", scheduledTime: Date.now(), noRetry: () => {} },
+      env as unknown as Parameters<typeof worker.scheduled>[1],
+      ctx,
+    );
+    // Without this the test passes on a handler that defers everything and
+    // never settles — `waitUntil`'s promise is exactly what would be missed.
+    await expect(waitOnExecutionContext(ctx)).rejects.toThrow(/m4-probe/);
+  } finally {
+    SCHEDULED_JOBS.length = 0;
+  }
 });

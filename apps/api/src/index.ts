@@ -104,11 +104,23 @@ export default {
   // no jobs; 8b, 8d and 8e each append one. `ctx.waitUntil` because
   // `runScheduled`'s promise resolving is the only thing keeping the
   // isolate alive once this method returns.
+  //
+  // `M-3`: every job still runs regardless of an earlier one throwing —
+  // that isolation is `runScheduled`'s own, untouched here — but the
+  // promise handed to `waitUntil` now rejects when `failed` is non-empty,
+  // so one job throwing every night is a failing cron invocation on
+  // Cloudflare's dashboard rather than a logged line nobody is watching.
   scheduled(
     controller: ScheduledController,
     env: WorkerEnv,
     ctx: ExecutionContext,
   ): void {
-    ctx.waitUntil(runScheduled(controller.cron, deps(env)).then(() => {}));
+    ctx.waitUntil(
+      runScheduled(controller.cron, deps(env)).then(({ failed }) => {
+        if (failed.length > 0) {
+          throw new Error(`scheduled: ${String(failed.length)} job(s) failed: ${failed.join(", ")}`);
+        }
+      }),
+    );
   },
 };
