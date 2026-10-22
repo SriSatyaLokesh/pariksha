@@ -41,9 +41,10 @@
 //     attempt: the proctoring ingest is an endpoint a candidate's browser
 //     can call in a loop, and each call writes a batch of rows regardless
 //     of outcome, so there is no "miss" to charge instead.
-//   * `attempt_snapshot` (`B3`) is the same shape, keyed per attempt too —
-//     and harder, since each call also writes an R2 object, not just D1
-//     rows. See its own entry in `LIMITS` for the arithmetic.
+//   * `attempt_snapshot` (`B3`) is the same shape and the same window,
+//     keyed per attempt too — and harder in cost, since each call also
+//     writes an R2 object, not just D1 rows. See its own entry in `LIMITS`
+//     for the arithmetic.
 //
 // **Never per IP** — a hall behind one NAT is one address, and a botnet is
 // a thousand. Every bucket is keyed by the thing being attacked (a test
@@ -105,31 +106,34 @@ export const LIMITS = {
    *  switches) and nowhere near the daily write budget `appendEvents`'s
    *  own cap already protects. */
   attempt_events: { limit: 120, windowMs: 5 * 60_000 },
-  /** Proctoring snapshots, per **attempt**, per hour (`B3`, whole-branch
-   *  review, Phase 7d Task 1 follow-up). Harder than `attempt_events`
-   *  above: each call here also writes an R2 object of up to
-   *  `SNAPSHOT_MAX_BYTES`, not just D1 rows, so the cap is sized by
-   *  arithmetic rather than copied from the sibling.
+  /** Proctoring snapshots, per **attempt**, per five minutes — the SAME
+   *  window as `attempt_events` above, deliberately (`B3`, whole-branch
+   *  review, Phase 7d Task 1 follow-up): `MAX_WINDOW_MS` below is the
+   *  longest window any bucket counts over, and every sweep pays for
+   *  whichever bucket owns it, so this does not widen it past
+   *  `email_code_address`'s own 10 minutes for every OTHER kind in this
+   *  table. Harder than `attempt_events` in cost, not in window: each call
+   *  here also writes an R2 object of up to `SNAPSHOT_MAX_BYTES`, not just
+   *  D1 rows.
    *
    *  The organiser-facing interval control (`ProctoringPanel.tsx`'s
-   *  `NumberField`) enforces no floor above zero — in principle an
-   *  organiser can configure any positive interval — but the one cadence
-   *  this codebase actually ships, tests and budgets against is Strict's
-   *  own default, `PROCTORING_DEFAULTS.strict.snapshotIntervalSeconds =
-   *  60` (`@pariksha/core`): `checklist.ts`'s own 200-image advisory
-   *  threshold is calibrated to stay silent against exactly this cadence
-   *  (`Q1c`). At 60 s, one honest hour is 3600 / 60 = 60 interval
-   *  captures. Add one identity photo (once, at the start) and headroom
-   *  for violation snapshots — five distinct violation types can each
-   *  fire in `ProctoringLayer.tsx`, and `violationLimit` defaults to 5
-   *  before the configured action ends the attempt, so 10 covers a
-   *  generous multiple of that before the consequence lands: 60 + 1 + 10
-   *  = 71, rounded up to 75/hour as the busiest honest attempt's ceiling.
-   *  Doubled for headroom, the same margin `B3`'s own fix note reasons
-   *  with: 150/hour honest, 300/hour as the cap — comfortably clear of
-   *  real traffic and, against the review's own abuse scenario (~20
-   *  requests/second), refusing after about 15 seconds rather than never. */
-  attempt_snapshot: { limit: 300, windowMs: 60 * 60_000 },
+   *  `NumberField`) enforces no floor above zero, but the one cadence this
+   *  codebase actually ships, tests and budgets against is Strict's own
+   *  default, `PROCTORING_DEFAULTS.strict.snapshotIntervalSeconds = 60`
+   *  (`@pariksha/core`): `checklist.ts`'s own 200-image advisory threshold
+   *  is calibrated to stay silent against exactly this cadence (`Q1c`). At
+   *  60 s, five honest minutes is 300 / 60 = 5 interval captures. Add one
+   *  identity photo (once, at the start). Violation snapshots are the
+   *  wildcard — `ProctoringLayer.tsx` pairs every one with a
+   *  `push`/`pushImmediate` into the SAME `attempt_events` queue this
+   *  module already rate-limits at 120 requests per five minutes per
+   *  attempt — so this route cannot see more violation-driven traffic
+   *  than that bucket already tolerates: 5 + 1 + 120 = 126, the busiest
+   *  honest attempt's own ceiling for this window. Rounded up to 150 for
+   *  headroom — comfortably clear of real traffic and, against the
+   *  review's own abuse scenario (~20 requests/second), refusing within
+   *  about 8 seconds rather than never. */
+  attempt_snapshot: { limit: 150, windowMs: 5 * 60_000 },
 } as const;
 
 export type LimitKind = keyof typeof LIMITS;

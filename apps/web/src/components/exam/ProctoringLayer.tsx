@@ -194,6 +194,18 @@ export interface ProctoringLayerProps {
    * `proctoring-layer-lifecycle.test.tsx` included — need not pass one.
    */
   cameraStream?: MediaStream | null;
+  /**
+   * B1 (whole-branch review, BLOCKING): true only when `routes/exam.tsx`'s
+   * resume path tried to reacquire a required camera and was refused —
+   * never inferred here from `proctoring.requireCamera && !cameraStream`,
+   * because that pair is also how several callers (test fixtures focused on
+   * fullscreen or window-leave included) legitimately mount this component
+   * with no camera in play at all. When true, the liveness effect below
+   * raises the SAME lost-camera overlay a mid-attempt loss would, rather
+   * than leaving the rest of the attempt silently unproctored. Optional
+   * (default `false`) so every existing caller is unaffected.
+   */
+  cameraUnavailable?: boolean;
 }
 
 export function ProctoringLayer({
@@ -201,6 +213,7 @@ export function ProctoringLayer({
   proctoring,
   initialViolations,
   cameraStream = null,
+  cameraUnavailable = false,
 }: ProctoringLayerProps) {
   /**
    * The paper's fullscreen state **at the moment this layer first
@@ -630,17 +643,14 @@ export function ProctoringLayer({
   }
 
   useEffect(() => {
-    // B1 (whole-branch review, BLOCKING): a resumed attempt reaches this
-    // component with no stream at all whenever `routes/exam.tsx`'s own
-    // reacquisition on resume was refused (the camera is genuinely gone) —
-    // and, in principle, a start-gate landing payload whose sentences
-    // missed "camera" while the resolved paper still requires one. Neither
-    // is `P-05`'s start gate: the attempt row already exists, so this is
-    // Task 3's own lost-camera condition, reused rather than rebuilt —
-    // `reportLost` raises the SAME overlay and records the SAME event a
-    // mid-attempt loss would, rather than leaving the rest of the attempt
-    // silently unproctored.
-    if (!liveStream && !proctoring.requireCamera) return;
+    // B1 (whole-branch review, BLOCKING): `cameraUnavailable` is true only
+    // when `routes/exam.tsx`'s resume path tried to reacquire a required
+    // camera and was refused — the attempt row already exists, so this is
+    // NOT `P-05`'s start gate; it is Task 3's own lost-camera condition,
+    // reused rather than rebuilt. `reportLost` raises the SAME overlay and
+    // records the SAME event a mid-attempt loss would, rather than leaving
+    // the rest of the attempt silently unproctored.
+    if (!liveStream && !cameraUnavailable) return;
     if (!liveStream) reportLost("ended");
 
     function onEnded(): void {
@@ -757,9 +767,11 @@ export function ProctoringLayer({
     // watches mid-attempt (`replaceStream` above), so this dependency array
     // intentionally re-runs the effect on that swap, tearing down the old
     // track's listeners and attaching fresh ones to the new track. B1:
-    // `proctoring.requireCamera` is added because it is now this effect's
-    // own gate for running at all when there is no stream.
-  }, [liveStream, proctoring.requireCamera]);
+    // `cameraUnavailable` is added because it is now this effect's own gate
+    // for running at all when there is no stream — fixed for the life of
+    // one mount in practice (`routes/exam.tsx` never flips it after render),
+    // but listed honestly since the effect body reads it.
+  }, [liveStream, cameraUnavailable]);
 
   // ---- the capture schedule (`AC-20`/`Q11b`/`Q4d`, Phase 7d Task 4) --------
 

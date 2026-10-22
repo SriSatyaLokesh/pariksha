@@ -434,12 +434,23 @@ type View =
        *  own comment), so on a resumed attempt this is the freshly
        *  reacquired stream when `proctoring.requireCamera` and the
        *  reacquisition succeeded (B1) — `null` otherwise, including every
-       *  resume where no camera is required at all. `null` while required is
-       *  not a second start gate: `ProctoringLayer` reads `proctoring.
-       *  requireCamera` against a `null` stream as the lost-camera condition
-       *  it already has an overlay for.
+       *  resume where no camera is required at all.
        */
       cameraStream: MediaStream | null;
+      /**
+       * B1: true only when `boot`'s resume path tried to reacquire a
+       * required camera and was refused — NOT inferred from
+       * `proctoring.requireCamera && cameraStream === null` by
+       * `ProctoringLayer` itself, because that pair is also how several
+       * unrelated test fixtures (and any future caller testing something
+       * else about a Strict attempt) legitimately mount it. `ProctoringLayer`
+       * reads this explicit flag as the lost-camera condition it already has
+       * an overlay for, rather than bouncing to a landing page that makes no
+       * sense for an attempt already in progress. `false` on every other
+       * path, including `startWith`'s own `cameraStream: null` — a refusal
+       * there never reaches this view at all (it bounces to landing first).
+       */
+      cameraUnavailable: boolean;
     }
   /** `C-09`: no cookie, no attempt, just a reference and an address. */
   | { kind: "result-code"; test: LandingPayload }
@@ -485,6 +496,7 @@ function AttemptView({
   client,
   onFinished,
   cameraStream,
+  cameraUnavailable,
 }: {
   paper: AttemptPaper;
   client: RunClient;
@@ -496,6 +508,9 @@ function AttemptView({
    *  straight through to `ProctoringLayer` — this component owns no camera
    *  logic of its own. */
   cameraStream: MediaStream | null;
+  /** B1 (`View`'s own doc comment) — threaded straight through, the same
+   *  way as `cameraStream`. */
+  cameraUnavailable: boolean;
 }) {
   /**
    * The first question this candidate may still write to.
@@ -750,6 +765,7 @@ function AttemptView({
             proctoring={paper.proctoring}
             initialViolations={paper.violations ?? 0}
             cameraStream={cameraStream}
+            cameraUnavailable={cameraUnavailable}
           />
         </ProctoringErrorBoundary>
       )}
@@ -908,7 +924,10 @@ export function ExamApp({ client }: { client: RunClient }) {
                existing. */
           }
         }
-        setView({ kind: "attempt", paper, cameraStream: camera?.stream ?? null });
+        // Always `false`: a refused camera never reaches this line at all
+        // (`startWith`'s own gate bounces to landing above, before
+        // `client.start` is even called).
+        setView({ kind: "attempt", paper, cameraStream: camera?.stream ?? null, cameraUnavailable: false });
       } catch (error) {
         // The attempt never minted — nothing to hand a camera stream to,
         // so it is stopped here rather than leaked to a view that will
@@ -962,15 +981,23 @@ export function ExamApp({ client }: { client: RunClient }) {
         // `acquireCamera()` the start gate uses, before this already-minted
         // attempt ever renders. A refusal here is NOT `P-05`'s start gate
         // (there is no landing page to bounce a refusal back to for an
-        // attempt already in progress, `Q2`'s own exception) — it is
-        // `ProctoringLayer`'s own lost-camera overlay, reused rather than
-        // rebuilt, that raises and records it from `cameraStream: null`.
+        // attempt already in progress, `Q2`'s own exception) — `cameraUnavailable`
+        // is what tells `ProctoringLayer` to raise its own lost-camera
+        // overlay, reused rather than rebuilt, instead of inferring it from
+        // `cameraStream` alone (`View`'s own doc comment on the flag).
         let resumedCameraStream: MediaStream | null = null;
+        let resumedCameraUnavailable = false;
         if (resumed.proctoring.requireCamera) {
           const acquired = await acquireCamera();
           if (acquired.ok) resumedCameraStream = acquired.stream;
+          else resumedCameraUnavailable = true;
         }
-        setView({ kind: "attempt", paper: resumed, cameraStream: resumedCameraStream });
+        setView({
+          kind: "attempt",
+          paper: resumed,
+          cameraStream: resumedCameraStream,
+          cameraUnavailable: resumedCameraUnavailable,
+        });
         return;
       }
       const test = await client.landing();
@@ -1014,6 +1041,7 @@ export function ExamApp({ client }: { client: RunClient }) {
         paper={view.paper}
         client={client}
         cameraStream={view.cameraStream}
+        cameraUnavailable={view.cameraUnavailable}
         onFinished={({ receipt, released }) => {
           setView({ kind: "finished", receipt, released });
         }}

@@ -102,21 +102,29 @@ let sampleCanvas: HTMLCanvasElement | null = null;
  * L3 (whole-branch review): the module-scoped pair above is reused across
  * an attempt's whole luminance-sampling lifetime by design (its own doc
  * comment), which means it otherwise keeps `sampleVideo.srcObject`
- * referencing the stopped `MediaStream` and `sampleCanvas` holding the last
- * drawn frame for the life of the document, not just the attempt. Not an
- * `AG2` violation on a plain reading — nothing here is recorded, stored or
- * uploaded — but `ProctoringLayer`'s own queue-lifecycle cleanup (the one
- * place that already owns "runs for exactly the attempt's lifetime") calls
- * this beside the track stop so neither survives past it. Dropped, not just
- * detached: `isCameraLensCovered` only sets a freshly created canvas's
- * dimensions (`if (!sampleCanvas)`, above), so clearing it in place rather
- * than nulling the module binding would leave a 0×0 canvas behind for the
- * next attempt in the same document to silently sample nothing from.
+ * referencing the stopped `MediaStream` for the life of the document, not
+ * just the attempt. Not an `AG2` violation on a plain reading — nothing
+ * here is recorded, stored or uploaded — but `ProctoringLayer`'s own
+ * queue-lifecycle cleanup (the one place that already owns "runs for
+ * exactly the attempt's lifetime") calls this beside the track stop so the
+ * stopped stream does not outlive it.
+ *
+ * Clears `srcObject` in place rather than dropping the module bindings
+ * themselves (`sampleVideo = null`): `isCameraLensCovered` is async with an
+ * `await` suspension in the middle, reading `sampleVideo`/`sampleCanvas`
+ * fresh on both sides of it — nulling the BINDING while a call from a
+ * still-live attempt is suspended there throws `Cannot read properties of
+ * null` on the next read, silently losing that sample (and, in this app,
+ * the whole-attempt test suite proved it: two `ProctoringLayer`s this close
+ * together only happens across adjacent tests sharing this module, but the
+ * failure mode is the same race a slow-enough real teardown could hit).
+ * `sampleCanvas`'s own last frame is left alone for the same reason — its
+ * only mutator is `drawImage`, called with no null-check on the next line —
+ * ponytail: a few KB of stale 32×24 pixels outliving the attempt is a
+ * smaller cost than reintroducing that race to clear it.
  */
 export function releaseCameraSampler(): void {
   if (sampleVideo) sampleVideo.srcObject = null;
-  sampleVideo = null;
-  sampleCanvas = null;
 }
 
 export async function isCameraLensCovered(stream: MediaStream): Promise<boolean | null> {
