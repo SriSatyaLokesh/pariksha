@@ -85,25 +85,44 @@ const LUMINANCE_SAMPLE_HEIGHT = 24;
  *  actually produces. */
 const COVERED_LENS_THRESHOLD = 10;
 
+/**
+ * Fix pass 1, finding 4 (Task 3 review finding 2): module-scoped and built
+ * once, lazily, rather than a fresh `<video>`/`<canvas>` pair every sample
+ * tick. `ProctoringLayer` samples at most once a second for the length of
+ * an attempt — not a leak either way (both would be GC-reclaimable), but an
+ * avoidable standing cost this reuses instead. Safe to share across calls:
+ * only one attempt, and so only one `ProctoringLayer`, samples a camera at
+ * a time in this app, and `srcObject` is reassigned on every call in case
+ * the stream being sampled has changed (a reconnect, fix pass 1 finding 1).
+ */
+let sampleVideo: HTMLVideoElement | null = null;
+let sampleCanvas: HTMLCanvasElement | null = null;
+
 export async function isCameraLensCovered(stream: MediaStream): Promise<boolean | null> {
   if (stream.getVideoTracks().length === 0) return null;
 
-  const video = document.createElement("video");
-  video.muted = true;
-  video.playsInline = true;
-  video.srcObject = stream;
+  if (!sampleVideo) {
+    sampleVideo = document.createElement("video");
+    sampleVideo.muted = true;
+    sampleVideo.playsInline = true;
+  }
+  if (sampleVideo.srcObject !== stream) {
+    sampleVideo.srcObject = stream;
+  }
   try {
-    await video.play();
+    await sampleVideo.play();
   } catch {
     /* AG1: same degrade `captureJpeg` takes on a refused autoplay. */
   }
 
-  const canvas = document.createElement("canvas");
-  canvas.width = LUMINANCE_SAMPLE_WIDTH;
-  canvas.height = LUMINANCE_SAMPLE_HEIGHT;
-  const ctx = canvas.getContext("2d");
+  if (!sampleCanvas) {
+    sampleCanvas = document.createElement("canvas");
+    sampleCanvas.width = LUMINANCE_SAMPLE_WIDTH;
+    sampleCanvas.height = LUMINANCE_SAMPLE_HEIGHT;
+  }
+  const ctx = sampleCanvas.getContext("2d");
   if (!ctx) return null;
-  ctx.drawImage(video, 0, 0, LUMINANCE_SAMPLE_WIDTH, LUMINANCE_SAMPLE_HEIGHT);
+  ctx.drawImage(sampleVideo, 0, 0, LUMINANCE_SAMPLE_WIDTH, LUMINANCE_SAMPLE_HEIGHT);
 
   let pixels: Uint8ClampedArray;
   try {

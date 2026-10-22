@@ -357,8 +357,18 @@ describe("ProctoringOverlay: window-leave (P-04)", () => {
     const beacon = vi.fn(() => true);
     Object.defineProperty(navigator, "sendBeacon", { configurable: true, value: beacon });
     await openAttempt({ proctoring: strictResolved });
-    fireEvent(window, new Event("blur")); // departure starts, no focus back
-    fireEvent(window, new Event("pagehide"));
+    // Fix pass 1, finding 6 (Task 4 review finding D): wrapped in `act`,
+    // matching every sibling test in this block — without it, this was a
+    // listener-registration race (`openAttempt` resolves via an async
+    // boundary before `ProctoringLayer`'s window-leave effect is guaranteed
+    // to have run as a passive effect of that same commit), not a real
+    // double-send: diagnosed and ruled out, see the task 4 review. Not
+    // `waitFor` on the assertion below — that would mask a genuine
+    // double-send rather than close the race.
+    await act(async () => {
+      fireEvent(window, new Event("blur")); // departure starts, no focus back
+      fireEvent(window, new Event("pagehide"));
+    });
     expect(beacon).toHaveBeenCalledTimes(1);
     const [url, body] = beacon.mock.calls[0] as unknown as [string, Blob];
     expect(url).toBe(EVENTS_PATH);

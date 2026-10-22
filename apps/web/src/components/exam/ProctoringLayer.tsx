@@ -180,13 +180,18 @@ export interface ProctoringLayerProps {
    * down rather than reacquired here — asking twice would prompt a
    * candidate a second time for a permission already granted. `null` on
    * every resumed attempt, where nothing survived the reload to hand over.
-   * Stopped in this component's own queue-lifecycle effect below ("Stop the
-   * tracks"): that effect already owns "the thing that lives exactly as
-   * long as the attempt", and a `MediaStream` left running is the same
-   * camera-light-stays-on defect a forgotten `setInterval` would be.
-   * Optional (default `null`) so every caller that mounts this with no
-   * camera in play — `proctoring-layer-lifecycle.test.tsx` included — need
-   * not pass one.
+   * Only this component's OWN initial seed from here on — fix pass 1,
+   * finding 1: a successful unplug/replug reconnect replaces the stream
+   * this layer actually watches (`liveStream` below) with a fresh one
+   * `acquireCamera()` hands back, which this prop itself never sees or
+   * needs to; `routes/exam.tsx` still owns nothing past mount. Stopped in
+   * this component's own queue-lifecycle effect below ("Stop the tracks"),
+   * reading whichever stream is current, not this prop — that effect
+   * already owns "the thing that lives exactly as long as the attempt",
+   * and a `MediaStream` left running is the same camera-light-stays-on
+   * defect a forgotten `setInterval` would be. Optional (default `null`) so
+   * every caller that mounts this with no camera in play —
+   * `proctoring-layer-lifecycle.test.tsx` included — need not pass one.
    */
   cameraStream?: MediaStream | null;
 }
@@ -286,6 +291,40 @@ export function ProctoringLayer({
    */
   const cameraStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /**
+   * Fix pass 1, finding 1 (Task 3 review Finding 1, BLOCKING): the stream
+   * this layer actually watches — seeded from the `cameraStream` prop but
+   * not pinned to it afterward. `onDeviceChange` below (the unplug/replug
+   * recovery) calls `acquireCamera()` again on a successful reconnect, and
+   * that returns a genuinely NEW `MediaStream`/track every time (`camera.ts`
+   * is a pure function of permission, never the same object twice) — the
+   * prop alone has nowhere to receive it, so "restored" used to mean only
+   * the overlay cleared while every listener below kept watching the same
+   * permanently-dead track. `liveStream` is what the liveness effect and
+   * the capture schedule key off from here on, not the prop; `liveStreamRef`
+   * mirrors it for the effects further down (fullscreen/window-leave/
+   * copy-paste/extra-monitor) that are gated on something else entirely and
+   * so must read whichever stream is CURRENT through a ref rather than
+   * close over whatever `liveStream` was the render they mounted.
+   */
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(cameraStream);
+  const liveStreamRef = useRef(liveStream);
+  liveStreamRef.current = liveStream;
+
+  /** Swaps in a newly acquired stream and stops the discarded one's tracks
+   *  — a reconnect must not leave two streams' hardware lights on, and
+   *  nothing else owns the stream this replaces once it is replaced. */
+  function replaceStream(next: MediaStream | null): void {
+    const previous = liveStreamRef.current;
+    if (previous && previous !== next) {
+      previous.getTracks().forEach((track) => {
+        track.stop();
+      });
+    }
+    liveStreamRef.current = next;
+    setLiveStream(next);
+  }
+
   useEffect(() => {
     if (cameraStopTimerRef.current !== null) {
       clearTimeout(cameraStopTimerRef.current);
@@ -312,12 +351,11 @@ export function ProctoringLayer({
     // effect is already the one place that owns "runs for exactly the
     // attempt's lifetime", and a `MediaStream` left running after unmount
     // is the same forgotten-resource defect a leaked `setInterval` would
-    // be. `cameraStream` is read directly rather than added to the
-    // dependency array below, the same posture this effect already takes
-    // with `proctoring` (its own comment, two lines down): both are fixed
-    // for the life of one attempt, so a changed value would mean a second
-    // attempt and therefore a remount with a fresh `attemptId`, which this
-    // effect already re-runs on.
+    // be. `liveStreamRef` (fix pass 1, finding 1), not the `cameraStream`
+    // prop: a reconnect may have swapped in a different stream since mount,
+    // and this cleanup fires on a deferred timer (below) that can run well
+    // after that swap, so reading the ref is what gets the CURRENT stream
+    // rather than whichever one was live when this effect was set up.
     return () => {
       queueRef.current = null;
       queue.stop();
@@ -327,7 +365,7 @@ export function ProctoringLayer({
       // is StrictMode's own phantom setup, which runs first.
       cameraStopTimerRef.current = setTimeout(() => {
         cameraStopTimerRef.current = null;
-        cameraStream?.getTracks().forEach((track) => {
+        liveStreamRef.current?.getTracks().forEach((track) => {
           track.stop();
         });
       }, 0);
@@ -378,7 +416,10 @@ export function ProctoringLayer({
         // than the next flush interval (`FLUSH_MS`'s own doc comment).
         void queueRef.current?.pushImmediate("fullscreen_exit", {} satisfies FullscreenExitDetail);
         // `AC-20`: one snapshot per violation, alongside the event itself.
-        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
+        // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
+        // reconnect may have swapped it since this effect last ran, and
+        // this effect does not depend on `liveStream` to re-close over it.
+        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
       setInFullscreen(next);
     }
@@ -428,7 +469,10 @@ export function ProctoringLayer({
         // `visibility_hidden` once the candidate RETURNS (`T4-R4`'s own
         // "no returned counterpart" rule), which a departure that never
         // ends (a closed tab) would never reach at all.
-        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
+        // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
+        // reconnect may have swapped it since this effect last ran, and
+        // this effect does not depend on `liveStream` to re-close over it.
+        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
     }
     function endAway(type: "window_blur" | "visibility_hidden"): void {
@@ -526,7 +570,7 @@ export function ProctoringLayer({
   const cameraLostAtRef = useRef<number | null>(null);
 
   useEffect(() => {
-    if (!cameraStream) return;
+    if (!liveStream) return;
 
     function reportLost(reason: CameraLostDetail["reason"]): void {
       if (cameraLostRef.current) return;
@@ -538,10 +582,17 @@ export function ProctoringLayer({
       // overlay, but the organiser's own count (`Q6`) should not lag a
       // flush interval behind a block that is already up.
       void queueRef.current?.pushImmediate("camera_lost", { reason } satisfies CameraLostDetail);
-      // `AC-20`'s snapshot deliberately does not fire here: the camera is
-      // the one thing this event says is unavailable, and Task 3's own
-      // overlay (below) is already the phase's one `AG1` exception —
-      // this does not stack a second camera read on top of it.
+      // `AC-20`'s snapshot deliberately does not fire for "ended"/"muted" —
+      // neither leaves a frame to capture, and Task 3's own overlay (below)
+      // is already the phase's one `AG1` exception. Fix pass 1, finding 3
+      // (Task 4 review finding B): "covered" is different — the track
+      // stays `live` with a drawable frame (`isCameraLensCovered` above
+      // depends on exactly that to detect the condition at all), so a
+      // capture here is both obtainable and the single most useful
+      // evidence a `camera_lost` event can ever produce.
+      if (reason === "covered" && liveStreamRef.current) {
+        void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+      }
     }
 
     function reportRestored(): void {
@@ -570,11 +621,25 @@ export function ProctoringLayer({
       if (cameraLostReasonRef.current === "muted") reportRestored();
     }
 
-    const tracks = cameraStream.getVideoTracks();
+    const tracks = liveStream.getVideoTracks();
     tracks.forEach((track) => {
       track.addEventListener?.("ended", onEnded);
       track.addEventListener?.("mute", onMute);
       track.addEventListener?.("unmute", onUnmute);
+    });
+
+    // Fix pass 1, finding 5 (Task 3 review finding 3): a track already dead
+    // or muted in the narrow window between `acquireCamera()` succeeding
+    // (`routes/exam.tsx`, or `onDeviceChange`'s own reconnect below) and
+    // this effect actually attaching its listeners never fires the
+    // transition event those listeners wait for — checked once, here, at
+    // the moment the listeners for THIS stream go up, so a track that
+    // arrives already in its terminal state is reported under the right
+    // reason immediately rather than caught a tick later by the luminance
+    // sampler and mislabelled "covered".
+    tracks.forEach((track) => {
+      if (track.readyState === "ended") reportLost("ended");
+      else if (track.muted) reportLost("muted");
     });
 
     // The unplug's own return trip. A real `MediaStreamTrack` never leaves
@@ -586,7 +651,18 @@ export function ProctoringLayer({
     function onDeviceChange(): void {
       if (!cameraLostRef.current || cameraLostReasonRef.current !== "ended") return;
       void acquireCamera().then((result) => {
-        if (result.ok) reportRestored();
+        if (result.ok) {
+          // Fix pass 1, finding 1 (Task 3 review Finding 1, BLOCKING):
+          // `result.stream` is a brand-new `MediaStream` — `replaceStream`
+          // is what makes this effect actually re-subscribe to it (its
+          // `[liveStream]` dependency below re-runs this whole effect on
+          // the swap, tearing down these listeners against the dead track
+          // and re-attaching fresh ones against the new one), rather than
+          // clearing the overlay while every listener here keeps watching
+          // a track that can never fire another event.
+          replaceStream(result.stream);
+          reportRestored();
+        }
         // Q2: still gone. The next `devicechange` (or the next sample
         // tick, for a covered lens discovered later) tries again.
       });
@@ -601,7 +677,7 @@ export function ProctoringLayer({
     // only `onDeviceChange`/`onUnmute` above are the real signal for those.
     const sampleTimer = setInterval(() => {
       if (cameraLostRef.current && cameraLostReasonRef.current !== "covered") return;
-      void isCameraLensCovered(cameraStream).then((covered) => {
+      void isCameraLensCovered(liveStream).then((covered) => {
         if (covered === null) return; // Q2: an unreadable frame is not a violation.
         if (covered) reportLost("covered");
         else reportRestored();
@@ -617,11 +693,12 @@ export function ProctoringLayer({
       navigator.mediaDevices?.removeEventListener?.("devicechange", onDeviceChange);
       clearInterval(sampleTimer);
     };
-    // `cameraStream` is fixed for the life of one attempt (the queue
-    // effect's own comment) — a changed value is a new attempt and a
-    // remount with a fresh `attemptId`, not a dependency this effect reacts
-    // to mid-attempt.
-  }, [cameraStream]);
+    // Fix pass 1, finding 1: `liveStream`, not the `cameraStream` prop — a
+    // successful reconnect now genuinely changes which stream this effect
+    // watches mid-attempt (`replaceStream` above), so this dependency array
+    // intentionally re-runs the effect on that swap, tearing down the old
+    // track's listeners and attaching fresh ones to the new track.
+  }, [liveStream]);
 
   // ---- the capture schedule (`AC-20`/`Q11b`/`Q4d`, Phase 7d Task 4) --------
 
@@ -636,13 +713,24 @@ export function ProctoringLayer({
    * against `Date.now()` on every tick, not incremented once per fire.
    *
    * One second, not `snapshotIntervalSeconds * 1000`: a fine check
-   * granularity is what lets a throttled tab catch up within a handful of
-   * real ticks once it returns, rather than waiting out a whole interval
-   * for the first catch-up fire. `due += intervalMs` (never `due = now +
-   * intervalMs`) is what keeps a backlog to one capture per tick instead
-   * of flooding the network from inside a single callback — several
-   * overdue periods drain one per subsequent tick until the schedule is
-   * caught up, never all at once.
+   * granularity is what lets a throttled tab notice it is overdue within a
+   * handful of real ticks once it returns, rather than waiting out a whole
+   * interval.
+   *
+   * Fix pass 1, finding 2 (Task 4 review finding A, ruled): `due = now +
+   * intervalMs` on every fire, never `due += intervalMs`. The brief's own
+   * prose promises one capture on return, not a backlog burst — `due +=
+   * intervalMs` drained the entire missed backlog, one capture per
+   * subsequent tick, until caught up (~20 captures for a 20-minute hide,
+   * `snapshot-schedule.test.tsx`'s own hidden-tab numbers before this fix).
+   * Resetting to `now + intervalMs` instead means a capture always resumes
+   * the cadence from the moment it actually happens, so any gap — a second
+   * or twenty minutes — costs exactly one catch-up shot, never a cluster.
+   * The gap itself is not lost: a hidden tab already emits
+   * `visibility_hidden` as a counted violation, and a backlog burst would
+   * only paper over it with photographs of the wrong moment. 7e's
+   * `expectedSnapshots`/`observed` mechanism is the designed way to say
+   * "proctoring was not watching" for the resulting shortfall.
    */
   const SNAPSHOT_CHECK_MS = 1_000;
   const nextSnapshotAtRef = useRef<number | null>(null);
@@ -651,23 +739,27 @@ export function ProctoringLayer({
     // `Q11b`: `snapshotIntervalSeconds: 0` is no capture timer at all —
     // not a timer whose upload is skipped, not a capture that is
     // discarded, no timer.
-    if (!cameraStream || proctoring.snapshotIntervalSeconds <= 0) return;
+    if (!liveStream || proctoring.snapshotIntervalSeconds <= 0) return;
     const intervalMs = proctoring.snapshotIntervalSeconds * 1000;
     nextSnapshotAtRef.current = Date.now() + intervalMs;
     const timer = setInterval(() => {
       const due = nextSnapshotAtRef.current;
       if (due === null || Date.now() < due) return;
-      nextSnapshotAtRef.current = due + intervalMs;
-      void captureAndUpload(cameraStream, "interval", queueRef.current);
+      // Fix pass 1, finding 2: resets from NOW, not from `due` — see the
+      // doc comment above. One capture per return, never a drained backlog.
+      nextSnapshotAtRef.current = Date.now() + intervalMs;
+      void captureAndUpload(liveStream, "interval", queueRef.current);
     }, SNAPSHOT_CHECK_MS);
     return () => {
       clearInterval(timer);
       nextSnapshotAtRef.current = null;
     };
-    // `cameraStream` is fixed for the life of one attempt (the queue
-    // effect's own comment above) — only `snapshotIntervalSeconds`
-    // genuinely varies this effect's behaviour mid-file, never mid-attempt.
-  }, [cameraStream, proctoring.snapshotIntervalSeconds]);
+    // Fix pass 1, finding 1: `liveStream`, not the `cameraStream` prop — a
+    // reconnect mid-attempt now genuinely changes which stream this effect
+    // captures from (the queue effect's own comment on `replaceStream`).
+    // `snapshotIntervalSeconds` still varies this effect's behaviour
+    // independently, never mid-attempt on its own.
+  }, [liveStream, proctoring.snapshotIntervalSeconds]);
 
   // ---- copy, paste and the context menu (`Q9`, 7c Task 5) ------------------
 
@@ -689,7 +781,10 @@ export function ProctoringLayer({
           {} satisfies CopyBlockedDetail | PasteBlockedDetail | ContextmenuBlockedDetail,
         );
         // `AC-20`: one snapshot per violation.
-        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
+        // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
+        // reconnect may have swapped it since this effect last ran, and
+        // this effect does not depend on `liveStream` to re-close over it.
+        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       };
     }
     const onCopy = blocked("copy_blocked");
@@ -729,7 +824,10 @@ export function ProctoringLayer({
         extraMonitorPushed.current = true;
         void queueRef.current?.pushImmediate("extra_monitor", {} satisfies ExtraMonitorDetail);
         // `AC-20`: one snapshot per violation.
-        if (cameraStream) void captureAndUpload(cameraStream, "violation", queueRef.current);
+        // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
+        // reconnect may have swapped it since this effect last ran, and
+        // this effect does not depend on `liveStream` to re-close over it.
+        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
     } catch {
       /* Q2: degrade — an unreadable screen is not a violation */
