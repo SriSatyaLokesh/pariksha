@@ -381,11 +381,26 @@ it("submitting without the attempt cookie is 401, and says nothing else", async 
 
 // --- the budget ----------------------------------------------------------
 
-it("the submit route reads the questions once, not once per answer — the real worst case, measured", async () => {
+it("the submit route reads the questions once, not once per answer", async () => {
+  // `rel-review`: `full_review`, no `counted_attempt` set — the common
+  // case, and the one this literal pins. `countedFor` (`submit.ts`) spends
+  // no subrequest at all when `counted_attempt` is unset, so this stays at
+  // **6**, not `ROUTE_BUDGETS[SUBMIT_PATH]` (7, paid only by the worst
+  // case below) — a literal, so the common path is still caught if a
+  // redundant read ever lands here even as the declared ceiling moves.
+  const { cookie, firstId } = await sat("rel-review");
+  await answer(cookie, firstId, { kind: "option", option: "a" });
+  const counting = countingDeps(deps);
+  const res = await submit(cookie, createApp(counting.deps));
+  expect(res.status).toBe(200);
+  expect(counting.counts().total).toBe(6);
+});
+
+it("the worst case — a counted_attempt test's last attempt at full_review — is the declared ceiling, measured", async () => {
   // `rel-counted`'s **last** attempt (`full_review`, two attempts allowed,
   // `counted_attempt: "highest"`) is the true worst case since Phase 8a
-  // Task 3 (`K6`/`K7`): the bank, read once regardless of how many answers
-  // came in, plus `attemptFiguresForCandidate`'s one read, paid only here.
+  // Task 3 (`K6`/`K7`): everything the common case above pays, plus
+  // `attemptFiguresForCandidate`'s one read, paid only here.
   const first = await sat("rel-counted");
   await answer(first.cookie, first.firstId, { kind: "option", option: "a" });
   await submit(first.cookie);

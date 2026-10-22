@@ -281,7 +281,7 @@ export async function submitAttempt(
   // costs **3** subrequests (the join, the answers, the count) and **4**
   // at `full_review`, where the bank is read again to rebuild the review.
   // Measured in `submit.test.ts`'s "a second press costs 3" rather than
-  // asserted here; both numbers are well under the route's budget of 6.
+  // asserted here; both numbers are well under the route's budget of 7.
   if (attempt.submittedAt !== null) {
     const stored = attempt.score as AttemptScore | null;
     return {

@@ -343,10 +343,8 @@ it("K7, live: absent on attempt 1 of 2, and correct — naming the PRIOR attempt
     candidateId: started.candidateId,
   });
   await answerRight(second.cookie, logicId);
-  const counting = countingDeps(deps);
-  const countedApp = createApp(counting.deps);
   const secondBody = (await (
-    await countedApp.request(SUBMIT_PATH, { method: "POST", headers: { cookie: second.cookie } })
+    await app.request(SUBMIT_PATH, { method: "POST", headers: { cookie: second.cookie } })
   ).json()) as { released: Released | null };
 
   expect(secondBody.released?.percent).toBeCloseTo(28.57, 2);
@@ -355,9 +353,9 @@ it("K7, live: absent on attempt 1 of 2, and correct — naming the PRIOR attempt
     attemptId: firstPaper.attemptId,
     of: 2,
   });
-  // `rel-counted` is the combination declared most expensive: `full_review`
-  // (the bank, for the key) plus this read, on the last attempt.
-  expect(counting.counts().total, SUBMIT_PATH).toBe(ROUTE_BUDGETS[SUBMIT_PATH]);
+  // The exact subrequest cost is `submit.test.ts`'s own budget tests' job,
+  // not this behavioural one's — see "the worst case — a counted_attempt
+  // test's last attempt at full_review" below, and its submit.test.ts twin.
 });
 
 // --- the degrade ruling --------------------------------------------------
@@ -508,12 +506,50 @@ it("S-07: the guess limiter is keyed on the attempt the reference resolved to", 
 
 // --- the budgets ---------------------------------------------------------
 
-it("every Task 11 route spends exactly its declared budget", async () => {
+it("every Task 11 route spends exactly its declared budget — the common case", async () => {
+  // `rel-review`: `full_review`, no `counted_attempt` set. `/code` never
+  // calls `resultFor` and costs the same regardless; `/verify` does, and
+  // `countedFor` (`submit.ts`) spends nothing when `counted_attempt` is
+  // unset, so its common-case cost stays at **6**, a literal rather than
+  // `ROUTE_BUDGETS[VERIFY_PATH]` (7 — the worst case below) — so a
+  // redundant read landing on this far more common path is still caught
+  // even if the declared ceiling moves again.
+  const budgetEmail = "budget@vce.ac.in";
+  const ref = await sitWithEmail("rel-review", budgetEmail);
+  const codeCount = countingDeps(deps);
+  const codeApp = createApp({ ...codeCount.deps, email: deps.email });
+  expect(
+    (
+      await codeApp.request(CODE_PATH, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ attemptRef: ref, email: budgetEmail }),
+      })
+    ).status,
+  ).toBe(202);
+  expect(codeCount.counts().total, CODE_PATH).toBe(ROUTE_BUDGETS[CODE_PATH]);
+
+  const code = codeFrom();
+  const verifyCount = countingDeps(deps);
+  const verifyApp = createApp(verifyCount.deps);
+  expect(
+    (
+      await verifyApp.request(VERIFY_PATH, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ attemptRef: ref, email: budgetEmail, code }),
+      })
+    ).status,
+  ).toBe(200);
+  expect(verifyCount.counts().total, VERIFY_PATH).toBe(6);
+});
+
+it("every Task 11 route spends exactly its declared budget — the worst case", async () => {
   // `/verify` goes through `resultFor`, same as the finish page — so its
   // worst case is `rel-counted`'s **last** attempt (`full_review`, two
   // attempts, `counted_attempt: "highest"`), not `rel-review`'s only one.
   // `/code` does not call `resultFor` and costs the same either way.
-  const budgetEmail = "budget@vce.ac.in";
+  const budgetEmail = "worst-budget@vce.ac.in";
   const first = await sit("rel-counted", { roll: "BUDGET1" });
   const candidateId = await candidateOf(first.paper);
   await deps.db.run("UPDATE candidate SET form_values_json = ? WHERE id = ?", [
