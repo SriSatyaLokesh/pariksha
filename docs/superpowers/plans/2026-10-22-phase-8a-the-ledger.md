@@ -4,13 +4,13 @@
 
 **Goal:** Give every later Phase 8 plan one scoring path, one counted figure, one CSV writer, one cost estimator and one migration — and close the two Phase 6 defects that live in the files this plan already opens.
 
-**Architecture:** The 60-line scoring block inside `submitAttempt` becomes `rescoreAttempt()`, which submit, grading and regrade all call. Four new pure functions land in `@pariksha/core` (`countedScore`, `toCsv`, `csvFilename`, `estimateCost`) because two or three surfaces consume each and the phase's own anti-goal is two surfaces disagreeing. One migration, `0010`, carries everything schema-shaped the whole phase needs. `scheduled` ships as an empty, tested job registry so three parallel plans can each register one job without owning the file.
+**Architecture:** The 60-line scoring block inside `submitAttempt` becomes `rescoreAttempt()`, which submit, grading and regrade all call. Four new pure functions land in `@pariksha/core` (`countedScore`, `toCsv`, `csvFilename`, `estimateCost`) because two or three surfaces consume each and the phase's own anti-goal is two surfaces disagreeing. One migration, `0009`, carries everything schema-shaped the whole phase needs. `scheduled` ships as an empty, tested job registry so three parallel plans can each register one job without owning the file.
 
 **Tech Stack:** TypeScript (strict), Vitest, Drizzle (D1 / SQLite / Postgres), Hono, Preact/React.
 
-**Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K5`, `K6`, `K7`, `K8`, `K9`, `K10`, `K12`, `K27`, `K28`, `K32`, `K33`, `K35`, `K36`, `K38`, `K41`, `K42`, `KG6`, `KG8`.
+**Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K5`, `K6`, `K7`, `K8`, `K9`, `K10`, `K27`, `K28`, `K32`, `K33`, `K35`, `K36`, `K38`, `K41`, `K42`, **`K43`**, `KG6`, `KG8`.
 
-**Depends on:** nothing. First plan of the phase, and the only one with no predecessor.
+**Depends on:** nothing in Phase 8. **Starts only once 7d merges** (`K43`) — the phase has one start gun, and 8a is cut from a tree that already has 7d in it.
 
 **Goals covered:** none on its own — it is the floor `G1`–`G6` are built on.
 
@@ -43,11 +43,11 @@ Every task's requirements implicitly include this section.
 
 ---
 
-### Task 1: Migration `0010`
+### Task 1: Migration `0009`
 
 **Files:**
-- Create: `packages/db/migrations/sqlite/0010_results_and_delivery.sql`
-- Create: `packages/db/migrations/pg/0010_results_and_delivery.sql`
+- Create: `packages/db/migrations/sqlite/0009_results_and_delivery.sql`
+- Create: `packages/db/migrations/pg/0009_results_and_delivery.sql`
 - Modify: `packages/db/src/schema/sqlite.ts`, `packages/db/src/schema/pg.ts`
 - Modify: `packages/db/src/schema/columns.ts` (`TABLE_MANIFEST`)
 - Modify: `packages/db/src/migrations.generated.ts` (regenerate, never hand-edit)
@@ -55,9 +55,9 @@ Every task's requirements implicitly include this section.
 - Test: `packages/db/test/parity.test.ts`, `migrate.test.ts`, `migrations-bundle.test.ts` (existing, must stay green)
 
 **Interfaces:**
-- Produces: the `webhook_delivery` table, `attempt.proctor_message`, `attempt.proctor_message_at`, and an index on `response(workspace_id, question_id)`. Consumed by 8b (`K42`'s index), 8c (`K42`'s index), 8d (`webhook_delivery`) and 8g (the two `attempt` columns).
+- Produces: the `webhook_delivery` table and an index on `response(workspace_id, question_id)`. Consumed by 8b and 8c (`K42`'s index) and 8d (`webhook_delivery`).
 
-**`K10`** — this is the phase's **only** migration, and it is `0010` because 7e takes `0009`. **Whichever of 7e and this lands second yields and renumbers.** Say so in the migration's own header comment.
+**`K10`, as revised by `K43`** — this is the phase's **only** migration and it is **`0009`**, verified free on `main`: 7e is out of scope and never created it. A future 7e takes `0009` or later. Say so in the migration's own header comment.
 
 **`K42`** — the index is here rather than in 8b or 8c because both need it and both run in parallel; a later plan discovering it needs schema is the renumbering `K10` exists to prevent.
 
@@ -66,11 +66,11 @@ The three additions, with the reason each is in this file:
 | addition | shape | for |
 | --- | --- | --- |
 | `webhook_delivery` | tenant table: `webhook_id`, `event`, `payload_json`, `attempt_count` (int), `next_attempt_at` (ts), `last_status` (int, null), `last_error` (text, null), `delivered_at` (ts, null), `created_at` (ts). Indexes `["workspace_id"]`, `["next_attempt_at"]` | 8d's drain (`K22`) |
-| `attempt.proctor_message` | `text`, **nullable** | 8g's broadcast (`K12`) |
-| `attempt.proctor_message_at` | `ts`, **nullable** | 8g's broadcast (`K12`) |
 | index on `response` | `["workspace_id", "question_id"]` | 8b's by-question grading, 8c's option pick rates (`K42`) |
 
-Both `attempt` columns are nullable, so neither needs a `DEFAULT` and neither raises a backfill question. `next_attempt_at` is indexed because the drain's only query is "deliveries due before now".
+**Two additions, not four.** `K43` dropped `attempt.proctor_message` and `.proctor_message_at`: they were 8g's broadcast columns alone, 8g is deferred with 7e, and shipping schema no code reads is `#186`'s defect in table form. They return with 8g.
+
+`next_attempt_at` is indexed because the drain's only query is "deliveries due before now".
 
 - [ ] **Step 1: Write the failing manifest test**
 
@@ -79,23 +79,25 @@ In `packages/db/test/parity.test.ts`'s existing style — it compares **three** 
 Add to `packages/db/test/schema.test.ts` (or the nearest existing manifest test):
 
 ```ts
-it("0010 adds webhook_delivery and the two broadcast columns", () => {
+it("0009 adds webhook_delivery and the by-question index", () => {
   const names = TABLE_MANIFEST.map((t) => t.name);
   expect(names).toContain("webhook_delivery");
 
-  const attempt = TABLE_MANIFEST.find((t) => t.name === "attempt");
-  const cols = attempt?.columns.map((c) => c.name) ?? [];
-  expect(cols).toContain("proctor_message");
-  expect(cols).toContain("proctor_message_at");
-
   const response = TABLE_MANIFEST.find((t) => t.name === "response");
   expect(response?.indexes).toContainEqual(["workspace_id", "question_id"]);
+});
+
+it("does NOT add the broadcast columns — K43 deferred them with 8g", () => {
+  const cols = TABLE_MANIFEST.find((t) => t.name === "attempt")!.columns.map((c) => c.name);
+  expect(cols).not.toContain("proctor_message");
+  // Control: the negative above is only meaningful if this lookup resolves.
+  expect(cols).toContain("integrity_flag");
 });
 ```
 
 - [ ] **Step 2: Run it and watch it fail**
 
-Run: `cd packages/db && npx vitest run test/schema.test.ts -t "0010"`
+Run: `cd packages/db && npx vitest run test/schema.test.ts -t "0009"`
 Expected: FAIL — `webhook_delivery` is not in the manifest.
 
 - [ ] **Step 3: Write both `.sql` files**
@@ -113,7 +115,7 @@ Never hand-edit `migrations.generated.ts`; `migrations-bundle.test.ts` asserts i
 
 - [ ] **Step 6: Extend `worker.test.ts`'s filename list and count**
 
-Both are deliberately literal ("Named, not counted"). Extend them; never make them dynamic. **This is also the only guard against a duplicate `0010` from a parallel branch** — `migrations-bundle.test.ts` does *not* catch that (`K10`).
+Both are deliberately literal ("Named, not counted"). Extend them; never make them dynamic. **This is also the only guard against a duplicate `0009` from a parallel branch** — `migrations-bundle.test.ts` does *not* catch that (`K10`).
 
 - [ ] **Step 7: Run the full db suite, both api configs, and the free Cloudflare checks**
 
@@ -128,13 +130,13 @@ Expected: PASS. `migrate.test.ts` executes the SQL against real SQLite, which re
 
 - [ ] **Step 8: Probe — prove `migrate.test.ts` catches a merged ALTER**
 
-Merge the two `attempt` `ADD COLUMN`s into one `ALTER TABLE`. Run `migrate.test.ts`. Record the verbatim failure line in the ledger. Restore. **No probe appears in a commit.**
+Merge two statements D1 would refuse — a multi-`ADD COLUMN` `ALTER` is the canonical shape. Run `migrate.test.ts`. Record the verbatim failure line in the ledger. Restore. **No probe appears in a commit.**
 
 - [ ] **Step 9: Commit**
 
 ```bash
 git add packages/db/migrations packages/db/src/schema packages/db/src/migrations.generated.ts packages/db/test apps/api/test/worker.test.ts
-git commit -m "feat(db): 0010 — webhook_delivery, the broadcast columns and the response index (K10, K12, K42)"
+git commit -m "feat(db): 0009 — webhook_delivery and the by-question response index (K10, K42, K43)"
 ```
 
 ---
@@ -769,8 +771,6 @@ export interface AttemptSummary {
   flag: string;
   integrityFlag: string;
   observed: boolean;
-  /** K11: max(response.saved_at, event.server_ts, snapshot.taken_at). */
-  lastContactAt: number | null;
   violations: number;
   answered: number;
 }
@@ -792,19 +792,18 @@ Consumed by 8b (the grading queue's attempt list), 8c (the CSV and analytics), 8
 
 **`K9`** and **`KG3`** — this is the function the whole phase's budget rests on. It is measured against **300 candidates**, not ten.
 
-**`K11`** — `lastContactAt` is derived here, in SQL, as the max of three timestamps, and is `null` when there is none. It is not a column and there is no heartbeat.
+**`K43` removed `lastContactAt` from this function.** It was derived for 8g's monitor as
+`max(response.saved_at, event.server_ts, snapshot.taken_at)` and has no other reader; 8g is deferred
+with 7e. `K11`'s reasoning — that there is no heartbeat to read, and why a per-candidate ping was
+refused — stands for whenever the monitor ships. **Do not add a field here with no caller:** that is
+`#186`'s defect, which this very plan fixes in Task 8.
 
 - [ ] **Step 1: Write the failing tests, with a 300-row fixture**
 
 ```ts
-it("returns one row per attempt with the derived last contact", async () => {
+it("returns one row per attempt with its score, flag and counts", async () => {
   const { rows } = await listAttemptsForTest(db, wsp, testId);
-  expect(rows[0].lastContactAt).toBe(LATEST_OF_THE_THREE);
-});
-
-it("reports null last contact for an attempt that has never contacted the server", async () => {
-  const { rows } = await listAttemptsForTest(db, wsp, quietTestId);
-  expect(rows[0].lastContactAt).toBeNull();
+  expect(rows[0]).toMatchObject({ setNo: 1, answered: 12, violations: 0 });
 });
 
 it("reads 300 attempts in a bounded number of statements", async () => {
@@ -840,7 +839,7 @@ Expected: FAIL — module not found.
 
 Every repository function is reachable only through `scoped()`, which registers it in `REPO_FUNCTIONS`; a test enumerates that registry and proves the workspace rule for every function that exists. Do not bypass it.
 
-The counts (`violations`, `answered`) and `lastContactAt` are aggregates in the same statement, not follow-up queries.
+The counts (`violations`, `answered`) are aggregates in the same statement, not follow-up queries.
 
 - [ ] **Step 4: Run**
 
@@ -855,7 +854,7 @@ Rewrite the aggregate as a per-attempt follow-up query. Run the budget test. Rec
 
 ```bash
 git add packages/db/src/repo/results.ts packages/db/src/repo/index.ts packages/db/test/repo/results.test.ts
-git commit -m "feat(db): the organiser's set-based attempt reads, with derived last contact (K9, K11)"
+git commit -m "feat(db): the organiser's set-based attempt reads (K9)"
 ```
 
 ---
@@ -951,7 +950,7 @@ git commit -m "fix(api,web,docs): the finish message gets a reader, a duration-l
 
 ## Before this plan merges
 
-**`K41` — `0010` is applied to the live database *before* this branch merges, not after.**
+**`K41` — `0009` is applied to the live database *before* this branch merges, not after.**
 
 `CLAUDE.md` carries this as a repository-wide rule, and it is written from this repository's own
 scar: **`0008` merged with Phase 7a and went four days unapplied**, while the Drizzle schema already
@@ -960,7 +959,7 @@ declared `integrity_flag` and `observed` — so every live `attempt` select fail
 and applies no migrations; `setup.mjs` applies them and a human runs it.
 
 **`0008` is applied as of 2026-10-22.** It is no longer outstanding, and this plan may assume those
-two columns exist. `0010` is the only migration this phase gates on.
+two columns exist. `0009` is the only migration this phase gates on.
 
 **The agent's pre-merge evidence** — both free, neither touches the account:
 
@@ -981,5 +980,5 @@ repository reaches Cloudflare.
 ```
 
 **After the merge, check the count.** `GET /api/v1/health` answers `{"migrations":N}`, and **N must
-equal the number of files in `packages/db/migrations/sqlite/`** — eleven once `0010` lands, twelve
+equal the number of files in `packages/db/migrations/sqlite/`** — eleven once `0009` lands, twelve
 if 7e's `0009` is already in. A mismatch means the deploy shipped ahead of the schema.

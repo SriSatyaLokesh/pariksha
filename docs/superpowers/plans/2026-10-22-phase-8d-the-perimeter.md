@@ -8,9 +8,9 @@
 
 **Tech Stack:** TypeScript (strict), Vitest, Hono, Preact/React, Web Crypto (HMAC-SHA256).
 
-**Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K22`, `K23`, `K24`, `K25`, `K26`, `K27`, `K35`, `K36`, `K37`, `KG2`, `KG5`.
+**Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K22`, `K23`, `K24`, `K25`, `K26`, `K27`, `K35`, `K36`, `K37`, **`K43`**, `KG2`, `KG5`.
 
-**Depends on:** **8a** — `0010`'s `webhook_delivery` table, the `SCHEDULED_JOBS` registry, and `estimateCost` for the webhook cost line.
+**Depends on:** **8a** — `0009`'s `webhook_delivery` table, the `SCHEDULED_JOBS` registry, and `estimateCost` for the webhook cost line. **Starts only once 7d merges** (`K43`).
 
 **Goals covered:** `G3`'s machine half, and `S-05`.
 
@@ -53,8 +53,13 @@
 - Produces:
 
 ```ts
+// `K43`: "attempt.flagged" is NOT a member. Its only trigger is 8g's
+// integrity recompute and 8g is deferred with 7e — an event a selector
+// offers but nothing can ever fire is the `Q1b` defect. It returns with
+// 8g, as one more member here plus its caller. The delivery machinery
+// below is event-agnostic and needs no change for it.
 export const WEBHOOK_EVENTS = [
-  "attempt.started", "attempt.submitted", "attempt.flagged", "test.closed",
+  "attempt.started", "attempt.submitted", "test.closed",
 ] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
@@ -209,7 +214,7 @@ git commit -m "feat(api): HMAC-SHA256 over the exact bytes sent, timestamp insid
 - Test: `apps/api/test/webhooks/deliver.test.ts`
 
 **Interfaces:**
-- Consumes: `signatureHeader` (Task 2), `0010`'s `webhook_delivery`.
+- Consumes: `signatureHeader` (Task 2), `0009`'s `webhook_delivery`.
 - Produces:
 
 ```ts
@@ -222,9 +227,9 @@ export async function fireWebhooks(deps: AppDeps, input: {
 export const DELIVERY_TIMEOUT_MS = 5_000;
 ```
 
-**`K37`** — **only `attempt.submitted` delivers inline.** `attempt.started`, `attempt.flagged` and `test.closed` write a row and the drain sends them. `attempt.started` fires on a candidate hot path 300 times per test; an inline fetch there is one more subrequest and one more failure mode to save a receiver five minutes on an event nobody waits for.
+**`K37` as revised by `K43`** — three events, not four. **Only `attempt.submitted` delivers inline.** `attempt.started` and `test.closed` write a row and the drain sends them. `attempt.started` fires on a candidate hot path 300 times per test; an inline fetch there is one more subrequest and one more failure mode to save a receiver five minutes on an event nobody waits for.
 
-**`attempt.flagged`'s trigger is 8g's** (7e's integrity recompute is where a flag is first written). This task ships its delivery path; 8g calls it.
+**`attempt.flagged` is cut**, because the only thing that writes `attempt.integrity_flag` is 7e's recompute and 7e is out of scope. Ship no member and no selector entry — a control that does nothing is the defect 7c's branch review corrected three times.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -256,6 +261,12 @@ it("queues attempt.started without attempting it inline", async () => {
   expect(await fireWebhooks(deps, { workspaceId: wsp, event: "attempt.started", payload, now }))
     .toEqual({ delivered: 0, queued: 1 });
   expect(fetchSpy).not.toHaveBeenCalled();
+});
+
+it("offers no attempt.flagged event — K43, nothing can fire it", () => {
+  expect(WEBHOOK_EVENTS).not.toContain("attempt.flagged");
+  // Control: the negative above is vacuous if the constant is empty or renamed.
+  expect(WEBHOOK_EVENTS).toContain("attempt.submitted");
 });
 
 it("sends nothing to a hook that did not subscribe to the event", async () => {

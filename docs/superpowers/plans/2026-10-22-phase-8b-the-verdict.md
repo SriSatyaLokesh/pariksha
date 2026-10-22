@@ -10,7 +10,7 @@
 
 **Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K5`, `K14`, `K15`, `K16`, `K17`, `K18`, `K27`, `K42`, `KG1`, `KG2`.
 
-**Depends on:** **8a.** Consumes `rescoreAttempt` (Task 2), `listAttemptsForTest` (Task 7), the `SCHEDULED_JOBS` registry (Task 6) and `0010`'s `response(workspace_id, question_id)` index (Task 1).
+**Depends on:** **8a.** Consumes `rescoreAttempt` (Task 2), `listAttemptsForTest` (Task 7), the `SCHEDULED_JOBS` registry (Task 6) and `0009`'s `response(workspace_id, question_id)` index (Task 1). **Starts only once 7d merges** (`K43`).
 
 **Goals covered:** `G2` — a manual question can be graded, blind or by question, and the score it produces is the same arithmetic the automatic path uses.
 
@@ -127,7 +127,7 @@ Expected: FAIL — module not found.
 
 `recordAward` writes the response row and calls `rescoreAttempt` with every stored award for that attempt — not only the new one — because the score is of the whole paper. Refuse a question whose document carries no `rubric`: `gradeManual` would resolve 0 for any level, and letting a grader award into that is the defect Review Focus 1 names.
 
-`listPendingAwards` is **one query** for the whole test, filtered by `question_id` when grading by question — the path `0010`'s index exists for (`K42`).
+`listPendingAwards` is **one query** for the whole test, filtered by `question_id` when grading by question — the path `0009`'s index exists for (`K42`).
 
 - [ ] **Step 4: Mount the route with all three declarations**
 
@@ -376,7 +376,7 @@ export const regradeJob: ScheduledJob;   // registered under the */5 cron
 
 **`K17`** — scoped to a test **version**, one audit entry naming the version, the count rescored and the count whose total changed. **`K18`** — the cron drains it; 300 attempts in one request is six times the ceiling and far past 10 ms of grading arithmetic.
 
-**There is no regrade queue table, and there must not be one.** `K10` makes `0010` the phase's only migration, and `0010` does not carry one.
+**There is no regrade queue table, and there must not be one.** `K10` makes `0009` the phase's only migration, and `0009` does not carry one.
 
 **Ruling, taken here so the implementer does not have to invent it: the queue is the audit log.** `enqueueRegrade` writes an `audit_log` row with `action: "regrade.requested"` and a `detail` naming the `testVersionId`; the job finds, for each version, the latest such row with no matching `"regrade.completed"` row, and rescores the submitted attempts of that version whose `score_json` was last written before it. `audit_log` is already workspace-scoped, already indexed on `["workspace_id", "at"]`, and `S-13` already requires a regrade to be logged — so the row has to exist anyway and a second table would store the same fact twice.
 

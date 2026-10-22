@@ -9,7 +9,8 @@
   [#186](https://github.com/SriSatyaLokesh/pariksha/issues/186) (`finish_message` has no reader),
   [#179](https://github.com/SriSatyaLokesh/pariksha/issues/179) (a test with no duration publishes)
 - **PRD:** `R-01`–`R-11`, `S-05`, `S-13`, `S-14`, `D-03`, `AC-08`, `AC-24`, `AC-25`, `AC-27`, `AC-28`
-- **Rulings:** `K1`–`K42`. **Guards:** `KG1`–`KG10`.
+- **Rulings:** `K1`–`K43`. **Guards:** `KG1`–`KG10`.
+- **Scope, 2026-10-23:** `K43` — **six plans execute** (8a–8f). **8g is deferred** with 7e.
 
 Rulings are numbered so a plan can cite one instead of re-arguing it. Each is written
 `Ruling: <what> — <why> — <cost if wrong>`. Twelve were taken by the owner before or during this
@@ -17,7 +18,7 @@ document and are marked **(owner)**; the rest were taken here against the tree a
 to overturn on reading.
 
 **Numbers record when a ruling was taken; position records what it is about.** `K35`–`K42` were
-added after a builder's review of the first draft and sit in the sections they belong to, not at
+added after a builder's review of the first draft, and `K43` after the owner cut 7e, and sit in the sections they belong to, not at
 the end — so `K37` is in §7.6 with the other webhook rulings, and `K40`/`K41` are in §9 because
 they are about order. Cite the number; find it by subject.
 
@@ -307,26 +308,30 @@ the release gate and appears only once no attempts remain.**
 
 ### 7.3 One migration, numbered after 7e's
 
-**`K10` — Phase 8 ships exactly one migration, and it is `0010`.**
+**`K10` — Phase 8 ships exactly one migration, and it is `0009`.**
 
-> Ruling: one SQLite file and one Postgres sibling, adding the `webhook_delivery` table and two
-> `attempt` columns (`K12`). Both dialects, plus `schema/columns.ts`'s `TABLE_MANIFEST` and a
-> regenerated `migrations.generated.ts`, plus `worker.test.ts`'s hard-coded filename list and
-> `migrations: N` count. It is numbered **`0010`** because **7e adds `0009_attempt_lock.sql`**
-> (handoff-3, `E-R1`), and the plan that ships it declares that dependency in its own header —
-> **why:** 7a's precedent. One plan owns the migration for the whole phase so no later plan has to
-> renumber under a parallel branch, and a migration is five files, not two. Numbering around 7e
-> rather than waiting for it is what lets the independent slices run while 7e is still in flight —
-> **cost if wrong:** two branches both claim `0010`. **The guard is weaker than it looks and the
-> plan must know which one it is:** `migrations-bundle.test.ts` does **not** catch this — it asserts
-> only that the committed bundle equals the generator's output and that the bundled names match the
-> sorted `.sql` files on disk, so two branches each adding a differently-named `0010_*.sql` both
-> pass. The real guard is `apps/api/test/worker.test.ts`'s hard-coded filename list and
-> `migrations: N` count, and **that file runs only under `apps/api`'s second vitest config**
-> (`vitest.workers.config.ts`), so a focused run stays green while the branch is red. 8a's plan says
-> this in its own verification steps. If 7e is abandoned, `0010` renumbers in one commit.
+> **Revised 2026-10-23 by `K43`: `0010` → `0009`, and the two broadcast columns are dropped.**
+> 7e is out of scope, so it will not take `0009`, and `0010` would leave a permanent gap for a
+> migration nobody is writing. `0009` is verified free on `main`. The columns `K12` wanted are
+> 8g's alone and 8g is deferred, so shipping them now is dead schema — **`0009` carries the
+> `webhook_delivery` table and `K42`'s `response` index, and nothing else.**
+>
+> Ruling: one SQLite file and one Postgres sibling. Both dialects, plus `schema/columns.ts`'s
+> `TABLE_MANIFEST` and a regenerated `migrations.generated.ts`, plus `worker.test.ts`'s hard-coded
+> filename list and `migrations: N` count — **why:** 7a's precedent. One plan owns the migration
+> for the whole phase so no later plan has to renumber under a parallel branch, and a migration is
+> five files, not two —
+> **cost if wrong:** a future 7e takes `0010` or later, which costs nothing. **The
+> duplicate-number guard is weaker than it looks and the plan must know which one it is:**
+> `migrations-bundle.test.ts` does **not** catch a collision — it asserts only that the committed
+> bundle equals the generator's output and that the bundled names match the sorted `.sql` files on
+> disk, so two branches each adding a differently-named `0009_*.sql` both pass. The real guard is
+> `apps/api/test/worker.test.ts`'s hard-coded filename list and `migrations: N` count, and **that
+> file runs only under `apps/api`'s second vitest config** (`vitest.workers.config.ts`), so a
+> focused run stays green while the branch is red. 8a's plan says this in its own verification
+> steps.
 
-**`K42` — `0010` also adds the index by-question grading and item analysis both need.**
+**`K42` — `0009` also adds the index by-question grading and item analysis both need.**
 
 > Ruling: the migration adds an index on `response(workspace_id, question_id)` alongside
 > `webhook_delivery` and the two `attempt` columns — **why:** `response` is indexed on
@@ -342,6 +347,10 @@ the release gate and appears only once no attempts remain.**
 
 **`K11` (owner) — the monitor derives "last contact" and renames the column.**
 
+> **Revised by `K43`: deferred with 8g, and `lastContactAt` leaves `listAttemptsForTest` — it was
+> derived for the monitor and has no other reader.** The reasoning below is decided for whenever
+> the monitor ships.
+>
 > Ruling: `R-01`'s "last heartbeat" ships as **last contact** —
 > `max(response.saved_at, event.server_ts, snapshot.taken_at)` per attempt, served as `null` and
 > rendered as `—` when there is none. `R-02`'s "inactive more than 2 minutes" filter ships, and the
@@ -354,6 +363,7 @@ the release gate and appears only once no attempts remain.**
 > inactive. The copy beside it is what stops a proctor acting on that, and it is the whole mitigation.
 
 **`K12` — the broadcast is two nullable columns on `attempt`, and it rides existing responses.**
+**(DEFERRED by `K43` with 8g. The reasoning below is decided, not pending — do not re-litigate it.)**
 
 > Ruling: `0010` adds `attempt.proctor_message` (text, null) and `attempt.proctor_message_at`
 > (timestamp, null). A proctor action sets both; the **existing** candidate→server routes —
@@ -370,6 +380,7 @@ the release gate and appears only once no attempts remain.**
 > coincidence.
 
 **`K39` (owner) — "reset an attempt" mints a new attempt and keeps the old one.**
+**(DEFERRED by `K43` with 8g. The definition stands for whenever it ships.)**
 
 > Ruling: `R-02`'s reset creates a **fresh attempt** for the same candidate against the same pinned
 > test version, leaves the previous attempt and all of its responses intact, and writes one audit
@@ -386,6 +397,7 @@ the release gate and appears only once no attempts remain.**
 > the case that genuinely needs data gone.
 
 **`K13` — the message is a single slot, overwritten, and cleared on delivery.**
+**(DEFERRED by `K43` with 8g.)**
 
 > Ruling: one pending message per attempt. Sending a second replaces the first. The route that
 > delivers it clears both columns in the same statement it is already issuing — **why:** `C-10` is
@@ -490,12 +502,17 @@ the release gate and appears only once no attempts remain.**
 > 288 invocations a day of a handler that usually finds nothing and exits. Measured, and stated in
 > the free-tier dashboard `P8.14` builds — the right place for it to show up.
 
-**`K37` — all four `D-03` events ship, and only `attempt.submitted` delivers inline.**
+**`K37` — three of `D-03`'s four events ship, and only `attempt.submitted` delivers inline.**
 
-> Ruling: `attempt.started`, `attempt.submitted`, `attempt.flagged` and `test.closed` all ship.
-> **`attempt.submitted` is the only one that attempts delivery inline** (`K23`); the other three
-> write a `webhook_delivery` row and the drain sends it on the next tick. `attempt.flagged` fires
-> from 7e's integrity recompute, so 8d ships its delivery path and its trigger lands with 8g —
+> **Revised by `K43`: `attempt.flagged` is cut.** Its only trigger was 8g's integrity recompute and
+> 8g is deferred; an event offered in a selector that nothing can ever fire is the `Q1b` defect
+> 7c's branch review had to correct three times. It returns with 8g — the delivery machinery is
+> event-agnostic, so it costs one array member then. `WEBHOOK_EVENTS` carries a comment naming it
+> rather than the member itself.
+>
+> Ruling: `attempt.started`, `attempt.submitted` and `test.closed` ship.
+> **`attempt.submitted` is the only one that attempts delivery inline** (`K23`); the other two
+> write a `webhook_delivery` row and the drain sends it on the next tick —
 > **why:** `AC-28` names a 10-second bound for `attempt.submitted` alone, and that is the only event
 > an organiser watches live. `attempt.started` fires on attempt creation, which is a **candidate hot
 > path** — an inline outbound `fetch` there is one more subrequest and one more failure mode on the
@@ -730,7 +747,7 @@ Seven plans. Each produces working, testable software on its own.
 | **8d — the perimeter** | webhook CRUD **and** delivery, HMAC, the retry drain, API-key CRUD and scopes | a |
 | **8e — the sweep** | retention job, candidate export and deletion, `rate_limit` expiry, the free-tier meter | a |
 | **8f — the ear** | `#209`'s microphone, `#84`'s re-cut | a, **7d** |
-| **8g — the watchtower** | live monitor, the five proctor actions, per-attempt review page, `C-10`'s broadcast | a, **7e** |
+| ~~**8g — the watchtower**~~ | ~~live monitor, proctor actions, review page, broadcast~~ — **DEFERRED by `K43`** with 7e. Written, not deleted. | a, b, d, **7e** |
 
 > **8d is bigger than "add delivery to an existing feature."** The pre-flight says of `webhook` and
 > `api_key` that the **tables** exist. Nothing else does: grepping `apps/` and `packages/` outside
@@ -741,22 +758,57 @@ Seven plans. Each produces working, testable software on its own.
 
 ### Order
 
+**Nothing starts until 7d merges** (`K43`). 8f needs it directly; the rest wait with it so the
+phase has one start gun rather than two, and so 8a is cut from a tree that already has 7d in it.
+
 **8a first and alone.** Every other plan consumes it, and it owns the only migration.
 
-**Then 8b, 8d and 8e in parallel** — none touches proctoring, and their tables (`review`,
-`webhook`, `api_key`) have existed since `0000`. This is the independent slice the brief asks to
-execute first, and it is **three** plans wide.
+**Then 8b, 8d, 8e and 8f in parallel** — none touches proctoring beyond 8f's own microphone, and
+their tables (`review`, `webhook`, `api_key`) have existed since `0000`. Four plans wide.
 
 **8c after 8b**, because the results CSV carries the verdict and the note.
 
-**8f once 7d merges.** `#209` re-enables a control and deletes a hardcoded `false` that **7d
-ships** — against today's `main` there is nothing there to re-enable.
+**8g does not execute.** `K43` defers it with 7e. The plan stays on the branch: when 7e lands it
+replaces the **surface** of 7e's two minimal organiser attempt routes and keeps their
+**endpoint**, as the roadmap says.
 
-**8g last.** It needs 7e. It replaces the **surface** of 7e's two minimal organiser attempt routes
-and keeps their **endpoint**, as the roadmap says.
+**`K43` (owner, 2026-10-23) — 7e is out of scope, so 8g is deferred whole, and 7d merging is the
+start gun for everything else.**
+
+> Ruling: **Phase 8 executes as six plans — 8a, 8b, 8c, 8d, 8e, 8f — and none of them starts until
+> 7d merges.** 8g is deferred entire, with [#89](https://github.com/SriSatyaLokesh/pariksha/issues/89),
+> [#90](https://github.com/SriSatyaLokesh/pariksha/issues/90),
+> [#91](https://github.com/SriSatyaLokesh/pariksha/issues/91) and
+> [#87](https://github.com/SriSatyaLokesh/pariksha/issues/87). The written plan stays on the branch
+> and is not deleted — **why:** every one of 8g's four deliverables reads `attempt.integrity_flag`,
+> `observed` or `0009`'s `locked_at`, and 7e is the only thing that writes any of them. Verified:
+> `setIntegrity` exists in `packages/db/src/repo/attempts.ts` and has **no production caller** —
+> the columns hold their defaults for every attempt in the database. A monitor over a column that
+> is `"clean"` for all 300 candidates is a surface that lies about coverage, which is this phase's
+> own anti-goal — **cost if wrong:** the phase ships without its live monitor, which is `R-01` and
+> `R-02`, and `G1` is not met. That is a real reduction in what Phase 8 delivers and it is the
+> owner's to make.
+>
+> **Four things this forces, each applied above rather than left as a consequence:**
+>
+> 1. **The migration is `0009`, not `0010`** (`K10`), and it **drops the two broadcast columns** —
+>    they were 8g's alone, and shipping schema no code reads is the `#186` defect in table form.
+> 2. **`attempt.flagged` is cut from the shipped webhook events** (`K37`). Its only trigger was
+>    8g's integrity recompute. An event offered in a selector that nothing can ever fire is the
+>    `Q1b` defect 7c's branch review had to correct three times.
+> 3. **`lastContactAt` leaves `listAttemptsForTest`** (`K11`). It was derived for the monitor and
+>    has no other reader.
+> 4. **`K12` and `K13` are deferred** with the plan that owns them.
+>
+> **What stays true and must not be re-litigated when 8g returns:** `K11`'s reasoning about there
+> being no heartbeat, `K12`'s three-carrier broadcast, `K13`'s single slot and `K39`'s
+> non-destructive reset are all still the right answers. They are decided, not pending.
 
 **`K40` (owner) — Phase 8 is planned whole now, and its two Phase-7-dependent plans are gated at
 execution rather than deferred at planning.**
+
+> **Superseded in part by `K43`:** the planning-whole half stands and paid off — 8g is written and
+> costs nothing to resume. The execution half now reads: **six plans execute, 8g does not.**
 
 > Ruling: all seven plans are written in this pass. 8f declares 7d and 8g declares 7e as execution
 > gates in their own headers. `0010` stands, and 8a's plan states that **7e must take `0009` or
@@ -798,8 +850,8 @@ execution rather than deferred at planning.**
 | a | `toCsv()`, the filename helper, the cursor-paging shape (`K38`) | c, e |
 | a | `estimateCost()` — composes `snapshotCost`, `workers`-only (`K35`, `K36`) | d (webhooks), e (the dashboard), and the publish checklist |
 | a | `TestRetention` + its resolver | e |
-| a | the organiser attempt reads | b, c, g |
-| a | `0010` — `webhook_delivery`, `attempt.proctor_message`, `.proctor_message_at`, the `response(workspace_id, question_id)` index | b, c, d, g |
+| a | the organiser attempt reads (no `lastContactAt` — `K43`) | b, c |
+| a | `0009` — `webhook_delivery` and the `response(workspace_id, question_id)` index | b, c, d |
 | a | the `scheduled` job registry | b (regrade drain), d (webhook drain), e (retention, rate limits) |
 | b | the verdict read | c |
 
@@ -831,6 +883,8 @@ execution rather than deferred at planning.**
 | A contact route for a locked candidate | No support-email field exists anywhere in the schema. Unchanged since 7a. | Whoever owns organiser contact details. |
 | Section-order shuffling (`D19`) | Needs a `pariksha/test@1` field, a format bump and an ADR. | Carried from 6.5. |
 | `branding.logo` on the candidate side | Needs a branding-scoped media route; never `layout.media`. | Carried from Phase 6. |
+| **The whole of 8g** — live monitor, proctor actions, per-attempt review page, `C-10`'s broadcast | `K43`. 7e is out of scope, and all four read a column only 7e writes. `setIntegrity` has no production caller, so `integrity_flag` is `"clean"` for every attempt in the database. | Whoever picks up 7e. The plan is written and costs nothing to resume. |
+| `attempt.flagged` as a webhook event | `K37` as revised. Its only trigger is 8g's recompute. | Returns with 8g — one array member. |
 | A message queue for `C-10` | `K13`. One slot. | Nobody, until someone asks. |
 | The noise threshold as an organiser control | 7d's constant. Unchanged. | Nobody, until someone asks. |
 | A custom report builder | §3. `R-06` and `R-07` are a fixed list. | Out of v1.0. |

@@ -10,7 +10,7 @@
 
 **Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K27`, `K28`, `K29`, `K30`, `K31`, `K35`, `K36`, `KG4`, `KG5`, `KG8`, `KG9`.
 
-**Depends on:** **8a** — `TestRetention` and `resolveRetention`, `estimateCost`, the `SCHEDULED_JOBS` registry, `toCsv`.
+**Depends on:** **8a** — `TestRetention` and `resolveRetention`, `estimateCost`, the `SCHEDULED_JOBS` registry, `toCsv`. **Starts only once 7d merges** (`K43`).
 
 **Goals covered:** `G5` and `G6`.
 

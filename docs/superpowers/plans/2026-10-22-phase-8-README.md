@@ -1,12 +1,23 @@
 # Phase 8 — results, monitoring, grading and data lifecycle: plan index
 
 **Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md)
-— 42 rulings, 10 guards, written 2026-10-22 and pre-flighted against `main` at `243ba07`. Twelve
-rulings are the owner's. A builder's review of the first draft added `K35`–`K42` and corrected one
-error in it.
+— 43 rulings, 10 guards, written 2026-10-22 and pre-flighted against `main` at `243ba07`. A
+builder's review of the first draft added `K35`–`K42` and corrected one error in it.
+
+> ## Scope, 2026-10-23 — `K43`
+>
+> **Six plans execute: 8a, 8b, 8c, 8d, 8e, 8f.** Execution is **subagent-driven** and **nothing
+> starts until 7d merges**.
+>
+> **8g is deferred whole**, with 7e — see its own banner. Its four deliverables each read a column
+> only 7e writes, and `setIntegrity` has no production caller today.
+>
+> Three knock-ons applied throughout: the migration is **`0009`** and drops the two broadcast
+> columns; **`attempt.flagged` is cut** from the webhook events; `lastContactAt` leaves
+> `listAttemptsForTest`.
 
 The spec covers seven independently shippable slices, so it is seven plans. Each produces working,
-testable software on its own.
+testable software on its own. **Six of the seven execute** — see the scope box above.
 
 > **Read the spec's §5 (the pre-flight) and §6 (the four constraints) before running any plan.**
 > §5 lists a dozen things the tree already has — a plan that rebuilds any of them costs a task —
@@ -15,52 +26,47 @@ testable software on its own.
 > slices hit at least one.
 
 > **Phase 7 is not finished.** `main` carries 7a, 7b and 7c. **7d is in flight** on an unmerged
-> branch and **7e is not started**. Two of these plans are gated on that; see Order below. Read
+> branch and **7e is out of scope** (`K43`). Read
 > [handoff](2026-10-22-phase-7-handoff.md), [handoff-2](2026-10-22-phase-7-handoff-2.md) and
 > [handoff-3](2026-10-22-phase-7-handoff-3.md) first — they carry every trap this project has
 > already paid for, and 8a's Global Constraints section is distilled from them.
 
 | plan | ships | goals | depends on |
 | --- | --- | --- | --- |
-| [8a — the ledger](2026-10-22-phase-8a-the-ledger.md) | `rescoreAttempt`, `countedScore`, `toCsv`, `estimateCost`, `TestRetention`, the organiser attempt reads, migration `0010`, the `scheduled` registry, `#186`, `#179`, the PRD correction | the floor | — |
+| [8a — the ledger](2026-10-22-phase-8a-the-ledger.md) | `rescoreAttempt`, `countedScore`, `toCsv`, `estimateCost`, `TestRetention`, the organiser attempt reads, migration `0009`, the `scheduled` registry, `#186`, `#179`, the PRD correction | the floor | — |
 | [8b — the verdict](2026-10-22-phase-8b-the-verdict.md) | grading queue (blind and by question), reviewer verdicts, regrade | `G2` | a |
 | [8c — the numbers](2026-10-22-phase-8c-the-numbers.md) | test analytics, item analysis, the four exports, the snapshot manifest, `D7c`'s readiness aggregate | `G3`, `G4` | a, b |
 | [8d — the perimeter](2026-10-22-phase-8d-the-perimeter.md) | webhook CRUD **and** delivery, HMAC, the retry drain, scoped API keys | `G3` (machine half), `S-05` | a |
 | [8e — the sweep](2026-10-22-phase-8e-the-sweep.md) | retention job, candidate export and erasure, `rate_limit` expiry, the free-tier meter | `G5`, `G6` | a |
-| [8f — the ear](2026-10-22-phase-8f-the-ear.md) | `#209`'s microphone, `#84`'s re-cut, the `P-06` reword and its ADR | Phase 7's `G2`/`G3`, mic half | a, **7d merged** |
-| [8g — the watchtower](2026-10-22-phase-8g-the-watchtower.md) | live monitor, the five proctor actions, per-attempt review page, `C-10`'s broadcast | `G1` | a, b, d, **7e merged** |
+| [8f — the ear](2026-10-22-phase-8f-the-ear.md) | `#209`'s microphone, `#84`'s re-cut, the `P-06` reword and its ADR | Phase 7's `G2`/`G3`, mic half | a |
+| ~~[8g — the watchtower](2026-10-22-phase-8g-the-watchtower.md)~~ | **DEFERRED (`K43`)** — monitor, proctor actions, review page, broadcast. Written, not deleted. | ~~`G1`~~ | a, b, d, **7e** |
 
 ## Order
 
+**Nothing starts until 7d merges.** 8f needs it directly; the rest wait with it so the phase has
+one start gun, and so 8a is cut from a tree that already has 7d in it.
+
 **8a first and alone.** Every other plan consumes it, and it owns the phase's only migration.
 
-**Then 8b, 8d and 8e in parallel** — none touches proctoring, and their tables (`review`,
-`webhook`, `api_key`) have existed since migration `0000`. This is the independent slice, and it is
-**three** plans wide.
+**Then 8b, 8d, 8e and 8f in parallel** — four plans wide. None touches proctoring beyond 8f's own
+microphone, and `review`, `webhook` and `api_key` have existed since migration `0000`.
 
 **8c after 8b**, because the results CSV carries the verdict and the note.
 
-**8f once 7d merges.** `#209` re-enables a control and deletes a hardcoded `false` that *7d ships* —
-against a tree without 7d there is nothing to re-enable, and the `AG2`/`AG3` source scans it must
-keep green do not exist yet.
-
-**8g last.** It needs 7e for `attempt.integrity_flag`, `observed` and `0009`'s `locked_at`, and it
-replaces the **surface** of 7e's two minimal organiser attempt routes while keeping their
-**endpoint**.
+**8g does not execute** (`K43`). When 7e lands, it replaces the **surface** of 7e's two minimal
+organiser attempt routes while keeping their **endpoint**, and brings its own migration for the two
+broadcast columns `0009` no longer carries.
 
 ```
-8a ──┬── 8b ──┬── 8c
-     │        │
-     ├── 8d ──┤
-     │        │
-     ├── 8e   └── 8g   (also waits on 7e)
-     │
-     └── 8f           (waits on 7d)
-```
+7d merges
+    │
+    └── 8a ──┬── 8b ── 8c
+             ├── 8d
+             ├── 8e
+             └── 8f
 
-8g is drawn after 8b and 8d because it shows their output: `latestVerdicts` on the review page and
-`fireWebhooks` for `attempt.flagged`. Both are long merged by the time 7e releases it, so the edge
-costs nothing — it is recorded so nobody starts 8g against a tree missing them.
+        8g ── DEFERRED with 7e (depends on a, b, d)
+```
 
 ## Before 8a merges — the owner's blocking step
 
@@ -73,7 +79,7 @@ This repository has the scar: **`0008` merged with Phase 7a and went four days u
 every live `attempt` select failed with `no such column` until setup was run on **2026-10-22**.
 
 **`0008` is applied. It is no longer outstanding** — `attempt.integrity_flag` and `observed` exist
-in production and every plan here may assume them. **`0010` is the only migration this phase gates
+in production and every plan here may assume them. **`0009` is the only migration this phase gates
 on**, and applying it is a blocking item in 8a's definition of done.
 
 The agent's pre-merge evidence, both free and neither touching the account:
@@ -95,11 +101,11 @@ ahead of the schema.
 
 ## Migration numbering
 
-`0010` is 8a's, and **`0009` belongs to 7e** (handoff-3, `E-R1`). Whichever of the two lands second
-yields and renumbers.
+**`0009` is 8a's**, verified free on `main`: 7e is out of scope and never created it. A future 7e
+takes `0010` or later, and 8g brings its own after that.
 
 **The guard here is weaker than it looks.** `migrations-bundle.test.ts` does **not** catch two
-branches each adding a differently-named `0010_*.sql` — it only asserts the committed bundle equals
+branches each adding a differently-named `0009_*.sql` — it only asserts the committed bundle equals
 the generator's output. The real guard is `apps/api/test/worker.test.ts`'s hard-coded filename list
 and `migrations: N` count, and **that file runs only under `apps/api`'s second vitest config**
 (`vitest.workers.config.ts`), so a focused run stays green while the branch is red.
@@ -113,21 +119,24 @@ and `migrations: N` count, and **that file runs only under `apps/api`'s second v
 | a | `toCsv()`, `csvFilename()`, `CsvPage` | c, e |
 | a | `estimateCost()` — composes `snapshotCost`, `workers`-only | d (the webhook line), e (the dashboard), the publish checklist |
 | a | `TestRetention`, `resolveRetention()`, `RETENTION_DEFAULTS` | e |
-| a | `listAttemptsForTest()` — set-based, with derived `lastContactAt` | b, c, g |
-| a | `0010` — `webhook_delivery`, `attempt.proctor_message`, `.proctor_message_at`, the `response(workspace_id, question_id)` index | b, c, d, g |
+| a | `listAttemptsForTest()` — set-based (no `lastContactAt`; `K43` removed it with 8g) | b, c |
+| a | `0009` — `webhook_delivery` and the `response(workspace_id, question_id)` index | b, c, d |
 | a | `SCHEDULED_JOBS`, `runScheduled()` | b (regrade drain), d (webhook drain), e (retention, rate limits) |
-| b | `latestVerdicts()` | c, g |
-| d | `fireWebhooks()` | g (`attempt.flagged`) |
+| b | `latestVerdicts()` | c |
+
 
 **`SCHEDULED_JOBS` ships empty with a deliberately brittle `expect(SCHEDULED_JOBS).toEqual([])`
 test.** A plan registering a job must edit that line, which is how the registry's contents stay
 visible instead of accumulating unseen. Three plans edit it: 8b, 8d, 8e.
 
-## The six permissions this phase wires for the first time
+## The five permissions this phase wires for the first time
 
-`attempts.monitor`, `attempts.read_evidence`, `attempts.grade`, `results.export`,
-`candidates.delete` and `keys.manage` have **zero production callers** on `main` — only
-`permissions.test.ts`. Phase 8 wires six of thirteen.
+`attempts.read_evidence`, `attempts.grade`, `results.export`, `candidates.delete` and
+`keys.manage` have **zero production callers** on `main` — only `permissions.test.ts`. Phase 8
+wires five of thirteen.
+
+**`attempts.monitor` stays unwired**: it was 8g's alone, and 8g is deferred (`K43`). It keeps the
+distinction it has had since the matrix was written — a Proctor holds it and nothing reads it yet.
 
 `KG2`: every 403 test needs a **200 beside it in the same file**. A typo in the URL makes a bare
 403 pass for free, and that shape shipped vacuous three times in 7c.
@@ -138,7 +147,6 @@ The boundaries that actually bite, each tested as a pair:
 | --- | --- | --- |
 | grading | Reviewer (`attempts.grade`) | Author (`tests.edit` only) |
 | events / snapshot exports | Reviewer (`attempts.read_evidence`) | **Viewer** (`results.export` only) |
-| monitor and actions | Proctor (`attempts.monitor`) | Author |
 | candidate erasure | **Owner only** (`candidates.delete`) | Admin |
 
 ## Guards this phase adds
@@ -155,10 +163,10 @@ does not rebuild is testing the old build — rebuild on the break *and* on the 
 | `KG4` | `S-14` deletion empties every candidate-data table in `TABLE_MANIFEST`, `audit_log` exempt by name | e |
 | `KG5` | no `secret_hash`, `signing_secret` or key plaintext in any response | d |
 | `KG6` | the CSV is Excel-safe — BOM, RFC 4180, round-trips through `readDelimited` | a |
-| `KG7` | the candidate runtime adds **no** periodic `fetch` | g |
+| ~~`KG7`~~ | the candidate runtime adds no periodic `fetch` — **deferred with 8g** | ~~g~~ |
 | `KG8` | no cost figure reaches a `node` deployment | e |
 | `KG9` | `audit_log.detail_json` carries ids, never personal data — this is what pays for `KG4`'s exemption | e |
-| `KG10` | the monitor joins the density registry's fixed `SURFACES` list | g |
+| ~~`KG10`~~ | the monitor joins the density registry — **deferred with 8g** | ~~g~~ |
 
 ## Cut order
 

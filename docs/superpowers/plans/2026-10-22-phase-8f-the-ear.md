@@ -10,7 +10,7 @@
 
 **Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K1`, `K34`. The **acceptance criteria are [#209](https://github.com/SriSatyaLokesh/pariksha/issues/209)'s**, in full; this plan adds nothing to them. Phase 7's spec `Q12`, `Q12a`, `Q12b`, `AG1`, `AG2`, `AG3` still bind.
 
-**Depends on:** **8a**, and **7d must be merged**. `#209` re-enables a control and deletes a hardcoded `false` that **7d ships** — against a tree without 7d there is nothing here to re-enable, and the `AG2`/`AG3` source scans this plan must keep green do not exist yet.
+**Depends on:** **8a**, and **7d must be merged**. `#209` re-enables a control and deletes a hardcoded `false` that **7d ships** — against a tree without 7d there is nothing here to re-enable, and the `AG2`/`AG3` source scans this plan must keep green do not exist yet. **Starts only once 7d merges** (`K43`).
 
 **Goals covered:** the microphone half of Phase 7's `G2`/`G3`.
 

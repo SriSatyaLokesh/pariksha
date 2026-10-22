@@ -1,5 +1,31 @@
 # Phase 8g — The Watchtower Implementation Plan
 
+> # DEFERRED — DO NOT EXECUTE
+>
+> **`K43` (owner, 2026-10-23): 7e is out of scope, so this plan is deferred whole**, with
+> [#89](https://github.com/SriSatyaLokesh/pariksha/issues/89),
+> [#90](https://github.com/SriSatyaLokesh/pariksha/issues/90),
+> [#91](https://github.com/SriSatyaLokesh/pariksha/issues/91) and
+> [#87](https://github.com/SriSatyaLokesh/pariksha/issues/87).
+>
+> Every one of its four deliverables reads `attempt.integrity_flag`, `observed` or `locked_at`, and
+> **7e is the only thing that writes any of them**. `setIntegrity` exists in
+> `packages/db/src/repo/attempts.ts` with **no production caller**, so those columns hold their
+> defaults for every attempt in the database. A monitor over a column reading `"clean"` for all 300
+> candidates is a surface that lies about coverage — this phase's own anti-goal.
+>
+> **The plan is kept, not deleted.** It is pre-flighted and costs nothing to resume. Two things
+> changed underneath it while it waits, and whoever picks it up must apply both:
+>
+> 1. **`attempt.proctor_message` and `.proctor_message_at` are no longer in the migration.** `K43`
+>    dropped them from `0009` as dead schema. Task 3 brings its own migration — numbered after 7e's.
+> 2. **`attempt.flagged` is not in `WEBHOOK_EVENTS`.** `K37` cut it because this plan was its only
+>    trigger. Task 4 adds the member back alongside the caller; 8d's delivery machinery is
+>    event-agnostic and needs no change.
+>
+> Everything else below stands as written.
+
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a proctor watch a live test, act on what they see, and read one attempt's whole story afterwards — without adding a single periodic request to any candidate's browser.
@@ -10,7 +36,7 @@
 
 **Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K1`, `K3`, `K4`, `K9`, `K11`, `K12`, `K13`, `K37`, `K39`, `KG1`, `KG2`, `KG3`, `KG7`, `KG10`.
 
-**Depends on:** **8a** (`listAttemptsForTest`, `0010`'s two `attempt` columns), **8b** (`latestVerdicts`, which Task 4's review page shows), **8d** (`fireWebhooks`, for `attempt.flagged`), and **7e must be merged**. 7e writes `attempt.integrity_flag` and `observed`, adds `0009`'s `locked_at`, and creates the product's **first two organiser attempt routes** — this plan replaces their **surface** and keeps their **endpoint**.
+**Depends on:** **8a** (`listAttemptsForTest`), **8b** (`latestVerdicts`), **8d** (`fireWebhooks`), a migration of its own for the two broadcast columns, and **7e must be merged**. 7e writes `attempt.integrity_flag` and `observed`, adds `0009`'s `locked_at`, and creates the product's **first two organiser attempt routes** — this plan replaces their **surface** and keeps their **endpoint**.
 
 **Goals covered:** `G1`.
 
@@ -48,7 +74,7 @@
 - Test: `apps/api/test/monitor.test.ts`, `apps/web/test/organiser/monitor.test.tsx`, `apps/web/e2e/density.spec.ts`
 
 **Interfaces:**
-- Consumes: `listAttemptsForTest` (8a Task 7) — including its derived `lastContactAt`.
+- Consumes: `listAttemptsForTest` (8a Task 7). **`lastContactAt` was removed from it by `K43`** — this task re-adds the `MAX()` derivation, since it is the only reader.
 - Produces: `GET /api/v1/workspaces/:id/tests/:testId/monitor` — `workspace`, `attempts.monitor`.
 
 **`R-01`'s columns:** counts (registered, in check, in progress, submitted, auto-submitted), and per candidate: set, time left, answered count, violations, **last contact** and camera status.
@@ -275,7 +301,7 @@ git commit -m "feat(api,web): the five proctor actions, all audited, reset non-d
 - Test: `apps/api/test/broadcast.test.ts`, `apps/web/test/exam/proctor-banner.test.tsx`
 
 **Interfaces:**
-- Consumes: `0010`'s `attempt.proctor_message` and `.proctor_message_at` (8a Task 1).
+- Consumes: `attempt.proctor_message` and `.proctor_message_at` — **this plan's own migration now**, since `K43` dropped them from `0009`.
 - Produces: `{ message: string; messageAt: number }` on three existing responses, when one is pending.
 
 **`K12`** — **no new route, no new request, no poll.** The events route already returns `{ violations, limit, action }` and the client already consumes it; one field joins it. Riding all three carriers is what makes it work for a candidate who is answering but not violating.

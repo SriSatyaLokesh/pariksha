@@ -8,9 +8,9 @@
 
 **Tech Stack:** TypeScript (strict), Vitest, Hono, Preact/React.
 
-**Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K2`, `K3`, `K4`, `K6`, `K8`, `K9`, `K19`, `K20`, `K21`, `K38`, `K42`, `KG1`, `KG2`, `KG3`, `KG6`.
+**Spec:** [`../specs/2026-10-22-phase-8-results-design.md`](../specs/2026-10-22-phase-8-results-design.md) — `K2`, `K3`, `K4`, `K6`, `K8`, `K9`, `K19`, `K20`, `K21`, `K38`, `K42`, **`K43`**, `KG1`, `KG2`, `KG3`, `KG6`.
 
-**Depends on:** **8a** (`toCsv`, `csvFilename`, `countedScore`, `listAttemptsForTest`, `0010`'s response index) and **8b** (`latestVerdicts` — the results CSV carries the verdict and the note).
+**Depends on:** **8a** (`toCsv`, `csvFilename`, `countedScore`, `listAttemptsForTest`, `0009`'s response index) and **8b** (`latestVerdicts` — the results CSV carries the verdict and the note). **Starts only once 7d merges** (`K43`).
 
 **Goals covered:** `G3` and `G4`.
 
@@ -68,6 +68,8 @@ export const testSummary: Scoped<(testId: string) => Promise<TestSummary>>;
 ```
 
 **`K19`** — `GROUP BY` aggregates, or one pass over one fetch. Never per candidate.
+
+**`integrity` will read `{ clean: n, review: 0, high_risk: 0 }` for every test**, and that is correct, not a bug. `K43` put 7e out of scope and `setIntegrity` has no production caller, so `attempt.integrity_flag` holds its `'clean'` default everywhere. The column is real and the count is honest — it means *no integrity signal has been recorded*. Keep the field, and do not invent data for it.
 
 Route: `GET /api/v1/workspaces/:id/tests/:testId/analytics` — `workspace`, `results.export`.
 
