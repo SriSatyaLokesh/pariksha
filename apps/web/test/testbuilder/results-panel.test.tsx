@@ -3,6 +3,7 @@
 // already covered in `release-branding.test.tsx` — this file only covers
 // what `ResultsPanel` adds around it.
 
+import { useState } from "react";
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { axe } from "jest-axe";
@@ -206,5 +207,58 @@ describe("ResultsPanel's candidate-data lookup", () => {
     fireEvent.click(screen.getByRole("button", { name: /Jane Rivera/ }));
     await screen.findByRole("group", { name: /Candidate data/i });
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+// Fix round 3 (`F5`): `routes/test.tsx`'s real `deleteCandidateData`
+// handler drops the erased id from its own `candidates` state
+// (`setCandidates((current) => current.filter((c) => c.id !== candidateId))`)
+// on a successful delete — without it, `CandidateLookup` keeps filtering
+// the array it was last rendered with, so an erased candidate stays
+// searchable and selectable with their pre-erasure name until a reload.
+// `ResultsPanel` itself owns no state over `candidates` (it is a prop,
+// by design — `routes/test.tsx`'s own comment on the prop), so this is
+// proved here the same shape the real caller uses: a small stateful
+// harness around `ResultsPanel`, exercising the exact one-line removal
+// `routes/test.tsx` performs, rather than asserting on `routes/test.tsx`
+// through the full `OrganiserApp` tree.
+describe("the stale-list fix after a successful erasure (fix round 3, F5)", () => {
+  function Harness({ onDeleteCandidateData }: { onDeleteCandidateData: (id: string) => Promise<void> }) {
+    const [candidates, setCandidates] = useState(CANDIDATES);
+    return (
+      <ResultsPanel
+        {...props}
+        candidates={candidates}
+        onDeleteCandidateData={async (candidateId, keepAnonymisedScore) => {
+          await onDeleteCandidateData(candidateId);
+          void keepAnonymisedScore;
+          setCandidates((current) => current.filter((c) => c.id !== candidateId));
+        }}
+      />
+    );
+  }
+
+  it("an erased candidate is no longer found by a repeat search", async () => {
+    const onDeleteCandidateData = vi.fn().mockResolvedValue(undefined);
+    render(<Harness onDeleteCandidateData={onDeleteCandidateData} />);
+
+    fireEvent.change(screen.getByLabelText(/Find a candidate/i), { target: { value: "jane" } });
+    fireEvent.click(screen.getByRole("button", { name: /Jane Rivera/ }));
+    await screen.findByRole("group", { name: /Candidate data/i });
+
+    fireEvent.click(screen.getByRole("button", { name: /Erase this candidate's data/i }));
+    fireEvent.change(await screen.findByLabelText(/Type ERASE to confirm/i), { target: { value: "ERASE" } });
+    fireEvent.click(screen.getByRole("button", { name: /Erase permanently/i }));
+    await screen.findByText(/data has been erased/i);
+
+    fireEvent.click(screen.getByRole("button", { name: /Look up a different candidate/i }));
+    fireEvent.change(screen.getByLabelText(/Find a candidate/i), { target: { value: "jane" } });
+
+    expect(screen.queryByRole("button", { name: /Jane Rivera/ })).toBeNull();
+    expect(screen.getByText(/No candidate on this test matches/i)).toBeVisible();
+    // The other candidate, untouched, is still findable — the fix removes
+    // one row, never the whole list.
+    fireEvent.change(screen.getByLabelText(/Find a candidate/i), { target: { value: "jaden" } });
+    expect(screen.getByRole("button", { name: /Jaden Okafor/ })).toBeInTheDocument();
   });
 });

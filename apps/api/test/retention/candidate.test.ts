@@ -2,8 +2,18 @@
 // (`exportCandidate`), and their right to have it erased (`deleteCandidate`,
 // `K29`). `KG4` is the completeness guard — every table `holdsCandidateData`
 // names, minus `audit_log` — and `KG9` is what pays for that exemption: no
-// `appendAudit` call site in `apps/api/src` may carry a candidate's name,
-// email or form values. `KG2`: the Owner/Admin pair over the real routes.
+// `appendAudit`-shaped call site in `apps/api/src` may carry a candidate's
+// name, email or form values. `KG2`: the Owner/Admin pair over the real
+// routes.
+//
+// Fix round 3: `F3` found `auth_token.payload_json` as a second,
+// JSON-embedded reference to a candidate that `holdsCandidateData`'s
+// column-name scan cannot see — `candidateDataClassification`'s own test
+// below is the closing guard, asserting every `TABLE_MANIFEST` table is
+// exactly one of structurally resolved / explicitly handled out of band /
+// explicitly exempt, so a second one cannot land unreached silently
+// again. `F4` folded the `audit_log` row into the same `db.batch` as the
+// erasure.
 //
 // Each `it` builds its own workspace off a shared in-memory database — a
 // fresh database per test would mean re-running every migration, which
@@ -28,8 +38,10 @@ import {
   newId,
   recordSnapshot,
   upsertResponse,
+  INVITE_KIND,
   TABLE_MANIFEST,
   type DbClient,
+  type InvitePayload,
 } from "@pariksha/db";
 import { createApp, ROUTE_ACTIONS, ROUTE_AUTH, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
@@ -37,6 +49,8 @@ import { issueSession } from "../../src/auth/session.js";
 import {
   AttemptInProgressError,
   CANDIDATE_DATA_EXEMPT,
+  CANDIDATE_DATA_HANDLED_OUT_OF_BAND,
+  candidateDataClassification,
   chunk,
   deleteCandidate,
   deleteCandidates,
@@ -129,6 +143,22 @@ async function seedCandidate(
     "INSERT INTO review (id, workspace_id, attempt_id, reviewer, verdict, note, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
     [newId("rev"), wsp, attemptId, "usr_reviewer", "clean", "Looked fine.", FIXED_NOW],
   );
+  // F3: a list invite minted for this candidate — `auth_token` is
+  // untenanted and carries no `candidate_id`/`attempt_id` column, so this
+  // row is invisible to `holdsCandidateData`'s structural walk. Its
+  // `externalId` is the exact leak this fix round closed: a real
+  // email/roll-number value, surviving redemption (`run.ts` only ever
+  // sets `used_at`) unless `deleteCandidates` deletes it explicitly.
+  const invitePayload: InvitePayload = {
+    workspaceId: wsp,
+    testId,
+    candidateId,
+    externalId: "jamie@example.test",
+  };
+  await deps.db.run(
+    "INSERT INTO auth_token (token_hash, kind, payload_json, created_at, expires_at, used_at) VALUES (?, ?, ?, ?, ?, NULL)",
+    [`hash-invite-${candidateId}`, INVITE_KIND, deps.db.jsonParam(invitePayload), FIXED_NOW, FIXED_NOW + 90 * DAY],
+  );
 
   return { wsp, testId, candidateId, attemptId };
 }
@@ -173,6 +203,19 @@ async function countUniqueClaims(db: DbClient, wsp: string, candidateId: string)
   return Number(rows[0]?.n ?? 0);
 }
 
+/** F3: `auth_token` carries no `workspace_id` or `candidate_id` column —
+ *  the only way to find a candidate's own invite row is the same
+ *  `json_extract` `deleteCandidates` itself uses (sqlite/d1 shape; these
+ *  tests run on the sqlite dialect, same as every other fixture in this
+ *  file). */
+async function countAuthTokensFor(db: DbClient, candidateId: string): Promise<number> {
+  const rows = await db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM auth_token WHERE json_extract(payload_json, '$.candidateId') = ?",
+    [candidateId],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 // --- KG9: the source scanner ----------------------------------------------
 
 /** `KG9`'s denylist: the three categories Review Focus item 3 names — a
@@ -206,16 +249,27 @@ function listTsFiles(dir: string): string[] {
   return out;
 }
 
-/** Every `appendAudit(...)` call's own argument text, found by counting
- *  parentheses from the call site rather than a regex — the call commonly
- *  spans many lines and nests object and array literals of its own. */
+/** Every `appendAudit(...)`-shaped call's own argument text, found by
+ *  counting parentheses from the call site rather than a regex over the
+ *  whole call — it commonly spans many lines and nests object and array
+ *  literals of its own.
+ *
+ *  Fix round 3 (`F4`): the start pattern is `\bappendAudit\w*\(`, not the
+ *  literal string `"appendAudit("` — `retention/candidate.ts`'s
+ *  `appendAuditStatement` (built to fold the audit `INSERT` into
+ *  `deleteCandidates`'s own `db.batch`, since `@pariksha/db`'s
+ *  `appendAudit` issues its own `db.run` and cannot be) would otherwise be
+ *  a raw `INSERT INTO audit_log` with no call site this scanner could see
+ *  — the exact shape of blind spot `F3` found on the `TABLE_MANIFEST`
+ *  side, here on the audit side instead. Keeping `appendAudit` as a
+ *  substring of the wrapper's own name is what keeps it caught. */
 function appendAuditCallBodies(text: string): string[] {
   const calls: string[] = [];
-  const needle = "appendAudit(";
-  let idx = 0;
-  while ((idx = text.indexOf(needle, idx)) !== -1) {
+  const callStart = /\bappendAudit\w*\(/g;
+  let match: RegExpExecArray | null;
+  while ((match = callStart.exec(text)) !== null) {
     let depth = 0;
-    let i = idx + needle.length - 1;
+    let i = match.index + match[0].length - 1;
     const start = i;
     do {
       if (text[i] === "(") depth++;
@@ -223,7 +277,7 @@ function appendAuditCallBodies(text: string): string[] {
       i++;
     } while (depth > 0 && i < text.length);
     calls.push(text.slice(start, i));
-    idx = i;
+    callStart.lastIndex = i;
   }
   return calls;
 }
@@ -290,7 +344,7 @@ it("empties every table holding candidate data, except the audit row that logged
     storage: deps.storage,
   });
 
-  const tables = TABLE_MANIFEST.filter((t) => holdsCandidateData(t) && !CANDIDATE_DATA_EXEMPT.includes(t.name));
+  const tables = TABLE_MANIFEST.filter((t) => holdsCandidateData(t) && !(t.name in CANDIDATE_DATA_EXEMPT));
   for (const table of tables) {
     expect(await rowsMentioning(deps.db, table.name, candidateId), table.name).toEqual([]);
   }
@@ -302,13 +356,53 @@ it("finds rows before the deletion — control for the sweep above", async () =>
   const { wsp, candidateId } = await seedCandidate(deps);
   void wsp;
 
-  const tables = TABLE_MANIFEST.filter((t) => holdsCandidateData(t) && !CANDIDATE_DATA_EXEMPT.includes(t.name));
+  const tables = TABLE_MANIFEST.filter((t) => holdsCandidateData(t) && !(t.name in CANDIDATE_DATA_EXEMPT));
   // Without this, the test above passes for free if `holdsCandidateData`
   // returned nothing at all.
   expect(tables.length).toBeGreaterThan(3);
   for (const table of tables) {
     expect(await rowsMentioning(deps.db, table.name, candidateId), table.name).not.toEqual([]);
   }
+  await closeClient(deps.db);
+});
+
+// --- F3: the manifest-blind-spot guard, and the auth_token leak it found ----
+
+it("every TABLE_MANIFEST table is structurally resolved, explicitly handled out of band, or explicitly exempt", () => {
+  // The failure state this guard exists to catch: `auth_token` before this
+  // fix round classified as none of the three — not exempt, not handled,
+  // just unreached, which is exactly how its `payload_json.candidateId`
+  // leak survived a structural scan undetected.
+  const unclassified = TABLE_MANIFEST.filter((t) => candidateDataClassification(t) === null).map((t) => t.name);
+  expect(unclassified).toEqual([]);
+});
+
+it("auth_token is named as explicitly handled, not silently exempt", () => {
+  // `holdsCandidateData(auth_token)` really is `false` (no `candidate_id`/
+  // `attempt_id` column) — this table is only safe because
+  // `deleteCandidates` deletes it by name, not because the structural walk
+  // found it.
+  const authToken = TABLE_MANIFEST.find((t) => t.name === "auth_token");
+  expect(authToken).toBeDefined();
+  expect(holdsCandidateData(authToken!)).toBe(false);
+  expect(candidateDataClassification(authToken!)).toBe("handled");
+  expect(CANDIDATE_DATA_HANDLED_OUT_OF_BAND.auth_token).toBeTruthy();
+});
+
+it("deletes the invite's auth_token row — payload_json.candidateId, invisible to the structural scan", async () => {
+  const { deps } = await testDeps();
+  const { wsp, candidateId } = await seedCandidate(deps);
+  expect(await countAuthTokensFor(deps.db, candidateId)).toBeGreaterThan(0);
+
+  await deleteCandidate(deps.db, wsp, {
+    candidateId,
+    keepAnonymisedScore: true,
+    actor: "usr_1",
+    now: FIXED_NOW,
+    storage: deps.storage,
+  });
+
+  expect(await countAuthTokensFor(deps.db, candidateId)).toBe(0);
   await closeClient(deps.db);
 });
 
@@ -510,6 +604,44 @@ it("logs the deletion with ids and counts, never personal data", async () => {
   expect(rows[0]?.target).toBe(candidateId);
   expect(rows[0]?.detail).toMatchObject({ keepAnonymisedScore: true });
   expect(JSON.stringify(rows[0]?.detail)).not.toMatch(/Jamie|jamie@example/);
+  await closeClient(deps.db);
+});
+
+it("F4: the audit row is inside the same db.batch as the erasure, never a separate db.run after it", async () => {
+  const { deps } = await testDeps();
+  const { wsp, candidateId } = await seedCandidate(deps);
+
+  const batchCalls: { sql: string; params: unknown[] }[][] = [];
+  const runCalls: string[] = [];
+  const spied: DbClient = {
+    ...deps.db,
+    batch: (statements) => {
+      batchCalls.push([...statements]);
+      return deps.db.batch(statements);
+    },
+    run: (sql, params) => {
+      runCalls.push(sql);
+      return deps.db.run(sql, params);
+    },
+  };
+
+  await deleteCandidate(spied, wsp, {
+    candidateId,
+    keepAnonymisedScore: true,
+    actor: "usr_1",
+    now: FIXED_NOW,
+    storage: deps.storage,
+  });
+
+  // The whole erasure is ONE db.batch call, and the audit INSERT rides
+  // inside it — not a toEqual([]) on `runCalls` (candidateExists and the
+  // in-progress/snapshot-key reads are real `db.query` calls, not `run`,
+  // so this file's other fixtures still issue some `db.run` elsewhere;
+  // the property that matters is that no `db.run` ever carries the audit
+  // INSERT once `db.batch` has already committed).
+  expect(batchCalls).toHaveLength(1);
+  expect(batchCalls[0]?.some((s) => /INSERT INTO audit_log/i.test(s.sql))).toBe(true);
+  expect(runCalls.some((sql) => /INSERT INTO audit_log/i.test(sql))).toBe(false);
   await closeClient(deps.db);
 });
 

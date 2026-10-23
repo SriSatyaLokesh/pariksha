@@ -52,9 +52,52 @@
 // meant to cover both the manual path here and the future nightly one the
 // same way, per the advisor ruling above — there is no second definition of
 // "what erasure empties" to keep in step.
+//
+// **Fix round 3, `F3`: `holdsCandidateData`'s blind spot, named rather than
+// silently unreached.** A column-name scan cannot see a reference embedded
+// inside an opaque JSON column — `auth_token.payload_json` (untenanted, no
+// `candidate_id`/`attempt_id` column at all) carries `InvitePayload.
+// candidateId` (`packages/db/src/repo/run.ts`), and redemption only ever
+// sets `used_at` (that file's own comment: "so a replay is distinguishable
+// from a token that never existed"), so a list-invited candidate's
+// `external_id` — routinely an email or a roll number, the exact shape
+// `candidate_unique`'s hash exists to stop leaking — lived in that row
+// forever. `deleteCandidates` below now deletes it explicitly, matched on
+// `payload_json`'s `candidateId` rather than a column `holdsCandidateData`
+// could see. `CANDIDATE_DATA_HANDLED_OUT_OF_BAND` names this table and why,
+// and `candidateDataClassification`'s own completeness test (`KG4`, the
+// test file) fails for any `TABLE_MANIFEST` table that is in none of the
+// three states — structurally resolved, explicitly handled here, or
+// explicitly exempt (`CANDIDATE_DATA_EXEMPT`) — so a second JSON-embedded
+// reference added later cannot land unreached the same way this one did.
+//
+// **Not a `candidate_id` column on `auth_token`.** That is the better
+// long-term shape — it would make the structural scan see this for free —
+// but it needs a migration, and Phase 7e is concurrently taking migrations
+// `0010`/`0011` on another branch; an 8e migration here would collide on
+// merge. Filed as a follow-up rather than risked as a numbering conflict.
+//
+// **Fix round 3, `F4`: the `audit_log` row is now inside the same
+// `db.batch` as the erasure, not written after it commits.** `S-13`
+// requires the deletion be logged, and `KG9`'s exemption of `audit_log`
+// from the completeness sweep rests on that row actually existing — a
+// `db.run` after the batch commits is a window where the erasure has
+// irreversibly happened with zero record of it, widened precisely as the
+// batch size grows (the nightly sweep this phase's `AC-24` gap still
+// needs, built by a sibling task against this same function). The audit
+// `INSERT`s are built as `{sql, params}` entries by
+// `appendAuditStatement` below — not a call to `@pariksha/db`'s
+// `appendAudit`, which issues its own `db.run` and could not be part of
+// this batch — and pushed into the same `statements` array `db.batch`
+// commits once. `appendAuditStatement` keeps `appendAudit` in its name on
+// purpose: `auditCallSitesPassingPersonalData` (`KG9`, the test file)
+// greps source for that substring, and a raw `INSERT INTO audit_log` with
+// no recognisable call site would have been invisible to it — the same
+// shape of blind spot `F3` found on the manifest side, here on the audit
+// side instead.
 
 import type { DbClient, TableSpec } from "@pariksha/db";
-import { appendAudit, TABLE_MANIFEST } from "@pariksha/db";
+import { INVITE_KIND, newId, TABLE_MANIFEST } from "@pariksha/db";
 import type { StorageAdapter } from "@pariksha/storage";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -73,11 +116,42 @@ import { actorOr401, requires } from "../middleware/authorize.js";
 export type Scoped<F extends (...args: never[]) => unknown> =
   F extends (...args: infer A) => infer R ? (db: DbClient, workspaceId: string, ...args: A) => R : never;
 
-/** K29/KG4: `S-13` requires the deletion itself be logged, so the one row
- *  that records an erasure is allowed to name the candidate it erased —
- *  `KG9` (`auditCallSitesPassingPersonalData`) is what keeps that exemption
- *  safe, by proving the row never carries more than an id. */
-export const CANDIDATE_DATA_EXEMPT = ["audit_log"];
+/**
+ * `KG4`'s third bucket: every `TABLE_MANIFEST` table that holds no
+ * candidate data and needs no deletion — keyed by name, valued by why, so
+ * "exempt" always reads as a decision rather than an absence. `audit_log`
+ * is the one case with its own standing reason (`S-13` requires the
+ * deletion itself be logged, and `KG9`'s scanner is what keeps that row
+ * from ever carrying more than an id); every other entry here is a table
+ * that was never about a candidate at all — organiser accounts, bank and
+ * test *content*, rate-limit counters — present so
+ * `candidateDataClassification`'s completeness test (fix round 3, `F3`)
+ * has somewhere to put a table that structurally holds no reference,
+ * rather than that table reading as merely unreached, which is the exact
+ * shape `auth_token` slipped through in before this fix round.
+ */
+export const CANDIDATE_DATA_EXEMPT: Readonly<Record<string, string>> = {
+  audit_log: "S-13 requires the deletion itself be logged; KG9 keeps that row from naming more than an id.",
+  workspace: "branding_json/settings_json describe the workspace itself — never a candidate.",
+  user: "An organiser or system account. A candidate has no row in this table at all.",
+  membership: "test_grants_json holds a user's (an organiser's) per-test role grants — never a candidate's.",
+  session: "An organiser's own signed-in session — never a candidate's.",
+  question_bank: "groups_json/tags_json describe the bank's own content — authoring data, not candidate data.",
+  question: "media_json/options_json/key_json/scoring_json/tags_json/extra_json describe one question's content.",
+  test: "tags_json is the test's own tag list — not candidate data.",
+  test_version: "settings_json/sections_json are the published test definition — not candidate data.",
+  set: "question_ids_json is a shuffled question list for one (test_version, set_no) pair, not a candidate.",
+  rate_limit:
+    "bucket/window_start/count are keyed by an opaque bucket string (a test id, an address digest, a " +
+    "short code) — never a candidate identifier, and the row carries no personal data to erase.",
+  api_key: "scopes_json is the key's own permission scopes — not candidate data.",
+  webhook: "events_json is the subscribed event-type list (e.g. \"attempt.submitted\") — configuration, not data.",
+  webhook_delivery:
+    "payload_json is a queued delivery body for 8d's drain queue, UNBUILT as of this phase (no writer " +
+    "exists yet — grep confirms no INSERT anywhere). Flagged for re-review once 8d lands one: a webhook " +
+    "payload could plausibly embed a candidate identifier the way auth_token's did (F3), and this entry " +
+    "is not a claim that it won't, only that there is nothing to sweep today.",
+};
 
 /** `KG4`. See the file header. */
 export function holdsCandidateData(table: TableSpec, seen: Set<string> = new Set()): boolean {
@@ -92,6 +166,42 @@ export function holdsCandidateData(table: TableSpec, seen: Set<string> = new Set
     if (ref && holdsCandidateData(ref, seen)) return true;
   }
   return false;
+}
+
+/**
+ * `F3`'s closed list, keyed by table name: a table whose only reference to
+ * `candidate` lives somewhere `holdsCandidateData`'s column scan cannot
+ * see — inside a JSON column, for `auth_token` — and so is handled by name
+ * in `deleteCandidates` instead of by the structural walk. The value is
+ * the reason, read by `candidateDataClassification`'s own test and by
+ * nobody else; this is documentation with a compiler check attached to
+ * it, not a runtime lookup.
+ */
+export const CANDIDATE_DATA_HANDLED_OUT_OF_BAND: Readonly<Record<string, string>> = {
+  auth_token:
+    "InvitePayload.candidateId lives inside payload_json (packages/db/src/repo/run.ts) — auth_token is " +
+    "untenanted and carries no candidate_id/attempt_id column at all, so holdsCandidateData cannot see it. " +
+    "deleteCandidates deletes matching rows explicitly, by kind + a dialect-specific JSON extraction.",
+};
+
+/**
+ * `F3`'s closing move: every `TABLE_MANIFEST` table is exactly one of
+ * three things — structurally resolved (`holdsCandidateData`), explicitly
+ * handled out of band (above), or explicitly exempt
+ * (`CANDIDATE_DATA_EXEMPT`, one reason per table). `null` is the failure
+ * state: a table in none of the three, which is what `auth_token` was
+ * before this fix round — not exempt, not handled, just unreached, which
+ * is exactly the shape that lets a second JSON-embedded reference leak
+ * silently. The completeness test in this task's test file asserts no
+ * `TABLE_MANIFEST` table classifies as `null`.
+ */
+export function candidateDataClassification(
+  table: TableSpec,
+): "structural" | "handled" | "exempt" | null {
+  if (holdsCandidateData(table)) return "structural";
+  if (table.name in CANDIDATE_DATA_HANDLED_OUT_OF_BAND) return "handled";
+  if (table.name in CANDIDATE_DATA_EXEMPT) return "exempt";
+  return null;
 }
 
 /** Raised by `deleteCandidates` when one or more of the given candidates has
@@ -270,6 +380,33 @@ interface AttemptRow {
 }
 
 /**
+ * `F4`: `@pariksha/db`'s `appendAudit` issues its own `db.run`, which
+ * cannot be made part of `deleteCandidates`'s `db.batch`. This builds the
+ * identical `INSERT` as a `{sql, params}` entry instead, so the row that
+ * logs an erasure commits in the same atomic batch as the erasure itself
+ * — see the file header for why that matters and why this keeps
+ * `appendAudit` in its own name (`KG9`'s scanner greps for it).
+ */
+function appendAuditStatement(
+  db: DbClient,
+  workspaceId: string,
+  input: { actor: string; action: string; target: string; detail?: unknown; now: number },
+): { sql: string; params: unknown[] } {
+  return {
+    sql: "INSERT INTO audit_log (id, workspace_id, actor, action, target, detail_json, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+    params: [
+      newId("aud"),
+      workspaceId,
+      input.actor,
+      input.action,
+      input.target,
+      input.detail === undefined ? null : db.jsonParam(input.detail),
+      input.now,
+    ],
+  };
+}
+
+/**
  * `K29`, batched (mid-task advisor note: the real implementation, so the
  * nightly sweep this phase's `AC-24` gap still needs can call it without a
  * rewrite). Blanks `candidate` rather than removing it; `keepAnonymisedScore`
@@ -343,7 +480,19 @@ export const deleteCandidates: Scoped<
   if (snapshotKeys.length > 0) await storage.delete(snapshotKeys);
 
   const statements: { sql: string; params: unknown[] }[] = [];
-  const tablesTouched = new Set<string>(["candidate", "candidate_unique"]);
+  const tablesTouched = new Set<string>(["candidate", "candidate_unique", "auth_token"]);
+
+  // `F3`: `auth_token` is untenanted and carries no `candidate_id` column —
+  // `InvitePayload.candidateId` lives inside `payload_json`, so the match
+  // is a JSON extraction rather than an indexed column, and the dialect
+  // split is the same one `jsonParam`/`jsonValue` already draw (`client.ts`'s
+  // own `dialect` field — the split `retention/sweep.ts`'s `dueCandidates`
+  // already uses for a different JSON column on the same two dialects).
+  // `kind = ?` scopes this to invites specifically; no other `auth_token`
+  // kind's payload has a `candidateId` to match in the first place, but
+  // naming it is cheaper than leaving the reader to work that out.
+  const candidateIdExtract =
+    db.dialect === "pg" ? "payload_json ->> 'candidateId'" : "json_extract(payload_json, '$.candidateId')";
 
   for (const idsChunk of chunk(candidateIds, MAX_IDS_PER_CHUNK)) {
     const inClause = inList(idsChunk.length);
@@ -355,6 +504,10 @@ export const deleteCandidates: Scoped<
       {
         sql: `DELETE FROM candidate_unique WHERE workspace_id = ? AND candidate_id IN (${inClause})`,
         params: [workspaceId, ...idsChunk],
+      },
+      {
+        sql: `DELETE FROM auth_token WHERE kind = ? AND ${candidateIdExtract} IN (${inClause})`,
+        params: [INVITE_KIND, ...idsChunk],
       },
     );
   }
@@ -387,26 +540,30 @@ export const deleteCandidates: Scoped<
     }
   }
 
-  await db.batch(statements);
-
-  // KG9: ids and counts only. Never the blanked form values, never the
-  // email `candidate_unique` held a hash of — see
+  // `F4`: folded into the same `statements` array `db.batch` commits once
+  // below, not a `db.run` loop after it — see `appendAuditStatement` and
+  // the file header. KG9: ids and counts only. Never the blanked form
+  // values, never the email `candidate_unique` held a hash of — see
   // `auditCallSitesPassingPersonalData` in this task's test file. One row
   // per candidate, same as every other per-entity audit write in this
   // repository (never one row for a whole batch, which would make "which
   // of these ten was erased" unanswerable from the log alone).
   for (const candidateId of candidateIds) {
-    await appendAudit(db, workspaceId, {
-      actor,
-      action: "candidate.delete",
-      target: candidateId,
-      detail: {
-        keepAnonymisedScore,
-        attemptsRemoved: keepAnonymisedScore ? 0 : (attemptsByCandidate.get(candidateId)?.length ?? 0),
-      },
-      now,
-    });
+    statements.push(
+      appendAuditStatement(db, workspaceId, {
+        actor,
+        action: "candidate.delete",
+        target: candidateId,
+        detail: {
+          keepAnonymisedScore,
+          attemptsRemoved: keepAnonymisedScore ? 0 : (attemptsByCandidate.get(candidateId)?.length ?? 0),
+        },
+        now,
+      }),
+    );
   }
+
+  await db.batch(statements);
 
   return { tablesTouched: [...tablesTouched] };
 };

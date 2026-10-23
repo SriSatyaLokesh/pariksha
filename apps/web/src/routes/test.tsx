@@ -561,6 +561,13 @@ export function TestBuilder({
   // is more useful here than a banner at the top of a long settings screen.
   async function deleteCandidateData(candidateId: string, keepAnonymisedScore: boolean): Promise<void> {
     await client.deleteCandidateData(workspaceId, candidateId, keepAnonymisedScore);
+    // Fix round 3 (`F5`): without this, `CandidateLookup` keeps filtering
+    // the stale array it was rendered with — erase "Jane Rivera", search
+    // "jane" again, and she is still listed and selectable until a
+    // reload. The server row is correctly blanked either way, but a
+    // screen that still finds her reads as the erasure not having
+    // happened at all.
+    setCandidates((current) => current.filter((candidate) => candidate.id !== candidateId));
   }
 
   return (
