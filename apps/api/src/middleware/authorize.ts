@@ -43,6 +43,22 @@ export function guardOf(
   return typeof handler === "function" ? GUARDS.get(handler) : undefined;
 }
 
+/**
+ * `actorOnly()` registers here the way `guard()` registers in `GUARDS` and
+ * `attemptContext` registers in its own `CONTEXTS` (`attemptContext.ts`) —
+ * so `routeAuthorities()` reads the `actor` authority off the **mounted**
+ * middleware instead of carrying it as a declaration-only allowlist
+ * (whole-branch re-review, finding 2: a sixth `actor` route landing without
+ * `actorOnly()` used to fail nothing, which is the exact shape that
+ * produced CRITICAL-1). Declaring `actor` over a route that mounts no
+ * `actorOnly()` now fails `route-authority.test.ts`, and so does mounting
+ * one without declaring it.
+ */
+const ACTOR_ONLY = new WeakSet<object>();
+
+export const isActorOnly = (handler: unknown): boolean =>
+  typeof handler === "function" && ACTOR_ONLY.has(handler);
+
 /** Membership in the workspace the path names, and nothing more. */
 export function requireMember(): MiddlewareHandler<AppBindings> {
   return guard(null, () => undefined);
@@ -66,12 +82,14 @@ export function requireMember(): MiddlewareHandler<AppBindings> {
  * scope, because none of those handlers ever asked.
  */
 export function actorOnly(): MiddlewareHandler<AppBindings> {
-  return async (c, next) => {
+  const handler: MiddlewareHandler<AppBindings> = async (c, next) => {
     if (actorOr401(c).apiKeyScopes !== undefined) {
       throw new ApiError(403, "forbidden", "A key cannot act outside a workspace.");
     }
     await next();
   };
+  ACTOR_ONLY.add(handler);
+  return handler;
 }
 
 export function requires(action: Action): MiddlewareHandler<AppBindings> {

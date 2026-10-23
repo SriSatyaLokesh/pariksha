@@ -53,12 +53,15 @@ it("the workspace-authority set is exactly the guarded set", () => {
 it("the declared authorities match the middleware actually mounted", () => {
   // `routeAuthorities` reads the live route table, not the declaration, so
   // this is the direction `ROUTE_AUTH` cannot satisfy by agreeing with
-  // itself: declaring `workspace` over a route that mounts no guard, or
-  // `attempt` over one that mounts no attempt context, fails here.
+  // itself: declaring `workspace` over a route that mounts no guard,
+  // `attempt` over one that mounts no attempt context, or `actor` over one
+  // that mounts no `actorOnly()` (whole-branch re-review, finding 2 — a
+  // sixth `actor` route landing without the guard used to fail nothing),
+  // fails here.
   const live = routeAuthorities(app);
   const declaredLive = Object.fromEntries(
     Object.entries(ROUTE_AUTH).filter(
-      ([, authority]) => authority === "workspace" || authority === "attempt",
+      ([, authority]) => authority === "workspace" || authority === "attempt" || authority === "actor",
     ),
   );
   expect(live).toEqual(declaredLive);
@@ -252,13 +255,15 @@ it("every endpoint the entry allowlist names really does refuse a caller with no
 /**
  * The mirror of the assertion above, and the reason both exist.
  *
- * `public` and `actor` are the two authorities that carry no middleware for
- * `routeAuthorities` to read back, so the literal is all that holds them —
- * and a literal only catches a human reading one new line in a sorted list.
- * Without this, a Phase 7 or Phase 8 route that calls `actorOr401` inside
- * its handler but is declared `public` passes every other assertion in this
- * file. Task 12's scrubber then enumerates it from `ROUTE_AUTH` as
- * candidate-reachable and reports clean on a body it could never obtain.
+ * `public` is the one authority left with no middleware for
+ * `routeAuthorities` to read back (`actor` lost that distinction to
+ * `actorOnly()`, whole-branch re-review, finding 2), so the literal above is
+ * all that holds it — and a literal only catches a human reading one new
+ * line in a sorted list. Without this, a Phase 7 or Phase 8 route that calls
+ * `actorOr401` inside its handler but is declared `public` passes every
+ * other assertion in this file. Task 12's scrubber then enumerates it from
+ * `ROUTE_AUTH` as candidate-reachable and reports clean on a body it could
+ * never obtain.
  *
  * 401 **and** 403: both mean "you needed a credential you did not send",
  * which is the one thing a `public` route may never answer. Any other

@@ -9,7 +9,7 @@ import type { DbClient } from "@pariksha/db";
 import type { StorageAdapter } from "@pariksha/storage";
 import type { Action } from "@pariksha/core";
 import type { AppBindings, AppDeps, RouteAuthority } from "./app.js";
-import { guardOf } from "./middleware/authorize.js";
+import { guardOf, isActorOnly } from "./middleware/authorize.js";
 import { isAttemptContext } from "./middleware/attemptContext.js";
 
 /** Cloudflare Workers, free plan. A paid plan raises it; the guard does not. */
@@ -183,14 +183,17 @@ export function routeGuards(
  * itself. Phase 6 Task 1 (#65, ADR 0008).
  *
  * Only the authorities that *are* a piece of middleware appear here:
- * `workspace` (the `GUARDS` WeakMap, written by `guard()`) and `attempt`
+ * `workspace` (the `GUARDS` WeakMap, written by `guard()`), `attempt`
  * (the attempt-token context, Task 5, which registers itself the same
- * way). `actor`, `entry` and `public` carry no
- * middleware to read — `actorOr401` is called inside a handler, and
- * "public" is the absence of anything — so they are declaration-only, and
- * `route-authority.test.ts` holds each to a literal allowlist instead.
- * Declaring `workspace` over a route that mounts no guard therefore fails,
- * and so does declaring `public` over one that does.
+ * way), and `actor` (the `ACTOR_ONLY` WeakSet, written by `actorOnly()` —
+ * whole-branch re-review, finding 2). `entry` and `public` carry no
+ * middleware to read — "public" is the absence of anything, and the
+ * `entry` routes read their Bearer token directly inside the handler — so
+ * those two stay declaration-only, and `route-authority.test.ts` holds
+ * each to a literal allowlist instead. Declaring `workspace` over a route
+ * that mounts no guard therefore fails, and so does declaring `public` or
+ * `entry` over one that mounts `actorOnly()`, a guard, or an attempt
+ * context.
  */
 export function routeAuthorities(
   app: Hono<AppBindings>,
@@ -201,6 +204,8 @@ export function routeAuthorities(
       authorities[`${route.method} ${route.path}`] = "workspace";
     } else if (isAttemptContext(route.handler)) {
       authorities[`${route.method} ${route.path}`] = "attempt";
+    } else if (isActorOnly(route.handler)) {
+      authorities[`${route.method} ${route.path}`] = "actor";
     }
   }
   return authorities;
