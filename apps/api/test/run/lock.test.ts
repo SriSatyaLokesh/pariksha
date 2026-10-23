@@ -128,6 +128,14 @@ async function lockedEventCount(attemptId: string): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
+async function totalEventCount(attemptId: string): Promise<number> {
+  const rows = await deps.db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM event WHERE attempt_id = ?",
+    [attemptId],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 async function reachLimit(cookie: string, n = 5): Promise<Response> {
   return post(
     EVENTS_PATH,
@@ -324,6 +332,23 @@ it("writes nothing to R2 or the database when a snapshot is posted on a locked a
   } finally {
     deps.storage.put = realPut;
   }
+});
+
+// `POST /attempt/events` was never one of `E-R2`'s enumerated guarded
+// routes either, and its own `attempt.submittedAt === null` no-op (the
+// same shape `/attempt/snapshot`'s pre-fix-round guard had) never checked
+// `lockedAt` — so a locked candidate's browser kept driving real
+// `appendEvents` inserts into `event` on every further violation,
+// indefinitely, against the same metered D1 budget the MAJOR fix closed
+// for R2.
+it("writes no further event rows once an attempt is locked", async () => {
+  await reachLimit(attemptCookie, 5);
+  expect((await attemptState(attemptId)).status).toBe("locked");
+  const before = await totalEventCount(attemptId);
+
+  const res = await reachLimit(attemptCookie, 3);
+  expect(res.status).toBeLessThan(500);
+  expect(await totalEventCount(attemptId)).toBe(before);
 });
 
 // --- the budget: the worst case is declared and measured -------------------

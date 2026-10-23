@@ -154,7 +154,17 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // the candidate (`AG1`), and a 409 here would make the fail-open queue
     // retry a write that can never succeed again until its 100-item buffer
     // fills.
-    if (attempt.submittedAt === null) {
+    // Fix round 2 (`E-R2`'s third hole): `attempt.lockedAt !== null` added
+    // beside the pre-existing `submittedAt` no-op. This route was never one
+    // of `E-R2`'s enumerated guarded routes either — it is neither a read
+    // nor one of the two write routes `assertNotLocked` covers — so without
+    // this a locked candidate's browser kept driving real `appendEvents`
+    // inserts into `event` on every further violation, indefinitely,
+    // against the same metered D1 budget the MAJOR fix (the snapshot route,
+    // same shape) closed for R2. Same silent-no-op posture, same `AG1`
+    // reason: a proctoring failure — and a lock is exactly that, from this
+    // route's point of view — must never surface anything to the candidate.
+    if (attempt.submittedAt === null && attempt.lockedAt === null) {
       await appendEvents(deps.db, attempt.workspaceId, {
         attemptId: attempt.attemptId,
         events: parsed.data.events,
@@ -214,7 +224,11 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // whose own batch locks this attempt — `ProctoringLayer`'s own
     // `initialLocked`/`locked` doc comment is the mirror of `submitted`'s.
     let locked = false;
-    if (attempt.submittedAt === null) {
+    // Same fix round 2 guard as the append above: once locked, there is
+    // nothing left for this block to decide — `claimViolationLimit` would
+    // only ever lose its own claim from here on — so it no longer spends a
+    // D1 write finding that out on every subsequent violation.
+    if (attempt.submittedAt === null && attempt.lockedAt === null) {
       const atLimit = violations >= resolved.violationLimit;
       const alreadyActioned = atLimit
         ? !(
