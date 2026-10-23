@@ -322,6 +322,23 @@ export function ProctoringLayer({
   const [locked, setLocked] = useState(initialLocked);
 
   /**
+   * Fix round 1 (MAJOR, mirrors the server's own `apps/api/src/routes/
+   * proctoring.ts` `attempt.lockedAt !== null` no-op): every violation and
+   * interval capture below reads this ref rather than the `locked` state
+   * directly, the same `liveStreamRef` shape this file already uses for a
+   * value several long-lived effects need to read FRESH without listing it
+   * as a dependency (which would tear down and rebuild listeners on every
+   * lock transition for no reason — the effects themselves do not change
+   * shape when a lock fires, only whether their one `captureAndUpload` call
+   * should still run). Without this, a locked candidate's browser kept
+   * calling `POST /attempt/snapshot` on every subsequent violation —
+   * wasted requests the server-side no-op alone would still refuse, but a
+   * request this component should simply stop making.
+   */
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
+
+  /**
    * The live queue — owned by the effect below, not by `useMemo`.
    *
    * `useMemo` is a cache React is free to drop and recreate on its own
@@ -509,7 +526,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
       setInFullscreen(next);
     }
@@ -562,7 +579,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
     }
     function endAway(type: "window_blur" | "visibility_hidden"): void {
@@ -695,7 +712,7 @@ export function ProctoringLayer({
     // depends on exactly that to detect the condition at all), so a
     // capture here is both obtainable and the single most useful
     // evidence a `camera_lost` event can ever produce.
-    if (reason === "covered" && liveStreamRef.current) {
+    if (reason === "covered" && liveStreamRef.current && !lockedRef.current) {
       void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
     }
   }
@@ -889,6 +906,12 @@ export function ProctoringLayer({
     const timer = setInterval(() => {
       const due = nextSnapshotAtRef.current;
       if (due === null || Date.now() < due) return;
+      // Fix round 1 (MAJOR): a locked attempt is terminal (only a fresh
+      // page load after an organiser clears it ever reaches this component
+      // again), so there is no "restore" to resume a cadence for — unlike
+      // the camera-lost skip below, this one need not preserve `due` for
+      // anything.
+      if (lockedRef.current) return;
       // M2 (whole-branch review): a frameless outage ("ended"/"muted")
       // must not manufacture coverage from the frozen last frame a real
       // browser keeps showing on a dead `<video>` — `camera_lost`/
@@ -940,7 +963,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       };
     }
     const onCopy = blocked("copy_blocked");
@@ -983,7 +1006,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
     } catch {
       /* Q2: degrade — an unreadable screen is not a violation */

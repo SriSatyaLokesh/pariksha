@@ -312,7 +312,17 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // proctoring failure must never surface anything to the candidate
     // (`AG1`), and this route previously kept writing R2 objects and
     // `snapshot` rows against an attempt that was already over.
-    if (attempt.submittedAt !== null) {
+    //
+    // Fix round 1 (MAJOR): `attempt.lockedAt !== null` added. This route
+    // was never in `E-R2`'s enumerated guard list — it is neither a read
+    // nor one of the two write routes `assertNotLocked` covers — so a
+    // locked candidate kept driving real R2 object writes and real
+    // `snapshot` inserts indefinitely against a metered live Cloudflare
+    // account. Same silent-no-op shape as the `submittedAt` case
+    // immediately above, for the same `AG1` reason: a proctoring failure —
+    // and a lock is exactly that, from this route's point of view — must
+    // never surface anything to the candidate.
+    if (attempt.submittedAt !== null || attempt.lockedAt !== null) {
       return c.json({ stored: true });
     }
 

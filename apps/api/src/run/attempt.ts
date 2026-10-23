@@ -875,9 +875,28 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
      * avoid, and it is why the stamp is `deadline_at` itself rather than
      * `now` — the attempt ended when the clock ran out, not when somebody
      * next looked at it.
+     *
+     * Fix round 1 (CRITICAL): `attempt.lockedAt === null` added. Without
+     * it, this is the one path that clears a lock on its own — `GET
+     * /attempt` is the one route a locked candidate is explicitly allowed
+     * to keep polling (`E-R2`), so once the deadline plus grace passed, the
+     * very next poll stamped `submitted_at` here and
+     * `routes/exam.tsx`'s own `resumed.submittedAt !== null` check then
+     * walked the candidate straight to a clean receipt — no organiser
+     * involved, the exact outcome the restored `proctoring_lock_without_
+     * recourse` advisory promises cannot happen. A locked attempt now
+     * simply never times out on its own, same as before this file's own
+     * `C-07` existed: the paragraph above already documents that an
+     * attempt nobody ever reads again (a closed tab, no sweeper in this
+     * phase) stays `submitted_at IS NULL` forever today, lock or no lock —
+     * a permanently-locked attempt is one more instance of that same
+     * already-accepted shape, not a new one. Retention (`AC-24`, Phase 8e,
+     * not yet built in this codebase — `docs/superpowers/plans/
+     * 2026-10-22-phase-8e-the-sweep.md`) is that later plan's own problem
+     * to solve for every never-submitted attempt, this one included.
      */
     let submittedAt = attempt.submittedAt;
-    if (submittedAt === null && timedOut(attempt, now)) {
+    if (submittedAt === null && attempt.lockedAt === null && timedOut(attempt, now)) {
       submittedAt = attempt.deadlineAt;
       await finishAttempt(deps.db, attempt.workspaceId, {
         attemptId: attempt.attemptId,

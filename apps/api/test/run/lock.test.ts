@@ -9,7 +9,7 @@
 // `attemptState`) rather than importing them — a one-file duplication, the
 // same call this repo's own `D-R4` pattern makes for its own helpers.
 
-import { afterAll, beforeEach, expect, it } from "vitest";
+import { afterAll, beforeEach, expect, it, vi } from "vitest";
 import {
   closeClient,
   createCandidate,
@@ -20,7 +20,7 @@ import {
 import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { REGISTRATION_KIND, REGISTRATION_TTL_MS, registrationHash } from "../../src/run/entry.js";
-import { EVENTS_PATH } from "../../src/routes/proctoring.js";
+import { EVENTS_PATH, SNAPSHOT_PATH } from "../../src/routes/proctoring.js";
 import { ANSWER_PATH, type AttemptPaper } from "../../src/run/attempt.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { DAY, iso, seedTest, seedWorkspace } from "./fixtures.js";
@@ -136,12 +136,34 @@ async function reachLimit(cookie: string, n = 5): Promise<Response> {
   );
 }
 
+/** `snapshot.test.ts`'s own helper pattern. */
+function postBytes(path: string, body: Uint8Array, cookie: string, on = app): Promise<Response> {
+  return on.request(path, {
+    method: "POST",
+    headers: { "content-type": "image/jpeg", cookie },
+    body,
+  });
+}
+
+/** A real JPEG magic-byte prefix — `snapshot.test.ts`'s own fixture,
+ *  reused rather than re-minted: `D-R8` checks the bytes, not the header. */
+const jpegFixture = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+
+async function listSnapshots(attemptId: string): Promise<number> {
+  const rows = await deps.db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM snapshot WHERE attempt_id = ?",
+    [attemptId],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 let attemptCookie = "";
 let attemptId = "";
 
 beforeEach(async () => {
   await deps.db.run("DELETE FROM event", []);
   await deps.db.run("DELETE FROM response", []);
+  await deps.db.run("DELETE FROM snapshot", []);
   await deps.db.run("DELETE FROM attempt", []);
   await deps.db.run("DELETE FROM audit_log", []);
   await deps.db.run("DELETE FROM auth_token", []);
@@ -251,6 +273,57 @@ it("never locks an attempt that stays under the limit", async () => {
   expect((await attemptState(attemptId)).status).toBe("in_progress");
   const answer = await put(ANSWER_PATH, { questionId: q["LOG-001"] as string, value: { kind: "option", option: "a" }, clientSeq: 1 }, attemptCookie);
   expect(answer.status).not.toBe(409);
+});
+
+// --- fix round 1 (CRITICAL) — the lock does not clear itself -------------
+
+// `GET /attempt`'s own timeout materialisation (`C-07`) must not stamp
+// `submitted_at` for a locked attempt once its deadline passes — that is
+// the one path `attemptContext`'s read-only exemption (`E-R2`) left open,
+// and without `attempt.lockedAt === null` in its own condition it would
+// have walked a locked candidate to a clean receipt with no organiser ever
+// involved, past the 45-minute duration plus the 30-second grace this
+// test's own fixture carries (`clock.ts`'s `TIMING_DEFAULTS`).
+it("stays locked and unsubmitted after its deadline passes, even on GET /attempt", async () => {
+  await reachLimit(attemptCookie, 5);
+  expect((await attemptState(attemptId)).status).toBe("locked");
+
+  const pastDeadlineDeps = { ...deps, now: () => T + 45 * 60_000 + 31_000 };
+  const pastDeadlineApp = createApp(pastDeadlineDeps);
+  const res = await pastDeadlineApp.request("/api/v1/run/attempt", { headers: { cookie: attemptCookie } });
+  expect(res.status).toBe(200);
+  const paper = (await res.json()) as AttemptPaper;
+  expect(paper.submittedAt).toBeNull();
+  expect(paper.lockedAt).not.toBeNull();
+
+  const state = await attemptState(attemptId);
+  expect(state.status).toBe("locked");
+});
+
+// --- fix round 1 (MAJOR) — the snapshot route writes nothing while locked -
+
+// `POST /attempt/snapshot` was never one of `E-R2`'s enumerated guarded
+// routes — it is neither a read nor one of the two write routes
+// `assertNotLocked` covers — so without its own `lockedAt` no-op (mirroring
+// the pre-existing `submittedAt` one, same file) a locked candidate's
+// browser kept driving real R2 `put`s and real `snapshot` row inserts
+// indefinitely against a metered live Cloudflare account.
+it("writes nothing to R2 or the database when a snapshot is posted on a locked attempt", async () => {
+  await reachLimit(attemptCookie, 5);
+  expect((await attemptState(attemptId)).status).toBe("locked");
+
+  const putSpy = vi.fn(deps.storage.put.bind(deps.storage));
+  const realPut = deps.storage.put;
+  deps.storage.put = putSpy;
+  try {
+    const res = await postBytes(`${SNAPSHOT_PATH}?reason=interval`, jpegFixture, attemptCookie);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ stored: true });
+    expect(putSpy).not.toHaveBeenCalled();
+    expect(await listSnapshots(attemptId)).toBe(0);
+  } finally {
+    deps.storage.put = realPut;
+  }
 });
 
 // --- the budget: the worst case is declared and measured -------------------

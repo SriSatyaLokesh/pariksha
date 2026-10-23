@@ -125,6 +125,21 @@ function fakeStream(): MediaStream {
   return { getVideoTracks: () => [track], getTracks: () => [track] } as unknown as MediaStream;
 }
 
+/** `snapshot-schedule.test.tsx`'s own `installFakeCanvas`: jsdom has no
+ *  `canvas` package, so `getContext`/`toBlob` are stubbed by hand rather
+ *  than left to return `null`/never call back, which would make every
+ *  capture in this file silently produce nothing — needed only by the
+ *  client-side capture-gate test below, which has to prove a capture was
+ *  SKIPPED rather than merely absent for the usual jsdom reason. */
+function installFakeCanvas(): void {
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    (() => ({ drawImage: vi.fn() })) as unknown as typeof HTMLCanvasElement.prototype.getContext,
+  );
+  vi.spyOn(HTMLCanvasElement.prototype, "toBlob").mockImplementation(((callback: BlobCallback) => {
+    callback(new Blob(["fake-jpeg-bytes"], { type: "image/jpeg" }));
+  }) as unknown as typeof HTMLCanvasElement.prototype.toBlob);
+}
+
 beforeEach(() => {
   Object.defineProperty(navigator, "mediaDevices", {
     configurable: true,
@@ -263,6 +278,56 @@ it("is unreachable for a candidate whose attempt was never locked", async () => 
 
   expect(screen.queryByRole("alertdialog")).toBeNull();
   expect(screen.queryByText(/test locked/i)).toBeNull();
+});
+
+// Fix round 1 (MAJOR): the client-side half of the snapshot guard — an
+// optimisation beside the server's own `lockedAt` no-op
+// (`apps/api/test/run/lock.test.ts`'s own "writes nothing" test is the
+// real guard), but a locked candidate's browser must stop CALLING
+// `POST /attempt/snapshot` at all, not merely have the server discard what
+// it sends. The violation that causes the lock still captures (nothing
+// before the server's own response can know the lock is coming — the same
+// "cannot gate on the future" shape the server's own `claimViolationLimit`
+// already lives with); only a violation AFTER the client learns it is
+// locked is gated.
+it("stops capturing snapshots on a violation after the client learns it is locked", async () => {
+  installFakeCanvas();
+  let snapshotCalls = 0;
+  vi.stubGlobal("fetch", (input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.includes("/attempt/snapshot")) {
+      snapshotCalls += 1;
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ stored: true }) } as Response);
+    }
+    if (url.includes("/attempt/events")) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ violations: 1, limit: 1, action: "lock", locked: true }),
+      } as Response);
+    }
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ stored: true }) } as Response);
+  });
+  await startStrictAttempt({ violationLimit: 1, violationAction: "lock" });
+
+  // The violation that locks the attempt: the client cannot know it is
+  // about to be locked until the server answers, so this one still fires.
+  await act(async () => {
+    fireEvent(window, new Event("blur"));
+  });
+  await act(async () => {
+    fireEvent(window, new Event("focus"));
+  });
+  await screen.findByRole("alertdialog");
+  expect(snapshotCalls).toBe(1);
+
+  // A second violation, now that the client has learned it is locked.
+  await act(async () => {
+    fireEvent(window, new Event("blur"));
+  });
+  await act(async () => {
+    fireEvent(window, new Event("focus"));
+  });
+  expect(snapshotCalls).toBe(1); // unchanged
 });
 
 // Phase 7e Task 3 (`E-R1`): a reload mid-lock must raise the overlay again
