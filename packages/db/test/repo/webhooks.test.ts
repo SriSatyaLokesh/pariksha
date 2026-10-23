@@ -149,3 +149,48 @@ describe("listActiveWebhooksForEvent", () => {
     expect(await repo.listActiveWebhooksForEvent(db, ws, "attempt.started")).toEqual([]);
   });
 });
+
+// Phase 8d Task 3 (K23): the row `fireWebhooks` (apps/api) writes for
+// Task 4's drain when the inline attempt is skipped or fails.
+describe("queueWebhookDelivery", () => {
+  it("mints a whd_-prefixed id and stores the payload, never the signing secret", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "queue-ws", name: "Queue" });
+    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["attempt.submitted"], now: T });
+
+    await repo.queueWebhookDelivery(db, ws, {
+      webhookId,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_x" },
+      attemptCount: 1,
+      lastStatus: 500,
+      lastError: null,
+      now: T,
+    });
+
+    const rows = await db.query<{
+      id: string;
+      webhook_id: string;
+      event: string;
+      payload_json: unknown;
+      attempt_count: number;
+      next_attempt_at: number;
+      last_status: number | null;
+      last_error: string | null;
+      delivered_at: number | null;
+    }>("SELECT * FROM webhook_delivery WHERE workspace_id = ?", [ws]);
+
+    expect(rows).toHaveLength(1);
+    const row = rows[0]!;
+    expect(row.id).toMatch(/^whd_/);
+    expect(row.webhook_id).toBe(webhookId);
+    expect(row.event).toBe("attempt.submitted");
+    expect(db.jsonValue(row.payload_json)).toEqual({ attemptId: "att_x" });
+    expect(row.attempt_count).toBe(1);
+    expect(row.next_attempt_at).toBe(T);
+    expect(row.last_status).toBe(500);
+    expect(row.last_error).toBeNull();
+    expect(row.delivered_at).toBeNull();
+    expect(JSON.stringify(row)).not.toContain("whsec_");
+  });
+});

@@ -456,7 +456,11 @@ it("measures the real subrequest cost of publish, close, archive and versions", 
   // measurement agree with itself again and both go green. Standing
   // decision 5's "update the pin and the table together" needs both.
   expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/publish"]).toBe(9);
-  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/close"]).toBe(6);
+  // Phase 8d Task 3 (K23): 7, not 6 — `fireWebhooks`'s one
+  // `listActiveWebhooksForEvent` read for `test.closed`, paid even with no
+  // webhook registered (this fixture registers none). Archive is unchanged:
+  // it fires no event.
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/close"]).toBe(7);
   expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/archive"]).toBe(6);
   expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/versions"]).toBe(3);
 

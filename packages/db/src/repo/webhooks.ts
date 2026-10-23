@@ -177,3 +177,51 @@ export const listActiveWebhooksForEvent = scoped(
       .map((row) => ({ id: row.id, url: row.url, signingSecret: row.signing_secret }));
   },
 );
+
+/**
+ * Task 3's write: one `webhook_delivery` row for Task 4's drain to pick up
+ * off `webhook_delivery_next_attempt_idx`. `attemptCount`/`lastStatus`/
+ * `lastError` are the caller's own record of what just happened — `0` and
+ * two `null`s for `attempt.started`/`test.closed`, which are never tried
+ * inline (`K37`/`K43`) and so have nothing yet to report, and `1` plus
+ * whatever the one inline try came back with for a queued
+ * `attempt.submitted`. Never the signing secret (`KG5`): nothing here
+ * reads `signing_secret` at all.
+ */
+export const queueWebhookDelivery = scoped(
+  "queueWebhookDelivery",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: {
+      webhookId: string;
+      event: WebhookEvent;
+      payload: unknown;
+      attemptCount: number;
+      lastStatus: number | null;
+      lastError: string | null;
+      now: number;
+    },
+  ): Promise<void> => {
+    await db.run(
+      "INSERT INTO webhook_delivery " +
+        "(id, workspace_id, webhook_id, event, payload_json, attempt_count, next_attempt_at, last_status, last_error, delivered_at, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        newId("whd"),
+        workspaceId,
+        input.webhookId,
+        input.event,
+        db.jsonParam(input.payload),
+        input.attemptCount,
+        // Ready for the drain the moment it exists — Task 4 owns backoff,
+        // not this write.
+        input.now,
+        input.lastStatus,
+        input.lastError,
+        null,
+        input.now,
+      ],
+    );
+  },
+);

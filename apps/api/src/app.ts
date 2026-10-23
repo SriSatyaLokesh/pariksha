@@ -275,7 +275,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // second, smaller shape for the screens to special-case). The plan
   // estimated 5 against a response that did not exist yet; the
   // measurement wins.
-  "/api/v1/workspaces/:id/tests/:testId/close": 6,
+  //
+  // Phase 8d Task 3 (`K23`): close alone grows to **7** —
+  // `listActiveWebhooksForEvent`'s one read for `test.closed`, paid even
+  // with no webhook registered. Never tried inline (it is an organiser
+  // action, not a candidate hot path), so no `http` line: the event is
+  // only ever queued. Archive stays at 6 — it fires no event.
+  "/api/v1/workspaces/:id/tests/:testId/close": 7,
   "/api/v1/workspaces/:id/tests/:testId/archive": 6,
   // Auth (2) + `listVersions` (1, one correlated subquery for the attempt
   // counts, never one query per version). No separate existence check —
@@ -478,7 +484,20 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // A number above 7 means the bank, or the counted read, is being spent
   // more than once a request — the failure this line exists to catch on a
   // 50-subrequest ceiling.
-  "/api/v1/run/attempt/submit": 7,
+  //
+  // Phase 8d Task 3 (`K23`): **8**, not 7, once `fireWebhooks` is in the
+  // picture — `listActiveWebhooksForEvent`'s one read, plus one `http` for
+  // the single active `attempt.submitted` hook the measuring fixture
+  // registers (`test/webhooks/deliver.test.ts`'s "keeps the submit route
+  // inside its declared budget with a webhook firing", measured the same
+  // way this file's other budgets are, via `countingDeps`). N active hooks
+  // on the event is N more subrequests on top of that — sequential, one
+  // `fetch` per hook — so this number holds only for a workspace with one
+  // `attempt.submitted` hook registered; a self-hoster who registers more
+  // is trading headroom under the 50-subrequest ceiling for each one past
+  // the first, the same trade-off `webhookCostPerCandidate` already prices
+  // for them before they save it (`K35`/`K36`, `routes/webhooks.ts`).
+  "/api/v1/run/attempt/submit": 8,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
   // **4** in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
