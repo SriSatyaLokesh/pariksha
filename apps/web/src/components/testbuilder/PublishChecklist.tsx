@@ -229,11 +229,15 @@ export function PublishChecklist({
                     real browser — `routes/tests.tsx` has the mechanism; the
                     State cell's flex line is the one place on that row with
                     width to spare), for a reader who is scanning many tests
-                    and has no panel open at all; that surface renders
-                    `${ready} / ${total}` with no qualifier (a list row is
-                    not a rail) but reuses `ALL_CLEAR` above for the
-                    zero-row case rather than growing its own word for it —
-                    the defect this rail's own history is about.
+                    and has no panel open at all. That surface has no
+                    qualifier (a list row is not a rail) and, fix round 3,
+                    no bare number either: `"${ready} / ${total} ready"` names
+                    itself in words next to the State cell's upright status
+                    words, the same way `ALL_CLEAR` above already does for
+                    the zero-row case that surface reuses rather than
+                    growing a second phrase for it — a number sitting beside
+                    a status with nothing marking it as a different kind of
+                    fact was the defect that history is about.
 
                     "not blocking", not "clear", for the number itself:
                     the arithmetic is the brief's and is unchanged; the word

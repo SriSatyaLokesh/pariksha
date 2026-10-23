@@ -132,8 +132,11 @@ function versionSummary(test: TestSummary): string {
  *  blocking"` pairs with `"must fix"` in the rail: two phrases for one
  *  axis, not a number and a word.
  *
- *  The THIRD state is a different one: the aggregate is still loading or
- *  has nothing for this test at all (no entry in the map), which is
+ *  The THIRD state is a different one, and not "still loading" — `load`
+ *  (below) fetches `tests` and this aggregate together in one `Promise.all`
+ *  and sets both in the same tick, so a row never renders before this map
+ *  is populated. A missing key means the route genuinely has nothing for
+ *  that test id (`readinessFor`'s own `if (!draft) continue`), which is
  *  "unknown" and must never be spelled the same as either "zero rows" above
  *  or `ALL_CLEAR` (fix round 1 named this conflation directly: "0 / 0"
  *  reading as "all clear" is the shape of the defect, whichever side of it
@@ -227,9 +230,12 @@ export function TestList({
   const [filter, setFilter] = useState<UrlFilter>(() => filterFromSearch(window.location.search));
   const [tests, setTests] = useState<TestSummary[] | null>(null);
   // `D7c`'s aggregate, keyed by test id — one call for the whole table,
-  // never one `checklist()` per row (`K21`). Absent until the first load
-  // settles, which is why `readinessSummary` reads a key that may not be
-  // there yet as "—" rather than as "all clear".
+  // never one `checklist()` per row (`K21`). Fetched together with `tests`
+  // below (one `Promise.all`, both set in the same tick), so a row never
+  // renders before this is populated — a key missing from the map means the
+  // route genuinely has nothing for that test id, not "still loading",
+  // which is why `readinessSummary` spells that case out in words
+  // ("Readiness unknown") rather than an em dash.
   const [readiness, setReadiness] = useState<Record<string, ReadinessSummary>>({});
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -600,12 +606,12 @@ export function TestList({
                             column header that used to frame it was gone. No
                             `aria-label` now: `readinessSummary` returns a
                             self-describing phrase instead, so the same text
-                            every reader sees is the whole of the message.
-                            `.test-readiness`, not `.test-badge` — italic, not
-                            the upright status words beside it, because a
-                            measurement and a status are two different kinds
-                            of fact and sharing one style made them read as
-                            one. */}
+                            every reader sees is the whole of the message —
+                            that phrase, sitting beside the upright status
+                            words above, is what tells a measurement from a
+                            status on sight; `.test-readiness`'s italic
+                            (testbuilder.css) is the secondary cue, not the
+                            whole of it. */}
                         <span className="test-readiness">{readinessSummary(readiness[test.id])}</span>
                       </td>
                       <td className="test-version">{versionSummary(test)}</td>
