@@ -10,7 +10,7 @@
 // same way `liveQuestions` (`apps/api/src/run/submit.ts`) already wraps it
 // for the candidate side.
 
-import { deriveAward, isManualQuestion, type RubricAward } from "@pariksha/core";
+import { deriveAward, isManualQuestion, type ManualQuestion, type RubricAward } from "@pariksha/core";
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
@@ -117,6 +117,43 @@ export const attemptForGrading = scoped(
   },
 );
 
+/**
+ * Candidate identity for a page of `listPendingAwards` rows, batched in one
+ * statement over every distinct `attemptId` on that page — `K9`/`KG3`: the
+ * non-blind path of Task 2's queue would otherwise be one query per row (in
+ * the worst case, one per candidate), and the blind path (`K15`) never
+ * calls this at all, so a blind request costs nothing extra for identity it
+ * is not allowed to carry.
+ *
+ * `formValues` only — a registration field (commonly an "email" field) is
+ * the one place this product stores a candidate's name or contact, the same
+ * blob `candidates.ts`'s own `CandidateRow` exposes for the organiser's
+ * candidate list.
+ */
+export const identityForAttempts = scoped(
+  "identityForAttempts",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    attemptIds: readonly string[],
+  ): Promise<Map<string, Record<string, unknown>>> => {
+    if (attemptIds.length === 0) return new Map();
+    const placeholders = attemptIds.map(() => "?").join(", ");
+    const rows = await db.query<{ attempt_id: string; form_values_json: unknown }>(
+      "SELECT a.id AS attempt_id, c.form_values_json AS form_values_json " +
+        "FROM attempt a JOIN candidate c ON c.workspace_id = a.workspace_id AND c.id = a.candidate_id " +
+        `WHERE a.workspace_id = ? AND a.id IN (${placeholders})`,
+      [workspaceId, ...attemptIds],
+    );
+    return new Map(
+      rows.map((row) => [
+        row.attempt_id,
+        row.form_values_json == null ? {} : db.jsonValue<Record<string, unknown>>(row.form_values_json),
+      ]),
+    );
+  },
+);
+
 export interface PendingAward {
   attemptId: string;
   questionId: string;
@@ -125,6 +162,13 @@ export interface PendingAward {
   /** Present only when a grader already awarded one. */
   award: RubricAward | null;
   points: number | null;
+  /** The question itself — a Reviewer holds no `tests.edit` and has no
+   *  other route to a question's prompt or rubric, so Task 2's queue reads
+   *  it off the same `manual` map this function already built for the
+   *  award check below, never a second lookup. Always present: `ids`
+   *  (above) is drawn from `manual.keys()`, so every row this query can
+   *  return names a key `manual` already holds. */
+  question: ManualQuestion;
 }
 
 interface PendingAwardRecord {
@@ -219,6 +263,11 @@ export const listPendingAwards = scoped(
           value: db.jsonValue(row.value_json),
           award,
           points: award === null ? null : Number(row.points ?? 0),
+          // Cast, not a lookup that could fail: `ids` above is drawn from
+          // `manual.keys()`, so every `row.question_id` this query can
+          // return is already a key of `manual`, and every value in
+          // `manual` passed `isManualQuestion` when the map was built.
+          question: manual.get(row.question_id) as ManualQuestion,
         };
       }),
       nextCursor,

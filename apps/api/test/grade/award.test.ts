@@ -466,4 +466,114 @@ describe("POST /api/v1/workspaces/:id/tests/:testId/grade", () => {
     expect(counting.counts().total).toBe(8);
     expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/grade"]).toBe(8);
   });
+
+  // --- The grading queue: GET .../grading-queue (K15, Task 2). Nested here,
+  // not a sibling describe, so it shares this block's own `asReviewer`,
+  // `asAuthor`, `asOutsider` and `otherWorkspaceId` rather than minting a
+  // second set of sessions for the same three roles. ---
+
+  describe("GET /api/v1/workspaces/:id/tests/:testId/grading-queue", () => {
+    const CANDIDATE_EMAIL = "queue-candidate@alpha.test";
+    let queueAttemptId = "";
+
+    const queueUrl = (wsp: string, query = "") => `/api/v1/workspaces/${wsp}/tests/${testId}/grading-queue${query}`;
+    const get = (url: string, cookie: string, instance = createApp(deps)) =>
+      instance.request(url, { method: "GET", headers: { cookie } });
+
+    // A fixture of its own rather than the shared `attemptId`/`candidateId`
+    // `beforeEach` rebuilds before every test in this file: this describe
+    // needs ONE attempt that carries a real, checkable identity and stays
+    // put for all of its own tests, not a fresh blank one per test.
+    beforeAll(async () => {
+      const queueCandidateId = await createCandidate(deps.db, workspaceId, {
+        testId,
+        formValues: { email: CANDIDATE_EMAIL },
+        consentVersion: "1",
+        now: NOW,
+      });
+      queueAttemptId = newId("att");
+      await createAttempt(deps.db, workspaceId, {
+        id: queueAttemptId,
+        candidateId: queueCandidateId,
+        testVersionId,
+        setNo: 1,
+        layout,
+        startedAt: NOW,
+        deadlineAt: NOW + 3_600_000,
+        tokenHash: newId("tok"),
+      });
+      await upsertResponse(deps.db, workspaceId, {
+        attemptId: queueAttemptId,
+        questionId: q3,
+        value: { kind: "text", text: "A candidate's answer" },
+        clientSeq: 1,
+        savedAt: NOW,
+      });
+      await finishAttempt(deps.db, workspaceId, { attemptId: queueAttemptId, submittedAt: NOW, reason: "candidate" });
+    });
+
+    it("sends no candidate identity in blind mode", async () => {
+      const res = await get(queueUrl(workspaceId, "?blind=1"), asReviewer);
+      expect(res.status, await res.clone().text()).toBe(200);
+      const body = (await res.json()) as { rows: Array<Record<string, unknown>> };
+      expect(JSON.stringify(body)).not.toContain(CANDIDATE_EMAIL);
+      const row = body.rows.find((r) => r.attemptId === queueAttemptId);
+      expect(row).toBeDefined();
+      expect(row).not.toHaveProperty("formValues");
+      // The Reviewer grading blind still needs to see what was asked and
+      // what to grade it against — blind withholds candidate identity, not
+      // the question (`K15`'s own scope: identity alone).
+      expect(row).toMatchObject({
+        question: { prompt: "Summarise", rubric: [{ level: "thin", points: 1 }, { level: "thorough", points: 4 }] },
+      });
+    });
+
+    it("sends it when blind mode is off — the control for the assertion above", async () => {
+      const res = await get(queueUrl(workspaceId), asReviewer);
+      expect(res.status, await res.clone().text()).toBe(200);
+      const body = await res.json();
+      expect(JSON.stringify(body)).toContain(CANDIDATE_EMAIL);
+    });
+
+    it("admits an actor holding attempts.grade", async () => {
+      const res = await get(queueUrl(workspaceId), asReviewer);
+      expect(res.status, await res.clone().text()).toBe(200);
+    });
+
+    it("refuses an Author, who holds tests.edit and not attempts.grade", async () => {
+      const res = await get(queueUrl(workspaceId), asAuthor);
+      expect(res.status).toBe(403);
+    });
+
+    it("refuses a member of another workspace with 404", async () => {
+      const res = await get(queueUrl(workspaceId), asOutsider);
+      expect(res.status).toBe(404);
+    });
+
+    it("every mounted endpoint declares its authority and action", () => {
+      expect(ROUTE_AUTH["GET /api/v1/workspaces/:id/tests/:testId/grading-queue"]).toBe("workspace");
+      expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/tests/:testId/grading-queue"]).toBe("attempts.grade");
+    });
+
+    it("measures the real subrequest cost of the route, against a 300-candidate workspace", async () => {
+      // `K9`/`KG3`: proved, not merely asserted — 300 idle candidates added
+      // first, and the cost below does not move. `identityForAttempts` is
+      // one batched query over the page's distinct attempts, never one per
+      // row.
+      for (let i = 0; i < 300; i += 1) {
+        await createCandidate(deps.db, workspaceId, { testId, formValues: {}, consentVersion: "1", now: NOW });
+      }
+      const counting = countingDeps(deps);
+      const res = await createApp(counting.deps).request(queueUrl(workspaceId), {
+        method: "GET",
+        headers: { cookie: asReviewer },
+      });
+      expect(res.status, await res.clone().text()).toBe(200);
+      // auth (2) + listPendingAwards (2: workspaceQuestions, then its own
+      // paginated select) + identityForAttempts (1, the non-blind path's
+      // one batched identity read).
+      expect(counting.counts().total).toBe(5);
+      expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/grading-queue"]).toBe(5);
+    });
+  });
 });

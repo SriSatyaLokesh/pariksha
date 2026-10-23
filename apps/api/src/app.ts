@@ -529,6 +529,19 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1) = 8. Flat in how many candidates the workspace holds — this route
   // touches exactly one attempt.
   "/api/v1/workspaces/:id/tests/:testId/grade": 8,
+
+  // Phase 8b Task 2 (`K15`): the grading queue, `listPendingAwards`'s first
+  // production caller. Measured (`apps/api/test/grade/award.test.ts`'s own
+  // "measures the real subrequest cost" test for this route, against a
+  // 300-candidate workspace), on the non-blind path — the more expensive
+  // of the two and the one a shared bare-path budget has to cover: auth
+  // (2) + `listPendingAwards` (2 — `workspaceQuestions`, then its own
+  // paginated select) + `identityForAttempts` (1, one batched query over
+  // every distinct attempt on the page, never one per row or per
+  // candidate) = 5. The blind path (`?blind=1`) skips the identity read
+  // entirely and spends less, never more. Flat in how many candidates the
+  // workspace holds.
+  "/api/v1/workspaces/:id/tests/:testId/grading-queue": 5,
 };
 
 /**
@@ -619,6 +632,10 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // `permissions.test.ts` did). A Reviewer or Admin holds it; an Author
   // (`tests.edit`) does not.
   "POST /api/v1/workspaces/:id/tests/:testId/grade": "attempts.grade",
+  // Phase 8b Task 2 (`K15`): reading the queue is part of grading, the same
+  // action the POST above requires — a Reviewer or Admin holds it, an
+  // Author (`tests.edit`) does not.
+  "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "attempts.grade",
 };
 
 /**
@@ -824,6 +841,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
   // Phase 8b Task 1 (`K14`): recording a rubric award.
   "POST /api/v1/workspaces/:id/tests/:testId/grade": "workspace",
+  // Phase 8b Task 2 (`K15`): the grading queue.
+  "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {

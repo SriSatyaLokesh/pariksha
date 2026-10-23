@@ -14,11 +14,28 @@
 // would un-grade every question graded before it. `listResponses`
 // (`packages/db`) already carries `graded_by`/`points` for the whole
 // attempt, so reconstructing that set costs no second read of `response`.
+//
+// Phase 8b Task 2 (`K15`): the grading queue itself, `listPendingAwards`'s
+// (`packages/db`) first production caller. `blind` governs identity ALONE —
+// whether `identityForAttempts` runs at all, never whether its result is
+// dropped after the fact. A blind request therefore never asks the
+// database for a candidate's registration answers in the first place,
+// which is the only way to be sure the browser is never sent them: a
+// filter applied after the read is one missed branch away from shipping
+// the field it meant to withhold.
 
 import { Hono } from "hono";
 import { z } from "zod";
 import { deriveAward, gradeManual, type ResponseValue, type RubricAward } from "@pariksha/core";
-import { attemptForGrading, listResponses, writeAward, writeScore } from "@pariksha/db";
+import {
+  attemptForGrading,
+  identityForAttempts,
+  listPendingAwards,
+  listResponses,
+  writeAward,
+  writeScore,
+  type PendingAward,
+} from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
@@ -108,6 +125,44 @@ export async function recordAward(
   return { points, written };
 }
 
+export interface GradingQueueRow extends PendingAward {
+  /** The candidate's registration answers — present only off the blind
+   *  path (`K15`). Omitted, not an empty object, when `blind` was
+   *  requested, so `"formValues" in row` is false and a JSON payload
+   *  carries no key for it at all. */
+  formValues?: Record<string, unknown>;
+}
+
+/**
+ * The queue a reviewer works from: every manually-gradable, ungraded
+ * answer for one test, optionally narrowed to one question. `blind` is the
+ * one switch `K15` is about — true costs no identity read at all; false
+ * joins every distinct attempt's candidate identity in the one batched
+ * query `identityForAttempts` is (`K9`/`KG3`), never one per row.
+ */
+export async function listGradingQueue(
+  deps: AppDeps,
+  workspaceId: string,
+  testId: string,
+  opts: { questionId?: string; limit?: number; cursor?: string; blind: boolean },
+): Promise<{ rows: GradingQueueRow[]; nextCursor: string | null }> {
+  const { rows, nextCursor } = await listPendingAwards(deps.db, workspaceId, testId, opts);
+  if (opts.blind || rows.length === 0) {
+    return { rows, nextCursor };
+  }
+  const attemptIds = [...new Set(rows.map((row) => row.attemptId))];
+  const identities = await identityForAttempts(deps.db, workspaceId, attemptIds);
+  return {
+    rows: rows.map((row) => ({ ...row, formValues: identities.get(row.attemptId) ?? {} })),
+    nextCursor,
+  };
+}
+
+// `listPendingAwards`'s own clamp (`packages/db/src/repo/grading.ts`) is 1
+// to 500; this rejects out of range rather than silently clamping, the
+// same discipline `questions.ts`'s own `limitSchema` applies to its list.
+const queueLimitSchema = z.coerce.number().int().positive().max(500);
+
 const gradeBody = z.object({
   attemptId: z.string().min(1),
   questionId: z.string().min(1),
@@ -124,7 +179,13 @@ function parse<T extends z.ZodType>(schema: T, body: unknown): z.infer<T> {
 
 /** `POST /api/v1/workspaces/:id/tests/:testId/grade` — `workspace`
  *  authority, `attempts.grade`. Mounted by `createApp` under
- *  `/api/v1/workspaces`, like every other workspace route. */
+ *  `/api/v1/workspaces`, like every other workspace route.
+ *
+ *  `GET /api/v1/workspaces/:id/tests/:testId/grading-queue` — same
+ *  authority and action: reading the queue is part of grading, not a
+ *  separate permission. A distinct bare path from the POST above, never
+ *  the same one under a different method — `ROUTE_BUDGETS` keys on the
+ *  bare path alone, and the two routes spend different amounts. */
 export function gradeRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
@@ -140,6 +201,36 @@ export function gradeRoutes(deps: AppDeps): Hono<AppBindings> {
       gradedBy: actor.userId,
       now: deps.now(),
     });
+    return c.json(result);
+  });
+
+  routes.get("/:id/tests/:testId/grading-queue", requires("attempts.grade"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const testId = c.req.param("testId");
+    // `exactOptionalPropertyTypes`: built up rather than passed through with
+    // `?? undefined`, so a query string's absence and an explicit
+    // `undefined` stay apart the same way `questions.ts`'s own
+    // `filterFromQuery` keeps them apart.
+    const opts: { questionId?: string; cursor?: string; limit?: number; blind: boolean } = {
+      // `K15`: the default is the control, not the guarded case — a plain
+      // GET carries identity, and `?blind=1` is what withholds it. Matches
+      // the organiser's own toggle, which calls this route with `blind=1`
+      // only while blind grading is switched on.
+      blind: c.req.query("blind") === "1",
+    };
+    const questionId = c.req.query("questionId");
+    if (questionId !== undefined) opts.questionId = questionId;
+    const cursor = c.req.query("cursor");
+    if (cursor !== undefined) opts.cursor = cursor;
+    const rawLimit = c.req.query("limit");
+    if (rawLimit !== undefined) {
+      const parsed = queueLimitSchema.safeParse(rawLimit);
+      if (!parsed.success) {
+        throw new ApiError(400, "invalid_request", "limit must be a whole number from 1 to 500.");
+      }
+      opts.limit = parsed.data;
+    }
+    const result = await listGradingQueue(deps, workspaceId, testId, opts);
     return c.json(result);
   });
 
