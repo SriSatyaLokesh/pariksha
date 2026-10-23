@@ -5,6 +5,8 @@ import { beforeEach, expect, it, vi } from "vitest";
 import { SCHEDULED_JOBS, runScheduled, type ScheduledJob } from "../src/scheduled.js";
 import { regradeJob } from "../src/grade/regrade.js";
 import { SUBREQUEST_LIMIT } from "../src/instrument.js";
+import { webhookDrainJob } from "../src/webhooks/drain.js";
+import { rateLimitJob, retentionJob } from "../src/retention/sweep.js";
 import { testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
@@ -34,12 +36,12 @@ function throwing(name: string, cron: string): ScheduledJob {
 
 // Pinned before any test pushes a job, per K27: a plan that registers one
 // must edit this line, which is how the registry's contents stay visible
-// rather than accumulating unseen. Phase 8b Task 4 is the first to land —
-// `regradeJob` and nothing else this branch ships (`P8D-R2`: whichever of
-// 8d/8e merges second rebases and extends this array; never loosen it to
-// dodge that).
+// rather than accumulating unseen. 8d landed first (`webhookDrainJob`,
+// K22); 8e added `retentionJob` and `rateLimitJob` beside it
+// (`apps/api/src/scheduled.ts`'s own header on declaration order); 8b adds
+// `regradeJob` last, staggered onto its own cron (`REGRADE_CRON`).
 it("ships with exactly the jobs this branch registers", async () => {
-  expect(shippedWith).toEqual([regradeJob]);
+  expect(shippedWith).toEqual([webhookDrainJob, retentionJob, rateLimitJob, regradeJob]);
 });
 
 beforeEach(() => {

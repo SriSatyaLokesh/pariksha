@@ -1,13 +1,20 @@
-// The cron job registry (`deploy/cloudflare/wrangler.toml`'s
-// `crons`, K27). Shipped EMPTY; three plans (8b, 8d, 8e) each append one job
-// here, in parallel — the last test in `test/scheduled.test.ts` pinned the
-// list empty so a plan that forgot to register its job would fail loudly
-// instead of landing silently unscheduled. Phase 8b Task 4 (`K18`) is the
-// first to land: `regradeJob` runs on the frequent `*/5 * * * *` trigger,
-// not the nightly one.
+// The cron job registry (`deploy/cloudflare/wrangler.toml`'s `crons`, K27).
+// Shipped EMPTY on purpose: three later plans (8b, 8d, 8e) each append one
+// job here, in parallel, and none of them should have to own this file to
+// do it. The last test in `test/scheduled.test.ts` pins the list's exact
+// contents so a plan that forgets to register its job fails loudly instead
+// of landing silently unscheduled.
+//
+// Phase 8d Task 4 registers `webhookDrainJob` (`*/5 * * * *`, K22) — the
+// first entry here. Phase 8b Task 4 (`K18`) adds `regradeJob`, staggered
+// onto its own `2-59/5 * * * *` trigger so it never shares an invocation
+// (and its 50-subrequest ceiling) with `webhookDrainJob`. 8e adds
+// `retentionJob` and `rateLimitJob` on the nightly trigger.
 
 import type { AppDeps } from "./app.js";
 import { regradeJob } from "./grade/regrade.js";
+import { rateLimitJob, retentionJob } from "./retention/sweep.js";
+import { webhookDrainJob } from "./webhooks/drain.js";
 
 export interface ScheduledJob {
   name: string;
@@ -29,7 +36,9 @@ export interface ScheduledJob {
 }
 
 /**
- * Ships EMPTY. 8b, 8d and 8e each append one entry.
+ * Shipped EMPTY; 8b, 8d and 8e each append one entry. 8d's `webhookDrainJob`
+ * landed first; 8e adds `retentionJob` and `rateLimitJob`
+ * (`apps/api/src/retention/sweep.ts`, K30, AC-24, #101) beside it.
  *
  * **Order is declaration order, and that is a guarantee, not an accident** —
  * `runScheduled` iterates this array as written. Three plans append here
@@ -37,8 +46,24 @@ export interface ScheduledJob {
  * a job must not depend on another job's writes within the same run. If one
  * ever genuinely must follow another, say so at the registration site; do
  * not rely on where a merge happened to put the lines.
+ *
+ * `retentionJob` and `rateLimitJob` satisfy that rule between themselves —
+ * one expires `snapshot` rows and overdue `candidate` rows (Task 4's
+ * `AC-24` pass subsumed the retired `response` pass — see `sweep.ts`'s own
+ * header), the other `rate_limit` rows, and neither reads what the other
+ * writes — so their relative order here is arbitrary. `webhookDrainJob` runs
+ * on a different cron string (the 5-minutely drain cadence vs. the nightly
+ * `17 3 * * *`, `deploy/cloudflare/wrangler.toml`), so `runScheduled`'s
+ * `job.cron !== cron` guard already keeps it out of the same invocation as
+ * the other two — nothing here shares a 50-subrequest budget with anything
+ * else.
  */
-export const SCHEDULED_JOBS: ScheduledJob[] = [regradeJob];
+export const SCHEDULED_JOBS: ScheduledJob[] = [
+  webhookDrainJob,
+  retentionJob,
+  rateLimitJob,
+  regradeJob,
+];
 
 /**
  * Runs every job registered for `cron`, in order. One job throwing is

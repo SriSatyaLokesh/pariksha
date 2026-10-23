@@ -417,6 +417,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".home__figure": { dark: "signal-bg", light: "signal-l-bg" },
   ".home__sep": { dark: "signal-bg", light: "signal-l-bg" },
 
+  // Phase 8e Task 3 (`K31`, `K36`, #102): the free-tier meter, same tier as
+  // the page lead above it — `.home__usage-figure` carries no entry of its
+  // own; it declares no `color`, only `font-weight`, so it never reaches
+  // `colorSelectors` in the first place.
+  ".home__usage-text": { dark: "signal-bg", light: "signal-l-bg" },
+
   ".home__pane-title": { dark: "signal-surface", light: "signal-l-surface" },
   ".home__group-name, .home__group-count": {
     dark: "signal-surface",
@@ -494,6 +500,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // CardHairline uses), so everything else reads on the page's own ground.
   ".bank-list__item": { dark: "signal-surface", light: "signal-l-surface" },
   ".bank-list__count": { dark: "signal-surface", light: "signal-l-surface" },
+
+  // ---- admin.css: Phase 8d Task 1's webhook panel ------------------------
+  // `.webhook-secret` fills itself with `--surface-2` (a card inside the
+  // `.release-panel__group` card `WebhookPanel.tsx` renders it in), the
+  // same "card on the page" pattern `.bank-list__item` above is.
+  ".webhook-secret": { dark: "signal-surface-2", light: "signal-l-surface-2" },
   ".bank-browser__group-label": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__tag-chip": { dark: "signal-surface", light: "signal-l-surface" },
   ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },

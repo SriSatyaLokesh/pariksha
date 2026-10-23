@@ -16,21 +16,39 @@ export async function testDeps(
   // Expiry tests need one database read through several points in time, which
   // an injected clock covers and a second `testDeps()` would not: a new call
   // is a new, empty database.
-  options: { now?: () => number; env?: Record<string, unknown> } = {},
+  options: {
+    now?: () => number;
+    env?: Record<string, unknown>;
+    /** `KG8` (Phase 8e Task 3, #102): the one existing caller of this
+     *  function that needs a `node`-target app at all. Defaults to
+     *  `"workers"`, every other call's only target before this task. */
+    target?: "workers" | "node";
+  } = {},
 ): Promise<{
   deps: AppDeps;
   migrations: number;
 }> {
   const db: DbClient = sqliteClient(":memory:");
   const { applied } = await migrate(db);
+  const target = options.target ?? "workers";
   return {
     deps: {
       db,
       storage: memoryAdapter(),
       now: options.now ?? (() => FIXED_NOW),
       env: parseEnv(
-        { SESSION_SECRET: "test-session-secret", ...options.env },
-        "workers",
+        {
+          SESSION_SECRET: "test-session-secret",
+          ...(target === "node"
+            ? {
+                DATABASE_URL: ":memory:",
+                STORAGE_DIR: "/tmp/pariksha-test-storage",
+                PUBLIC_URL: "https://pariksha.test",
+              }
+            : {}),
+          ...options.env,
+        },
+        target,
       ),
     },
     migrations: applied.length,

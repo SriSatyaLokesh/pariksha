@@ -95,19 +95,27 @@ bucket_name = "pariksha-files"
 # that noise is unwelcome before Phase 8, comment this block out; nothing
 # reads it.
 #
-# Phase 8b Task 4 (`K18`): drains the regrade queue
-# (`apps/api/src/grade/regrade.ts`'s `regradeJob`, `REGRADE_CRON`).
-# Branch review C2, coordinator follow-up: deliberately NOT the same string
-# as 8d's webhook drain (also frequent, on `*/5 * * * *` in `main`) —
-# `runScheduled` shares one invocation's 50-subrequest ceiling across every
-# job whose `cron` matches verbatim, and two jobs on the identical string
-# would have split that ceiling (37 + 22 = 59, over it, before this fix).
-# `2-59/5 * * * *` fires at :02, :07, :12 and on — the same twelve times an
-# hour as `*/5 * * * *`, staggered rather than coincident. Expect this line
-# to conflict at merge with 8d/8e's own crons entry; the fix is one array
-# carrying every expression, not two `[triggers]` blocks.
+# Phase 8d Task 4 (K22): the webhook drain, beside the nightly entry it
+# shares this block with. `webhookDrainJob` (`apps/api/src/webhooks/drain.ts`)
+# retries whatever `webhook_delivery` holds with exponential backoff out to
+# 24 hours — free-plan Workers have neither Queues nor Durable Object
+# alarms, so a table drained by its own cron is what stands in for both.
+# `*/5 * * * *` is every 5 minutes: 288 invocations a day of a handler that
+# finds nothing and exits on every tick but the rare one with a delivery
+# actually due. Measured, and meant to show up in the free-tier dashboard
+# `P8.14` builds, not to be invisible there.
+#
+# Phase 8b Task 4 (`K18`) adds a third entry: `2-59/5 * * * *` drains the
+# regrade queue (`apps/api/src/grade/regrade.ts`'s `regradeJob`,
+# `REGRADE_CRON`). Branch review C2, coordinator follow-up: deliberately NOT
+# the same string as the webhook drain above — `runScheduled` shares one
+# invocation's 50-subrequest ceiling across every job whose `cron` matches
+# verbatim, and two jobs on the identical string would have split that
+# ceiling (37 + 22 = 59, over it, before this fix). `2-59/5 * * * *` fires at
+# :02, :07, :12 and on — the same twelve times an hour as `*/5 * * * *`,
+# staggered rather than coincident.
 [triggers]
-crons = ["17 3 * * *", "2-59/5 * * * *"]
+crons = ["17 3 * * *", "*/5 * * * *", "2-59/5 * * * *"]
 
 # No `[vars]` block: everything this Worker reads is a secret, and anything
 # under `[vars]` is plaintext here and in the dashboard. See

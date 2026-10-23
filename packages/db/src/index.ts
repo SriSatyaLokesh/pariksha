@@ -29,3 +29,7 @@ export * from "./repo/rate-limit.js";
 // regrade-scan.ts. A cron tick names no workspace, so there is nothing for
 // `scoped()` to check (Phase 8b Task 4, K18).
 export * from "./repo/regrade-scan.js";
+// Phase 8d Task 1: `urlRefusal`, T-19's SSRF refusal table, moved here so
+// `repo/webhooks.ts` and `apps/api/src/net/reachable.ts` share one copy —
+// see net.ts's own header.
+export * from "./net.js";

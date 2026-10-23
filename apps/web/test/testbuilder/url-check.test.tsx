@@ -313,6 +313,13 @@ function viewClient(): ApiClient {
     gradingQueue: notUsed,
     grade: notUsed,
     recordVerdict: notUsed,
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
+    usage: async () => undefined,
+    listWebhooks: notUsed,
+    createWebhook: notUsed,
+    setWebhookActive: notUsed,
+    deleteWebhook: notUsed,
   };
 }
 

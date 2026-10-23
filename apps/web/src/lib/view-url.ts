@@ -62,6 +62,7 @@ const VIEWS: readonly ViewParams["view"][] = [
   "home",
   "banks",
   "tests",
+  "webhooks",
   "test",
   "bank",
   "question",

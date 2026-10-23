@@ -1,5 +1,36 @@
 # Phase 8f — The Ear Implementation Plan
 
+> # DEFERRED — DO NOT EXECUTE
+>
+> **`K44` (owner, 2026-10-23): deferred whole**, with 7e and 8g, carrying
+> [#209](https://github.com/SriSatyaLokesh/pariksha/issues/209) and
+> [#84](https://github.com/SriSatyaLokesh/pariksha/issues/84) with it.
+>
+> **The reason is that this plan cannot be proved by anything this repository runs.** jsdom has no
+> `AudioContext`, no `AudioWorklet`, no `getUserMedia` and no `MediaStream`; Playwright's Chromium
+> offers only a synthetic audio source. So every assertion here would be made against a double of
+> this plan's own writing — the shape of a module that no browser in CI ever loads. That is the
+> exact defect Phase 8a produced four times and this phase names as its anti-goal: **something
+> built that nothing reaches, and a test that cannot fail.** The microphone's real verification is
+> hand validation on three devices, which is also what 7e waits on.
+>
+> It is also larger than its three tasks read. Task 2 inverts a hardcoded `false` that reaches the
+> organiser control, the publish checklist, the device check and the start gate; Task 3 reworks a
+> **public privacy claim** and its ADR. Capture-without-retention is a different promise from
+> no-capture, and it should not be made on an untestable implementation.
+>
+> **The plan is kept, not deleted**, and Task 1 has a parked draft: branch `phase-8f/the-ear`,
+> commit `cf6274f` — the worklet, the `monitorNoise` caller and the event detail shape, unfinished,
+> uncovered and **not to be merged**. Start from it; do not trust it.
+>
+> One thing changed underneath this plan while it waits: **`resolveProctoring` now hardcodes
+> `violationAction: "warn_only"`** as well as `faceCheck` and `requireMicrophone`
+> ([#214](https://github.com/SriSatyaLokesh/pariksha/issues/214)). Task 2 inverts one of three
+> pre-cuts, not one of two.
+>
+> **Read the 7d carry-forward below before resuming** — the `.m?js` walker note is the trap that
+> would let this plan's own worklet pass unscanned.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Turn the microphone on — a noise-level monitor that records nothing — and re-point the face-counting control at a future that can actually deliver it.

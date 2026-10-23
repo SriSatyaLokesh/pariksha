@@ -53,11 +53,22 @@ carries a migration.
 
 ## Clones, never worktrees
 
-Three fixed checkouts exist and no others: `pariksha`, `pariksha-wt1`,
-`pariksha-wt2`. **Never create a git worktree.** pnpm's junctions have twice
-deleted `packages/core/**` and `packages/db/**` out of the primary checkout
-when a worktree was removed. To read a file at a frozen commit, use
-`git show <sha>:<path>`.
+Four fixed checkouts exist and no others: `pariksha`, `pariksha-wt1`,
+`pariksha-wt2`, `pariksha-wt3`. **Never create a git worktree.** pnpm's
+junctions have twice deleted `packages/core/**` and `packages/db/**` out of the
+primary checkout when a worktree was removed. To read a file at a frozen commit,
+use `git show <sha>:<path>`.
+
+**The rule is about worktrees, not about the number four.** `pariksha-wt3` was
+added on 2026-10-23, with the owner's authorisation, to run a fourth slice in
+parallel; a clone carries none of the junction hazard a worktree does. Add
+another the same way — by cloning, never by `git worktree add`.
+
+**Parallel clones are safe for editing and unsafe for verification.** Running
+two full suites at once produced a 37-failure cascade across 5 unrelated files,
+three separate times, each a different subset. With several waves in flight,
+keep implementers on targeted tests and run the full suite once, alone, before
+review — or pass `--no-file-parallelism`.
 
 ## Git
 

@@ -31,6 +31,10 @@ import { inviteRoutes } from "./routes/invites.js";
 import { gradeRoutes } from "./grade/award.js";
 import { verdictRoutes } from "./grade/verdict.js";
 import { regradeRoutes } from "./grade/regrade.js";
+import { candidateDataRoutes } from "./retention/candidate.js";
+import { usageRoute } from "./usage/project.js";
+import { requireMember } from "./middleware/authorize.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -277,7 +281,16 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // second, smaller shape for the screens to special-case). The plan
   // estimated 5 against a response that did not exist yet; the
   // measurement wins.
-  "/api/v1/workspaces/:id/tests/:testId/close": 6,
+  //
+  // Phase 8d Task 3 (`K23`): close alone grows to **7** —
+  // `listActiveWebhooksForEvent`'s one read for `test.closed`, paid even
+  // with no webhook registered. Never tried inline (it is an organiser
+  // action, not a candidate hot path), so no `http` line: the event is
+  // only ever queued — and, fix round 1 (F1), queued through one
+  // `db.batch()` call regardless of how many hooks subscribed, so this
+  // number is a bound here too, not a one-hook measurement. Archive stays
+  // at 6 — it fires no event.
+  "/api/v1/workspaces/:id/tests/:testId/close": 7,
   "/api/v1/workspaces/:id/tests/:testId/archive": 6,
   // Auth (2) + `listVersions` (1, one correlated subquery for the attempt
   // counts, never one query per version). No separate existence check —
@@ -480,7 +493,25 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // A number above 7 means the bank, or the counted read, is being spent
   // more than once a request — the failure this line exists to catch on a
   // 50-subrequest ceiling.
-  "/api/v1/run/attempt/submit": 7,
+  //
+  // Phase 8d Task 3 (`K23`): **8**, not 7, once `fireWebhooks` is in the
+  // picture — `listActiveWebhooksForEvent`'s one read, plus one `http` for
+  // the single active `attempt.submitted` hook the measuring fixture
+  // registers (`test/webhooks/deliver.test.ts`'s "keeps the submit route
+  // inside its declared budget with a webhook firing", measured the same
+  // way this file's other budgets are, via `countingDeps`).
+  //
+  // **Fix round 1, F1: this is a bound, not a one-hook measurement.**
+  // `webhooks/deliver.ts`'s `INLINE_FANOUT_LIMIT` caps how many hooks on
+  // this event ever reach `fetch` (3, at the time of writing), and every
+  // hook past it — plus every one inside it that failed — is written in
+  // one `db.batch()` call, never one `INSERT` per row. So 8 holds for a
+  // workspace with 1 active `attempt.submitted` hook *or* 50 of them:
+  // `test/webhooks/deliver.test.ts`'s "the subrequest cost is the same at
+  // the limit and past it" proves the total does not move with hook count.
+  // Raising `INLINE_FANOUT_LIMIT` raises this number with it — see that
+  // constant's own comment for the arithmetic before changing either.
+  "/api/v1/run/attempt/submit": 8,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
   // **4** in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
@@ -569,6 +600,53 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // by more published versions than that pays one more subrequest per 99,
   // which this product has never approached.
   "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": 5,
+
+  // Phase 8e Task 2 (`S-14`, #101): the candidate's own data, and its
+  // erasure. `candidates.delete` gets its first production caller here.
+  // Measured (`apps/api/test/retention/candidate.test.ts`'s own "measures
+  // the real subrequest cost" test), not estimated. GET costs 8: auth (2) +
+  // `candidateExists` (1) + `exportCandidate`'s five reads — the candidate
+  // row, `attempt`, `response`, `event` and `snapshot`, one query each (1
+  // apiece) — on a candidate with at least one attempt, which is the worst
+  // case; a never-attempted candidate costs 4 less (no attempt-scoped reads
+  // at all). DELETE costs 8 too, on its own worst path: auth (2) +
+  // `candidateExists` (1) + the in-progress check, one `attempt` read (1) +
+  // the snapshot key read (1) + `storage.delete`'s one batched call when
+  // there is a snapshot to remove (1) + the one batched `db.batch` (1, flat
+  // in row count up to `MAX_IDS_PER_CHUNK`) + the audit row (1, per
+  // candidate — flat here at one). Both methods land on the same number by
+  // coincidence, not because they share work — same rule every other
+  // budget above follows: the higher of the two, measured.
+  "/api/v1/workspaces/:id/candidates/:candidateId/data": 8,
+
+  // Phase 8e Task 3 (`K31`, `K36`, `KG8`, #102): the free-tier meter.
+  // Measured (`apps/api/test/usage/project.test.ts`'s own "measures the
+  // real subrequest cost" test), not estimated. Branch review `C2`
+  // (CRITICAL) deleted the backward-looking `countsToday` half (see
+  // `usage/project.ts`'s own header), which drops this from 6 to **5** on
+  // the `workers` target: auth (2) + the workspace's published-test
+  // settings (1, flat in test count — one JOIN pinned to each test's
+  // `current_version`) + candidate counts grouped across every test (1,
+  // flat in candidate count) + the workspace's active webhook count (1,
+  // workspace-scoped, not per-test — `webhook` carries no `test_id`
+  // column). On `node` it is **2**: auth only (`requireMember()` reads the
+  // membership already on the session, no further query) — `usageRoute`
+  // returns `{}` before issuing a single query of its own, because
+  // nothing a self-hosted container needs is projected against a plan it
+  // is not on (`K36`). 5 is the ceiling either way, which is what is
+  // declared.
+  "/api/v1/workspaces/:id/usage": 5,
+  // Phase 8d Task 1: webhook CRUD. Measured
+  // (`test/webhooks.test.ts`'s own "measures the real subrequest cost"
+  // test), not estimated. GET costs 3: auth (2) + `listWebhooks` (1) —
+  // `costPerCandidate` is `estimateCost`'s own pure arithmetic, no
+  // subrequest. POST costs 4: auth (2) + `createWebhook`'s one insert (1)
+  // + `appendAudit` (1) — `urlRefusal` runs in memory, no subrequest
+  // either. PATCH and DELETE each cost 4: auth (2) + the one write (1,
+  // `setWebhookActive`/`deleteWebhook`) + `appendAudit` (1). The higher of
+  // the methods sharing each path, same rule every budget above follows.
+  "/api/v1/workspaces/:id/webhooks": 4,
+  "/api/v1/workspaces/:id/webhooks/:webhookId": 4,
 };
 
 /**
@@ -653,6 +731,17 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // the candidate list, so it is the same permission that uploaded the
   // list — an Author who built the test holds `tests.edit` and not this.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
+
+  // Phase 8d Task 1, fix round 1 (`F1`): `docs/PRD.md:106`'s "Create API
+  // keys and webhooks" row is Owner+Admin — the same row `keys.manage`
+  // exists for — not `workspace.settings`, which the matrix gives to Owner
+  // alone. The Phase 8 spec names `keys.manage` as one of the five
+  // permissions this phase wires for the first time; `workspace.settings`
+  // is not in that list.
+  "GET /api/v1/workspaces/:id/webhooks": "keys.manage",
+  "POST /api/v1/workspaces/:id/webhooks": "keys.manage",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 
@@ -674,6 +763,17 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // (`banks.edit`, the permission that saved the key change this route
   // reacts to) does not.
   "POST /api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": "attempts.grade",
+
+  // Phase 8e Task 2 (`S-14`, #101): `candidates.delete` is Owner-only in the
+  // matrix — `owner: ACTIONS` and nobody else — which is what makes an
+  // Admin's 403 here the real boundary, not a looser `candidates.manage`.
+  "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
+  "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
+
+  // Phase 8e Task 3 (`K31`, #102). `null`, same as `GET /:id`: membership is
+  // the whole check, nothing finer-grained — every role already sees its
+  // own workspace's scale figures on Home, and this is one more.
+  "GET /api/v1/workspaces/:id/usage": null,
 };
 
 /**
@@ -886,6 +986,16 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "workspace",
   // Phase 8b Task 4 (`K17`/`K18`): the regrade offer.
   "POST /api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": "workspace",
+  // Phase 8e Task 2 (`S-14`, #101).
+  "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
+  "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
+  // Phase 8e Task 3 (`K31`, #102).
+  "GET /api/v1/workspaces/:id/usage": "workspace",
+  // Phase 8d Task 1: webhooks.
+  "GET /api/v1/workspaces/:id/webhooks": "workspace",
+  "POST /api/v1/workspaces/:id/webhooks": "workspace",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -936,6 +1046,16 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Same prefix, mounted
   // next to `gradeRoutes`/`verdictRoutes` for the same locality reason.
   app.route("/api/v1/workspaces", regradeRoutes(deps));
+  // Phase 8e Task 2 (`S-14`, #101): a candidate's export and erasure.
+  app.route("/api/v1/workspaces", candidateDataRoutes(deps));
+  // Phase 8e Task 3 (`K31`, #102): the free-tier meter. Mounted directly,
+  // like `/api/v1/me`, rather than folded into `workspaceRoutes` — one
+  // route, no sub-router of its own to justify.
+  app.get("/api/v1/workspaces/:id/usage", requireMember(), usageRoute(deps));
+  // Phase 8d Task 1: webhooks, mounted after the candidate-runtime invite
+  // route for locality with the rest of `/api/v1/workspaces/:id/...`
+  // rather than out of necessity — no prefix below collides.
+  app.route("/api/v1/workspaces", webhookRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing

@@ -27,3 +27,5 @@ export * from "./review.js";
 // and batched write. `regrade-scan.ts` sits beside this list, not in it —
 // see its own header for why.
 export * from "./regrade.js";
+// Phase 8d Task 1: webhook CRUD, and Task 3's own delivery read.
+export * from "./webhooks.js";

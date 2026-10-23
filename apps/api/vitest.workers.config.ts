@@ -21,5 +21,8 @@ export default defineConfig({
       },
     }),
   ],
-  test: { include: ["test/worker.test.ts"] },
+  // `test/webhooks/sign.test.ts` is listed here too: it is the one test file
+  // that exercises `crypto.subtle`, and Workers' implementation is worth
+  // proving directly rather than trusting that it matches Node's (K24).
+  test: { include: ["test/worker.test.ts", "test/webhooks/sign.test.ts"] },
 });

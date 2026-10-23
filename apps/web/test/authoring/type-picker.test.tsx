@@ -162,6 +162,13 @@ function fakeClient(): ApiClient {
     gradingQueue: unused,
     grade: unused,
     recordVerdict: unused,
+    exportCandidateData: unused,
+    deleteCandidateData: unused,
+    usage: async () => undefined,
+    listWebhooks: unused,
+    createWebhook: unused,
+    setWebhookActive: unused,
+    deleteWebhook: unused,
   };
 }
 

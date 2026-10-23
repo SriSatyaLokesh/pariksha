@@ -140,6 +140,25 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     recordVerdict: async () => {
       throw new Error("not used by this test file");
     },
+    exportCandidateData: async () => {
+      throw new Error("not used by this test file");
+    },
+    deleteCandidateData: async () => {
+      throw new Error("not used by this test file");
+    },
+    usage: async () => undefined,
+    listWebhooks: async () => {
+      throw new Error("not used by this test file");
+    },
+    createWebhook: async () => {
+      throw new Error("not used by this test file");
+    },
+    setWebhookActive: async () => {
+      throw new Error("not used by this test file");
+    },
+    deleteWebhook: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }
@@ -590,6 +609,31 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     fireEvent.click(await screen.findByRole("button", { name: /create your first test/i }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Tests" })).toBeInTheDocument();
+  });
+
+  // Phase 8d Task 1, same lesson applied again: a test that renders
+  // `WebhookPanel` directly (apps/web/test/organiser/webhook-panel.test.tsx)
+  // cannot see that nothing in the running app ever mounts it — the nav
+  // item, the `NavKey`, the `View` arm and `readView`/`paramsOf` all have
+  // to agree for one click on "Webhooks" to land here.
+  it("reaches the webhook panel from the app's own entry point", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          listWebhooks: async () => ({ webhooks: [] }),
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Webhooks" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Webhooks" })).toBeInTheDocument();
+    expect(await screen.findByText(/No webhooks yet/)).toBeInTheDocument();
   });
 
   // Task 3 (#55, P5.2), same lesson applied a third time: a test that
