@@ -22,6 +22,7 @@ import {
   type TestSummary,
   type Workspace,
 } from "../src/lib/api";
+import { fakeClient as sharedClient } from "./fixtures/api-client";
 import { OrganiserApp } from "../src/routes/organiser";
 
 const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
@@ -59,7 +60,7 @@ const TEST_ROW: TestSummary = {
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
@@ -67,36 +68,15 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [BANK],
-    createBank: async () => {
-      throw new Error("not used");
-    },
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: async () => {
-      throw new Error("not used");
-    },
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: async () => {
-      throw new Error("not used");
-    },
-    updateGroup: async () => {
-      throw new Error("not used");
-    },
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: async () => {
-      throw new Error("not used");
-    },
     tests: async () => [TEST_ROW],
-    createTest: async () => {
-      throw new Error("not used");
-    },
     test: async () => TEST_ROW,
-    updateTest: async () => {
-      throw new Error("not used");
-    },
     draft: async () => ({
       id: "ver_1",
       testId: "tst_1",
@@ -108,82 +88,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       setPoints: {},
       points: {},
     }),
-    patchDraft: async () => {
-      throw new Error("not used");
-    },
-    publishTest: async () => {
-      throw new Error("not used");
-    },
-    closeTest: async () => {
-      throw new Error("not used");
-    },
-    archiveTest: async () => {
-      throw new Error("not used");
-    },
     versions: async () => [],
     checklist: async () => [],
-    cloneTest: async () => {
-      throw new Error("not used");
-    },
-    exportTest: async () => {
-      throw new Error("not used");
-    },
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: async () => {
-      throw new Error("not used");
-    },
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: async () => {
-      throw new Error("not used");
-    },
-    uploadMedia: async () => {
-      throw new Error("not used");
-    },
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: async () => {
-      throw new Error("not used");
-    },
-    importCandidates: async () => {
-      throw new Error("not used");
-    },
-    gradingQueue: async () => {
-      throw new Error("not used by this test file");
-    },
-    grade: async () => {
-      throw new Error("not used by this test file");
-    },
-    recordVerdict: async () => {
-      throw new Error("not used by this test file");
-    },
-    exportCandidateData: async () => {
-      throw new Error("not used");
-    },
-    deleteCandidateData: async () => {
-      throw new Error("not used");
-    },
     usage: async () => undefined,
-    listWebhooks: async () => {
-      throw new Error("not used by this test file");
-    },
-    createWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
-    setWebhookActive: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
     listApiKeys: async () => ({ keys: [] }),
-    createApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
-    revokeApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
     ...overrides,
-  };
+  });
 }
 
 /** A reload at `search`: the URL is set before the app's first paint, which

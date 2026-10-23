@@ -72,6 +72,7 @@ import type {
   TestSummary,
   Workspace,
 } from "../src/lib/api";
+import { fakeClient as sharedClient } from "./fixtures/api-client";
 import type { Question } from "@pariksha/core";
 
 const TEST_DIR = dirname(fileURLToPath(import.meta.url));
@@ -168,10 +169,7 @@ const QUESTION: QuestionSummary = {
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  const unused = () => {
-    throw new Error("not used by this test file");
-  };
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
@@ -182,39 +180,21 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createBank: async () => ({ ...BANK }),
     listQuestions: async () => ({ questions: [QUESTION] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: unused,
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: unused,
-    updateGroup: unused,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: unused,
     tests: async () => [PUBLISHED],
-    createTest: unused,
-    test: unused,
     updateTest: async (_workspaceId, _testId, patch) => ({ ...PUBLISHED, ...patch }),
-    draft: unused,
-    patchDraft: unused,
-    publishTest: unused,
-    closeTest: unused,
-    archiveTest: unused,
     versions: async () => [],
     checklist: async () => [],
-    cloneTest: unused,
-    exportTest: unused,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: unused,
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: unused,
-    uploadMedia: unused,
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: unused,
-    importCandidates: unused,
     ...overrides,
-  } as ApiClient;
+  });
 }
 
 /** Home -> Tests. */
