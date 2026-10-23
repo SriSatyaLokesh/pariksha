@@ -152,6 +152,12 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     importCandidates: async () => {
       throw new Error("not used");
     },
+    gradingQueue: async () => {
+      throw new Error("not used by this test file");
+    },
+    grade: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

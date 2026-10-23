@@ -17,6 +17,7 @@ import type {
   Question,
   QuestionType,
   Role,
+  RubricAward,
   Section,
   Test,
   TestBranding,
@@ -448,6 +449,30 @@ export interface ApiClient {
     csv: string,
     opts?: { dryRun?: boolean },
   ): Promise<CandidateImportReport>;
+
+  /**
+   * Phase 8b Task 2 (`K15`): the grading queue. `blind: true` is what makes
+   * a request blind — the server never puts a candidate-identifying field
+   * in the payload at all (`GradingQueueRow["formValues"]` is simply
+   * absent), not merely unrendered. `questionId` narrows to one question,
+   * for "by question" mode.
+   */
+  gradingQueue(
+    workspaceId: string,
+    testId: string,
+    opts?: { questionId?: string; cursor?: string; limit?: number; blind?: boolean },
+  ): Promise<{ rows: GradingQueueRow[]; nextCursor: string | null }>;
+
+  /**
+   * Phase 8b Task 1 (`K14`): records a rubric award and rescores the
+   * attempt through the one path `POST .../grade` already is. Task 2's own
+   * first caller of this route from the browser.
+   */
+  grade(
+    workspaceId: string,
+    testId: string,
+    input: { attemptId: string; questionId: string; award: RubricAward },
+  ): Promise<{ points: number; written: boolean }>;
 }
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
@@ -473,6 +498,28 @@ export interface CandidateIssue {
 export interface CandidateImportReport {
   imported: number;
   issues: CandidateIssue[];
+}
+
+/** Phase 8b Task 2 (`K15`): one row of the grading queue. Mirrors
+ *  `GradingQueueRow` (`apps/api/src/grade/award.ts`), which widens
+ *  `PendingAward` (`packages/db/src/repo/grading.ts`) with the question
+ *  itself — a Reviewer holds no `tests.edit` and has no other route to a
+ *  question's prompt or rubric. */
+export interface GradingQueueRow {
+  attemptId: string;
+  questionId: string;
+  /** The candidate's answer. Never the model answer. */
+  value: unknown;
+  /** The question a Reviewer is grading against — just enough to grade by,
+   *  not the full authoring document. */
+  question: { prompt: string; rubric?: { level: string; points: number; description?: string }[] };
+  /** Present only once a grader has recorded one. */
+  award: RubricAward | null;
+  points: number | null;
+  /** The candidate's registration answers. **Absent, not an empty object,
+   *  off the blind path** (`K15`) — `"formValues" in row` is false, so a
+   *  blind payload carries no key for it at all. */
+  formValues?: Record<string, unknown>;
 }
 
 const API = "/api/v1";
@@ -807,6 +854,21 @@ export function createApiClient(): ApiClient {
         throw error;
       }
     },
+
+    async gradingQueue(workspaceId, testId, opts = {}) {
+      const qs = query({
+        questionId: opts.questionId,
+        cursor: opts.cursor,
+        limit: opts.limit === undefined ? undefined : String(opts.limit),
+        blind: opts.blind ? "1" : undefined,
+      });
+      return json<{ rows: GradingQueueRow[]; nextCursor: string | null }>(
+        `/workspaces/${workspaceId}/tests/${testId}/grading-queue${qs}`,
+      );
+    },
+
+    grade: (workspaceId, testId, input) =>
+      json<{ points: number; written: boolean }>(`/workspaces/${workspaceId}/tests/${testId}/grade`, post(input)),
   };
 }
 

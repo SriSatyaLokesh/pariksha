@@ -159,6 +159,8 @@ function fakeClient(): ApiClient {
     uploadMedia: unused,
     candidates: async () => [],
     importCandidates: unused,
+    gradingQueue: unused,
+    grade: unused,
   };
 }
 
