@@ -25,8 +25,10 @@
 // **D1 rows read.** Every tick pays `recentAuditRows`'s one scan: a seek to
 // `REGRADE_LOOKBACK_MS` ago on `audit_log_at_idx` (not the table's whole
 // history — see `regrade-scan.ts`'s header for why that still is not free),
-// plus `4 + REGRADE_BATCH_SIZE` rows for whichever version it works on this
-// tick, plus up to 3 more on the tick that finishes a version. At this
+// plus `7 + REGRADE_BATCH_SIZE` subrequests for whichever version it works
+// on this tick (measured at 37 against a 300-attempt fixture,
+// `test/grade/regrade.test.ts`'s own "stays inside the subrequest ceiling"
+// test), plus up to 3 more on the tick that finishes a version. At this
 // phase's audit volume that is a few hundred rows per tick, not the
 // whole-table scan an *unbounded* cross-workspace read would be — and once
 // a version's `"regrade"` row is written, every later tick's grouping
@@ -65,11 +67,15 @@ export const REGRADE_CRON = "*/5 * * * *";
 /**
  * One attempt's `rescoreAttempt` call costs one D1 read no `batch()` can
  * absorb (`liveQuestions`, called *inside* that function, not by this
- * file). `4 + REGRADE_BATCH_SIZE` subrequests on the common tick, `7 +
- * REGRADE_BATCH_SIZE` on the one that also finishes a version (the extra
- * attempt-id read, `latestVerdicts`, and the completion audit row) must
- * stay at or under `SUBREQUEST_LIMIT` (50) with real headroom — 30 leaves
- * 10+.
+ * file). `7 + REGRADE_BATCH_SIZE` subrequests on the common tick
+ * (`recentAuditRows`, the batch fetch, `testVersionSettings`, this file's
+ * own award-reconstruction bank read, `listResponsesForAttempts`,
+ * `writeScores`' one `db.batch()`, and the progress audit append — measured
+ * at 37 against a 300-attempt fixture), `10 + REGRADE_BATCH_SIZE` on the
+ * one that also finishes a version (the extra attempt-id read,
+ * `latestVerdicts`, and the completion audit row in place of the progress
+ * one) must stay at or under `SUBREQUEST_LIMIT` (50) with real headroom —
+ * 30 leaves 13.
  */
 export const REGRADE_BATCH_SIZE = 30;
 

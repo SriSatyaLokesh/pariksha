@@ -255,22 +255,29 @@ describe("enqueueRegrade / regradeJob", () => {
     expect(first.summary).toMatch(/\d+ of 300/);
     expect(first.summary).not.toContain("done"); // one tick never finishes 300 at a batch of 30
 
-    const rows = await deps.db.query<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM attempt WHERE workspace_id = ? AND test_version_id = ? AND submitted_at IS NOT NULL AND score_json LIKE '%\"total\":0%'",
-      [workspaceId, testVersionId],
-    );
-    const scoredSoFarAfterFirst = Number(rows[0]!.n);
+    // The progress cursor itself (`"regrade.batch"`'s own `rescoredSoFar`),
+    // not a count derived from score content: which 12 of the 300 attempts
+    // actually carry the changed total depends on where `id` ordering
+    // happens to put them, so a content-based proxy can land in the first
+    // batch, the last, or not move the visible total at all between two
+    // ticks by chance. The cursor is unambiguous and is exactly what `K18`
+    // claims resumes.
+    async function progress(): Promise<number> {
+      const rows = (await listAudit(deps.db, workspaceId, { limit: 1000 })).filter(
+        (r) => r.action === "regrade.batch" && r.target === testVersionId,
+      );
+      const latest = rows[0]; // listAudit is newest-first
+      return (latest?.detail as { rescoredSoFar?: number } | undefined)?.rescoredSoFar ?? 0;
+    }
+
+    const afterFirst = await progress();
+    expect(afterFirst).toBe(REGRADE_BATCH_SIZE);
 
     await regradeJob.run(deps);
 
-    const rowsAfterSecond = await deps.db.query<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM attempt WHERE workspace_id = ? AND test_version_id = ? AND submitted_at IS NOT NULL AND score_json LIKE '%\"total\":0%'",
-      [workspaceId, testVersionId],
-    );
-    // Strictly more zeroed-out than after the first tick — `K18`'s own
-    // assertion that a second tick makes further, not repeated, progress.
-    expect(Number(rowsAfterSecond[0]!.n)).toBeGreaterThan(scoredSoFarAfterFirst);
-    expect(Number(rowsAfterSecond[0]!.n)).toBeLessThan(300);
+    const afterSecond = await progress();
+    expect(afterSecond).toBe(REGRADE_BATCH_SIZE * 2);
+    expect(afterSecond).toBeLessThan(300);
   });
 
   it("stays inside the subrequest ceiling on one tick", async () => {
@@ -282,7 +289,9 @@ describe("enqueueRegrade / regradeJob", () => {
     await regradeJob.run(counting.deps);
     // `K18`'s whole reason, as an assertion: a tick over a 300-attempt
     // version — six times `REGRADE_BATCH_SIZE` — never approaches the
-    // platform's 50-subrequest ceiling.
+    // platform's 50-subrequest ceiling. Measured at 37 against this
+    // fixture (`apps/api/src/grade/regrade.ts`'s own header does the
+    // arithmetic).
     expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
   });
 });
