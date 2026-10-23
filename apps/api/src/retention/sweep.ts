@@ -203,14 +203,22 @@ async function minSnapshotsDaysCutoff(deps: AppDeps): Promise<number> {
  *
  * Branch review `C1`: `WHERE sn.taken_at <= ?` (bound by
  * `minSnapshotsDaysCutoff` above) replaces what used to be no `WHERE` at
- * all. D1 bills rows *examined*, not rows returned, and `ORDER BY
- * sn.taken_at ASC LIMIT ?` with no `WHERE` forced a full scan of `snapshot`
- * plus a sort before the `LIMIT` could apply — every row, every tick,
- * forever, including every already-blanked or not-yet-due row the batch
- * was never going to touch. The old ponytail note here ("the fix is a
- * per-row cutoff computed in SQL") was this finding, predicted and
- * deferred; this is that fix. The real fix — `snapshot(taken_at)`, a
- * migration — is #226's, not this branch's (`K10`: no migration here).
+ * all. **Correction (fix-wave re-review): this does NOT make steady state
+ * ~0 rows.** `snapshot` has no index on `taken_at`
+ * (`packages/db/migrations/sqlite/0000_calm_blizzard.sql`:168 declares only
+ * `snapshot_workspace_idx`/`snapshot_attempt_idx`) — confirmed with
+ * `EXPLAIN QUERY PLAN` against this exact query on a local, indexed
+ * `better-sqlite3`, which shows `SCAN sn`, a full table scan. D1 bills rows
+ * *examined*, and a `WHERE` on an unindexed column does not reduce what the
+ * base scan examines; it only stops the per-row `attempt`/`test_version`
+ * PK probes and the sort from running for rows that fail it. Before: every
+ * scanned row paid those two probes plus the sort — ~3× `snapshot`'s row
+ * count. After: the base scan still reads every row, but a not-yet-due
+ * cohort skips the probes and the sort — ~1× `snapshot`'s row count, not
+ * ~0. A genuine ~3×→~1× win, not the full fix. The real fix —
+ * `snapshot(taken_at)`, a migration — is #226's, not this branch's (`K10`:
+ * no migration here); #226 also needs to cover getting the not-yet-due case
+ * to near-zero, not just in-drain batch fairness.
  */
 async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
   const cutoffDays = await minSnapshotsDaysCutoff(deps);
