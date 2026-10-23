@@ -17,12 +17,7 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import {
-  gradeManual,
-  type Question,
-  type ResponseValue,
-  type RubricAward,
-} from "@pariksha/core";
+import { deriveAward, gradeManual, type ResponseValue, type RubricAward } from "@pariksha/core";
 import { attemptForGrading, listResponses, writeAward, writeScore } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
@@ -30,22 +25,6 @@ import { actorOr401, requires } from "../middleware/authorize.js";
 import type { PinnedLayout } from "../run/attempt.js";
 import { defaultsOf, liveQuestions, scoringOf } from "../run/submit.js";
 import { rescoreAttempt } from "../run/rescore.js";
-
-/**
- * Reconstructs a `RubricAward` from a graded response's stored `points`,
- * matched against the question's own rubric. `packages/db/src/repo/
- * grading.ts`'s `listPendingAwards` carries the same logic for the same
- * reason (`K14` stores only `points`/`graded_by`, never the levels a
- * reviewer picked) — see its own comment for the one case this degrades
- * (a rubric edited between a grade and a later rescore).
- */
-function deriveAward(q: Question | undefined, points: number): RubricAward {
-  if (points === 0 || q === undefined || (q.type !== "short_answer" && q.type !== "long_answer")) {
-    return { levels: [] };
-  }
-  const level = (q.rubric ?? []).find((l) => l.points === points);
-  return { levels: level ? [level.level] : [] };
-}
 
 /** Stores the award and rescores in one call. `K14`. */
 export async function recordAward(
@@ -72,6 +51,14 @@ export async function recordAward(
   if (attempt === null) {
     throw new ApiError(404, "not_found", "No such resource.");
   }
+  // Fix round 1, F1: `writeScore` already refuses to stamp a score onto an
+  // attempt still in progress (`submitted_at IS NOT NULL`), but nothing
+  // stopped `writeAward` from running first — so grading an in-progress
+  // attempt corrupted `response.points` under a fresh score that was never
+  // actually written, and answered 200. Refuse before either write runs.
+  if (attempt.submittedAt === null) {
+    throw new ApiError(409, "not_submitted", "This attempt has not been submitted yet.");
+  }
 
   const defaults = defaultsOf(scoringOf(attempt.settings));
   const { points } = gradeManual(q, input.award, defaults);
@@ -92,7 +79,15 @@ export async function recordAward(
   const awards: Record<string, RubricAward> = {};
   for (const r of responses) {
     if (r.gradedBy === null) continue;
-    awards[r.questionId] = deriveAward(byId.get(r.questionId), r.points ?? 0);
+    // Fix round 1, F2: a `null` reconstruction (a rubric level edited out
+    // from under an already-graded answer) is left **out** of `awards`
+    // entirely, not inserted as a zero-scoring one — `scoreAttempt`
+    // (`packages/core/src/score.ts`) only re-enters `pending` when a
+    // question's id is *absent* from this map, so inserting `{ levels: [] }`
+    // here would silently zero a candidate's credit instead of sending the
+    // question back to a human.
+    const award = deriveAward(byId.get(r.questionId), r.points ?? 0);
+    if (award !== null) awards[r.questionId] = award;
   }
 
   const { score } = await rescoreAttempt(deps, {
@@ -103,7 +98,12 @@ export async function recordAward(
     awards,
   });
 
-  await writeScore(deps.db, workspaceId, { attemptId: input.attemptId, score });
+  const { updated } = await writeScore(deps.db, workspaceId, { attemptId: input.attemptId, score });
+  // The `submittedAt` guard above is what makes this true — a dropped
+  // return here, not a missing guard, is how F1 shipped undetected.
+  if (!updated) {
+    throw new Error(`recordAward: writeScore did not update attempt ${input.attemptId}`);
+  }
 
   return { points, written };
 }

@@ -1,22 +1,23 @@
 // Manual grading's data layer (Phase 8b Task 1, `K14`): the award itself
-// lands on `response.points`/`response.graded_by` — the two columns `0009`
-// already added and left unwritten — and nothing else. There is no awards
-// table (`K14`'s own ruling), so "what did a reviewer award" is answered by
-// re-deriving it from the question's own rubric and the stored points,
-// never by reading a second store.
+// lands on `response.points`/`response.graded_by` — `0002_dapper_wilson_
+// fisk.sql`'s own two columns, left unwritten until now — and nothing
+// else. There is no awards table (`K14`'s own ruling), so "what did a
+// reviewer award" is answered by re-deriving it from the question's own
+// rubric and the stored points, never by reading a second store.
 //
 // `newId`/`scoped` follow the same shape every file under `repo/` does;
 // `workspaceQuestions` (`banks.ts`) is reused rather than re-queried, the
 // same way `liveQuestions` (`apps/api/src/run/submit.ts`) already wraps it
 // for the candidate side.
 
-import type { Question, RubricAward } from "@pariksha/core";
+import { deriveAward, isManualQuestion, type RubricAward } from "@pariksha/core";
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
 import { workspaceQuestions } from "./banks.js";
 
-/** `0009`'s `response.points`/`response.graded_by`: the award, stored. */
+/** `0002_dapper_wilson_fisk.sql`'s `response.points`/`response.graded_by`:
+ *  the award, stored. */
 export const writeAward = scoped(
   "writeAward",
   async (
@@ -116,32 +117,6 @@ export const attemptForGrading = scoped(
   },
 );
 
-function isManual(q: Question): q is Question & { rubric?: { level: string; points: number }[] } {
-  return q.type === "short_answer" || q.type === "long_answer";
-}
-
-/**
- * Reconstructs a `RubricAward` from a graded response's stored `points`,
- * matched against the question's own rubric.
- *
- * ponytail: `K14` stores only `points`/`graded_by`, never the levels a
- * reviewer actually picked, so this is a best-effort replay rather than a
- * record — it finds a rubric level whose points equal the stored amount
- * and awards that one level. Exact whenever the rubric has not changed
- * since grading, which is the ordinary case; 0 points round-trips exactly
- * always (`{ levels: [] }` sums to 0 under any rubric). The one case this
- * degrades is a rubric edited to remove the matching level between a grade
- * and a later rescore, which loses the credit back to 0 rather than
- * reproducing a wrong nonzero figure. Upgrade path, if that drift ever
- * actually bites: persist the award itself in a new column — out of reach
- * this task under `K10` (0009 is the phase's one migration).
- */
-function deriveAward(q: Question | undefined, points: number): RubricAward {
-  if (points === 0 || q === undefined || !isManual(q)) return { levels: [] };
-  const level = (q.rubric ?? []).find((l) => l.points === points);
-  return { levels: level ? [level.level] : [] };
-}
-
 export interface PendingAward {
   attemptId: string;
   questionId: string;
@@ -186,7 +161,7 @@ export const listPendingAwards = scoped(
     opts: { questionId?: string; limit?: number; cursor?: string } = {},
   ): Promise<{ rows: PendingAward[]; nextCursor: string | null }> => {
     const questions = await workspaceQuestions(db, workspaceId);
-    const manual = new Map(questions.filter((q) => isManual(q.document)).map((q) => [q.id, q.document]));
+    const manual = new Map(questions.filter((q) => isManualQuestion(q.document)).map((q) => [q.id, q.document]));
 
     const ids = opts.questionId
       ? manual.has(opts.questionId)
@@ -231,14 +206,21 @@ export const listPendingAwards = scoped(
     const nextCursor = hasMore && last ? encodeCursor(last.attempt_id, last.question_id) : null;
 
     return {
-      rows: page.map((row) => ({
-        attemptId: row.attempt_id,
-        questionId: row.question_id,
-        value: db.jsonValue(row.value_json),
-        award:
-          row.graded_by === null ? null : deriveAward(manual.get(row.question_id), Number(row.points ?? 0)),
-        points: row.points === null ? null : Number(row.points),
-      })),
+      rows: page.map((row) => {
+        // `deriveAward` returning `null` (fix round 1, F2: a rubric level
+        // edited out from under an already-graded answer) is reported the
+        // same as never graded — `points` too, not the now-unreconstructable
+        // stored figure — never as a quiet zero.
+        const award =
+          row.graded_by === null ? null : deriveAward(manual.get(row.question_id), Number(row.points ?? 0));
+        return {
+          attemptId: row.attempt_id,
+          questionId: row.question_id,
+          value: db.jsonValue(row.value_json),
+          award,
+          points: award === null ? null : Number(row.points ?? 0),
+        };
+      }),
       nextCursor,
     };
   },

@@ -19,6 +19,7 @@ import {
   getDraftVersion,
   newId,
   readResponse,
+  upsertQuestion,
   upsertQuestions,
   upsertResponse,
 } from "@pariksha/db";
@@ -35,6 +36,7 @@ const NOW = FIXED_NOW;
 
 let deps: AppDeps;
 let workspaceId: string;
+let bankId: string;
 let testId: string;
 let testVersionId: string;
 /** Auto-graded, worth 2, key "a". */
@@ -45,6 +47,11 @@ let q3 = "";
 /** `short_answer`, worth 4, authored with **no** `rubric` array at all —
  *  Review Focus 1's defect. */
 let qNoRubric = "";
+/** `short_answer`, worth 2, one rubric level ("ok" = 2) — a second
+ *  gradeable question, so grading it can trigger a rescore that replays
+ *  `q3`'s *stored* award without this call also being `q3`'s own grade
+ *  (fix round 1, F2). */
+let q5 = "";
 
 let attemptId: string;
 let candidateId: string;
@@ -61,7 +68,7 @@ async function setFlag(workspaceId: string, attemptId: string, flag: string): Pr
 beforeAll(async () => {
   ({ deps } = await testDeps());
   workspaceId = await seedWorkspace(deps);
-  const bankId = await createBank(deps.db, workspaceId, { name: "Grading fixtures", now: NOW });
+  bankId = await createBank(deps.db, workspaceId, { name: "Grading fixtures", now: NOW });
   const docs: Question[] = [
     {
       id: "q1",
@@ -90,9 +97,16 @@ beforeAll(async () => {
       prompt: "Explain",
       scoring: { points: 4 },
     },
+    {
+      id: "q5",
+      type: "short_answer",
+      prompt: "A second gradeable question",
+      rubric: [{ level: "ok", points: 2 }],
+      scoring: { points: 2 },
+    },
   ];
   const { ids } = await upsertQuestions(deps.db, workspaceId, bankId, docs, NOW);
-  [q1, q3, qNoRubric] = ids as [string, string, string];
+  [q1, q3, qNoRubric, q5] = ids as [string, string, string, string];
 
   const test = await createTest(deps.db, workspaceId, {
     name: "Grading",
@@ -100,7 +114,7 @@ beforeAll(async () => {
     now: NOW,
     body: {
       settings: {},
-      sections: [{ id: "sec", title: "Section", source: { kind: "fixed", questions: [q1, q3, qNoRubric] } }],
+      sections: [{ id: "sec", title: "Section", source: { kind: "fixed", questions: [q1, q3, qNoRubric, q5] } }],
     },
   });
   testId = test.id;
@@ -109,7 +123,7 @@ beforeAll(async () => {
   testVersionId = draft.id;
 
   layout = {
-    sections: [{ sectionId: "sec", questionIds: [q1, q3, qNoRubric], optionOrder: {} }],
+    sections: [{ sectionId: "sec", questionIds: [q1, q3, qNoRubric, q5], optionOrder: {} }],
     media: [],
     paper: [],
   };
@@ -252,6 +266,131 @@ describe("recordAward", () => {
       perQuestion: Record<string, { points: number }>;
     };
     expect(score.perQuestion[q1]?.points).toBe(2);
+  });
+
+  // --- Fix round 1, F1: the submitted-attempt guard ---------------------
+
+  it("refuses to grade an attempt that has not been submitted", async () => {
+    const freshCandidateId = await createCandidate(deps.db, workspaceId, {
+      testId,
+      formValues: {},
+      consentVersion: "1",
+      now: NOW,
+    });
+    const inProgressAttemptId = newId("att");
+    await createAttempt(deps.db, workspaceId, {
+      id: inProgressAttemptId,
+      candidateId: freshCandidateId,
+      testVersionId,
+      setNo: 1,
+      layout,
+      startedAt: NOW,
+      deadlineAt: NOW + 3_600_000,
+      tokenHash: newId("tok"),
+    });
+    // Deliberately never submitted.
+    await expect(
+      recordAward(deps, workspaceId, {
+        attemptId: inProgressAttemptId,
+        questionId: q3,
+        award: { levels: ["thorough"] },
+        gradedBy: "usr_1",
+        now: NOW,
+      }),
+    ).rejects.toThrow(/not.*submitted/i);
+    // Nothing was written: the refusal is before writeAward, not after.
+    expect(await readResponse(deps.db, workspaceId, inProgressAttemptId, q3)).toBeNull();
+    // Positive control, same call shape, the already-submitted attempt:
+    // grades cleanly (`KG2`'s pairing, applied to this guard too).
+    await expect(
+      recordAward(deps, workspaceId, {
+        attemptId,
+        questionId: q3,
+        award: { levels: ["thorough"] },
+        gradedBy: "usr_1",
+        now: NOW,
+      }),
+    ).resolves.toMatchObject({ written: true });
+  });
+
+  // --- Fix round 1, F2: a reconstruction that finds no match -------------
+
+  it("a rubric level edited out from under an already-graded answer returns the question to pending, not 0", async () => {
+    // Grade q3 "thorough" — 4 points, matched against the rubric as it
+    // stands right now.
+    await recordAward(deps, workspaceId, {
+      attemptId,
+      questionId: q3,
+      award: { levels: ["thorough"] },
+      gradedBy: "usr_1",
+      now: NOW,
+    });
+    let score = (await getAttempt(deps.db, workspaceId, attemptId))!.scoreJson as {
+      pending: string[];
+      perQuestion: Record<string, { points: number }>;
+    };
+    expect(score.pending).not.toContain(q3);
+    expect(score.perQuestion[q3]?.points).toBe(4);
+
+    // An organiser edits the rubric: "thorough" is now worth 7, not 4 — no
+    // level on q3 is worth 4 any more, so the stored points cannot be
+    // reconstructed.
+    await upsertQuestion(
+      deps.db,
+      workspaceId,
+      bankId,
+      {
+        id: "q3",
+        type: "short_answer",
+        prompt: "Summarise",
+        rubric: [
+          { level: "thin", points: 1 },
+          { level: "thorough", points: 7 },
+        ],
+        scoring: { points: 7 },
+      },
+      NOW,
+    );
+
+    // Grading q5 triggers a fresh rescore that replays every stored award,
+    // q3's included — this call grades q5, not q3.
+    await recordAward(deps, workspaceId, {
+      attemptId,
+      questionId: q5,
+      award: { levels: ["ok"] },
+      gradedBy: "usr_1",
+      now: NOW,
+    });
+    score = (await getAttempt(deps.db, workspaceId, attemptId))!.scoreJson as {
+      pending: string[];
+      perQuestion: Record<string, { points: number }>;
+    };
+    // Back to pending, never a silent zero.
+    expect(score.pending).toContain(q3);
+    expect(score.perQuestion[q3]?.points).toBe(0);
+    // Positive control: q5, graded against its own unedited rubric, is not
+    // pending and carries its real points.
+    expect(score.pending).not.toContain(q5);
+    expect(score.perQuestion[q5]?.points).toBe(2);
+
+    // Restore q3's rubric — this bank is shared by every later test in the
+    // file, and none of them should see the edit this test made.
+    await upsertQuestion(
+      deps.db,
+      workspaceId,
+      bankId,
+      {
+        id: "q3",
+        type: "short_answer",
+        prompt: "Summarise",
+        rubric: [
+          { level: "thin", points: 1 },
+          { level: "thorough", points: 4 },
+        ],
+        scoring: { points: 4 },
+      },
+      NOW,
+    );
   });
 });
 
