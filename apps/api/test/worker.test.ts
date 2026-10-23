@@ -7,7 +7,7 @@
 
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
-import { d1Client, migrate } from "@pariksha/db";
+import { claimViolationLimit, d1Client, migrate, newId } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
 import { SCHEDULED_JOBS } from "../src/scheduled.js";
@@ -77,6 +77,30 @@ it("every migration applies against the Miniflare D1 binding", async () => {
   // could in principle reject the `WHERE` clause of — proved here rather
   // than trusted from the bundle, the same reason every statement above is.
   expect(await sql("event_violation_limit_uq")).toContain("violation_limit_reached");
+  // 0011 (`E-R1`): a nullable `ADD COLUMN`, same family as 0008's two above
+  // but never itself proved against the real engine until now.
+  expect(await sql("attempt")).toContain("`locked_at` integer");
+});
+
+// Branch-review m7: `worker.test.ts`'s own opening comment is that
+// better-sqlite3 "accepts SQL D1 rejects" — `violation-limit.test.ts` only
+// ever exercises `claimViolationLimit`'s `INSERT … ON CONFLICT (attempt_id)
+// WHERE type = '…' DO NOTHING RETURNING id` under better-sqlite3, and that
+// statement is on the candidate hot path, outside either of the handler's
+// two AG1 `try` blocks (`routes/proctoring.ts`) — a rejection there would be
+// a 500 on every at-limit event POST, on live data. Partial-index conflict
+// targets have been in SQLite since 3.24 and are "almost certainly" fine,
+// which is exactly what this file exists to replace with proof.
+it("claimViolationLimit's own ON CONFLICT (attempt_id) WHERE … DO NOTHING RETURNING id works against the real D1 engine", async () => {
+  const db = binding();
+  await migrate(db);
+
+  const workspaceId = newId("wsp");
+  const attemptId = newId("att");
+  const first = await claimViolationLimit(db, workspaceId, { attemptId, now: 0 });
+  expect(first.claimed).toBe(true);
+  const second = await claimViolationLimit(db, workspaceId, { attemptId, now: 1 });
+  expect(second.claimed).toBe(false);
 });
 
 it("a second run applies nothing", async () => {
