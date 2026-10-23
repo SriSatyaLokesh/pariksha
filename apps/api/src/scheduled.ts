@@ -6,6 +6,7 @@
 // register its job fails loudly instead of landing silently unscheduled.
 
 import type { AppDeps } from "./app.js";
+import { rateLimitJob, retentionJob } from "./retention/sweep.js";
 
 export interface ScheduledJob {
   name: string;
@@ -16,7 +17,9 @@ export interface ScheduledJob {
 }
 
 /**
- * Ships EMPTY. 8b, 8d and 8e each append one entry.
+ * Shipped EMPTY; 8b, 8d and 8e each append one entry. 8e is first to land:
+ * `retentionJob` and `rateLimitJob` (`apps/api/src/retention/sweep.ts`,
+ * K30, AC-24, #101).
  *
  * **Order is declaration order, and that is a guarantee, not an accident** —
  * `runScheduled` iterates this array as written. Three plans append here
@@ -24,8 +27,13 @@ export interface ScheduledJob {
  * a job must not depend on another job's writes within the same run. If one
  * ever genuinely must follow another, say so at the registration site; do
  * not rely on where a merge happened to put the lines.
+ *
+ * `retentionJob` and `rateLimitJob` satisfy that rule between themselves —
+ * one expires `snapshot`/`response` rows, the other `rate_limit` rows, and
+ * neither reads what the other writes — so their relative order here is
+ * arbitrary.
  */
-export const SCHEDULED_JOBS: ScheduledJob[] = [];
+export const SCHEDULED_JOBS: ScheduledJob[] = [retentionJob, rateLimitJob];
 
 /**
  * Runs every job registered for `cron`, in order. One job throwing is

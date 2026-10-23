@@ -32,8 +32,11 @@ function throwing(name: string, cron: string): ScheduledJob {
 // Pinned before any test pushes a job, per K27: a plan that registers one
 // must edit this line, which is how the registry's contents stay visible
 // rather than accumulating unseen.
-it("ships with no jobs registered", async () => {
-  expect(shippedWith).toEqual([]); // 8b, 8d and 8e each change this line
+it("ships with 8e's two jobs registered", async () => {
+  expect(shippedWith).toEqual([
+    expect.objectContaining({ name: "retention.sweep", cron: "17 3 * * *" }),
+    expect.objectContaining({ name: "rate_limit.sweep", cron: "17 3 * * *" }),
+  ]); // 8b and 8d still change this line
 });
 
 beforeEach(() => {
