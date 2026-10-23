@@ -16,7 +16,7 @@ import { resolveRetention, type TestRetention } from "@pariksha/core";
 import { appendAudit, sweepRateLimits, type DbClient } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import type { ScheduledJob } from "../scheduled.js";
-import { LIMITS } from "../run/limit.js";
+import { MAX_WINDOW_MS } from "../run/limit.js";
 
 const DAY_MS = 86_400_000;
 const CRON = "17 3 * * *";
@@ -155,18 +155,13 @@ export const retentionJob: ScheduledJob = {
   },
 };
 
-/** The longest window any `rate_limit` bucket counts over — `limitOrThrow`'s
- *  own rule (packages/db/src/repo/rate-limit.ts's `sweepRateLimits` doc):
- *  `before` must be older than every kind's window, not just one, because
- *  one `DELETE` sees every bucket. Read off `LIMITS` rather than copied, so
- *  a new `LIMITS` entry with a longer window moves this for free. */
-const maxWindowMs = (): number => Math.max(...Object.values(LIMITS).map((limit) => limit.windowMs));
-
 export const rateLimitJob: ScheduledJob = {
   name: "rate_limit.sweep",
   cron: CRON,
   run: async (deps) => {
-    const deleted = await sweepRateLimits(deps.db, deps.now() - maxWindowMs());
+    // `MAX_WINDOW_MS` (`run/limit.ts`): `before` must be older than every
+    // kind's window, not just one, because one `DELETE` sees every bucket.
+    const deleted = await sweepRateLimits(deps.db, deps.now() - MAX_WINDOW_MS);
     return { summary: `rate_limit.sweep: deleted ${deleted} row(s)` };
   },
 };

@@ -177,8 +177,13 @@ it("removes the R2 objects in one batched call, not one per key", async () => {
 
   // Positive control: it really did call `storage.delete`, so the ceiling
   // below is not vacuously satisfied by calling it zero times.
+  //
+  // `<= 1`, not `<= 2`: two snapshots and a per-key loop (the regression
+  // this test exists to catch) both call `storage.delete` twice, so `<= 2`
+  // passes either way — Fix round 1, F1. One call is the actual contract,
+  // true for correct code at any fixture size.
   expect(counting.counts().storage).toBeGreaterThan(0);
-  expect(counting.counts().storage).toBeLessThanOrEqual(2);
+  expect(counting.counts().storage).toBeLessThanOrEqual(1);
 });
 
 // --- idempotence: a row survives, its object does not --------------------
