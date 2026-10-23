@@ -416,6 +416,12 @@ export const TABLE_MANIFEST: TableSpec[] = [
       // already in flight when this migration runs.
       text("integrity_flag"),
       bool("observed"),
+      // Phase 7e Task 3 (`E-R1`, migration 0011, both dialects): nullable,
+      // the same shape `submitted_at` already has — null means "never
+      // locked". Added to the manifest alongside the migration so
+      // `parity.test.ts` checks it the same as every other column instead
+      // of silently drifting from what the migration actually shipped.
+      ts("locked_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
     uniques: [["token_hash"]],
