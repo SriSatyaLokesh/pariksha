@@ -705,3 +705,30 @@
 .organiser-form .field {
   width: 100%;
 }
+
+/* ---- Phase 8d Task 1: webhooks ------------------------------------------ */
+
+/* Everything else on `WebhookPanel.tsx` (organiser/WebhookPanel.tsx) reuses
+   `.release-panel__group`/`.release-panel__fact` (testbuilder.css, already
+   loaded by `admin-main.tsx` for every organiser screen), `.organiser-form`
+   above and `.organiser-empty` below. These two are the only rules the
+   screen needed that nothing already named. */
+
+.webhook-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+.webhook-secret {
+  display: block;
+  margin: 0;
+  padding: var(--space-sm) var(--space-md);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-sm);
+  background-color: var(--surface-2);
+  color: var(--ink);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  word-break: break-all;
+}

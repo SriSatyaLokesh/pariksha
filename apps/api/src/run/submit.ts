@@ -50,6 +50,7 @@ import {
 } from "@pariksha/core";
 import type { AppDeps } from "../app.js";
 import type { AttemptContextVar } from "../middleware/attemptContext.js";
+import { fireWebhooks } from "../webhooks/deliver.js";
 import type { PinnedLayout } from "./attempt.js";
 import { TIMING_DEFAULTS, timingOf } from "./clock.js";
 import { MatchBudgetExceeded, matchStrict } from "./bounded.js";
@@ -375,6 +376,20 @@ export async function submitAttempt(
         now,
       });
     }
+    // Phase 8d Task 3 (K23, K37): the one event delivered inline, and only
+    // for the race's winner — the loser writes nothing above and must not
+    // fire a second webhook for the same submission either. `fireWebhooks`
+    // never throws; a dead or slow receiver costs this request at most
+    // `INLINE_FANOUT_LIMIT * DELIVERY_TIMEOUT_MS` — 15s at the shipped
+    // limit of 3 (sequential, not parallel; `deliver.ts`'s own arithmetic),
+    // never the receipt. Branch review MINOR-10: this comment previously
+    // named `DELIVERY_TIMEOUT_MS` alone, understating the bound 3x.
+    await fireWebhooks(deps, {
+      workspaceId: attempt.workspaceId,
+      event: "attempt.submitted",
+      payload: { attemptId: attempt.attemptId },
+      now,
+    });
   }
 
   return {

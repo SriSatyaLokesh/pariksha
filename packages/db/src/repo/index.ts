@@ -18,3 +18,5 @@ export * from "./candidates.js";
 export * from "./run.js";
 // Phase 8a Task 7 (K9, KG3): the organiser's first attempt read.
 export * from "./results.js";
+// Phase 8d Task 1: webhook CRUD, and Task 3's own delivery read.
+export * from "./webhooks.js";

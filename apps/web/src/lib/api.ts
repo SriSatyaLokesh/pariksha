@@ -448,7 +448,44 @@ export interface ApiClient {
     csv: string,
     opts?: { dryRun?: boolean },
   ): Promise<CandidateImportReport>;
+
+  // Phase 8d Task 1: webhooks, behind `workspace.settings` like branding
+  // above. `costPerCandidate` is absent on the `node` target (`K36`) — the
+  // route omits the field rather than sending `null`.
+  listWebhooks(workspaceId: string): Promise<{ webhooks: Webhook[]; costPerCandidate?: number }>;
+  /** The one call that ever sees `signingSecret` (`KG5`) — shown once, by
+   *  the panel, and never fetched again. */
+  createWebhook(
+    workspaceId: string,
+    input: { url: string; events: WebhookEvent[] },
+  ): Promise<{ id: string; url: string; events: WebhookEvent[]; signingSecret: string }>;
+  setWebhookActive(workspaceId: string, webhookId: string, active: boolean): Promise<void>;
+  deleteWebhook(workspaceId: string, webhookId: string): Promise<void>;
 }
+
+/** Mirrors `packages/db/src/repo/webhooks.ts`'s `WebhookRow` — the wire
+ * shape, never `signingSecret`. */
+export interface Webhook {
+  id: string;
+  url: string;
+  events: WebhookEvent[];
+  active: boolean;
+  createdAt: number;
+}
+
+/** The closed set `packages/db/src/repo/webhooks.ts` exports as
+ * `WEBHOOK_EVENTS`. Not re-exported from `@pariksha/db` here —
+ * `apps/web` does not depend on that package — so the two strings are
+ * typed by hand; `WebhookPanel.tsx`'s own test pins them against the
+ * route's actual `GET .../webhooks` response, which is what would catch
+ * the two ever drifting apart. `K43`: "attempt.flagged" is deliberately
+ * not a member — see `webhooks.ts`'s own header. MAJOR-3 (whole-branch
+ * review): "attempt.started" is the identical defect and was dropped the
+ * same way — nothing ever fired it, and offering it in this selector with
+ * no caller behind it is `Q1b`.
+ */
+export type WebhookEvent = "attempt.submitted" | "test.closed";
+export const WEBHOOK_EVENTS: readonly WebhookEvent[] = ["attempt.submitted", "test.closed"];
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
  * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */
@@ -806,6 +843,20 @@ export function createApiClient(): ApiClient {
         }
         throw error;
       }
+    },
+
+    listWebhooks: (workspaceId) =>
+      json<{ webhooks: Webhook[]; costPerCandidate?: number }>(`/workspaces/${workspaceId}/webhooks`),
+
+    createWebhook: (workspaceId, input) =>
+      json(`/workspaces/${workspaceId}/webhooks`, post(input)),
+
+    async setWebhookActive(workspaceId, webhookId, active) {
+      await request(`/workspaces/${workspaceId}/webhooks/${webhookId}`, patchBody({ active }));
+    },
+
+    async deleteWebhook(workspaceId, webhookId) {
+      await request(`/workspaces/${workspaceId}/webhooks/${webhookId}`, { method: "DELETE" });
     },
   };
 }
