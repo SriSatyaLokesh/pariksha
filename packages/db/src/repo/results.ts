@@ -30,6 +30,11 @@ export interface AttemptSummary {
   observed: boolean;
   violations: number;
   answered: number;
+  /** Phase 8c Task 3: the results CSV's "Locked at" column — 7e's
+   *  `attempt.locked_at`, added to this projection rather than read with a
+   *  second scoped call, because it is the same row `listAttemptsForTest`
+   *  already reads (the task brief's own ruling). */
+  lockedAt: number | null;
 }
 
 // Same construction `attempts.ts` uses for `countViolations`: generated once
@@ -64,6 +69,7 @@ interface AttemptSummaryRecord {
   observed: unknown;
   violations: number;
   answered: number;
+  locked_at: number | null;
 }
 
 function toAttemptSummary(db: DbClient, row: AttemptSummaryRecord): AttemptSummary {
@@ -81,6 +87,7 @@ function toAttemptSummary(db: DbClient, row: AttemptSummaryRecord): AttemptSumma
     observed: Boolean(row.observed),
     violations: Number(row.violations),
     answered: Number(row.answered),
+    lockedAt: row.locked_at === null ? null : Number(row.locked_at),
   };
 }
 
@@ -127,7 +134,7 @@ export const listAttemptsForTest = scoped(
       "SELECT a.id AS id, a.candidate_id AS candidate_id, a.set_no AS set_no, " +
         "a.started_at AS started_at, a.deadline_at AS deadline_at, a.submitted_at AS submitted_at, " +
         "a.submit_reason AS submit_reason, a.score_json AS score_json, a.flag AS flag, " +
-        "a.integrity_flag AS integrity_flag, a.observed AS observed, " +
+        "a.integrity_flag AS integrity_flag, a.observed AS observed, a.locked_at AS locked_at, " +
         "(SELECT COUNT(*) FROM event e WHERE e.workspace_id = a.workspace_id AND e.attempt_id = a.id " +
         `AND e.type IN (${VIOLATION_PLACEHOLDERS})) AS violations, ` +
         "(SELECT COUNT(*) FROM response r WHERE r.workspace_id = a.workspace_id AND r.attempt_id = a.id) " +
@@ -188,5 +195,99 @@ export const countedFiguresForTest = scoped(
       else byCandidate.set(row.candidate_id, [figure]);
     }
     return byCandidate;
+  },
+);
+
+/**
+ * Phase 8c Task 3 (`R-08`, Review Focus 2): the results CSV's `Rank`
+ * column, from **one** page-independent ordering rather than a page's own
+ * row position — a `RANK()` window function over the whole test's scored
+ * attempts, so a candidate's rank cannot "restart at 1" on page two the way
+ * it would if each page ranked only the rows it happened to fetch.
+ *
+ * One statement, flat in cohort size (`K9`), the same `json_extract`/`->>`
+ * split `listIntegrityCounts` (`attempts.ts`) already draws for a numeric
+ * value inside a JSON column: `pg`'s `->>` returns text and is cast to
+ * `numeric` so `ORDER BY` compares it as a number, not lexically;
+ * `sqlite`/`d1`'s `json_extract` already returns a real JSON number.
+ *
+ * Scoped to `submitted_at IS NOT NULL AND score_json IS NOT NULL` —
+ * ranking an in-progress attempt against a percent it does not have yet
+ * would be meaningless, and `R-10`'s "available during the test" is served
+ * by that attempt's row simply carrying no rank, not by a fabricated one.
+ * Ties share a rank and leave a gap after them (`RANK()`'s own semantics,
+ * e.g. `1, 1, 3`) — standard leaderboard behaviour, and nothing in `R-08`
+ * asks for a different tiebreak.
+ */
+export const rankedScoresForTest = scoped(
+  "rankedScoresForTest",
+  async (db: DbClient, workspaceId: string, testId: string): Promise<Map<string, number>> => {
+    const percentExtract =
+      db.dialect === "pg" ? "(a.score_json ->> 'percent')::numeric" : "json_extract(a.score_json, '$.percent')";
+    const rows = await db.query<{ id: string; rnk: number }>(
+      `SELECT a.id AS id, RANK() OVER (ORDER BY ${percentExtract} DESC) AS rnk ` +
+        "FROM attempt a " +
+        "JOIN test_version tv ON tv.workspace_id = a.workspace_id AND tv.id = a.test_version_id " +
+        "WHERE a.workspace_id = ? AND tv.test_id = ? " +
+        "AND a.submitted_at IS NOT NULL AND a.score_json IS NOT NULL",
+      [workspaceId, testId],
+    );
+    const ranks = new Map<string, number>();
+    for (const row of rows) ranks.set(row.id, Number(row.rnk));
+    return ranks;
+  },
+);
+
+interface ResponseRecord {
+  attempt_id: string;
+  question_id: string;
+  value_json: unknown;
+}
+
+/**
+ * Phase 8c Task 3 (`R-09`'s per-answer CSV): every response for a **page**
+ * of attempts, in one statement — the `IN (...)` sibling of `latestVerdicts`
+ * (`review.ts`)'s whole-table scan, chosen instead of it because `response`
+ * is not small the way `review` is (it is one row per candidate per
+ * question, not one per human click), so reading it whole per export would
+ * cost more than the page it is answering for, not less.
+ *
+ * **Callers must keep `attemptIds.length` well under D1's 100-bound-
+ * parameter cap** (one placeholder per id, plus `workspaceId`) — this
+ * function does not chunk, the same restraint `latestVerdicts`'s own doc
+ * comment explains chunking would break. `export/results.ts`'s answers
+ * route is the only caller, and it pages attempts in small enough batches
+ * that this is always true; a second caller must keep that invariant
+ * itself rather than assume this one enforces it.
+ *
+ * `correct` and `points` are deliberately not read here: they live in the
+ * attempt's own `score_json.perQuestion`, which the caller already has from
+ * `listAttemptsForTest`, and re-deriving them from the question bank would
+ * be the second reader `K6`'s own precedent warns against — and would put
+ * this function one `SELECT *` away from the answer key `KG1` forbids.
+ */
+export const responsesForAttempts = scoped(
+  "responsesForAttempts",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    attemptIds: readonly string[],
+  ): Promise<Map<string, { questionId: string; value: unknown }[]>> => {
+    if (attemptIds.length === 0) return new Map();
+    const placeholders = attemptIds.map(() => "?").join(", ");
+    const rows = await db.query<ResponseRecord>(
+      `SELECT attempt_id, question_id, value_json FROM response ` +
+        `WHERE workspace_id = ? AND attempt_id IN (${placeholders}) ` +
+        "ORDER BY attempt_id, question_id",
+      [workspaceId, ...attemptIds],
+    );
+    const byAttempt = new Map<string, { questionId: string; value: unknown }[]>();
+    for (const row of rows) {
+      const value = row.value_json === null ? null : db.jsonValue(row.value_json);
+      const list = byAttempt.get(row.attempt_id);
+      if (list) list.push({ questionId: row.question_id, value });
+      else byAttempt.set(row.attempt_id, [{ questionId: row.question_id, value }]);
+    }
+    return byAttempt;
   },
 );
