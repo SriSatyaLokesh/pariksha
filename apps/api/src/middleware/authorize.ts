@@ -50,6 +50,17 @@ export function requireMember(): MiddlewareHandler<AppBindings> {
 
 export function requires(action: Action): MiddlewareHandler<AppBindings> {
   return guard(action, (c, membership) => {
+    // Phase 8d Task 2 (`K25`): a key-authenticated actor carries its own
+    // scopes instead of a role `can()` would answer for. Checked first and
+    // decided entirely on its own — never combined with the role below —
+    // because a key's scopes are the whole of what it is allowed, not an
+    // addition to it.
+    const keyScopes = actorOr401(c).apiKeyScopes;
+    if (keyScopes !== undefined) {
+      if (keyScopes.includes(action)) return undefined;
+      throw new ApiError(403, "forbidden", `This key does not hold ${action}.`);
+    }
+
     // A grant raises the role for one test and never lowers the workspace
     // role, so it is passed through rather than substituted. No route takes
     // a `:testId` yet; wiring it here means the first one that does inherits

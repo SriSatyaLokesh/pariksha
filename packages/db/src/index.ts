@@ -29,3 +29,9 @@ export * from "./repo/rate-limit.js";
 // `repo/webhooks.ts` and `apps/api/src/net/reachable.ts` share one copy —
 // see net.ts's own header.
 export * from "./net.js";
+// Phase 8d Task 2 (K25, K26): deliberately outside repo/index.js too — see
+// the header of keys.ts. `resolveApiKey` takes no workspace ID: which
+// workspace a presented secret belongs to is what it produces, not an
+// argument it can take, the same reason candidate-entry.ts sits outside
+// that barrel.
+export { resolveApiKey } from "./repo/keys.js";
