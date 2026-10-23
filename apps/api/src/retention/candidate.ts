@@ -146,14 +146,6 @@ export const CANDIDATE_DATA_EXEMPT: Readonly<Record<string, string>> = {
     "short code) — never a candidate identifier, and the row carries no personal data to erase.",
   api_key: "scopes_json is the key's own permission scopes — not candidate data.",
   webhook: "events_json is the subscribed event-type list (e.g. \"attempt.submitted\") — configuration, not data.",
-  webhook_delivery:
-    "payload_json is a queued delivery body for 8d's drain queue, UNBUILT as of this phase (no writer " +
-    "exists yet). Flagged for re-review once 8d lands one: a webhook payload could plausibly embed a " +
-    "candidate identifier the way auth_token's did (F3), and this entry is not a claim that it won't, " +
-    "only that there is nothing to sweep today — branch review M4: that claim is now enforced, not just " +
-    "stated. apps/api/test/retention/candidate.test.ts's \"webhook_delivery has no production writer " +
-    "yet\" fails the day 8d adds an INSERT for this table, so the exemption cannot silently outlive the " +
-    "fact it depends on.",
 };
 
 /** `KG4`. See the file header. */
@@ -185,6 +177,14 @@ export const CANDIDATE_DATA_HANDLED_OUT_OF_BAND: Readonly<Record<string, string>
     "InvitePayload.candidateId lives inside payload_json (packages/db/src/repo/run.ts) — auth_token is " +
     "untenanted and carries no candidate_id/attempt_id column at all, so holdsCandidateData cannot see it. " +
     "deleteCandidates deletes matching rows explicitly, by kind + a dialect-specific JSON extraction.",
+  webhook_delivery:
+    "fireWebhooks (apps/api/src/run/submit.ts) queues attempt.submitted with payload: { attemptId } — " +
+    "the same JSON-embedded reference shape as auth_token's payload_json.candidateId (F3); " +
+    "webhook_delivery carries no candidate_id/attempt_id column, so holdsCandidateData cannot see it " +
+    "either. Re-reviewed post-merge (branch review M4, re-review) once 8d's queueWebhookDeliveries landed " +
+    "a real writer: deleteCandidates deletes matching rows explicitly, by this batch's own attemptIds + " +
+    "a dialect-specific JSON extraction. test.closed's payload ({ testId }) carries no candidate " +
+    "reference at all, so it never matches.",
 };
 
 /**
@@ -515,6 +515,24 @@ export const deleteCandidates: Scoped<
     );
   }
 
+  // Branch review `M4` (re-review, post-merge): 8d's `queueWebhookDeliveries`
+  // landed a real writer for `webhook_delivery` (`packages/db/src/repo/webhooks.ts`)
+  // — `apps/api/test/retention/candidate.test.ts`'s "webhook_delivery has no
+  // production writer yet" tripwire fired on exactly that merge, as designed
+  // (see this file's own `CANDIDATE_DATA_EXEMPT` comment, written when the
+  // table was still unreachable). The re-review it demanded: `fireWebhooks`
+  // (`apps/api/src/run/submit.ts`) only ever queues `attempt.submitted` with
+  // `payload: { attemptId }` — `test.closed` carries `{ testId }`, no
+  // candidate reference — so `attemptId`, JSON-embedded in `payload_json`
+  // exactly the way `auth_token.payload_json.candidateId` was (`F3`), is the
+  // one leak. Handled the same way: by name, dialect-aware JSON extraction,
+  // matched against this batch's own `attemptIds`. `webhook_delivery` moves
+  // from `CANDIDATE_DATA_EXEMPT` to `CANDIDATE_DATA_HANDLED_OUT_OF_BAND`
+  // below — the exemption's claim ("nothing to sweep today") no longer
+  // holds now that there is something to sweep.
+  const webhookAttemptIdExtract =
+    db.dialect === "pg" ? "payload_json ->> 'attemptId'" : "json_extract(payload_json, '$.attemptId')";
+
   if (attemptIds.length > 0) {
     for (const idsChunk of chunk(attemptIds, MAX_IDS_PER_CHUNK)) {
       const inClause = inList(idsChunk.length);
@@ -522,9 +540,13 @@ export const deleteCandidates: Scoped<
         { sql: `DELETE FROM response WHERE workspace_id = ? AND attempt_id IN (${inClause})`, params: [workspaceId, ...idsChunk] },
         { sql: `DELETE FROM event WHERE workspace_id = ? AND attempt_id IN (${inClause})`, params: [workspaceId, ...idsChunk] },
         { sql: `DELETE FROM snapshot WHERE workspace_id = ? AND attempt_id IN (${inClause})`, params: [workspaceId, ...idsChunk] },
+        {
+          sql: `DELETE FROM webhook_delivery WHERE workspace_id = ? AND ${webhookAttemptIdExtract} IN (${inClause})`,
+          params: [workspaceId, ...idsChunk],
+        },
       );
     }
-    tablesTouched.add("response").add("event").add("snapshot");
+    tablesTouched.add("response").add("event").add("snapshot").add("webhook_delivery");
 
     if (!keepAnonymisedScore) {
       for (const idsChunk of chunk(attemptIds, MAX_IDS_PER_CHUNK)) {

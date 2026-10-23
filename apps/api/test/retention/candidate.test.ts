@@ -416,44 +416,77 @@ it("every TABLE_MANIFEST table is structurally resolved, explicitly handled out 
   expect(unclassified).toEqual([]);
 });
 
-// Branch review `M4` (MAJOR): `CANDIDATE_DATA_EXEMPT.webhook_delivery`'s own
-// reason admits it is not a safety claim ("not a claim that it won't,
-// only that there is nothing to sweep today") — but `candidateDataClassification`
-// still reads the table as `"exempt"`, so the three-state completeness
-// test above passes today and keeps passing the day 8d lands a writer for
-// it, silently. That is `auth_token` a second time: a table affirmatively
-// classified safe while actually just unreached. This converts the dated
-// note into a trap that springs on that merge, the same idiom
-// `auditCallSitesPassingPersonalData` above already uses (grep the real
-// source tree, not a `TABLE_MANIFEST` entry's own say-so) — `listTsFiles`
-// is that function's own helper, reused rather than redeclared.
-it("webhook_delivery has no production writer yet — the exemption's one load-bearing claim", () => {
-  // Every package's own `src/` only — never `node_modules` (which a
-  // recursive walk from the repo root would otherwise drag in, slowly and
-  // pointlessly) and never `test/`, where this very scan's own planted
-  // fixtures and any future test double for a webhook writer legitimately
-  // say "INSERT INTO webhook_delivery" without being a real caller.
-  const repoRoot = fileURLToPath(new URL("../../../..", import.meta.url));
-  const sourceDirs = [
-    "apps/api/src",
-    "apps/web/src",
-    "packages/core/src",
-    "packages/db/src",
-    "packages/storage/src",
-  ].map((rel) => join(repoRoot, rel));
+// Branch review `M4` (MAJOR, then re-review post-merge): the tripwire that
+// used to live here ("webhook_delivery has no production writer yet")
+// sprang exactly as designed when Phase 8d's `queueWebhookDeliveries`
+// (`packages/db/src/repo/webhooks.ts`) merged into this branch — a real
+// `INSERT INTO webhook_delivery` landed, the thing `CANDIDATE_DATA_EXEMPT
+// .webhook_delivery`'s own reason said to re-review for. That re-review:
+// `fireWebhooks` only ever queues `attempt.submitted` with
+// `payload: { attemptId }` (`test.closed`'s `{ testId }` carries no
+// candidate reference), the same JSON-embedded shape `auth_token`'s F3
+// leak was. `webhook_delivery` now lives in
+// `CANDIDATE_DATA_HANDLED_OUT_OF_BAND`, not `CANDIDATE_DATA_EXEMPT` — the
+// tests below are its `auth_token`-shaped parity checks, not the tripwire
+// (which cannot be re-armed: the writer it watched for is permanent now).
+it("webhook_delivery is named as explicitly handled, not silently exempt", () => {
+  const webhookDelivery = TABLE_MANIFEST.find((t) => t.name === "webhook_delivery");
+  expect(webhookDelivery).toBeDefined();
+  expect(holdsCandidateData(webhookDelivery!)).toBe(false);
+  expect(candidateDataClassification(webhookDelivery!)).toBe("handled");
+  expect(CANDIDATE_DATA_HANDLED_OUT_OF_BAND.webhook_delivery).toBeTruthy();
+  expect(CANDIDATE_DATA_EXEMPT.webhook_delivery).toBeUndefined();
+});
 
-  const hits: string[] = [];
-  for (const dir of sourceDirs) {
-    for (const file of listTsFiles(dir)) {
-      if (/INSERT\s+INTO\s+webhook_delivery/i.test(readFileSync(file, "utf8"))) hits.push(file);
-    }
-  }
+it("deletes the queued attempt.submitted webhook_delivery row — payload_json.attemptId, invisible to the structural scan", async () => {
+  const { deps } = await testDeps();
+  const { wsp, candidateId, attemptId } = await seedCandidate(deps);
+
+  // A delivery for this candidate's own attempt, and a `test.closed`
+  // delivery beside it that must survive — its payload names no
+  // candidate at all, so it is not this candidate's data to begin with.
+  await deps.db.run(
+    "INSERT INTO webhook_delivery (id, workspace_id, webhook_id, event, payload_json, attempt_count, " +
+      "next_attempt_at, last_status, last_error, delivered_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [
+      newId("whd"),
+      wsp,
+      "wbh_fake",
+      "attempt.submitted",
+      deps.db.jsonParam({ attemptId }),
+      1,
+      FIXED_NOW,
+      200,
+      null,
+      FIXED_NOW,
+      FIXED_NOW,
+    ],
+  );
+  const survivorId = newId("whd");
+  await deps.db.run(
+    "INSERT INTO webhook_delivery (id, workspace_id, webhook_id, event, payload_json, attempt_count, " +
+      "next_attempt_at, last_status, last_error, delivered_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    [survivorId, wsp, "wbh_fake", "test.closed", deps.db.jsonParam({ testId: "tst_other" }), 0, FIXED_NOW, null, null, null, FIXED_NOW],
+  );
+
+  await deleteCandidate(deps.db, wsp, {
+    candidateId,
+    keepAnonymisedScore: true,
+    actor: "usr_1",
+    now: FIXED_NOW,
+    storage: deps.storage,
+  });
 
   expect(
-    hits,
-    "a webhook_delivery writer has landed — CANDIDATE_DATA_EXEMPT.webhook_delivery's own reason says to " +
-      "re-review it for a candidate-identifier leak the way auth_token's F3 was (candidate.ts's own comment)",
+    await deps.db.query("SELECT * FROM webhook_delivery WHERE workspace_id = ? AND id = ?", [wsp, survivorId]),
+  ).not.toEqual([]);
+  expect(
+    await deps.db.query("SELECT * FROM webhook_delivery WHERE workspace_id = ? AND json_extract(payload_json, '$.attemptId') = ?", [
+      wsp,
+      attemptId,
+    ]),
   ).toEqual([]);
+  await closeClient(deps.db);
 });
 
 it("auth_token is named as explicitly handled, not silently exempt", () => {
