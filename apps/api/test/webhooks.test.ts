@@ -99,6 +99,39 @@ describe("POST — create", () => {
     expect(res.status).toBe(201);
   });
 
+  // MINOR-3 (whole-branch review): the route used to wrap the whole
+  // `createWebhook` call in a `catch` that turned ANY throw — a D1 failure
+  // included — into `422 url_refused` carrying the driver's own message.
+  // Forced here with a `db.run` that throws for the one `INSERT INTO
+  // webhook` statement, leaving everything else (including `urlRefusal`'s
+  // own pass) working: a genuinely valid URL that fails for a reason that
+  // has nothing to do with SSRF must surface as the generic 500 envelope,
+  // not a 422 naming a refusal that never happened, and the raw driver
+  // message must never reach the response body.
+  it("a non-SSRF failure (a DB error) is not reported as url_refused, and its raw message never reaches the client", async () => {
+    const failing: typeof deps.db = {
+      ...deps.db,
+      run: (sql: string, params?: unknown[]) => {
+        if (sql.includes("INSERT INTO webhook")) {
+          return Promise.reject(new Error("SQLITE_CONSTRAINT: a secret connection string, not for the client"));
+        }
+        return deps.db.run(sql, params);
+      },
+    };
+    const failingApp = createApp({ ...deps, db: failing });
+
+    const res = await failingApp.request(
+      url(),
+      send("POST", ownerCookie, { url: "https://example.test/db-failure-hook", events: ["attempt.submitted"] }),
+    );
+
+    expect(res.status).toBe(500);
+    const body = JSON.stringify(await res.json());
+    expect(body).not.toContain("url_refused");
+    expect(body).not.toContain("SQLITE_CONSTRAINT");
+    expect(body).not.toContain("secret connection string");
+  });
+
   it("refuses an event outside the closed set", async () => {
     const res = await app.request(
       url(),

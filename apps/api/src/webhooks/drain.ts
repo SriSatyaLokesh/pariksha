@@ -2,8 +2,8 @@
 //
 // Task 3's `fireWebhooks` attempts `attempt.submitted` once, inline, and
 // writes a `webhook_delivery` row for anything that did not deliver —
-// `attempt.started` and `test.closed` land there unconditionally, and so
-// does every hook past `INLINE_FANOUT_LIMIT`. This module is what makes
+// `test.closed` lands there unconditionally, and so does every hook past
+// `INLINE_FANOUT_LIMIT`. This module is what makes
 // those rows real: a `ScheduledJob` that runs every five minutes, retries
 // what is due, and reuses `tryDeliver`/`deliveryRawBody` from `deliver.ts`
 // rather than a second delivery implementation — two paths signing and

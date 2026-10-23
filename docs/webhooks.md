@@ -57,5 +57,14 @@ below — a receiver that wants replay protection should check `t` itself).
 A delivery is retried with backoff for up to 24 hours if your endpoint does
 not answer 2xx. Each retry is signed fresh, with the `t` of that attempt —
 so the same event can arrive more than once with different signatures. Treat
-deliveries as at-least-once and de-duplicate on the event's own id, not on
-the signature.
+deliveries as at-least-once, and never de-duplicate on the signature (`t`
+changes on every retry of the same event).
+
+There is currently no delivery or event id in the request — not in the
+body, not in a header. What you can de-duplicate on today is inside the
+payload itself: `attemptId`, for an `attempt.submitted` delivery. A
+`test.closed` delivery carries only `testId`, which is not unique if the
+same test is ever closed more than once — if that matters to you, track
+`(testId, t)` pairs you have already acted on rather than `testId` alone.
+A stable delivery id is on the roadmap; this section will be updated with
+the header name when one ships.

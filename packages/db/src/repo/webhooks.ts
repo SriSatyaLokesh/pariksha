@@ -9,9 +9,20 @@ import { scoped } from "./guard.js";
 // `K43`: "attempt.flagged" is NOT a member of `WEBHOOK_EVENTS`. Its only
 // trigger is 8g's integrity recompute and 8g is deferred whole with 7e — an
 // event a selector offers but nothing can ever fire is the `Q1b` defect. It
-// returns with 8g, as one more member here plus its caller. The delivery
-// machinery (Task 3) is event-agnostic and needs no change for it.
-export const WEBHOOK_EVENTS = ["attempt.started", "attempt.submitted", "test.closed"] as const;
+// returns with 8g, as one more member here plus its caller.
+//
+// MAJOR-3 (whole-branch review): "attempt.started" was the identical defect,
+// shipped rather than caught — offered in this set, in the web mirror and
+// in the UI's event checklist, with `deliver.ts`'s header carrying a whole
+// paragraph of design rationale for a caller that never existed.
+// `fireWebhooks` had exactly two production call sites (`attempt.submitted`
+// from the submit route, `test.closed` from the close route) and
+// "attempt.started" was not one of them — an organiser who ticked it would
+// never see a delivery, with no error and no empty-state hint. Dropped,
+// the way `attempt.flagged` already was and for the identical reason; it
+// returns with its first real caller. The delivery machinery (Task 3) is
+// event-agnostic and needs no change for either.
+export const WEBHOOK_EVENTS = ["attempt.submitted", "test.closed"] as const;
 export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
 
 const WEBHOOK_EVENT_SET: ReadonlySet<string> = new Set(WEBHOOK_EVENTS);
@@ -133,17 +144,28 @@ export const setWebhookActive = scoped(
   },
 );
 
-/** Revokes the endpoint outright. `webhook_delivery` rows already queued
- * for it are left as they are — Task 3's drain queue, not this function's
- * concern — rather than this write reaching into a second table. */
+/** Revokes the endpoint outright, and retires its queued rows in the same
+ * `db.batch()` call (one subrequest, `K23`'s own rule — `queueWebhookDeliveries`
+ * follows it too).
+ *
+ * MINOR-5 (whole-branch review): this used to leave `webhook_delivery`
+ * rows queued for the webhook exactly as they were. The drain's `JOIN
+ * webhook` is an INNER join and `0009` declares no foreign key, so those
+ * rows became invisible the moment the `webhook` row was gone — never
+ * delivered, never marked, never cleaned, just unbounded storage on a
+ * metered account. Deleting them here is the direct fix; not attempted is
+ * not the same as cleaned up. */
 export const deleteWebhook = scoped(
   "deleteWebhook",
   async (db: DbClient, workspaceId: string, webhookId: string): Promise<void> => {
-    const { changes } = await db.run("DELETE FROM webhook WHERE workspace_id = ? AND id = ?", [
-      workspaceId,
-      webhookId,
+    const results = await db.batch([
+      { sql: "DELETE FROM webhook WHERE workspace_id = ? AND id = ?", params: [workspaceId, webhookId] },
+      {
+        sql: "DELETE FROM webhook_delivery WHERE workspace_id = ? AND webhook_id = ?",
+        params: [workspaceId, webhookId],
+      },
     ]);
-    if (changes === 0) throw new Error("deleteWebhook: no such webhook in this workspace.");
+    if (results[0]!.changes === 0) throw new Error("deleteWebhook: no such webhook in this workspace.");
   },
 );
 

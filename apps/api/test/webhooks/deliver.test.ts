@@ -15,6 +15,9 @@
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { closeClient, createWebhook, newId, WEBHOOK_EVENTS } from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS, type AppDeps } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
@@ -23,6 +26,27 @@ import { SIGNATURE_HEADER } from "../../src/webhooks/sign.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { seedPublishedTest } from "../run/fixtures.js";
 import { seedAttemptTests, startAttemptFor } from "../run/paper-fixtures.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const API_SRC_DIR = resolve(__dirname, "..", "..", "src");
+
+/** `true` iff some `.ts` file under `dir` contains `needle` literally —
+ *  the `Q1b` guard's own small walk, the same shape `webhooks.test.ts`'s
+ *  `grepSource` uses for `KG5`, kept local rather than shared per this
+ *  codebase's "one small single-purpose walk per file" convention
+ *  (`no-hex-colors.test.ts`'s own header). */
+function sourceContains(needle: string, dir: string): boolean {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stats = statSync(full);
+    if (stats.isDirectory()) {
+      if (sourceContains(needle, full)) return true;
+      continue;
+    }
+    if (entry.endsWith(".ts") && readFileSync(full, "utf8").includes(needle)) return true;
+  }
+  return false;
+}
 
 const { deps } = await testDeps();
 const workspaceId = await seedPublishedTest(deps);
@@ -140,6 +164,33 @@ describe("fireWebhooks", () => {
     expect(await deliveryRows(wsp)).toEqual([{ event: "attempt.submitted", webhook_id: webhookId }]);
   });
 
+  // MINOR-4 (whole-branch review): `tryDeliver` used to leave `error: null`
+  // for an ordinary non-2xx response (only a thrown/aborted fetch set it),
+  // so the row this inline failure queues carried `last_error = NULL` —
+  // the identical gap Task 4 fix round 1 closed on the *drain's own retry*
+  // side and left open here, on the write side. Fixed at the root: once
+  // `tryDeliver` itself returns a readable reason, both callers (this
+  // inline queue push and the drain's `nextState`) get it for free.
+  it("MINOR-4: the queued row for an inline non-2xx failure carries a readable last_error, not NULL", async () => {
+    const wsp = newId("wsp");
+    await hookIn(wsp, ["attempt.submitted"]);
+
+    await fireWebhooks(withHttp(failingHttp()), {
+      workspaceId: wsp,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_x" },
+      now: FIXED_NOW,
+    });
+
+    const [row] = await deps.db.query<{ last_error: string | null; last_status: number | null }>(
+      "SELECT last_error, last_status FROM webhook_delivery WHERE workspace_id = ?",
+      [wsp],
+    );
+    expect(row?.last_status).toBe(500);
+    expect(row?.last_error).not.toBeNull();
+    expect(row?.last_error).toContain("500");
+  });
+
   // MAJOR-1 (whole-branch review): without `redirect: "manual"`, `fetch`'s
   // default `"follow"` bypasses `urlRefusal` entirely — a URL that passed
   // the SSRF check once can 307/308 an organiser's own signed payload to
@@ -189,27 +240,43 @@ describe("fireWebhooks", () => {
     expect(await deliveryRows(wsp)).toEqual([{ event: "attempt.submitted", webhook_id: webhookId }]);
   });
 
-  it("queues attempt.started without attempting it inline", async () => {
+  // MAJOR-3: retargeted from `attempt.started`, which `WEBHOOK_EVENTS` no
+  // longer offers (nothing ever fired it — see the generalised guard
+  // below). `test.closed` demonstrates the identical "queue-only, never
+  // inline" behaviour and is the one that still ships.
+  it("queues test.closed without attempting it inline", async () => {
     const wsp = newId("wsp");
     const http = okHttp();
-    const { webhookId } = await hookIn(wsp, ["attempt.started"]);
+    const { webhookId } = await hookIn(wsp, ["test.closed"]);
 
     const result = await fireWebhooks(withHttp(http), {
       workspaceId: wsp,
-      event: "attempt.started",
-      payload: { attemptId: "att_x" },
+      event: "test.closed",
+      payload: { testId: "tst_x" },
       now: FIXED_NOW,
     });
 
     expect(result).toEqual({ delivered: 0, queued: 1 });
     expect(http).not.toHaveBeenCalled();
-    expect(await deliveryRows(wsp)).toEqual([{ event: "attempt.started", webhook_id: webhookId }]);
+    expect(await deliveryRows(wsp)).toEqual([{ event: "test.closed", webhook_id: webhookId }]);
   });
 
-  it("offers no attempt.flagged event — K43, nothing can fire it", () => {
+  // MAJOR-3 (whole-branch review): "offers no attempt.flagged" alone did
+  // not catch "attempt.started" — the identical `Q1b` defect, shipped
+  // anyway. This is the guard the review named as the one that would
+  // have: not "this one excluded event is excluded" but "every event this
+  // selector offers has somewhere that actually fires it." Scans
+  // `apps/api/src` (not just the two known call sites) for the literal
+  // `event: "<member>"` `fireWebhooks` is always called with, so a third
+  // call site added later is picked up with no change needed here.
+  it("Q1b: every offered event has a production fireWebhooks call site, and attempt.started/attempt.flagged stay excluded", () => {
+    for (const event of WEBHOOK_EVENTS) {
+      expect(sourceContains(`event: "${event}"`, API_SRC_DIR), event).toBe(true);
+    }
     expect(WEBHOOK_EVENTS).not.toContain("attempt.flagged");
-    // Control: the negative above is vacuous if the constant is empty or
-    // renamed out from under this assertion.
+    expect(WEBHOOK_EVENTS).not.toContain("attempt.started");
+    // Control: both negatives above are vacuous if the constant is empty
+    // or renamed out from under this assertion.
     expect(WEBHOOK_EVENTS).toContain("attempt.submitted");
   });
 
@@ -284,9 +351,9 @@ describe("fireWebhooks", () => {
     );
     // Not dropped: a row for every one of the hooks that were registered,
     // `INLINE_FANOUT_LIMIT` of them actually tried (attempt_count 1) and
-    // the overflow never touched (attempt_count 0) — exactly the shape
-    // `attempt.started`/`test.closed` rows already have, so Task 4's drain
-    // sees one consistent "never tried yet" state either way.
+    // the overflow never touched (attempt_count 0) — exactly the shape a
+    // `test.closed` row already has, so Task 4's drain sees one
+    // consistent "never tried yet" state either way.
     expect(rows.map((r) => r.webhook_id).sort()).toEqual([...hookIds].sort());
     expect(rows.filter((r) => r.attempt_count === 1)).toHaveLength(INLINE_FANOUT_LIMIT);
     expect(rows.filter((r) => r.attempt_count === 0)).toHaveLength(2);

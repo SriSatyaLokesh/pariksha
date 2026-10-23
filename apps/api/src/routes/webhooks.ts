@@ -23,8 +23,8 @@ import {
   deleteWebhook,
   listWebhooks,
   setWebhookActive,
+  urlRefusal,
   WEBHOOK_EVENTS,
-  type WebhookEvent,
 } from "@pariksha/db";
 import { estimateCost, resolveProctoring } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
@@ -79,20 +79,23 @@ export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
     const input = parse(newWebhook, await json(c.req.raw));
     const now = deps.now();
 
-    let created: { webhookId: string; signingSecret: string };
-    try {
-      created = await createWebhook(deps.db, workspaceId, {
-        url: input.url,
-        events: input.events as WebhookEvent[],
-        now,
-      });
-    } catch (cause) {
-      // `urlRefusal` (packages/db/src/net.ts) is the only other way this
-      // throws — the events array is already narrowed to `WEBHOOK_EVENTS`
-      // by the schema above, so a thrown error here is always the SSRF
-      // refusal, never the closed-set one zod already enforced.
-      throw new ApiError(422, "url_refused", cause instanceof Error ? cause.message : "That URL cannot be used.");
+    // MINOR-3 (whole-branch review): this used to wrap the whole
+    // `createWebhook` call in a `try`/`catch` that turned ANY throw — a D1
+    // failure or constraint violation included — into `422 url_refused`
+    // carrying the driver's own message to the organiser. Checking
+    // `urlRefusal` here, before the call, means the only way left to reach
+    // this 422 really is the SSRF refusal; everything else now falls
+    // through to the generic error handler instead of being misreported.
+    const refused = urlRefusal(input.url);
+    if (refused !== null) {
+      throw new ApiError(422, "url_refused", `${refused}.`);
     }
+
+    const created: { webhookId: string; signingSecret: string } = await createWebhook(deps.db, workspaceId, {
+      url: input.url,
+      events: input.events,
+      now,
+    });
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,

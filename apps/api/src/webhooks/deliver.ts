@@ -2,11 +2,18 @@
 // by K43).
 //
 // Only `attempt.submitted` is ever tried inline, from the submit path
-// itself. `attempt.started` and `test.closed` go straight to
-// `webhook_delivery` with no `fetch` at all — `attempt.started` fires on a
-// candidate hot path up to the attempt limit times per test, and a dead
-// receiver there would be one more subrequest and one more failure mode to
-// save someone five minutes on an event nobody is waiting on.
+// itself. `test.closed` goes straight to `webhook_delivery` with no
+// `fetch` at all — `AC-28`'s 10s bound names `attempt.submitted` alone,
+// the one event an organiser watches live; `test.closed` fires from an
+// organiser's own close action, not a candidate hot path, and can wait a
+// drain tick behind it with no latency anyone is counting.
+//
+// MAJOR-3 (whole-branch review): this comment used to also justify
+// `attempt.started` landing here unconditionally — a paragraph of design
+// rationale for a caller that never existed. `WEBHOOK_EVENTS`
+// (`packages/db/src/repo/webhooks.ts`) no longer offers it, for the
+// identical `Q1b` reason `attempt.flagged` was never offered: an event a
+// selector shows but nothing ever fires.
 //
 // `K24`: the body is serialised exactly once, held in `rawBody`, and that
 // same string is what `signatureHeader` signs and what `fetch` sends — the
@@ -27,8 +34,8 @@
 // organiser's own webhook count must never be able to turn the candidate's
 // submit request into an open-ended sequence of outbound `fetch`es. Past
 // the limit, a hook is written straight to `webhook_delivery` — exactly
-// the `attempt.started`/`test.closed` path above, just reached by a
-// different hook instead of a different event.
+// the `test.closed` path above, just reached by a different hook instead
+// of a different event.
 
 import {
   listActiveWebhooksForEvent,

@@ -50,10 +50,12 @@ describe("createWebhook", () => {
     ).rejects.toThrow();
   });
 
-  // `K43`: the shipped list is three events, and `attempt.flagged` — 8g's
-  // deferred integrity recompute — is deliberately not one of them.
-  it("WEBHOOK_EVENTS names exactly the three shipped events", () => {
-    expect(repo.WEBHOOK_EVENTS).toEqual(["attempt.started", "attempt.submitted", "test.closed"]);
+  // `K43`/`MAJOR-3`: the shipped list is two events. `attempt.flagged`
+  // (8g's deferred integrity recompute) and `attempt.started` (nothing
+  // ever fired it — whole-branch review) are both deliberately absent;
+  // each returns with its first real caller.
+  it("WEBHOOK_EVENTS names exactly the two shipped events", () => {
+    expect(repo.WEBHOOK_EVENTS).toEqual(["attempt.submitted", "test.closed"]);
   });
 
   it("mints a whk_-prefixed id", async () => {
@@ -66,7 +68,7 @@ describe("listWebhooks", () => {
   it("never carries signingSecret, on a workspace with more than one webhook", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "list-ws", name: "List" });
-    await repo.createWebhook(db, ws, { url, events: ["attempt.started"], now: T });
+    await repo.createWebhook(db, ws, { url, events: ["test.closed"], now: T });
     await repo.createWebhook(db, ws, { url: "https://example.test/second", events: ["test.closed"], now: T });
 
     const rows = await repo.listWebhooks(db, ws);
@@ -81,7 +83,7 @@ describe("listWebhooks", () => {
     const wsB = newId("wsp");
     await repo.createWorkspace(db, wsA, { slug: "scope-a", name: "Scope A" });
     await repo.createWorkspace(db, wsB, { slug: "scope-b", name: "Scope B" });
-    await repo.createWebhook(db, wsA, { url, events: ["attempt.started"], now: T });
+    await repo.createWebhook(db, wsA, { url, events: ["test.closed"], now: T });
 
     expect(await repo.listWebhooks(db, wsA)).toHaveLength(1);
     expect(await repo.listWebhooks(db, wsB)).toHaveLength(0);
@@ -92,7 +94,7 @@ describe("setWebhookActive", () => {
   it("toggles active off and back on", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "toggle-ws", name: "Toggle" });
-    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["attempt.started"], now: T });
+    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["test.closed"], now: T });
 
     await repo.setWebhookActive(db, ws, webhookId, false);
     expect((await repo.listWebhooks(db, ws))[0]?.active).toBe(false);
@@ -110,7 +112,7 @@ describe("deleteWebhook", () => {
   it("removes the row", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "delete-ws", name: "Delete" });
-    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["attempt.started"], now: T });
+    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["test.closed"], now: T });
 
     await repo.deleteWebhook(db, ws, webhookId);
     expect(await repo.listWebhooks(db, ws)).toHaveLength(0);
@@ -118,6 +120,40 @@ describe("deleteWebhook", () => {
 
   it("throws for a webhook id that does not exist in this workspace", async () => {
     await expect(repo.deleteWebhook(db, wsp, newId("whk"))).rejects.toThrow();
+  });
+
+  // MINOR-5 (whole-branch review): the drain's `JOIN webhook` is an INNER
+  // join with no foreign key behind it, so a queued row whose webhook was
+  // deleted used to become invisible rather than cleaned up — never
+  // delivered, never retried, never removed. Deleting the webhook must
+  // retire its own queued rows and leave every other row (another webhook
+  // in the same workspace, the same webhook id in another workspace) alone.
+  it("retires the webhook's own queued rows, and no others", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "delete-queued-ws", name: "Delete Queued" });
+    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["test.closed"], now: T });
+    const other = await repo.createWebhook(db, ws, { url: `${url}/other`, events: ["test.closed"], now: T });
+
+    await repo.queueWebhookDeliveries(db, ws, [
+      { webhookId, event: "test.closed", payload: {}, attemptCount: 0, lastStatus: null, lastError: null, now: T },
+      {
+        webhookId: other.webhookId,
+        event: "test.closed",
+        payload: {},
+        attemptCount: 0,
+        lastStatus: null,
+        lastError: null,
+        now: T,
+      },
+    ]);
+
+    await repo.deleteWebhook(db, ws, webhookId);
+
+    const remaining = await db.query<{ webhook_id: string }>(
+      "SELECT webhook_id FROM webhook_delivery WHERE workspace_id = ?",
+      [ws],
+    );
+    expect(remaining.map((r) => r.webhook_id)).toEqual([other.webhookId]);
   });
 });
 
@@ -146,7 +182,7 @@ describe("listActiveWebhooksForEvent", () => {
   it("returns nothing for a workspace with no matching subscription", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "empty-ws", name: "Empty" });
-    expect(await repo.listActiveWebhooksForEvent(db, ws, "attempt.started")).toEqual([]);
+    expect(await repo.listActiveWebhooksForEvent(db, ws, "test.closed")).toEqual([]);
   });
 });
 
