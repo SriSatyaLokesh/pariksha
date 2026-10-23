@@ -4,7 +4,7 @@
 // 0002 budgets it at one D1 write plus at most one R2 call, so `upsertResponse`
 // is a single statement and nothing here loops a query over questions.
 
-import { VIOLATION_EVENTS } from "@pariksha/core";
+import { VIOLATION_EVENTS, type ProctoringEventType } from "@pariksha/core";
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
@@ -453,6 +453,27 @@ export const countViolations = scoped(
       [workspaceId, attemptId, ...VIOLATION_TYPES],
     );
     return Number(rows[0]?.n ?? 0);
+  },
+);
+
+/**
+ * Phase 7e Task 1 (`Q7a`, "once, not twice"): `violationOutcome`'s own
+ * `alreadyActioned` input. `violation_limit_reached` is written (by the
+ * ingest route) the first time the configured action fires for an attempt,
+ * so a later batch that is still at or past the limit reads `true` here and
+ * the action does not fire a second time. One `COUNT(*)`, the same shape
+ * `countViolations` above already takes for the same reason — the result
+ * is bounded by "has this ever happened", never a row set that grows with
+ * the attempt's history.
+ */
+export const violationLimitAlreadyReached = scoped(
+  "violationLimitAlreadyReached",
+  async (db: DbClient, workspaceId: string, attemptId: string): Promise<boolean> => {
+    const rows = await db.query<{ n: number }>(
+      "SELECT COUNT(*) AS n FROM event WHERE workspace_id = ? AND attempt_id = ? AND type = ?",
+      [workspaceId, attemptId, "violation_limit_reached" satisfies ProctoringEventType],
+    );
+    return Number(rows[0]?.n ?? 0) > 0;
   },
 );
 

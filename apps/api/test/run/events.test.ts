@@ -32,14 +32,14 @@ const app = createApp(deps);
 const workspaceId = await seedWorkspace(deps, SLUG.workspace, "Gamma Inc");
 const q = await seedBank(deps, workspaceId);
 
-// Standard profile — `limit: 5, action: "warn_only"` and
+// Standard profile — `limit: 5, action: "warn_then_flag"` and
 // `requireFullscreen: true, faceCheck: false` are what `PROCTORING_DEFAULTS.
 // standard` resolves to, and what every assertion below is pinned against.
 //
-// `action` was `warn_then_flag` until #214: `resolveProctoring` now refuses
-// every action but `warn_only`, because nothing in this phase consumes one.
-// The route still answers with it — the field is real and 7e's successor
-// (#213) is what makes it mean something again.
+// `action` resolved `warn_only` between #214 and Phase 7e Task 1 (#213):
+// `resolveProctoring` refused every other action because nothing consumed
+// one. `violationOutcome` is that consumer now, so Standard's real default
+// (`warn_then_flag`) is what this route answers with again.
 await seedTest(deps, workspaceId, {
   name: "Proctored",
   slug: SLUG.test,
@@ -127,7 +127,7 @@ it("writes events and answers with the authoritative count", async () => {
     attemptCookie,
   );
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_only" });
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
 });
 
 it("counts only violation types toward the figure", async () => {
@@ -169,7 +169,7 @@ it("ships the resolved proctoring object on the attempt", async () => {
 
 // --- `Q7c`: measured, not estimated ---------------------------------------
 
-it("the ingest's budget is measured at exactly 4, and the route's authority is the attempt", async () => {
+it("the ingest's common-path cost is measured at 5, under the declared ceiling, and the route's authority is the attempt", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -179,18 +179,26 @@ it("the ingest's budget is measured at exactly 4, and the route's authority is t
   );
   await res.json();
   // The attempt join, the `attempt_events` rate token, `appendEvents`'s one
-  // batched insert and `countViolations`'s one read.
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[EVENTS_PATH]);
-  expect(counting.counts().total).toBe(4);
+  // batched insert, `countViolations`'s one read and
+  // `violationLimitAlreadyReached`'s one read (Phase 7e Task 1). One
+  // `window_blur` is nowhere near Standard's limit of 5, so the sixth,
+  // worst-case subrequest — the `violation_limit_reached` marker write —
+  // is not paid here; `violation-limit.test.ts` measures that path.
+  expect(counting.counts().total).toBe(5);
+  expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[EVENTS_PATH] as number);
   expect(ROUTE_AUTH[`POST ${EVENTS_PATH}`]).toBe("attempt");
 });
 
 it("the ten events a request carries are written as one batched insert, not ten", async () => {
-  const events = Array.from({ length: 10 }, (_, i) => ({ type: "window_blur" as const, clientTs: i }));
+  // `fullscreen_restore`, not `window_blur`: ten violations would cross
+  // Standard's limit of 5 and pay the marker-write subrequest this test
+  // does not mean to measure (`violation-limit.test.ts` does). The batching
+  // claim this test makes — one statement, not ten — holds for any type.
+  const events = Array.from({ length: 10 }, (_, i) => ({ type: "fullscreen_restore" as const, clientTs: i }));
   const counting = countingDeps(deps);
   const res = await post(EVENTS_PATH, { events }, attemptCookie, createApp(counting.deps));
   await res.json();
-  expect(counting.counts().total).toBe(4);
+  expect(counting.counts().total).toBe(5);
   const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM event", []);
   expect(Number(rows[0]?.n)).toBe(10);
 });
@@ -265,7 +273,7 @@ it("writes nothing and still answers the current count once the attempt is submi
     attemptCookie,
   );
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_only" });
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
 
   const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM event", []);
   // The one pre-submission event, and nothing from the post-submission

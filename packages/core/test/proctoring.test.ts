@@ -71,7 +71,7 @@ describe("resolveProctoring", () => {
       requireMicrophone: false,
       extraMonitorCheck: false,
       violationLimit: 5,
-      violationAction: "warn_only",
+      violationAction: "warn_then_flag",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
       allowCalculator: false,
@@ -92,7 +92,7 @@ describe("resolveProctoring", () => {
       requireMicrophone: false,
       extraMonitorCheck: true,
       violationLimit: 5,
-      violationAction: "warn_only",
+      violationAction: "warn_then_flag",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
       allowCalculator: false,
@@ -139,21 +139,19 @@ describe("resolveProctoring", () => {
     expect(r.requireMicrophone).toBe(false);
   });
 
-  // Issue #214 — pre-cut the same way Q3/Q12b cut faceCheck/requireMicrophone.
-  // Positive control first: the same override object resolves every OTHER
-  // control it sets, proving the input is real and the query is right,
-  // before the negative assertion that violationAction alone is refused —
-  // each of its three live siblings (`auto_submit`, `lock`, the document
-  // asking for `warn_then_flag`) is tried in turn.
-  it.each(["warn_then_flag", "auto_submit", "lock"] as const)(
-    "resolves violationAction warn_only even when the document asks for %s, leaving its sibling overrides honoured",
+  // Phase 7e Task 1 (#213) restores this: `violationAction` was refused
+  // outright from #214 until `violationOutcome` gave it a consumer. Same
+  // shape as the positive-control tests above — the override is honoured
+  // exactly like every sibling control, for each of the four real values.
+  it.each(["warn_only", "warn_then_flag", "auto_submit", "lock"] as const)(
+    "resolves violationAction to whatever the document asks for (%s), leaving its sibling overrides honoured",
     (violation_action) => {
       const r = resolveProctoring({
         profile: "off",
         overrides: { violation_action, desktop_only: true },
       });
       expect(r.desktopOnly).toBe(true);
-      expect(r.violationAction).toBe("warn_only");
+      expect(r.violationAction).toBe(violation_action);
     },
   );
 

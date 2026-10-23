@@ -478,15 +478,20 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // more than once a request — the failure this line exists to catch on a
   // 50-subrequest ceiling.
   "/api/v1/run/attempt/submit": 7,
-  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
-  // **4** in `test/run/events.test.ts`'s own counting test: the attempt
+  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The common
+  // path — no attempt reaches its violation limit this batch — is **5**,
+  // measured in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
   // `appendEvents`'s one batched insert (capped at 10 rows a request, so
   // this number is flat in how many events the request actually carries),
-  // and `countViolations`'s one read for the response's authoritative
-  // count. An empty `events` array costs one less — `appendEvents` is a
-  // no-op on it — so 4 is the ceiling, not the floor.
-  "/api/v1/run/attempt/events": 4,
+  // `countViolations`'s one read for the response's authoritative count,
+  // and `violationLimitAlreadyReached`'s one read (Phase 7e Task 1, `Q7a`).
+  // The declared ceiling is **6**, the worst case paid only the first time
+  // an attempt reaches its limit: one more `appendEvents` call writing the
+  // single `violation_limit_reached` marker (`test/run/violation-limit.
+  // test.ts`). An empty `events` array costs one less than the common
+  // path — `appendEvents` is a no-op on it.
+  "/api/v1/run/attempt/events": 6,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the
   // attempt join the cookie resolves through, `attempt_snapshot`'s rate

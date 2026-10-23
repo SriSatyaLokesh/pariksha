@@ -26,8 +26,13 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { appendEvents, countViolations, recordSnapshot } from "@pariksha/db";
-import { PROCTORING_EVENTS } from "@pariksha/core";
+import {
+  appendEvents,
+  countViolations,
+  recordSnapshot,
+  violationLimitAlreadyReached,
+} from "@pariksha/db";
+import { PROCTORING_EVENTS, violationOutcome } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
@@ -145,6 +150,37 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // `resolvedProctoringOf` helper `GET /attempt` uses — one boundary
     // cast from the stored, `unknown` settings column, not two.
     const resolved = resolvedProctoringOf(attempt.settings);
+
+    // Phase 7e Task 1 (`P-09`, issue #213): the count has a limit, and
+    // `violationOutcome` is the one place `violations >= limit` turns into
+    // a decision. Guarded by the same `submittedAt === null` check as the
+    // write above, for the same reason: a stale tab's flush past
+    // submission must not mark an attempt that is already over as newly
+    // actioned.
+    //
+    // `flag`/`auto_submit`/`lock` are the three kinds a first firing can
+    // be; `warn` and `none` are not a firing at all, so nothing is marked.
+    // The marker — a `violation_limit_reached` event — is what makes
+    // `alreadyActioned` true on the next request (`Review Focus 1`: once,
+    // not twice) and what `warn_then_flag`'s whole action amounts to today:
+    // Tasks 2 and 3 of this plan are what make `auto_submit` and `lock`
+    // actually submit or lock, reusing this same outcome.
+    if (attempt.submittedAt === null) {
+      const alreadyActioned = await violationLimitAlreadyReached(
+        deps.db,
+        attempt.workspaceId,
+        attempt.attemptId,
+      );
+      const outcome = violationOutcome({ violations, resolved, alreadyActioned });
+      if (outcome.kind !== "none" && outcome.kind !== "warn") {
+        const now = deps.now();
+        await appendEvents(deps.db, attempt.workspaceId, {
+          attemptId: attempt.attemptId,
+          events: [{ type: "violation_limit_reached", clientTs: now }],
+          serverTs: now,
+        });
+      }
+    }
 
     return c.json({ violations, limit: resolved.violationLimit, action: resolved.violationAction });
   });
