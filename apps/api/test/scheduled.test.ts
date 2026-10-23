@@ -3,6 +3,7 @@
 
 import { beforeEach, expect, it, vi } from "vitest";
 import { SCHEDULED_JOBS, runScheduled, type ScheduledJob } from "../src/scheduled.js";
+import { webhookDrainJob } from "../src/webhooks/drain.js";
 import { testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
@@ -31,9 +32,10 @@ function throwing(name: string, cron: string): ScheduledJob {
 
 // Pinned before any test pushes a job, per K27: a plan that registers one
 // must edit this line, which is how the registry's contents stay visible
-// rather than accumulating unseen.
-it("ships with no jobs registered", async () => {
-  expect(shippedWith).toEqual([]); // 8b, 8d and 8e each change this line
+// rather than accumulating unseen. 8d is the first to (`webhookDrainJob`,
+// K22); 8b and 8e each add theirs to the same array, on another branch.
+it("ships with exactly the jobs registered so far", async () => {
+  expect(shippedWith).toEqual([webhookDrainJob]); // 8b and 8e each change this line
 });
 
 beforeEach(() => {

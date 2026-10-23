@@ -185,14 +185,17 @@ it("does not submit an already-submitted attempt", async () => {
 
 // --- the budget: the worst case is declared and measured -------------------
 
-// **13** (`ROUTE_BUDGETS[EVENTS_PATH]`, `app.ts`'s own comment has the full
+// **14** (`ROUTE_BUDGETS[EVENTS_PATH]`, `app.ts`'s own comment has the full
 // arithmetic): the limit-reaching 5, plus `submitAttempt`'s own cost, which
 // Phase 7e Task 5 (`Q6a`) moved from 5 to 8 by adding its own
 // `recomputeIntegrity` call (`run/submit.ts`'s "a submit always recomputes"
-// comment). `routes/proctoring.ts`'s own `recomputeIntegrity` call is
-// skipped for this batch (`!submitted` is false once `submitAttempt` has
-// already fired one) — paying the recompute twice for one answer is exactly
-// what that guard exists to refuse.
+// comment) and Phase 8d Task 3 moved from 8 to 9 by adding `fireWebhooks`'s
+// own `listActiveWebhooksForEvent` read. `routes/proctoring.ts`'s own
+// `recomputeIntegrity` call is skipped for this batch (`!submitted` is
+// false once `submitAttempt` has already fired one) — paying the recompute
+// twice for one answer is exactly what that guard exists to refuse;
+// `fireWebhooks` cannot double-fire either, since it too lives inside
+// `submitAttempt`'s own `submitted` branch.
 it("the worst case — the batch that first auto-submits — costs the declared ceiling, measured", async () => {
   const counting = countingDeps(deps);
   const res = await post(

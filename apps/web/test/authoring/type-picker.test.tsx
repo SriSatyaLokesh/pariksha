@@ -161,6 +161,10 @@ function fakeClient(): ApiClient {
     lockedAttempts: async () => [],
     unlockAttempt: unused,
     importCandidates: unused,
+    listWebhooks: unused,
+    createWebhook: unused,
+    setWebhookActive: unused,
+    deleteWebhook: unused,
   };
 }
 

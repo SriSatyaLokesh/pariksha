@@ -59,6 +59,16 @@
 // entry and not after it. The refusals below stay as the first gate
 // either way.
 
+// Phase 8d Task 1: the refusal table itself (ports, IP literals, internal
+// suffixes, the FQDN-root-label strip) moved to `@pariksha/db`'s
+// `urlRefusal` (`packages/db/src/net.ts`) so `repo/webhooks.ts`'s
+// `createWebhook` can reuse it. Not `@pariksha/core`: that package is a
+// pure leaf with no DOM/Node `lib` and hand-parses URLs for that reason
+// (`registration.ts`'s `hostOf`); `packages/db` already carries Node types
+// and the global `URL` they provide. Imported here, not reimplemented, so
+// the two can never drift apart.
+import { urlRefusal as refusal } from "@pariksha/db";
+
 export type ReachState = "reachable" | "unverified" | "timeout" | "refused";
 
 export interface ReachResult {
@@ -89,57 +99,6 @@ export interface ReachResult {
  * (whole-branch security review, L4 — the declared ceiling was a
  * single-fetch number). `ROUTE_BUDGETS` is pinned to that path. */
 export const REACH_TIMEOUT_MS = 5000;
-
-/** The ports a web link is served on. A check of `:22`, `:5432` or `:6379`
- * is a port scan with a form field for a console, whoever the target is. */
-const WEB_PORTS = new Set(["", "80", "443"]);
-
-/** Dotted-quad IPv4. The WHATWG URL parser already normalises the decimal,
- * octal and hex spellings (`http://2130706433/`, `http://0177.0.0.1/`) into
- * this one, so matching it matches all of them. */
-const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
-
-/** Host suffixes that only ever name something inside the deployment. */
-const INTERNAL_SUFFIX = [".localhost", ".internal", ".local"];
-
-const SCHEME_REFUSAL = "only http and https links can be checked";
-const ADDRESS_REFUSAL = "a link to a network address cannot be checked";
-
-/** `null` when the URL may be fetched, or the sentence saying why not. */
-function refusal(url: string): string | null {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return SCHEME_REFUSAL;
-  }
-
-  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return SCHEME_REFUSAL;
-  if (parsed.username !== "" || parsed.password !== "") {
-    return "a link carrying a username or password cannot be checked";
-  }
-  if (!WEB_PORTS.has(parsed.port)) return "only links on the standard web ports can be checked";
-
-  // The FQDN root label is dropped before any comparison below (task 5/6
-  // review, C1). `URL.hostname` keeps a trailing dot — `http://localhost./`
-  // parses to `"localhost."` — so every string comparison here used to miss
-  // it, and `http://metadata./` even satisfied the single-label check
-  // because `"metadata."` contains a dot. `http://127.0.0.1./` was never
-  // affected (the IPv4 parser drops the empty part), which is exactly why
-  // the literal half of the table above looked correct while this gap sat
-  // underneath it. The WHATWG parser already folds the full-width stops
-  // (U+3002, U+FF0E) into ".", so one strip covers those spellings too.
-  const host = parsed.hostname.toLowerCase().replace(/\.+$/, "");
-  // `new URL("http://[::1]/").hostname` is `"[::1]"` — every IPv6 literal
-  // keeps its brackets, which is the whole test.
-  if (host.startsWith("[") || IPV4.test(host)) return ADDRESS_REFUSAL;
-  if (host === "localhost" || INTERNAL_SUFFIX.some((suffix) => host.endsWith(suffix))) return ADDRESS_REFUSAL;
-  // A host with no dot is a name only the deployment's own resolver knows:
-  // `intranet`, `metadata`, `db`. A real resume link always has one.
-  if (!host.includes(".")) return ADDRESS_REFUSAL;
-
-  return null;
-}
 
 export async function checkReachable(
   http: typeof globalThis.fetch,

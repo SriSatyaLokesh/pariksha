@@ -385,18 +385,21 @@ it("the submit route reads the questions once, not once per answer", async () =>
   // `rel-review`: `full_review`, no `counted_attempt` set — the common
   // case, and the one this literal pins. `countedFor` (`submit.ts`) spends
   // no subrequest at all when `counted_attempt` is unset, so this stays at
-  // **9**, not `ROUTE_BUDGETS[SUBMIT_PATH]` (10, paid only by the worst
+  // **10**, not `ROUTE_BUDGETS[SUBMIT_PATH]` (11, paid only by the worst
   // case below) — a literal, so the common path is still caught if a
   // redundant read ever lands here even as the declared ceiling moves.
-  // (Base **6**, plus Phase 7e Task 5's `recomputeIntegrity` — +3 — on
-  // every first press that actually writes: `app.ts`'s own comment on this
-  // route has the full arithmetic.)
+  // Base **6**, plus Phase 7e Task 5's `recomputeIntegrity` — +3 — on
+  // every first press that actually writes, plus Phase 8d Task 3's
+  // `fireWebhooks` — +1, `listActiveWebhooksForEvent`'s one read, paid on
+  // every submission even when this workspace has registered no webhook at
+  // all (as here): `app.ts`'s own comment on this route has the full
+  // arithmetic.
   const { cookie, firstId } = await sat("rel-review");
   await answer(cookie, firstId, { kind: "option", option: "a" });
   const counting = countingDeps(deps);
   const res = await submit(cookie, createApp(counting.deps));
   expect(res.status).toBe(200);
-  expect(counting.counts().total).toBe(9);
+  expect(counting.counts().total).toBe(10);
 });
 
 it("the worst case — a counted_attempt test's last attempt at full_review — is the declared ceiling, measured", async () => {
@@ -421,12 +424,16 @@ it("M-1: a release.when: 'never' test's last attempt does not pay the counted re
   // attempts, `counted_attempt: "highest"`, this the last one, so
   // `countedFor`'s own gate would allow the read — except `release.when`
   // is `never`, so `releasedResult` discloses nothing at all and the read
-  // must not happen either (`M-1`). Without the fix this cost **10**, the
-  // same as `rel-counted`'s worst case; with it, it costs the same **9**
+  // must not happen either (`M-1`). Without the fix this cost **11**, the
+  // same as `rel-counted`'s worst case; with it, it costs the same **10**
   // as the common `full_review`/no-`counted_attempt` path above, because
   // `rescoreAttempt` still reads the bank to score regardless of
   // disclosure. `rel-counted` above is this test's positive control: the
   // released twin where the read does happen.
+  //
+  // Phase 8d Task 3 (K23): 10, not 9, for the same reason the common-path
+  // test above moved — `fireWebhooks`'s unconditional
+  // `listActiveWebhooksForEvent` read.
   const first = await sat("rel-never-counted");
   await answer(first.cookie, first.firstId, { kind: "option", option: "a" });
   await submit(first.cookie);
@@ -437,7 +444,7 @@ it("M-1: a release.when: 'never' test's last attempt does not pay the counted re
   const res = await submit(second.cookie, createApp(counting.deps));
   expect(res.status).toBe(200);
   expect((await res.json()).released).toBeNull();
-  expect(counting.counts().total).toBe(9);
+  expect(counting.counts().total).toBe(10);
 });
 
 it("a second press costs 3, and 4 when a full review is served", async () => {

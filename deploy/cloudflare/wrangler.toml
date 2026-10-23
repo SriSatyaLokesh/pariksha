@@ -94,8 +94,17 @@ bucket_name = "pariksha-files"
 # has no handler — it costs no quota, but it will show in the dashboard. If
 # that noise is unwelcome before Phase 8, comment this block out; nothing
 # reads it.
+# Phase 8d Task 4 (K22): the webhook drain, beside the nightly entry it
+# shares this block with. `webhookDrainJob` (`apps/api/src/webhooks/drain.ts`)
+# retries whatever `webhook_delivery` holds with exponential backoff out to
+# 24 hours — free-plan Workers have neither Queues nor Durable Object
+# alarms, so a table drained by its own cron is what stands in for both.
+# `*/5 * * * *` is every 5 minutes: 288 invocations a day of a handler that
+# finds nothing and exits on every tick but the rare one with a delivery
+# actually due. Measured, and meant to show up in the free-tier dashboard
+# `P8.14` builds, not to be invisible there.
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["17 3 * * *", "*/5 * * * *"]
 
 # No `[vars]` block: everything this Worker reads is a secret, and anything
 # under `[vars]` is plaintext here and in the dashboard. See

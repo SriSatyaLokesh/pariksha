@@ -63,6 +63,7 @@ import { checkReachable } from "../net/reachable.js";
 import { blockingRows, buildChecklist, type ChecklistRow } from "../publish/checklist.js";
 import { exportTest } from "../export/test.js";
 import { importTestDocument, parseTestJson, TEST_IMPORT_MAX_BYTES } from "../import/test.js";
+import { fireWebhooks } from "../webhooks/deliver.js";
 import { readBodyWithLimit } from "./media.js";
 
 // The same shape `apps/api/src/routes/workspaces.ts` validates its own slug
@@ -901,6 +902,18 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
         detail: { from: test.status },
         now,
       });
+      // Phase 8d Task 3 (K37/K43): `test.closed` only — Archive has no
+      // webhook event. Never tried inline (K37): this is an organiser
+      // action, not a candidate hot path, so it is written straight to the
+      // queue for Task 4's drain. `fireWebhooks` never throws.
+      if (to === "closed") {
+        await fireWebhooks(deps, {
+          workspaceId,
+          event: "test.closed",
+          payload: { testId },
+          now,
+        });
+      }
 
       const heads = await headVersionsByTest(deps.db, workspaceId, testId);
       return c.json(toWire({ ...test, status: to, updatedAt: now }, heads.get(testId), now));

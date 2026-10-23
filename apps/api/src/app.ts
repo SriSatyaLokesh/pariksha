@@ -29,6 +29,7 @@ import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -275,7 +276,16 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // second, smaller shape for the screens to special-case). The plan
   // estimated 5 against a response that did not exist yet; the
   // measurement wins.
-  "/api/v1/workspaces/:id/tests/:testId/close": 6,
+  //
+  // Phase 8d Task 3 (`K23`): close alone grows to **7** —
+  // `listActiveWebhooksForEvent`'s one read for `test.closed`, paid even
+  // with no webhook registered. Never tried inline (it is an organiser
+  // action, not a candidate hot path), so no `http` line: the event is
+  // only ever queued — and, fix round 1 (F1), queued through one
+  // `db.batch()` call regardless of how many hooks subscribed, so this
+  // number is a bound here too, not a one-hook measurement. Archive stays
+  // at 6 — it fires no event.
+  "/api/v1/workspaces/:id/tests/:testId/close": 7,
   "/api/v1/workspaces/:id/tests/:testId/archive": 6,
   // Auth (2) + `listVersions` (1, one correlated subquery for the attempt
   // counts, never one query per version). No separate existence check —
@@ -474,26 +484,55 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `counted_attempt` is set to anything but `"latest"` **and** whose
   // release actually discloses something (`show !== null`, M-1 — a
   // `release.when: "never"` test on the same last-attempt shape stays at
-  // the common path's 9, measured by `"rel-never-counted"`'s own test in
-  // `submit.test.ts`, with `"rel-counted"` below as its released,
-  // 10-paying twin) (`apps/api/test/run/release.test.ts`'s "K7, live" test
-  // exercises this combination, uncounted there). **10**, not 7: the old
-  // 7 was the pre-Task-5 worst case (6 + the counted read); Task 5's +3
-  // moves it the same way it moves the common path.
+  // the common path's 9 (10 with the webhook check below), measured by
+  // `"rel-never-counted"`'s own test in `submit.test.ts`, with
+  // `"rel-counted"` below as its released twin)
+  // (`apps/api/test/run/release.test.ts`'s "K7, live" test exercises this
+  // combination, uncounted there). The old 7 was the pre-Task-5 worst case
+  // (6 + the counted read); Task 5's +3 moves it the same way it moves the
+  // common path.
   //
   // A second press writes nothing — the row the cookie resolved already
   // carries the score and the stamp, and `recomputeIntegrity` never runs
-  // for it either — but it is not free: it still pays the join, the
+  // for it either, and nor does `fireWebhooks` below (both live inside the
+  // `submitted` branch) — but it is not free: it still pays the join, the
   // answers and the attempt count, so **3**, and **4** at `full_review`
   // where the bank is read again for the key (neither fixture that
   // measures those two numbers sets `counted_attempt`, so the counted
   // read adds nothing to them). Both measured in `test/run/submit.test.ts`
-  // and both unchanged by Task 5.
+  // and both unchanged by Task 5 or Phase 8d.
   //
-  // A number above 10 means the bank, the counted read, or the integrity
-  // recompute is being spent more than once a request — the failure this
-  // line exists to catch on a 50-subrequest ceiling.
-  "/api/v1/run/attempt/submit": 10,
+  // Phase 8d Task 3 (`K23`): `fireWebhooks` adds one more on top of
+  // whichever of the two paths above actually writes —
+  // `listActiveWebhooksForEvent`'s one read, unconditional, plus one
+  // `http` for every active `attempt.submitted` hook this request actually
+  // reaches inline. **Fix round 1, F1: this is a bound, not a one-hook
+  // measurement.** `webhooks/deliver.ts`'s `INLINE_FANOUT_LIMIT` caps how
+  // many hooks on this event ever reach `fetch` (3, at the time of
+  // writing), and every hook past it — plus every one inside it that
+  // failed — is written in one `db.batch()` call, never one `INSERT` per
+  // row. So this +1 holds for a workspace with 1 active
+  // `attempt.submitted` hook *or* 50 of them:
+  // `test/webhooks/deliver.test.ts`'s "the subrequest cost is the same at
+  // the limit and past it" proves the total does not move with hook count,
+  // and its "keeps the submit route inside its declared budget with a
+  // webhook firing" measures the common path at one webhook actually
+  // delivered — **10**, not 9. Raising `INLINE_FANOUT_LIMIT` raises this
+  // number with it — see that constant's own comment for the arithmetic
+  // before changing either.
+  //
+  // The declared ceiling is the worst case **with** the webhook check: 10
+  // (Task 5's worst case) + 1 = **11**. No fixture combines a
+  // `counted_attempt` last attempt with an active webhook in the same
+  // workspace — the two deltas are additive on the same shared base and
+  // neither call site gates on the other, so the ceiling is their sum
+  // rather than a third, unmeasured scenario.
+  //
+  // A number above 11 means the bank, the counted read, the integrity
+  // recompute or the webhook check is being spent more than once a
+  // request — the failure this line exists to catch on a 50-subrequest
+  // ceiling.
+  "/api/v1/run/attempt/submit": 11,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The common
   // path when the batch carries a violation — below the limit — is **7**,
   // measured in `test/run/events.test.ts`'s own counting test: the attempt
@@ -520,29 +559,36 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // recompute (a limit-reaching batch always carries a violation) —
   // **8** (`test/run/violation-limit.test.ts`).
   //
-  // The declared ceiling is **13** — Phase 7e Task 2's own worst case, the
+  // The declared ceiling is **14** — Phase 7e Task 2's own worst case, the
   // first batch that reaches the limit under `auto_submit`: the 5 above,
-  // plus `submitAttempt`'s own common-case cost, which Task 5 also moved
-  // from 5 to 8 (`listResponses`, `countAttemptsForCandidate`,
-  // `rescoreAttempt`'s one bank read, `finishAttempt`'s write,
-  // `appendAudit`'s write, `recomputeIntegrity`'s own +3 — the same 8
-  // `run/submit.ts`'s own first-press measurement pays beyond
-  // `/attempt/submit`'s own attempt-context join). This route's own
+  // plus `submitAttempt`'s own common-case cost, which Task 5 moved from 5
+  // to 8 (`listResponses`, `countAttemptsForCandidate`, `rescoreAttempt`'s
+  // one bank read, `finishAttempt`'s write, `appendAudit`'s write,
+  // `recomputeIntegrity`'s own +3) and Phase 8d Task 3 moved from 8 to
+  // **9** — `fireWebhooks`'s own `listActiveWebhooksForEvent` read, paid
+  // here for the same reason it is paid on `/attempt/submit` directly:
+  // `fireWebhooks` lives inside `submitAttempt`'s `submitted` branch,
+  // which this route reaches the same way the candidate's own submit does
+  // — the same 9 `run/submit.ts`'s own first-press measurement pays
+  // beyond `/attempt/submit`'s own attempt-context join). This route's own
   // `recomputeIntegrity` call is skipped when `submitAttempt` already fired
   // one this request (the `!submitted` guard in `routes/proctoring.ts`) —
-  // paying it twice would be two writes for one answer. Measured in
-  // `test/run/auto-submit.test.ts`'s own counting test. An empty `events`
-  // array costs one less than the base common path — `appendEvents` is a
-  // no-op on it, and an empty batch carries no integrity signal either.
+  // paying it twice would be two writes for one answer; `fireWebhooks` is
+  // guarded the same way, inside `submitAttempt` itself, so it cannot
+  // double-fire either. Measured in `test/run/auto-submit.test.ts`'s own
+  // counting test. An empty `events` array costs one less than the base
+  // common path — `appendEvents` is a no-op on it, and an empty batch
+  // carries no integrity signal either.
   //
   // Phase 7e Task 3: the first batch that first locks under `lock` costs
   // **10** (the 5 above, plus `lockAttempt`'s own write and one more
   // `appendEvents` call for the `attempt_locked` marker — 7 — plus the +3
   // recompute, since locking never submits and so never skips it) —
   // measured in `test/run/lock.test.ts`'s own counting test, cheaper than
-  // `auto_submit`'s 13 and so no reason to move the ceiling this already
-  // declares.
-  "/api/v1/run/attempt/events": 13,
+  // `auto_submit`'s 14 and so no reason to move the ceiling this already
+  // declares. Locking never calls `submitAttempt`, so it never pays the
+  // webhook check either.
+  "/api/v1/run/attempt/events": 14,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the
   // attempt join the cookie resolves through, `attempt_snapshot`'s rate
@@ -586,6 +632,18 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // write) + `appendEvents` (1, the `attempt_unlocked` marker) +
   // `appendAudit` (1).
   "/api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": 6,
+
+  // Phase 8d Task 1: webhook CRUD. Measured
+  // (`test/webhooks.test.ts`'s own "measures the real subrequest cost"
+  // test), not estimated. GET costs 3: auth (2) + `listWebhooks` (1) —
+  // `costPerCandidate` is `estimateCost`'s own pure arithmetic, no
+  // subrequest. POST costs 4: auth (2) + `createWebhook`'s one insert (1)
+  // + `appendAudit` (1) — `urlRefusal` runs in memory, no subrequest
+  // either. PATCH and DELETE each cost 4: auth (2) + the one write (1,
+  // `setWebhookActive`/`deleteWebhook`) + `appendAudit` (1). The higher of
+  // the methods sharing each path, same rule every budget above follows.
+  "/api/v1/workspaces/:id/webhooks": 4,
+  "/api/v1/workspaces/:id/webhooks/:webhookId": 4,
 };
 
 /**
@@ -668,6 +726,17 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // the candidate list, so it is the same permission that uploaded the
   // list — an Author who built the test holds `tests.edit` and not this.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
+
+  // Phase 8d Task 1, fix round 1 (`F1`): `docs/PRD.md:106`'s "Create API
+  // keys and webhooks" row is Owner+Admin — the same row `keys.manage`
+  // exists for — not `workspace.settings`, which the matrix gives to Owner
+  // alone. The Phase 8 spec names `keys.manage` as one of the five
+  // permissions this phase wires for the first time; `workspace.settings`
+  // is not in that list.
+  "GET /api/v1/workspaces/:id/webhooks": "keys.manage",
+  "POST /api/v1/workspaces/:id/webhooks": "keys.manage",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 
@@ -882,6 +951,11 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // Phase 7e Task 4 (`Q5a`): the minimal pair.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "workspace",
+  // Phase 8d Task 1: webhooks.
+  "GET /api/v1/workspaces/:id/webhooks": "workspace",
+  "POST /api/v1/workspaces/:id/webhooks": "workspace",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -926,6 +1000,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 8d Task 1: webhooks, mounted after the candidate-runtime invite
+  // route for locality with the rest of `/api/v1/workspaces/:id/...`
+  // rather than out of necessity — no prefix below collides.
+  app.route("/api/v1/workspaces", webhookRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing

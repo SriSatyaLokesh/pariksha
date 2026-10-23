@@ -312,6 +312,10 @@ function viewClient(): ApiClient {
     lockedAttempts: async () => [],
     unlockAttempt: notUsed,
     importCandidates: notUsed,
+    listWebhooks: notUsed,
+    createWebhook: notUsed,
+    setWebhookActive: notUsed,
+    deleteWebhook: notUsed,
   };
 }
 
