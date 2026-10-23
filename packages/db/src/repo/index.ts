@@ -18,3 +18,6 @@ export * from "./candidates.js";
 export * from "./run.js";
 // Phase 8a Task 7 (K9, KG3): the organiser's first attempt read.
 export * from "./results.js";
+// Phase 8b Task 1 (K14): manual grading's writes and the grading queue's
+// one read.
+export * from "./grading.js";

@@ -28,6 +28,7 @@ import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
+import { gradeRoutes } from "./grade/award.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -515,6 +516,17 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1), one `batch` however long the list is (1), and the audit row (1).
   // Flat in the list's size, which `test/invites.test.ts` measures at 200.
   "/api/v1/workspaces/:id/tests/:testId/invites": 7,
+
+  // Phase 8b Task 1 (`K14`): recording a rubric award. Measured
+  // (`apps/api/test/grade/award.test.ts`'s own "measures the real
+  // subrequest cost" test), not estimated: auth (2) + `liveQuestions` (1,
+  // the rubric check and the question map `rescoreAttempt` would otherwise
+  // read a second time) + `attemptForGrading` (1) + `writeAward` (1) +
+  // `awardsForAttempt` (1) + `listResponses` (1) + `rescoreAttempt`'s own
+  // `liveQuestions` (1 — it cannot share this route's, `rescoreAttempt` is
+  // reused as-is) + `writeScore` (1) = 9. Flat in how many candidates the
+  // workspace holds — this route touches exactly one attempt.
+  "/api/v1/workspaces/:id/tests/:testId/grade": 9,
 };
 
 /**
@@ -599,6 +611,12 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
+
+  // Phase 8b Task 1 (`K14`): `attempts.grade`'s first production caller —
+  // zero routes named this action before this line (only
+  // `permissions.test.ts` did). A Reviewer or Admin holds it; an Author
+  // (`tests.edit`) does not.
+  "POST /api/v1/workspaces/:id/tests/:testId/grade": "attempts.grade",
 };
 
 /**
@@ -802,6 +820,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
+  // Phase 8b Task 1 (`K14`): recording a rubric award.
+  "POST /api/v1/workspaces/:id/tests/:testId/grade": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -842,6 +862,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 8b Task 1 (`K14`): manual grading. Same `/api/v1/workspaces`
+  // prefix as every other organiser route, mounted here for locality with
+  // `inviteRoutes` rather than out of necessity.
+  app.route("/api/v1/workspaces", gradeRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing
