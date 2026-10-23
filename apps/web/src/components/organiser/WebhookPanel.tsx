@@ -14,8 +14,10 @@ import { TextField } from "../TextField";
 // `.webhook-secret` and `.webhook-list__actions` (admin.css) are the only
 // two rules this task adds, and both are declared in tokens, not literals.
 
+// MAJOR-3 (whole-branch review): "Attempt started" used to be offered
+// here with no route ever firing it — `WEBHOOK_EVENTS` (`lib/api.ts`) no
+// longer lists it, so this record's keys now exhaust every event there is.
 const EVENT_LABEL: Readonly<Record<WebhookEvent, string>> = {
-  "attempt.started": "Attempt started",
   "attempt.submitted": "Attempt submitted",
   "test.closed": "Test closed",
 };
@@ -29,8 +31,24 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
 
   const [url, setUrl] = useState("");
   const [events, setEvents] = useState<WebhookEvent[]>([]);
-  const [error, setError] = useState<string | undefined>(undefined);
+  // MINOR-6 (whole-branch review): one shared `error` used to be rendered
+  // as `TextField`'s error for Endpoint URL no matter what caused it — a
+  // failed list load, pause, resume or revoke all showed up attached to
+  // an empty, untouched URL field, and `aria-invalid="true"` followed it
+  // there. Three errors now, each rendered where the thing it is about
+  // lives: `urlError` stays the field error (empty-URL validation and the
+  // create call's own SSRF refusal both are genuinely about the URL),
+  // `eventsError` sits beside the event `<fieldset>`, and `panelError`
+  // covers everything that is about the panel as a whole, not one field.
+  const [urlError, setUrlError] = useState<string | undefined>(undefined);
+  const [eventsError, setEventsError] = useState<string | undefined>(undefined);
+  const [panelError, setPanelError] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
+  // MINOR-8: guards Pause/Resume/Revoke against a double-click firing a
+  // second request (and, for Revoke, a second `DELETE` whose 404 would
+  // surface as a failure after the first call already succeeded). One id
+  // at a time, since these actions are never meant to run concurrently.
+  const [busyRowId, setBusyRowId] = useState<string | null>(null);
 
   // The secret this screen's own `createWebhook` call just answered —
   // never re-fetched, because `listWebhooks` never carries it (`KG5`).
@@ -46,7 +64,7 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
       setWebhooks(res.webhooks);
       setCostPerCandidate(res.costPerCandidate);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "Webhooks could not be loaded.");
+      setPanelError(cause instanceof ApiError ? cause.message : "Webhooks could not be loaded.");
     }
   }, [client, workspaceId]);
 
@@ -60,16 +78,17 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
 
   async function onSubmit(formEvent: FormEvent) {
     formEvent.preventDefault();
+    setUrlError(undefined);
+    setEventsError(undefined);
     const target = url.trim();
     if (target.length === 0) {
-      setError("A webhook needs an endpoint URL.");
+      setUrlError("A webhook needs an endpoint URL.");
       return;
     }
     if (events.length === 0) {
-      setError("Select at least one event.");
+      setEventsError("Select at least one event.");
       return;
     }
-    setError(undefined);
     setBusy(true);
     try {
       const created = await client.createWebhook(workspaceId, { url: target, events });
@@ -79,41 +98,63 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
       setEvents([]);
       await load();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "The webhook could not be created. Try again.");
+      // Genuinely a field error: creation only ever fails on this screen
+      // over the URL (the SSRF refusal, `webhooks.test.ts`'s `422`), so it
+      // belongs on the field it is about, not the panel-wide region.
+      setUrlError(cause instanceof ApiError ? cause.message : "The webhook could not be created. Try again.");
     } finally {
       setBusy(false);
     }
   }
 
   async function onToggleActive(webhook: Webhook) {
+    if (busyRowId !== null) return; // MINOR-8: already mid-request
+    setBusyRowId(webhook.id);
     try {
       await client.setWebhookActive(workspaceId, webhook.id, !webhook.active);
       await load();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "That could not be changed. Try again.");
+      setPanelError(cause instanceof ApiError ? cause.message : "That could not be changed. Try again.");
+    } finally {
+      setBusyRowId(null);
     }
   }
 
   async function onRevoke(webhookId: string) {
+    if (busyRowId !== null) return; // MINOR-8: already mid-request
+    setBusyRowId(webhookId);
     try {
       await client.deleteWebhook(workspaceId, webhookId);
       setConfirmingDelete(null);
       if (revealed?.id === webhookId) setRevealed(null);
       await load();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "The webhook could not be revoked. Try again.");
+      setPanelError(cause instanceof ApiError ? cause.message : "The webhook could not be revoked. Try again.");
+    } finally {
+      setBusyRowId(null);
     }
   }
 
   return (
     <>
+      {/* MINOR-6: the panel-wide region — list load, pause/resume and
+          revoke failures — separate from the create form's own field
+          errors below, so a failed revoke no longer renders as the URL
+          field being invalid. */}
+      {panelError !== undefined && (
+        <p className="release-panel__risk" role="alert">
+          <span aria-hidden="true">⚠ </span>
+          {panelError}
+        </p>
+      )}
+
       <CardHairline className="organiser__panel">
         <form className="organiser-form" onSubmit={(formEvent) => void onSubmit(formEvent)} noValidate>
           <TextField
             id="webhook-url"
             label="Endpoint URL"
             help="Pariksha sends a signed JSON POST here for every event you select below."
-            error={error}
+            error={urlError}
             value={url}
             onChange={setUrl}
           />
@@ -133,6 +174,15 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
                 />
               </div>
             ))}
+            {/* MINOR-6: was `error` — the shared field error — rendered
+                nowhere a screen reader would connect it to this fieldset.
+                Now its own alert, beside the control it is actually about. */}
+            {eventsError !== undefined && (
+              <p className="release-panel__risk" role="alert">
+                <span aria-hidden="true">⚠ </span>
+                {eventsError}
+              </p>
+            )}
             {/* `K35`: `estimateCost`'s "webhooks" line, read with exactly
                 one active hook — the marginal cost of turning this one on,
                 shown before it is saved. `K36`: absent entirely on the
@@ -151,7 +201,12 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
       </CardHairline>
 
       {revealed !== null && (
-        <CardHairline className="release-panel__group">
+        // MINOR-7: no live region and no focus move meant a screen reader
+        // never heard the one credential this screen ever shows appear.
+        // `role="status"` on the card itself announces its arrival the
+        // same way the existing "Copied." paragraph already announces a
+        // later change inside it.
+        <div className="card-hairline release-panel__group" role="status">
           <p className="release-panel__fact">
             <strong>This signing secret is shown once.</strong> Store it now — Pariksha cannot show it to you
             again, and creating or revoking another webhook clears it from this screen.
@@ -172,14 +227,14 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
           <p role="status" aria-label="Signing-secret clipboard" className="release-panel__fact">
             {copied ? "Copied." : ""}
           </p>
-        </CardHairline>
+        </div>
       )}
 
       {webhooks.length === 0 ? (
         <CardHairline className="organiser-empty">
           <h2 className="organiser-empty__title">No webhooks yet</h2>
           <p className="organiser-empty__body">
-            Create one above to let another system learn when an attempt starts, is submitted, or a test closes.
+            Create one above to let another system learn when an attempt is submitted or a test closes.
           </p>
         </CardHairline>
       ) : (
@@ -193,7 +248,17 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
                 {webhook.active ? "Active" : "Paused"}
               </p>
               <div className="webhook-list__actions">
-                <button type="button" className="button-secondary" onClick={() => void onToggleActive(webhook)}>
+                {/* MINOR-8: `busyRowId !== null` while ANY row's
+                    pause/resume/revoke is in flight — these actions are
+                    never meant to run concurrently, so one busy row is
+                    reason enough to hold every row's buttons still rather
+                    than track one in-flight id per row. */}
+                <button
+                  type="button"
+                  className="button-secondary"
+                  disabled={busyRowId !== null}
+                  onClick={() => void onToggleActive(webhook)}
+                >
                   {webhook.active ? "Pause" : "Resume"}
                 </button>
                 {confirmingDelete === webhook.id ? (
@@ -202,6 +267,7 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
                       type="button"
                       className="button-secondary"
                       aria-label={`Confirm revoking the webhook to ${webhook.url}`}
+                      disabled={busyRowId !== null}
                       onClick={() => void onRevoke(webhook.id)}
                     >
                       Confirm revoke
@@ -215,6 +281,7 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
                     type="button"
                     className="button-secondary"
                     aria-label={`Revoke the webhook to ${webhook.url}`}
+                    disabled={busyRowId !== null}
                     onClick={() => setConfirmingDelete(webhook.id)}
                   >
                     Revoke

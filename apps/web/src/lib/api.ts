@@ -475,14 +475,17 @@ export interface Webhook {
 
 /** The closed set `packages/db/src/repo/webhooks.ts` exports as
  * `WEBHOOK_EVENTS`. Not re-exported from `@pariksha/db` here —
- * `apps/web` does not depend on that package — so the three strings are
+ * `apps/web` does not depend on that package — so the two strings are
  * typed by hand; `WebhookPanel.tsx`'s own test pins them against the
  * route's actual `GET .../webhooks` response, which is what would catch
  * the two ever drifting apart. `K43`: "attempt.flagged" is deliberately
- * not a member — see `webhooks.ts`'s own header.
+ * not a member — see `webhooks.ts`'s own header. MAJOR-3 (whole-branch
+ * review): "attempt.started" is the identical defect and was dropped the
+ * same way — nothing ever fired it, and offering it in this selector with
+ * no caller behind it is `Q1b`.
  */
-export type WebhookEvent = "attempt.started" | "attempt.submitted" | "test.closed";
-export const WEBHOOK_EVENTS: readonly WebhookEvent[] = ["attempt.started", "attempt.submitted", "test.closed"];
+export type WebhookEvent = "attempt.submitted" | "test.closed";
+export const WEBHOOK_EVENTS: readonly WebhookEvent[] = ["attempt.submitted", "test.closed"];
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
  * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */

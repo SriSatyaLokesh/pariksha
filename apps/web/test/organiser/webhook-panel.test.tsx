@@ -7,7 +7,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
-import type { ApiClient, Webhook } from "../../src/lib/api";
+import { ApiError, type ApiClient, type Webhook } from "../../src/lib/api";
 import { WebhookPanel } from "../../src/components/organiser/WebhookPanel";
 
 const WORKSPACE_ID = "wsp_1";
@@ -160,6 +160,33 @@ describe("WebhookPanel — create, and the secret shown once (KG5)", () => {
     expect(await screen.findByText("Copied.")).toBeInTheDocument();
   });
 
+  // MINOR-7 (whole-branch review): the reveal card had no live region and
+  // no focus move, so a screen reader never heard the one credential this
+  // screen ever shows appear — reachable by Tab, but easy to miss, for the
+  // single most important thing on the page.
+  it("MINOR-7: the secret reveal card is a live region a screen reader would announce", async () => {
+    const createWebhook = vi.fn().mockResolvedValue({
+      id: "whk_new",
+      url: "https://example.test/new",
+      events: ["attempt.submitted"],
+      signingSecret: "whsec_abc123",
+    });
+    render(
+      <WebhookPanel
+        workspaceId={WORKSPACE_ID}
+        client={fakeClient({ listWebhooks: async () => ({ webhooks: [] }), createWebhook })}
+      />,
+    );
+    await screen.findByText(/No webhooks yet/);
+
+    fireEvent.change(screen.getByLabelText(/Endpoint URL/), { target: { value: "https://example.test/new" } });
+    fireEvent.click(screen.getByLabelText("Attempt submitted"));
+    fireEvent.click(screen.getByRole("button", { name: "Create webhook" }));
+
+    const secret = await screen.findByText("whsec_abc123");
+    expect(secret.closest('[role="status"]')).not.toBeNull();
+  });
+
   it("refuses to submit with no event selected", async () => {
     const createWebhook = vi.fn();
     render(
@@ -249,6 +276,57 @@ describe("WebhookPanel — pause/resume and revoke", () => {
 
     expect(screen.getByRole("button", { name: `Revoke the webhook to ${HOOK.url}` })).toBeInTheDocument();
     expect(deleteWebhook).not.toHaveBeenCalled();
+  });
+
+  // MINOR-6 (whole-branch review): a revoke failure used to set the one
+  // shared `error` state, which `TextField` rendered as the Endpoint URL
+  // field's own error and `aria-invalid="true"` followed it there — a
+  // field the organiser never touched, reported invalid over a row action
+  // that has nothing to do with it.
+  it("MINOR-6: a failed revoke is a panel alert, and does not mark the URL field invalid", async () => {
+    const deleteWebhook = vi.fn().mockRejectedValue(new ApiError(500, "internal_error", "could not be completed"));
+    render(
+      <WebhookPanel
+        workspaceId={WORKSPACE_ID}
+        client={fakeClient({ listWebhooks: async () => ({ webhooks: [HOOK] }), deleteWebhook })}
+      />,
+    );
+    await screen.findByText(HOOK.url);
+
+    fireEvent.click(screen.getByRole("button", { name: `Revoke the webhook to ${HOOK.url}` }));
+    fireEvent.click(screen.getByRole("button", { name: `Confirm revoking the webhook to ${HOOK.url}` }));
+
+    expect(await screen.findByText(/could not be completed/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Endpoint URL/)).not.toHaveAttribute("aria-invalid", "true");
+  });
+
+  // MINOR-8 (whole-branch review): no in-flight guard meant a double-click
+  // on Pause fired two `PATCH`es (and would, for Revoke, fire a second
+  // `DELETE` whose 404 surfaces as a failure after the first already
+  // succeeded).
+  it("MINOR-8: double-clicking Pause only calls setWebhookActive once", async () => {
+    let resolveCall: (() => void) | undefined;
+    const setWebhookActive = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveCall = resolve;
+        }),
+    );
+    render(
+      <WebhookPanel
+        workspaceId={WORKSPACE_ID}
+        client={fakeClient({ listWebhooks: async () => ({ webhooks: [HOOK] }), setWebhookActive })}
+      />,
+    );
+    await screen.findByText(HOOK.url);
+
+    const pauseButton = screen.getByRole("button", { name: "Pause" });
+    fireEvent.click(pauseButton);
+    fireEvent.click(pauseButton);
+    fireEvent.click(pauseButton);
+
+    expect(setWebhookActive).toHaveBeenCalledTimes(1);
+    resolveCall?.();
   });
 });
 
