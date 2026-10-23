@@ -389,6 +389,29 @@ it("measures the real subrequest cost of every route this task mounts", async ()
   await measure("DELETE", `${url()}/${id}`, 4);
 });
 
+// MINOR-4 (whole-branch review): the test above sends `ownerCookie` for
+// every call, so it measures the session path over the key-management
+// routes — nothing here ever pinned the cost of authenticating *with* a
+// key. MAJOR-2 also changed that cost from a flat 2 to "1 normally, 2 on
+// the first use of a UTC day", which needed its own measurement either way.
+it("measures the real subrequest cost of key authentication itself", async () => {
+  const { secret } = await createKey(["results.export"]);
+
+  // First use since creation: `last_used_at` is still null, so MAJOR-2's
+  // day-boundary check writes — one read plus one write.
+  const first = countingDeps(deps);
+  const firstRes = await buildProbe(first.deps).request(`/api/v1/probe/${workspaceId}/results.export`, withKey(secret));
+  expect(firstRes.status).toBe(200);
+  expect(first.counts().total).toBe(2);
+
+  // Second use, same day: already stamped today, so the write is skipped —
+  // the indexed read alone.
+  const second = countingDeps(deps);
+  const secondRes = await buildProbe(second.deps).request(`/api/v1/probe/${workspaceId}/results.export`, withKey(secret));
+  expect(secondRes.status).toBe(200);
+  expect(second.counts().total).toBe(1);
+});
+
 // `KG5`: no secret ever appears in a response body, a log line or an audit
 // row — except the single creation response. The log/audit half is
 // structural (`appendAudit`'s call sites here never pass the secret —
