@@ -698,8 +698,13 @@ export function TestBuilder({
         <LockedAttempts
           attempts={lockedAttempts}
           onUnlock={async (attemptId) => {
-            await client.unlockAttempt(workspaceId, testId, attemptId);
-            setLockedAttempts((current) => current.filter((row) => row.attemptId !== attemptId));
+            try {
+              await client.unlockAttempt(workspaceId, testId, attemptId);
+              setLockedAttempts((current) => current.filter((row) => row.attemptId !== attemptId));
+              setError(undefined);
+            } catch (cause) {
+              setError(cause instanceof ApiError ? cause.message : "The attempt could not be unlocked.");
+            }
           }}
         />
       )}

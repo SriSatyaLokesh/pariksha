@@ -157,6 +157,34 @@ describe("resolveProctoring", () => {
     },
   );
 
+  // M7: `violation_limit: 0` would make `claimViolationLimit`'s own
+  // `violations (0) >= limit (0)` true on the first batch, and
+  // `integrityFor`'s identical comparison `high_risk` unconditional —
+  // unlike `snapshot_interval_seconds`, 0 here has no legitimate meaning.
+  it.each([
+    ["violation_limit", "violationLimit"],
+    ["camera_outage_seconds", "cameraOutageSeconds"],
+    ["multi_face_snapshots", "multiFaceSnapshots"],
+  ] as const)("floors %s at 1 — a document-supplied 0 cannot make every attempt high_risk", (override, field) => {
+    const r = resolveProctoring({ profile: "strict", overrides: { [override]: 0 } });
+    expect(r[field]).toBe(1);
+  });
+
+  it.each([
+    ["violation_limit", "violationLimit"],
+    ["camera_outage_seconds", "cameraOutageSeconds"],
+    ["multi_face_snapshots", "multiFaceSnapshots"],
+  ] as const)("leaves %s honoured above the floor", (override, field) => {
+    const r = resolveProctoring({ profile: "strict", overrides: { [override]: 3 } });
+    expect(r[field]).toBe(3);
+  });
+
+  it("snapshot_interval_seconds keeps no floor — 0 still means off", () => {
+    expect(
+      resolveProctoring({ profile: "strict", overrides: { snapshot_interval_seconds: 0 } }).snapshotIntervalSeconds,
+    ).toBe(0);
+  });
+
   it("has no undefined on any key for any profile", () => {
     for (const profile of ["off", "standard", "strict"] as const) {
       for (const [k, v] of Object.entries(resolveProctoring({ profile }))) {

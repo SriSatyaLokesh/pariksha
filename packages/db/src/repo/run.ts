@@ -340,10 +340,20 @@ export interface CandidateAttempts {
    * second row would orphan the first one's answers.
    */
   liveDeadlineAt: number | null;
+  /**
+   * How many of this candidate's attempts are currently locked (`M2`).
+   * `liveDeadlineAt` goes `null` once a locked attempt's own deadline
+   * passes — since `da1bae5` a locked attempt never self-submits, so it
+   * sits there locked forever while no longer counting as "live". Without
+   * this, a candidate with a spare attempt could simply wait out the
+   * clock and `/start` a fresh, unlocked one. One extra `SUM` on the same
+   * statement, no new subrequest.
+   */
+  lockedCount: number;
 }
 
 /**
- * One statement for the three numbers the start gate needs.
+ * One statement for the numbers the start gate needs.
  *
  * Keyed on the **candidate**, not the test version: a `candidate` row
  * belongs to one test (`candidate.test_id`), so every attempt that row
@@ -354,9 +364,15 @@ export interface CandidateAttempts {
 export const countAttemptsForCandidate = scoped(
   "countAttemptsForCandidate",
   async (db: DbClient, workspaceId: string, candidateId: string, now: number): Promise<CandidateAttempts> => {
-    const rows = await db.query<{ n: number; last_ended: number | null; live_deadline: number | null }>(
+    const rows = await db.query<{
+      n: number;
+      last_ended: number | null;
+      live_deadline: number | null;
+      locked_count: number;
+    }>(
       "SELECT COUNT(*) AS n, MAX(COALESCE(submitted_at, deadline_at)) AS last_ended, " +
-        "MAX(CASE WHEN submitted_at IS NULL AND deadline_at > ? THEN deadline_at END) AS live_deadline " +
+        "MAX(CASE WHEN submitted_at IS NULL AND deadline_at > ? THEN deadline_at END) AS live_deadline, " +
+        "SUM(CASE WHEN locked_at IS NOT NULL THEN 1 ELSE 0 END) AS locked_count " +
         "FROM attempt WHERE workspace_id = ? AND candidate_id = ?",
       [now, workspaceId, candidateId],
     );
@@ -365,6 +381,7 @@ export const countAttemptsForCandidate = scoped(
       count: Number(row?.n ?? 0),
       lastEndedAt: row?.last_ended == null ? null : Number(row.last_ended),
       liveDeadlineAt: row?.live_deadline == null ? null : Number(row.live_deadline),
+      lockedCount: Number(row?.locked_count ?? 0),
     };
   },
 );

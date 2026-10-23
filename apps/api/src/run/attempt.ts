@@ -643,6 +643,14 @@ export async function startAttempt(
       "You already have this test open. Open it in the browser you started it in; a different device needs a proctor to unlock it.",
     );
   }
+  // `M2`: a locked attempt stops being "live" once its own deadline
+  // passes (it never self-submits), but it is still locked. Without this
+  // check, waiting out the clock on a locked attempt and starting a fresh
+  // one is how a candidate walks straight around the product's one
+  // consequence for a violation limit.
+  if (attempts.lockedCount > 0) {
+    throw conflict("attempt_locked", "An earlier attempt is locked. Contact your organiser to continue.");
+  }
   const allowed = timing.attempts_allowed ?? TIMING_DEFAULTS.attempts_allowed;
   if (attempts.count >= allowed) {
     throw conflict(

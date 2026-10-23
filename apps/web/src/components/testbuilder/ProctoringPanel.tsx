@@ -520,7 +520,7 @@ export function ProctoringPanel({
             <select
               className="text-input"
               id={`${ids}-violation_action`}
-              value={value.overrides.violation_action ?? "warn_only"}
+              value={value.overrides.violation_action ?? resolved.violationAction}
               onChange={(event) => setOverride("violation_action", event.target.value as ViolationAction)}
               aria-describedby={
                 violationActionMarker === undefined

@@ -679,6 +679,16 @@
   color: var(--ink-3);
 }
 
+/* Phase 7e fix wave (M5): the locked-attempts unlock arms on a first click
+   and shows this row to confirm or back out, rather than firing on one
+   click — there is no re-lock surface anywhere in the product, so a
+   mis-click here is permanent. */
+.locked-attempts__confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
 /* The two quiet lines that render INSIDE a preview, on its cream rather than
    on the page. `.branding-panel__footer` renders nowhere else
    (BrandingPanel.tsx:286, 291, 296); `.branding-panel__fact` renders on the

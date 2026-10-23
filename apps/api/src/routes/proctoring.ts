@@ -35,8 +35,6 @@ import {
 } from "@pariksha/db";
 import {
   CANDIDATE_PROCTORING_EVENTS,
-  FAILURE_EVENTS,
-  VIOLATION_EVENTS,
   violationOutcome,
   type ProctoringEventType,
 } from "@pariksha/core";
@@ -226,13 +224,20 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // whose own batch locks this attempt — `ProctoringLayer`'s own
     // `initialLocked`/`locked` doc comment is the mirror of `submitted`'s.
     let locked = false;
+    // M1: hoisted out of the block below so the integrity-recompute gate
+    // further down can read them — `atLimit && !alreadyActioned` is true on
+    // exactly the one batch that first crosses the limit, never again for
+    // this attempt (the claim is one-shot). Declared here rather than
+    // computed twice.
+    let atLimit = false;
+    let alreadyActioned = false;
     // Same fix round 2 guard as the append above: once locked, there is
     // nothing left for this block to decide — `claimViolationLimit` would
     // only ever lose its own claim from here on — so it no longer spends a
     // D1 write finding that out on every subsequent violation.
     if (attempt.submittedAt === null && attempt.lockedAt === null) {
-      const atLimit = violations >= resolved.violationLimit;
-      const alreadyActioned = atLimit
+      atLimit = violations >= resolved.violationLimit;
+      alreadyActioned = atLimit
         ? !(
             await claimViolationLimit(deps.db, attempt.workspaceId, {
               attemptId: attempt.attemptId,
@@ -277,14 +282,12 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     }
 
     // Phase 7e Task 5 (`Q6a`): "recomputed on submit and whenever a
-    // violation lands." This batch landed one (or a `FAILURE_EVENTS` type,
-    // `Q6b`: not a violation, but still where `observed` is read) only when
-    // `hasIntegritySignal` is true — the other 7 of `PROCTORING_EVENTS`' 17
-    // types (restores, lifecycle markers, `noise_above_threshold`, identity
-    // capture) never move `integrityFor`'s output, so a batch of only those
-    // recomputes nothing: this is what keeps `events.test.ts`'s "ten events
-    // as one batched insert" measurement (all `fullscreen_restore`) at its
-    // existing cost.
+    // violation lands." Originally gated on any batch carrying a
+    // `VIOLATION_EVENTS`/`FAILURE_EVENTS` type; M1 below narrows that to the
+    // one batch that matters most relative to its cost. `events.test.ts`'s
+    // "ten events as one batched insert" (all `fullscreen_restore`) still
+    // recomputes nothing — neither gate fires for a batch with no violation
+    // or failure event in it.
     //
     // `!submitted`: when this same batch's violation already crossed into
     // `auto_submit`, `submitAttempt` above already recomputed against the
@@ -292,14 +295,30 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // pre-submit evidence into a second, wasted write. A `lock` outcome
     // still falls through to here: locking does not submit, and the
     // organiser reading a freshly-locked attempt needs the flag current.
-    const hasIntegritySignal = parsed.data.events.some(
-      (event) => VIOLATION_EVENTS.has(event.type) || FAILURE_EVENTS.has(event.type),
-    );
+    //
+    // Branch-review M1: `listIntegrityEvents`/`listSnapshotFaceCounts`
+    // project this attempt's *whole* history, and this block used to run on
+    // every integrity-signal-bearing batch — quadratic in rows read across a
+    // session (`sum(1..n)`) on `warn_then_flag`, the default action, which
+    // never locks or auto-submits to stop the growth. `atLimit &&
+    // !alreadyActioned` is true on exactly the one batch that first crosses
+    // the limit (the atomic claim above is one-shot, so it can never be true
+    // twice for the same attempt) — bounding the ingest-side recompute to at
+    // most once per attempt. The submit-side call (`submitAttempt`, above
+    // and in `submit.ts`) still recomputes fresh every time and is what
+    // makes the stored flag final; this one only has to be current enough
+    // for an organiser reading a *live* attempt, not current on every batch.
+    // ponytail: a `warn_then_flag`/`warn_only` test's live flag can go stale
+    // between the crossing batch and submit (more violations, camera
+    // outages); upgrade to a time-boxed recompute (e.g. at most once per N
+    // seconds, tracked per attempt) if an organiser actually needs that
+    // window to be live rather than only final.
     if (
       attempt.submittedAt === null &&
       attempt.lockedAt === null &&
       !submitted &&
-      hasIntegritySignal
+      atLimit &&
+      !alreadyActioned
     ) {
       try {
         await recomputeIntegrity(deps, attempt, deps.now());

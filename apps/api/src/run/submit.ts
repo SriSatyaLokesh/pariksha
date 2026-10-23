@@ -263,10 +263,21 @@ export async function recomputeIntegrity(
   now: number,
 ): Promise<void> {
   const resolved = resolvedProctoringOf(attempt.settings);
-  const [events, snapshots] = await Promise.all([
+  const [events, snapshotFacts] = await Promise.all([
     listIntegrityEvents(deps.db, attempt.workspaceId, attempt.attemptId),
     listSnapshotFaceCounts(deps.db, attempt.workspaceId, attempt.attemptId),
   ]);
+  // M1: `listSnapshotFaceCounts` now returns the two aggregate numbers
+  // `integrityFor` actually reads off a snapshot list — its length and how
+  // many show more than one face — rather than every row. Reconstructed
+  // here rather than widening `integrityFor`'s own, already-sound signature:
+  // `snapshots.length` reads back as `snapshotFacts.count`, and exactly
+  // `snapshotFacts.multiFaceCount` of the synthetic entries carry a
+  // `faceCount` above the `> 1` threshold — the rest are `null`, same as a
+  // real not-yet-detected frame.
+  const snapshots: { faceCount: number | null }[] = Array.from({ length: snapshotFacts.count }, (_, i) => ({
+    faceCount: i < snapshotFacts.multiFaceCount ? 2 : null,
+  }));
   const elapsedSeconds = Math.max(0, (now - attempt.startedAt) / 1000);
   const expectedSnapshots =
     resolved.requireCamera && resolved.snapshotIntervalSeconds > 0

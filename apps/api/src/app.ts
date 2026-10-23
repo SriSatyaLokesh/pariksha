@@ -502,56 +502,69 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // read adds nothing to them). Both measured in `test/run/submit.test.ts`
   // and both unchanged by Task 5 or Phase 8d.
   //
-  // Phase 8d Task 3 (`K23`): `fireWebhooks` adds one more on top of
-  // whichever of the two paths above actually writes —
+  // Phase 8d Task 3 (`K23`): `fireWebhooks` adds a variable amount on top
+  // of whichever of the two paths above actually writes —
   // `listActiveWebhooksForEvent`'s one read, unconditional, plus one
   // `http` for every active `attempt.submitted` hook this request actually
-  // reaches inline. **Fix round 1, F1: this is a bound, not a one-hook
-  // measurement.** `webhooks/deliver.ts`'s `INLINE_FANOUT_LIMIT` caps how
-  // many hooks on this event ever reach `fetch` (3, at the time of
-  // writing), and every hook past it — plus every one inside it that
-  // failed — is written in one `db.batch()` call, never one `INSERT` per
-  // row. So this +1 holds for a workspace with 1 active
-  // `attempt.submitted` hook *or* 50 of them:
-  // `test/webhooks/deliver.test.ts`'s "the subrequest cost is the same at
-  // the limit and past it" proves the total does not move with hook count,
-  // and its "keeps the submit route inside its declared budget with a
-  // webhook firing" measures the common path at one webhook actually
-  // delivered — **10**, not 9. Raising `INLINE_FANOUT_LIMIT` raises this
-  // number with it — see that constant's own comment for the arithmetic
-  // before changing either.
+  // reaches inline, plus one `db.batch()` write for every hook that did not
+  // deliver (queued, including everything past `INLINE_FANOUT_LIMIT`).
   //
-  // The declared ceiling is the worst case **with** the webhook check: 10
-  // (Task 5's worst case) + 1 = **11**. No fixture combines a
-  // `counted_attempt` last attempt with an active webhook in the same
-  // workspace — the two deltas are additive on the same shared base and
-  // neither call site gates on the other, so the ceiling is their sum
-  // rather than a third, unmeasured scenario.
+  // **Branch-review M6: both `app.ts` comments on this route used to claim
+  // "+1", and that is only true with zero active hooks — a no-op path that
+  // pays the read and nothing else.** `webhooks/deliver.test.ts:388`
+  // measures `fireWebhooks`'s own real worst case directly:
+  // `{ db: 2, http: INLINE_FANOUT_LIMIT, total: 5 }` — the read,
+  // `INLINE_FANOUT_LIMIT` (3, at the time of writing) hooks that all fail
+  // inline, and one batched write queuing all of them. Raising
+  // `INLINE_FANOUT_LIMIT` raises this number with it — see that constant's
+  // own comment for the arithmetic before changing either. One delivering
+  // hook costs **+2** (the read plus the one `http`; a success is never
+  // queued, so no write) — `test/webhooks/deliver.test.ts`'s "keeps the
+  // submit route inside its declared budget with a webhook firing" exercises
+  // exactly that shape.
   //
-  // A number above 11 means the bank, the counted read, the integrity
-  // recompute or the webhook check is being spent more than once a
-  // request — the failure this line exists to catch on a 50-subrequest
-  // ceiling.
-  "/api/v1/run/attempt/submit": 11,
+  // The declared ceiling is the worst case combining **both** deltas that
+  // were previously measured only apart: the counted read (+1, Task5's 9 to
+  // 10) **and** `fireWebhooks`'s own worst case (+5, not +1) —
+  // `test/run/combined-budgets.test.ts`'s "the submit route's real worst
+  // case is 15" is the fixture neither `submit.test.ts` (counted read, zero
+  // hooks) nor `deliver.test.ts` (one delivering hook, no counted read)
+  // combines on its own: 9 + 1 + 5 = **15**. No functional change — 15 is
+  // still far under the 50-subrequest ceiling — only the declared number and
+  // the comments claiming a flat "+1" were wrong.
+  //
+  // A number above 15 means the bank, the counted read, the integrity
+  // recompute or the webhook fan-out is being spent more than its own
+  // measured worst case — the failure this line exists to catch on a
+  // 50-subrequest ceiling.
+  "/api/v1/run/attempt/submit": 15,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The common
-  // path when the batch carries a violation — below the limit — is **7**,
+  // path when the batch carries a violation — below the limit — is **4**,
   // measured in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
   // `appendEvents`'s one batched insert (capped at 10 rows a request, so
   // this number is flat in how many events the request actually carries),
-  // `countViolations`'s one read for the response's authoritative count
-  // — that base is **4** — plus Phase 7e Task 5 (`Q6a`)'s `recomputeIntegrity`
-  // (`listIntegrityEvents`, `listSnapshotFaceCounts`, `setIntegrity` — +3),
-  // paid whenever the batch carries a `VIOLATION_EVENTS` or `FAILURE_EVENTS`
-  // type. A batch of only restore/lifecycle events (`fullscreen_restore`
-  // and the like, which can never move `integrityFor`'s output) skips the
-  // recompute and stays at the base **4** — `test/run/events.test.ts`'s
-  // "ten events as one batched insert" test is exactly that case, unchanged
-  // by Task 5. Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
+  // and `countViolations`'s one read for the response's authoritative count.
+  // Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
   // (`packages/db/src/repo/attempts.ts`) is paid only when `violations >=
   // limit` — below it, no read or write of its own happens at all, which is
   // one cheaper than the `violationLimitAlreadyReached` read this route used
   // to spend on every request regardless.
+  //
+  // Branch-review M1: Phase 7e Task 5's `recomputeIntegrity` originally ran
+  // on **every** batch carrying a `VIOLATION_EVENTS`/`FAILURE_EVENTS` type —
+  // quadratic rows read across a session on `warn_then_flag`, the default
+  // action, which never locks or auto-submits to stop the growth (`M1`:
+  // "roughly 2M rows for one bad session against a 5M/day allowance"). It
+  // now runs only on the one batch that first reaches the limit (`atLimit &&
+  // !alreadyActioned` — the atomic claim below is one-shot, so this can fire
+  // at most once per attempt from this route); every batch below the limit,
+  // however many of them there are, costs the base **4** and nothing more —
+  // `test/run/events.test.ts`'s "below-limit violation batches never pay the
+  // integrity recompute" measures four of them in a row. A batch of only
+  // restore/lifecycle events (`fullscreen_restore` and the like) was always
+  // outside this and still is — "ten events as one batched insert" stays at
+  // the base **4**.
   //
   // A batch that reaches the limit costs one more on top of the base 4:
   // `claimViolationLimit`'s own atomic insert, which both decides and marks

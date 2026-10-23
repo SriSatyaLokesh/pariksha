@@ -46,11 +46,23 @@ async function openBuilderWithLockedAttempt(): Promise<void> {
 }
 
 describe("the locked-attempts panel and its one gesture (Q5a)", () => {
-  it("shows locked attempts on the test and unlocks from there", async () => {
+  it("shows locked attempts on the test and unlocks from there, after a confirm (M5)", async () => {
     await openBuilderWithLockedAttempt();
     expect(screen.getByText("21CS0147")).toBeInTheDocument();
+    // First click only arms — M5: there is no re-lock surface anywhere in
+    // the product, so a single click must not fire the request.
     fireEvent.click(await screen.findByRole("button", { name: /Unlock/ }));
-    await waitFor(() => expect(screen.queryByRole("button", { name: /Unlock/ })).toBeNull());
+    expect(screen.getByText("21CS0147")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^Confirm unlock$/i }));
+    await waitFor(() => expect(screen.queryByText("21CS0147")).toBeNull());
+  });
+
+  it("M5: Cancel backs out of an armed unlock without calling onUnlock", async () => {
+    await openBuilderWithLockedAttempt();
+    fireEvent.click(await screen.findByRole("button", { name: /Unlock/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel$/i }));
+    expect(screen.getByText("21CS0147")).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /Unlock 21CS0147/i })).toBeInTheDocument();
   });
 
   it("says plainly that nothing else tells the organiser a lock happened", async () => {

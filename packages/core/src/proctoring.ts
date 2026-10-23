@@ -200,7 +200,14 @@ export function resolveProctoring(
     // act on it.
     requireMicrophone: false,
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
-    violationLimit: overrideOr(overrides, "violation_limit", defaults.violationLimit),
+    // M7: `PUT /draft` and `POST /tests/import` accept arbitrary JSON —
+    // `violation_limit: 0` would lock (or flag `high_risk`) every candidate
+    // on their very first event batch, `0 >= 0` being true from the start.
+    // The UI already floors this control at 1; this is the server-side
+    // floor that a hand-edited or imported document cannot route around.
+    // `snapshotIntervalSeconds` above keeps accepting 0 on purpose — that
+    // one really does mean "off".
+    violationLimit: Math.max(1, overrideOr(overrides, "violation_limit", defaults.violationLimit)),
     // Phase 7e Task 1 (#213): restored to a real `overrideOr`, the same
     // shape as every other control. Was hardcoded `"warn_only"` from #214
     // until a consumer existed — `violationOutcome` (`proctoring-outcome.ts`)
@@ -210,8 +217,10 @@ export function resolveProctoring(
     // a document that already holds `auto_submit`/`lock`/`warn_then_flag`
     // (round-tripped since #214) now resolves to it for real.
     violationAction: overrideOr(overrides, "violation_action", defaults.violationAction),
-    cameraOutageSeconds: overrideOr(overrides, "camera_outage_seconds", defaults.cameraOutageSeconds),
-    multiFaceSnapshots: overrideOr(overrides, "multi_face_snapshots", defaults.multiFaceSnapshots),
+    // M7: same floor, same reason — `0` would make `high_risk` unconditional
+    // in `integrityFor`.
+    cameraOutageSeconds: Math.max(1, overrideOr(overrides, "camera_outage_seconds", defaults.cameraOutageSeconds)),
+    multiFaceSnapshots: Math.max(1, overrideOr(overrides, "multi_face_snapshots", defaults.multiFaceSnapshots)),
     allowCalculator: overrideOr(overrides, "allow_calculator", defaults.allowCalculator),
   };
 }

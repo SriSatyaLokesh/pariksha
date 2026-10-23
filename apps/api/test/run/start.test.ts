@@ -672,6 +672,27 @@ it("past the cooldown the second attempt starts, and attempt 1 is untouched", as
   );
 });
 
+it("M2: a locked attempt whose deadline has passed refuses a fresh /start rather than minting an unlocked one", async () => {
+  const candidateId = await candidateFor("twice");
+  const first = await start("twice", await tokenFor("twice", candidateId));
+  expect(first.status).toBe(201);
+  const firstPaper = await paperOf(first);
+  // The candidate was locked (violation limit, Task 3) rather than
+  // submitted — the attempt just sits there, unresolved.
+  await deps.db.run("UPDATE attempt SET locked_at = ? WHERE id = ?", [clock, firstPaper.attemptId]);
+
+  // Past the ten-minute paper's own deadline: `liveDeadlineAt` goes null,
+  // so the earlier `attempt_in_progress` gate no longer fires — the exact
+  // state M2 is about.
+  clock = T + 50 * 60_000;
+  const res = await start("twice", await tokenFor("twice", candidateId));
+
+  expect(res.status).toBe(409);
+  expect((await errorOf(res)).code).toBe("attempt_locked");
+  // No second, unlocked attempt was minted.
+  expect(await attemptRows()).toHaveLength(1);
+});
+
 // --- a version that has gone stale -------------------------------------
 
 /** A test of its own, over a bank of its own, so a deletion here cannot

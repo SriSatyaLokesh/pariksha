@@ -30,6 +30,11 @@ export function LockedAttempts({
   // whole table, so an organiser clearing five attempts in a row is never
   // blocked on the first.
   const [unlocking, setUnlocking] = useState<string | null>(null);
+  // Phase 7e fix wave (M5): which row's unlock is armed, awaiting a second
+  // click. There is no re-lock surface anywhere in the product — this is at
+  // least as irreversible as close/archive, which already confirm — so a
+  // mis-click must not fire the request on its own.
+  const [confirming, setConfirming] = useState<string | null>(null);
 
   if (attempts.length === 0) return null;
 
@@ -61,20 +66,38 @@ export function LockedAttempts({
               <td>{attempt.violations}</td>
               <td>{Math.ceil(attempt.remainingSeconds / 60)} min</td>
               <td>
-                <button
-                  type="button"
-                  className="button-secondary"
-                  disabled={unlocking === attempt.attemptId}
-                  aria-label={`Unlock ${attempt.candidateLabel}'s attempt`}
-                  onClick={() => {
-                    setUnlocking(attempt.attemptId);
-                    void onUnlock(attempt.attemptId).finally(() => {
-                      setUnlocking(null);
-                    });
-                  }}
-                >
-                  Unlock
-                </button>
+                {confirming === attempt.attemptId ? (
+                  <span className="locked-attempts__confirm">
+                    <span>Unlock {attempt.candidateLabel}?</span>
+                    <button
+                      type="button"
+                      className="button-primary button-primary--surface"
+                      disabled={unlocking === attempt.attemptId}
+                      onClick={() => {
+                        setConfirming(null);
+                        setUnlocking(attempt.attemptId);
+                        void onUnlock(attempt.attemptId).finally(() => {
+                          setUnlocking(null);
+                        });
+                      }}
+                    >
+                      Confirm unlock
+                    </button>
+                    <button type="button" className="button-secondary" onClick={() => setConfirming(null)}>
+                      Cancel
+                    </button>
+                  </span>
+                ) : (
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    disabled={unlocking === attempt.attemptId}
+                    aria-label={`Unlock ${attempt.candidateLabel}'s attempt`}
+                    onClick={() => setConfirming(attempt.attemptId)}
+                  >
+                    Unlock
+                  </button>
+                )}
               </td>
             </tr>
           ))}

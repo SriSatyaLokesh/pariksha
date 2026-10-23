@@ -490,13 +490,20 @@ export const listIntegrityEvents = scoped(
 );
 
 /**
- * `integrityFor`'s other input: every snapshot this attempt has, regardless
- * of `reason` — a violation- or identity-triggered capture is still real
- * evidence someone was watching, and still a frame the multi-face threshold
- * must see. `face_count` is always `null` today (`Q3`: face detection is
- * pre-cut), which is exactly what `integrityFor`'s own `Q3a` handling
- * expects — a `null` is never mistaken for zero faces or for evidence of
- * anything.
+ * `integrityFor`'s other input, reduced to the two facts it actually reads
+ * off a snapshot row: how many there are (`snapshots.length`, for the
+ * silent-shortfall check) and how many show more than one face
+ * (`multiFaceCount`, for the `high_risk` threshold). `face_count` is always
+ * `null` today (`Q3`: face detection is pre-cut), so `multiFaceCount` is
+ * always 0 — the field and the threshold exist for the reader that
+ * eventually writes a real count.
+ *
+ * Branch-review M1: used to project every `face_count` row and let the
+ * caller filter in JS — one row per snapshot instead of the one row this
+ * aggregate returns. `recomputeIntegrity` (`apps/api/src/run/submit.ts`)
+ * reconstructs the minimal array `integrityFor`'s pure signature expects
+ * from these two numbers, rather than this function's own shape changing
+ * what `integrityFor` (and its own, already-sound test suite) takes.
  */
 export const listSnapshotFaceCounts = scoped(
   "listSnapshotFaceCounts",
@@ -504,14 +511,14 @@ export const listSnapshotFaceCounts = scoped(
     db: DbClient,
     workspaceId: string,
     attemptId: string,
-  ): Promise<{ faceCount: number | null }[]> => {
-    const rows = await db.query<{ face_count: number | null }>(
-      "SELECT face_count FROM snapshot WHERE workspace_id = ? AND attempt_id = ?",
+  ): Promise<{ count: number; multiFaceCount: number }> => {
+    const rows = await db.query<{ n: number; multi: number }>(
+      "SELECT COUNT(*) AS n, SUM(CASE WHEN face_count > 1 THEN 1 ELSE 0 END) AS multi " +
+        "FROM snapshot WHERE workspace_id = ? AND attempt_id = ?",
       [workspaceId, attemptId],
     );
-    return rows.map((row) => ({
-      faceCount: row.face_count === null ? null : Number(row.face_count),
-    }));
+    const row = rows[0];
+    return { count: Number(row?.n ?? 0), multiFaceCount: Number(row?.multi ?? 0) };
   },
 );
 

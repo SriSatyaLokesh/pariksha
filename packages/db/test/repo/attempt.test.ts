@@ -18,11 +18,13 @@ import {
   createWorkspace,
   getAttempt,
   getDraftVersion,
+  listSnapshotFaceCounts,
   migrate,
   newId,
   publishDraftVersion,
   putDraftVersion,
   readAttemptByTokenHash,
+  recordSnapshot,
   setIntegrity,
   sqliteClient,
   type DbClient,
@@ -98,6 +100,7 @@ interface AttemptInput {
   startedAt?: number;
   deadlineAt?: number;
   submittedAt?: number | null;
+  lockedAt?: number | null;
   tokenHash?: string;
   setNo?: number;
 }
@@ -119,6 +122,9 @@ async function attempt(
   });
   if (input.submittedAt != null) {
     await db.run("UPDATE attempt SET submitted_at = ? WHERE id = ?", [input.submittedAt, id]);
+  }
+  if (input.lockedAt != null) {
+    await db.run("UPDATE attempt SET locked_at = ? WHERE id = ?", [input.lockedAt, id]);
   }
   return id;
 }
@@ -266,7 +272,17 @@ it("a candidate with no attempts reads zero, null and null rather than throwing"
     count: 0,
     lastEndedAt: null,
     liveDeadlineAt: null,
+    lockedCount: 0,
   });
+});
+
+it("M2: a locked attempt whose own deadline has passed still counts as locked, even though it is no longer live", async () => {
+  const candidateId = await candidateIn(alpha);
+  await attempt(alpha, { candidateId, deadlineAt: NOW - MINUTE, tokenHash: "locked-and-expired", lockedAt: NOW - 30 * MINUTE });
+
+  const attempts = await countAttemptsForCandidate(db, alpha.workspaceId, candidateId, NOW);
+  expect(attempts.liveDeadlineAt).toBeNull();
+  expect(attempts.lockedCount).toBe(1);
 });
 
 it("another candidate's attempts are not counted against this one", async () => {
@@ -415,4 +431,32 @@ it("the round-robin index is the number of attempts already minted on the versio
   const elsewhere = await candidateIn(beta);
   await attempt(beta, { candidateId: elsewhere, tokenHash: "rr-beta" });
   expect(await countAttemptsForVersion(db, alpha.workspaceId, alpha.versionId)).toBe(2);
+});
+
+// --- listSnapshotFaceCounts (M1) ----------------------------------------
+
+it("M1: reports the aggregate count and multi-face count, not one row per snapshot", async () => {
+  const candidateId = await candidateIn(alpha);
+  const id = await attempt(alpha, { candidateId, tokenHash: "snapshot-agg" });
+
+  expect(await listSnapshotFaceCounts(db, alpha.workspaceId, id)).toEqual({ count: 0, multiFaceCount: 0 });
+
+  await recordSnapshot(db, alpha.workspaceId, { attemptId: id, storageKey: "k1", takenAt: NOW, reason: "interval" });
+  await recordSnapshot(db, alpha.workspaceId, { attemptId: id, storageKey: "k2", takenAt: NOW, reason: "interval" });
+  await recordSnapshot(db, alpha.workspaceId, { attemptId: id, storageKey: "k3", takenAt: NOW, reason: "interval" });
+  // `recordSnapshot` always writes `face_count: null` (`Q3`: pre-cut) — one
+  // row is bumped by hand, the only way today to exercise the `> 1` branch.
+  await db.run("UPDATE snapshot SET face_count = 2 WHERE storage_key = 'k2'", []);
+
+  expect(await listSnapshotFaceCounts(db, alpha.workspaceId, id)).toEqual({ count: 3, multiFaceCount: 1 });
+});
+
+it("M1: another attempt's snapshots are not counted against this one", async () => {
+  const candidateId = await candidateIn(alpha);
+  const mine = await attempt(alpha, { candidateId, tokenHash: "snapshot-mine" });
+  const theirCandidate = await candidateIn(alpha);
+  const theirs = await attempt(alpha, { candidateId: theirCandidate, tokenHash: "snapshot-theirs" });
+
+  await recordSnapshot(db, alpha.workspaceId, { attemptId: theirs, storageKey: "k4", takenAt: NOW, reason: "interval" });
+  expect(await listSnapshotFaceCounts(db, alpha.workspaceId, mine)).toEqual({ count: 0, multiFaceCount: 0 });
 });
