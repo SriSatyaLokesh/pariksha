@@ -94,6 +94,7 @@ bucket_name = "pariksha-files"
 # has no handler — it costs no quota, but it will show in the dashboard. If
 # that noise is unwelcome before Phase 8, comment this block out; nothing
 # reads it.
+#
 # Phase 8d Task 4 (K22): the webhook drain, beside the nightly entry it
 # shares this block with. `webhookDrainJob` (`apps/api/src/webhooks/drain.ts`)
 # retries whatever `webhook_delivery` holds with exponential backoff out to
@@ -103,8 +104,18 @@ bucket_name = "pariksha-files"
 # finds nothing and exits on every tick but the rare one with a delivery
 # actually due. Measured, and meant to show up in the free-tier dashboard
 # `P8.14` builds, not to be invisible there.
+#
+# Phase 8b Task 4 (`K18`) adds a third entry: `2-59/5 * * * *` drains the
+# regrade queue (`apps/api/src/grade/regrade.ts`'s `regradeJob`,
+# `REGRADE_CRON`). Branch review C2, coordinator follow-up: deliberately NOT
+# the same string as the webhook drain above — `runScheduled` shares one
+# invocation's 50-subrequest ceiling across every job whose `cron` matches
+# verbatim, and two jobs on the identical string would have split that
+# ceiling (37 + 22 = 59, over it, before this fix). `2-59/5 * * * *` fires at
+# :02, :07, :12 and on — the same twelve times an hour as `*/5 * * * *`,
+# staggered rather than coincident.
 [triggers]
-crons = ["17 3 * * *", "*/5 * * * *"]
+crons = ["17 3 * * *", "*/5 * * * *", "2-59/5 * * * *"]
 
 # No `[vars]` block: everything this Worker reads is a secret, and anything
 # under `[vars]` is plaintext here and in the dashboard. See

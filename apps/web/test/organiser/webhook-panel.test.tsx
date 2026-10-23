@@ -80,6 +80,11 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     listApiKeys: notUsed,
     createApiKey: notUsed,
     revokeApiKey: notUsed,
+    // 8b's additions to `ApiClient` (#228 again — fourth time today that one
+    // interface change broke a hand-rolled copy of this fixture).
+    gradingQueue: notUsed,
+    grade: notUsed,
+    recordVerdict: notUsed,
     ...overrides,
   };
 }

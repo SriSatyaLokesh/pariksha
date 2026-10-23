@@ -19,6 +19,7 @@ import { QuestionScreen } from "./question";
 import { TestList } from "./tests";
 import { TestBuilder } from "./test";
 import { ImportScreen } from "./import";
+import { GradingRoute } from "./grading";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 
@@ -65,6 +66,11 @@ type View =
   | { kind: "webhooks"; actor: Actor; workspace: Workspace }
   | { kind: "keys"; actor: Actor; workspace: Workspace }
   | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
+  // Phase 8b Task 2 fix round 1 (`K15`, `AC-26`): the grading queue, reached
+  // from the test builder's own "Grading queue" button (`test.tsx`), never
+  // from the top nav — `D3` (`OrganiserShell.tsx:141-144`) keeps it off
+  // `NAV` until a cross-test inbox is actually wanted.
+  | { kind: "grading"; actor: Actor; workspace: Workspace; testId: string }
   // `bankName` is absent exactly when the browser was deep-linked rather
   // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
   // not in `ViewParams` and no call in this component fetches one.
@@ -330,7 +336,20 @@ export function OrganiserApp({
           // is readable by every member and writable only by an owner, so
           // the builder needs the membership to know which it is showing.
           actor={view.actor}
+          onOpenGrading={(testId) =>
+            go({ kind: "grading", actor: view.actor, workspace: view.workspace, testId })
+          }
         />,
+      );
+    case "grading":
+      // `current="tests"`, not a nav entry of its own (`D3`): this is a
+      // destination reached from one test, not a place the rail offers.
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        { title: "Grading queue", crumb: "Grading" },
+        <GradingRoute client={client} workspaceId={view.workspace.id} testId={view.testId} />,
       );
     case "banks":
       return shell(
@@ -397,6 +416,10 @@ export function OrganiserApp({
           bankId={view.bankId}
           initial={view.initial}
           client={client}
+          // Branch review M3: `QuestionScreen` gates the regrade offer on
+          // `attempts.grade`, which needs the actor's role in this
+          // workspace — already in scope here, same as every other arm.
+          actor={view.actor}
           // Stays on this screen after a save (`QuestionScreen`'s own
           // "Saved." status announces it) rather than navigating away —
           // the rail is the deliberate, explicit way out. A caller that
@@ -480,6 +503,10 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
       return params.test === undefined
         ? home
         : { kind: "test", actor, workspace, testId: params.test };
+    case "grading":
+      return params.test === undefined
+        ? home
+        : { kind: "grading", actor, workspace, testId: params.test };
     case "bank":
       return params.bank === undefined
         ? home
@@ -515,6 +542,8 @@ function paramsOf(view: View): ViewParams | null {
       return { view: view.kind };
     case "test":
       return { view: "test", test: view.testId };
+    case "grading":
+      return { view: "grading", test: view.testId };
     case "bank":
       return { view: "bank", bank: view.bankId };
     case "question":

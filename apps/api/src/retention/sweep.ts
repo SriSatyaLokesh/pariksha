@@ -417,6 +417,11 @@ async function sweepCandidates(
 export const retentionJob: ScheduledJob = {
   name: "retention.sweep",
   cron: CRON,
+  // Merge note (phase-8b/phase-8e, `ScheduledJob.maxSubrequests`): 30, the
+  // composed worst case `sweep.test.ts`'s "stays inside the subrequest
+  // ceiling with both halves loaded in the same tick" pins with `toBe` —
+  // see that test's own comment for the arithmetic.
+  maxSubrequests: 30,
   run: async (deps) => {
     const snapshots = await sweepSnapshots(deps);
     const candidates = await sweepCandidates(deps);
@@ -471,6 +476,9 @@ export const retentionJob: ScheduledJob = {
 export const rateLimitJob: ScheduledJob = {
   name: "rate_limit.sweep",
   cron: CRON,
+  // Merge note (phase-8b/phase-8e, `ScheduledJob.maxSubrequests`): 1 —
+  // `sweepRateLimits` is a single `DELETE`, nothing else.
+  maxSubrequests: 1,
   run: async (deps) => {
     // `MAX_WINDOW_MS` (`run/limit.ts`): `before` must be older than every
     // kind's window, not just one, because one `DELETE` sees every bucket.

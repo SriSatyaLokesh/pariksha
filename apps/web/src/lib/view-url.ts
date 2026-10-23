@@ -38,8 +38,15 @@ export interface ViewParams {
    * `?view=import&bank=bnk_1` is a bank import, `?view=import` alone is a
    * whole-test import — which names no bank, because it creates its own
    * test. One parameter, not two that can disagree.
+   *
+   * `grading` is Phase 8b Task 2 fix round 1 (`K15`): a destination of its
+   * own, reached from the test builder (`test.tsx`'s "Grading queue"
+   * button) rather than the top nav — `OrganiserShell.tsx:141-144`'s `D3`
+   * ruling. It carries `test`, the same id-bearing parameter `test`
+   * already does, because it names a queue scoped to one test, not a
+   * second kind of id.
    */
-  view: NavKey | "test" | "bank" | "question" | "import";
+  view: NavKey | "test" | "bank" | "question" | "import" | "grading";
   test?: string;
   bank?: string;
   section?: string;
@@ -61,6 +68,7 @@ const VIEWS: readonly ViewParams["view"][] = [
   "bank",
   "question",
   "import",
+  "grading",
 ];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */

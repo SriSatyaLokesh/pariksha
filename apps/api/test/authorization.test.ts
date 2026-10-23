@@ -269,5 +269,16 @@ it("the audit repository exposes no update or delete", () => {
     Object.keys(db)
       .filter((name) => name.toLowerCase().includes("audit"))
       .sort(),
-  ).toEqual(["appendAudit", "listAudit"]);
+  ).toEqual([
+    "appendAudit",
+    // Fix round (`M5`): N `appendAudit` calls batched into one `db.batch()`
+    // — still only `INSERT`, never an update or a delete.
+    "appendAuditBatch",
+    "listAudit",
+    // Phase 8b Task 4 (`K18`): the regrade cron's own cross-workspace
+    // read (`packages/db/src/repo/regrade-scan.ts`) — a second read, not
+    // an update or a delete, so `KG4`'s own guarantee (append-only) is
+    // unchanged by its existence.
+    "recentAuditRows",
+  ]);
 });

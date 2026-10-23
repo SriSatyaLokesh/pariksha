@@ -188,5 +188,8 @@ async function drain(deps: AppDeps): Promise<{ summary: string }> {
 export const webhookDrainJob: ScheduledJob = {
   name: "webhook-drain",
   cron: "*/5 * * * *",
+  // Merge note (phase-8b/phase-8e, `ScheduledJob.maxSubrequests`): 22 —
+  // `2 + DRAIN_BATCH_LIMIT`, this file's own worst-case arithmetic above.
+  maxSubrequests: 2 + DRAIN_BATCH_LIMIT,
   run: drain,
 };

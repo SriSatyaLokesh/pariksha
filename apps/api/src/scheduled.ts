@@ -6,9 +6,13 @@
 // of landing silently unscheduled.
 //
 // Phase 8d Task 4 registers `webhookDrainJob` (`*/5 * * * *`, K22) — the
-// first entry here. 8b and 8e add theirs beside it, each editing the pin.
+// first entry here. Phase 8b Task 4 (`K18`) adds `regradeJob`, staggered
+// onto its own `2-59/5 * * * *` trigger so it never shares an invocation
+// (and its 50-subrequest ceiling) with `webhookDrainJob`. 8e adds
+// `retentionJob` and `rateLimitJob` on the nightly trigger.
 
 import type { AppDeps } from "./app.js";
+import { regradeJob } from "./grade/regrade.js";
 import { rateLimitJob, retentionJob } from "./retention/sweep.js";
 import { webhookDrainJob } from "./webhooks/drain.js";
 
@@ -17,6 +21,17 @@ export interface ScheduledJob {
   /** The cron expression this job runs under, matched verbatim against
    *  `ScheduledController.cron`. */
   cron: string;
+  /**
+   * Branch review C2: the ceiling is 50 subrequests per **invocation**, not
+   * per job (`instrument.ts`'s own first line) — `runScheduled` awaits
+   * every job sharing a `cron` inside the one `scheduled()` call. A job
+   * declares the worst case it measured for one tick; `scheduled.test.ts`
+   * sums every declared `maxSubrequests` by `cron` and pins the total under
+   * `SUBREQUEST_LIMIT`, so two jobs that each fit alone but not together
+   * fail the suite instead of one silently losing `Too many subrequests`
+   * on every contended tick.
+   */
+  maxSubrequests: number;
   run(deps: AppDeps): Promise<{ summary: string }>;
 }
 
@@ -43,7 +58,12 @@ export interface ScheduledJob {
  * the other two — nothing here shares a 50-subrequest budget with anything
  * else.
  */
-export const SCHEDULED_JOBS: ScheduledJob[] = [webhookDrainJob, retentionJob, rateLimitJob];
+export const SCHEDULED_JOBS: ScheduledJob[] = [
+  webhookDrainJob,
+  retentionJob,
+  rateLimitJob,
+  regradeJob,
+];
 
 /**
  * Runs every job registered for `cron`, in order. One job throwing is

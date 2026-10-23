@@ -218,7 +218,14 @@ export function QuestionEditor({
    * to reset "Saved.", which used to be set once and never cleared.
    */
   onDirty?: () => void;
-  onSaved: (question: Question) => void;
+  /**
+   * Phase 8b Task 4 (`K17`/`K18`): the saved row's own id rides along as a
+   * second argument — `saved.document.id` is the ref_id an author typed,
+   * never the `qst_` row id a URL path segment (and the regrade route)
+   * needs, so `question.tsx`'s regrade offer has nowhere else to get it.
+   * Every other caller already ignores extra arguments it does not ask for.
+   */
+  onSaved: (question: Question, questionId: string) => void;
 }) {
   const [question, setQuestion] = useState<Question>(
     () => initial ?? withType({ id: freshQuestionId(), prompt: "" }, "single"),
@@ -318,7 +325,7 @@ export function QuestionEditor({
     setSaving(true);
     try {
       const saved = await client.saveQuestion(workspaceId, bankId, effectiveQuestion);
-      onSaved(saved.document);
+      onSaved(saved.document, saved.id);
     } catch (cause) {
       setNotice(cause instanceof ApiError ? cause.message : "The question could not be saved.");
     } finally {

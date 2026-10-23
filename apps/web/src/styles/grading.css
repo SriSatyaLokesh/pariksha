@@ -1,0 +1,61 @@
+/* Phase 8b Task 2 (`K15`): the grading queue's own layout. LAYOUT ONLY — not
+   one rule below declares `color`, `background` or `border-color`. Every
+   piece of text in `GradingQueue.tsx` is painted by a class this chain
+   already carries a `SURFACE` entry for (`.card-hairline`,
+   `.organiser-empty__title`, `.organiser__status`, `.field-help`,
+   `.field-label`, `.mono-caption`), and the rubric radios are the product's
+   one `input[type="radio"]` (`registration.css`, `D17`), already painted for
+   this ground by `admin.css`'s `--control-accent`/`--control-edge` alias. So
+   `contrast-usage.test.ts` needs no new entry for this file — it only
+   collects selectors that set a `color`, and this one sets none. */
+
+.grading-queue {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.grading-queue__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.grading-queue__cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+}
+
+.grading-queue__card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.grading-queue__rubric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.grading-queue__options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* `touch-spacing`/`touch-target-size`: the radio is 17px (registration.css,
+   `D17`) and the label extends its hit area rather than leaving a tiny
+   circle as the only target — the row, not the glyph, is what a reviewer
+   clicks. */
+.grading-queue__option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  min-height: 44px;
+}
+
+.grading-queue__option .field-label {
+  cursor: pointer;
+}

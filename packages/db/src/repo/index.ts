@@ -18,6 +18,15 @@ export * from "./candidates.js";
 export * from "./run.js";
 // Phase 8a Task 7 (K9, KG3): the organiser's first attempt read.
 export * from "./results.js";
+// Phase 8b Task 1 (K14): manual grading's writes and the grading queue's
+// one read.
+export * from "./grading.js";
+// Phase 8b Task 3 (K16): the reviewer's verdict, append-only.
+export * from "./review.js";
+// Phase 8b Task 4 (K17/K18): regrade's own, version-scoped attempt reads
+// and batched write. `regrade-scan.ts` sits beside this list, not in it —
+// see its own header for why.
+export * from "./regrade.js";
 // Phase 8d Task 1: webhook CRUD, and Task 3's own delivery read.
 export * from "./webhooks.js";
 // Phase 8d Task 2 (K25, K26): scoped API keys. `resolveApiKey` is

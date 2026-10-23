@@ -11,6 +11,7 @@ import {
   ApiError,
   type ApiClient,
   type Actor,
+  type GradingQueueRow,
   type IdentityProvider,
   type Workspace,
 } from "../src/lib/api";
@@ -128,6 +129,15 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     candidates: async () => [],
     importCandidates: async () => {
+      throw new Error("not used by this test file");
+    },
+    gradingQueue: async () => {
+      throw new Error("not used by this test file");
+    },
+    grade: async () => {
+      throw new Error("not used by this test file");
+    },
+    recordVerdict: async () => {
       throw new Error("not used by this test file");
     },
     exportCandidateData: async () => {
@@ -1417,6 +1427,125 @@ describe("OrganiserApp routes on state, not on a URL", () => {
       logo_alt: "Alpha College crest",
       primary_colour: "#b63a10",
     });
+  });
+
+  // Phase 8b Task 2 fix round 1 (`K15`, `AC-26`): `GradingRoute` had no
+  // caller in the running app until this fix — a `routes/grading.tsx` file
+  // that compiled, typechecked and rendered correctly in its own component
+  // test, and that nothing in `organiser.tsx` ever mounted. Same shape as
+  // the `K28` reachability tests above it: walked from the app's own entry
+  // point, through the button an organiser actually clicks, never rendered
+  // directly.
+  it("reaches the grading queue from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      closesAt: null,
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const DRAFT = {
+      id: "ver_1",
+      testId: "tst_1",
+      version: 1,
+      body: { settings: {}, sections: [] },
+      publishedAt: null,
+      createdAt: 0,
+      draw: {},
+      setPoints: {},
+      points: {},
+    };
+    const ROW: GradingQueueRow = {
+      attemptId: "att_1",
+      questionId: "qst_1",
+      value: { kind: "text", text: "A candidate's answer." },
+      question: { prompt: "Summarise.", rubric: [{ level: "thorough", points: 4 }] },
+      award: null,
+      points: null,
+    };
+    const gradingQueue = vi.fn(async () => ({ rows: [ROW], nextCursor: null }));
+    const { container } = render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => DRAFT,
+          gradingQueue,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Grading queue" }));
+
+    expect(await screen.findAllByRole("article")).toHaveLength(1);
+    // The real call site, with the real ids — not a prop a direct render
+    // of `GradingQueue` could never prove.
+    expect(gradingQueue).toHaveBeenCalledWith("wsp_1", "tst_1", { blind: true });
+    expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // An Author holds `tests.edit`, not `attempts.grade` — the same route the
+  // button leads to would 403 them. `KG2`'s pairing, applied to a nav
+  // affordance rather than a route: a control that leads nowhere an Author
+  // may go must not appear for one at all.
+  it("an Author sees no entry to the grading queue, which would refuse them", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      closesAt: null,
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    // The Results row is the one `openSetting` already proves reachable
+    // for every role, so its presence here is what makes the absence below
+    // a missing control rather than a page that has not finished loading.
+    await openSetting("Results");
+    expect(screen.queryByRole("button", { name: "Grading queue" })).toBeNull();
   });
 
   // ACTOR above is an owner. An Author reaching the same screen must see
