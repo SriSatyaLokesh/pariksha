@@ -87,6 +87,18 @@ export function TestStateBadge({ state }: { state: TestState }) {
  * same `buildChecklist` the builder's own rail does, over four statements
  * total regardless of how many tests there are. `test-list.test.tsx` guards
  * both the meter's presence and the call budget.
+ *
+ * WHERE IT RENDERS, fix round 2: not in its own column, and not folded onto
+ * this function's own Version line either — both measured **24px taller**
+ * in a real browser (`e2e/measurement/density.spec.ts`'s testList row,
+ * invisible to this package's jsdom suite: every cell in a table row shares
+ * one height, and `.test-version`'s `white-space: nowrap` makes that
+ * column's minimum width exactly its content width, so a single extra
+ * character there has nowhere to go but to steal width from a column that
+ * CAN shrink — the short-link cell's "Copy short link" button, which wraps
+ * to a second line the moment it loses that width). The State cell's flex
+ * line, beside `TestStateBadge`, is the one place on this row with width to
+ * spare; see that `<td>` in the markup below.
  */
 function versionSummary(test: TestSummary): string {
   if (test.currentVersion === null) return "never published";
@@ -515,10 +527,6 @@ export function TestList({
                       Version is the publish history. */}
                   <th scope="col">State</th>
                   <th scope="col">Version</th>
-                  {/* Phase 8c Task 5 (`D7c`): the readiness aggregate, one
-                      call for the whole table (`K21`) — not a third fact
-                      folded into Version, which already carries two. */}
-                  <th scope="col">Readiness</th>
                   <th scope="col" {...sortHeaderProps("updated")}>
                     Last edited
                   </th>
@@ -568,12 +576,20 @@ export function TestList({
                             <Icon name="review" /> In review
                           </span>
                         )}
+                        {/* Fix round 2: reuses `.test-badge` — already
+                            audited (`contrast-usage.test.ts`), already
+                            mono/quiet/no-hue — rather than a new selector.
+                            No visible label: the column header that would
+                            have named it cost 24px of row height in a real
+                            browser (see `versionSummary`'s own docblock,
+                            above), so the number stands alone for a sighted
+                            reader and `aria-label` carries the word for
+                            everyone else. */}
+                        <span className="test-badge" aria-label={`Readiness ${readinessSummary(readiness[test.id])}`}>
+                          {readinessSummary(readiness[test.id])}
+                        </span>
                       </td>
                       <td className="test-version">{versionSummary(test)}</td>
-                      {/* Reuses `.test-version`'s own rule (mono, quiet,
-                          no hue) rather than a new selector — the same
-                          kind of supporting fact in the same row. */}
-                      <td className="test-version">{readinessSummary(readiness[test.id])}</td>
                       <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
                       <td>
                         <div className="field">

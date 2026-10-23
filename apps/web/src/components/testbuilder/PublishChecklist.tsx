@@ -39,7 +39,7 @@ import { Icon } from "../OrganiserShell";
 // panel would be unreachable the moment a hover ended.
 
 /** The one phrase for "the gate raised nothing" — exported so the test
- *  list's own readiness column (`routes/tests.tsx`, Phase 8c Task 5) reads
+ *  list's own readiness figure (`routes/tests.tsx`, Phase 8c Task 5) reads
  *  the same word this rail does for the same state, rather than growing a
  *  second literal that can drift from it. A zero-row test is "All clear" in
  *  both places or `K33` is back. */
@@ -223,13 +223,17 @@ export function PublishChecklist({
                     "not blocking, N must fix" qualifier beside the number,
                     for the reader who has the whole panel open. Phase 8c
                     Task 5 (`D7c`) put the bare number a second place too,
-                    the test list's own Readiness column, for a reader who
-                    is scanning many tests and has no panel open at all; that
-                    surface renders `${ready} / ${total}` with no qualifier
-                    (a list column is not a rail) but reuses `ALL_CLEAR`
-                    above for the zero-row case rather than growing its own
-                    word for it — the defect this rail's own history is
-                    about.
+                    inline beside the test list's own State badge (fix round
+                    2: a column of its own, and even a figure folded onto the
+                    Version cell's own line, both measured 24px taller in a
+                    real browser — `routes/tests.tsx` has the mechanism; the
+                    State cell's flex line is the one place on that row with
+                    width to spare), for a reader who is scanning many tests
+                    and has no panel open at all; that surface renders
+                    `${ready} / ${total}` with no qualifier (a list row is
+                    not a rail) but reuses `ALL_CLEAR` above for the
+                    zero-row case rather than growing its own word for it —
+                    the defect this rail's own history is about.
 
                     "not blocking", not "clear", for the number itself:
                     the arithmetic is the brief's and is unchanged; the word
