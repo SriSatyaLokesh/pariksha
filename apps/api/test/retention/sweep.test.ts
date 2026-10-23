@@ -20,7 +20,7 @@ import type { TestRetention } from "@pariksha/core";
 import { testDeps, FIXED_NOW } from "../deps.js";
 import { seedWorkspace, seedTest } from "../run/fixtures.js";
 import { countingDeps, SUBREQUEST_LIMIT } from "../../src/instrument.js";
-import { rateLimitJob, retentionJob, RETENTION_BATCH } from "../../src/retention/sweep.js";
+import { DELETE_CHUNK, rateLimitJob, retentionJob, RETENTION_BATCH } from "../../src/retention/sweep.js";
 import type { AppDeps } from "../../src/app.js";
 
 const DAY = 86_400_000;
@@ -33,8 +33,13 @@ const DAY = 86_400_000;
 async function seedAttempt(
   deps: AppDeps,
   retention?: TestRetention,
+  // Distinct per call only when a test actually needs more than one
+  // workspace in its (fresh, per-test) database — `seedWorkspace`'s own
+  // slug is unique per workspace, and every other test here seeds exactly
+  // one, so the shared default is fine for them.
+  slug = "retention",
 ): Promise<{ wsp: string; attemptId: string }> {
-  const wsp = await seedWorkspace(deps);
+  const wsp = await seedWorkspace(deps, slug);
   const testId = await seedTest(deps, wsp, {
     name: "Retention",
     slug: "retention",
@@ -228,6 +233,39 @@ it("stays inside the subrequest ceiling on one tick", async () => {
   const counting = countingDeps(deps);
   await retentionJob.run(counting.deps);
 
+  // Exact, not just under the ceiling: 1 snapshot SELECT + the chunked
+  // DELETEs a full RETENTION_BATCH needs (Fix round 2, F3) + 1 batched
+  // storage.delete + 1 (empty) response SELECT + 1 audit row for the one
+  // workspace this run touched.
+  const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
+  expect(counting.counts().total).toBe(1 + deleteChunks + 1 + 1 + 1);
+  expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
+}, 30_000);
+
+it("stays inside the subrequest ceiling when the batch spans several workspaces", async () => {
+  // Fix round 2: the per-workspace audit loop (one `appendAudit` per
+  // workspace a run touched) is the one piece of this job whose cost does
+  // not come from `RETENTION_BATCH`/`DELETE_CHUNK` directly — it comes
+  // from how many distinct workspaces the fetched batch happens to span.
+  // A full batch spread over several ordinary workspaces (as opposed to
+  // one workspace's own 500) is the realistic shape to prove safe.
+  const { deps } = await testDeps();
+  const perWorkspace = 100;
+  const workspaceCount = RETENTION_BATCH / perWorkspace;
+  for (let w = 0; w < workspaceCount; w++) {
+    const { wsp, attemptId } = await seedAttempt(deps, undefined, `ws-${w}`);
+    for (let i = 0; i < perWorkspace; i++) {
+      await addSnapshot(deps, wsp, attemptId, FIXED_NOW - 100 * DAY, `snap/${attemptId}/${i}`);
+    }
+  }
+
+  const counting = countingDeps(deps);
+  await retentionJob.run(counting.deps);
+
+  const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
+  // 1 snapshot SELECT + the chunked DELETEs + 1 batched storage.delete +
+  // 1 (empty) response SELECT + one audit row per workspace touched.
+  expect(counting.counts().total).toBe(1 + deleteChunks + 1 + 1 + workspaceCount);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 

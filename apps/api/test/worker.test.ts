@@ -11,6 +11,7 @@ import { d1Client, migrate } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
 import { SCHEDULED_JOBS } from "../src/scheduled.js";
+import { RETENTION_BATCH } from "../src/retention/sweep.js";
 
 const binding = () => d1Client((env as { DB: D1Database }).DB);
 
@@ -358,3 +359,74 @@ it("the worker entry accepts a scheduled invocation over the same bindings", asy
     SCHEDULED_JOBS.splice(SCHEDULED_JOBS.indexOf(probe), 1);
   }
 });
+
+// Fix round 2, F3: `retentionJob`'s delete is `DELETE … WHERE id IN (…)`
+// with one bound parameter per id, and a full `RETENTION_BATCH` (500)
+// overflows D1's documented 100-bound-parameter ceiling — a fact
+// `better-sqlite3` (every other test in this phase) has no equivalent
+// limit for and so cannot catch. This is the one database that can, run
+// through the real `scheduled` export like the tests above it, with
+// `retentionJob` reached exactly as it is already registered in
+// `SCHEDULED_JOBS` rather than invoked directly — so a break in the
+// registry or the Worker's wiring would fail this too, not just a unit
+// call.
+it("the nightly sweep clears a full RETENTION_BATCH of expired snapshots against real D1", async () => {
+  const db = d1Client(env.DB as unknown as D1Database);
+  await migrate(db);
+
+  const workspaceId = "wsp_d1sweep00001";
+  const versionId = "ver_d1sweep00001";
+  const attemptId = "att_d1sweep00001";
+  const now = Date.now();
+  const DAY = 86_400_000;
+
+  await db.run("INSERT INTO workspace (id, slug, name, created_at) VALUES (?, ?, ?, ?)", [
+    workspaceId,
+    "d1sweep",
+    "D1 Sweep",
+    now,
+  ]);
+  // No `retention` key: S-13's defaults (snapshots 90 days) apply.
+  await db.run(
+    "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, published_at, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [versionId, workspaceId, "tst_d1sweep0001", 1, "{}", "[]", now, now],
+  );
+  await db.run(
+    "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, " +
+      "deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, section_started_at, " +
+      "integrity_flag, observed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, NULL, ?, ?)",
+    [attemptId, workspaceId, "cnd_d1sweep0001", versionId, 1, "{}", now, now + DAY, "clean", "hash-d1sweep", 0, "clean", 0],
+  );
+
+  const takenAt = now - 100 * DAY; // past the 90-day default
+  await db.batch(
+    Array.from({ length: RETENTION_BATCH }, (_, i) => ({
+      sql:
+        "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason, face_count) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+      params: [`snp_d1sweep${String(i).padStart(7, "0")}`, workspaceId, attemptId, `snap/d1sweep/${i}`, takenAt, "interval", null],
+    })),
+  );
+
+  const ctx = createExecutionContext();
+  const noRetry = vi.fn();
+  worker.scheduled(
+    { cron: "17 3 * * *", scheduledTime: now, noRetry },
+    env as unknown as Parameters<typeof worker.scheduled>[1],
+    ctx,
+  );
+  // F3's bug does not throw here: `runScheduled`'s per-job try/catch
+  // (K27's isolation) turns a rejected `retentionJob.run` into a name in
+  // `failed`, which `index.ts` reports by calling `noRetry()` and then
+  // throwing — so the proof an unchunked delete would fail is `noRetry()`
+  // never being called, not a rejection from this call.
+  await waitOnExecutionContext(ctx);
+  expect(noRetry).not.toHaveBeenCalled();
+
+  const remaining = await db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM snapshot WHERE workspace_id = ?",
+    [workspaceId],
+  );
+  expect(Number(remaining[0]?.n ?? -1)).toBe(0);
+}, 30_000);

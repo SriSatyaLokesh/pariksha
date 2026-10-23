@@ -22,14 +22,48 @@ const DAY_MS = 86_400_000;
 const CRON = "17 3 * * *";
 
 /**
- * K30: bounded, not "everything expired" in one tick. Measured, not
- * guessed — one SELECT, one batched `storage.delete` and one batched row
- * DELETE cost the same one-subrequest-each at 5 rows or at 500
- * (`StorageAdapter.delete` and a `WHERE id IN (…)` are both one call
- * regardless of key count), so 500 is sized to keep a D1 statement's own
- * row budget comfortable, not the Worker's 50-subrequest ceiling.
+ * K30: bounded, not "everything expired" in one tick. The fetch stays one
+ * SELECT regardless of size — one bound parameter (`LIMIT ?`), not one per
+ * row — so 500 is sized to keep a D1 statement's own row budget
+ * comfortable, not the Worker's 50-subrequest ceiling. The deletes derived
+ * from it are a different constraint; see `DELETE_CHUNK`.
  */
 export const RETENTION_BATCH = 500;
+
+/**
+ * Fix round 2, F3: Cloudflare's documented D1 limit is **100 bound
+ * parameters per query**. A `DELETE … WHERE id IN (…)` binds one parameter
+ * per id, so a `RETENTION_BATCH`-sized batch (500) overflows it — green on
+ * `better-sqlite3`, which has no such cap, and red on the only database
+ * that matters. `deleteChunked` below splits the id list into groups of at
+ * most this many instead.
+ *
+ * **Deliberately not the same number as `RETENTION_BATCH`, and must stay
+ * that way**: the two are different constraints on different statements
+ * (one bound parameter for the fetch's `LIMIT`, one bound parameter per id
+ * for a delete's `IN (…)`) that happen to both be sized in the hundreds.
+ * Folding them into one constant would make a future reader's "simplify
+ * this" correct-looking and wrong.
+ */
+export const DELETE_CHUNK = 100;
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const groups: T[][] = [];
+  for (let i = 0; i < items.length; i += size) groups.push(items.slice(i, i + size));
+  return groups;
+}
+
+/** Deletes `ids` from `table` in groups of `DELETE_CHUNK`, each its own
+ *  statement — one `db.run` per chunk, so a 500-row batch costs up to 5
+ *  subrequests here, not 1 and not 500. `table` is always one of this
+ *  module's own two literals, never request input, so the interpolation
+ *  below binds no value a candidate or an organiser ever supplied. */
+async function deleteChunked(db: DbClient, table: "snapshot" | "response", ids: string[]): Promise<void> {
+  for (const group of chunk(ids, DELETE_CHUNK)) {
+    const placeholders = group.map(() => "?").join(", ");
+    await db.run(`DELETE FROM ${table} WHERE id IN (${placeholders})`, group);
+  }
+}
 
 interface Candidate {
   id: string;
@@ -98,8 +132,7 @@ async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorks
   // Object first, row second — see the function above this one.
   await deps.storage.delete(due.map((row) => row.storage_key));
 
-  const placeholders = due.map(() => "?").join(", ");
-  await deps.db.run(`DELETE FROM snapshot WHERE id IN (${placeholders})`, due.map((row) => row.id));
+  await deleteChunked(deps.db, "snapshot", due.map((row) => row.id));
 
   return { deleted: due.length, byWorkspace: tally(due) };
 }
@@ -116,8 +149,7 @@ async function sweepResponses(deps: AppDeps): Promise<{ deleted: number; byWorks
   const due = expired(deps.db, rows, deps.now(), (r) => r.personalDataDays);
   if (due.length === 0) return { deleted: 0, byWorkspace: new Map() };
 
-  const placeholders = due.map(() => "?").join(", ");
-  await deps.db.run(`DELETE FROM response WHERE id IN (${placeholders})`, due.map((row) => row.id));
+  await deleteChunked(deps.db, "response", due.map((row) => row.id));
 
   return { deleted: due.length, byWorkspace: tally(due) };
 }
