@@ -62,9 +62,7 @@ export const listSubmittedAttemptsForVersion = scoped(
 );
 
 /** `enqueueRegrade`'s own count (`K18`: "how many attempts will be
- *  rescored"), and the job's fallback when a `"regrade.requested"` row
- *  predates this addition and carries no `queued` of its own. Same
- *  no-join shape as `listSubmittedAttemptsForVersion`. */
+ *  rescored"). Same no-join shape as `listSubmittedAttemptsForVersion`. */
 export const countSubmittedAttemptsForVersion = scoped(
   "countSubmittedAttemptsForVersion",
   async (db: DbClient, workspaceId: string, testVersionId: string): Promise<number> => {
@@ -73,6 +71,40 @@ export const countSubmittedAttemptsForVersion = scoped(
       [workspaceId, testVersionId],
     );
     return Number(rows[0]?.n ?? 0);
+  },
+);
+
+/**
+ * `countSubmittedAttemptsForVersion`, for every id in `testVersionIds`, in
+ * one grouped statement — fix round `M5(a)`: the regrade route used to call
+ * the singular version once per matched published version (2 subrequests
+ * each, with `appendAuditBatch`'s sibling fix, flat at 2), which made its
+ * declared budget of 5 false past one matching version. `GROUP BY` costs
+ * one statement regardless of how many ids are asked for; chunked at 99 ids
+ * (D1's 100-bound-parameter cap, one slot reserved for `workspaceId`) only
+ * because this product has no ceiling on how many published versions one
+ * question can appear in — ordinary use never approaches the chunk size.
+ * A version with zero submitted attempts is absent from the grouped result,
+ * not present at 0, so the caller must default a missing id itself.
+ */
+export const countSubmittedAttemptsForVersions = scoped(
+  "countSubmittedAttemptsForVersions",
+  async (db: DbClient, workspaceId: string, testVersionIds: readonly string[]): Promise<Map<string, number>> => {
+    const counts = new Map<string, number>();
+    if (testVersionIds.length === 0) return counts;
+    const CHUNK = 99;
+    for (let i = 0; i < testVersionIds.length; i += CHUNK) {
+      const chunk = testVersionIds.slice(i, i + CHUNK);
+      const placeholders = chunk.map(() => "?").join(", ");
+      const rows = await db.query<{ test_version_id: string; n: number }>(
+        "SELECT test_version_id, COUNT(*) AS n FROM attempt " +
+          `WHERE workspace_id = ? AND test_version_id IN (${placeholders}) AND submitted_at IS NOT NULL ` +
+          "GROUP BY test_version_id",
+        [workspaceId, ...chunk],
+      );
+      for (const row of rows) counts.set(row.test_version_id, Number(row.n));
+    }
+    return counts;
   },
 );
 

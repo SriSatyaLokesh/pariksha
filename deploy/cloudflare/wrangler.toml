@@ -95,13 +95,19 @@ bucket_name = "pariksha-files"
 # that noise is unwelcome before Phase 8, comment this block out; nothing
 # reads it.
 #
-# Phase 8b Task 4 (`K18`): `*/5 * * * *` drains the regrade queue
-# (`apps/api/src/grade/regrade.ts`'s `regradeJob`) — the same frequent
-# trigger 8d's webhook drain also registers under. Expect this line to
-# conflict at merge with whichever of 8d/8e lands it first; the fix is one
-# cron array carrying both, not two `[triggers]` blocks.
+# Phase 8b Task 4 (`K18`): drains the regrade queue
+# (`apps/api/src/grade/regrade.ts`'s `regradeJob`, `REGRADE_CRON`).
+# Branch review C2, coordinator follow-up: deliberately NOT the same string
+# as 8d's webhook drain (also frequent, on `*/5 * * * *` in `main`) —
+# `runScheduled` shares one invocation's 50-subrequest ceiling across every
+# job whose `cron` matches verbatim, and two jobs on the identical string
+# would have split that ceiling (37 + 22 = 59, over it, before this fix).
+# `2-59/5 * * * *` fires at :02, :07, :12 and on — the same twelve times an
+# hour as `*/5 * * * *`, staggered rather than coincident. Expect this line
+# to conflict at merge with 8d/8e's own crons entry; the fix is one array
+# carrying every expression, not two `[triggers]` blocks.
 [triggers]
-crons = ["17 3 * * *", "*/5 * * * *"]
+crons = ["17 3 * * *", "2-59/5 * * * *"]
 
 # No `[vars]` block: everything this Worker reads is a secret, and anything
 # under `[vars]` is plaintext here and in the dashboard. See

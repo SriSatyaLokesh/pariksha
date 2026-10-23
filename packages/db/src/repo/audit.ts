@@ -47,6 +47,47 @@ export const appendAudit = scoped(
   },
 );
 
+/**
+ * `appendAudit`, N times, in one `db.batch()` — Phase 8b Task 4's fix round
+ * (`M5`): the regrade route enqueues one `"regrade.requested"` row per
+ * published version a key change affects, and N single-row `appendAudit`
+ * calls cost N subrequests where one `batch()` costs one regardless of N.
+ * Still append-only: every statement in the batch is an `INSERT`, nothing
+ * this module does not already allow one row at a time.
+ */
+export const appendAuditBatch = scoped(
+  "appendAuditBatch",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    entries: readonly {
+      actor: string;
+      action: string;
+      target: string;
+      detail?: unknown;
+      now?: number;
+    }[],
+  ): Promise<string[]> => {
+    if (entries.length === 0) return [];
+    const ids = entries.map(() => newId("aud"));
+    await db.batch(
+      entries.map((input, i) => ({
+        sql: "INSERT INTO audit_log (id, workspace_id, actor, action, target, detail_json, at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        params: [
+          ids[i],
+          workspaceId,
+          input.actor,
+          input.action,
+          input.target,
+          input.detail === undefined ? null : db.jsonParam(input.detail),
+          input.now ?? Date.now(),
+        ],
+      })),
+    );
+    return ids;
+  },
+);
+
 export const listAudit = scoped(
   "listAudit",
   async (

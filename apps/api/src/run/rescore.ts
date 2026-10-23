@@ -35,6 +35,18 @@ export interface RescoreResult {
  * a throw out of the engine become anything worse than an unscored,
  * flagged attempt. See `submit.ts`'s header (rule 3) for why that last
  * part is a rule and not a convenience.
+ *
+ * `questions`, optional: a caller that has **already** read the live bank
+ * for this workspace this tick — `grade/regrade.ts`'s batch loop is the
+ * one caller that does, for its own award reconstruction — hands the same
+ * map back in and this function skips its own `liveQuestions` call.
+ * Fix round (`M6`): without this, a regrade batch of N attempts paid N
+ * full `workspaceQuestions` scans, one per attempt, for a bank that never
+ * changes mid-batch. `K5`'s "one scoring path" rule is unchanged — this is
+ * still the only place an `AttemptScore` is produced, it just stops
+ * re-reading what its caller already holds. Every other caller
+ * (`submit.ts`, `grade/award.ts`) omits it and keeps paying its own single
+ * read, exactly as before.
  */
 export async function rescoreAttempt(
   deps: AppDeps,
@@ -44,11 +56,12 @@ export async function rescoreAttempt(
     settings: unknown;
     responses: Record<string, ResponseValue | null>;
     awards: Record<string, RubricAward>;
+    questions?: ReadonlyMap<string, Question>;
   },
 ): Promise<RescoreResult> {
   const { workspaceId, layout, settings, responses, awards } = input;
 
-  const byId = await liveQuestions(deps, workspaceId);
+  const byId = input.questions ?? (await liveQuestions(deps, workspaceId));
   const blocked = blockedQuestions(layout, byId);
   const blockedIds = new Set(blocked.map((one) => one.questionId));
 

@@ -396,6 +396,10 @@ export function OrganiserApp({
           bankId={view.bankId}
           initial={view.initial}
           client={client}
+          // Branch review M3: `QuestionScreen` gates the regrade offer on
+          // `attempts.grade`, which needs the actor's role in this
+          // workspace — already in scope here, same as every other arm.
+          actor={view.actor}
           // Stays on this screen after a save (`QuestionScreen`'s own
           // "Saved." status announces it) rather than navigating away —
           // the rail is the deliberate, explicit way out. A caller that

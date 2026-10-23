@@ -555,19 +555,19 @@ export const ROUTE_BUDGETS: Record<string, number> = {
 
   // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Measured
   // (`apps/api/test/grade/regrade.test.ts`'s own "measures the real
-  // subrequest cost" test, one published version referencing the question):
-  // auth (2) + `publishedVersionsForQuestion` (1) + `enqueueRegrade`'s own
-  // count and audit write (2) = 5.
+  // subrequest cost" test): auth (2) + `publishedVersionsForQuestion` (1) +
+  // `countSubmittedAttemptsForVersions`'s one grouped count (1) +
+  // `appendAuditBatch`'s one batched write (1) = 5.
   //
-  // ponytail: **not flat** in how many published versions reference the
-  // question — each adds one more `enqueueRegrade` call (2 more
-  // subrequests), because a key edit can regrade more than one still-live
-  // published version at once (`AC-08`: "any published version uses"). A
-  // question referenced by a couple of live versions stays nowhere near the
-  // ceiling; one referenced by dozens would not. If that is ever realistic
-  // for this product, the fix is batching `enqueueRegrade`'s count and
-  // audit write across versions in one `db.batch()`, not raising this
-  // number.
+  // **Flat in how many published versions matched** (branch review M5(a) —
+  // this budget line used to be measured against exactly one match and
+  // declared itself flat while the route looped `enqueueRegrade` once per
+  // version at 2 subrequests each; past ~24 matches it would have hit the
+  // 50-subrequest ceiling the budget table exists to catch). The grouped
+  // count is chunked at 99 ids (D1's 100-bound-parameter cap,
+  // `packages/db/src/repo/regrade.ts`'s own comment) — a question matched
+  // by more published versions than that pays one more subrequest per 99,
+  // which this product has never approached.
   "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": 5,
 };
 

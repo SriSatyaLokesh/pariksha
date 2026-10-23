@@ -203,6 +203,18 @@ async function testsUsingQuestion(
  * `bankId` and a `questionId` and nothing about tests, so it is the one
  * screen that genuinely needs the *ids*, not just the name list
  * `testsUsingQuestion` returns for `deleteQuestion`'s 409 message.
+ *
+ * **Branch review M5(b): the `bankId` arm over-matches for this caller.**
+ * It answers "every published version drawing from this bank at all" (any
+ * `pool` source), which is the right, deliberately broad question for
+ * `testsUsingQuestion`'s own job — refusing a delete must never miss a real
+ * reference. For the regrade route it is too broad: a version whose only
+ * draw from the bank is a `pool` section that happens never to include this
+ * particular question still matches, and gets a regrade enqueued for work
+ * it was never actually doing. Not fixed here — the correct long-run test
+ * is the attempt's own pinned `layout_json`/pool-draw record, a later
+ * phase's work — named at the regrade route's own call site too, not left
+ * as a silently-borrowed semantics mismatch.
  */
 export const publishedVersionsForQuestion = scoped(
   "publishedVersionsForQuestion",

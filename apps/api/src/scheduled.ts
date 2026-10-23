@@ -14,6 +14,17 @@ export interface ScheduledJob {
   /** The cron expression this job runs under, matched verbatim against
    *  `ScheduledController.cron`. */
   cron: string;
+  /**
+   * Branch review C2: the ceiling is 50 subrequests per **invocation**, not
+   * per job (`instrument.ts`'s own first line) — `runScheduled` awaits
+   * every job sharing a `cron` inside the one `scheduled()` call. A job
+   * declares the worst case it measured for one tick; `scheduled.test.ts`
+   * sums every declared `maxSubrequests` by `cron` and pins the total under
+   * `SUBREQUEST_LIMIT`, so two jobs that each fit alone but not together
+   * fail the suite instead of one silently losing `Too many subrequests`
+   * on every contended tick.
+   */
+  maxSubrequests: number;
   run(deps: AppDeps): Promise<{ summary: string }>;
 }
 
