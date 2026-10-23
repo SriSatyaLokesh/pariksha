@@ -21,12 +21,13 @@ import { testDeps, FIXED_NOW } from "../deps.js";
 import { seedWorkspace, seedTest } from "../run/fixtures.js";
 import { countingDeps, SUBREQUEST_LIMIT } from "../../src/instrument.js";
 import {
-  CANDIDATE_BATCH,
+  CANDIDATE_WORKSPACE_LIMIT,
   DELETE_CHUNK,
   rateLimitJob,
   retentionJob,
   RETENTION_BATCH,
 } from "../../src/retention/sweep.js";
+import { MAX_IDS_PER_CHUNK } from "../../src/retention/candidate.js";
 import type { AppDeps } from "../../src/app.js";
 
 const DAY = 86_400_000;
@@ -443,6 +444,57 @@ it("does not touch a candidate with a live attempt, even if created long ago", a
   expect(isBlanked(deps, await getCandidate(deps, wsp, candidateId))).toBe(false);
 });
 
+// Fix round 1, F2: the one race the anchor cannot close on its own — an
+// attempt starts for a candidate *after* `dueCandidates`'s SELECT decided
+// it was due, but *before* `sweepCandidates` reaches that workspace in its
+// per-workspace loop, within the same tick. Simulated here by intercepting
+// `deps.db.query`: the moment `dueCandidates`'s own SELECT (identified by
+// its `workspace_rank` column, unique to that query) returns, a live
+// attempt is inserted for one of the two due candidates it found — exactly
+// the gap the real code cannot see. `deleteCandidates` then refuses that
+// one workspace (`AttemptInProgressError`); the question this test asks is
+// whether that takes the *other* workspace's erasure down with it.
+it("skips a workspace whose due candidate gained a live attempt mid-tick, without failing the other workspace", async () => {
+  const { deps } = await testDeps();
+  const { wsp: raceWsp, testId: raceTestId, versionId: raceVersionId } = await seedCandidateTest(deps, {
+    slug: "race-a",
+  });
+  if (!raceVersionId) throw new Error("fixture: expected a published version");
+  const { wsp: safeWsp, testId: safeTestId } = await seedCandidateTest(deps, { slug: "race-b" });
+  const raceCandidateId = await addCandidateOnly(deps, raceWsp, raceTestId, FIXED_NOW - 400 * DAY);
+  const safeCandidateId = await addCandidateOnly(deps, safeWsp, safeTestId, FIXED_NOW - 400 * DAY);
+
+  let injected = false;
+  const racingDb: typeof deps.db = {
+    ...deps.db,
+    query: (async <T = Record<string, unknown>>(sql: string, params?: unknown[]): Promise<T[]> => {
+      const rows = await deps.db.query<T>(sql, params);
+      if (!injected && sql.includes("workspace_rank")) {
+        injected = true;
+        const attemptId = newId("att");
+        await deps.db.run(
+          "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, " +
+            "started_at, deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, " +
+            "section_started_at, integrity_flag, observed) " +
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, ?, ?, ?, NULL, ?, ?)",
+          [attemptId, raceWsp, raceCandidateId, raceVersionId, 1, "{}", FIXED_NOW, FIXED_NOW + DAY, "clean", `hash-${attemptId}`, 0, "clean", 0],
+        );
+      }
+      return rows;
+    }) as typeof deps.db.query,
+  };
+
+  const result = await retentionJob.run({ ...deps, db: racingDb });
+
+  expect(injected).toBe(true); // the race fixture itself actually fired
+  // The raced workspace survives the gap untouched -- deleteCandidates
+  // refused the whole call rather than blanking around a now-live attempt.
+  expect(isBlanked(deps, await getCandidate(deps, raceWsp, raceCandidateId))).toBe(false);
+  // The other workspace's erasure is unaffected by its sibling's race.
+  expect(isBlanked(deps, await getCandidate(deps, safeWsp, safeCandidateId))).toBe(true);
+  expect(result.summary).toMatch(/deleted 0 snapshot\(s\) and 1 candidate\(s\)/);
+});
+
 it("expires a candidate with no attempt at all on its own created_at", async () => {
   const { deps } = await testDeps();
   const { wsp, testId } = await seedCandidateTest(deps);
@@ -478,30 +530,96 @@ it("is idempotent: a second run over an already-blanked candidate deletes nothin
   expect(second.summary).toMatch(/deleted 0 snapshot\(s\) and 0 candidate\(s\)/);
 });
 
-it("processes a bounded CANDIDATE_BATCH and resumes on the next tick", async () => {
+// Fix round 1, F1: the per-tick bound is now two-dimensional — a
+// workspace's own due candidates are capped at `MAX_IDS_PER_CHUNK` (one
+// `deleteCandidates` id-chunk), and the number of *distinct workspaces*
+// touched is capped at `CANDIDATE_WORKSPACE_LIMIT`. Each dimension gets
+// its own K30 "bounded batch, resumes" proof below.
+
+it("caps one workspace's own cohort at MAX_IDS_PER_CHUNK and resumes on the next tick", async () => {
   const { deps } = await testDeps();
   const { wsp, testId } = await seedCandidateTest(deps);
-  const total = CANDIDATE_BATCH + 7;
+  const total = MAX_IDS_PER_CHUNK + 7;
   for (let i = 0; i < total; i++) {
     await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY, { slot: i });
   }
 
   const first = await retentionJob.run(deps);
-  expect(first.summary).toMatch(new RegExp(`${String(CANDIDATE_BATCH)} candidate`));
-  expect(await countUnblankedCandidates(deps, wsp)).toBe(total - CANDIDATE_BATCH);
+  expect(first.summary).toMatch(new RegExp(`${String(MAX_IDS_PER_CHUNK)} candidate`));
+  expect(await countUnblankedCandidates(deps, wsp)).toBe(total - MAX_IDS_PER_CHUNK);
 
   const second = await retentionJob.run(deps);
   expect(second.summary).toMatch(/deleted 0 snapshot\(s\) and 7 candidate\(s\)/);
   expect(await countUnblankedCandidates(deps, wsp)).toBe(0);
+}, 30_000);
+
+it("caps the workspaces touched at CANDIDATE_WORKSPACE_LIMIT and resumes with the rest", async () => {
+  // The other dimension: `CANDIDATE_WORKSPACE_LIMIT + 3` workspaces, one
+  // due candidate each, each strictly older than the last so
+  // `workspace_rank`'s tie-break never has to decide which "ties" go
+  // first — the most-overdue `CANDIDATE_WORKSPACE_LIMIT` are unambiguously
+  // the ones due this tick.
+  const { deps } = await testDeps();
+  const workspaceCount = CANDIDATE_WORKSPACE_LIMIT + 3;
+  const workspaces: string[] = [];
+  for (let i = 0; i < workspaceCount; i++) {
+    const { wsp, testId } = await seedCandidateTest(deps, { slug: `rcw-${String(i)}` });
+    workspaces.push(wsp);
+    await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY - i * DAY);
+  }
+
+  const first = await retentionJob.run(deps);
+  expect(first.summary).toMatch(new RegExp(`${String(CANDIDATE_WORKSPACE_LIMIT)} candidate`));
+  const unblankedAfterFirst = await Promise.all(workspaces.map((wsp) => countUnblankedCandidates(deps, wsp)));
+  expect(unblankedAfterFirst.filter((n) => n === 0)).toHaveLength(CANDIDATE_WORKSPACE_LIMIT);
+  expect(unblankedAfterFirst.filter((n) => n === 1)).toHaveLength(3);
+  // The most-overdue workspaces (largest `i`, oldest `at`) are the ones
+  // cleared first — the fairness `workspace_rank`'s own `ORDER BY` exists
+  // for.
+  for (let i = 0; i < 3; i++) {
+    expect(unblankedAfterFirst[i]).toBe(1);
+  }
+
+  const second = await retentionJob.run(deps);
+  expect(second.summary).toMatch(/deleted 0 snapshot\(s\) and 3 candidate\(s\)/);
+  const unblankedAfterSecond = await Promise.all(workspaces.map((wsp) => countUnblankedCandidates(deps, wsp)));
+  expect(unblankedAfterSecond.every((n) => n === 0)).toBe(true);
 });
 
-/** The worst case `CANDIDATE_BATCH` has to survive: unlike snapshots, a
+it("clears a 300-candidate single-workspace cohort in ceil(300 / MAX_IDS_PER_CHUNK) nights", async () => {
+  // The finding fix round 1 exists to close: a fixed row-count `LIMIT`
+  // bounded on the rare "one candidate per workspace" shape and made the
+  // common one — one test's whole overdue cohort, all in one workspace —
+  // pay for it. Before this fix, 300 candidates at the old
+  // `CANDIDATE_BATCH = 8` cleared in 300 / 8 = 38 nights; AC-24 promises
+  // "the daily job deletes ... for that test", not five-plus weeks later.
+  const { deps } = await testDeps();
+  const { wsp, testId } = await seedCandidateTest(deps);
+  const total = 300;
+  for (let i = 0; i < total; i++) {
+    await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY, { slot: i });
+  }
+
+  const expectedNights = Math.ceil(total / MAX_IDS_PER_CHUNK);
+  let nights = 0;
+  let remaining = total;
+  while (remaining > 0) {
+    await retentionJob.run(deps);
+    remaining = await countUnblankedCandidates(deps, wsp);
+    nights += 1;
+  }
+
+  expect(nights).toBe(expectedNights);
+}, 30_000);
+
+/** The worst case `CANDIDATE_WORKSPACE_LIMIT` has to survive: a
  *  `deleteCandidates` call's cost (attempt select, snapshot select,
  *  `storage.delete`, one `db.batch`) and the per-workspace `retention.sweep`
- *  audit row are both paid **per workspace**, not per row — so one due
- *  candidate per workspace, each with a surviving attempt and snapshot, is
- *  strictly more expensive than the same count in one workspace. Both
- *  subrequest-ceiling tests below seed that shape. */
+ *  audit row are both paid **per workspace**, not per row inside it — so
+ *  one due candidate per workspace, each with a surviving attempt and
+ *  snapshot, is strictly more expensive than the same count in one
+ *  workspace. Both subrequest-ceiling tests below seed one of the two
+ *  shapes. */
 async function addDueCandidateWithSnapshot(
   deps: AppDeps,
   wsp: string,
@@ -524,11 +642,14 @@ async function addDueCandidateWithSnapshot(
 // not a contrived one.
 const SURVIVING_SNAPSHOT: TestRetention = { snapshots_days: 10_000 };
 
-it("stays inside the subrequest ceiling on one tick (candidates, one workspace)", async () => {
+it("stays inside the subrequest ceiling on one tick (candidates, one workspace at its full per-workspace cap)", async () => {
+  // MAX_IDS_PER_CHUNK (98), not CANDIDATE_WORKSPACE_LIMIT: this is the
+  // fix round's actual point — one workspace's own cohort costs the same
+  // handful of subrequests whether it holds 8 due candidates or 98.
   const { deps } = await testDeps();
   const { wsp, testId, versionId } = await seedCandidateTest(deps, { retention: SURVIVING_SNAPSHOT });
   if (!versionId) throw new Error("fixture: expected a published version");
-  for (let i = 0; i < CANDIDATE_BATCH; i++) {
+  for (let i = 0; i < MAX_IDS_PER_CHUNK; i++) {
     await addDueCandidateWithSnapshot(deps, wsp, testId, versionId);
   }
 
@@ -539,18 +660,20 @@ it("stays inside the subrequest ceiling on one tick (candidates, one workspace)"
   // 1 `storage.delete` + 1 `db.batch` (candidate/candidate_unique/
   // response/event/snapshot/audit, one round trip) + 1 `sweepSnapshots`
   // select (0 due here, its own clock overridden past the fixture) +
-  // 1 `retention.sweep` audit row for the one workspace touched.
+  // 1 `retention.sweep` audit row for the one workspace touched — the same
+  // 7 regardless of whether this loop runs 8 or 98 times.
   expect(counting.counts().total).toBe(7);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
-});
+}, 30_000);
 
 it("stays inside the subrequest ceiling when due candidates are spread one-per-workspace", async () => {
-  // The adversarial shape: `CANDIDATE_BATCH` due candidates, no two in the
-  // same workspace, is the worst case `dueCandidates`'s own `LIMIT` can
-  // hand `sweepCandidates` — every workspace pays its own `deleteCandidates`
-  // overhead AND its own `retention.sweep` audit row.
+  // The adversarial shape: `CANDIDATE_WORKSPACE_LIMIT` due candidates, no
+  // two in the same workspace, is the worst case `dueCandidates`'s own
+  // admission bound can hand `sweepCandidates` — every workspace pays its
+  // own `deleteCandidates` overhead AND its own `retention.sweep` audit
+  // row.
   const { deps } = await testDeps();
-  for (let i = 0; i < CANDIDATE_BATCH; i++) {
+  for (let i = 0; i < CANDIDATE_WORKSPACE_LIMIT; i++) {
     const { wsp, testId, versionId } = await seedCandidateTest(deps, {
       slug: `rc-${String(i)}`,
       retention: SURVIVING_SNAPSHOT,
@@ -563,11 +686,13 @@ it("stays inside the subrequest ceiling when due candidates are spread one-per-w
   await retentionJob.run(counting.deps);
 
   // 1 `dueCandidates` select + 1 `sweepSnapshots` select (0 due) +
-  // `CANDIDATE_BATCH` workspaces, each paying its own `deleteCandidates`
-  // (attempt select + snapshot select + `storage.delete` + `db.batch` = 4)
-  // plus its own `retention.sweep` audit row (5 per workspace) — the
-  // measured worst case this constant is sized against.
-  expect(counting.counts().total).toBe(2 + 5 * CANDIDATE_BATCH);
+  // `CANDIDATE_WORKSPACE_LIMIT` workspaces, each paying its own
+  // `deleteCandidates` (attempt select + snapshot select +
+  // `storage.delete` + `db.batch` = 4) plus its own `retention.sweep`
+  // audit row (5 per workspace) — the measured worst case this constant
+  // is sized against, unchanged by fix round 1 (it bounds the other
+  // dimension).
+  expect(counting.counts().total).toBe(2 + 5 * CANDIDATE_WORKSPACE_LIMIT);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 });
 

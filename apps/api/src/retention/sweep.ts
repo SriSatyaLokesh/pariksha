@@ -17,7 +17,7 @@ import { appendAudit, sweepRateLimits, type DbClient } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import type { ScheduledJob } from "../scheduled.js";
 import { MAX_WINDOW_MS } from "../run/limit.js";
-import { deleteCandidates } from "./candidate.js";
+import { AttemptInProgressError, deleteCandidates, MAX_IDS_PER_CHUNK } from "./candidate.js";
 
 const DAY_MS = 86_400_000;
 const CRON = "17 3 * * *";
@@ -49,21 +49,24 @@ export const RETENTION_BATCH = 500;
 export const DELETE_CHUNK = 100;
 
 /**
- * AC-24: how many due candidates one tick erases. Far smaller than
- * `RETENTION_BATCH`, and deliberately so — `sweepSnapshots`'s (and the
- * retired `sweepResponses`'s) audit cost is one row per *workspace*
- * touched, so a 500-row batch spread over any number of workspaces still
- * costs a handful of subrequests. `deleteCandidates` (Task 2, K29/KG9)
- * writes one `candidate.delete` audit row per *candidate* — "which of
- * these was erased" has to be answerable from the log alone — so that
- * cost is **per row**, and the adversarial case (one due candidate per
- * workspace, each with an attempt and a surviving snapshot) is also one
- * full `deleteCandidates` call — attempt select, snapshot select,
- * `storage.delete`, one `db.batch`, one audit row — per candidate. See
- * "stays inside the subrequest ceiling" below for the measured number
- * this constant is sized against.
+ * Fix round 1, F1: bounded on **distinct workspaces**, not on raw
+ * candidate count. `candidate.test_id` is NOT NULL and a test belongs to
+ * exactly one workspace (`packages/db/src/schema/columns.ts:302-321`), so
+ * one test's whole overdue cohort sits in one workspace — the common
+ * shape this product actually produces. `deleteCandidates`'s own
+ * subrequest cost (attempt select, snapshot select, `storage.delete`, one
+ * `db.batch`) is paid **per workspace it is called for**, not per
+ * candidate inside that call, so a cohort sharing one workspace is cheap
+ * regardless of its size, and the adversarial case is the rare one: many
+ * *distinct* workspaces each contributing one due candidate. A fixed
+ * row-count limit (the original `CANDIDATE_BATCH`) bounded on the rare
+ * shape and made the common one pay for it — a 300-candidate single-test
+ * cohort cleared at 8 rows a night, 37 nights, which does not meet
+ * `AC-24`'s "after the retention period, the daily job deletes ... for
+ * that test." See "stays inside the subrequest ceiling" below for the
+ * measured number this constant is sized against.
  */
-export const CANDIDATE_BATCH = 8;
+export const CANDIDATE_WORKSPACE_LIMIT = 8;
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const groups: T[][] = [];
@@ -166,18 +169,35 @@ async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorks
  * so upload time is the only clock it has; several attempts in one test
  * fold through `MAX`.
  *
- * Both the cutoff and the "already erased" check live in this query's
+ * The cutoff and the "already erased" check both live in this query's
  * `WHERE`, not a JS filter applied after the fetch — #226 is exactly a
  * global `ORDER BY ... LIMIT` with no `WHERE`, which lets one workspace's
  * long-override, not-yet-due rows occupy every batch and starve every
- * other workspace. Pushing the cutoff into SQL means `LIMIT` only ever
- * spends `CANDIDATE_BATCH` on rows that are actually due, from any
- * workspace. "Already erased" is read off `deleteCandidates`'s own
+ * other workspace. "Already erased" is read off `deleteCandidates`'s own
  * blanked shape (`form_values_json = '{}'` and `external_id IS NULL`
  * together — neither alone is safe, since a self-registered candidate's
  * `external_id` is NULL from creation, never set — see
  * `packages/db/src/repo/attempts.ts`), or every tick reprocesses the same
  * rows forever.
+ *
+ * **Fix round 1, F1: the admission bound is two window functions, not one
+ * `LIMIT`.** `rn` (`ROW_NUMBER() OVER (PARTITION BY workspace_id ORDER BY
+ * at)`) caps each workspace at `MAX_IDS_PER_CHUNK` due candidates this
+ * tick — exactly one `deleteCandidates` id-chunk, which is what keeps a
+ * workspace's own cost at the measured, fixed "attempt select + snapshot
+ * select + storage.delete + one batch" regardless of how many of its
+ * candidates are admitted. `workspace_rank` then caps the *number of
+ * workspaces* touched this tick at `CANDIDATE_WORKSPACE_LIMIT`,
+ * most-overdue workspace first — `DENSE_RANK() OVER (ORDER BY
+ * workspace_min_at, workspace_id)`, reading each workspace's own earliest
+ * `at` back from a plain column rather than nesting a window function
+ * inside another one's `ORDER BY` (SQLite/D1 refuse that directly; see the
+ * query's own comment on `workspace_min_at`). A fixed-row `LIMIT` (this
+ * query's original shape) would let one large single-workspace cohort's
+ * own rows crowd out a `LIMIT` of 8 before any other workspace got a
+ * turn, or — the fix round's actual finding — cap that one cohort's own
+ * nightly throughput at 8 regardless of how cheap it really is to
+ * process.
  *
  * Settings resolve through `test.current_version`, `LEFT JOIN`ed so a
  * never-published test's uploaded list still falls through to
@@ -185,7 +205,10 @@ async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorks
  *
  * sqlite/d1 store JSON as text (`json_extract`); Postgres as `jsonb`
  * (`#>>`, cast to `numeric`) — `db.dialect` (client.ts:78-80) is the one
- * branch point, the same split `jsonParam`/`jsonValue` already draw.
+ * branch point, the same split `jsonParam`/`jsonValue` already draw. Window
+ * functions themselves are plain ANSI SQL, supported identically by all
+ * three dialects (confirmed against better-sqlite3's bundled SQLite 3.53;
+ * D1 and Postgres both document the same `ROW_NUMBER`/`DENSE_RANK`).
  */
 async function dueCandidates(deps: AppDeps): Promise<Candidate[]> {
   const pg = deps.db.dialect === "pg";
@@ -193,34 +216,67 @@ async function dueCandidates(deps: AppDeps): Promise<Candidate[]> {
     ? "c.form_values_json = '{}'::jsonb AND c.external_id IS NULL"
     : "c.form_values_json = '{}' AND c.external_id IS NULL";
   const daysExtract = pg
-    ? "(sub.settings_json #>> '{retention,personal_data_days}')::numeric"
-    : "json_extract(sub.settings_json, '$.retention.personal_data_days')";
+    ? "(raw.settings_json #>> '{retention,personal_data_days}')::numeric"
+    : "json_extract(raw.settings_json, '$.retention.personal_data_days')";
 
   return deps.db.query<Candidate>(
-    `SELECT sub.* FROM (
-       SELECT c.id AS id, c.workspace_id AS workspace_id,
-         COALESCE((SELECT MAX(att.deadline_at) FROM attempt att WHERE att.candidate_id = c.id), c.created_at) AS at,
-         tv.settings_json AS settings_json
-       FROM candidate c
-       JOIN test t ON t.id = c.test_id
-       LEFT JOIN test_version tv ON tv.test_id = t.id AND tv.version = t.current_version
-       WHERE NOT (${alreadyBlanked})
-     ) sub
-     WHERE sub.at <= ? - COALESCE(${daysExtract}, ?) * ${DAY_MS}
-     ORDER BY sub.at ASC
-     LIMIT ?`,
-    [deps.now(), RETENTION_DEFAULTS.personalDataDays, CANDIDATE_BATCH],
+    `SELECT ranked.id AS id, ranked.workspace_id AS workspace_id, ranked.at AS at, ranked.settings_json AS settings_json
+     FROM (
+       SELECT withmin.*,
+         ROW_NUMBER() OVER (PARTITION BY withmin.workspace_id ORDER BY withmin.at ASC) AS rn,
+         DENSE_RANK() OVER (ORDER BY withmin.workspace_min_at ASC, withmin.workspace_id ASC) AS workspace_rank
+       FROM (
+         -- MIN(due.at) OVER (...) has to land in its own plain column
+         -- here: SQLite (and D1) refuse a window-function call nested
+         -- directly inside another window function's own ORDER BY
+         -- ("misuse of window function"), so workspace_rank above reads
+         -- this column back as an ordinary value instead of re-computing it
+         -- inline.
+         SELECT due.*, MIN(due.at) OVER (PARTITION BY due.workspace_id) AS workspace_min_at
+         FROM (
+           SELECT raw.id AS id, raw.workspace_id AS workspace_id, raw.at AS at, raw.settings_json AS settings_json
+           FROM (
+             SELECT c.id AS id, c.workspace_id AS workspace_id,
+               COALESCE((SELECT MAX(att.deadline_at) FROM attempt att WHERE att.candidate_id = c.id), c.created_at) AS at,
+               tv.settings_json AS settings_json
+             FROM candidate c
+             JOIN test t ON t.id = c.test_id
+             LEFT JOIN test_version tv ON tv.test_id = t.id AND tv.version = t.current_version
+             WHERE NOT (${alreadyBlanked})
+           ) raw
+           WHERE raw.at <= ? - COALESCE(${daysExtract}, ?) * ${DAY_MS}
+         ) due
+       ) withmin
+     ) ranked
+     WHERE ranked.workspace_rank <= ? AND ranked.rn <= ?
+     ORDER BY ranked.at ASC`,
+    [deps.now(), RETENTION_DEFAULTS.personalDataDays, CANDIDATE_WORKSPACE_LIMIT, MAX_IDS_PER_CHUNK],
   );
 }
 
 /**
  * AC-24's missing half of S-13/S-14: applies Task 2's `deleteCandidates`
  * (never a second erasure path — `TABLE_MANIFEST`/`KG4` guard this and the
- * manual route with one test) to a bounded batch of due candidates,
- * `keepAnonymisedScore: true` per K29's blanked-row shape so results
- * analytics keep reading an anonymised `score_json`. `deleteCandidates` is
- * workspace-scoped, so a batch spanning several workspaces calls it once
- * per workspace, grouped from the one SQL fetch above.
+ * manual route with one test) to up to `CANDIDATE_WORKSPACE_LIMIT`
+ * workspaces' worth of due candidates, `keepAnonymisedScore: true` per
+ * K29's blanked-row shape so results analytics keep reading an anonymised
+ * `score_json`. `deleteCandidates` is workspace-scoped, so the batch —
+ * already grouped and capped per workspace by `dueCandidates`'s own SQL —
+ * calls it once per workspace.
+ *
+ * **Fix round 1, F2:** `deleteCandidates` refuses its *whole* call
+ * (`AttemptInProgressError`) if any candidate in it has gained a live
+ * attempt. `dueCandidates`'s anchor should make that impossible — every
+ * selected row's cutoff is already in the past — but the one race it
+ * cannot close is an attempt created *after* the select and *before* this
+ * loop reaches that workspace, within the same tick. Caught here and
+ * skipped rather than left to propagate: an uncaught throw would fail the
+ * whole `retentionJob` run — and with it, every other workspace's sweep
+ * this tick, snapshots included (K27's isolation only separates
+ * `retentionJob` from `rateLimitJob`, not the two halves of this job from
+ * each other) — for one workspace's one-tick timing accident. A skip costs
+ * that one workspace one night; an uncaught throw costs every workspace
+ * every night until someone notices the job failing.
  */
 async function sweepCandidates(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
   const due = await dueCandidates(deps);
@@ -233,17 +289,26 @@ async function sweepCandidates(deps: AppDeps): Promise<{ deleted: number; byWork
     byWorkspace.set(row.workspace_id, list);
   }
 
+  const succeeded = new Map<string, number>();
   for (const [workspaceId, candidateIds] of byWorkspace) {
-    await deleteCandidates(deps.db, workspaceId, {
-      candidateIds,
-      keepAnonymisedScore: true,
-      actor: "system",
-      now: deps.now(),
-      storage: deps.storage,
-    });
+    try {
+      await deleteCandidates(deps.db, workspaceId, {
+        candidateIds,
+        keepAnonymisedScore: true,
+        actor: "system",
+        now: deps.now(),
+        storage: deps.storage,
+      });
+      succeeded.set(workspaceId, candidateIds.length);
+    } catch (err) {
+      if (!(err instanceof AttemptInProgressError)) throw err;
+      // Skip this workspace's batch entirely — see the function comment.
+    }
   }
 
-  return { deleted: due.length, byWorkspace: tally(due) };
+  let deleted = 0;
+  for (const count of succeeded.values()) deleted += count;
+  return { deleted, byWorkspace: succeeded };
 }
 
 export const retentionJob: ScheduledJob = {
@@ -279,7 +344,7 @@ export const retentionJob: ScheduledJob = {
     return {
       summary:
         `retention.sweep: deleted ${snapshots.deleted} snapshot(s) and ${candidates.deleted} candidate(s) ` +
-        `across ${workspaces.size} workspace(s), batch ${RETENTION_BATCH}/${CANDIDATE_BATCH}`,
+        `across ${workspaces.size} workspace(s), batch ${RETENTION_BATCH}/${CANDIDATE_WORKSPACE_LIMIT}ws`,
     };
   },
 };
