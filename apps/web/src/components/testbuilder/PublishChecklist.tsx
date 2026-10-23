@@ -38,6 +38,13 @@ import { Icon } from "../OrganiserShell";
 // convenience, never a lock." A pin that lived only inside the floating
 // panel would be unreachable the moment a hover ended.
 
+/** The one phrase for "the gate raised nothing" — exported so the test
+ *  list's own readiness figure (`routes/tests.tsx`, Phase 8c Task 5) reads
+ *  the same word this rail does for the same state, rather than growing a
+ *  second literal that can drift from it. A zero-row test is "All clear" in
+ *  both places or `K33` is back. */
+export const ALL_CLEAR = "All clear";
+
 const SEVERITY_LABEL: Readonly<Record<ChecklistRow["severity"], string>> = {
   // In words, not only by colour or icon: the two groups have to be
   // distinguishable to a reader who sees neither (`O-04`).
@@ -209,20 +216,36 @@ export function PublishChecklist({
              fix") with nothing to measure it against. */
           <p className="checklist-rail__readiness" aria-live="polite" aria-atomic="true">
             {rows.length === 0 ? (
-              <strong>All clear</strong>
+              <strong>{ALL_CLEAR}</strong>
             ) : (
               <>
-                {/* `D7c`: the readiness figure lives here and nowhere else.
-                    How many of the gate's own rows do not stop a publish,
-                    over how many it raised.
+                {/* `D7c`: this is where the figure is EXPLAINED — the rail's
+                    "not blocking, N must fix" qualifier beside the number,
+                    for the reader who has the whole panel open. Phase 8c
+                    Task 5 (`D7c`) put the bare number a second place too,
+                    inline beside the test list's own State badge (fix round
+                    2: a column of its own, and even a figure folded onto the
+                    Version cell's own line, both measured 24px taller in a
+                    real browser — `routes/tests.tsx` has the mechanism; the
+                    State cell's flex line is the one place on that row with
+                    width to spare), for a reader who is scanning many tests
+                    and has no panel open at all. That surface has no
+                    qualifier (a list row is not a rail) and, fix round 3,
+                    no bare number either: `"${ready} / ${total} ready"` names
+                    itself in words next to the State cell's upright status
+                    words, the same way `ALL_CLEAR` above already does for
+                    the zero-row case that surface reuses rather than
+                    growing a second phrase for it — a number sitting beside
+                    a status with nothing marking it as a different kind of
+                    fact was the defect that history is about.
 
-                    "not blocking", not "clear". The arithmetic is the
-                    brief's and is unchanged; the word was this file's and
-                    was wrong. Seven advisory rows and nothing blocking read
-                    "7 / 7 clear" directly above seven rows each labelled
-                    "Worth checking" — the rail contradicting its own panel
-                    at a glance, which is the one failure this feature
-                    exists to prevent.
+                    "not blocking", not "clear", for the number itself:
+                    the arithmetic is the brief's and is unchanged; the word
+                    was this file's and was wrong. Seven advisory rows and
+                    nothing blocking read "7 / 7 clear" directly above seven
+                    rows each labelled "Worth checking" — the rail
+                    contradicting its own panel at a glance, which is the
+                    one failure this feature exists to prevent.
 
                     And the qualifier is unconditional, for the same reason:
                     suppressing "0 must fix" is what left that case with

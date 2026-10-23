@@ -202,6 +202,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     archiveTest: unused,
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
     cloneTest: unused,
     exportTest: unused,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),

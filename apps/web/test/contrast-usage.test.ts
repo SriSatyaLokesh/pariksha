@@ -532,6 +532,10 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // cell since `D21a`'s id fold.
   ".test-id": { dark: "signal-bg", light: "signal-l-bg" },
   ".test-version": { dark: "signal-bg", light: "signal-l-bg" },
+  // Fix round 3 (Phase 8c Task 5): the readiness figure, same pairing as
+  // `.test-badge`/`.test-version` above — it renders in the same row, on
+  // the same unfilled page ground.
+  ".test-readiness": { dark: "signal-bg", light: "signal-l-bg" },
   ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
   ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
