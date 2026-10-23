@@ -448,6 +448,12 @@ export interface ApiClient {
     csv: string,
     opts?: { dryRun?: boolean },
   ): Promise<CandidateImportReport>;
+
+  // Phase 7e Task 4 (`Q5a`): the minimal pair — a locked-attempts read and
+  // the unlock. Both gated server-side on `attempts.monitor`; Phase 8's
+  // monitor replaces both.
+  lockedAttempts(workspaceId: string, testId: string): Promise<LockedAttemptRow[]>;
+  unlockAttempt(workspaceId: string, testId: string, attemptId: string): Promise<void>;
 }
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
@@ -461,6 +467,16 @@ export interface CandidateRow {
   source: "list" | "registration";
   consentVersion: string | null;
   createdAt: number;
+}
+
+// Phase 7e Task 4 (`Q5a`): the minimal pair — mirrors `LockedAttemptRow`
+// (`apps/api/src/routes/attempts.ts`), the wire shape verbatim.
+export interface LockedAttemptRow {
+  attemptId: string;
+  candidateLabel: string;
+  lockedAt: number;
+  violations: number;
+  remainingSeconds: number;
 }
 
 export interface CandidateIssue {
@@ -806,6 +822,17 @@ export function createApiClient(): ApiClient {
         }
         throw error;
       }
+    },
+
+    lockedAttempts: async (workspaceId, testId) =>
+      (
+        await json<{ attempts: LockedAttemptRow[] }>(
+          `/workspaces/${workspaceId}/tests/${testId}/attempts?status=locked`,
+        )
+      ).attempts,
+
+    async unlockAttempt(workspaceId, testId, attemptId) {
+      await json(`/workspaces/${workspaceId}/tests/${testId}/attempts/${attemptId}/unlock`, post({}));
     },
   };
 }

@@ -15,6 +15,7 @@ import {
   type CandidateRow,
   type ChecklistRow,
   type DraftPatch,
+  type LockedAttemptRow,
   type StoredSection,
   type TestSummary,
   type TestVersionRow,
@@ -27,6 +28,7 @@ import { AccessPanel } from "../components/testbuilder/AccessPanel";
 import { ResultsPanel } from "../components/testbuilder/ResultsPanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 import { ProctoringPanel } from "../components/testbuilder/ProctoringPanel";
+import { LockedAttempts } from "../components/testbuilder/LockedAttempts";
 import {
   PANEL_KEYS,
   SettingRow,
@@ -166,6 +168,11 @@ export function TestBuilder({
   // inside `BrandingPanel`, so the panel stays a controlled component like
   // every other one in this shell and the shell keeps owning every call.
   const canManageCandidates = role !== undefined && can({ role, action: "candidates.manage" });
+  // Phase 7e Task 4 (`Q5a`): the minimal pair's other half. `proctor` holds
+  // this and not `candidates.manage` above, so the two are asked for
+  // independently rather than one standing in for the other.
+  const canMonitorAttempts = role !== undefined && can({ role, action: "attempts.monitor" });
+  const [lockedAttempts, setLockedAttempts] = useState<readonly LockedAttemptRow[]>([]);
   const [workspaceBranding, setWorkspaceBranding] = useState<TestBranding>(NO_BRANDING);
   // Task 9 (#60 / #56, P5.7b). Loaded beside the draft, and only when this
   // actor holds `candidates.manage` — the route 403s otherwise, and an
@@ -228,7 +235,7 @@ export function TestBuilder({
 
   const load = useCallback(async () => {
     try {
-      const [summary, version, branding, listed, history, rows] = await Promise.all([
+      const [summary, version, branding, listed, history, rows, locked] = await Promise.all([
         client.test(workspaceId, testId),
         client.draft(workspaceId, testId),
         // An Author cannot write workspace branding but can read it — the
@@ -246,6 +253,10 @@ export function TestBuilder({
         // exactly who reaches this screen, so no role has to opt out of it
         // the way `candidates` above does.
         client.checklist(workspaceId, testId),
+        // Phase 7e Task 4: the same opt-out `candidates` above takes, and
+        // for the same reason — `attempts.monitor` is its own permission,
+        // not implied by anything else this load already asks for.
+        canMonitorAttempts ? client.lockedAttempts(workspaceId, testId) : Promise.resolve([]),
       ]);
       setTest(summary);
       setVersions(history);
@@ -253,11 +264,12 @@ export function TestBuilder({
       setCandidates(listed);
       setDraft(version);
       setChecklist(rows);
+      setLockedAttempts(locked);
       setError(undefined);
     } catch (cause) {
       setError(cause instanceof ApiError ? cause.message : "The test could not be loaded.");
     }
-  }, [client, workspaceId, testId, canManageCandidates]);
+  }, [client, workspaceId, testId, canManageCandidates, canMonitorAttempts]);
 
   useEffect(() => {
     void load();
@@ -674,6 +686,21 @@ export function TestBuilder({
           }}
           onRerun={() => void runChecklist()}
           onConfirm={() => void onPublish()}
+        />
+      )}
+
+      {/* Phase 7e Task 4 (`Q5a`): the only way out of a lock, placed beside
+          the version banner rather than behind a settings row — `D7`'s own
+          reasoning for the checklist rail applies here too: an organiser
+          with a candidate stuck behind an overlay should not have to find a
+          collapsed panel first. Renders nothing when nothing is locked. */}
+      {canMonitorAttempts && (
+        <LockedAttempts
+          attempts={lockedAttempts}
+          onUnlock={async (attemptId) => {
+            await client.unlockAttempt(workspaceId, testId, attemptId);
+            setLockedAttempts((current) => current.filter((row) => row.attemptId !== attemptId));
+          }}
         />
       )}
 

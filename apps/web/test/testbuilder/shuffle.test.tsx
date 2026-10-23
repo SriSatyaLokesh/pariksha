@@ -136,6 +136,8 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     saveWorkspaceBranding: notUsed,
     uploadMedia: notUsed,
     candidates: async () => [],
+    lockedAttempts: async () => [],
+    unlockAttempt: notUsed,
     importCandidates: notUsed,
     ...overrides,
   };
