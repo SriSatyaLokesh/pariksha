@@ -462,30 +462,68 @@ export const countViolations = scoped(
  * about, not its whole history. `VIOLATION_EVENTS ∪ FAILURE_EVENTS` is 10 of
  * `PROCTORING_EVENTS`' 17; the other 7 (restores, lifecycle markers,
  * `noise_above_threshold`, the identity capture) never move `integrityFor`'s
- * output, so there is no reason to pull them over the wire on every
- * recompute — the same reasoning `countViolations`' own header gives for
- * not projecting a whole attempt's event history to count a number bounded
- * by a handful of rows.
+ * output, so there is no reason to scope the query below to anything wider
+ * — the same reasoning `countViolations`' own header gives for not
+ * projecting a whole attempt's event history to count a number bounded by a
+ * handful of rows. Also the `WHERE` scope `listIntegrityCounts` (below)
+ * narrows to.
  */
 const INTEGRITY_EVENT_TYPES = [...VIOLATION_EVENTS, ...FAILURE_EVENTS];
 const INTEGRITY_EVENT_PLACEHOLDERS = INTEGRITY_EVENT_TYPES.map(() => "?").join(", ");
 
-export const listIntegrityEvents = scoped(
-  "listIntegrityEvents",
+const FAILURE_TYPES = [...FAILURE_EVENTS];
+const FAILURE_PLACEHOLDERS = FAILURE_TYPES.map(() => "?").join(", ");
+
+/**
+ * Branch re-review (post-M1): `integrityFor` (`packages/core/src/
+ * integrity.ts:69`) reads exactly three things off an attempt's event
+ * list — `violationCount`, `failureCount`, and the longest single
+ * `camera_lost` outage — never the rows themselves. `listIntegrityEvents`
+ * (this function's predecessor) still projected every matching row to let
+ * the caller compute those three in JS, the same shape M1 had already found
+ * and fixed on the snapshot side (`listSnapshotFaceCounts`, below). One
+ * aggregate query replaces it: flat in the attempt's history instead of
+ * growing with it, the fix `recomputeIntegrity`
+ * (`apps/api/src/run/submit.ts`) needed to stop gating itself to one call
+ * per attempt (`routes/proctoring.ts`'s removed `atLimit && !alreadyActioned`
+ * gate — see that route's own comment).
+ *
+ * `cameraOutageMs` is a `MAX`, not a `SUM` — `integrityFor`'s own doc
+ * comment: one long outage crosses `high_risk`, many short ones do not
+ * compound. The JSON extraction is the dialect split `apps/api/src/
+ * retention/candidate.ts` already draws for `payload_json` (`->>` on `pg`,
+ * `json_extract` on `sqlite`/`d1`) — `pg`'s `->>` returns text, so the
+ * result is cast to `numeric` for `MAX` to compare it as a number rather
+ * than lexically; `sqlite`/`json_extract` already returns a real JSON
+ * number and needs no cast. A `camera_lost` event missing `outageMs`
+ * extracts/casts to `NULL` on both dialects, which `MAX` ignores, same as
+ * `integrityFor`'s own `typeof detail?.outageMs === "number" ? … : 0`
+ * reading of a malformed one.
+ */
+export const listIntegrityCounts = scoped(
+  "listIntegrityCounts",
   async (
     db: DbClient,
     workspaceId: string,
     attemptId: string,
-  ): Promise<{ type: ProctoringEventType; detail: unknown }[]> => {
-    const rows = await db.query<{ type: string; detail_json: unknown }>(
-      `SELECT type, detail_json FROM event WHERE workspace_id = ? AND attempt_id = ? ` +
+  ): Promise<{ violationCount: number; failureCount: number; cameraOutageMs: number }> => {
+    const outageExtract =
+      db.dialect === "pg" ? "(detail_json ->> 'outageMs')::numeric" : "json_extract(detail_json, '$.outageMs')";
+    const rows = await db.query<{ violations: number; failures: number; max_outage: number | null }>(
+      "SELECT " +
+        `SUM(CASE WHEN type IN (${VIOLATION_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS violations, ` +
+        `SUM(CASE WHEN type IN (${FAILURE_PLACEHOLDERS}) THEN 1 ELSE 0 END) AS failures, ` +
+        `MAX(CASE WHEN type = 'camera_lost' THEN ${outageExtract} ELSE NULL END) AS max_outage ` +
+        "FROM event WHERE workspace_id = ? AND attempt_id = ? " +
         `AND type IN (${INTEGRITY_EVENT_PLACEHOLDERS})`,
-      [workspaceId, attemptId, ...INTEGRITY_EVENT_TYPES],
+      [...VIOLATION_TYPES, ...FAILURE_TYPES, workspaceId, attemptId, ...INTEGRITY_EVENT_TYPES],
     );
-    return rows.map((row) => ({
-      type: row.type as ProctoringEventType,
-      detail: row.detail_json === null ? undefined : db.jsonValue(row.detail_json),
-    }));
+    const row = rows[0];
+    return {
+      violationCount: Number(row?.violations ?? 0),
+      failureCount: Number(row?.failures ?? 0),
+      cameraOutageMs: Number(row?.max_outage ?? 0),
+    };
   },
 );
 

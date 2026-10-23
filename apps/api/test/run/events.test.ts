@@ -169,7 +169,7 @@ it("ships the resolved proctoring object on the attempt", async () => {
 
 // --- `Q7c`: measured, not estimated ---------------------------------------
 
-it("the ingest's common-path cost is measured at 4, under the declared ceiling, and the route's authority is the attempt", async () => {
+it("the ingest's common-path cost is measured at 7, under the declared ceiling, and the route's authority is the attempt", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -179,34 +179,38 @@ it("the ingest's common-path cost is measured at 4, under the declared ceiling, 
   );
   await res.json();
   // The attempt join, the `attempt_events` rate token, `appendEvents`'s one
-  // batched insert and `countViolations`'s one read — **4**. Phase 7e Task
-  // 1's fix round (F2) made `claimViolationLimit` conditional on `atLimit`
-  // — below the limit, no read or write of its own is paid at all, so one
-  // `window_blur` (nowhere near Standard's limit of 5) costs one less than
+  // batched insert and `countViolations`'s one read — base **4**. Phase 7e
+  // Task 1's fix round (F2) made `claimViolationLimit` conditional on
+  // `atLimit` — below the limit, no read or write of its own is paid at
+  // all, so a batch nowhere near Standard's limit of 5 costs one less than
   // this route used to (5, when `violationLimitAlreadyReached` ran on every
   // request regardless). The fifth, worst-case subrequest — the atomic
   // claim's own insert — is not paid here; `violation-limit.test.ts`
   // measures that path.
   //
-  // Branch-review M1: `recomputeIntegrity` used to fire on every batch
-  // carrying a violation or failure event, regardless of whether the batch
-  // was anywhere near the limit — quadratic rows read across a session on
-  // `warn_then_flag`, the default action. It now fires only on the one
-  // batch that first reaches the limit (`"the integrity recompute pays for
-  // itself only at the limit-crossing batch"`, below) — one `window_blur`,
-  // nowhere near Standard's limit of 5, pays none of it, so this stays at
-  // the base 4 rather than the 7 it used to be.
-  expect(counting.counts().total).toBe(4);
+  // Branch re-review (post-M1): `window_blur` is a `VIOLATION_EVENTS` type,
+  // so this batch carries an integrity signal and `recomputeIntegrity`
+  // fires on it — +3 (`listIntegrityCounts`, `listSnapshotFaceCounts`,
+  // `setIntegrity`) — **7**, on every such batch, not only the one that
+  // first reaches the limit. M1 had gated this to `atLimit &&
+  // !alreadyActioned` (at most once per attempt) to keep
+  // `listIntegrityEvents`'s then-unbounded row projection from growing
+  // quadratic across a session; `listIntegrityCounts` is flat in the
+  // attempt's history the same way `listSnapshotFaceCounts` already was, so
+  // the gate cost nothing to remove and `Q6`'s "review on any violation"
+  // is live again (`test/run/integrity.test.ts`).
+  expect(counting.counts().total).toBe(7);
   expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[EVENTS_PATH] as number);
   expect(ROUTE_AUTH[`POST ${EVENTS_PATH}`]).toBe("attempt");
 });
 
-// Branch-review M1, the fix proved: the quadratic shape was every
-// violation-carrying batch re-reading the attempt's whole event/snapshot
-// history. These two tests are the before/after of that — four below-limit
-// batches cost nothing extra each, and the one batch that crosses the limit
-// pays the recompute exactly once.
-it("M1: below-limit violation batches never pay the integrity recompute", async () => {
+// Branch re-review (post-M1): the quadratic shape M1 fixed was
+// `listIntegrityEvents` re-reading the attempt's whole matching history on
+// every call; gating the caller to one firing per attempt hid that cost but
+// also broke `Q6` for a live, never-crossing `warn_then_flag` attempt. These
+// two tests are the before/after of the real fix: every integrity-bearing
+// batch pays the same flat recompute, however many of them a session has.
+it("every violation batch pays the integrity recompute, flat per batch", async () => {
   const counting = countingDeps(deps);
   const countingApp = createApp(counting.deps);
   // Four separate requests, one `window_blur` each — violations 1..4,
@@ -215,13 +219,12 @@ it("M1: below-limit violation batches never pay the integrity recompute", async 
     const res = await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: i }] }, attemptCookie, countingApp);
     await res.json();
   }
-  // Each of the four pays the same base 4 as the single-event test above —
-  // 16 total, not 16 plus four lots of the +3 recompute the old,
-  // unconditional gate would have charged every one of them.
-  expect(counting.counts().total).toBe(16);
+  // Each of the four pays the same 7 as the single-event test above — 28
+  // total, flat per batch rather than growing with the session.
+  expect(counting.counts().total).toBe(28);
 });
 
-it("M1: the batch that first crosses the limit pays the recompute; the next one, already actioned, does not", async () => {
+it("the batch that crosses the limit, and every batch after it, pays the recompute", async () => {
   // Four below-limit batches first, uncounted — violations 1..4.
   for (let i = 0; i < 4; i += 1) {
     await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: i }] }, attemptCookie);
@@ -230,7 +233,7 @@ it("M1: the batch that first crosses the limit pays the recompute; the next one,
   const countingApp = createApp(counting.deps);
   // Violation 5: crosses Standard's limit of 5. Base 4 + the atomic claim
   // (+1, it is attempted at or past the limit) + the recompute's own +3
-  // (`listIntegrityEvents`, `listSnapshotFaceCounts`, `setIntegrity`) = 8.
+  // (`listIntegrityCounts`, `listSnapshotFaceCounts`, `setIntegrity`) = 8.
   const crossing = await post(
     EVENTS_PATH,
     { events: [{ type: "window_blur", clientTs: 10 }] },
@@ -240,14 +243,15 @@ it("M1: the batch that first crosses the limit pays the recompute; the next one,
   await crossing.json();
   expect(counting.counts().total).toBe(8);
 
-  // Violation 6: still past the limit, but `alreadyActioned` is now true —
-  // the claim is attempted (and loses) but the recompute does not fire
-  // again. Base 4 + the lost claim attempt (+1) = 5.
+  // Violation 6: still past the limit, and `alreadyActioned` is now true —
+  // the claim is attempted and loses, but the recompute runs regardless of
+  // `alreadyActioned`: the gate it used to sit behind is gone. Same 8, not
+  // the 5 a one-shot gate would have left it at.
   const after = countingDeps(deps);
   const afterApp = createApp(after.deps);
   const res = await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 11 }] }, attemptCookie, afterApp);
   await res.json();
-  expect(after.counts().total).toBe(5);
+  expect(after.counts().total).toBe(8);
 });
 
 it("the ten events a request carries are written as one batched insert, not ten", async () => {

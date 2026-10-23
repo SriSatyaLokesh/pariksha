@@ -34,7 +34,7 @@ import {
   attemptFiguresForCandidate,
   countAttemptsForCandidate,
   finishAttempt,
-  listIntegrityEvents,
+  listIntegrityCounts,
   listResponses,
   listSnapshotFaceCounts,
   setIntegrity,
@@ -45,6 +45,7 @@ import {
   type AttemptFigure,
   type AttemptScore,
   type CountedAttempt,
+  type ProctoringEventType,
   type Question,
   type ResponseValue,
   type ScoringDefaults,
@@ -263,8 +264,8 @@ export async function recomputeIntegrity(
   now: number,
 ): Promise<void> {
   const resolved = resolvedProctoringOf(attempt.settings);
-  const [events, snapshotFacts] = await Promise.all([
-    listIntegrityEvents(deps.db, attempt.workspaceId, attempt.attemptId),
+  const [counts, snapshotFacts] = await Promise.all([
+    listIntegrityCounts(deps.db, attempt.workspaceId, attempt.attemptId),
     listSnapshotFaceCounts(deps.db, attempt.workspaceId, attempt.attemptId),
   ]);
   // M1: `listSnapshotFaceCounts` now returns the two aggregate numbers
@@ -278,6 +279,30 @@ export async function recomputeIntegrity(
   const snapshots: { faceCount: number | null }[] = Array.from({ length: snapshotFacts.count }, (_, i) => ({
     faceCount: i < snapshotFacts.multiFaceCount ? 2 : null,
   }));
+  // Branch re-review (post-M1): `listIntegrityCounts` (`@pariksha/db`) is
+  // `listSnapshotFaceCounts`'s own fix applied to the side M1 left alone —
+  // `violationCount`, `failureCount` and the longest `camera_lost` outage,
+  // one aggregate query instead of `listIntegrityEvents`'s whole projection.
+  // Reconstructed into the minimal synthetic event list `integrityFor`
+  // expects, the same way `snapshots` above is: `counts.violationCount`
+  // entries of a `VIOLATION_EVENTS` type (so they count toward
+  // `violationCount` the same way a real one would), one of them
+  // `camera_lost` carrying `counts.cameraOutageMs` when there was an
+  // outage (there can be no outage without at least one real `camera_lost`
+  // event, itself a `VIOLATION_EVENTS` member, so `violationCount` is never
+  // 0 when `cameraOutageMs` is not), and `counts.failureCount` entries of a
+  // `FAILURE_EVENTS` type. Which specific type fills the rest of each list
+  // is arbitrary — `integrityFor` only counts membership and reads
+  // `detail.outageMs` off `camera_lost` events, never any other type's
+  // `detail`.
+  const events: { type: ProctoringEventType; detail?: unknown }[] = [
+    ...Array.from({ length: counts.violationCount }, (_, i) =>
+      i === 0 && counts.cameraOutageMs > 0
+        ? { type: "camera_lost" as const, detail: { outageMs: counts.cameraOutageMs } }
+        : { type: "fullscreen_exit" as const },
+    ),
+    ...Array.from({ length: counts.failureCount }, () => ({ type: "snapshot_failed" as const })),
+  ];
   const elapsedSeconds = Math.max(0, (now - attempt.startedAt) / 1000);
   const expectedSnapshots =
     resolved.requireCamera && resolved.snapshotIntervalSeconds > 0

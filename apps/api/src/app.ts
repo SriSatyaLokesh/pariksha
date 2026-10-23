@@ -476,7 +476,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `finishAttempt` write, the audit row.
   //
   // Phase 7e Task 5 (`Q6a`): `recomputeIntegrity` adds exactly **3** more
-  // to every first press that actually writes — `listIntegrityEvents`,
+  // to every first press that actually writes — `listIntegrityCounts`,
   // `listSnapshotFaceCounts`, `setIntegrity` — so the common path moves
   // from 6 to **9**, and the worst case below moves the same +3. The
   // already-submitted second press (below) is unaffected: it returns
@@ -543,39 +543,51 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // measured worst case — the failure this line exists to catch on a
   // 50-subrequest ceiling.
   "/api/v1/run/attempt/submit": 15,
-  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The common
-  // path when the batch carries a violation — below the limit — is **4**,
-  // measured in `test/run/events.test.ts`'s own counting test: the attempt
-  // join the cookie resolves through, the `attempt_events` rate token,
+  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The base
+  // cost — a batch with no `VIOLATION_EVENTS`/`FAILURE_EVENTS` type in it,
+  // restores and lifecycle markers only — is **4**, measured in
+  // `test/run/events.test.ts`'s own counting test: the attempt join the
+  // cookie resolves through, the `attempt_events` rate token,
   // `appendEvents`'s one batched insert (capped at 10 rows a request, so
   // this number is flat in how many events the request actually carries),
   // and `countViolations`'s one read for the response's authoritative count.
-  // Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
+  // "ten events as one batched insert" (all `fullscreen_restore`) is this
+  // base case. Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
   // (`packages/db/src/repo/attempts.ts`) is paid only when `violations >=
   // limit` — below it, no read or write of its own happens at all, which is
   // one cheaper than the `violationLimitAlreadyReached` read this route used
   // to spend on every request regardless.
   //
-  // Branch-review M1: Phase 7e Task 5's `recomputeIntegrity` originally ran
-  // on **every** batch carrying a `VIOLATION_EVENTS`/`FAILURE_EVENTS` type —
-  // quadratic rows read across a session on `warn_then_flag`, the default
-  // action, which never locks or auto-submits to stop the growth (`M1`:
-  // "roughly 2M rows for one bad session against a 5M/day allowance"). It
-  // now runs only on the one batch that first reaches the limit (`atLimit &&
-  // !alreadyActioned` — the atomic claim below is one-shot, so this can fire
-  // at most once per attempt from this route); every batch below the limit,
-  // however many of them there are, costs the base **4** and nothing more —
-  // `test/run/events.test.ts`'s "below-limit violation batches never pay the
-  // integrity recompute" measures four of them in a row. A batch of only
-  // restore/lifecycle events (`fullscreen_restore` and the like) was always
-  // outside this and still is — "ten events as one batched insert" stays at
-  // the base **4**.
+  // Branch re-review (post-M1): a batch that *does* carry a violation or
+  // failure type costs the base 4 plus `recomputeIntegrity`'s own +3
+  // (`listIntegrityCounts`, `listSnapshotFaceCounts`, `setIntegrity`) —
+  // **7**, measured in `test/run/events.test.ts`'s own counting test — on
+  // every such batch, not only the one that first crosses the limit. M1 had
+  // narrowed this to `atLimit && !alreadyActioned` (at most once per
+  // attempt) because `listIntegrityEvents` then projected the attempt's
+  // *whole* matching history on every call — quadratic rows read across a
+  // session on `warn_then_flag`, the default action, which never locks or
+  // auto-submits to stop the growth (M1: "roughly 2M rows for one bad
+  // session against a 5M/day allowance"). That gate also silently broke
+  // `Q6`'s "review on any violation" for a live attempt
+  // (`test/run/integrity.test.ts`'s "recomputes on every violation, not
+  // only on submit") — `listIntegrityCounts` is the M1 fix applied to the
+  // side M1 left alone, flat in the attempt's history the same way
+  // `listSnapshotFaceCounts` already was, so there is no cost reason left
+  // to gate this to one firing per attempt and the gate is gone: every
+  // integrity-bearing batch costs the same flat **+3**, never more, however
+  // many of them a session has.
   //
   // A batch that reaches the limit costs one more on top of the base 4:
   // `claimViolationLimit`'s own atomic insert, which both decides and marks
   // "has this fired before" in the one statement — 5 — plus the same +3
   // recompute (a limit-reaching batch always carries a violation) —
-  // **8** (`test/run/violation-limit.test.ts`).
+  // **8** (`test/run/violation-limit.test.ts`). Every later batch past the
+  // limit costs the same **8**: `claimViolationLimit` is still attempted
+  // (and loses, `alreadyActioned: true`) and the recompute still runs —
+  // there is no longer a cheaper "already actioned" case at the ingest
+  // side, only `violationOutcome`'s own decision (`{kind:"none"}` past a
+  // `warn_then_flag` firing) changes.
   //
   // The first batch that reaches the limit under `auto_submit` costs the 5
   // above, plus `submitAttempt`'s own common-case cost, which Task 5 moved

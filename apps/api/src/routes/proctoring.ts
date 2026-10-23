@@ -35,6 +35,8 @@ import {
 } from "@pariksha/db";
 import {
   CANDIDATE_PROCTORING_EVENTS,
+  FAILURE_EVENTS,
+  VIOLATION_EVENTS,
   violationOutcome,
   type ProctoringEventType,
 } from "@pariksha/core";
@@ -224,13 +226,6 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // whose own batch locks this attempt — `ProctoringLayer`'s own
     // `initialLocked`/`locked` doc comment is the mirror of `submitted`'s.
     let locked = false;
-    // M1: hoisted out of the block below so the integrity-recompute gate
-    // further down can read them — `atLimit && !alreadyActioned` is true on
-    // exactly the one batch that first crosses the limit, never again for
-    // this attempt (the claim is one-shot). Declared here rather than
-    // computed twice.
-    let atLimit = false;
-    let alreadyActioned = false;
     // Same fix round 2 guard as the append above: once locked, there is
     // nothing left for this block to decide — `claimViolationLimit` would
     // only ever lose its own claim from here on — so it no longer spends a
@@ -245,8 +240,8 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       // only caller never actually gets. Excluding it here also saves the
       // wasted `INSERT … ON CONFLICT DO NOTHING` a `warn_only` test would
       // otherwise pay on every at-limit batch forever, to learn nothing.
-      atLimit = violations >= resolved.violationLimit && resolved.violationAction !== "warn_only";
-      alreadyActioned = atLimit
+      const atLimit = violations >= resolved.violationLimit && resolved.violationAction !== "warn_only";
+      const alreadyActioned = atLimit
         ? !(
             await claimViolationLimit(deps.db, attempt.workspaceId, {
               attemptId: attempt.attemptId,
@@ -291,12 +286,14 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     }
 
     // Phase 7e Task 5 (`Q6a`): "recomputed on submit and whenever a
-    // violation lands." Originally gated on any batch carrying a
-    // `VIOLATION_EVENTS`/`FAILURE_EVENTS` type; M1 below narrows that to the
-    // one batch that matters most relative to its cost. `events.test.ts`'s
-    // "ten events as one batched insert" (all `fullscreen_restore`) still
-    // recomputes nothing — neither gate fires for a batch with no violation
-    // or failure event in it.
+    // violation lands." This batch landed one (or a `FAILURE_EVENTS` type,
+    // `Q6b`: not a violation, but still where `observed` is read) only when
+    // `hasIntegritySignal` is true — the other 7 of `PROCTORING_EVENTS`' 17
+    // types (restores, lifecycle markers, `noise_above_threshold`, identity
+    // capture) never move `integrityFor`'s output, so a batch of only those
+    // recomputes nothing: this is what keeps `events.test.ts`'s "ten events
+    // as one batched insert" measurement (all `fullscreen_restore`) at its
+    // existing cost.
     //
     // `!submitted`: when this same batch's violation already crossed into
     // `auto_submit`, `submitAttempt` above already recomputed against the
@@ -305,29 +302,31 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // still falls through to here: locking does not submit, and the
     // organiser reading a freshly-locked attempt needs the flag current.
     //
-    // Branch-review M1: `listIntegrityEvents`/`listSnapshotFaceCounts`
-    // project this attempt's *whole* history, and this block used to run on
-    // every integrity-signal-bearing batch — quadratic in rows read across a
-    // session (`sum(1..n)`) on `warn_then_flag`, the default action, which
-    // never locks or auto-submits to stop the growth. `atLimit &&
-    // !alreadyActioned` is true on exactly the one batch that first crosses
-    // the limit (the atomic claim above is one-shot, so it can never be true
-    // twice for the same attempt) — bounding the ingest-side recompute to at
-    // most once per attempt. The submit-side call (`submitAttempt`, above
-    // and in `submit.ts`) still recomputes fresh every time and is what
-    // makes the stored flag final; this one only has to be current enough
-    // for an organiser reading a *live* attempt, not current on every batch.
-    // ponytail: a `warn_then_flag`/`warn_only` test's live flag can go stale
-    // between the crossing batch and submit (more violations, camera
-    // outages); upgrade to a time-boxed recompute (e.g. at most once per N
-    // seconds, tracked per attempt) if an organiser actually needs that
-    // window to be live rather than only final.
+    // Branch re-review (post-M1): this gate used to be `atLimit &&
+    // !alreadyActioned` — M1 bounded `listSnapshotFaceCounts` to an
+    // aggregate query but left `listIntegrityEvents` projecting every
+    // matching row, so recomputing on *every* integrity-bearing batch was
+    // quadratic in rows read across a session (`sum(1..n)`) on
+    // `warn_then_flag`, the default action, which never locks or
+    // auto-submits to stop the growth. Narrowing the gate to the one batch
+    // that first crosses the limit hid that cost, but it also meant a
+    // `warn_then_flag` organiser watching a *live* attempt read `clean`
+    // forever when the limit was never crossed before submit — `Q6`'s own
+    // "review on any violation" promise, silently broken, and exactly what
+    // `integrity.test.ts`'s "recomputes on every violation, not only on
+    // submit" exists to catch. `listIntegrityCounts` (`@pariksha/db`) is the
+    // other half of M1's fix, applied to the side M1 left alone: one
+    // aggregate query, flat in the attempt's history, same as
+    // `listSnapshotFaceCounts` already was — so there is no cost reason left
+    // to gate this to one firing per attempt, and it no longer is.
+    const hasIntegritySignal = parsed.data.events.some(
+      (event) => VIOLATION_EVENTS.has(event.type) || FAILURE_EVENTS.has(event.type),
+    );
     if (
       attempt.submittedAt === null &&
       attempt.lockedAt === null &&
       !submitted &&
-      atLimit &&
-      !alreadyActioned
+      hasIntegritySignal
     ) {
       try {
         await recomputeIntegrity(deps, attempt, deps.now());
