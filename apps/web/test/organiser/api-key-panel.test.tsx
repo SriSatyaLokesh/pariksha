@@ -85,6 +85,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     listApiKeys: notUsed,
     createApiKey: notUsed,
     revokeApiKey: notUsed,
+    // 8e's additions to `ApiClient`. This file was created on this branch, so
+    // git merged it without a conflict and only the type caught the gap. See
+    // #228: every test file hand-rolls this fixture, so one interface change
+    // breaks twenty-odd of them in places no merge can point at.
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
+    usage: async () => undefined,
     ...overrides,
   };
 }
