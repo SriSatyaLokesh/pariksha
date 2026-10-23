@@ -82,6 +82,21 @@ import { requires } from "../middleware/authorize.js";
 export interface ExportPageOptions {
   cursor?: string;
   limit?: number;
+  /**
+   * Fix round 1 (Important): the absolute origin `R-08`'s review link
+   * resolves against. A CSV is opened in Excel, away from the app — a
+   * relative URL has nothing to resolve against there and is inert in the
+   * one place this column is ever used.
+   *
+   * Supplied by the route handler via `originOf` below, the same
+   * `appUrl`-or-request-origin pattern `routes/run.ts:324` and
+   * `routes/invites.ts:113` already use: `appUrl` when configured, the
+   * request's own origin otherwise — which is what makes it correct on the
+   * Workers target, which configures neither `appUrl` nor (unlike the
+   * `node` target) a `publicUrl`. Omitted only by a caller with no request
+   * to resolve against (a direct, non-HTTP call — a test, say).
+   */
+  origin?: string;
 }
 
 /** `CsvPage` plus the one thing it deliberately does not carry: `R-10`'s
@@ -162,6 +177,12 @@ interface ResultsColumnContext {
   ranks: Map<string, number>;
   countedMode: CountedAttempt;
   testId: string;
+  /** The absolute origin the review link resolves against — see
+   *  `ExportPageOptions.origin`. Empty only for a direct call that
+   *  supplied none, which renders a relative (and inert) link rather than
+   *  throwing — a test building columns in isolation still gets a value
+   *  back. */
+  origin: string;
 }
 
 /** A free-text cell value, serialised the one way every cell in this file
@@ -183,16 +204,20 @@ function cellOf(value: unknown): string | number | boolean | null | undefined {
  * pair (`Locked at`, `Integrity flag`), verdict and note, and a review
  * link.
  *
- * **The review link is relative, not absolute.** `AppEnv`'s `publicUrl`
- * exists only on the `node` target — the production Workers target carries
- * no configured origin for the web app at all (`env.ts`) — so there is
- * nothing to prefix an absolute URL with that would be correct on both
- * targets. It points at the organiser web app's own `?view=grading&test=`
- * (`apps/web/src/lib/view-url.ts`), the grading queue for this test: that
- * query-string scheme carries no per-attempt parameter today (deliberately
- * — `organiser.tsx`'s own comment on `QuestionScreen` draws the same line),
- * so a queue-level link is the closest real destination rather than a
- * fabricated one.
+ * **The review link is absolute** (fix round 1, Important) — `ctx.origin`,
+ * `appUrl` when configured or the request's own origin otherwise, the same
+ * mechanism `routes/run.ts`'s `originOf` and `routes/invites.ts`'s `base`
+ * already use for exactly this reason: `AppEnv.publicUrl` is `node`-only,
+ * but `appUrl` and the request origin both exist on every target,
+ * including the production Workers one. A CSV is opened away from the
+ * app — a relative URL there resolves against nothing. It points at the
+ * organiser web app's own `?view=grading&test=` (`apps/web/src/lib/
+ * view-url.ts`), the grading queue for this test: that query-string scheme
+ * carries no per-attempt parameter today (deliberately — `organiser.tsx`'s
+ * own comment on `QuestionScreen` draws the same line), so a queue-level
+ * link is the closest real destination rather than a fabricated one — a
+ * limitation of the app's routing, not of this column, and out of this
+ * task's scope to invent.
  */
 function resultsColumns(ctx: ResultsColumnContext): CsvColumn<AttemptSummary>[] {
   const fieldColumns: CsvColumn<AttemptSummary>[] = ctx.fields.map((field) => ({
@@ -247,7 +272,7 @@ function resultsColumns(ctx: ResultsColumnContext): CsvColumn<AttemptSummary>[] 
     { header: "Integrity flag", value: (row) => row.integrityFlag },
     { header: "Verdict", value: (row) => ctx.verdicts.get(row.attemptId)?.verdict ?? "" },
     { header: "Note", value: (row) => ctx.verdicts.get(row.attemptId)?.note ?? "" },
-    { header: "Review link", value: () => `/?view=grading&test=${ctx.testId}` },
+    { header: "Review link", value: () => `${ctx.origin}/?view=grading&test=${ctx.testId}` },
   ];
 }
 
@@ -293,6 +318,7 @@ export async function exportResultsPage(
     ranks,
     countedMode: shape.countedMode,
     testId,
+    origin: opts.origin ?? "",
   });
 
   const firstPage = opts.cursor === undefined;
@@ -378,7 +404,15 @@ export async function exportAnswersPage(
   };
 }
 
-function pageOptions(c: Context<AppBindings>): ExportPageOptions {
+/** `appUrl` when configured, the request's own origin otherwise — the same
+ *  pattern `routes/run.ts`'s `originOf` and `routes/invites.ts`'s `base`
+ *  already use, duplicated locally the same way theirs are (neither is
+ *  exported): `AppEnv.publicUrl` is `node`-only, so it cannot be this
+ *  function's answer on the Workers target this app actually deploys to. */
+const originOf = (deps: AppDeps, c: Context<AppBindings>): string =>
+  (deps.env.appUrl ?? new URL(c.req.url).origin).replace(/\/$/, "");
+
+function pageOptions(c: Context<AppBindings>, origin?: string): ExportPageOptions {
   const cursor = c.req.query("cursor");
   const limitRaw = c.req.query("limit");
   const limit = limitRaw === undefined ? undefined : Number(limitRaw);
@@ -387,7 +421,11 @@ function pageOptions(c: Context<AppBindings>): ExportPageOptions {
       issues: [{ path: "limit", message: "must be a positive integer" }],
     });
   }
-  return { ...(cursor !== undefined && { cursor }), ...(limit !== undefined && { limit }) };
+  return {
+    ...(cursor !== undefined && { cursor }),
+    ...(limit !== undefined && { limit }),
+    ...(origin !== undefined && { origin }),
+  };
 }
 
 /**
@@ -401,7 +439,7 @@ export function resultsExportRoutes(deps: AppDeps): Hono<AppBindings> {
   routes.get("/:id/tests/:testId/export/results.csv", requires("results.export"), async (c) => {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
-    return c.json(await exportResultsPage(deps, workspaceId, testId, pageOptions(c)));
+    return c.json(await exportResultsPage(deps, workspaceId, testId, pageOptions(c, originOf(deps, c))));
   });
 
   routes.get("/:id/tests/:testId/export/answers.csv", requires("results.export"), async (c) => {

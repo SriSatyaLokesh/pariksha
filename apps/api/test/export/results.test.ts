@@ -305,6 +305,52 @@ const c5 = await candidateIn(smallTestId, { roll: "R5" });
 const a5 = await seedAttempt({ candidateId: c5, testVersionId: smallVersionId, startedAt: FIXED_NOW + 4 });
 ATTEMPT_ROLL.set(a5, "R5");
 
+// Fix round 1 (Minor 2): a fixture that actually forces two sections to
+// share a title — `disambiguate()` is shared code with the field-label
+// case above, which is why it already worked, but nothing was red if it
+// stopped. One tiny test, one attempt, two sections both titled "Section".
+const dupSectionsBody: TestDocumentBody = {
+  settings: {
+    timing: { duration_minutes: 30, navigation: "free", ...openWindow },
+    access: { mode: "link_code", access_code: "OPEN3" },
+    registration_form: { fields: [{ id: "roll", type: "short_text", label: "Roll", required: true }] },
+  },
+  sections: [
+    { id: "sec1", title: "Section", source: { kind: "fixed", questions: ["qst_0"] } },
+    { id: "sec2", title: "Section", source: { kind: "fixed", questions: ["qst_1"] } },
+  ],
+};
+const dupSectionsTestId = await seedTest(deps, workspaceId, { name: "Dup sections", slug: "dup-sections", body: dupSectionsBody });
+const dupSectionsVersionId = await versionIdOf(dupSectionsTestId);
+const dupSectionsCandidate = await candidateIn(dupSectionsTestId, { roll: "D1" });
+await seedAttempt({
+  candidateId: dupSectionsCandidate,
+  testVersionId: dupSectionsVersionId,
+  startedAt: FIXED_NOW,
+  submittedAt: FIXED_NOW + 600_000,
+  scoreJson: {
+    perQuestion: { qst_0: { points: 1, max: 1, correct: true }, qst_1: { points: 1, max: 1, correct: true } },
+    sections: [
+      { sectionId: "sec1", points: 1, max: 1 },
+      { sectionId: "sec2", points: 1, max: 1 },
+    ],
+    total: 2,
+    max: 2,
+    percent: 100,
+    passed: true,
+    pending: [],
+  },
+});
+
+it("disambiguates two sections sharing a title", async () => {
+  const csv = await drain((opts) => exportResultsPage(deps, workspaceId, dupSectionsTestId, opts));
+  const { header } = headerAndRows(csv);
+  expect(new Set(header).size).toBe(header.length);
+  expect(header).toContain("Section (sec1)");
+  expect(header).toContain("Section (sec2)");
+  expect(header).not.toContain("Section");
+});
+
 // The 300-candidate, 60-question-each cohort. Seeded with one `db.batch` —
 // 300 attempts and 18,000 responses would be an unreasonable number of
 // individual awaited statements, and the fixture itself owes no subrequest
@@ -514,6 +560,30 @@ it("is available while the test is still open", async () => {
 it("R-10's filename shape: <slug>_results_<YYYYMMDD-HHMM>.csv, built from csvFilename", async () => {
   const page = await exportResultsPage(deps, workspaceId, smallTestId, {});
   expect(page.filename).toMatch(/^small_results_\d{8}-\d{4}\.csv$/);
+});
+
+// Fix round 1 (Important): the review link must be absolute — a CSV is
+// opened away from the app, so a relative URL resolves against nothing.
+// Over the real route (not the bare function, which has no request to
+// resolve an origin from), with no APP_URL configured in this test's env,
+// so this also pins the fallback: the request's own origin.
+it("the review link is absolute, not relative — resolvable from inside the CSV", async () => {
+  const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests/${smallTestId}/export/results.csv`, get(viewerCookie));
+  expect(res.status, await res.clone().text()).toBe(200);
+  const page = (await res.json()) as ExportPage;
+  const { header, rows } = headerAndRows(page.csv);
+  const link = cell(header, rowOf(header, rows, a1), "Review link");
+  expect(link).toMatch(/^https?:\/\//);
+  expect(link).toContain(`?view=grading&test=${smallTestId}`);
+});
+
+// The bare function (no HTTP request, no origin to resolve) must not
+// throw — it falls back to a relative link rather than fabricating one,
+// exactly the `ExportPageOptions.origin` contract documents.
+it("falls back to a relative link when called with no origin at all", async () => {
+  const page = await exportResultsPage(deps, workspaceId, smallTestId, {});
+  const { header, rows } = headerAndRows(page.csv);
+  expect(cell(header, rowOf(header, rows, a1), "Review link")).toBe(`/?view=grading&test=${smallTestId}`);
 });
 
 // --- the full expected column set, as one sanity check ----------------------

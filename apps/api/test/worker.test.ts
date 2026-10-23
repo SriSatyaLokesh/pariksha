@@ -7,7 +7,7 @@
 
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
-import { claimViolationLimit, d1Client, migrate, newId, sqliteMigrations } from "@pariksha/db";
+import { claimViolationLimit, createApiKey, d1Client, migrate, newId, sqliteMigrations } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
 import { SCHEDULED_JOBS } from "../src/scheduled.js";
@@ -244,6 +244,67 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
     dialect: "d1",
     migrations: 12,
   });
+});
+
+// Fix round 1 (Important): the results CSV's review link has to be
+// absolute — a CSV is opened away from the app, so a relative URL resolves
+// against nothing. The risk this closes is specific to the real Worker:
+// `deploy/cloudflare/wrangler.toml` configures no `APP_URL`, so production
+// takes the exact fallback branch this test pins — `new URL(c.req.url)
+// .origin`, proved here against the real Worker entry rather than Hono's
+// in-memory `app.request()` (which `apps/api/test/export/results.test.ts`
+// already covers, but that is not this deploy target).
+it("the results CSV's review link is absolute against the real Worker's own origin", async () => {
+  const db = d1Client(env.DB as unknown as D1Database);
+  await migrate(db);
+
+  const workspaceId = newId("wsp");
+  const testId = "tst_d1review01";
+  const versionId = "ver_d1review01";
+  const candidateId = "cnd_d1review01";
+  const attemptId = "att_d1review01";
+  const now = Date.now();
+
+  await db.run("INSERT INTO workspace (id, slug, name, created_at) VALUES (?, ?, ?, ?)", [
+    workspaceId,
+    "d1review",
+    "D1 Review",
+    now,
+  ]);
+  await db.run(
+    "INSERT INTO test (id, workspace_id, slug, name, description, short_code, status, review_requested, " +
+      "current_version, tags_json, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL)",
+    [testId, workspaceId, "d1review", "D1 Review", "d1review1", "published", 0, 1, "[]", now],
+  );
+  await db.run(
+    "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, published_at, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [versionId, workspaceId, testId, 1, "{}", "[]", now, now],
+  );
+  await db.run(
+    "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, form_values_json, " +
+      "consent_version, consent_at, created_at) VALUES (?, ?, ?, NULL, NULL, 'registration', '{}', NULL, NULL, ?)",
+    [candidateId, workspaceId, testId, now],
+  );
+  await db.run(
+    "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, " +
+      "deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, section_started_at, " +
+      "integrity_flag, observed) VALUES (?, ?, ?, ?, 1, '{}', ?, ?, NULL, NULL, NULL, 'clean', ?, 0, NULL, 'clean', 0)",
+    [attemptId, workspaceId, candidateId, versionId, now, now + 3_600_000, "hash-d1review"],
+  );
+
+  const { secret } = await createApiKey(db, workspaceId, { name: "review-link", scopes: ["results.export"], now });
+
+  const res = await SELF.fetch(
+    `https://example.com/api/v1/workspaces/${workspaceId}/tests/${testId}/export/results.csv`,
+    { headers: { authorization: `Bearer ${secret}` } },
+  );
+  expect(res.status, await res.clone().text()).toBe(200);
+  const body = (await res.json()) as { csv: string };
+  expect(body.csv).toContain(`https://example.com/?view=grading&test=${testId}`);
+  // The old, relative form must not also be present — the fix replaces the
+  // branch, it does not merely add an alternative.
+  expect(body.csv).not.toContain(`"/?view=grading&test=${testId}"`);
 });
 
 // One Worker serves the API and the static site, so the entry point has to
