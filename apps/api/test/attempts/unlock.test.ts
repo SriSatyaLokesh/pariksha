@@ -37,6 +37,9 @@ const app = createApp(deps);
 const workspaceId = await seedWorkspace(deps, SLUG.workspace, "Alpha Corp");
 const otherWorkspaceId = await seedWorkspace(deps, "beta", "Beta Corp");
 const q = await seedBank(deps, workspaceId);
+// m8: a bank and a published test of beta's own, so a beta attempt id
+// exists to try against alpha's own `:id`/`:testId` pair.
+const otherQ = await seedBank(deps, otherWorkspaceId);
 
 const testId = await seedTest(deps, workspaceId, {
   name: "Lockable",
@@ -49,6 +52,21 @@ const testId = await seedTest(deps, workspaceId, {
       proctoring: { profile: "standard", overrides: { violation_limit: 5, violation_action: "lock" } },
     },
     sections: [{ id: "only", title: "Only", source: { kind: "fixed", questions: [q["LOG-001"] as string] } }],
+  },
+});
+
+const OTHER_SLUG = { workspace: "beta", test: "lockable" } as const;
+await seedTest(deps, otherWorkspaceId, {
+  name: "Lockable (beta)",
+  slug: OTHER_SLUG.test,
+  body: {
+    settings: {
+      timing: { duration_minutes: 45, opens_at: iso(T - DAY), closes_at: iso(T + DAY) },
+      access: { mode: "link_code", access_code: "OPENSESAME" },
+      registration_form: PAPER_FORM,
+      proctoring: { profile: "standard", overrides: { violation_limit: 5, violation_action: "lock" } },
+    },
+    sections: [{ id: "only", title: "Only", source: { kind: "fixed", questions: [otherQ["LOG-001"] as string] } }],
   },
 });
 
@@ -76,9 +94,11 @@ const otherWorkspaceCookie = await cookieFor(otherWorkspaceId, "proctor", "proct
 
 let serial = 1;
 
-async function start(): Promise<{ cookie: string; attemptId: string }> {
-  const test = await resolvePublishedTest(deps.db, SLUG.workspace, SLUG.test, T);
-  if (!test) throw new Error(`no published test at ${SLUG.workspace}/${SLUG.test}`);
+async function start(
+  slug: { workspace: string; test: string } = SLUG,
+): Promise<{ cookie: string; attemptId: string }> {
+  const test = await resolvePublishedTest(deps.db, slug.workspace, slug.test, T);
+  if (!test) throw new Error(`no published test at ${slug.workspace}/${slug.test}`);
   const candidateId = await createCandidate(deps.db, test.workspaceId, {
     testId: test.testId,
     formValues: { roll: `R${String(serial++)}` },
@@ -93,7 +113,7 @@ async function start(): Promise<{ cookie: string; attemptId: string }> {
     now: T,
     expiresAt: T + REGISTRATION_TTL_MS,
   });
-  const res = await app.request(`/api/v1/run/${SLUG.workspace}/${SLUG.test}/start`, {
+  const res = await app.request(`/api/v1/run/${slug.workspace}/${slug.test}/start`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}` },
   });
@@ -269,6 +289,21 @@ it("404s an unlock for an attempt that belongs to a different test in the same w
     {},
     proctorCookie,
   );
+  expect(res.status).toBe(404);
+});
+
+// m8: the one half of `getAttemptLockState`'s scope the suite above never
+// exercised — a proctor's own `:id`/`:testId` (both real, both theirs),
+// against an attempt id that belongs to a wholly different workspace.
+// `getAttemptLockState`'s own `WHERE a.workspace_id = ?` is what refuses
+// this; without it, alpha's proctor could probe or unlock beta's attempts
+// by id alone.
+it("m8: 404s an unlock for an attempt id that belongs to a different workspace entirely", async () => {
+  const { cookie, attemptId: betaAttemptId } = await start(OTHER_SLUG);
+  const locked = await reachLimit(cookie, 5);
+  expect((await locked.json() as { locked: boolean }).locked).toBe(true);
+
+  const res = await post(unlockPath(betaAttemptId), {}, proctorCookie);
   expect(res.status).toBe(404);
 });
 
