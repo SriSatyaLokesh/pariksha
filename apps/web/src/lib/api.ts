@@ -111,6 +111,15 @@ export interface ChecklistRow {
   sectionId?: string;
 }
 
+/** `D7c`'s readiness aggregate (Phase 8c Task 5) — mirrors the server's own
+ * arithmetic (`apps/api/src/publish/readiness.ts`, `PublishChecklist.tsx`'s
+ * own rail figure): `total` is every row the gate raised for this test,
+ * `ready` how many of those do not stop a publish. */
+export interface ReadinessSummary {
+  ready: number;
+  total: number;
+}
+
 export interface TestSummary {
   id: string;
   name: string;
@@ -468,6 +477,10 @@ export interface ApiClient {
   /** Task 13 (#64, P5.11): the same rows `publishTest` enforces, read
    * rather than enforced — one function, two callers (Review Focus 4). */
   checklist(workspaceId: string, testId: string): Promise<ChecklistRow[]>;
+  /** Phase 8c Task 5 (`D7c`, `K21`): one response for every test in the
+   * workspace, not one `checklist()` per row — the list renders this,
+   * never the per-test checklist. */
+  readiness(workspaceId: string): Promise<Record<string, ReadinessSummary>>;
 
   // Task 12 (#63, P5.10): AC-04's three.
   /** A new Draft from this test's editable head, with a new id, short code
@@ -1062,6 +1075,10 @@ export function createApiClient(): ApiClient {
           `/workspaces/${workspaceId}/tests/${testId}/checklist`,
         )
       ).rows,
+    // Phase 8c Task 5 (`D7c`): the response IS the map, unlike `checklist`
+    // above — there is no row array here to wrap a key around.
+    readiness: (workspaceId) =>
+      json<Record<string, ReadinessSummary>>(`/workspaces/${workspaceId}/tests/readiness`),
 
     cloneTest: (workspaceId, testId) =>
       json<TestSummary>(

@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSummary } from "../lib/api";
+import {
+  ApiError,
+  type ApiClient,
+  type ReadinessSummary,
+  type TestFilter,
+  type TestState,
+  type TestSummary,
+} from "../lib/api";
 import { downloadJson } from "../lib/download";
 import { CardHairline } from "../components/CardHairline";
 import { TextField } from "../components/TextField";
@@ -71,10 +78,14 @@ export function TestStateBadge({ state }: { state: TestState }) {
  *   draftVersion > currentVersion  v1 live, v2 being edited
  *   otherwise                      v1 live, and nothing newer
  *
- * NO READINESS METER, deliberately (`D7c`): this route loads version heads,
- * not draft bodies, so a real "5 / 7" would be one `GET …/checklist` per row.
- * The meter lives in the builder until Phase 8 adds an aggregate, and
- * `test-list.test.tsx` guards both the absence and the call budget.
+ * THE READINESS METER (`D7c`, Phase 8c Task 5): this route used to load only
+ * version heads, not draft bodies, so a real "5 / 7" per row would have been
+ * one `GET …/checklist` per test (`K21` forbids exactly that). `GET
+ * .../tests/readiness` answers for every test in the workspace in one call
+ * instead — `readinessFor` (`apps/api/src/publish/readiness.ts`) runs the
+ * same `buildChecklist` the builder's own rail does, over four statements
+ * total regardless of how many tests there are. `test-list.test.tsx` guards
+ * both the meter's presence and the call budget.
  */
 function versionSummary(test: TestSummary): string {
   if (test.currentVersion === null) return "never published";
@@ -82,6 +93,16 @@ function versionSummary(test: TestSummary): string {
   return test.draftVersion !== null && test.draftVersion > test.currentVersion
     ? `${live} · v${test.draftVersion} draft`
     : live;
+}
+
+/** `D7c`'s own arithmetic (`PublishChecklist.tsx`): how many of the
+ *  checklist's own rows do not stop a publish, over how many it raised. An
+ *  em dash while the aggregate is still loading or has nothing for this
+ *  test — not "0 / 0", which would read as "all clear" instead of
+ *  "unknown". Plain text, no hue: the same `D1` rule `versionSummary`
+ *  follows, and the numbers alone are what a screen reader needs. */
+function readinessSummary(summary: ReadinessSummary | undefined): string {
+  return summary === undefined ? "—" : `${summary.ready} / ${summary.total}`;
 }
 
 type Sort = "name" | "updated" | "created";
@@ -162,6 +183,11 @@ export function TestList({
 }) {
   const [filter, setFilter] = useState<UrlFilter>(() => filterFromSearch(window.location.search));
   const [tests, setTests] = useState<TestSummary[] | null>(null);
+  // `D7c`'s aggregate, keyed by test id — one call for the whole table,
+  // never one `checklist()` per row (`K21`). Absent until the first load
+  // settles, which is why `readinessSummary` reads a key that may not be
+  // there yet as "—" rather than as "all clear".
+  const [readiness, setReadiness] = useState<Record<string, ReadinessSummary>>({});
   const [error, setError] = useState<string | undefined>(undefined);
 
   const [name, setName] = useState("");
@@ -182,7 +208,17 @@ export function TestList({
   const load = useCallback(
     async (f: UrlFilter) => {
       try {
-        setTests(await client.tests(workspaceId, toApiFilter(f)));
+        // One `tests()` call and one `readiness()` call, together — never a
+        // `checklist()` per row (`K21`). `readiness()` answers for the whole
+        // workspace, unaffected by `f`, but refreshing it alongside `tests()`
+        // is what keeps a freshly created or cloned test's figure current
+        // without a second effect to wire up.
+        const [rows, ready] = await Promise.all([
+          client.tests(workspaceId, toApiFilter(f)),
+          client.readiness(workspaceId),
+        ]);
+        setTests(rows);
+        setReadiness(ready);
         setError(undefined);
       } catch (cause) {
         setError(cause instanceof ApiError ? cause.message : "Tests could not be loaded.");
@@ -465,6 +501,10 @@ export function TestList({
                       Version is the publish history. */}
                   <th scope="col">State</th>
                   <th scope="col">Version</th>
+                  {/* Phase 8c Task 5 (`D7c`): the readiness aggregate, one
+                      call for the whole table (`K21`) — not a third fact
+                      folded into Version, which already carries two. */}
+                  <th scope="col">Readiness</th>
                   <th scope="col" {...sortHeaderProps("updated")}>
                     Last edited
                   </th>
@@ -516,6 +556,10 @@ export function TestList({
                         )}
                       </td>
                       <td className="test-version">{versionSummary(test)}</td>
+                      {/* Reuses `.test-version`'s own rule (mono, quiet,
+                          no hue) rather than a new selector — the same
+                          kind of supporting fact in the same row. */}
+                      <td className="test-version">{readinessSummary(readiness[test.id])}</td>
                       <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
                       <td>
                         <div className="field">

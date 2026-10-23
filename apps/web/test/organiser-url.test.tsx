@@ -122,6 +122,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     },
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
     cloneTest: async () => {
       throw new Error("not used");
     },
