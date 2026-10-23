@@ -519,7 +519,10 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
       id: "proctoring_lock_without_recourse",
       severity: "advisory",
       field: "proctoring.overrides.violation_action",
-      message: "a locked attempt clears only when an organiser opens it — phase 8 adds the monitor",
+      // m3: this branch (Task 4) added the monitor the old copy still
+      // promised as a future phase — git-recovered verbatim from before
+      // #214 removed the row, which is why it still said so.
+      message: "a locked attempt clears only when an organiser unlocks it from the attempts panel",
     });
   }
 
