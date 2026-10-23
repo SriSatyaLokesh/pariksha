@@ -28,6 +28,7 @@ import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
+import { webhookRoutes } from "./routes/webhooks.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -515,6 +516,18 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1), one `batch` however long the list is (1), and the audit row (1).
   // Flat in the list's size, which `test/invites.test.ts` measures at 200.
   "/api/v1/workspaces/:id/tests/:testId/invites": 7,
+
+  // Phase 8d Task 1: webhook CRUD. Measured
+  // (`test/webhooks.test.ts`'s own "measures the real subrequest cost"
+  // test), not estimated. GET costs 3: auth (2) + `listWebhooks` (1) —
+  // `costPerCandidate` is `estimateCost`'s own pure arithmetic, no
+  // subrequest. POST costs 4: auth (2) + `createWebhook`'s one insert (1)
+  // + `appendAudit` (1) — `urlRefusal` runs in memory, no subrequest
+  // either. PATCH and DELETE each cost 4: auth (2) + the one write (1,
+  // `setWebhookActive`/`deleteWebhook`) + `appendAudit` (1). The higher of
+  // the methods sharing each path, same rule every budget above follows.
+  "/api/v1/workspaces/:id/webhooks": 4,
+  "/api/v1/workspaces/:id/webhooks/:webhookId": 4,
 };
 
 /**
@@ -597,6 +610,14 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // the candidate list, so it is the same permission that uploaded the
   // list — an Author who built the test holds `tests.edit` and not this.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
+
+  // Phase 8d Task 1: webhooks are workspace configuration, guarded by the
+  // same `workspace.settings` branding and the workspace name already
+  // sit behind — not a new row in the matrix.
+  "GET /api/v1/workspaces/:id/webhooks": "workspace.settings",
+  "POST /api/v1/workspaces/:id/webhooks": "workspace.settings",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "workspace.settings",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "workspace.settings",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
@@ -802,6 +823,11 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
+  // Phase 8d Task 1: webhooks.
+  "GET /api/v1/workspaces/:id/webhooks": "workspace",
+  "POST /api/v1/workspaces/:id/webhooks": "workspace",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -842,6 +868,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 8d Task 1: webhooks, mounted after the candidate-runtime invite
+  // route for locality with the rest of `/api/v1/workspaces/:id/...`
+  // rather than out of necessity — no prefix below collides.
+  app.route("/api/v1/workspaces", webhookRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing

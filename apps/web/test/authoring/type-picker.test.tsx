@@ -159,6 +159,10 @@ function fakeClient(): ApiClient {
     uploadMedia: unused,
     candidates: async () => [],
     importCandidates: unused,
+    listWebhooks: unused,
+    createWebhook: unused,
+    setWebhookActive: unused,
+    deleteWebhook: unused,
   };
 }
 

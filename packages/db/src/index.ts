@@ -25,3 +25,7 @@ export * from "./repo/candidate-entry.js";
 // A `/t/:code` miss bucket has no workspace, so there is nothing for
 // `scoped()` to check (Phase 6 Task 3, #67).
 export * from "./repo/rate-limit.js";
+// Phase 8d Task 1: `urlRefusal`, T-19's SSRF refusal table, moved here so
+// `repo/webhooks.ts` and `apps/api/src/net/reachable.ts` share one copy —
+// see net.ts's own header.
+export * from "./net.js";

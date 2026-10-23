@@ -16,7 +16,7 @@ import { readGround, writeGround, type Ground } from "../lib/ground";
 // a nav with nothing behind it is exactly the lie `admin.css:99-101` refused
 // when it declined to invent one for three screens. `organiser.tsx` decides
 // that, because it is the only place that knows which of the two it is.
-export type NavKey = "home" | "banks" | "tests";
+export type NavKey = "home" | "banks" | "tests" | "webhooks";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
@@ -83,6 +83,10 @@ export const ICONS: Record<string, string[]> = {
   "state-closed": ["M5.2 5.2h9.6v9.6H5.2Z"],
   "state-archived": ["M4.4 5h11.2v10H4.4Z", "M4.4 8.2h11.2", "M8.4 11h3.2"],
   warn: ["M10 3.6 17.4 16.4H2.6Z", "M10 8.4v3.4", "M10 14h.01"],
+  /* Phase 8d Task 1: the perimeter's own nav destination — a bolt, for the
+     event this screen's webhooks fire out on. Same viewBox, same stroke,
+     same `currentColor` as every entry above. */
+  webhooks: ["M11.4 3 5.6 11.6h3.4L8 17l6.4-9h-3.6Z"],
 };
 
 /* The icons whose SHAPE is a fill rather than an outline — `D1`'s "glyph and
@@ -146,6 +150,9 @@ const NAV: { key: NavKey; label: string }[] = [
   { key: "home", label: "Home" },
   { key: "banks", label: "Banks" },
   { key: "tests", label: "Tests" },
+  // Phase 8d Task 1: the first thing behind this nav slot — present, not
+  // dimmed (the comment above this table's own rule).
+  { key: "webhooks", label: "Webhooks" },
 ];
 
 export function OrganiserShell({

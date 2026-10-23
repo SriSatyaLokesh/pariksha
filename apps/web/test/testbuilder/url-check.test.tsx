@@ -310,6 +310,10 @@ function viewClient(): ApiClient {
     uploadMedia: notUsed,
     candidates: async () => [],
     importCandidates: notUsed,
+    listWebhooks: notUsed,
+    createWebhook: notUsed,
+    setWebhookActive: notUsed,
+    deleteWebhook: notUsed,
   };
 }
 

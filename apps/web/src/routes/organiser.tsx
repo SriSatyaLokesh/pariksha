@@ -19,6 +19,7 @@ import { QuestionScreen } from "./question";
 import { TestList } from "./tests";
 import { TestBuilder } from "./test";
 import { ImportScreen } from "./import";
+import { WebhookPanel } from "../components/organiser/WebhookPanel";
 
 // Routing, without a router.
 //
@@ -60,6 +61,7 @@ type View =
   | { kind: "dashboard"; actor: Actor; workspace: Workspace }
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
+  | { kind: "webhooks"; actor: Actor; workspace: Workspace }
   | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
   // `bankName` is absent exactly when the browser was deep-linked rather
   // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
@@ -291,6 +293,14 @@ export function OrganiserApp({
           onImport={() => go({ kind: "import", actor: view.actor, workspace: view.workspace })}
         />,
       );
+    case "webhooks":
+      return shell(
+        "webhooks",
+        view.actor,
+        view.workspace,
+        { title: "Webhooks", crumb: "Webhooks" },
+        <WebhookPanel workspaceId={view.workspace.id} client={client} />,
+      );
     case "test":
       // The builder fetches the test and renders `test?.name ?? "Test
       // builder"` as its own <h1> (test.tsx), so it is the one arm that
@@ -453,6 +463,7 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
   switch (params.view) {
     case "banks":
     case "tests":
+    case "webhooks":
       return { kind: params.view, actor, workspace };
     case "test":
       return params.test === undefined
@@ -488,6 +499,7 @@ function paramsOf(view: View): ViewParams | null {
       return { view: "home" };
     case "banks":
     case "tests":
+    case "webhooks":
       return { view: view.kind };
     case "test":
       return { view: "test", test: view.testId };

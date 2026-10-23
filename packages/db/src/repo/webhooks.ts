@@ -1,0 +1,179 @@
+// Webhook endpoints: CRUD, and the secret shown once (Phase 8d Task 1,
+// `K35`, `K36`, `KG5`).
+
+import type { DbClient } from "../client.js";
+import { newId } from "../ids.js";
+import { urlRefusal } from "../net.js";
+import { scoped } from "./guard.js";
+
+// `K43`: "attempt.flagged" is NOT a member of `WEBHOOK_EVENTS`. Its only
+// trigger is 8g's integrity recompute and 8g is deferred whole with 7e — an
+// event a selector offers but nothing can ever fire is the `Q1b` defect. It
+// returns with 8g, as one more member here plus its caller. The delivery
+// machinery (Task 3) is event-agnostic and needs no change for it.
+export const WEBHOOK_EVENTS = ["attempt.started", "attempt.submitted", "test.closed"] as const;
+export type WebhookEvent = (typeof WEBHOOK_EVENTS)[number];
+
+const WEBHOOK_EVENT_SET: ReadonlySet<string> = new Set(WEBHOOK_EVENTS);
+
+/**
+ * The organiser-facing shape. **Never `signingSecret`** (`KG5`) — the
+ * column exists so deliveries can be signed, but once creation has
+ * answered it the only reader for the rest of this row's life is
+ * `listActiveWebhooksForEvent`, below, which Task 3's delivery machinery
+ * calls directly and no route ever serialises.
+ */
+export interface WebhookRow {
+  id: string;
+  url: string;
+  events: WebhookEvent[];
+  active: boolean;
+  createdAt: number;
+}
+
+interface WebhookRecord {
+  id: string;
+  url: string;
+  events_json: unknown;
+  active: unknown;
+  created_at: number;
+}
+
+const WEBHOOK_COLUMNS = "id, url, events_json, active, created_at";
+
+function toWebhookRow(db: DbClient, row: WebhookRecord): WebhookRow {
+  return {
+    id: row.id,
+    url: row.url,
+    events: db.jsonValue<WebhookEvent[]>(row.events_json),
+    active: Boolean(row.active),
+    createdAt: Number(row.created_at),
+  };
+}
+
+/** `whsec_` plus 32 random bytes, hex — the same `crypto.getRandomValues`
+ * source `ids.ts`'s `newId` draws from, not a second RNG. Not an
+ * `IdPrefix` (`ids.ts`): this is a bearer secret handed to the organiser
+ * once, never a row this database addresses by it. */
+function generateSigningSecret(): string {
+  const bytes = new Uint8Array(32);
+  globalThis.crypto.getRandomValues(bytes);
+  let hex = "";
+  for (const byte of bytes) hex += byte.toString(16).padStart(2, "0");
+  return `whsec_${hex}`;
+}
+
+/**
+ * Creates the webhook and returns its signing secret — the one and only
+ * time this database hands it back (`KG5`). `listWebhooks` below reads the
+ * same row and never includes it.
+ *
+ * Refuses two ways, both before the row is written: an event outside the
+ * closed `WEBHOOK_EVENTS` set (a stale client, or one that invented its
+ * own), and a URL `urlRefusal` (`../net.js`, T-19's rules) would refuse to
+ * fetch — the same hazard `check_reachable` exists for: an organiser-
+ * supplied URL this Worker itself will fetch, repeatedly, carrying a
+ * signing secret in its headers.
+ */
+export const createWebhook = scoped(
+  "createWebhook",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { url: string; events: readonly WebhookEvent[]; now: number },
+  ): Promise<{ webhookId: string; signingSecret: string }> => {
+    for (const event of input.events) {
+      if (!WEBHOOK_EVENT_SET.has(event)) {
+        throw new Error(`createWebhook: "${event}" is not a webhook event.`);
+      }
+    }
+    const refused = urlRefusal(input.url);
+    if (refused !== null) {
+      throw new Error(`createWebhook: ${refused}.`);
+    }
+
+    const id = newId("whk");
+    const signingSecret = generateSigningSecret();
+    await db.run(
+      "INSERT INTO webhook (id, workspace_id, url, events_json, signing_secret, active, created_at) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, workspaceId, input.url, db.jsonParam(input.events), signingSecret, 1, input.now],
+    );
+
+    return { webhookId: id, signingSecret };
+  },
+);
+
+/** Every webhook in the workspace, active or not — the organiser's own
+ * list. Never `signingSecret` (`KG5`). */
+export const listWebhooks = scoped(
+  "listWebhooks",
+  async (db: DbClient, workspaceId: string): Promise<WebhookRow[]> => {
+    const rows = await db.query<WebhookRecord>(
+      `SELECT ${WEBHOOK_COLUMNS} FROM webhook WHERE workspace_id = ? ORDER BY created_at DESC`,
+      [workspaceId],
+    );
+    return rows.map((row) => toWebhookRow(db, row));
+  },
+);
+
+/** Toggles delivery on or off without touching the URL, the events or the
+ * secret — the organiser's pause button, not a re-creation. Throws when no
+ * such webhook exists in this workspace, which the route turns into its
+ * own 404 (the same "existence is not disclosed across a workspace
+ * boundary" shape `setTestStatus`'s callers already follow). */
+export const setWebhookActive = scoped(
+  "setWebhookActive",
+  async (db: DbClient, workspaceId: string, webhookId: string, active: boolean): Promise<void> => {
+    const { changes } = await db.run(
+      "UPDATE webhook SET active = ? WHERE workspace_id = ? AND id = ?",
+      [active ? 1 : 0, workspaceId, webhookId],
+    );
+    if (changes === 0) throw new Error("setWebhookActive: no such webhook in this workspace.");
+  },
+);
+
+/** Revokes the endpoint outright. `webhook_delivery` rows already queued
+ * for it are left as they are — Task 3's drain queue, not this function's
+ * concern — rather than this write reaching into a second table. */
+export const deleteWebhook = scoped(
+  "deleteWebhook",
+  async (db: DbClient, workspaceId: string, webhookId: string): Promise<void> => {
+    const { changes } = await db.run("DELETE FROM webhook WHERE workspace_id = ? AND id = ?", [
+      workspaceId,
+      webhookId,
+    ]);
+    if (changes === 0) throw new Error("deleteWebhook: no such webhook in this workspace.");
+  },
+);
+
+/** The delivery machinery's own shape — carries `signingSecret` because
+ * signing the payload is the only reason this read exists. Nothing in
+ * `apps/api/src/routes` may call this (`KG5`'s scan asserts it): the one
+ * caller this function has is Task 3's drain queue, not an HTTP response. */
+export interface DeliverableWebhook {
+  id: string;
+  url: string;
+  signingSecret: string;
+}
+
+/**
+ * Task 3's read: every **active** webhook in `workspaceId` subscribed to
+ * `event` — what fans one candidate event out to deliveries. Filtered in
+ * application code rather than a dialect-specific JSON operator
+ * (`events_json @> '...'` on Postgres has no SQLite equivalent, and a
+ * workspace's webhook count is small enough that this never costs more
+ * than one statement plus an in-memory filter over a handful of rows).
+ */
+export const listActiveWebhooksForEvent = scoped(
+  "listActiveWebhooksForEvent",
+  async (db: DbClient, workspaceId: string, event: WebhookEvent): Promise<DeliverableWebhook[]> => {
+    const rows = await db.query<{ id: string; url: string; signing_secret: string; events_json: unknown }>(
+      "SELECT id, url, signing_secret, events_json FROM webhook WHERE workspace_id = ? AND active = 1",
+      [workspaceId],
+    );
+    return rows
+      .filter((row) => db.jsonValue<WebhookEvent[]>(row.events_json).includes(event))
+      .map((row) => ({ id: row.id, url: row.url, signingSecret: row.signing_secret }));
+  },
+);
