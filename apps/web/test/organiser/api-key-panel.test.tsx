@@ -92,6 +92,11 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     exportCandidateData: notUsed,
     deleteCandidateData: notUsed,
     usage: async () => undefined,
+    // 8b's additions to `ApiClient` (#228 again — fourth time today that one
+    // interface change broke a hand-rolled copy of this fixture).
+    gradingQueue: notUsed,
+    grade: notUsed,
+    recordVerdict: notUsed,
     ...overrides,
   };
 }
