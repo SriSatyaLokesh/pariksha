@@ -14,7 +14,7 @@ import {
   newId,
   resolvePublishedTest,
 } from "@pariksha/db";
-import { createApp, ROUTE_BUDGETS } from "../../src/app.js";
+import { createApp } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
 import { REGISTRATION_KIND, REGISTRATION_TTL_MS, registrationHash } from "../../src/run/entry.js";
 import { EVENTS_PATH } from "../../src/routes/proctoring.js";
@@ -126,6 +126,26 @@ beforeEach(async () => {
   attemptId = started.attemptId;
 });
 
+// --- F1 (Critical, code review of #213): the candidate cannot forge the
+// server's own "limit already fired" marker --------------------------------
+
+it.each(["violation_limit_reached", "attempt_locked", "attempt_unlocked"] as const)(
+  "refuses %s from a candidate's own POST, before anything is written",
+  async (type) => {
+    const res = await post(EVENTS_PATH, { events: [{ type, clientTs: 1 }] }, attemptCookie);
+    expect(res.status).toBe(400);
+    expect(await limitReachedCount()).toBe(0);
+  },
+);
+
+// KG2: every refusal test needs a 200 beside it in the same file, so the
+// trio above cannot pass for free (a typo'd route, say, 400ing everything).
+it("accepts a legitimate candidate-observable event in the same request shape", async () => {
+  const res = await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 1 }] }, attemptCookie);
+  expect(res.status).toBe(200);
+  expect(await res.json()).toMatchObject({ violations: 1 });
+});
+
 // --- the brief's own test ---------------------------------------------------
 
 // Review Focus 3 — a failure is not a violation, at the route.
@@ -176,9 +196,47 @@ it("does not mark anything when the limit fires on an already-submitted attempt'
   expect((await attemptState(attemptId)).status).toBe("submitted");
 });
 
-// --- the budget: the worst case is declared and measured -------------------
+// --- F2 (Major, code review of #213): the claim is atomic, not a race ------
 
-it("the worst case — the batch that first reaches the limit — costs the declared ceiling", async () => {
+// `Promise.all` over two posts against the *same* attempt: even though
+// Node's event loop is single-threaded, each `await` inside the handler is
+// a yield point, so two in-flight requests still interleave statement by
+// statement — which is exactly the shape that broke the old `SELECT`-then-
+// `INSERT` (both could read "not yet claimed" before either wrote). The
+// fix removes the yield point between "check" and "claim": one `INSERT …
+// ON CONFLICT … DO NOTHING` is the whole operation, so there is nothing
+// left for two concurrent calls to interleave around.
+it("two concurrent batches that both cross the limit still mark it exactly once", async () => {
+  await post(EVENTS_PATH, { events: Array.from({ length: 4 },
+    (_, i) => ({ type: "window_blur" as const, clientTs: i })) }, attemptCookie);
+  expect(await limitReachedCount()).toBe(0);
+
+  const [a, b] = await Promise.all([
+    post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 10 }] }, attemptCookie),
+    post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 11 }] }, attemptCookie),
+  ]);
+  expect(a.status).toBe(200);
+  expect(b.status).toBe(200);
+  // Exactly one marker row — exactly one outcome fired — whichever of the
+  // two requests the database serialised first.
+  expect(await limitReachedCount()).toBe(1);
+});
+
+// --- the budget: this outcome's own cost is measured ------------------------
+
+// Phase 7e Task 2: the route's declared ceiling (`ROUTE_BUDGETS[EVENTS_PATH]`)
+// moved once `auto_submit` became a real consumer of `submitAttempt`
+// (`test/run/auto-submit.test.ts` measures and pins that worst case) — this
+// `warn_then_flag` batch is no longer the most expensive thing the route can
+// do, so it is pinned to its own literal rather than to the shared constant,
+// the same reason `submit.test.ts`'s own common-case test gives for doing the
+// same thing: a literal still catches a redundant read landing here even as
+// the declared ceiling moves for an unrelated outcome. **5**, not 6: Task 1's
+// own fix round (F2) replaced the old `violationLimitAlreadyReached` read
+// plus a separate `appendEvents` marker write with one atomic
+// `claimViolationLimit` call (`events.test.ts`'s own comment has the detail),
+// which is one subrequest cheaper at the limit too.
+it("the batch that first reaches the limit under warn_then_flag costs 5, measured", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -187,6 +245,5 @@ it("the worst case — the batch that first reaches the limit — costs the decl
     createApp(counting.deps),
   );
   await res.json();
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[EVENTS_PATH]);
-  expect(counting.counts().total).toBe(6);
+  expect(counting.counts().total).toBe(5);
 });

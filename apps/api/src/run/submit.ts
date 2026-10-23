@@ -56,8 +56,11 @@ import { MatchBudgetExceeded, matchStrict } from "./bounded.js";
 import { releasedResult, servedShow, type ReleasedResult } from "./release.js";
 import { rescoreAttempt } from "./rescore.js";
 
-/** Which of the three ended the attempt. `limit` is reserved for Phase 7's
- *  proctoring cut-off; nothing mints it yet. */
+/** Which of the three ended the attempt. Phase 7e Task 2 mints `limit`:
+ *  `routes/proctoring.ts`'s ingest calls `submitAttempt` with it, the one
+ *  other caller of this function, when `violationOutcome` (`@pariksha/core`)
+ *  decides `auto_submit`. Everything below this point treats it like any
+ *  other reason — same statement, same idempotence, same audit row. */
 export type SubmitReason = "manual" | "timeout" | "limit";
 
 /**

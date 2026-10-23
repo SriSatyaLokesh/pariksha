@@ -1,0 +1,21 @@
+-- Phase 7e Task 1 fix round (F2, Major, code review of #213): the atomic
+-- claim that makes "the violation limit fires once" true under concurrency,
+-- not just in sequence.
+--
+-- `claimViolationLimit` (packages/db/src/repo/attempts.ts) used to be a
+-- `SELECT COUNT(*)` read, several lines before a conditional `INSERT` in the
+-- ingest route — a plain read-then-write race. Two concurrent posts for the
+-- same attempt, both past the limit, could both read "not yet fired" and
+-- both fire the configured action, which auto-submits or locks a candidate
+-- twice once Tasks 2 and 3 wire those actions to this outcome.
+--
+-- This partial unique index is the conflict target `INSERT … ON CONFLICT
+-- (attempt_id) WHERE type = 'violation_limit_reached' DO NOTHING` names:
+-- whichever of two concurrent inserts the database serialises first is the
+-- only one that ever gets a row back.
+--
+-- Filtered to this one event type on purpose, not a plain unique on
+-- `(attempt_id, type)`: an attempt can carry many rows of every other type
+-- (`window_blur`, `camera_lost`, …) and a non-partial unique would refuse
+-- every one of those after the first.
+CREATE UNIQUE INDEX `event_violation_limit_uq` ON `event` (`attempt_id`) WHERE `type` = 'violation_limit_reached';

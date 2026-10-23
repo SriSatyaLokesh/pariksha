@@ -455,7 +455,13 @@ export const TABLE_MANIFEST: TableSpec[] = [
       ts("server_ts"),
     ],
     indexes: [["workspace_id"], ["attempt_id"]],
-    uniques: [],
+    // Phase 7e Task 1 fix round (F2, Major): `event_violation_limit_uq`, a
+    // partial unique index (`attempt_id` only, filtered to `type =
+    // 'violation_limit_reached'` — see `schema/sqlite.ts`/`pg.ts`'s own
+    // comment). The manifest and `parity.test.ts` only compare column
+    // groupings, not the `WHERE` clause, so this reads the same as a plain
+    // unique on `attempt_id` here.
+    uniques: [["attempt_id"]],
   },
   {
     name: "snapshot",

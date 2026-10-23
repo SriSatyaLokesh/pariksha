@@ -479,19 +479,32 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // 50-subrequest ceiling.
   "/api/v1/run/attempt/submit": 7,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The common
-  // path — no attempt reaches its violation limit this batch — is **5**,
+  // path — no attempt reaches its violation limit this batch — is **4**,
   // measured in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
   // `appendEvents`'s one batched insert (capped at 10 rows a request, so
   // this number is flat in how many events the request actually carries),
-  // `countViolations`'s one read for the response's authoritative count,
-  // and `violationLimitAlreadyReached`'s one read (Phase 7e Task 1, `Q7a`).
-  // The declared ceiling is **6**, the worst case paid only the first time
-  // an attempt reaches its limit: one more `appendEvents` call writing the
-  // single `violation_limit_reached` marker (`test/run/violation-limit.
-  // test.ts`). An empty `events` array costs one less than the common
-  // path — `appendEvents` is a no-op on it.
-  "/api/v1/run/attempt/events": 6,
+  // and `countViolations`'s one read for the response's authoritative
+  // count. Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
+  // (`packages/db/src/repo/attempts.ts`) is paid only when `violations >=
+  // limit` — below it, no read or write of its own happens at all, which is
+  // one cheaper than the `violationLimitAlreadyReached` read this route used
+  // to spend on every request regardless.
+  //
+  // A batch that reaches the limit costs one more: `claimViolationLimit`'s
+  // own atomic insert, which both decides and marks "has this fired before"
+  // in the one statement (`test/run/violation-limit.test.ts`) — **5**.
+  //
+  // The declared ceiling is **10** — Phase 7e Task 2's own worst case, the
+  // first batch that reaches the limit under `auto_submit`: the 5 above,
+  // plus `submitAttempt`'s own common-case cost of 5 (`listResponses`,
+  // `countAttemptsForCandidate`, `rescoreAttempt`'s one bank read,
+  // `finishAttempt`'s write, `appendAudit`'s write — the same 5 `run/
+  // submit.ts`'s own first-press measurement pays beyond `/attempt/submit`'s
+  // own attempt-context join). Measured in `test/run/auto-submit.test.ts`'s
+  // own counting test. An empty `events` array costs one less than the
+  // common path — `appendEvents` is a no-op on it.
+  "/api/v1/run/attempt/events": 10,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the
   // attempt join the cookie resolves through, `attempt_snapshot`'s rate

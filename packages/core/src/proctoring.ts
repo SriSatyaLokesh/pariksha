@@ -412,6 +412,49 @@ export const FAILURE_EVENTS: ReadonlySet<ProctoringEventType> = new Set([
   "proctoring_unavailable", "snapshot_failed",
 ]);
 
+// Phase 7e Task 1 fix round (F1, Critical): `PROCTORING_EVENTS` above is
+// every type `appendEvents` can store, but three of them are written only
+// by server-side route logic — never a candidate's own POST. Before this,
+// `apps/api/src/routes/proctoring.ts`'s `eventItem` accepted the whole
+// union from the candidate's own request body, which let a candidate POST
+// `{"type":"violation_limit_reached"}` at violation 0 and forge the one
+// fact `violationOutcome`'s `alreadyActioned` is gated on — permanently
+// switching their own attempt's consequences off (`Q7a` exactly inverted:
+// the client handing the server its own decision).
+//
+// Two independent, hand-written lists, not one computed as "whatever's
+// left" from the other: a derived complement is complete by construction,
+// so a test asserting it partitions `PROCTORING_EVENTS` could never fail —
+// which is exactly how a third server-only type joined this union
+// unnoticed in the first place (Phase 7d). `proctoring.test.ts`'s own
+// partition test can fail two real ways: a type in neither list (added to
+// `PROCTORING_EVENTS` but never classified) or a type in both (misclassified
+// — the shape of this very bug, run in reverse).
+
+/**
+ * Written only by this package's own server-side route logic — a lock
+ * firing, an unlock, the violation limit being reached. Never legitimately
+ * present in a candidate's own `POST /attempt/events` body.
+ */
+export const SERVER_SYNTHESIZED_EVENTS = [
+  "violation_limit_reached", "attempt_locked", "attempt_unlocked",
+] as const satisfies readonly ProctoringEventType[];
+
+/**
+ * The events a candidate's browser can legitimately observe and report.
+ * `eventItem` (`apps/api/src/routes/proctoring.ts`) is built from this, not
+ * from `PROCTORING_EVENTS` — a server-synthesized type is refused with a
+ * 400 at the schema, before anything is written.
+ */
+export const CANDIDATE_PROCTORING_EVENTS = [
+  "fullscreen_exit", "fullscreen_restore",
+  "window_blur", "visibility_hidden",
+  "copy_blocked", "paste_blocked", "contextmenu_blocked",
+  "extra_monitor", "camera_lost", "camera_restored",
+  "identity_photo_captured", "noise_above_threshold",
+  "proctoring_unavailable", "snapshot_failed",
+] as const satisfies readonly ProctoringEventType[];
+
 // Deliberately neither: the four restore/capture/lifecycle types
 // (`fullscreen_restore`, `camera_restored`, `identity_photo_captured`,
 // `violation_limit_reached`/`attempt_locked`/`attempt_unlocked`) describe

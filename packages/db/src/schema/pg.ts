@@ -8,6 +8,7 @@
 // `integer` in 1970, and points are `numeric` because SQLite has no exact
 // decimal and `real` is the nearest it offers.
 
+import { sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -308,6 +309,11 @@ export const event = pgTable(
   (t) => [
     index("event_workspace_idx").on(t.workspaceId),
     index("event_attempt_idx").on(t.attemptId),
+    // Phase 7e Task 1 fix round (F2, Major) — the sqlite.ts sibling's own
+    // comment.
+    uniqueIndex("event_violation_limit_uq")
+      .on(t.attemptId)
+      .where(sql`type = 'violation_limit_reached'`),
   ],
 );
 

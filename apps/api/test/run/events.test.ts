@@ -169,7 +169,7 @@ it("ships the resolved proctoring object on the attempt", async () => {
 
 // --- `Q7c`: measured, not estimated ---------------------------------------
 
-it("the ingest's common-path cost is measured at 5, under the declared ceiling, and the route's authority is the attempt", async () => {
+it("the ingest's common-path cost is measured at 4, under the declared ceiling, and the route's authority is the attempt", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -179,12 +179,15 @@ it("the ingest's common-path cost is measured at 5, under the declared ceiling, 
   );
   await res.json();
   // The attempt join, the `attempt_events` rate token, `appendEvents`'s one
-  // batched insert, `countViolations`'s one read and
-  // `violationLimitAlreadyReached`'s one read (Phase 7e Task 1). One
-  // `window_blur` is nowhere near Standard's limit of 5, so the sixth,
-  // worst-case subrequest — the `violation_limit_reached` marker write —
-  // is not paid here; `violation-limit.test.ts` measures that path.
-  expect(counting.counts().total).toBe(5);
+  // batched insert and `countViolations`'s one read. Phase 7e Task 1's fix
+  // round (F2) made `claimViolationLimit` conditional on `atLimit` — below
+  // the limit, no read or write of its own is paid at all, so one
+  // `window_blur` (nowhere near Standard's limit of 5) costs one less than
+  // this route used to (5, when `violationLimitAlreadyReached` ran on every
+  // request regardless). The fifth, worst-case subrequest — the atomic
+  // claim's own insert — is not paid here; `violation-limit.test.ts`
+  // measures that path.
+  expect(counting.counts().total).toBe(4);
   expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[EVENTS_PATH] as number);
   expect(ROUTE_AUTH[`POST ${EVENTS_PATH}`]).toBe("attempt");
 });
@@ -198,7 +201,7 @@ it("the ten events a request carries are written as one batched insert, not ten"
   const counting = countingDeps(deps);
   const res = await post(EVENTS_PATH, { events }, attemptCookie, createApp(counting.deps));
   await res.json();
-  expect(counting.counts().total).toBe(5);
+  expect(counting.counts().total).toBe(4);
   const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM event", []);
   expect(Number(rows[0]?.n)).toBe(10);
 });

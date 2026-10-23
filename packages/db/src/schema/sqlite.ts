@@ -3,6 +3,7 @@
 // manifest all agree. This module exports tables and nothing else — the
 // parity test reads it with `Object.values`.
 
+import { sql } from "drizzle-orm";
 import {
   sqliteTable,
   text,
@@ -300,6 +301,19 @@ export const event = sqliteTable(
   (t) => [
     index("event_workspace_idx").on(t.workspaceId),
     index("event_attempt_idx").on(t.attemptId),
+    // Phase 7e Task 1 fix round (F2, Major): the atomic claim that makes
+    // "the limit fires once" true under concurrency. `claimViolationLimit`
+    // (packages/db/src/repo/attempts.ts) inserts this marker with
+    // `ON CONFLICT (attempt_id) WHERE type = 'violation_limit_reached' DO
+    // NOTHING` — this partial unique index is the conflict target, and
+    // whichever of two concurrent inserts the database serialises first is
+    // the only one that ever returns a row. A plain unique on
+    // `(attempt_id, type)` would refuse every *repeatable* event type an
+    // attempt can have more than one of (`window_blur`, `camera_lost`, …),
+    // so the index is scoped to this one type by its own `WHERE`.
+    uniqueIndex("event_violation_limit_uq")
+      .on(t.attemptId)
+      .where(sql`type = 'violation_limit_reached'`),
   ],
 );
 

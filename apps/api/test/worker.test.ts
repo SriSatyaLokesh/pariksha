@@ -39,6 +39,7 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0007_attempt_progress.sql",
     "0008_attempt_integrity.sql",
     "0009_results_and_delivery.sql",
+    "0010_violation_limit_claim.sql",
   ]);
 
   // The four table rebuilds are the statements D1 could reject, so the test
@@ -71,6 +72,10 @@ it("every migration applies against the Miniflare D1 binding", async () => {
   expect(await sql("response_workspace_question_idx")).toContain(
     "`workspace_id`,`question_id`",
   );
+  // 0010 (F2, Major, code review of #213): the partial unique index D1
+  // could in principle reject the `WHERE` clause of — proved here rather
+  // than trusted from the bundle, the same reason every statement above is.
+  expect(await sql("event_violation_limit_uq")).toContain("violation_limit_reached");
 });
 
 it("a second run applies nothing", async () => {
@@ -141,7 +146,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 10,
+    migrations: 11,
   });
 });
 

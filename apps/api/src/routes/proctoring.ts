@@ -28,16 +28,17 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
   appendEvents,
+  claimViolationLimit,
   countViolations,
   recordSnapshot,
-  violationLimitAlreadyReached,
 } from "@pariksha/db";
-import { PROCTORING_EVENTS, violationOutcome } from "@pariksha/core";
+import { CANDIDATE_PROCTORING_EVENTS, violationOutcome } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
 import { limitOrThrow } from "../run/limit.js";
 import { resolvedProctoringOf } from "../run/attempt.js";
+import { submitAttempt } from "../run/submit.js";
 import { readBodyWithLimit } from "./media.js";
 
 /** `Q7`: the cap `appendEvents` already documents and the daily write
@@ -59,8 +60,20 @@ export const EVENTS_PATH = "/api/v1/run/attempt/events";
  *  deliberately, per that ruling) — nothing has ever bounded its size. */
 const MAX_DETAIL_BYTES = 512;
 
+// Phase 7e Task 1 fix round (F1, Critical): `PROCTORING_EVENTS` is the
+// *storage* vocabulary — `appendEvents` can write any of it — but three of
+// its members (`violation_limit_reached`, `attempt_locked`,
+// `attempt_unlocked`) are server-synthesized and must never come from a
+// candidate's own POST body. The full union here let a candidate forge
+// `violation_limit_reached` at violation 0 and permanently switch their own
+// attempt's consequences off (`alreadyActioned` has no origin column to
+// tell a server row from a client one) — `Q7a` exactly inverted, the client
+// handing the server the one fact its decision is gated on.
+// `CANDIDATE_PROCTORING_EVENTS` is the closed set a candidate's browser can
+// legitimately observe; the three server types are refused with a 400
+// before anything is written, not merely trusted not to be sent.
 const eventItem = z.object({
-  type: z.enum(PROCTORING_EVENTS),
+  type: z.enum(CANDIDATE_PROCTORING_EVENTS),
   detail: z
     .unknown()
     .optional()
@@ -163,26 +176,65 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // The marker — a `violation_limit_reached` event — is what makes
     // `alreadyActioned` true on the next request (`Review Focus 1`: once,
     // not twice) and what `warn_then_flag`'s whole action amounts to today:
-    // Tasks 2 and 3 of this plan are what make `auto_submit` and `lock`
-    // actually submit or lock, reusing this same outcome.
+    // Task 3 of this plan is what makes `lock` actually lock, reusing this
+    // same outcome.
+    //
+    // Phase 7e Task 1 fix round (F2, Major): `claimViolationLimit` replaces
+    // a `SELECT`-then-`INSERT` that raced under concurrency — see its own
+    // doc comment (`packages/db/src/repo/attempts.ts`). It is attempted
+    // only at or past the limit (`atLimit`): below it, `alreadyActioned` is
+    // always `false` and no write — atomic or otherwise — is needed to know
+    // that, so the common case pays nothing extra here at all.
+    //
+    // Phase 7e Task 2: `auto_submit` is made real here, the first consumer
+    // of that branch. `submitAttempt` is the same function `POST
+    // /attempt/submit` calls — not re-derived — so a candidate submitted
+    // this way gets the exact same idempotent, scored, audited ending a
+    // manual press does, with `reason: "limit"` collecting the value
+    // `SubmitReason` has reserved since Task 11 (`submit.ts`).
+    //
+    // `AG1`: this must not throw into, or surface anything to, the
+    // candidate's own request — the same posture every other write in this
+    // handler already takes. `submitAttempt` itself only ever performs
+    // fast, local D1 statements (no upload, no third-party call) so there
+    // is nothing here that can *stall* the response either; the `try` is
+    // for the unlikely case a statement itself fails, not for a slow one.
+    // A failure here leaves `alreadyActioned` true (the marker above is
+    // still written) and the attempt not yet submitted — the candidate's
+    // own Submit press or the exam's own timeout still ends it normally,
+    // the same fallback every other proctoring failure in this phase
+    // degrades to.
+    let submitted = false;
     if (attempt.submittedAt === null) {
-      const alreadyActioned = await violationLimitAlreadyReached(
-        deps.db,
-        attempt.workspaceId,
-        attempt.attemptId,
-      );
+      const atLimit = violations >= resolved.violationLimit;
+      const alreadyActioned = atLimit
+        ? !(
+            await claimViolationLimit(deps.db, attempt.workspaceId, {
+              attemptId: attempt.attemptId,
+              now: deps.now(),
+            })
+          ).claimed
+        : false;
       const outcome = violationOutcome({ violations, resolved, alreadyActioned });
-      if (outcome.kind !== "none" && outcome.kind !== "warn") {
-        const now = deps.now();
-        await appendEvents(deps.db, attempt.workspaceId, {
-          attemptId: attempt.attemptId,
-          events: [{ type: "violation_limit_reached", clientTs: now }],
-          serverTs: now,
-        });
+      if (outcome.kind === "auto_submit") {
+        try {
+          await submitAttempt(deps, attempt, "limit", deps.now());
+          submitted = true;
+        } catch {
+          /* AG1: degrade — see the comment above. */
+        }
       }
     }
 
-    return c.json({ violations, limit: resolved.violationLimit, action: resolved.violationAction });
+    // `submitted` tells the browser this very request is the one that
+    // ended the attempt, so the runner can move itself to the receipt
+    // instead of finding out on its next save (a 409) or its next reload.
+    return c.json({
+      violations,
+      limit: resolved.violationLimit,
+      action: resolved.violationAction,
+      submitted,
+    });
   });
 
   routes.post("/attempt/snapshot", attemptContext(deps), async (c) => {

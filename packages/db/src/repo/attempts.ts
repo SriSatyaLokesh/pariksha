@@ -457,23 +457,50 @@ export const countViolations = scoped(
 );
 
 /**
- * Phase 7e Task 1 (`Q7a`, "once, not twice"): `violationOutcome`'s own
- * `alreadyActioned` input. `violation_limit_reached` is written (by the
- * ingest route) the first time the configured action fires for an attempt,
- * so a later batch that is still at or past the limit reads `true` here and
- * the action does not fire a second time. One `COUNT(*)`, the same shape
- * `countViolations` above already takes for the same reason — the result
- * is bounded by "has this ever happened", never a row set that grows with
- * the attempt's history.
+ * Phase 7e Task 1 fix round (F2, Major): `violationOutcome`'s own
+ * `alreadyActioned` input, made atomic. The ingest route used to `SELECT
+ * COUNT(*)` for "has this already fired" and, several lines later, `INSERT`
+ * the marker — a plain read-then-write race: two concurrent posts for the
+ * same attempt, both past the limit, could both read "not yet" and both
+ * fire (auto-submitting or locking a candidate twice once Tasks 2/3 wire
+ * those actions to this outcome).
+ *
+ * This is one statement instead: the `violation_limit_reached` marker is
+ * attempted unconditionally, and `event_violation_limit_uq` (migration
+ * 0010) — a unique index on `event(attempt_id)` filtered to this one event
+ * type — is the conflict target `ON CONFLICT … DO NOTHING` names. Whichever
+ * of two concurrent inserts the database serialises first is the only one
+ * that ever gets a row back; the loser's `RETURNING` is empty. `claimed`
+ * *is* "did this call just become the first one to reach the limit" —
+ * there is no separate read to go stale between it and the write, because
+ * there is no separate read.
+ *
+ * The caller still gates this on `violations >= limit` itself (`routes/
+ * proctoring.ts`) — this function does not re-check that, the same way
+ * `countViolations` does not decide anything either, it only counts.
  */
-export const violationLimitAlreadyReached = scoped(
-  "violationLimitAlreadyReached",
-  async (db: DbClient, workspaceId: string, attemptId: string): Promise<boolean> => {
-    const rows = await db.query<{ n: number }>(
-      "SELECT COUNT(*) AS n FROM event WHERE workspace_id = ? AND attempt_id = ? AND type = ?",
-      [workspaceId, attemptId, "violation_limit_reached" satisfies ProctoringEventType],
+export const claimViolationLimit = scoped(
+  "claimViolationLimit",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; now: number },
+  ): Promise<{ claimed: boolean }> => {
+    const rows = await db.query<{ id: string }>(
+      "INSERT INTO event (id, workspace_id, attempt_id, type, detail_json, client_ts, server_ts) " +
+        "VALUES (?, ?, ?, ?, NULL, ?, ?) " +
+        "ON CONFLICT (attempt_id) WHERE type = 'violation_limit_reached' DO NOTHING " +
+        "RETURNING id",
+      [
+        newId("evt"),
+        workspaceId,
+        input.attemptId,
+        "violation_limit_reached" satisfies ProctoringEventType,
+        input.now,
+        input.now,
+      ],
     );
-    return Number(rows[0]?.n ?? 0) > 0;
+    return { claimed: rows.length > 0 };
   },
 );
 

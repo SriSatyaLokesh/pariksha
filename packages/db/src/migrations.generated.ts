@@ -142,6 +142,9 @@ export const sqliteMigrations: Migration[] = [
     "CREATE INDEX `webhook_delivery_next_attempt_idx` ON `webhook_delivery` (`next_attempt_at`);",
     "CREATE INDEX `response_workspace_question_idx` ON `response` (`workspace_id`,`question_id`);",
   ] },
+  { name: "0010_violation_limit_claim.sql", statements: [
+    "-- Phase 7e Task 1 fix round (F2, Major, code review of #213): the atomic\n-- claim that makes \"the violation limit fires once\" true under concurrency,\n-- not just in sequence.\n--\n-- `claimViolationLimit` (packages/db/src/repo/attempts.ts) used to be a\n-- `SELECT COUNT(*)` read, several lines before a conditional `INSERT` in the\n-- ingest route — a plain read-then-write race. Two concurrent posts for the\n-- same attempt, both past the limit, could both read \"not yet fired\" and\n-- both fire the configured action, which auto-submits or locks a candidate\n-- twice once Tasks 2 and 3 wire those actions to this outcome.\n--\n-- This partial unique index is the conflict target `INSERT … ON CONFLICT\n-- (attempt_id) WHERE type = 'violation_limit_reached' DO NOTHING` names:\n-- whichever of two concurrent inserts the database serialises first is the\n-- only one that ever gets a row back.\n--\n-- Filtered to this one event type on purpose, not a plain unique on\n-- `(attempt_id, type)`: an attempt can carry many rows of every other type\n-- (`window_blur`, `camera_lost`, …) and a non-partial unique would refuse\n-- every one of those after the first.\nCREATE UNIQUE INDEX `event_violation_limit_uq` ON `event` (`attempt_id`) WHERE `type` = 'violation_limit_reached';",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -265,5 +268,8 @@ export const pgMigrations: Migration[] = [
     "CREATE INDEX \"webhook_delivery_workspace_idx\" ON \"webhook_delivery\" USING btree (\"workspace_id\");",
     "CREATE INDEX \"webhook_delivery_next_attempt_idx\" ON \"webhook_delivery\" USING btree (\"next_attempt_at\");",
     "CREATE INDEX \"response_workspace_question_idx\" ON \"response\" USING btree (\"workspace_id\",\"question_id\");",
+  ] },
+  { name: "0010_violation_limit_claim.sql", statements: [
+    "-- Phase 7e Task 1 fix round (F2, Major, code review of #213): the\n-- sqlite/0010_violation_limit_claim.sql sibling. Postgres supports the same\n-- partial unique index and the same `ON CONFLICT (attempt_id) WHERE type =\n-- 'violation_limit_reached' DO NOTHING` conflict target.\nCREATE UNIQUE INDEX \"event_violation_limit_uq\" ON \"event\" USING btree (\"attempt_id\") WHERE \"type\" = 'violation_limit_reached';",
   ] },
 ];

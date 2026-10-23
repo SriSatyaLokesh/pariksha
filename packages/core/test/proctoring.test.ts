@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import {
   anyProctoringControlActive,
+  CANDIDATE_PROCTORING_EVENTS,
   FAILURE_EVENTS,
   isViolation,
   KB_PER_MB,
@@ -15,6 +16,7 @@ import {
   PROCTORING_EVENTS,
   proctoringRequirements,
   resolveProctoring,
+  SERVER_SYNTHESIZED_EVENTS,
   snapshotCost,
   SNAPSHOT_KB,
   VIOLATION_EVENTS,
@@ -358,5 +360,34 @@ describe("proctoring events", () => {
   it("does not count noise toward a limit", () => {
     expect(isViolation("noise_above_threshold")).toBe(false);
     expect(FAILURE_EVENTS.has("noise_above_threshold")).toBe(false);
+  });
+});
+
+// Phase 7e Task 1 fix round (F1, Critical): the guard that stops a server-
+// synthesized type from silently becoming candidate-submittable again.
+// `CANDIDATE_PROCTORING_EVENTS` and `SERVER_SYNTHESIZED_EVENTS` are two
+// independent, hand-written lists — neither is computed from the other or
+// from `PROCTORING_EVENTS` — so both assertions below are real: a type
+// added to `PROCTORING_EVENTS` and left off both lists breaks the union,
+// and a type listed on both breaks the intersection. Probed (task-1-report.
+// md): adding `"attempt_locked"` to `CANDIDATE_PROCTORING_EVENTS` failed
+// the intersection assertion with the verbatim array `["attempt_locked"]`.
+describe("CANDIDATE_PROCTORING_EVENTS / SERVER_SYNTHESIZED_EVENTS", () => {
+  it("partitions PROCTORING_EVENTS exhaustively, with no event type in both", () => {
+    const union = new Set<string>([...CANDIDATE_PROCTORING_EVENTS, ...SERVER_SYNTHESIZED_EVENTS]);
+    expect(union).toEqual(new Set(PROCTORING_EVENTS));
+
+    const intersection = CANDIDATE_PROCTORING_EVENTS.filter((t) =>
+      (SERVER_SYNTHESIZED_EVENTS as readonly string[]).includes(t),
+    );
+    expect(intersection).toEqual([]);
+  });
+
+  it("marks exactly the three server-synthesized lifecycle types as not candidate-submittable", () => {
+    expect(SERVER_SYNTHESIZED_EVENTS).toEqual([
+      "violation_limit_reached",
+      "attempt_locked",
+      "attempt_unlocked",
+    ]);
   });
 });

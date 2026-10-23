@@ -64,6 +64,16 @@
  *   one call in that API surface that raises a Window Management
  *   permission dialog mid-exam, which is a `Q2` hazard this task's own
  *   ruling refuses.
+ *
+ * Phase 7e Task 2 (`AC-21`) adds the terminal case: `EventsResponse.
+ * submitted` (`proctoring-queue.ts`), set true on the one response whose
+ * own batch carried the attempt past its limit under `auto_submit`, flips
+ * `autoSubmitted` — a one-way flag reusing `ProctoringOverlay` the same
+ * no-recourse way the camera block already does, because there genuinely
+ * is nothing left to press. The actual submission (`finishAttempt`'s own
+ * idempotent statement) happened server-side, inside the ingest route,
+ * before this response ever arrived — this component only has to tell the
+ * candidate it happened, not make it happen.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -260,6 +270,21 @@ export function ProctoringLayer({
   const [leaveCountKnown, setLeaveCountKnown] = useState(true);
 
   /**
+   * Phase 7e Task 2 (`AC-21`): `true` once the ingest has told this layer
+   * that THIS batch is what carried the attempt over its violation limit
+   * under `auto_submit` (`EventsResponse.submitted`). Terminal — nothing
+   * below ever sets it back to `false` — because the attempt really is
+   * over: `submitAttempt` (`apps/api/src/run/submit.ts`) already stamped
+   * `submitted_at` by the time this flag can be true, the same statement
+   * every other way an attempt ends uses. `initialViolations` seeds
+   * `count` above but never this: a resumed attempt that was auto-submitted
+   * on an earlier page load reloads straight to the finish page before
+   * `ProctoringLayer` is ever mounted again (`routes/exam.tsx`'s own
+   * resume path), so this flag only ever needs to catch the live case.
+   */
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
+
+  /**
    * The live queue — owned by the effect below, not by `useMemo`.
    *
    * `useMemo` is a cache React is free to drop and recreate on its own
@@ -345,7 +370,7 @@ export function ProctoringLayer({
     }
     const queue = createProctoringQueue({
       send: sendEvents,
-      onCount: (violations, limit, action) => {
+      onCount: (violations, limit, action, submitted) => {
         // Checked against the ref, not a boolean: a state update from
         // *this* queue instance only lands while it is still the live
         // one. A stale closure from a queue this same effect has already
@@ -355,6 +380,9 @@ export function ProctoringLayer({
         if (queueRef.current !== queue) return;
         setCount({ violations, limit, action });
         setLeaveCountKnown(true);
+        // Phase 7e Task 2: never unset — see `autoSubmitted`'s own doc
+        // comment above.
+        if (submitted) setAutoSubmitted(true);
       },
       flushMs: FLUSH_MS,
     });
@@ -925,7 +953,7 @@ export function ProctoringLayer({
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 
   const fullscreenBlocked = fullscreenEnforced && !inFullscreen;
-  const overlayOpen = cameraLost || fullscreenBlocked || leaveWarning !== null;
+  const overlayOpen = autoSubmitted || cameraLost || fullscreenBlocked || leaveWarning !== null;
 
   useEffect(() => {
     // `ProctoringLayer` mounts as `Runner`'s sibling, never its parent
@@ -972,14 +1000,25 @@ export function ProctoringLayer({
           </span>
         )}
       </div>
-      {/* The camera wins the floor over everything else — `Q2`'s one
-          deliberate `AG1` exception, and the only one of the three with no
-          control at all: no "Enter fullscreen", no "Continue", nothing a
-          candidate can press to make it go away. Fullscreen still wins over
-          a leave warning — it is indefinite and still wrong; the leave
-          warning is already resolved (the candidate is back) and only
-          needs acknowledging. */}
-      {cameraLost ? (
+      {/* `autoSubmitted` wins the floor over everything else: the attempt
+          is over, not merely blocked, so there is nothing left for a
+          camera or fullscreen overlay to be about. No control, the same
+          as the camera overlay below and for the same reason — there is
+          no action that makes this one go away, because nothing the
+          candidate does now can un-submit the attempt. The camera wins the
+          floor over everything else beneath this — `Q2`'s one deliberate
+          `AG1` exception, and the only one of the three with no control at
+          all: no "Enter fullscreen", no "Continue", nothing a candidate
+          can press to make it go away. Fullscreen still wins over a leave
+          warning — it is indefinite and still wrong; the leave warning is
+          already resolved (the candidate is back) and only needs
+          acknowledging. */}
+      {autoSubmitted ? (
+        <ProctoringOverlay
+          title="Test submitted"
+          message="Submitted because the warning limit was reached. Your answers up to this point are saved."
+        />
+      ) : cameraLost ? (
         <ProctoringOverlay
           title="Camera connection lost"
           message="This test requires a working camera for the whole attempt. Reconnect or uncover your camera — your answers and the timer are unaffected while this is up, and it clears itself the moment the camera is back."
