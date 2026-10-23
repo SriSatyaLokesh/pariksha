@@ -185,9 +185,10 @@ export const revokeApiKey = scoped(
  *
  * Stamps `last_used_at` on the **first** successful resolution of a UTC
  * day, not every one (MAJOR-2, whole-branch review) — unlike a session's
- * `touchSession`, this column is informational only (no screen renders it
- * yet, and nothing expires off it), while a key exists precisely to be
- * called in a loop a human session never would; a write every request is
+ * `touchSession`, this column is informational only (`ApiKeyPanel.tsx`
+ * renders it as "Never used" / "Last used <date>", and nothing expires off
+ * it), while a key exists precisely to be called in a loop a human session
+ * never would; a write every request is
  * 86,400 of the account's 100k-writes-a-day allowance from one key polled
  * once a second, shared with every candidate attempt submission in the
  * product. `now` defaults to `Date.now()` only so the two-argument shape
@@ -226,11 +227,12 @@ export async function resolveApiKey(
   // MAJOR-2 (whole-branch review): a write every request is 86,400 writes a
   // day from one key polled once a second, against a 100k-write-a-day
   // account-wide allowance shared with every candidate attempt submission
-  // in the product — and the panel does not even render this column
-  // (`ApiKeyPanel.tsx` shows name, scopes and Active/Revoked, nothing
-  // else). `last_used_at` is already in the SELECT above (free — same row,
-  // same index read), so a day boundary is checked in memory and the write
-  // only happens at most once per key per day: 86,400 -> at most 1.
+  // in the product — for a column `ApiKeyPanel.tsx` renders as "Never
+  // used" / "Last used <date>", not a security control a tighter write
+  // schedule would strengthen. `last_used_at` is already in the SELECT
+  // above (free — same row, same index read), so a day boundary is checked
+  // in memory and the write only happens at most once per key per day:
+  // 86,400 -> at most 1.
   const DAY_MS = 86_400_000;
   if (row.last_used_at === null || Math.floor(row.last_used_at / DAY_MS) !== Math.floor(now / DAY_MS)) {
     await db.run("UPDATE api_key SET last_used_at = ? WHERE secret_hash = ?", [now, secretHash]);
