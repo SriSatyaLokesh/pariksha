@@ -4,20 +4,30 @@
 — 43 rulings, 10 guards, written 2026-10-22 and pre-flighted against `main` at `243ba07`. A
 builder's review of the first draft added `K35`–`K42` and corrected one error in it.
 
-> ## Scope, 2026-10-23 — `K43`
+> ## Scope, 2026-10-23 — `K43`, then `K44`
 >
-> **Six plans execute: 8a, 8b, 8c, 8d, 8e, 8f.** Execution is **subagent-driven** and **nothing
+> **Five plans execute: 8a, 8b, 8c, 8d, 8e.** Execution is **subagent-driven** and **nothing
 > starts until 7d merges**.
 >
 > **8g is deferred whole**, with 7e — see its own banner. Its four deliverables each read a column
 > only 7e writes, and `setIntegrity` has no production caller today.
+>
+> **`K44` (owner, 2026-10-23, after 8a merged): 8f is deferred whole too**, with 7e and 8g, taking
+> `#209` and `#84` with it. Nothing this repository runs can prove it — jsdom has no `AudioContext`
+> or `AudioWorklet`, and Chromium's synthetic audio source is not evidence — so its tests would
+> assert against a double of the plan's own writing. Its Task 1 has a parked, unmerged draft at
+> `phase-8f/the-ear` `cf6274f`. See its banner.
+>
+> **8d is two plans' work, not one** (ruling in its own scope warning): the `webhook` and `api_key`
+> tables have existed since `0000` with **no repo function, route or screen for either**. Split it
+> at the Task 4/5 seam — webhooks first, keys second — and review each half on its own branch.
 >
 > Three knock-ons applied throughout: the migration is **`0009`** and drops the two broadcast
 > columns; **`attempt.flagged` is cut** from the webhook events; `lastContactAt` leaves
 > `listAttemptsForTest`.
 
 The spec covers seven independently shippable slices, so it is seven plans. Each produces working,
-testable software on its own. **Six of the seven execute** — see the scope box above.
+testable software on its own. **Five of the seven execute** — see the scope box above.
 
 > **Read the spec's §5 (the pre-flight) and §6 (the four constraints) before running any plan.**
 > §5 lists a dozen things the tree already has — a plan that rebuilds any of them costs a task —
@@ -38,18 +48,20 @@ testable software on its own. **Six of the seven execute** — see the scope box
 | [8c — the numbers](2026-10-22-phase-8c-the-numbers.md) | test analytics, item analysis, the four exports, the snapshot manifest, `D7c`'s readiness aggregate | `G3`, `G4` | a, b |
 | [8d — the perimeter](2026-10-22-phase-8d-the-perimeter.md) | webhook CRUD **and** delivery, HMAC, the retry drain, scoped API keys | `G3` (machine half), `S-05` | a |
 | [8e — the sweep](2026-10-22-phase-8e-the-sweep.md) | retention job, candidate export and erasure, `rate_limit` expiry, the free-tier meter | `G5`, `G6` | a |
-| [8f — the ear](2026-10-22-phase-8f-the-ear.md) | `#209`'s microphone, `#84`'s re-cut, the `P-06` reword and its ADR | Phase 7's `G2`/`G3`, mic half | a |
+| ~~[8f — the ear](2026-10-22-phase-8f-the-ear.md)~~ | **DEFERRED (`K44`)** — `#209`'s microphone, `#84`'s re-cut, the `P-06` reword and its ADR. Written, not deleted; Task 1 parked at `cf6274f`. | ~~Phase 7's `G2`/`G3`, mic half~~ | a |
 | ~~[8g — the watchtower](2026-10-22-phase-8g-the-watchtower.md)~~ | **DEFERRED (`K43`)** — monitor, proctor actions, review page, broadcast. Written, not deleted. | ~~`G1`~~ | a, b, d, **7e** |
 
 ## Order
 
-**Nothing starts until 7d merges.** 8f needs it directly; the rest wait with it so the phase has
-one start gun, and so 8a is cut from a tree that already has 7d in it.
+**7d is merged** (`#216`) and **8a is merged** (`#221`, squashed `c8e6c7e`), with `0009` applied to
+the live D1 before it and `GET /api/v1/health` answering `{"migrations":10}` after. The phase's one
+start gun has fired and its only migration is in production.
 
 **8a first and alone.** Every other plan consumes it, and it owns the phase's only migration.
 
-**Then 8b, 8d, 8e and 8f in parallel** — four plans wide. None touches proctoring beyond 8f's own
-microphone, and `review`, `webhook` and `api_key` have existed since migration `0000`.
+**Then 8b, 8d and 8e in parallel** — 8d as its two halves. None touches proctoring at all, and
+`review`, `webhook` and `api_key` have existed since migration `0000`. 8f was the fourth of these
+until `K44` deferred it.
 
 **8c after 8b**, because the results CSV carries the verdict and the note.
 
@@ -58,14 +70,14 @@ organiser attempt routes while keeping their **endpoint**, and brings its own mi
 broadcast columns `0009` no longer carries.
 
 ```
-7d merges
+7d merged (#216)
     │
-    └── 8a ──┬── 8b ── 8c
-             ├── 8d
-             ├── 8e
-             └── 8f
+    └── 8a merged (#221, c8e6c7e) ──┬── 8b ── 8c
+                                    ├── 8d-1 webhooks ── 8d-2 keys
+                                    └── 8e
 
-        8g ── DEFERRED with 7e (depends on a, b, d)
+        8f ── DEFERRED with 7e (K44) — #209, #84
+        8g ── DEFERRED with 7e (K43) — depends on a, b, d
 ```
 
 ## Before 8a merges — the blocking migration step
@@ -196,22 +208,21 @@ Written for whoever picks this up — including a session in another clone, whic
 the planning ledger** (`.superpowers/` is git-ignored and does not travel). Everything needed is
 committed; this section is the entry point.
 
-1. **Confirm 7d is merged.** `git log --oneline main | grep -i "7d\|the eye"`. Nothing in Phase 8
-   starts before it (`K43`). If it is not merged, finish that first.
+1. **7d is merged** (`#216`) and so is **8a** (`#221`, `c8e6c7e`). Steps 1, 3, 4 and 5 below are
+   done; they are kept because they record how the phase was entered.
 2. **Pull `main` and park on it.** The plans and the spec are on `main` as of this PR.
 3. **Re-verify the spec's §5 pre-flight against the head you cut from.** It was true at `243ba07`;
    7d moves things. This is the cheapest hour in the phase and 7a proved it — seven of its plan's
    own file paths and helper names did not match the tree. **Record what moved** before dispatching
    Task 1.
-4. **Re-check 8f against what 7d actually shipped**, not against 7d's plan. 8f was written from
-   7d's plan plus handoff-3's description of the cut, because 7d was unmerged and in another clone
-   when these plans were written. Specifically: that `resolveProctoring` hardcodes
-   `requireMicrophone: false` where 8f assumes, that the organiser control ships disabled, and that
-   the `AG2`/`AG3` source scans exist in the shape 8f must keep green. Twenty minutes, not a
-   re-plan.
+4. ~~**Re-check 8f against what 7d actually shipped.**~~ **Deferred by `K44`** — and the re-check
+   was done before it was: `resolveProctoring` hardcodes `requireMicrophone: false` as 8f assumes,
+   now beside `violationAction: "warn_only"` as well (`#214`); the organiser control ships
+   disabled; and the `AG2`/`AG3` scans carry 7d's widened `.m?js` walker. All three are recorded in
+   8f's own banner for whoever resumes it.
 5. **Run 8a alone, to completion and merge**, including `K41`'s blocking migration step. Every
-   other plan consumes its interfaces.
-6. **Then 8b, 8d, 8e and 8f.** They are independent of each other. Parallel clones are safe for
+   other plan consumes its interfaces. **Done** — `0009` applied, health `{"migrations":10}`.
+6. **Then 8b, 8d and 8e**, 8d as its two halves. They are independent of each other. Parallel clones are safe for
    **editing** and unsafe for **verification** — use `--no-file-parallelism` for any full-suite
    run, and never two full suites at once (a documented 37-failure cascade across 5 unrelated
    files, three times, each a different subset).
@@ -222,7 +233,9 @@ committed; this section is the entry point.
 screen for either. It is two plans' worth of work in one. Split it rather than quietly dropping the
 CRUD.
 
-**8g is deferred — do not execute it.** Its banner says why and what changed underneath it.
+**8f and 8g are deferred — do not execute either.** Each banner says why and what changed
+underneath it. 8f additionally has a parked, unmerged draft of its Task 1 at `phase-8f/the-ear`
+`cf6274f`.
 
 ## Execution
 
@@ -259,8 +272,8 @@ and each result goes in the roadmap's Phase 8 row, not only in a task report.
 | `AC-27` — ten attempts hand-scored against the CSV | an automated check would use the same scoring engine the CSV did | c |
 | The CSV opened in **real Excel**, with a non-Latin name in it | `KG6` proves the bytes, not the application | c |
 | `AC-28` — a webhook to a real endpoint, verifying, then retried after a deliberate 500 | the HMAC is unit-tested against an independent verifier; only a real receiver proves the header survives the wire | d |
-| A real microphone: granted, denied, and unplugged mid-attempt | `AG1` means denied **starts the attempt anyway** — the opposite of the camera on the same page | f |
-| The worklet's cost on a weak machine | `#209`'s own cut criterion: if it is not free, cut the event and keep the permission | f |
+| ~~A real microphone: granted, denied, and unplugged mid-attempt~~ | `AG1` means denied **starts the attempt anyway** — the opposite of the camera on the same page. **Deferred with 8f (`K44`)**, and the reason 8f is deferred: this row, not CI, is where the microphone is actually proved | ~~f~~ |
+| ~~The worklet's cost on a weak machine~~ | `#209`'s own cut criterion: if it is not free, cut the event and keep the permission. **Deferred with 8f (`K44`)** | ~~f~~ |
 | The monitor against 300 real candidates | `KG3` proves the query shape; only a real test proves the screen is readable | g |
 | A broadcast to a candidate who is reading, not typing | `K12`'s known cost, and the one case the design accepts | g |
 | A reset, end to end | `K39` destroys nothing — confirm the earlier attempt survives and `countedScore` picks the expected one | g |

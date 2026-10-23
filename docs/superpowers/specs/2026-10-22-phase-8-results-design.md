@@ -9,8 +9,9 @@
   [#186](https://github.com/SriSatyaLokesh/pariksha/issues/186) (`finish_message` has no reader),
   [#179](https://github.com/SriSatyaLokesh/pariksha/issues/179) (a test with no duration publishes)
 - **PRD:** `R-01`–`R-11`, `S-05`, `S-13`, `S-14`, `D-03`, `AC-08`, `AC-24`, `AC-25`, `AC-27`, `AC-28`
-- **Rulings:** `K1`–`K43`. **Guards:** `KG1`–`KG10`.
-- **Scope, 2026-10-23:** `K43` — **six plans execute** (8a–8f). **8g is deferred** with 7e.
+- **Rulings:** `K1`–`K44`. **Guards:** `KG1`–`KG10`.
+- **Scope, 2026-10-23:** `K43` — **8g is deferred** with 7e. Then `K44`, after 8a merged — **8f is
+  deferred too**, with 7e and 8g. **Five plans execute: 8a–8e.**
 
 Rulings are numbered so a plan can cite one instead of re-arguing it. Each is written
 `Ruling: <what> — <why> — <cost if wrong>`. Twelve were taken by the owner before or during this
@@ -760,7 +761,7 @@ Seven plans. Each produces working, testable software on its own.
 | **8c — the numbers** | test analytics, item analysis, results CSV, the three detailed exports, the snapshot manifest, `D7c`'s readiness aggregate | a, b |
 | **8d — the perimeter** | webhook CRUD **and** delivery, HMAC, the retry drain, API-key CRUD and scopes | a |
 | **8e — the sweep** | retention job, candidate export and deletion, `rate_limit` expiry, the free-tier meter | a |
-| **8f — the ear** | `#209`'s microphone, `#84`'s re-cut | a, **7d** |
+| ~~**8f — the ear**~~ | ~~`#209`'s microphone, `#84`'s re-cut~~ — **DEFERRED by `K44`** with 7e. Written, not deleted; Task 1 parked unmerged at `phase-8f/the-ear` `cf6274f`. | a, **7d** |
 | ~~**8g — the watchtower**~~ | ~~live monitor, proctor actions, review page, broadcast~~ — **DEFERRED by `K43`** with 7e. Written, not deleted. | a, b, d, **7e** |
 
 > **8d is bigger than "add delivery to an existing feature."** The pre-flight says of `webhook` and
@@ -772,17 +773,19 @@ Seven plans. Each produces working, testable software on its own.
 
 ### Order
 
-**Nothing starts until 7d merges** (`K43`). 8f needs it directly; the rest wait with it so the
+**Nothing starts until 7d merges** (`K43`). 8f needed it directly; the rest wait with it so the
 phase has one start gun rather than two, and so 8a is cut from a tree that already has 7d in it.
+**7d merged as `#216` and 8a as `#221`.**
 
 **8a first and alone.** Every other plan consumes it, and it owns the only migration.
 
-**Then 8b, 8d, 8e and 8f in parallel** — none touches proctoring beyond 8f's own microphone, and
-their tables (`review`, `webhook`, `api_key`) have existed since `0000`. Four plans wide.
+**Then 8b, 8d and 8e in parallel**, 8d as two halves — none touches proctoring at all, and their
+tables (`review`, `webhook`, `api_key`) have existed since `0000`. 8f was the fourth of these
+until `K44`.
 
 **8c after 8b**, because the results CSV carries the verdict and the note.
 
-**8g does not execute.** `K43` defers it with 7e. The plan stays on the branch: when 7e lands it
+**Neither 8f nor 8g executes.** `K44` defers 8f and `K43` defers 8g, both with 7e. The plan stays on the branch: when 7e lands it
 replaces the **surface** of 7e's two minimal organiser attempt routes and keeps their
 **endpoint**, as the roadmap says.
 
@@ -817,6 +820,42 @@ start gun for everything else.**
 > **What stays true and must not be re-litigated when 8g returns:** `K11`'s reasoning about there
 > being no heartbeat, `K12`'s three-carrier broadcast, `K13`'s single slot and `K39`'s
 > non-destructive reset are all still the right answers. They are decided, not pending.
+
+**`K44` (owner, 2026-10-23, after 8a merged) — 8f is deferred too, with 7e and 8g, because nothing
+this repository runs can prove it.**
+
+> Ruling: **Phase 8 executes as five plans — 8a, 8b, 8c, 8d, 8e.** 8f is deferred entire, with
+> [#209](https://github.com/SriSatyaLokesh/pariksha/issues/209) and
+> [#84](https://github.com/SriSatyaLokesh/pariksha/issues/84). The written plan stays and is not
+> deleted — **why:** the test environment has no way to execute this code. jsdom provides no
+> `AudioContext`, no `AudioWorklet`, no `getUserMedia` and no `MediaStream`, and Playwright's
+> Chromium offers only a synthetic audio source, so every assertion 8f could make would be made
+> against a double of its own writing. The §9 table already concedes this: **both** of 8f's rows
+> there are hand-validation rows, which means the hand validation *is* the verification, not a
+> supplement to it. Building it now ships a surface whose only honest test is a human with three
+> devices — the same condition that defers 7e, and the same defect 8a produced four times
+> (*something built that nothing reaches, or a test that cannot fail*).
+>
+> It is also under-sized at three tasks. Task 2 inverts a hardcoded `false` reaching the organiser
+> control, the publish checklist, the device check and the start gate; Task 3 reworks the **public
+> `P-06` privacy claim** and its ADR. Capture-without-retention is a materially different promise
+> from no-capture and should not be published against an unverifiable implementation.
+>
+> **Cost if wrong:** the phase ships without the microphone, so Phase 7's `G2`/`G3` keep their mic
+> half open and `require_microphone` stays a disabled control naming `#209`. That is the same
+> shape `faceCheck` has carried since `K1`, and it is honest about what the product does.
+>
+> **Two things this forces:**
+>
+> 1. **`#209` and `#84` leave the Phase 8 milestone** and go with 7e's bucket, like `#89`–`#91`
+>    and `#87` before them.
+> 2. **Task 1 is parked, not discarded** — `phase-8f/the-ear` `cf6274f` holds the worklet, the
+>    `monitorNoise` caller and the event detail shape, uncovered and **not to be merged**. The next
+>    attempt starts from a draft, not a blank file, and rewrites rather than trusts it.
+>
+> **What stays true:** `K34`'s detail shape (a duration and nothing else), `AG2`/`AG3`'s no-capture
+> scans and 7d's widened `.m?js` walker are all still the right answers, and `K1`'s cut of face
+> counting is untouched by this. Decided, not pending.
 
 **`K40` (owner) — Phase 8 is planned whole now, and its two Phase-7-dependent plans are gated at
 execution rather than deferred at planning.**
@@ -909,6 +948,7 @@ execution rather than deferred at planning.**
 | Section-order shuffling (`D19`) | Needs a `pariksha/test@1` field, a format bump and an ADR. | Carried from 6.5. |
 | `branding.logo` on the candidate side | Needs a branding-scoped media route; never `layout.media`. | Carried from Phase 6. |
 | **The whole of 8g** — live monitor, proctor actions, per-attempt review page, `C-10`'s broadcast | `K43`. 7e is out of scope, and all four read a column only 7e writes. `setIntegrity` has no production caller, so `integrity_flag` is `"clean"` for every attempt in the database. | Whoever picks up 7e. The plan is written and costs nothing to resume. |
+| **The whole of 8f** — `#209`'s microphone, `#84`'s re-cut, the `P-06` reword | `K44`. jsdom has no `AudioContext` or `AudioWorklet` and Chromium's audio source is synthetic, so §9's two hand-validation rows **are** the verification. A public privacy claim should not be reworded against an implementation CI cannot execute. | Whoever picks up 7e. Task 1 is parked unmerged at `phase-8f/the-ear` `cf6274f`. |
 | `attempt.flagged` as a webhook event | `K37` as revised. Its only trigger is 8g's recompute. | Returns with 8g — one array member. |
 | A message queue for `C-10` | `K13`. One slot. | Nobody, until someone asks. |
 | The noise threshold as an organiser control | 7d's constant. Unchanged. | Nobody, until someone asks. |
