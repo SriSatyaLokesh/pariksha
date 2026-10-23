@@ -142,33 +142,6 @@ function deriveAward(q: Question | undefined, points: number): RubricAward {
   return { levels: level ? [level.level] : [] };
 }
 
-/**
- * Every manual question this attempt already carries a grade for, as the
- * `awards` map `rescoreAttempt` takes — `K14`: a new award is scored
- * alongside every one already stored, never alone, because the total is of
- * the whole paper. `byId` is the caller's own already-paid `liveQuestions`
- * read (`K9`): this never queries the bank a second time.
- */
-export const awardsForAttempt = scoped(
-  "awardsForAttempt",
-  async (
-    db: DbClient,
-    workspaceId: string,
-    attemptId: string,
-    byId: ReadonlyMap<string, Question>,
-  ): Promise<Record<string, RubricAward>> => {
-    const rows = await db.query<{ question_id: string; points: number | null }>(
-      "SELECT question_id, points FROM response WHERE workspace_id = ? AND attempt_id = ? AND graded_by IS NOT NULL",
-      [workspaceId, attemptId],
-    );
-    const awards: Record<string, RubricAward> = {};
-    for (const row of rows) {
-      awards[row.question_id] = deriveAward(byId.get(row.question_id), Number(row.points ?? 0));
-    }
-    return awards;
-  },
-);
-
 export interface PendingAward {
   attemptId: string;
   questionId: string;

@@ -519,14 +519,16 @@ export const ROUTE_BUDGETS: Record<string, number> = {
 
   // Phase 8b Task 1 (`K14`): recording a rubric award. Measured
   // (`apps/api/test/grade/award.test.ts`'s own "measures the real
-  // subrequest cost" test), not estimated: auth (2) + `liveQuestions` (1,
-  // the rubric check and the question map `rescoreAttempt` would otherwise
-  // read a second time) + `attemptForGrading` (1) + `writeAward` (1) +
-  // `awardsForAttempt` (1) + `listResponses` (1) + `rescoreAttempt`'s own
-  // `liveQuestions` (1 — it cannot share this route's, `rescoreAttempt` is
-  // reused as-is) + `writeScore` (1) = 9. Flat in how many candidates the
-  // workspace holds — this route touches exactly one attempt.
-  "/api/v1/workspaces/:id/tests/:testId/grade": 9,
+  // subrequest cost" test, against a 300-candidate workspace), not
+  // estimated: auth (2) + `liveQuestions` (1, the rubric check and the
+  // question map every stored award is matched against) +
+  // `attemptForGrading` (1) + `writeAward` (1) + `listResponses` (1 — also
+  // where every other stored award is reconstructed from, so it is read
+  // only once) + `rescoreAttempt`'s own `liveQuestions` (1 — it cannot
+  // share this route's, `rescoreAttempt` is reused as-is) + `writeScore`
+  // (1) = 8. Flat in how many candidates the workspace holds — this route
+  // touches exactly one attempt.
+  "/api/v1/workspaces/:id/tests/:testId/grade": 8,
 };
 
 /**

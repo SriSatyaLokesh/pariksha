@@ -321,9 +321,10 @@ describe("POST /api/v1/workspaces/:id/tests/:testId/grade", () => {
     });
     expect(res.status, await res.clone().text()).toBe(200);
     // auth (2) + liveQuestions (1) + attemptForGrading (1) + writeAward (1)
-    // + awardsForAttempt (1) + listResponses (1) + rescoreAttempt's own
-    // liveQuestions (1) + writeScore (1).
-    expect(counting.counts().total).toBe(9);
-    expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/grade"]).toBe(9);
+    // + listResponses (1, also where every other stored award is
+    // reconstructed from) + rescoreAttempt's own liveQuestions (1) +
+    // writeScore (1).
+    expect(counting.counts().total).toBe(8);
+    expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/grade"]).toBe(8);
   });
 });

@@ -9,31 +9,43 @@
 // writes what comes back.
 //
 // `recordAward` passes **every** manual question this attempt already
-// carries a grade for, not only the one just graded — `packages/db`'s
-// `awardsForAttempt` is what reconstructs that set, because the score is
+// carries a grade for, not only the one just graded, because the score is
 // of the whole paper and a rescore that only knew about the new award
-// would un-grade every question graded before it.
+// would un-grade every question graded before it. `listResponses`
+// (`packages/db`) already carries `graded_by`/`points` for the whole
+// attempt, so reconstructing that set costs no second read of `response`.
 
 import { Hono } from "hono";
 import { z } from "zod";
 import {
   gradeManual,
+  type Question,
   type ResponseValue,
   type RubricAward,
 } from "@pariksha/core";
-import {
-  attemptForGrading,
-  awardsForAttempt,
-  listResponses,
-  writeAward,
-  writeScore,
-} from "@pariksha/db";
+import { attemptForGrading, listResponses, writeAward, writeScore } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 import type { PinnedLayout } from "../run/attempt.js";
 import { defaultsOf, liveQuestions, scoringOf } from "../run/submit.js";
 import { rescoreAttempt } from "../run/rescore.js";
+
+/**
+ * Reconstructs a `RubricAward` from a graded response's stored `points`,
+ * matched against the question's own rubric. `packages/db/src/repo/
+ * grading.ts`'s `listPendingAwards` carries the same logic for the same
+ * reason (`K14` stores only `points`/`graded_by`, never the levels a
+ * reviewer picked) — see its own comment for the one case this degrades
+ * (a rubric edited between a grade and a later rescore).
+ */
+function deriveAward(q: Question | undefined, points: number): RubricAward {
+  if (points === 0 || q === undefined || (q.type !== "short_answer" && q.type !== "long_answer")) {
+    return { levels: [] };
+  }
+  const level = (q.rubric ?? []).find((l) => l.points === points);
+  return { levels: level ? [level.level] : [] };
+}
 
 /** Stores the award and rescores in one call. `K14`. */
 export async function recordAward(
@@ -75,10 +87,13 @@ export async function recordAward(
   // Read back after the write, not before: the award just stored is then
   // already part of "every stored award", with no special-casing for the
   // one this call just graded.
-  const [awards, responses] = await Promise.all([
-    awardsForAttempt(deps.db, workspaceId, input.attemptId, byId),
-    listResponses(deps.db, workspaceId, input.attemptId),
-  ]);
+  const responses = await listResponses(deps.db, workspaceId, input.attemptId);
+
+  const awards: Record<string, RubricAward> = {};
+  for (const r of responses) {
+    if (r.gradedBy === null) continue;
+    awards[r.questionId] = deriveAward(byId.get(r.questionId), r.points ?? 0);
+  }
 
   const { score } = await rescoreAttempt(deps, {
     workspaceId,
