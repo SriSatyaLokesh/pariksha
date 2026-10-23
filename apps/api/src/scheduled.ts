@@ -1,11 +1,15 @@
-// The nightly cron's job registry (`deploy/cloudflare/wrangler.toml`'s
-// `crons = ["17 3 * * *"]`, K27). Ships EMPTY on purpose: three later plans
-// (8b, 8d, 8e) each append one job here, in parallel, and none of them
-// should have to own this file to do it. The last test in
-// `test/scheduled.test.ts` pins the list empty so a plan that forgets to
-// register its job fails loudly instead of landing silently unscheduled.
+// The cron job registry (`deploy/cloudflare/wrangler.toml`'s `crons`, K27).
+// Shipped EMPTY on purpose: three later plans (8b, 8d, 8e) each append one
+// job here, in parallel, and none of them should have to own this file to
+// do it. The last test in `test/scheduled.test.ts` pins the list's exact
+// contents so a plan that forgets to register its job fails loudly instead
+// of landing silently unscheduled.
+//
+// Phase 8d Task 4 registers `webhookDrainJob` (`*/5 * * * *`, K22) — the
+// first entry here. 8b and 8e add theirs beside it, each editing the pin.
 
 import type { AppDeps } from "./app.js";
+import { webhookDrainJob } from "./webhooks/drain.js";
 
 export interface ScheduledJob {
   name: string;
@@ -16,7 +20,7 @@ export interface ScheduledJob {
 }
 
 /**
- * Ships EMPTY. 8b, 8d and 8e each append one entry.
+ * Shipped EMPTY. 8b, 8d and 8e each append one entry — this is 8d's.
  *
  * **Order is declaration order, and that is a guarantee, not an accident** —
  * `runScheduled` iterates this array as written. Three plans append here
@@ -25,7 +29,7 @@ export interface ScheduledJob {
  * ever genuinely must follow another, say so at the registration site; do
  * not rely on where a merge happened to put the lines.
  */
-export const SCHEDULED_JOBS: ScheduledJob[] = [];
+export const SCHEDULED_JOBS: ScheduledJob[] = [webhookDrainJob];
 
 /**
  * Runs every job registered for `cron`, in order. One job throwing is

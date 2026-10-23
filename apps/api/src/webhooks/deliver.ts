@@ -74,17 +74,26 @@ export const DELIVERY_TIMEOUT_MS = 5_000;
  */
 export const INLINE_FANOUT_LIMIT = 3;
 
-interface Attempt {
+export interface Attempt {
   ok: boolean;
   status: number | null;
   error: string | null;
 }
 
+/** `K24`, the one place this exact string is built — the drain (Task 4)
+ *  reconstructs the same `rawBody` from the stored `payload_json` through
+ *  this function rather than re-deriving the format, so the two callers
+ *  can never drift on key order or whitespace. */
+export function deliveryRawBody(event: WebhookEvent, payload: unknown): string {
+  return JSON.stringify({ event, ...(payload as Record<string, unknown>) });
+}
+
 /** One `fetch`, signed and timed out. Never throws — every failure shape
  *  (a thrown signer, a refused connection, a timeout, a non-2xx response)
  *  comes back as `{ ok: false }` so the caller always has something to
- *  queue. */
-async function tryDeliver(
+ *  queue. Exported for the drain (Task 4) to call directly — a second
+ *  delivery implementation there is how the two paths would drift apart. */
+export async function tryDeliver(
   http: typeof globalThis.fetch,
   url: string,
   rawBody: string,
@@ -118,7 +127,7 @@ async function deliverAll(
 
   // Serialised once (K24) — every hook's signature covers this exact
   // string, and every hook's request body, inline or queued, carries it.
-  const rawBody = JSON.stringify({ event: input.event, ...(input.payload as Record<string, unknown>) });
+  const rawBody = deliveryRawBody(input.event, input.payload);
   const nowSeconds = Math.floor(input.now / 1000);
   const http = deps.http ?? globalThis.fetch;
   const attemptInline = input.event === "attempt.submitted";
