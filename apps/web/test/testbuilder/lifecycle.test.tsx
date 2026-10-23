@@ -114,6 +114,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     importCandidates: async () => {
       throw new Error("not used");
     },
+    exportCandidateData: async () => {
+      throw new Error("not used");
+    },
+    deleteCandidateData: async () => {
+      throw new Error("not used");
+    },
+    usage: async () => undefined,
     listWebhooks: async () => {
       throw new Error("not used by this test file");
     },

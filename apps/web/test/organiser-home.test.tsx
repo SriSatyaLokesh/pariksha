@@ -141,6 +141,12 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadMedia: notUsed,
     candidates: async () => [],
     importCandidates: notUsed,
+    // Phase 8e Task 3 (`K31`, `K36`, #102): `undefined` is the default here
+    // for the same reason it is the prop's own default — a fixture that
+    // said nothing about usage should render Home exactly as it did before
+    // this task, not grow a meter every other test in this file never asked
+    // for.
+    usage: async () => undefined,
     ...overrides,
   } as unknown as ApiClient;
 
@@ -679,6 +685,10 @@ describe("a load that fails says so once (and stops saying Loading)", () => {
 });
 
 describe("Home reads only what already exists (D6)", () => {
+  // Phase 8e Task 3 tried widening this to three; the whole-branch review
+  // (`C2`, CRITICAL) found the trade wrong and reverted it — `usage()` is
+  // `UsagePanel`'s own gesture-triggered call now, never Home's own. This
+  // assertion is back to its pre-Task-3 shape.
   it("calls only tests() and listBanks()", async () => {
     await openHome();
 

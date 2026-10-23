@@ -70,6 +70,12 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createWebhook: notUsed,
     setWebhookActive: notUsed,
     deleteWebhook: notUsed,
+    // 8e's additions to `ApiClient`. This file is 8d's and the two branches
+    // never conflicted — nothing here overlaps a line 8e touched — so only
+    // the type caught it. See #228: every test file hand-rolls this fixture.
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
+    usage: async () => undefined,
     ...overrides,
   };
 }

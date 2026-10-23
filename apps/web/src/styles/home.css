@@ -147,6 +147,57 @@
   padding-inline: var(--space-base);
 }
 
+/* Phase 8e Task 3 (`K31`, `K36`, issue 102): the free-tier meter. Same page-lead
+   tier as `.home__crumb`/`.home__lead` above it (both read `signal-bg` /
+   `signal-l-bg` in `contrast-usage.test.ts`'s SURFACE map) — this carries
+   the identical `--ink-2`-on-that-pairing, not a new one. `.home__dot` is
+   reused unchanged from the agenda above: a background-only tone, never the
+   only signal — the sentence beside it says "approaching the free-plan
+   ceiling" in words on the same `warn` state the dot colours. */
+.home__usage {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-base);
+  margin: var(--space-xs) 0 0;
+}
+
+.home__usage-text {
+  margin: 0;
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  line-height: var(--type-mono-sm-line-height);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* No colour of its own — inherits `.home__usage-text`'s, which is already
+   scored. Only the weight sets this apart from the sentence around it. */
+.home__usage-figure {
+  font-weight: 600;
+}
+
+/* The gesture button (`C2`'s fix): `.home__usage-text` alone sets its
+   colour (reused, not duplicated — see this file's own note above); every
+   property here is layout/reset, never `color`, so there is nothing new
+   for `contrast-usage.test.ts`'s exhaustive sweep to account for. */
+.home__usage-check {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.home__usage-check:disabled {
+  cursor: default;
+  text-decoration: none;
+}
+
 /* ---- The two panes ----------------------------------------------------- */
 
 /* min-height: 0 on both the row and the panes is what lets the scroll areas
