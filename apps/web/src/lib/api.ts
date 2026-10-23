@@ -322,6 +322,26 @@ export interface ApiClient {
     bankId: string,
     doc: Question,
   ): Promise<QuestionSummary>;
+  /**
+   * Phase 8b Task 4 (`K17`/`K18`): the regrade offer after a key change
+   * (`POST .../questions/:qid/regrade`, `apps/api/src/grade/regrade.ts`).
+   * `questionId` is the row id (`QuestionSummary.id`), the same id
+   * `deleteQuestion`/`exportQuestion` already take. Resolves every
+   * published test version the question's key now belongs to and enqueues
+   * one regrade per version server-side — `versions` is how many that was,
+   * `queued` the attempts across all of them.
+   *
+   * **Optional**, unlike every other method here: two dozen test files
+   * each hand-build a full `ApiClient` fake (no shared fixture exists),
+   * and `question.tsx` is the only caller — making this required would
+   * turn a one-screen addition into an unrelated edit of every one of
+   * them for a stub neither asks for nor exercises.
+   */
+  regradeQuestion?(
+    workspaceId: string,
+    bankId: string,
+    questionId: string,
+  ): Promise<{ queued: number; versions: number }>;
   /** Tags already used anywhere in the workspace (UX-03's autocomplete). */
   listTags(workspaceId: string): Promise<string[]>;
 
@@ -776,6 +796,12 @@ export function createApiClient(): ApiClient {
       json<QuestionSummary>(
         `/workspaces/${workspaceId}/banks/${bankId}/questions`,
         post(doc),
+      ),
+
+    regradeQuestion: (workspaceId, bankId, questionId) =>
+      json<{ queued: number; versions: number }>(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/regrade`,
+        { method: "POST" },
       ),
 
     listTags: async (workspaceId) =>
