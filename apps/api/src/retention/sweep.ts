@@ -276,11 +276,30 @@ async function dueCandidates(deps: AppDeps): Promise<Candidate[]> {
  * `retentionJob` from `rateLimitJob`, not the two halves of this job from
  * each other) — for one workspace's one-tick timing accident. A skip costs
  * that one workspace one night; an uncaught throw costs every workspace
- * every night until someone notices the job failing.
+ * every night until someone notices the job failing. Every other error —
+ * not `instanceof AttemptInProgressError` — is rethrown, unexamined, before
+ * any write for that workspace has happened: `deleteCandidates` throws
+ * `AttemptInProgressError` from its own guard check, ahead of the
+ * `db.batch` that does the erasure, so a caught skip never leaves a
+ * partial one.
+ *
+ * **Fix round 2, F1:** `skipped` (second return value) is what makes a
+ * skip leave a trace. Returning only the deleted counts, as this did
+ * before, meant a workspace stuck with a perpetually-extended attempt was
+ * skipped every night with nothing anywhere recording it — satisfying
+ * this comment's own "skip, don't fail" promise while quietly breaking
+ * `AC-24` for that one workspace forever. The caller (`retentionJob.run`)
+ * writes the same `retention.sweep` audit row for a skipped workspace it
+ * already writes for a touched one, naming the skipped count — ids and
+ * counts only, never which candidate or why (`KG9`); the *reason* is
+ * always the same one this file's own type system already pins down,
+ * `AttemptInProgressError`, so there is nothing else to name.
  */
-async function sweepCandidates(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
+async function sweepCandidates(
+  deps: AppDeps,
+): Promise<{ deleted: number; byWorkspace: Map<string, number>; skipped: Map<string, number> }> {
   const due = await dueCandidates(deps);
-  if (due.length === 0) return { deleted: 0, byWorkspace: new Map() };
+  if (due.length === 0) return { deleted: 0, byWorkspace: new Map(), skipped: new Map() };
 
   const byWorkspace = new Map<string, string[]>();
   for (const row of due) {
@@ -290,6 +309,7 @@ async function sweepCandidates(deps: AppDeps): Promise<{ deleted: number; byWork
   }
 
   const succeeded = new Map<string, number>();
+  const skipped = new Map<string, number>();
   for (const [workspaceId, candidateIds] of byWorkspace) {
     try {
       await deleteCandidates(deps.db, workspaceId, {
@@ -303,12 +323,13 @@ async function sweepCandidates(deps: AppDeps): Promise<{ deleted: number; byWork
     } catch (err) {
       if (!(err instanceof AttemptInProgressError)) throw err;
       // Skip this workspace's batch entirely — see the function comment.
+      skipped.set(workspaceId, candidateIds.length);
     }
   }
 
   let deleted = 0;
   for (const count of succeeded.values()) deleted += count;
-  return { deleted, byWorkspace: succeeded };
+  return { deleted, byWorkspace: succeeded, skipped };
 }
 
 export const retentionJob: ScheduledJob = {
@@ -327,7 +348,20 @@ export const retentionJob: ScheduledJob = {
     // before the deadline anchor `dueCandidates` uses, so the candidate
     // pass already subsumes it; running both would delete the same rows
     // on two different clocks.
-    const workspaces = new Set([...snapshots.byWorkspace.keys(), ...candidates.byWorkspace.keys()]);
+    //
+    // Fix round 2, F1: `candidates.skipped` joins the set a workspace
+    // counts as "touched", not just `snapshots`/`candidates.byWorkspace` —
+    // a workspace `deleteCandidates` refused this tick (`AttemptInProgressError`)
+    // did nothing visible before this, which let a perpetually-stuck
+    // workspace fail `AC-24` silently, forever, with nothing in `audit_log`
+    // for a human to find. `candidatesSkipped` is a count, same as every
+    // other field here (`KG9`) — never which candidate or why, since the
+    // why is always this one guard.
+    const workspaces = new Set([
+      ...snapshots.byWorkspace.keys(),
+      ...candidates.byWorkspace.keys(),
+      ...candidates.skipped.keys(),
+    ]);
     for (const workspaceId of workspaces) {
       await appendAudit(deps.db, workspaceId, {
         actor: "system",
@@ -336,15 +370,18 @@ export const retentionJob: ScheduledJob = {
         detail: {
           snapshotsDeleted: snapshots.byWorkspace.get(workspaceId) ?? 0,
           candidatesDeleted: candidates.byWorkspace.get(workspaceId) ?? 0,
+          candidatesSkipped: candidates.skipped.get(workspaceId) ?? 0,
         },
         now: deps.now(),
       });
     }
 
+    const skippedTotal = [...candidates.skipped.values()].reduce((a, b) => a + b, 0);
     return {
       summary:
         `retention.sweep: deleted ${snapshots.deleted} snapshot(s) and ${candidates.deleted} candidate(s) ` +
-        `across ${workspaces.size} workspace(s), batch ${RETENTION_BATCH}/${CANDIDATE_WORKSPACE_LIMIT}ws`,
+        `(${skippedTotal} skipped, attempt in progress) across ${workspaces.size} workspace(s), ` +
+        `batch ${RETENTION_BATCH}/${CANDIDATE_WORKSPACE_LIMIT}ws`,
     };
   },
 };

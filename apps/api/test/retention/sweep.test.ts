@@ -493,6 +493,39 @@ it("skips a workspace whose due candidate gained a live attempt mid-tick, withou
   // The other workspace's erasure is unaffected by its sibling's race.
   expect(isBlanked(deps, await getCandidate(deps, safeWsp, safeCandidateId))).toBe(true);
   expect(result.summary).toMatch(/deleted 0 snapshot\(s\) and 1 candidate\(s\)/);
+
+  // Fix round 2, F1: a skip must leave readable evidence, or a workspace
+  // stuck with a perpetually-extended attempt fails AC-24 silently, every
+  // night, forever. The same `retention.sweep` audit row every touched
+  // workspace already gets names the skip by count — ids and counts only
+  // (KG9), never which candidate or why.
+  const raceAudit = await listAudit(deps.db, raceWsp);
+  const raceSweepRow = raceAudit.find((r) => r.action === "retention.sweep");
+  expect(raceSweepRow?.detail).toMatchObject({ candidatesDeleted: 0, candidatesSkipped: 1 });
+});
+
+// Fix round 2, F2: the catch in `sweepCandidates` is narrowed to
+// `instanceof AttemptInProgressError` — everything else must still come
+// out. Source inspection said so; this is the break-it-and-watch-it-fail
+// proof the round's own standard calls for. `deps.db.batch` is
+// intercepted (not `.query`, which `dueCandidates` alone uses) to throw a
+// plain `Error` the moment `deleteCandidates` tries to commit its erasure
+// — a failure with no relationship at all to a live attempt, so a catch
+// that swallowed it would be a bare `catch`, not the narrow one this task
+// promises.
+it("lets a non-AttemptInProgressError out of sweepCandidates rather than swallowing it", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId } = await seedCandidateTest(deps);
+  await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY);
+
+  const breakingDb: typeof deps.db = {
+    ...deps.db,
+    batch: (async () => {
+      throw new Error("storage backend unreachable");
+    }) as typeof deps.db.batch,
+  };
+
+  await expect(retentionJob.run({ ...deps, db: breakingDb })).rejects.toThrow("storage backend unreachable");
 });
 
 it("expires a candidate with no attempt at all on its own created_at", async () => {
