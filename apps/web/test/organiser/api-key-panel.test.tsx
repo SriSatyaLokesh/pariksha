@@ -97,6 +97,10 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     gradingQueue: notUsed,
     grade: notUsed,
     recordVerdict: notUsed,
+    // 7e's additions to `ApiClient` — fifth time today one interface change
+    // has broken a hand-rolled copy of this fixture (#228).
+    lockedAttempts: notUsed,
+    unlockAttempt: notUsed,
     ...overrides,
   };
 }
