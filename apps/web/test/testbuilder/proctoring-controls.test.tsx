@@ -248,4 +248,19 @@ describe("each override key is written by the control its label names (branch-re
       expect.objectContaining({ overrides: expect.objectContaining({ violation_action: "lock" }) }),
     );
   });
+
+  // Branch-review M3: every other control in this panel renders the
+  // *resolved* value when there is no override; this select alone fell back
+  // to a literal `"warn_only"`, which disagreed with `standard`'s and
+  // `strict`'s real default of `warn_then_flag` (`P7E-R3`). An organiser who
+  // never touches this control must see what the engine will actually do.
+  it("M3: shows the resolved violation_action, not a hardcoded warn_only, when there is no override", async () => {
+    await openProctoringPanel({ profile: "strict" });
+    expect(screen.getByLabelText(/When the limit is reached/i)).toHaveValue("warn_then_flag");
+  });
+
+  it("M3: an explicit override still wins over the resolved default", async () => {
+    await openProctoringPanel({ profile: "strict", overrides: { violation_action: "warn_only" } });
+    expect(screen.getByLabelText(/When the limit is reached/i)).toHaveValue("warn_only");
+  });
 });
