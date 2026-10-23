@@ -183,10 +183,9 @@ it("does not submit an already-submitted attempt", async () => {
   expect((await attemptState(attemptId)).submitReason).toBe("manual");
 });
 
-// --- the budget: the worst case is declared and measured -------------------
+// --- the budget: the common auto-submit case is measured, under the ceiling -
 
-// **14** (`ROUTE_BUDGETS[EVENTS_PATH]`, `app.ts`'s own comment has the full
-// arithmetic): the limit-reaching 5, plus `submitAttempt`'s own cost, which
+// **14**: the limit-reaching 5, plus `submitAttempt`'s own cost, which
 // Phase 7e Task 5 (`Q6a`) moved from 5 to 8 by adding its own
 // `recomputeIntegrity` call (`run/submit.ts`'s "a submit always recomputes"
 // comment) and Phase 8d Task 3 moved from 8 to 9 by adding `fireWebhooks`'s
@@ -196,7 +195,13 @@ it("does not submit an already-submitted attempt", async () => {
 // twice for one answer is exactly what that guard exists to refuse;
 // `fireWebhooks` cannot double-fire either, since it too lives inside
 // `submitAttempt`'s own `submitted` branch.
-it("the worst case — the batch that first auto-submits — costs the declared ceiling, measured", async () => {
+//
+// Branch-review M6: this attempt is neither a counted test's last attempt
+// nor in a workspace with a registered webhook, so it is no longer the
+// declared ceiling — that is `combined-budgets.test.ts`'s "the events
+// route's real worst case is 19", which combines the counted-read delta
+// with `fireWebhooks`'s own worst case of 5, not 1.
+it("the common case — the first batch that auto-submits, no counted attempt, no webhook — measures 14, under the declared ceiling", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -205,5 +210,6 @@ it("the worst case — the batch that first auto-submits — costs the declared 
     createApp(counting.deps),
   );
   expect((await res.json() as { submitted: boolean }).submitted).toBe(true);
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[EVENTS_PATH]);
+  expect(counting.counts().total).toBe(14);
+  expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[EVENTS_PATH] as number);
 });

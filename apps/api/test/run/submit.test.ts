@@ -385,15 +385,15 @@ it("the submit route reads the questions once, not once per answer", async () =>
   // `rel-review`: `full_review`, no `counted_attempt` set — the common
   // case, and the one this literal pins. `countedFor` (`submit.ts`) spends
   // no subrequest at all when `counted_attempt` is unset, so this stays at
-  // **10**, not `ROUTE_BUDGETS[SUBMIT_PATH]` (11, paid only by the worst
-  // case below) — a literal, so the common path is still caught if a
-  // redundant read ever lands here even as the declared ceiling moves.
-  // Base **6**, plus Phase 7e Task 5's `recomputeIntegrity` — +3 — on
-  // every first press that actually writes, plus Phase 8d Task 3's
-  // `fireWebhooks` — +1, `listActiveWebhooksForEvent`'s one read, paid on
-  // every submission even when this workspace has registered no webhook at
-  // all (as here): `app.ts`'s own comment on this route has the full
-  // arithmetic.
+  // **10**, not `ROUTE_BUDGETS[SUBMIT_PATH]` (15, paid only by the true
+  // worst case in `combined-budgets.test.ts`) — a literal, so the common
+  // path is still caught if a redundant read ever lands here even as the
+  // declared ceiling moves. Base **6**, plus Phase 7e Task 5's
+  // `recomputeIntegrity` — +3 — on every first press that actually writes,
+  // plus Phase 8d Task 3's `fireWebhooks` — +1, `listActiveWebhooksForEvent`'s
+  // one read, paid on every submission even when this workspace has
+  // registered no webhook at all (as here): `app.ts`'s own comment on this
+  // route has the full arithmetic.
   const { cookie, firstId } = await sat("rel-review");
   await answer(cookie, firstId, { kind: "option", option: "a" });
   const counting = countingDeps(deps);
@@ -402,11 +402,16 @@ it("the submit route reads the questions once, not once per answer", async () =>
   expect(counting.counts().total).toBe(10);
 });
 
-it("the worst case — a counted_attempt test's last attempt at full_review — is the declared ceiling, measured", async () => {
+it("the counted-attempt delta — a counted_attempt test's last attempt at full_review, no webhook — measures 11, under the declared ceiling", async () => {
   // `rel-counted`'s **last** attempt (`full_review`, two attempts allowed,
-  // `counted_attempt: "highest"`) is the true worst case since Phase 8a
-  // Task 3 (`K6`/`K7`): everything the common case above pays, plus
-  // `attemptFiguresForCandidate`'s one read, paid only here.
+  // `counted_attempt: "highest"`) pays everything the common case above
+  // does, plus `attemptFiguresForCandidate`'s one read (Phase 8a Task 3,
+  // `K6`/`K7`) — **11**. This workspace registers no webhook, so
+  // `fireWebhooks` costs only its unconditional `listActiveWebhooksForEvent`
+  // read. Branch-review M6: this is no longer the declared ceiling — that
+  // is `combined-budgets.test.ts`'s "the submit route's real worst case is
+  // 15", which combines this same counted-read delta with `fireWebhooks`'s
+  // own worst case of 5, not 1.
   const first = await sat("rel-counted");
   await answer(first.cookie, first.firstId, { kind: "option", option: "a" });
   await submit(first.cookie);
@@ -416,7 +421,8 @@ it("the worst case — a counted_attempt test's last attempt at full_review — 
   const counting = countingDeps(deps);
   const res = await submit(second.cookie, createApp(counting.deps));
   expect(res.status).toBe(200);
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[SUBMIT_PATH]);
+  expect(counting.counts().total).toBe(11);
+  expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[SUBMIT_PATH] as number);
 });
 
 it("M-1: a release.when: 'never' test's last attempt does not pay the counted read, even with counted_attempt set", async () => {

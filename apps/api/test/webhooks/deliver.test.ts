@@ -437,7 +437,7 @@ describe("the submit route, with a webhook registered", () => {
     expect((await res.json()).receipt).toBeDefined();
   }, DELIVERY_TIMEOUT_MS + 2000);
 
-  it("keeps the submit route inside its declared budget with a webhook firing", async () => {
+  it("keeps the submit route under its declared budget with one webhook delivering", async () => {
     const http = okHttp();
     const { cookie } = await startWith(http);
     // `startWith` built an app over plain `withHttp(http)` and we discard it:
@@ -448,8 +448,12 @@ describe("the submit route, with a webhook registered", () => {
     const res = await createApp(counting.deps).request(SUBMIT_PATH, { method: "POST", headers: { cookie } });
 
     expect(res.status).toBe(200);
-    expect(counting.counts().total, "POST /api/v1/run/attempt/submit, webhook firing").toBe(
-      ROUTE_BUDGETS["/api/v1/run/attempt/submit"],
-    );
+    // One *delivering* hook costs the base common path (9) plus the read
+    // and the one `http` (+2, a success is never queued, so no write) —
+    // **11**. Branch-review M6: no longer the declared ceiling — that is
+    // `combined-budgets.test.ts`'s "the submit route's real worst case is
+    // 15", `INLINE_FANOUT_LIMIT` hooks that all fail and all get queued.
+    expect(counting.counts().total, "POST /api/v1/run/attempt/submit, webhook firing").toBe(11);
+    expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS["/api/v1/run/attempt/submit"] as number);
   });
 });

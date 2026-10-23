@@ -572,36 +572,48 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // recompute (a limit-reaching batch always carries a violation) —
   // **8** (`test/run/violation-limit.test.ts`).
   //
-  // The declared ceiling is **14** — Phase 7e Task 2's own worst case, the
-  // first batch that reaches the limit under `auto_submit`: the 5 above,
-  // plus `submitAttempt`'s own common-case cost, which Task 5 moved from 5
-  // to 8 (`listResponses`, `countAttemptsForCandidate`, `rescoreAttempt`'s
-  // one bank read, `finishAttempt`'s write, `appendAudit`'s write,
-  // `recomputeIntegrity`'s own +3) and Phase 8d Task 3 moved from 8 to
-  // **9** — `fireWebhooks`'s own `listActiveWebhooksForEvent` read, paid
-  // here for the same reason it is paid on `/attempt/submit` directly:
-  // `fireWebhooks` lives inside `submitAttempt`'s `submitted` branch,
-  // which this route reaches the same way the candidate's own submit does
-  // — the same 9 `run/submit.ts`'s own first-press measurement pays
-  // beyond `/attempt/submit`'s own attempt-context join). This route's own
+  // The first batch that reaches the limit under `auto_submit` costs the 5
+  // above, plus `submitAttempt`'s own common-case cost, which Task 5 moved
+  // from 5 to 8 (`listResponses`, `countAttemptsForCandidate`,
+  // `rescoreAttempt`'s one bank read, `finishAttempt`'s write,
+  // `appendAudit`'s write, `recomputeIntegrity`'s own +3) — **13**,
+  // measured in `test/run/auto-submit.test.ts`'s own counting test on an
+  // uncounted attempt with no webhook registered. This route's own
   // `recomputeIntegrity` call is skipped when `submitAttempt` already fired
   // one this request (the `!submitted` guard in `routes/proctoring.ts`) —
-  // paying it twice would be two writes for one answer; `fireWebhooks` is
-  // guarded the same way, inside `submitAttempt` itself, so it cannot
-  // double-fire either. Measured in `test/run/auto-submit.test.ts`'s own
-  // counting test. An empty `events` array costs one less than the base
-  // common path — `appendEvents` is a no-op on it, and an empty batch
-  // carries no integrity signal either.
+  // paying it twice would be two writes for one answer. An empty `events`
+  // array costs one less than the base common path — `appendEvents` is a
+  // no-op on it, and an empty batch carries no integrity signal either.
+  //
+  // **Branch-review M6: the declared ceiling used to add a flat "+1" for
+  // `fireWebhooks`'s unconditional read and never combined it with the
+  // counted-attempt delta** — the same error as `/attempt/submit`'s own
+  // comment, inherited because `fireWebhooks` lives inside `submitAttempt`,
+  // which this route reaches the same way `/attempt/submit` does, on the
+  // `auto_submit` branch. `test/run/combined-budgets.test.ts`'s "the events
+  // route's real worst case is 19" is the fixture that combines both: the
+  // 13 above, on a *last, counted* attempt (`countedFor`'s own +1 read,
+  // `/attempt/submit`'s identical delta) and `fireWebhooks`'s own worst
+  // case of **5**, not 1 (`deliver.test.ts:388`,
+  // `{ db: 2, http: INLINE_FANOUT_LIMIT, total: 5 }`) — 13 + 1 + 5 = **19**.
+  // `fireWebhooks` is guarded the same way `recomputeIntegrity` is, inside
+  // `submitAttempt` itself, so it cannot double-fire even though both
+  // `/attempt/submit` and the `auto_submit` branch here can reach it.
+  //
+  // A number above 19 means the ingest base, the claim, the counted read,
+  // the integrity recompute or the webhook fan-out is being spent more than
+  // its own measured worst case — the failure this line exists to catch on
+  // a 50-subrequest ceiling.
   //
   // Phase 7e Task 3: the first batch that first locks under `lock` costs
   // **10** (the 5 above, plus `lockAttempt`'s own write and one more
   // `appendEvents` call for the `attempt_locked` marker — 7 — plus the +3
   // recompute, since locking never submits and so never skips it) —
   // measured in `test/run/lock.test.ts`'s own counting test, cheaper than
-  // `auto_submit`'s 14 and so no reason to move the ceiling this already
+  // `auto_submit`'s 19 and so no reason to move the ceiling this already
   // declares. Locking never calls `submitAttempt`, so it never pays the
   // webhook check either.
-  "/api/v1/run/attempt/events": 14,
+  "/api/v1/run/attempt/events": 19,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the
   // attempt join the cookie resolves through, `attempt_snapshot`'s rate
