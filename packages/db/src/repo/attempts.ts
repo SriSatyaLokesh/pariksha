@@ -4,7 +4,7 @@
 // 0002 budgets it at one D1 write plus at most one R2 call, so `upsertResponse`
 // is a single statement and nothing here loops a query over questions.
 
-import { VIOLATION_EVENTS, type ProctoringEventType } from "@pariksha/core";
+import { FAILURE_EVENTS, VIOLATION_EVENTS, type ProctoringEventType } from "@pariksha/core";
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
@@ -453,6 +453,65 @@ export const countViolations = scoped(
       [workspaceId, attemptId, ...VIOLATION_TYPES],
     );
     return Number(rows[0]?.n ?? 0);
+  },
+);
+
+/**
+ * Phase 7e Task 5 (`Q6`): `integrityFor`'s (`@pariksha/core`) own event
+ * input — the subset of an attempt's events the flag can possibly care
+ * about, not its whole history. `VIOLATION_EVENTS ∪ FAILURE_EVENTS` is 10 of
+ * `PROCTORING_EVENTS`' 17; the other 7 (restores, lifecycle markers,
+ * `noise_above_threshold`, the identity capture) never move `integrityFor`'s
+ * output, so there is no reason to pull them over the wire on every
+ * recompute — the same reasoning `countViolations`' own header gives for
+ * not projecting a whole attempt's event history to count a number bounded
+ * by a handful of rows.
+ */
+const INTEGRITY_EVENT_TYPES = [...VIOLATION_EVENTS, ...FAILURE_EVENTS];
+const INTEGRITY_EVENT_PLACEHOLDERS = INTEGRITY_EVENT_TYPES.map(() => "?").join(", ");
+
+export const listIntegrityEvents = scoped(
+  "listIntegrityEvents",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    attemptId: string,
+  ): Promise<{ type: ProctoringEventType; detail: unknown }[]> => {
+    const rows = await db.query<{ type: string; detail_json: unknown }>(
+      `SELECT type, detail_json FROM event WHERE workspace_id = ? AND attempt_id = ? ` +
+        `AND type IN (${INTEGRITY_EVENT_PLACEHOLDERS})`,
+      [workspaceId, attemptId, ...INTEGRITY_EVENT_TYPES],
+    );
+    return rows.map((row) => ({
+      type: row.type as ProctoringEventType,
+      detail: row.detail_json === null ? undefined : db.jsonValue(row.detail_json),
+    }));
+  },
+);
+
+/**
+ * `integrityFor`'s other input: every snapshot this attempt has, regardless
+ * of `reason` — a violation- or identity-triggered capture is still real
+ * evidence someone was watching, and still a frame the multi-face threshold
+ * must see. `face_count` is always `null` today (`Q3`: face detection is
+ * pre-cut), which is exactly what `integrityFor`'s own `Q3a` handling
+ * expects — a `null` is never mistaken for zero faces or for evidence of
+ * anything.
+ */
+export const listSnapshotFaceCounts = scoped(
+  "listSnapshotFaceCounts",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    attemptId: string,
+  ): Promise<{ faceCount: number | null }[]> => {
+    const rows = await db.query<{ face_count: number | null }>(
+      "SELECT face_count FROM snapshot WHERE workspace_id = ? AND attempt_id = ?",
+      [workspaceId, attemptId],
+    );
+    return rows.map((row) => ({
+      faceCount: row.face_count === null ? null : Number(row.face_count),
+    }));
   },
 );
 
