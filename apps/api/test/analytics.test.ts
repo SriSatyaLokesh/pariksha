@@ -9,9 +9,12 @@ import {
   addMembership,
   closeClient,
   createApiKey,
+  createBank,
   createUser,
+  upsertQuestion,
   type TestDocumentBody,
 } from "@pariksha/db";
+import type { Question } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS, type AppDeps } from "../src/app.js";
 import { countingDeps } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
@@ -156,5 +159,116 @@ it("measures the real subrequest cost of the analytics route against a 300-candi
   expect(counting.counts().total).toBe(
     ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/analytics"],
   );
+  await closeClient(deps.db);
+});
+
+// --- Fix round 1, Important 2: the item table's own stem join -------------
+
+/** Writes one scored attempt with one response, directly — the same
+ *  "drop to raw SQL for fixture setup" convention `results.test.ts`'s own
+ *  `seedAttempt` keeps, since no production path creates a scored attempt
+ *  out of thin air. */
+async function seedScoredAttempt(
+  deps: AppDeps,
+  workspaceId: string,
+  testVersionId: string,
+  candidateId: string,
+  questionId: string,
+): Promise<void> {
+  const attemptId = "att_" + Math.random().toString(36).slice(2, 10);
+  await deps.db.run(
+    "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, " +
+      "deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, section_started_at, " +
+      "integrity_flag, observed, locked_at) VALUES (?, ?, ?, ?, 1, '{}', ?, ?, ?, 'manual', ?, 'clean', ?, 0, NULL, 'clean', 1, NULL)",
+    [
+      attemptId,
+      workspaceId,
+      candidateId,
+      testVersionId,
+      FIXED_NOW,
+      FIXED_NOW + 60_000,
+      FIXED_NOW,
+      JSON.stringify({
+        percent: 100,
+        total: 1,
+        max: 1,
+        passed: null,
+        pending: [],
+        perQuestion: { [questionId]: { points: 1, max: 1, correct: true } },
+        sections: [],
+      }),
+      `hash-${attemptId}`,
+    ],
+  );
+  await deps.db.run(
+    "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, 1, NULL, NULL)",
+    [`rsp_${attemptId}`, workspaceId, attemptId, questionId, JSON.stringify({ kind: "option", option: "a" }), FIXED_NOW],
+  );
+}
+
+async function testVersionIdOf(deps: AppDeps, workspaceId: string, testId: string): Promise<string> {
+  const rows = await deps.db.query<{ id: string }>(
+    "SELECT id FROM test_version WHERE workspace_id = ? AND test_id = ? AND published_at IS NOT NULL",
+    [workspaceId, testId],
+  );
+  return rows[0]!.id;
+}
+
+it("joins the question's own stem into each item row — Important 2", async () => {
+  const { deps } = await testDeps();
+  const workspaceId = await seedWorkspace(deps);
+  const bankId = await createBank(deps.db, workspaceId, { name: "Stems", now: FIXED_NOW });
+  const question: Question = {
+    id: "q1",
+    type: "single",
+    prompt: "A train 180 m long crosses a platform in 24 s. Find the platform length.",
+    options: [
+      { id: "a", text: "60 m" },
+      { id: "b", text: "120 m" },
+    ],
+    key: "a",
+    scoring: { points: 1 },
+  };
+  const { id: questionId } = await upsertQuestion(deps.db, workspaceId, bankId, question, FIXED_NOW);
+  const testBody: TestDocumentBody = {
+    settings: { timing: { duration_minutes: 45 } },
+    sections: [{ id: "s1", title: "Section one", source: { kind: "fixed", questions: [questionId] } }],
+  };
+  const testId = await seedTest(deps, workspaceId, { name: "Stems test", slug: "stems-test", body: testBody });
+  const testVersionId = await testVersionIdOf(deps, workspaceId, testId);
+  await seedScoredAttempt(deps, workspaceId, testVersionId, "cnd_1", questionId);
+  const cookie = await cookieFor(deps, workspaceId, "viewer");
+
+  const res = await createApp(deps).request(`/api/v1/workspaces/${workspaceId}/tests/${testId}/analytics`, {
+    headers: { cookie },
+  });
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as { items: { questionId: string; stem: string }[] };
+  expect(json.items).toHaveLength(1);
+  expect(json.items[0]!.stem).toBe(question.prompt);
+  await closeClient(deps.db);
+});
+
+it("states a removed question rather than an empty stem", async () => {
+  const { deps } = await testDeps();
+  const workspaceId = await seedWorkspace(deps);
+  const testBody: TestDocumentBody = {
+    settings: { timing: { duration_minutes: 45 } },
+    // Names a question that was never created in any bank — the shape of
+    // a question deleted after the test last referenced it.
+    sections: [{ id: "s1", title: "Section one", source: { kind: "fixed", questions: ["qst_gone"] } }],
+  };
+  const testId = await seedTest(deps, workspaceId, { name: "Gone", slug: "gone-question", body: testBody });
+  const testVersionId = await testVersionIdOf(deps, workspaceId, testId);
+  await seedScoredAttempt(deps, workspaceId, testVersionId, "cnd_1", "qst_gone");
+  const cookie = await cookieFor(deps, workspaceId, "viewer");
+
+  const res = await createApp(deps).request(`/api/v1/workspaces/${workspaceId}/tests/${testId}/analytics`, {
+    headers: { cookie },
+  });
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as { items: { stem: string }[] };
+  expect(json.items[0]!.stem).toBe("(question removed from the bank)");
   await closeClient(deps.db);
 });

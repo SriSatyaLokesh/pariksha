@@ -805,13 +805,19 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // "measures the real subrequest cost" test against a 300-candidate
   // fixture), not estimated — the brief's own guess (`<= 4`, written
   // before this route also carried item analysis) is superseded by this
-  // number. Auth (2) + `getTest`'s existence check (1) + `testAnalytics`
-  // (2: `listAttemptsForTest` and the registered-candidate `COUNT`) +
-  // `testItemAnalysis` (2: its own `listAttemptsForTest` call — a second
-  // repository function, not a shared fetch, Review Focus in
-  // `routes/analytics.ts` — and the response join) = 7. Nowhere near
-  // `SUBREQUEST_LIMIT` (50).
-  "/api/v1/workspaces/:id/tests/:testId/analytics": 7,
+  // number, and superseded again by fix round 1's own Important 2 (the
+  // stem join). Auth (2) + `getTest`'s existence check (1) + `testAnalytics`
+  // (2: one page of `listAttemptsForTest` and the registered-candidate
+  // `COUNT` — a 300-row fixture is one page) + `testItemAnalysis` (2: its
+  // own page of `listAttemptsForTest` — a second repository function, not
+  // a shared fetch, `routes/analytics.ts`'s own header — and the response
+  // join) + `workspaceQuestions` (1, the stem join) = 8. A cohort past 500
+  // attempts costs one more statement per extra page, per function
+  // (`fetchAllAttempts`'s own pagination, fix round 1's Important 1) — still
+  // nowhere near `SUBREQUEST_LIMIT` (50) even at the hard page cap (see
+  // `packages/db/src/repo/analytics.ts`'s own `MAX_ATTEMPT_PAGES` comment
+  // for the worst-case arithmetic).
+  "/api/v1/workspaces/:id/tests/:testId/analytics": 8,
 };
 
 /**
