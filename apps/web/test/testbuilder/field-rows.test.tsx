@@ -45,6 +45,7 @@ import {
 import { FormBuilder } from "../../src/components/testbuilder/FormBuilder";
 import { QuestionEditor } from "../../src/components/authoring/QuestionEditor";
 import type { ApiClient } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 
 const STYLES_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles");
 
@@ -105,14 +106,10 @@ const SINGLE: SingleQuestion = {
 
 const noop = (): void => undefined;
 
-/** Only the two calls `QuestionEditor` makes on mount. */
+/** Only the one call `QuestionEditor` makes on mount — #228's shared
+ *  fakeClient already throws "not stubbed" for the rest. */
 function editorClient(): ApiClient {
-  return {
-    listGroups: async () => [],
-    saveQuestion: async () => {
-      throw new Error("not used by this test file");
-    },
-  } as unknown as ApiClient;
+  return sharedClient({ listGroups: async () => [] });
 }
 
 function renderQuestionEditor(): void {
