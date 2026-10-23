@@ -134,3 +134,10 @@ export * from "./csv.js";
 // the Results panel, the webhook panel (8d), the free-tier dashboard (8e)
 // and the publish checklist all read.
 export * from "./cost.js";
+
+// Phase 8c Task 2 (`R-07`, `K19`, `K20`): `itemAnalysis()` turns one fetch
+// of a test's attempts and responses into a per-question share-correct,
+// discrimination index and option pick-rate breakdown, in a single pass.
+// `packages/db/src/repo/analytics.ts` and the analytics screen are its
+// consumers.
+export * from "./item-analysis.js";

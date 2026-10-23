@@ -8,7 +8,6 @@
 // pattern for how the 0.42 is constructed.
 
 import { describe, expect, it, vi } from "vitest";
-import type { ItemStat } from "../src/item-analysis.js";
 import { itemAnalysis } from "../src/item-analysis.js";
 
 type Attempt = { attemptId: string; percent: number };
@@ -116,7 +115,7 @@ describe("itemAnalysis", () => {
   });
 
   it("withholds the index below ten attempts and says why", () => {
-    const s = itemAnalysis(cohortOf(6))[0] as ItemStat;
+    const s = itemAnalysis(cohortOf(6))[0]!;
     expect(s.discrimination).toBeNull();
     expect(s.discriminationWithheld).toBe("too_few_attempts");
     expect(s.n).toBe(6);
