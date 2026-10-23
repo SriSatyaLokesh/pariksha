@@ -4,6 +4,7 @@ import type { Actor, ApiClient, TestSummary, Workspace } from "../lib/api";
 // (whole-branch review, Minor 4): this row used to render the raw wire
 // value, so Home said `draft`/`open` where the test list says `Draft`/`Open`.
 import { STATE_LABEL } from "./tests";
+import { UsagePanel } from "../components/organiser/UsagePanel";
 
 // Home (spec §5, `D6`/`D6a`/`D6b`; §11, `D21`/`D21b`).
 //
@@ -12,6 +13,17 @@ import { STATE_LABEL } from "./tests";
 // `client.listBanks(workspaceId)` answer every figure on this page between
 // them, and if a future figure needs an aggregate, that is Phase 8's
 // analytics work and the answer is no.
+//
+// Phase 8e Task 3 (`K31`, `K36`, issue 102) tried amending this rule with a
+// third automatic call, `client.usage(workspaceId)` — the whole-branch
+// review (`C2`, CRITICAL) found that trade wrong: the alternative it was
+// weighed against (riding the projection along on `client.workspaces()`,
+// already called at boot) is strictly worse, but the comparison never
+// included the option `D6` itself already names, "don't put an aggregate
+// on Home." **The amendment is reverted.** `UsagePanel` (below) owns its
+// own fetch now, behind an explicit organiser gesture — see that
+// component's own header. Home still calls exactly the two endpoints `D6`
+// always allowed.
 //
 // `D6a` refused the four-metric-tile grid: a label, a number and a sentence
 // tells an organiser nothing actionable. What replaces it is an agenda —
@@ -374,6 +386,11 @@ export function Home({
         </span>
         <span className="home__figure">{questions}</span> questions
       </p>
+
+      {/* Phase 8e Task 3 (`K31`, `K36`, issue 102), reverted `D6` amendment
+          (branch review `C2`): owns its own fetch, behind its own button —
+          Home makes no `usage()` call of any kind. */}
+      <UsagePanel client={client} workspaceId={workspace.id} />
 
       {error !== null && (
         <p className="home__empty" role="alert">
