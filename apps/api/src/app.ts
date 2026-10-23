@@ -37,6 +37,7 @@ import { candidateDataRoutes } from "./retention/candidate.js";
 import { usageRoute } from "./usage/project.js";
 import { requireMember } from "./middleware/authorize.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { analyticsRoutes } from "./routes/analytics.js";
 import { keyRoutes } from "./routes/keys.js";
 import type { EmailSender } from "./email/adapter.js";
 
@@ -798,6 +799,19 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // write (1) + `appendAudit` (1).
   "/api/v1/workspaces/:id/keys": 4,
   "/api/v1/workspaces/:id/keys/:keyId": 4,
+
+  // Phase 8c Task 1/2 (`R-06`/`R-07`, #94/#95): test and item analytics,
+  // one screen. Measured (`apps/api/test/analytics.test.ts`'s own
+  // "measures the real subrequest cost" test against a 300-candidate
+  // fixture), not estimated — the brief's own guess (`<= 4`, written
+  // before this route also carried item analysis) is superseded by this
+  // number. Auth (2) + `getTest`'s existence check (1) + `testAnalytics`
+  // (2: `listAttemptsForTest` and the registered-candidate `COUNT`) +
+  // `testItemAnalysis` (2: its own `listAttemptsForTest` call — a second
+  // repository function, not a shared fetch, Review Focus in
+  // `routes/analytics.ts` — and the response join) = 7. Nowhere near
+  // `SUBREQUEST_LIMIT` (50).
+  "/api/v1/workspaces/:id/tests/:testId/analytics": 7,
 };
 
 /**
@@ -937,6 +951,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // the whole check, nothing finer-grained — every role already sees its
   // own workspace's scale figures on Home, and this is one more.
   "GET /api/v1/workspaces/:id/usage": null,
+
+  // Phase 8c Task 1 (`R-06`, #94): `results.export`'s first production
+  // caller. A Viewer holds it and nothing wider; an Author (`tests.edit`)
+  // does not hold it at all.
+  "GET /api/v1/workspaces/:id/tests/:testId/analytics": "results.export",
 };
 
 /**
@@ -1169,6 +1188,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "GET /api/v1/workspaces/:id/keys": "workspace",
   "POST /api/v1/workspaces/:id/keys": "workspace",
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "workspace",
+  // Phase 8c Task 1 (`R-06`, #94): test analytics.
+  "GET /api/v1/workspaces/:id/tests/:testId/analytics": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -1238,6 +1259,9 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // route for locality with the rest of `/api/v1/workspaces/:id/...`
   // rather than out of necessity — no prefix below collides.
   app.route("/api/v1/workspaces", webhookRoutes(deps));
+  // Phase 8c Task 1 (`R-06`, #94): test analytics, mounted beside webhooks
+  // for the same locality reason — no prefix below collides.
+  app.route("/api/v1/workspaces", analyticsRoutes(deps));
   // Phase 8d Task 2: scoped API keys, mounted beside webhooks for the same
   // locality reason — no prefix below collides.
   app.route("/api/v1/workspaces", keyRoutes(deps));
