@@ -18,9 +18,36 @@ import type { ReleasedResult } from "../../lib/run";
 
 /** A number the candidate will compare against another number, so it is
  *  rendered through the same `toLocaleString` the rest of the runtime
- *  uses rather than with a stray `toFixed`. */
-const points = (value: number): string =>
+ *  uses rather than with a stray `toFixed`. Exported for `AttemptFigures`
+ *  below, which formats the same percentages beside this component rather
+ *  than growing a second copy of this rounding. */
+export const points = (value: number): string =>
   value.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+
+/** `K7`: this attempt's own figure, named, ahead of `ResultView`'s own
+ *  total — and the counted one beneath it, only when the server has
+ *  already decided to disclose it (`result.counted` is absent while
+ *  attempts remain, and under `counted_attempt: "latest"`, where it would
+ *  just repeat this line). Exact copy, fixed by that ruling.
+ *
+ *  Shared by `Receipt.tsx` (the finish page) and `ResultCode.tsx` (the
+ *  return visit, `C-09`) — the same figure read a week apart is the same
+ *  component, not a second copy of this formatting (`B-1`). */
+export function AttemptFigures({ result }: { result: ReleasedResult }) {
+  return (
+    <p className="exam-attempt-figures">
+      This attempt: {points(result.percent)}%
+      {result.counted && (
+        <>
+          <br />
+          Counted for your result: {points(result.counted.percent)}%, your{" "}
+          {result.counted.attemptId === null ? "average" : "best"} of{" "}
+          {String(result.counted.of)}
+        </>
+      )}
+    </p>
+  );
+}
 
 /** The answer a candidate gave, or a correct one, as text.
  *

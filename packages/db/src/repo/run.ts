@@ -11,7 +11,7 @@
 
 import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
-import type { RegistrationFormSpec } from "@pariksha/core";
+import type { AttemptFigure, RegistrationFormSpec } from "@pariksha/core";
 import { scoped } from "./guard.js";
 import type { TestSettings } from "./test-document.js";
 
@@ -366,6 +366,36 @@ export const countAttemptsForCandidate = scoped(
       lastEndedAt: row?.last_ended == null ? null : Number(row.last_ended),
       liveDeadlineAt: row?.live_deadline == null ? null : Number(row.live_deadline),
     };
+  },
+);
+
+/**
+ * This candidate's own submitted, scored attempts, as `K6`'s `countedScore`
+ * takes them — one statement, not one per attempt (`K9`).
+ *
+ * `K7`: read only on the candidate's own last attempt. `release.ts`
+ * already refuses to disclose a counted figure while any remain, so a
+ * caller that read this earlier would pay a subrequest for a result it is
+ * guaranteed to discard — the gate belongs at the call site, not here.
+ *
+ * `submitted_at IS NOT NULL` is "finished"; `score_json IS NOT NULL` is
+ * "scored" — an attempt the engine never scored (`submit.ts`'s own
+ * "a bad engine costs the score, never the receipt") has no percent to
+ * contribute and is silently excluded rather than crashing this read.
+ */
+export const attemptFiguresForCandidate = scoped(
+  "attemptFiguresForCandidate",
+  async (db: DbClient, workspaceId: string, candidateId: string): Promise<AttemptFigure[]> => {
+    const rows = await db.query<{ id: string; submitted_at: number; score_json: unknown }>(
+      "SELECT id, submitted_at, score_json FROM attempt WHERE workspace_id = ? AND candidate_id = ? " +
+        "AND submitted_at IS NOT NULL AND score_json IS NOT NULL",
+      [workspaceId, candidateId],
+    );
+    return rows.map((row) => ({
+      attemptId: row.id,
+      percent: db.jsonValue<{ percent: number }>(row.score_json).percent,
+      submittedAt: Number(row.submitted_at),
+    }));
   },
 );
 

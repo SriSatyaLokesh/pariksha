@@ -16,3 +16,5 @@ export * from "./candidates.js";
 // `INVITE_KIND` string rides along — the rule above is about functions,
 // and `scoping.test.ts` enumerates only those.
 export * from "./run.js";
+// Phase 8a Task 7 (K9, KG3): the organiser's first attempt read.
+export * from "./results.js";

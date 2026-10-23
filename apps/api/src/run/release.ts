@@ -29,19 +29,27 @@
 //    forbidding either at publish. The downgrade happens **before** the
 //    build, so a `review` array is never constructed and then dropped.
 //
-// 2. **This attempt's score, not the counted one.** `T-14`'s
-//    `counted_attempt` (`highest`, `latest`, `average`) is a results
-//    concept and `docs/ROADMAP.md` gives results to Phase 8. Reading every
-//    prior attempt to compute a counted figure would add a subrequest to a
-//    route that needs none and would tell a candidate mid-series about
-//    their earlier attempts. **This disagrees with the organiser's results
-//    CSV whenever `counted_attempt` is `highest` or `average`**, and Phase
-//    8 inherits that reconciliation: its results view and its CSV must
-//    show the counted figure beside the per-attempt one, or say which is
-//    which. Recorded here so it is not rediscovered as a bug report.
+// 2. **This attempt's score, always; the counted one, only once there is
+//    one to tell.** `T-14`'s `counted_attempt` (`highest`, `latest`,
+//    `average`) now has a reader (`K6`, `@pariksha/core`'s `countedScore`),
+//    and `K7` is the reconciliation Phase 8 inherited from this note:
+//    the candidate's receipt and the organiser's CSV read the same
+//    arithmetic. But reading every prior attempt to compute it would add a
+//    subrequest to a route that needs none *while the candidate still has
+//    attempts left*, and would tell them mid-series what an earlier one
+//    scored — so `counted` is the caller's to supply (the `counted`
+//    parameter below), never this function's own read, and this function
+//    still refuses to put it in the payload until `attemptsRemaining` is
+//    zero, or at all under `"latest"` (whose counted attempt **is** this
+//    one, once disclosed — naming it a second time discloses nothing and
+//    only invites the two to drift).
 
+import { countedScore } from "@pariksha/core";
 import type {
+  AttemptFigure,
   AttemptScore,
+  CountedAttempt,
+  CountedResult,
   Question,
   ReleaseShow,
   ResponseValue,
@@ -65,6 +73,10 @@ export interface ReleasedResult {
   /** Question ids awaiting a human: a manual type with no award yet, and
    *  a question whose grading the regex bound refused (#129). */
   pending: string[];
+  /** `K6`/`K7`: the figure `counted_attempt` names, present only once
+   *  `attemptsRemaining` is zero, under the same `show` as everything
+   *  else here, and never under `"latest"` (see ruling 2). */
+  counted?: CountedResult;
   sections?: { sectionId: string; title: string; points: number; max: number }[];
   review?: {
     questionId: string;
@@ -150,6 +162,27 @@ export function servedShow(
 }
 
 /**
+ * `K6`/`K7`'s counted figure, as `releasedResult` is allowed to disclose
+ * it — `{}` otherwise, so it spreads onto `base` for every `show` level at
+ * once rather than being re-decided at each of the function's three return
+ * points.
+ *
+ * Never computed, let alone disclosed, while `attemptsRemaining > 0`: see
+ * ruling 2. And never under `"latest"`, whose counted attempt is always
+ * *this* one once it is the one being disclosed — naming it a second time
+ * tells the candidate nothing `base.percent` has not, and gives the two a
+ * chance to drift apart instead.
+ */
+function countedFieldOf(
+  attemptsRemaining: number,
+  counted: { mode: CountedAttempt; attempts: readonly AttemptFigure[] } | undefined,
+): { counted: CountedResult } | Record<string, never> {
+  if (attemptsRemaining > 0 || counted === undefined || counted.mode === "latest") return {};
+  const result = countedScore(counted.attempts, counted.mode);
+  return result === null ? {} : { counted: result };
+}
+
+/**
  * The gate.
  *
  * `null` means "not yet, or never" — the finish page then shows the
@@ -160,6 +193,14 @@ export function servedShow(
  * and the titles live on the pinned paper the caller already holds. A
  * section the map does not name falls back to its id rather than to an
  * empty heading.
+ *
+ * `counted` is the candidate's own attempt scores and the test's
+ * `counted_attempt` setting, for `K6`'s `countedScore` — supplied by the
+ * caller rather than read here, because reading every prior attempt is a
+ * subrequest this function must not spend on a candidate who still has
+ * attempts left (ruling 2). Omit it, or leave it `undefined`, where no
+ * reader has that data to hand; `releasedResult` then simply never
+ * discloses a counted figure.
  */
 export function releasedResult(
   release: TestRelease | undefined,
@@ -169,6 +210,7 @@ export function releasedResult(
   now: number,
   attemptsRemaining: number,
   sectionTitles: Readonly<Record<string, string>> = {},
+  counted?: { mode: CountedAttempt; attempts: readonly AttemptFigure[] },
 ): ReleasedResult | null {
   const show = servedShow(release, attemptsRemaining, now);
   if (show === null) return null;
@@ -180,6 +222,7 @@ export function releasedResult(
     percent: score.percent,
     passed: score.passed,
     pending: [...score.pending],
+    ...countedFieldOf(attemptsRemaining, counted),
   };
   if (show === "score_only") return base;
 

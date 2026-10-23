@@ -157,7 +157,9 @@ describe("the five settings are rows that state their own setting (D7)", () => {
     ).toBeVisible();
     expect(screen.getByText("Link and code · code APTI-2026 · no candidates on the list")).toBeVisible();
     expect(screen.getByText("2 fields · 1 required · identified by Email")).toBeVisible();
-    expect(screen.getByText("On submit · score and sections")).toBeVisible();
+    expect(
+      screen.getByText("On submit · score and sections · snapshots 90 days · data 365 days"),
+    ).toBeVisible();
     expect(screen.getByText("logo set · start message set · finish message empty")).toBeVisible();
   });
 
@@ -339,6 +341,30 @@ describe("the five settings are rows that state their own setting (D7)", () => {
     };
     await openBuilder(fakeClient({ draft: async () => never }));
     expect(rowFor("Results")).toHaveTextContent("Never released");
+  });
+
+  // `M-6`: the Results row now owns release plus the two retention
+  // integers (`ResultsPanel.tsx`), so changing a retention value alone —
+  // release untouched — must still move the collapsed row, the same way
+  // "updates the summary when the setting changes" proves it for Timing
+  // above.
+  it("M-6: updates the Results row when a retention value changes, release untouched", async () => {
+    const patchDraft = vi.fn(async () => DRAFT);
+    await openBuilder(fakeClient({ patchDraft }));
+
+    expect(rowFor("Results")).toHaveTextContent("snapshots 90 days · data 365 days");
+
+    fireEvent.click(rowFor("Results"));
+    fireEvent.change(await screen.findByLabelText(/delete snapshots after/i), {
+      target: { value: "30" },
+    });
+    fireEvent.click(rowFor("Results"));
+
+    expect(rowFor("Results")).toHaveTextContent(
+      "On submit · score and sections · snapshots 30 days · data 365 days",
+    );
+    expect(screen.queryByText(/snapshots 90 days/)).toBeNull();
+    await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
   });
 
   it("has no axe violations collapsed or open", async () => {

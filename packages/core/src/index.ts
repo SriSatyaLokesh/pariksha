@@ -99,3 +99,25 @@ export * from "./registration.js";
 // gates, the camera, the consequences — resolves through this instead of
 // branching on `profile` itself.
 export * from "./proctoring.js";
+
+// Phase 8a Task 3 (`K6`): `countedScore()` turns a candidate's attempt
+// scores and `timing.counted_attempt` into the one counted figure —
+// `CountedAttempt` itself is already public off `types.js`, above. The
+// candidate's own result page (`apps/api/src/run/release.ts`, `K7`), the
+// organiser's results CSV and the analytics screen (8c) all call this
+// rather than growing three readings of "best"/"latest"/"average".
+export * from "./counted.js";
+
+// Phase 8a Task 4 (`K8`): `toCsv()` is the one CSV serialiser every export
+// route builds its file through, `csvFilename()` is R-10's exact filename
+// shape, and `CsvPage` is the one page-of-an-export shape 8c and 8e's
+// paginated routes return (`K38`: a route that reached its bound always
+// returns a cursor).
+export * from "./csv.js";
+
+// Phase 8a Task 5 (`K28`, `K35`): `resolveRetention` applies S-13's deletion
+// defaults over `Test.retention` (`types.js`), and `estimateCost` composes
+// `snapshotCost` (above) into the one per-candidate request/byte estimate
+// the Results panel, the webhook panel (8d), the free-tier dashboard (8e)
+// and the publish checklist all read.
+export * from "./cost.js";

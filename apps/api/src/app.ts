@@ -451,21 +451,33 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // here would mean the route had gone looking at the workspace
   // instead, which is precisely the reading it exists not to take.
   "/api/v1/run/attempt/media/:key": 2,
-  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **6**
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **7**
   // in `test/run/submit.test.ts`, on the path that actually scores: the
   // attempt join the cookie resolves through, the answers, the
   // candidate's attempt count (which is what prints "Attempt 2 of 3" and
   // what the `full_review` degrade is judged by), the workspace's bank
-  // read **once** for the whole paper, the one `finishAttempt` write, and
-  // the audit row. A second press writes nothing — the row the cookie
-  // resolved already carries the score and the stamp — but it is not
-  // free: it still pays the join, the answers and the attempt count, so
-  // **3**, and **4** at `full_review` where the bank is read again for
-  // the key. Both measured in the same file.
+  // read **once** for the whole paper, the one `finishAttempt` write, the
+  // audit row, and — Phase 8a Task 3 (`K6`/`K7`) — `attemptFiguresForCandidate`'s
+  // one read of this candidate's own prior attempts, paid only on the last
+  // attempt of a test whose `counted_attempt` is set to anything but
+  // `"latest"` **and** whose release actually discloses something (`show
+  // !== null`, M-1 — a `release.when: "never"` test on the same
+  // last-attempt shape stays at the common path's 6, measured by
+  // `"rel-never-counted"`'s own test in `submit.test.ts`, with
+  // `"rel-counted"` below as its released, 7-paying twin)
+  // (`apps/api/test/run/release.test.ts`'s "K7, live" test
+  // measures this exact combination). A second press writes nothing — the
+  // row the cookie resolved already carries the score and the stamp — but
+  // it is not free: it still pays the join, the answers and the attempt
+  // count, so **3**, and **4** at `full_review` where the bank is read
+  // again for the key (neither fixture that measures those two numbers
+  // sets `counted_attempt`, so the counted read adds nothing to them).
+  // Both measured in `test/run/submit.test.ts`.
   //
-  // A number above 6 means the bank is being read per question, which is
-  // the failure this line exists to catch on a 50-subrequest ceiling.
-  "/api/v1/run/attempt/submit": 6,
+  // A number above 7 means the bank, or the counted read, is being spent
+  // more than once a request — the failure this line exists to catch on a
+  // 50-subrequest ceiling.
+  "/api/v1/run/attempt/submit": 7,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
   // **4** in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
@@ -487,13 +499,16 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // sweep, the attempt lookup and the token insert — plus the message
   // itself, which is not a subrequest in this count unless `deps.http`
   // is wired. The reference is no longer a bucket of its own (final
-  // review, Important 2), so the count is what it was. `/verify` is
-  // **6**: the lookup, the limiter on the attempt it resolved, the
-  // single-use consume, the candidate's attempt count, and — at
-  // `full_review` only — the bank and the candidate's own answers. A
-  // `score_only` verification costs 4.
+  // review, Important 2), so the count is what it was. `/verify` goes
+  // through the same `resultFor` the finish page re-reads through, so it
+  // inherits the same `K7` read: **7**, the lookup, the limiter on the
+  // attempt it resolved, the single-use consume, the candidate's attempt
+  // count, and — at `full_review` only — the bank, the candidate's own
+  // answers, and `attemptFiguresForCandidate` on the last attempt of a
+  // `counted_attempt` test. A `score_only` verification, or one off the
+  // last attempt, costs less; 4 is the floor this phase's fixtures reach.
   "/api/v1/run/result/code": 4,
-  "/api/v1/run/result/verify": 6,
+  "/api/v1/run/result/verify": 7,
 
   // The one organiser route of this phase: authentication (2), the test
   // and its slugs (1), the candidate list (1), the already-invited set

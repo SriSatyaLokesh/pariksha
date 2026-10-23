@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from "react";
 import {
   resolveProctoring,
+  resolveRetention,
   snapshotCost,
   PROFILE_LABEL,
   type FormField,
@@ -10,6 +11,7 @@ import {
   type TestAccess,
   type TestBranding,
   type TestRelease,
+  type TestRetention,
   type TestTiming,
 } from "@pariksha/core";
 import { MODE_LABEL } from "./AccessPanel";
@@ -251,10 +253,18 @@ export function registrationSummary(form: RegistrationFormSpec | undefined): str
   ].join(" · ");
 }
 
-export function resultsSummary(release: TestRelease): string {
+// `M-6`: the row now owns release plus the two retention integers
+// (`ResultsPanel.tsx`'s own comment on why they joined it rather than
+// growing a seventh row), so the summary names all three — changing a
+// retention value alone must move this line, the same as changing release
+// does, or the collapsed row under-reports what actually changed.
+export function resultsSummary(release: TestRelease, retention: TestRetention | undefined): string {
+  const resolved = resolveRetention(retention);
+  const retentionClause = `snapshots ${String(resolved.snapshotsDays)} days · data ${String(resolved.personalDataDays)} days`;
   // `never` releases nothing, so there is no "what they see" to state and
-  // naming one would describe a control rather than a setting.
-  if (release.when === "never") return "Never released";
+  // naming one would describe a control rather than a setting — retention
+  // still applies regardless, so it still has its own clause.
+  if (release.when === "never") return `Never released · ${retentionClause}`;
   const when =
     release.when === "on_date"
       ? release.at === undefined
@@ -269,7 +279,7 @@ export function resultsSummary(release: TestRelease): string {
   // document omits `show`, so that is what a candidate gets and that is
   // what this states. Lowercased: the first clause carries the line's one
   // capital, the way every other row here reads.
-  return `${when} · ${SHOW_LABEL[release.show ?? "score_only"].toLowerCase()}`;
+  return `${when} · ${SHOW_LABEL[release.show ?? "score_only"].toLowerCase()} · ${retentionClause}`;
 }
 
 /** The two halves T-23 splits branding across: the workspace's logo and the

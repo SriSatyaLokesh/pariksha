@@ -132,6 +132,33 @@ it("C-09: a reference, an address and the emailed code open the released result"
   expect(screen.queryByText(/correct answer/i)).toBeNull();
 });
 
+// `B-1`: the counted figure `/result/verify` already sends must reach this
+// screen too, not just the finish page — the same positive/negative
+// control pair `receipt.test.tsx` runs for the finish page, driven through
+// the real return-visit path instead of rendering `ResultView` directly.
+it("B-1: a week later, the returning candidate sees the counted figure too, not just this attempt's", async () => {
+  const withCounted: ReleasedResult = { ...released, counted: { percent: 81, attemptId: "att_2", of: 2 } };
+  const verifyResultCode = vi.fn<RunClient["verifyResultCode"]>(() => Promise.resolve(withCounted));
+  await askForCode(client({ requestResultCode: () => Promise.resolve(), verifyResultCode }));
+  await type(/code from your email/i, "428913");
+  await click(screen.getByRole("button", { name: /see my result/i }));
+
+  await screen.findByRole("heading", { name: "Your result" });
+  expect(screen.getByText(/This attempt: 77\.5%/)).toBeInTheDocument();
+  expect(screen.getByText(/Counted for your result: 81%, your best of 2/)).toBeInTheDocument();
+});
+
+it("B-1: without a counted block, only this attempt's figure shows — the positive control's own negative", async () => {
+  const verifyResultCode = vi.fn<RunClient["verifyResultCode"]>(() => Promise.resolve(released));
+  await askForCode(client({ requestResultCode: () => Promise.resolve(), verifyResultCode }));
+  await type(/code from your email/i, "428913");
+  await click(screen.getByRole("button", { name: /see my result/i }));
+
+  await screen.findByRole("heading", { name: "Your result" });
+  expect(screen.getByText(/This attempt: 77\.5%/)).toBeInTheDocument();
+  expect(screen.queryByText(/Counted for your result/)).toBeNull();
+});
+
 it("a test that releases nothing says so, rather than showing an empty score", async () => {
   await askForCode(client({ requestResultCode: () => Promise.resolve(), verifyResultCode: () => Promise.resolve(null) }));
   await type(/code from your email/i, "428913");

@@ -358,6 +358,24 @@ describe("the constraints the PRD names", () => {
     ]);
   });
 
+  // Phase 8a Task 1 (K10, K42, K43).
+  it("0009 adds webhook_delivery and the by-question index", () => {
+    const names = TABLE_MANIFEST.map((t) => t.name);
+    expect(names).toContain("webhook_delivery");
+
+    const response = TABLE_MANIFEST.find((t) => t.name === "response");
+    expect(response?.indexes).toContainEqual(["workspace_id", "question_id"]);
+  });
+
+  it("does NOT add the broadcast columns — K43 deferred them with 8g", () => {
+    const cols = TABLE_MANIFEST.find((t) => t.name === "attempt")!.columns.map(
+      (c) => c.name,
+    );
+    expect(cols).not.toContain("proctor_message");
+    // Control: the negative above is only meaningful if this lookup resolves.
+    expect(cols).toContain("integrity_flag");
+  });
+
   it("a bank's questions carry their in-file id, unique within the bank", () => {
     // `ref_id` is the `id` a `pariksha/bank@1` file carries, not the row's
     // `qst_…`. Export has to hand back what import read, and two questions

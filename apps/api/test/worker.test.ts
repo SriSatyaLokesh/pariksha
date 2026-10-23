@@ -5,10 +5,12 @@
 // (#160). Miniflare embeds D1's own implementation, so this is where the two
 // table-rebuild migrations are first proved rather than reasoned about.
 
-import { env, SELF } from "cloudflare:test";
-import { expect, it } from "vitest";
+import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
+import { expect, it, vi } from "vitest";
 import { d1Client, migrate } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
+import worker from "../src/index";
+import { SCHEDULED_JOBS } from "../src/scheduled.js";
 
 const binding = () => d1Client((env as { DB: D1Database }).DB);
 
@@ -36,6 +38,7 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0006_candid_registration.sql",
     "0007_attempt_progress.sql",
     "0008_attempt_integrity.sql",
+    "0009_results_and_delivery.sql",
   ]);
 
   // The four table rebuilds are the statements D1 could reject, so the test
@@ -62,6 +65,12 @@ it("every migration applies against the Miniflare D1 binding", async () => {
   // real engine rather than trusting the runner's bookkeeping.
   expect(await sql("attempt")).toContain("`integrity_flag` text");
   expect(await sql("attempt")).toContain("`observed` integer");
+  // 0009 (K10, K42, K43): a CREATE TABLE and two CREATE INDEXes, proved
+  // against the real engine rather than trusted from the bundle.
+  expect(await sql("webhook_delivery")).toContain("`webhook_id` text");
+  expect(await sql("response_workspace_question_idx")).toContain(
+    "`workspace_id`,`question_id`",
+  );
 });
 
 it("a second run applies nothing", async () => {
@@ -132,7 +141,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 9,
+    migrations: 10,
   });
 });
 
@@ -268,4 +277,84 @@ it("a deeper miss still answers with the static 404 page, not the shell", async 
 
   expect(res.status).toBe(404);
   expect(await res.text()).toContain("fixture-404");
+});
+
+// The control for the two assertions in the failing-job test below: a clean
+// run must neither reject nor call `noRetry()`. Without it, "rejects and
+// suppresses the retry" is indistinguishable from a handler that rejects and
+// suppresses unconditionally — which would turn every healthy night into a
+// failed invocation on the dashboard.
+it("a scheduled run with no failing job neither rejects nor suppresses the retry", async () => {
+  await migrate(d1Client(env.DB as unknown as D1Database));
+
+  const ctx = createExecutionContext();
+  const noRetry = vi.fn();
+  worker.scheduled(
+    { cron: "17 3 * * *", scheduledTime: Date.now(), noRetry },
+    env as unknown as Parameters<typeof worker.scheduled>[1],
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  expect(noRetry).not.toHaveBeenCalled();
+});
+
+// The `scheduled` export, against the real Workers runtime.
+//
+// Every other test here drives `SELF.fetch`, which exercises the `fetch`
+// export and nothing else. `scheduled` is a SEPARATE entry point, and
+// `deploy/cloudflare/wrangler.toml` already declares `crons = ["17 3 * * *"]`
+// — so an export that fails to bind is invisible to every suite in this repo
+// until a production night, which is the one failure a cron cannot report.
+//
+// `SELF.scheduled(...)` is NOT the way in: the controller has to cross the
+// loopback boundary and fails with `DataCloneError: Could not serialize
+// object of type "LoopbackServiceStub"`. The handler is called directly
+// instead, with `createExecutionContext`/`waitOnExecutionContext` — which is
+// also the only way to await the `ctx.waitUntil` the handler defers its work
+// into, and therefore the only way a job's failure could ever surface here.
+//
+// `M-4`: reaching the end of this test without throwing used to be the
+// whole claim, and it would have held just as well with `ctx.waitUntil`
+// never called, `runScheduled` never invoked, or `scheduled`'s body
+// emptied outright. With `M-3` done, a job's failure crosses `ctx.waitUntil`
+// as a rejection, which is an outcome this test can actually assert on —
+// so it registers one throwing job (matching the nightly cron, removed in
+// `finally` so the registry really does ship empty for every other test),
+// and the proof the whole real path ran — registry lookup, `deps(env)`,
+// `ctx.waitUntil`, this file's own D1 binding threaded all the way through
+// — is that rejection reaching here, naming the job that threw.
+it("the worker entry accepts a scheduled invocation over the same bindings", async () => {
+  await migrate(d1Client(env.DB as unknown as D1Database));
+
+  const probe = {
+    name: "m4-probe",
+    cron: "17 3 * * *",
+    run: () => Promise.reject(new Error("m4-probe blew up")),
+  };
+  SCHEDULED_JOBS.push(probe);
+  try {
+    const ctx = createExecutionContext();
+    // Spied, not a no-op: a rejecting `waitUntil` marks the invocation
+    // failed AND retriable, so Cloudflare would re-run the whole event and
+    // every job that already succeeded tonight would run twice. Calling
+    // `noRetry()` is what stops that, and an unasserted no-op here would
+    // let it be deleted silently.
+    const noRetry = vi.fn();
+    worker.scheduled(
+      { cron: "17 3 * * *", scheduledTime: Date.now(), noRetry },
+      env as unknown as Parameters<typeof worker.scheduled>[1],
+      ctx,
+    );
+    // Without this the test passes on a handler that defers everything and
+    // never settles — `waitUntil`'s promise is exactly what would be missed.
+    await expect(waitOnExecutionContext(ctx)).rejects.toThrow(/m4-probe/);
+    expect(noRetry).toHaveBeenCalledTimes(1);
+  } finally {
+    // Remove THIS probe, never truncate the registry. Emptying it would be
+    // B-2's own defect — a hook quietly clearing the array other tests
+    // assert against — rebuilt inside the code written to close M-4. Once
+    // 8b, 8d and 8e register real jobs, a truncate here would silently
+    // hollow out every test declared after this one in the file.
+    SCHEDULED_JOBS.splice(SCHEDULED_JOBS.indexOf(probe), 1);
+  }
 });

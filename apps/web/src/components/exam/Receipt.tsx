@@ -15,7 +15,7 @@
 
 import { useEffect, useRef } from "react";
 import type { Receipt as ReceiptPayload, ReleasedResult } from "../../lib/run";
-import { ResultView } from "./ResultView";
+import { AttemptFigures, ResultView } from "./ResultView";
 
 /** What a candidate is told when there is no result to show — here rather
  *  than in two files, because `ResultCode`'s return visit lands on exactly
@@ -110,6 +110,11 @@ export function Receipt({
             {receipt.finishMessage}
           </p>
         )}
+
+        {/* K7: this attempt's own figure, and the counted one beneath it —
+            `AttemptFigures` in `ResultView.tsx`, shared with `ResultCode`'s
+            return visit (`B-1`). */}
+        {released && <AttemptFigures result={released} />}
 
         {released && <ResultView result={released} />}
 

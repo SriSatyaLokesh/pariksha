@@ -433,7 +433,11 @@ export const TABLE_MANIFEST: TableSpec[] = [
       decimal("points", { null: true }),
       text("graded_by", { null: true }),
     ],
-    indexes: [["workspace_id"], ["attempt_id"]],
+    // `["workspace_id", "question_id"]` is Phase 8a Task 1 (K42): 8b's
+    // by-question grading and 8c's option pick rates both need it, and both
+    // run in parallel — added here rather than discovered mid-plan by one
+    // of them (the renumbering K10 exists to prevent).
+    indexes: [["workspace_id"], ["attempt_id"], ["workspace_id", "question_id"]],
     // The upsert target: one row per question per attempt, which is what makes
     // `INSERT … ON CONFLICT DO UPDATE WHERE excluded.client_seq > client_seq`
     // a single statement rather than a read-then-write race.
@@ -522,6 +526,32 @@ export const TABLE_MANIFEST: TableSpec[] = [
       ts("created_at"),
     ],
     indexes: [["workspace_id"]],
+    uniques: [],
+  },
+  // Phase 8a Task 1 (K10, K42, K43): 8d's drain queue (K22) — one row per
+  // delivery attempt of one webhook event. `next_attempt_at` is indexed
+  // because the drain's only query is "deliveries due before now".
+  //
+  // Two columns a draft carried are deliberately absent:
+  // `attempt.proctor_message` and `.proctor_message_at` were 8g's broadcast
+  // columns alone, and K43 deferred them with 8g rather than shipping schema
+  // no code reads yet (#186's defect in table form).
+  {
+    name: "webhook_delivery",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("webhook_id"),
+      text("event"),
+      json("payload_json"),
+      int("attempt_count"),
+      ts("next_attempt_at"),
+      int("last_status", { null: true }),
+      text("last_error", { null: true }),
+      ts("delivered_at", { null: true }),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["next_attempt_at"]],
     uniques: [],
   },
 ];

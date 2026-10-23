@@ -201,6 +201,19 @@ export async function seedPublishedTest(deps: AppDeps): Promise<string> {
     },
   });
 
+  // #179: `buildChecklist`'s `timing_missing` row already refuses to publish
+  // a version with no duration, so the only way to a published one with
+  // none is a direct write — which `seedTest` is. Proves the landing route
+  // fails loud rather than advertising a 0-minute test (`run.ts:138`).
+  // `no-duration` is already `paper-fixtures.ts`'s own slug for the same
+  // shape on the same workspace (`clock.test.ts`'s `/start` refusal), so
+  // this one is named for the route it proves instead.
+  await seedTest(deps, workspaceId, {
+    name: "No duration (landing)",
+    slug: "no-duration-landing",
+    body: { settings: {}, sections: [{ id: "only", title: "Only", source: { kind: "pool", count: 5 } }] },
+  });
+
   await seedAccessModeTests(deps, workspaceId);
   await seedRegistrationTests(deps, workspaceId);
 

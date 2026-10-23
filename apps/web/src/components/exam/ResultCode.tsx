@@ -25,7 +25,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { TextField } from "../TextField";
-import { ResultView } from "./ResultView";
+import { AttemptFigures, ResultView } from "./ResultView";
 import { NO_RESULT_NOTE } from "./Receipt";
 import type { ReleasedResult, RunClient } from "../../lib/run";
 
@@ -213,7 +213,13 @@ export function ResultCode({ client, onBack }: { client: RunClient; onBack: () =
             {released === null ? (
               <p className="exam-finish-note">{NO_RESULT_NOTE}</p>
             ) : (
-              <ResultView result={released} />
+              <>
+                {/* K7/B-1: the same counted figure the finish page shows,
+                    so a candidate reading this a week later sees the same
+                    answer, not a narrower one. */}
+                <AttemptFigures result={released} />
+                <ResultView result={released} />
+              </>
             )}
           </>
         )}

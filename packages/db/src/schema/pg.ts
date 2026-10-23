@@ -288,6 +288,9 @@ export const response = pgTable(
     index("response_workspace_idx").on(t.workspaceId),
     index("response_attempt_idx").on(t.attemptId),
     uniqueIndex("response_attempt_question_uq").on(t.attemptId, t.questionId),
+    // Phase 8a Task 1 (K42): 8b's by-question grading and 8c's option pick
+    // rates.
+    index("response_workspace_question_idx").on(t.workspaceId, t.questionId),
   ],
 );
 
@@ -389,4 +392,26 @@ export const webhook = pgTable(
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
   },
   (t) => [index("webhook_workspace_idx").on(t.workspaceId)],
+);
+
+// Phase 8a Task 1 (K10, K42, K43): 8d's drain queue (K22).
+export const webhookDelivery = pgTable(
+  "webhook_delivery",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    webhookId: text("webhook_id").notNull(),
+    event: text("event").notNull(),
+    payloadJson: jsonb("payload_json").notNull(),
+    attemptCount: integer("attempt_count").notNull(),
+    nextAttemptAt: bigint("next_attempt_at", { mode: "number" }).notNull(),
+    lastStatus: integer("last_status"),
+    lastError: text("last_error"),
+    deliveredAt: bigint("delivered_at", { mode: "number" }),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    index("webhook_delivery_workspace_idx").on(t.workspaceId),
+    index("webhook_delivery_next_attempt_idx").on(t.nextAttemptAt),
+  ],
 );
