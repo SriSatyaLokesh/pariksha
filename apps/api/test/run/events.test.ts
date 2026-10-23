@@ -169,7 +169,7 @@ it("ships the resolved proctoring object on the attempt", async () => {
 
 // --- `Q7c`: measured, not estimated ---------------------------------------
 
-it("the ingest's common-path cost is measured at 4, under the declared ceiling, and the route's authority is the attempt", async () => {
+it("the ingest's common-path cost is measured at 7, under the declared ceiling, and the route's authority is the attempt", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -179,15 +179,23 @@ it("the ingest's common-path cost is measured at 4, under the declared ceiling, 
   );
   await res.json();
   // The attempt join, the `attempt_events` rate token, `appendEvents`'s one
-  // batched insert and `countViolations`'s one read. Phase 7e Task 1's fix
-  // round (F2) made `claimViolationLimit` conditional on `atLimit` — below
-  // the limit, no read or write of its own is paid at all, so one
+  // batched insert and `countViolations`'s one read — **4**. Phase 7e Task
+  // 1's fix round (F2) made `claimViolationLimit` conditional on `atLimit`
+  // — below the limit, no read or write of its own is paid at all, so one
   // `window_blur` (nowhere near Standard's limit of 5) costs one less than
   // this route used to (5, when `violationLimitAlreadyReached` ran on every
   // request regardless). The fifth, worst-case subrequest — the atomic
   // claim's own insert — is not paid here; `violation-limit.test.ts`
   // measures that path.
-  expect(counting.counts().total).toBe(4);
+  //
+  // Phase 7e Task 5 (`Q6a`): a `window_blur` is a violation, so this batch
+  // also pays `recomputeIntegrity`'s own +3 (`listIntegrityEvents`,
+  // `listSnapshotFaceCounts`, `setIntegrity`) — **7**. The sibling test
+  // below ("ten events as one batched insert") posts only
+  // `fullscreen_restore`, which carries no integrity signal at all, and
+  // stays at the base 4 — proving the recompute is conditional, not paid
+  // on every batch regardless of content.
+  expect(counting.counts().total).toBe(7);
   expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[EVENTS_PATH] as number);
   expect(ROUTE_AUTH[`POST ${EVENTS_PATH}`]).toBe("attempt");
 });

@@ -34,10 +34,14 @@ import {
   attemptFiguresForCandidate,
   countAttemptsForCandidate,
   finishAttempt,
+  listIntegrityEvents,
   listResponses,
+  listSnapshotFaceCounts,
+  setIntegrity,
   workspaceQuestions,
 } from "@pariksha/db";
 import {
+  integrityFor,
   type AttemptFigure,
   type AttemptScore,
   type CountedAttempt,
@@ -50,7 +54,7 @@ import {
 } from "@pariksha/core";
 import type { AppDeps } from "../app.js";
 import type { AttemptContextVar } from "../middleware/attemptContext.js";
-import type { PinnedLayout } from "./attempt.js";
+import { resolvedProctoringOf, type PinnedLayout } from "./attempt.js";
 import { TIMING_DEFAULTS, timingOf } from "./clock.js";
 import { MatchBudgetExceeded, matchStrict } from "./bounded.js";
 import { releasedResult, servedShow, type ReleasedResult } from "./release.js";
@@ -233,6 +237,49 @@ function counts(
 }
 
 /**
+ * Phase 7e Task 5 (`Q6a`): "computed, never stored as the last word —
+ * recomputed on submit and whenever a violation lands." This is the one
+ * place that happens; `submitAttempt` below (the `submitted` branch, after
+ * the audit row) and `routes/proctoring.ts`'s ingest (whenever a batch
+ * carries a `VIOLATION_EVENTS` or `FAILURE_EVENTS` type) are the two
+ * callers.
+ *
+ * `expectedSnapshots` is this function's own derivation of the brief's "the
+ * resolved interval and the elapsed time" — `floor(elapsedSeconds /
+ * snapshotIntervalSeconds)`, zero whenever nothing was ever promised
+ * (`requireCamera` false or the interval is off), which is also exactly
+ * `integrityFor`'s own "nothing expected" reading of `P7E-R9`'s scoping.
+ *
+ * `AG1`-shaped at both call sites (wrapped in `try`/`catch` there, not
+ * here): a failure to recompute must never surface to the candidate or
+ * block the write that triggered it — the verdict is organiser-facing only,
+ * and a stale flag for one more request is a smaller harm than a 500 on a
+ * proctoring event or a submission.
+ */
+export async function recomputeIntegrity(
+  deps: AppDeps,
+  attempt: { workspaceId: string; attemptId: string; startedAt: number; settings: unknown },
+  now: number,
+): Promise<void> {
+  const resolved = resolvedProctoringOf(attempt.settings);
+  const [events, snapshots] = await Promise.all([
+    listIntegrityEvents(deps.db, attempt.workspaceId, attempt.attemptId),
+    listSnapshotFaceCounts(deps.db, attempt.workspaceId, attempt.attemptId),
+  ]);
+  const elapsedSeconds = Math.max(0, (now - attempt.startedAt) / 1000);
+  const expectedSnapshots =
+    resolved.requireCamera && resolved.snapshotIntervalSeconds > 0
+      ? Math.floor(elapsedSeconds / resolved.snapshotIntervalSeconds)
+      : 0;
+  const { flag, observed } = integrityFor({ events, snapshots, resolved, expectedSnapshots });
+  await setIntegrity(deps.db, attempt.workspaceId, {
+    attemptId: attempt.attemptId,
+    integrityFlag: flag,
+    observed,
+  });
+}
+
+/**
  * Submit, score, release.
  *
  * The caller is the route; `reason` is `"manual"` from the candidate's own
@@ -377,6 +424,17 @@ export async function submitAttempt(
         detail: { questions: blocked },
         now,
       });
+    }
+    // `Q6a`: recomputed on submit, same as every other action here — only
+    // the writer of this attempt's one submission recomputes, the same
+    // "only the writer audits" rule immediately above. `setIntegrity`
+    // (`@pariksha/db`) never touches `flag` — the `BLOCKED` write just above
+    // and this one are independent columns, which is the whole point of
+    // Review Focus 5's own paired test.
+    try {
+      await recomputeIntegrity(deps, attempt, submittedAt);
+    } catch {
+      /* AG1: a candidate's own submit must never fail or stall on this. */
     }
   }
 

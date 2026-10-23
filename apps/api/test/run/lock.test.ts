@@ -353,7 +353,13 @@ it("writes no further event rows once an attempt is locked", async () => {
 
 // --- the budget: the worst case is declared and measured -------------------
 
-it("the batch that first locks costs 7, measured — under the declared ceiling", async () => {
+// Base **7** (the limit-reaching 5, plus `lockAttempt`'s own write and one
+// more `appendEvents` call for the `attempt_locked` marker — `events.test.ts`'s
+// own comment has the detail on the 5). Phase 7e Task 5 (`Q6a`) adds its own
+// +3 on top: locking never submits, so the `!submitted` guard that skips
+// `routes/proctoring.ts`'s own `recomputeIntegrity` call for an auto-submit
+// never fires here — **10**.
+it("the batch that first locks costs 10, measured — under the declared ceiling", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -362,6 +368,6 @@ it("the batch that first locks costs 7, measured — under the declared ceiling"
     createApp(counting.deps),
   );
   expect((await res.json() as { locked: boolean }).locked).toBe(true);
-  expect(counting.counts().total).toBe(7);
+  expect(counting.counts().total).toBe(10);
   expect(counting.counts().total).toBeLessThanOrEqual(ROUTE_BUDGETS[EVENTS_PATH]);
 });

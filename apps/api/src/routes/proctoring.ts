@@ -35,6 +35,8 @@ import {
 } from "@pariksha/db";
 import {
   CANDIDATE_PROCTORING_EVENTS,
+  FAILURE_EVENTS,
+  VIOLATION_EVENTS,
   violationOutcome,
   type ProctoringEventType,
 } from "@pariksha/core";
@@ -43,7 +45,7 @@ import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
 import { limitOrThrow } from "../run/limit.js";
 import { resolvedProctoringOf } from "../run/attempt.js";
-import { submitAttempt } from "../run/submit.js";
+import { recomputeIntegrity, submitAttempt } from "../run/submit.js";
 import { readBodyWithLimit } from "./media.js";
 
 /** `Q7`: the cap `appendEvents` already documents and the daily write
@@ -271,6 +273,38 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
         } catch {
           /* AG1: degrade — see the comment above. */
         }
+      }
+    }
+
+    // Phase 7e Task 5 (`Q6a`): "recomputed on submit and whenever a
+    // violation lands." This batch landed one (or a `FAILURE_EVENTS` type,
+    // `Q6b`: not a violation, but still where `observed` is read) only when
+    // `hasIntegritySignal` is true — the other 7 of `PROCTORING_EVENTS`' 17
+    // types (restores, lifecycle markers, `noise_above_threshold`, identity
+    // capture) never move `integrityFor`'s output, so a batch of only those
+    // recomputes nothing: this is what keeps `events.test.ts`'s "ten events
+    // as one batched insert" measurement (all `fullscreen_restore`) at its
+    // existing cost.
+    //
+    // `!submitted`: when this same batch's violation already crossed into
+    // `auto_submit`, `submitAttempt` above already recomputed against the
+    // post-submit state — recomputing again here would read stale
+    // pre-submit evidence into a second, wasted write. A `lock` outcome
+    // still falls through to here: locking does not submit, and the
+    // organiser reading a freshly-locked attempt needs the flag current.
+    const hasIntegritySignal = parsed.data.events.some(
+      (event) => VIOLATION_EVENTS.has(event.type) || FAILURE_EVENTS.has(event.type),
+    );
+    if (
+      attempt.submittedAt === null &&
+      attempt.lockedAt === null &&
+      !submitted &&
+      hasIntegritySignal
+    ) {
+      try {
+        await recomputeIntegrity(deps, attempt, deps.now());
+      } catch {
+        /* AG1: degrade — see the comment above. */
       }
     }
 

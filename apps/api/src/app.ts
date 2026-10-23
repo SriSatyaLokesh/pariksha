@@ -452,67 +452,97 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // here would mean the route had gone looking at the workspace
   // instead, which is precisely the reading it exists not to take.
   "/api/v1/run/attempt/media/:key": 2,
-  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **7**
-  // in `test/run/submit.test.ts`, on the path that actually scores: the
-  // attempt join the cookie resolves through, the answers, the
-  // candidate's attempt count (which is what prints "Attempt 2 of 3" and
-  // what the `full_review` degrade is judged by), the workspace's bank
-  // read **once** for the whole paper, the one `finishAttempt` write, the
-  // audit row, and — Phase 8a Task 3 (`K6`/`K7`) — `attemptFiguresForCandidate`'s
-  // one read of this candidate's own prior attempts, paid only on the last
-  // attempt of a test whose `counted_attempt` is set to anything but
-  // `"latest"` **and** whose release actually discloses something (`show
-  // !== null`, M-1 — a `release.when: "never"` test on the same
-  // last-attempt shape stays at the common path's 6, measured by
-  // `"rel-never-counted"`'s own test in `submit.test.ts`, with
-  // `"rel-counted"` below as its released, 7-paying twin)
-  // (`apps/api/test/run/release.test.ts`'s "K7, live" test
-  // measures this exact combination). A second press writes nothing — the
-  // row the cookie resolved already carries the score and the stamp — but
-  // it is not free: it still pays the join, the answers and the attempt
-  // count, so **3**, and **4** at `full_review` where the bank is read
-  // again for the key (neither fixture that measures those two numbers
-  // sets `counted_attempt`, so the counted read adds nothing to them).
-  // Both measured in `test/run/submit.test.ts`.
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **6**
+  // in `test/run/submit.test.ts`, on the common first-press path that
+  // actually scores: the attempt join the cookie resolves through, the
+  // answers, the candidate's attempt count (which is what prints "Attempt
+  // 2 of 3" and what the `full_review` degrade is judged by), the
+  // workspace's bank read **once** for the whole paper, the one
+  // `finishAttempt` write, the audit row.
   //
-  // A number above 7 means the bank, or the counted read, is being spent
-  // more than once a request — the failure this line exists to catch on a
-  // 50-subrequest ceiling.
-  "/api/v1/run/attempt/submit": 7,
+  // Phase 7e Task 5 (`Q6a`): `recomputeIntegrity` adds exactly **3** more
+  // to every first press that actually writes — `listIntegrityEvents`,
+  // `listSnapshotFaceCounts`, `setIntegrity` — so the common path moves
+  // from 6 to **9**, and the worst case below moves the same +3. The
+  // already-submitted second press (below) is unaffected: it returns
+  // before the `submitted` branch `recomputeIntegrity` lives in, so it
+  // never pays this.
+  //
+  // The worst case: — Phase 8a Task 3 (`K6`/`K7`) —
+  // `attemptFiguresForCandidate`'s one read of this candidate's own prior
+  // attempts, paid only on the last attempt of a test whose
+  // `counted_attempt` is set to anything but `"latest"` **and** whose
+  // release actually discloses something (`show !== null`, M-1 — a
+  // `release.when: "never"` test on the same last-attempt shape stays at
+  // the common path's 9, measured by `"rel-never-counted"`'s own test in
+  // `submit.test.ts`, with `"rel-counted"` below as its released,
+  // 10-paying twin) (`apps/api/test/run/release.test.ts`'s "K7, live" test
+  // exercises this combination, uncounted there). **10**, not 7: the old
+  // 7 was the pre-Task-5 worst case (6 + the counted read); Task 5's +3
+  // moves it the same way it moves the common path.
+  //
+  // A second press writes nothing — the row the cookie resolved already
+  // carries the score and the stamp, and `recomputeIntegrity` never runs
+  // for it either — but it is not free: it still pays the join, the
+  // answers and the attempt count, so **3**, and **4** at `full_review`
+  // where the bank is read again for the key (neither fixture that
+  // measures those two numbers sets `counted_attempt`, so the counted
+  // read adds nothing to them). Both measured in `test/run/submit.test.ts`
+  // and both unchanged by Task 5.
+  //
+  // A number above 10 means the bank, the counted read, or the integrity
+  // recompute is being spent more than once a request — the failure this
+  // line exists to catch on a 50-subrequest ceiling.
+  "/api/v1/run/attempt/submit": 10,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The common
-  // path — no attempt reaches its violation limit this batch — is **4**,
+  // path when the batch carries a violation — below the limit — is **7**,
   // measured in `test/run/events.test.ts`'s own counting test: the attempt
   // join the cookie resolves through, the `attempt_events` rate token,
   // `appendEvents`'s one batched insert (capped at 10 rows a request, so
   // this number is flat in how many events the request actually carries),
-  // and `countViolations`'s one read for the response's authoritative
-  // count. Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
+  // `countViolations`'s one read for the response's authoritative count
+  // — that base is **4** — plus Phase 7e Task 5 (`Q6a`)'s `recomputeIntegrity`
+  // (`listIntegrityEvents`, `listSnapshotFaceCounts`, `setIntegrity` — +3),
+  // paid whenever the batch carries a `VIOLATION_EVENTS` or `FAILURE_EVENTS`
+  // type. A batch of only restore/lifecycle events (`fullscreen_restore`
+  // and the like, which can never move `integrityFor`'s output) skips the
+  // recompute and stays at the base **4** — `test/run/events.test.ts`'s
+  // "ten events as one batched insert" test is exactly that case, unchanged
+  // by Task 5. Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
   // (`packages/db/src/repo/attempts.ts`) is paid only when `violations >=
   // limit` — below it, no read or write of its own happens at all, which is
   // one cheaper than the `violationLimitAlreadyReached` read this route used
   // to spend on every request regardless.
   //
-  // A batch that reaches the limit costs one more: `claimViolationLimit`'s
-  // own atomic insert, which both decides and marks "has this fired before"
-  // in the one statement (`test/run/violation-limit.test.ts`) — **5**.
+  // A batch that reaches the limit costs one more on top of the base 4:
+  // `claimViolationLimit`'s own atomic insert, which both decides and marks
+  // "has this fired before" in the one statement — 5 — plus the same +3
+  // recompute (a limit-reaching batch always carries a violation) —
+  // **8** (`test/run/violation-limit.test.ts`).
   //
-  // The declared ceiling is **10** — Phase 7e Task 2's own worst case, the
+  // The declared ceiling is **13** — Phase 7e Task 2's own worst case, the
   // first batch that reaches the limit under `auto_submit`: the 5 above,
-  // plus `submitAttempt`'s own common-case cost of 5 (`listResponses`,
-  // `countAttemptsForCandidate`, `rescoreAttempt`'s one bank read,
-  // `finishAttempt`'s write, `appendAudit`'s write — the same 5 `run/
-  // submit.ts`'s own first-press measurement pays beyond `/attempt/submit`'s
-  // own attempt-context join). Measured in `test/run/auto-submit.test.ts`'s
-  // own counting test. An empty `events` array costs one less than the
-  // common path — `appendEvents` is a no-op on it.
+  // plus `submitAttempt`'s own common-case cost, which Task 5 also moved
+  // from 5 to 8 (`listResponses`, `countAttemptsForCandidate`,
+  // `rescoreAttempt`'s one bank read, `finishAttempt`'s write,
+  // `appendAudit`'s write, `recomputeIntegrity`'s own +3 — the same 8
+  // `run/submit.ts`'s own first-press measurement pays beyond
+  // `/attempt/submit`'s own attempt-context join). This route's own
+  // `recomputeIntegrity` call is skipped when `submitAttempt` already fired
+  // one this request (the `!submitted` guard in `routes/proctoring.ts`) —
+  // paying it twice would be two writes for one answer. Measured in
+  // `test/run/auto-submit.test.ts`'s own counting test. An empty `events`
+  // array costs one less than the base common path — `appendEvents` is a
+  // no-op on it, and an empty batch carries no integrity signal either.
   //
   // Phase 7e Task 3: the first batch that first locks under `lock` costs
-  // **7** (the 5 above, plus `lockAttempt`'s own write and one more
-  // `appendEvents` call for the `attempt_locked` marker) — measured in
-  // `test/run/lock.test.ts`'s own counting test, cheaper than
-  // `auto_submit`'s 10 and so no reason to move the ceiling this already
+  // **10** (the 5 above, plus `lockAttempt`'s own write and one more
+  // `appendEvents` call for the `attempt_locked` marker — 7 — plus the +3
+  // recompute, since locking never submits and so never skips it) —
+  // measured in `test/run/lock.test.ts`'s own counting test, cheaper than
+  // `auto_submit`'s 13 and so no reason to move the ceiling this already
   // declares.
-  "/api/v1/run/attempt/events": 10,
+  "/api/v1/run/attempt/events": 13,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the
   // attempt join the cookie resolves through, `attempt_snapshot`'s rate

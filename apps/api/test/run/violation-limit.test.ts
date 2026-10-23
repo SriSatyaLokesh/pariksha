@@ -231,12 +231,15 @@ it("two concurrent batches that both cross the limit still mark it exactly once"
 // do, so it is pinned to its own literal rather than to the shared constant,
 // the same reason `submit.test.ts`'s own common-case test gives for doing the
 // same thing: a literal still catches a redundant read landing here even as
-// the declared ceiling moves for an unrelated outcome. **5**, not 6: Task 1's
-// own fix round (F2) replaced the old `violationLimitAlreadyReached` read
-// plus a separate `appendEvents` marker write with one atomic
-// `claimViolationLimit` call (`events.test.ts`'s own comment has the detail),
-// which is one subrequest cheaper at the limit too.
-it("the batch that first reaches the limit under warn_then_flag costs 5, measured", async () => {
+// the declared ceiling moves for an unrelated outcome. The base is **5**,
+// not 6: Task 1's own fix round (F2) replaced the old
+// `violationLimitAlreadyReached` read plus a separate `appendEvents` marker
+// write with one atomic `claimViolationLimit` call (`events.test.ts`'s own
+// comment has the detail), which is one subrequest cheaper at the limit
+// too. Phase 7e Task 5 (`Q6a`) adds its own +3 on top — a limit-reaching
+// batch always carries a violation, so `recomputeIntegrity` always runs —
+// **8**.
+it("the batch that first reaches the limit under warn_then_flag costs 8, measured", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -245,5 +248,5 @@ it("the batch that first reaches the limit under warn_then_flag costs 5, measure
     createApp(counting.deps),
   );
   await res.json();
-  expect(counting.counts().total).toBe(5);
+  expect(counting.counts().total).toBe(8);
 });
