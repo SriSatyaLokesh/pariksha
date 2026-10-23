@@ -10,7 +10,6 @@
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
 import {
-  ACTIONS,
   type Bank as BankDocument,
   type Difficulty,
   type ImportIssue,
@@ -510,19 +509,6 @@ export interface ApiKey {
   lastUsedAt: number | null;
   revokedAt: number | null;
 }
-
-/**
- * `K26`'s two forbidden scopes, the way a key can never hold them and so
- * can never need an "I don't have this one" error for them: the create
- * form simply never offers them. `@pariksha/db`'s own
- * `KEY_FORBIDDEN_ACTIONS` is the source of truth (checked again at the
- * route, `K26` is refused there regardless of what this filter does) —
- * not re-exported here because `apps/web` does not depend on `@pariksha/db`
- * (the same reason `WEBHOOK_EVENTS` above is typed by hand), so the two
- * literals are repeated, not imported.
- */
-const KEY_FORBIDDEN_SCOPES: ReadonlySet<Action> = new Set(["keys.manage", "members.manage"]);
-export const API_KEY_SCOPES: readonly Action[] = ACTIONS.filter((action) => !KEY_FORBIDDEN_SCOPES.has(action));
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
  * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */

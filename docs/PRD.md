@@ -371,7 +371,7 @@ Each test picks a proctoring profile — Off, Standard or Strict — and can the
 - **S-02** Optional TOTP two-factor for password accounts; the instance owner can require 2FA or SSO for Owner and Admin roles.
 - **S-03** Sessions: HttpOnly, Secure, SameSite=Lax cookies; 12-hour idle timeout; rotated on sign-in and role change; "sign out everywhere".
 - **S-04** Members join by invitation link (expires in 7 days) or by automatic join for an allowed email domain.
-- **S-05** API keys are scoped to one workspace and a set of permissions, shown once, stored hashed, and revocable.
+- **S-05** API keys are scoped to one workspace and a set of permissions, shown once, stored hashed, and revocable. **Revoking or demoting the member who created a key does not revoke that key** — a key is an independent credential once minted, not tied to its creator's current role, so an organiser offboarding someone must revoke that person's keys explicitly (Phase 8d-2 whole-branch review, MAJOR-3: tracked as a follow-up to add `created_by` and revoke-on-demotion; not done on that branch to avoid a migration landing out of order against Phase 7e's in-flight `0010`/`0011`).
 
 ### Candidate access (per test)
 

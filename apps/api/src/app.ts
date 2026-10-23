@@ -15,6 +15,7 @@ import { securityHeaders } from "./middleware/security.js";
 import { logging } from "./middleware/logging.js";
 import { errorEnvelope, notFoundEnvelope } from "./middleware/errorEnvelope.js";
 import { authenticate } from "./middleware/authenticate.js";
+import { actorOnly } from "./middleware/authorize.js";
 import { health } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { me } from "./routes/me.js";
@@ -904,7 +905,12 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
 
   app.get("/api/v1/health", health(deps));
   app.route("/api/v1/auth", authRoutes(deps));
-  app.get("/api/v1/me", me());
+  // `actorOnly()` (whole-branch review, CRITICAL): `/me` names no
+  // workspace, so a key had no action for `requires()`'s scope check to run
+  // against and nothing else stood in front of it — a key of any scope
+  // could read this and get back a fabricated `role: "viewer"` membership
+  // for a role it was never granted.
+  app.get("/api/v1/me", actorOnly(), me());
   // Not in ROUTE_ACTIONS: neither route names a workspace, so there is no
   // membership to guard on. `complete` takes the actor from the session
   // through `actorOr401`, the way `/me` and `/workspaces` do.

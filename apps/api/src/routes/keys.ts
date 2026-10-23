@@ -11,7 +11,14 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { ACTIONS, can, type Action } from "@pariksha/core";
-import { appendAudit, createApiKey, listApiKeys, revokeApiKey, KEY_FORBIDDEN_ACTIONS } from "@pariksha/db";
+import {
+  appendAudit,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+  ApiKeyNotFoundError,
+  KEY_FORBIDDEN_ACTIONS,
+} from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, membershipOr404, requires } from "../middleware/authorize.js";
@@ -98,10 +105,16 @@ export function keyRoutes(deps: AppDeps): Hono<AppBindings> {
 
     try {
       await revokeApiKey(deps.db, workspaceId, keyId, now);
-    } catch {
-      // `revokeApiKey` throws only when the row is not an active key in
-      // this workspace — S-09's 404, not a 403 that would confirm the id.
-      notFound();
+    } catch (cause) {
+      // MINOR-6 (whole-branch review): only `ApiKeyNotFoundError` becomes
+      // this 404 (S-09's "existence is not disclosed", not a 403 that
+      // would confirm the id) — a `catch {}` here would turn a genuine D1
+      // failure into the identical 404, silently reporting an outage as
+      // "nothing to revoke". Anything else rethrows to the generic 500
+      // envelope, the same way a real failure in `createApiKey` already
+      // does above.
+      if (cause instanceof ApiKeyNotFoundError) notFound();
+      throw cause;
     }
 
     await appendAudit(deps.db, workspaceId, {

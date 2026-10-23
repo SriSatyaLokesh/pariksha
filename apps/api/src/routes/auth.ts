@@ -33,7 +33,7 @@ import {
   clearSessionCookie,
   setSessionCookie,
 } from "../middleware/authenticate.js";
-import { actorOr401 } from "../middleware/authorize.js";
+import { actorOnly, actorOr401 } from "../middleware/authorize.js";
 
 /** The provider id `auth/identity.ts` gives the email flow. */
 const MAGIC_LINK = "magic-link";
@@ -108,7 +108,13 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
     return c.body(null, 204);
   });
 
-  routes.post("/signout-everywhere", async (c) => {
+  // `actorOnly()` (whole-branch review, CRITICAL): before this, a key of
+  // any scope could call this and revoke every session its creator holds
+  // — `revokeAllSessions(deps, "key_…")` matched nothing, so the call was
+  // not even functional, but it still wrote an `auth.signout_everywhere`
+  // audit row attributed to the key, over a credential with no action to
+  // check it against.
+  routes.post("/signout-everywhere", actorOnly(), async (c) => {
     const actor = actorOr401(c);
     await audit(deps, actor, "auth.signout_everywhere", {});
     await revokeAllSessions(deps, actor.userId);

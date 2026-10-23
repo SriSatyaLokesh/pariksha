@@ -14,12 +14,14 @@
 //
 // Phase 8d Task 2 (`K25`): a `pk_…` key, presented as `Authorization:
 // Bearer`, is resolved instead of the cookie — never both, never one
-// falling back to the other. `resolveApiKey` costs the same **two**
-// subrequests `readSession` does (one indexed read by hash, one
-// `last_used_at` write), so a key-authenticated request pays the same
-// authentication floor a cookie-authenticated one already does. A
-// session-cookie request is untouched: this branch is only ever taken when
-// the header is present and starts with `pk_`, so it adds nothing to the
+// falling back to the other. `resolveApiKey` costs one indexed read by
+// hash on the common path, and a second write only on the first
+// resolution of a UTC day (MAJOR-2, whole-branch review: a write on every
+// request would be 86,400 of the account's 100k-writes-a-day allowance
+// from one key polled once a second — the exact opposite of a session,
+// which is self-limiting because a human sends it). A session-cookie
+// request is untouched: this branch is only ever taken when the header is
+// present and its scheme is `Bearer`/`bearer`, so it adds nothing to the
 // cost of every other request in the product.
 
 import type { MiddlewareHandler } from "hono";
@@ -58,9 +60,19 @@ const API_KEY_PREFIX = "pk_";
  * `c.var.actor`. So this branch existing changes nothing for it: a
  * non-`pk_` Bearer header falls straight through to the cookie check
  * below, same as no `Authorization` header at all.
+ *
+ * MINOR-7 (whole-branch review): the scheme word is matched
+ * case-insensitively (`"bearer pk_…"` works, not just `"Bearer pk_…"`) —
+ * RFC 7235 §2.1 says the auth-scheme token is case-insensitive, and a
+ * client sending the lowercase form used to fall through to the cookie
+ * path and get an unexplained 401 rather than 403/200. Still exactly one
+ * space: `"Bearer  pk_x"` (two spaces) still falls through unchanged,
+ * because the character right after the scheme is the token, and a token
+ * starting with a space is never `pk_`-prefixed.
  */
 function apiKeyFrom(header: string | undefined): string | null {
-  if (header === undefined || !header.startsWith(BEARER_PREFIX)) return null;
+  if (header === undefined || header.length < BEARER_PREFIX.length) return null;
+  if (header.slice(0, BEARER_PREFIX.length).toLowerCase() !== BEARER_PREFIX.toLowerCase()) return null;
   const token = header.slice(BEARER_PREFIX.length);
   return token.startsWith(API_KEY_PREFIX) ? token : null;
 }

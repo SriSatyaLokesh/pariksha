@@ -31,7 +31,7 @@ import { CREAM, EXAMPLE_BRAND_COLOUR, HEX_COLOUR, ROLES, contrastRatio, meetsAA 
 import type { AppBindings, AppDeps } from "../app.js";
 import { revokeAllSessions } from "../auth/session.js";
 import { ApiError } from "../errors.js";
-import { actorOr401, requireMember, requires } from "../middleware/authorize.js";
+import { actorOnly, actorOr401, requireMember, requires } from "../middleware/authorize.js";
 
 const newWorkspace = z.object({
   slug: z
@@ -108,14 +108,19 @@ const memberInput = z
 export function workspaceRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
-  routes.get("/", async (c) => {
+  // CRITICAL (whole-branch review): `actorOnly()` on both — neither names a
+  // workspace, so neither has an action for a key's scopes to be checked
+  // against, which before this fix meant a key of any scope could list
+  // every workspace its creator belongs to, or create a brand new one and
+  // write an orphan `membership` row under its own key id.
+  routes.get("/", actorOnly(), async (c) => {
     const actor = actorOr401(c);
     return c.json({ workspaces: await listUserWorkspaces(deps.db, actor.userId) });
   });
 
   // Not guarded by an action: creating a workspace is what someone with no
   // membership anywhere does first, so there is no role to consult.
-  routes.post("/", async (c) => {
+  routes.post("/", actorOnly(), async (c) => {
     const actor = actorOr401(c);
     const input = parse(newWorkspace, await json(c.req.raw));
     const id = newId("wsp");

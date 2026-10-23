@@ -35,3 +35,9 @@ export * from "./net.js";
 // argument it can take, the same reason candidate-entry.ts sits outside
 // that barrel.
 export { resolveApiKey } from "./repo/keys.js";
+// Same reason, different shape: `ApiKeyNotFoundError` is a class, which
+// `typeof` reports as `"function"` — exporting it through `repo/index.js`
+// would make `scoping.test.ts`'s "every exported repository function is
+// scoped" enumeration pick it up and fail, since it is an error type, not a
+// repository function `scoped()` could wrap.
+export { ApiKeyNotFoundError } from "./repo/keys.js";

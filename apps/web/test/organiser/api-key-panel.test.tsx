@@ -7,10 +7,21 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { ApiError, API_KEY_SCOPES, type ApiClient, type ApiKey } from "../../src/lib/api";
+import { ACTIONS, type Action } from "@pariksha/core";
+import { ApiError, type ApiClient, type ApiKey } from "../../src/lib/api";
 import { ApiKeyPanel, SCOPE_GROUPS_FLAT } from "../../src/components/organiser/ApiKeyPanel";
 
 const WORKSPACE_ID = "wsp_1";
+
+// MINOR-1 (whole-branch review): `API_KEY_SCOPES` had no production
+// caller — `ApiKeyPanel.tsx` hand-builds `SCOPE_GROUPS` and never filters
+// by it, so this test was its only consumer. Derived here instead of
+// imported, from the one source both the panel's groups and `K26`'s
+// forbidden list already agree is authoritative: `@pariksha/core`'s own
+// `ACTIONS`.
+const API_KEY_SCOPES: readonly Action[] = ACTIONS.filter(
+  (action) => action !== "keys.manage" && action !== "members.manage",
+);
 
 const KEY: ApiKey = {
   id: "key_1",

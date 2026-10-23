@@ -3,8 +3,9 @@
 // `KG2`, `KG5`).
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import type { Hono } from "hono";
 import { addMembership, closeClient, createUser } from "@pariksha/db";
-import { createApp, ROUTE_AUTH } from "../src/app.js";
+import { createApp, ROUTE_AUTH, type AppBindings, type AppDeps } from "../src/app.js";
 import { issueSession } from "../src/auth/session.js";
 import { requires } from "../src/middleware/authorize.js";
 import { countingDeps } from "../src/instrument.js";
@@ -20,9 +21,20 @@ const app = createApp(deps);
 // `packages/core/src/permissions.ts`). Proven the same way
 // `authorization.test.ts` proves the whole matrix: a probe route per
 // action, `requires()` wired for real, on the real app.
-const probe = createApp(deps);
-probe.get("/api/v1/probe/:id/results.export", requires("results.export"), (c) => c.json({ ok: true }));
-probe.get("/api/v1/probe/:id/tests.edit", requires("tests.edit"), (c) => c.json({ ok: true }));
+//
+// A function, not a module-level constant (MINOR-4, whole-branch review):
+// the subrequest-cost test below needs a probe app built over
+// `countingDeps`' own wrapped `deps`, which is a fresh object per
+// measurement — the single module-level `probe` instance could not be
+// reused for that without also counting every other test's traffic.
+function buildProbe(probeDeps: AppDeps): Hono<AppBindings> {
+  const probeApp = createApp(probeDeps);
+  probeApp.get("/api/v1/probe/:id/results.export", requires("results.export"), (c) => c.json({ ok: true }));
+  probeApp.get("/api/v1/probe/:id/tests.edit", requires("tests.edit"), (c) => c.json({ ok: true }));
+  return probeApp;
+}
+
+const probe = buildProbe(deps);
 
 afterAll(() => closeClient(deps.db));
 
@@ -129,6 +141,10 @@ describe("POST — create", () => {
     // Admin does not hold workspace.settings (Owner-only).
     const res = await app.request(url(), send("POST", adminCookie, { name: "too much", scopes: ["workspace.settings"] }));
     expect(res.status).toBe(403);
+    // MINOR-3 (whole-branch review): status alone does not say *why* — a
+    // 403 from the wrong check (K26, say) would pass this test too without
+    // the reason pinned.
+    expect((await res.json()).error.message).toMatch(/may not grant a key/);
   });
 
   it("an Owner can grant the same scope — the 200 beside the 403 above, proving the subset check and not a blanket refusal", async () => {
@@ -206,6 +222,27 @@ describe("authenticating with a key (K25)", () => {
     const { secret } = await createKey(["results.export"]);
     const res = await probe.request(`/api/v1/probe/${workspaceId}/tests.edit`, withKey(secret));
     expect(res.status).toBe(403);
+    // MINOR-3 (whole-branch review): the reason, not just the status.
+    expect((await res.json()).error.message).toMatch(/This key does not hold/);
+  });
+
+  // MAJOR-1 (whole-branch review): the pair above does not actually prove
+  // the scope check is load-bearing. `authenticate.ts`'s placeholder role
+  // for a key actor is `"viewer"`, and `viewer` happens to hold exactly
+  // `results.export` and nothing resembling `tests.edit` — so deleting the
+  // entire `apiKeyScopes` branch in `requires()` and falling through to
+  // `can({role: "viewer", action})` still passes both assertions above, by
+  // coincidence of which two actions this pair chose to probe. This one
+  // does not have that coincidence: a key scoped to `tests.edit` alone,
+  // probed against `results.export` — an action the placeholder role
+  // *does* hold but this key was never granted — must still be 403. If the
+  // scope check is removed, `viewer` holding `results.export` turns this
+  // into a 200, which is exactly the failure this test exists to catch.
+  it("refuses a scope the key lacks even when the placeholder role would hold it", async () => {
+    const { secret } = await createKey(["tests.edit"]);
+    const res = await probe.request(`/api/v1/probe/${workspaceId}/results.export`, withKey(secret));
+    expect(res.status).toBe(403);
+    expect((await res.json()).error.message).toMatch(/This key does not hold/);
   });
 
   // The creator's own session holds both — the key narrows, it does not
@@ -248,6 +285,83 @@ describe("authenticating with a key (K25)", () => {
       headers: { authorization: "Bearer not-a-key-at-all" },
     });
     expect(res.status).toBe(401);
+  });
+
+  // MINOR-7 (whole-branch review): the scheme word is case-insensitive per
+  // RFC 7235 §2.1. Before this fix, `Authorization: bearer pk_…` fell
+  // through to the cookie path and answered 401 with no signal at all
+  // about why — this proves the lowercase form is recognised the same way
+  // the canonical-case form already is.
+  it("recognises a lowercase bearer scheme the same way as Bearer", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await probe.request(`/api/v1/probe/${workspaceId}/results.export`, {
+      headers: { authorization: `bearer ${secret}` },
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
+// CRITICAL-1 (whole-branch review): a key satisfies the `workspace`
+// authority, and nothing else — `requireMember()`'s routes (which name a
+// workspace but no particular action) and the five `"actor"` routes
+// (which name no workspace at all) both have no scope for a key to be
+// checked against, and before this fix nothing checked at all. Each case
+// here is one of the concrete routes the review named reachable.
+describe("CRITICAL-1 — a key cannot reach an authority that names no action", () => {
+  it("refuses a key on POST /workspaces (actor) — the orphan-membership exploit", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await app.request("/api/v1/workspaces", {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ slug: "junk-0001", name: "junk" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses a key on GET /workspaces (actor)", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await app.request("/api/v1/workspaces", withKey(secret));
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses a key on GET /me (actor) — no fabricated identity", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await app.request("/api/v1/me", withKey(secret));
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses a key on POST /auth/signout-everywhere (actor)", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await app.request("/api/v1/auth/signout-everywhere", {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses a key on POST /setup/complete (actor), before the route's own 409 is ever reached", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await app.request("/api/v1/setup/complete", {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+      body: JSON.stringify({ name: "Takeover" }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it("refuses a key on a requireMember() route (GET /workspaces/:id) — membership alone is not a scope", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const res = await app.request(`/api/v1/workspaces/${workspaceId}`, withKey(secret));
+    expect(res.status).toBe(403);
+  });
+
+  // The creator's own session is untouched by any of the above — this
+  // guard is about keys, not about narrowing what a human organiser can
+  // reach.
+  it("the creator's own session still reaches every route above", async () => {
+    expect((await app.request("/api/v1/workspaces", send("GET", ownerCookie))).status).toBe(200);
+    expect((await app.request("/api/v1/me", send("GET", ownerCookie))).status).toBe(200);
+    expect((await app.request(`/api/v1/workspaces/${workspaceId}`, send("GET", ownerCookie))).status).toBe(200);
   });
 });
 

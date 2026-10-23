@@ -12,11 +12,13 @@ import { TextField } from "../TextField";
 // token-driven layout, named after their first caller rather than their
 // one caller, and a second one here costs no new rule.
 //
-// `API_KEY_SCOPES` (`lib/api.ts`) is `ACTIONS` with `K26`'s two forbidden
-// actions already filtered out — the create form never offers
-// `keys.manage` or `members.manage` as a checkbox, so there is no "you
-// can't have this one" error to design for; the route's own 422 stays as
-// the defense-in-depth behind a client that should never send it.
+// `SCOPE_GROUPS` below hand-lists every action except `K26`'s two
+// forbidden ones (`keys.manage`, `members.manage`) — the create form never
+// offers either as a checkbox, so there is no "you can't have this one"
+// error to design for; the route's own 422 stays as the defense-in-depth
+// behind a client that should never send it. Coverage is proven by a test
+// (`api-key-panel.test.tsx`'s "SCOPE_GROUPS covers exactly API_KEY_SCOPES"),
+// not the compiler — see the note on `SCOPE_GROUPS` itself.
 
 const SCOPE_LABEL: Readonly<Record<Action, string>> = {
   "members.manage": "Manage members",
@@ -36,9 +38,15 @@ const SCOPE_LABEL: Readonly<Record<Action, string>> = {
 
 // Eleven checkboxes in one flat list is a wall nobody scans; grouped under
 // a `<legend>` each, the way the PRD's own permission matrix reads top to
-// bottom. `ACTIONS`'s own order inside each group, so this table can only
-// drift from `API_KEY_SCOPES` by what it groups, never by what it lists —
-// `satisfies` below would fail the build if a scope were left out.
+// bottom. `ACTIONS`'s own order inside each group.
+//
+// MINOR-2 (whole-branch review): this used to claim "`satisfies` below
+// would fail the build if a scope were left out" — there is no `satisfies`
+// operator anywhere in this file, and a false claim about a safety net is
+// worse than none. Coverage that `SCOPE_GROUPS` lists every action `K26`
+// does not forbid, and none twice, is proven by a test
+// (`SCOPE_GROUPS_FLAT`, exported below, and `api-key-panel.test.tsx`'s own
+// assertion against it) — not the compiler.
 const SCOPE_GROUPS: readonly { title: string; scopes: Action[] }[] = [
   { title: "Workspace", scopes: ["workspace.settings"] },
   { title: "Tests & banks", scopes: ["tests.edit", "banks.edit", "tests.publish"] },
@@ -180,6 +188,16 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
           <p className="release-panel__fact">
             A key can only ever do what you can do — it never reaches further than your own role.
           </p>
+          {/* MAJOR-3 (whole-branch review): a key is an independent
+              credential once minted — it is not revoked by revoking or
+              demoting the member who created it. Stated here because the
+              product does not yet enforce it (tracked as a follow-up:
+              recording who created each key, and revoking their keys when
+              they are). */}
+          <p className="release-panel__fact">
+            Revoking or demoting a member does not revoke the keys they created — revoke those keys yourself before
+            removing someone from this workspace.
+          </p>
 
           <button type="submit" className="button-primary button-primary--surface" disabled={busy}>
             Create key
@@ -206,9 +224,11 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
           >
             Copy the key
           </button>
-          <p role="status" aria-label="API key clipboard" className="release-panel__fact">
-            {copied ? "Copied." : ""}
-          </p>
+          {/* MINOR-5 (whole-branch review): no `role="status"` here — the
+              outer card above already is one, and a `role="status"` nested
+              inside another has undefined announcement behaviour. One live
+              region, not two. */}
+          <p className="release-panel__fact">{copied ? "Copied." : ""}</p>
         </div>
       )}
 
