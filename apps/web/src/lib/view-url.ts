@@ -45,8 +45,13 @@ export interface ViewParams {
    * ruling. It carries `test`, the same id-bearing parameter `test`
    * already does, because it names a queue scoped to one test, not a
    * second kind of id.
+   *
+   * `analytics` is Phase 8c Task 1 (`R-06`, #94) — the same shape as
+   * `grading`, for the same reason: reached from the test builder's own
+   * "Analytics" button, carrying the same `test` id parameter, not a
+   * second one.
    */
-  view: NavKey | "test" | "bank" | "question" | "import" | "grading";
+  view: NavKey | "test" | "bank" | "question" | "import" | "grading" | "analytics";
   test?: string;
   bank?: string;
   section?: string;
@@ -69,6 +74,7 @@ const VIEWS: readonly ViewParams["view"][] = [
   "question",
   "import",
   "grading",
+  "analytics",
 ];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */

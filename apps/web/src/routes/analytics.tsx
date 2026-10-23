@@ -1,0 +1,507 @@
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { DISCRIMINATION_MIN_N } from "@pariksha/core";
+import { ApiError, type ApiClient, type ItemStat, type TestAnalytics } from "../lib/api";
+
+// Test and item analytics (Phase 8c Task 1/2, `R-06`/`R-07`, #94/#95). One
+// screen, two fetches already joined by `client.analytics()`, rendered in
+// the language `.prototypes/analytics.html` (D11) established: the Signal
+// ground, `.card-hairline` panels, and the two-absences-without-hue
+// discrimination cell.
+//
+// `ItemStat` (`@pariksha/core`) carries no question stem, type, section or
+// correct-option id — only `questionId`, `shareCorrect`, `discrimination`,
+// `discriminationWithheld`, `optionPickRates` and `n`. The prototype's
+// stem/type columns and its "✓ key" / "▲ over-polling" pick-rate markers
+// were drawn from a mocked row shape richer than the real interface; this
+// screen renders what the real one carries and nothing it has to invent.
+// Widening `ItemStat` to add a bank lookup is a different task's scope
+// (Task 2's own interface is already merged and is not this task's to
+// rewrite).
+//
+// `K2`, stated on the surface: no time figure anywhere below, and the foot
+// note says so in words rather than being an omission a reader has to
+// notice.
+
+type SortKey = "order" | "shareCorrect" | "discrimination";
+type SortDir = "asc" | "desc";
+interface SortState {
+  key: SortKey;
+  dir: SortDir;
+}
+
+type LoadState =
+  | { status: "loading" }
+  | { status: "error"; message: string }
+  | { status: "ready"; analytics: TestAnalytics; items: ItemStat[] };
+
+/**
+ * `"order"` is the array order `itemAnalysis` returns — first appearance in
+ * the response set, the closest honest stand-in for "question order" this
+ * interface carries (it has no section/paper position of its own). A null
+ * `discrimination` (either withheld reason) never competes against a real
+ * magnitude: it sorts after every question that has one, in both
+ * directions — "which questions have the weakest index" and "which are
+ * withheld" are different questions, so this answers only the first.
+ */
+function sortItems(items: readonly ItemStat[], sort: SortState): ItemStat[] {
+  if (sort.key === "order") return [...items];
+  const key = sort.key;
+  return items
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => {
+      const av = a.item[key];
+      const bv = b.item[key];
+      if (av === null && bv === null) return a.index - b.index;
+      if (av === null) return 1;
+      if (bv === null) return -1;
+      const diff = sort.dir === "asc" ? av - bv : bv - av;
+      return diff !== 0 ? diff : a.index - b.index;
+    })
+    .map((w) => w.item);
+}
+
+function ariaSortOf(sort: SortState, key: SortKey): "ascending" | "descending" | "none" {
+  if (sort.key !== key) return "none";
+  return sort.dir === "asc" ? "ascending" : "descending";
+}
+
+function SortButton({
+  label,
+  column,
+  sort,
+  onSort,
+}: {
+  label: string;
+  column: SortKey;
+  sort: SortState;
+  onSort: (sort: SortState) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="analytics-sort-button"
+      onClick={() =>
+        onSort({
+          key: column,
+          dir: sort.key === column && sort.dir === "desc" ? "asc" : "desc",
+        })
+      }
+    >
+      {label}
+      {sort.key === column ? (sort.dir === "asc" ? " ↑" : " ↓") : ""}
+    </button>
+  );
+}
+
+function pct(fraction: number): string {
+  return `${Math.round(fraction * 100)}%`;
+}
+
+/** The discrimination cell's three renderings — one present, two absent.
+ *  Neither absence is tinted (D11): both share `.analytics-label`'s plain
+ *  secondary ink, because colouring either would restore the "the number
+ *  came out bad" reading the construct exists to kill. */
+function DiscriminationCell({ item }: { item: ItemStat }) {
+  if (item.discriminationWithheld === "too_few_attempts") {
+    return (
+      <div className="analytics-disc">
+        <span className="analytics-disc__gauge">
+          <span className="analytics-disc__hatch" aria-hidden="true" />
+        </span>
+        <span className="analytics-disc__absent">
+          <span className="analytics-label">withheld</span>
+          <span className="analytics-meta analytics-disc__qualifier">
+            n={item.n}, under {DISCRIMINATION_MIN_N}
+          </span>
+        </span>
+      </div>
+    );
+  }
+  if (item.discriminationWithheld === "no_variance") {
+    return (
+      <div className="analytics-disc">
+        <span className="analytics-disc__gauge">
+          <span className="analytics-disc__flat" aria-hidden="true" />
+        </span>
+        <span className="analytics-disc__absent">
+          <span className="analytics-label">no variance</span>
+          <span className="analytics-meta analytics-disc__qualifier">
+            {item.shareCorrect === 1 ? "all correct" : item.shareCorrect === 0 ? "none correct" : "no spread"}
+          </span>
+        </span>
+      </div>
+    );
+  }
+  const value = item.discrimination ?? 0;
+  const negative = value < 0;
+  return (
+    <span className={negative ? "analytics-meta analytics-risk" : "analytics-meta"}>
+      {negative && <span aria-hidden="true">{"▲ "}</span>}
+      {value.toFixed(2)}
+    </span>
+  );
+}
+
+function OptionPickRates({ item }: { item: ItemStat }) {
+  const entries = Object.entries(item.optionPickRates);
+  if (entries.length === 0) {
+    // The real interface cannot tell "not a choice question" apart from
+    // "nobody reached it" — both arrive as `{}` (`itemAnalysis`'s own
+    // contract) and neither carries a question type to disambiguate with.
+    return <span className="analytics-meta">no option data</span>;
+  }
+  entries.sort(([, a], [, b]) => b - a);
+  return (
+    <div className="analytics-picks">
+      {entries.map(([optionId, share]) => (
+        <span className="analytics-meta" key={optionId}>
+          {optionId} {pct(share)}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+export function AnalyticsRoute({
+  workspaceId,
+  testId,
+  client,
+}: {
+  workspaceId: string;
+  testId: string;
+  client: ApiClient;
+}) {
+  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [sort, setSort] = useState<SortState>({ key: "order", dir: "asc" });
+
+  const load = useCallback(async () => {
+    setState({ status: "loading" });
+    try {
+      const { analytics, items } = await client.analytics(workspaceId, testId);
+      setState({ status: "ready", analytics, items });
+    } catch (cause) {
+      setState({
+        status: "error",
+        message: cause instanceof ApiError ? cause.message : "Analytics could not be loaded.",
+      });
+    }
+  }, [client, workspaceId, testId]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const sorted = useMemo(
+    () => (state.status === "ready" ? sortItems(state.items, sort) : []),
+    [state, sort],
+  );
+
+  if (state.status === "loading") {
+    return (
+      <p className="organiser__status" role="status">
+        Loading analytics…
+      </p>
+    );
+  }
+  if (state.status === "error") {
+    return (
+      <p role="alert" className="field-error">
+        {state.message}
+      </p>
+    );
+  }
+
+  const { analytics } = state;
+  const { counts } = analytics;
+  const everEnded = counts.submitted + counts.autoSubmitted + counts.locked;
+
+  // The state every test is in on the day it is published (CLAUDE.md's
+  // own ruling for this screen) — a mean of `null`, an empty histogram and
+  // sixty `no_variance` rows is worse than a line saying nothing has
+  // happened yet, so it ships with the screen rather than being left for
+  // the first candidate to uncover.
+  if (everEnded === 0) {
+    return (
+      <div className="organiser-empty">
+        <h2 className="organiser-empty__title">Nothing has been attempted yet</h2>
+        <p className="organiser-empty__body">
+          {counts.registered} candidate{counts.registered === 1 ? "" : "s"} registered, and none has finished an
+          attempt. Analytics appear once the first candidate submits.
+        </p>
+      </div>
+    );
+  }
+
+  const maxBucket = Math.max(1, ...analytics.distribution);
+  const scoredCount = analytics.distribution.reduce((sum, n) => sum + n, 0);
+  const totalIntegrity = analytics.integrity.clean + analytics.integrity.review + analytics.integrity.high_risk;
+
+  return (
+    <div className="analytics">
+      <div className="analytics-band">
+        <h2 className="analytics-band__title">Test analytics</h2>
+        <span className="analytics-meta analytics-band__meta">R-06 · {counts.registered} registered</span>
+      </div>
+
+      <section className="card-hairline analytics-counts" aria-label="Attempt counts">
+        <div className="analytics-count">
+          <p className="analytics-count__label">
+            <span className="analytics-count__dot" aria-hidden="true" />
+            <span className="analytics-meta">Registered</span>
+          </p>
+          <p className="analytics-count__value">{counts.registered}</p>
+        </div>
+        <div className="analytics-count">
+          <p className="analytics-count__label">
+            <span className="analytics-count__dot" data-live="true" aria-hidden="true" />
+            <span className="analytics-meta">In progress</span>
+          </p>
+          <p className="analytics-count__value">{counts.inProgress}</p>
+        </div>
+        <div className="analytics-count">
+          <p className="analytics-count__label">
+            <span className="analytics-count__dot" aria-hidden="true" />
+            <span className="analytics-meta">Submitted</span>
+          </p>
+          <p className="analytics-count__value">{counts.submitted}</p>
+        </div>
+        <div className="analytics-count">
+          <p className="analytics-count__label">
+            <span className="analytics-count__dot" aria-hidden="true" />
+            <span className="analytics-meta">Auto-submitted</span>
+          </p>
+          <p className="analytics-count__value">{counts.autoSubmitted}</p>
+          <p className="analytics-hint analytics-count__hint">Time ran out mid-attempt.</p>
+        </div>
+        <div className="analytics-count">
+          <p className="analytics-count__label">
+            <span className="analytics-count__dot" aria-hidden="true" />
+            <span className="analytics-meta">Locked</span>
+          </p>
+          <p className="analytics-count__value">{counts.locked}</p>
+          <p className="analytics-hint analytics-count__hint">A proctoring violation ended the attempt.</p>
+        </div>
+      </section>
+
+      <div className="analytics-cols">
+        <section className="card-hairline" aria-label="Score distribution">
+          <div className="analytics-panel__head">
+            <h3 className="analytics-panel__title">Score distribution</h3>
+            <span className="analytics-meta">ten fixed buckets, percent</span>
+          </div>
+          <div className="analytics-hist">
+            {analytics.distribution.map((count, i) => (
+              <div className="analytics-hist__row" key={i}>
+                <span className="analytics-meta">
+                  {i * 10}
+                  {"–"}
+                  {i * 10 + 10}
+                </span>
+                <progress className="analytics-progress" value={count} max={maxBucket} aria-label={`${i * 10} to ${i * 10 + 10} percent`} />
+                <span className="analytics-meta">{count}</span>
+              </div>
+            ))}
+          </div>
+          <p className="analytics-hint analytics-hist__note">
+            {scoredCount} scored attempt{scoredCount === 1 ? "" : "s"}.{" "}
+            {analytics.mean !== null && analytics.median !== null
+              ? `Mean ${analytics.mean.toFixed(1)}, median ${analytics.median.toFixed(1)}.`
+              : ""}{" "}
+            {analytics.passRate === null
+              ? "This test sets no pass mark, so no pass line is drawn — there is nothing to draw it at."
+              : null}
+          </p>
+        </section>
+
+        <div className="analytics-side">
+          <section className="card-hairline" aria-label="Summary">
+            <div className="analytics-panel__head">
+              <h3 className="analytics-panel__title">Summary</h3>
+            </div>
+            <div className="analytics-stats">
+              <div className="analytics-stat">
+                <span className="analytics-meta">Mean</span>
+                <span className="analytics-stat__value">{analytics.mean === null ? "—" : analytics.mean.toFixed(1)}</span>
+              </div>
+              <div className="analytics-stat">
+                <span className="analytics-meta">Median</span>
+                <span className="analytics-stat__value">
+                  {analytics.median === null ? "—" : analytics.median.toFixed(1)}
+                </span>
+              </div>
+              <div className="analytics-stat">
+                <span className="analytics-meta">Pass rate</span>
+                {analytics.passRate === null ? (
+                  <>
+                    <span className="analytics-stat__value analytics-stat__value--absent">no pass mark set</span>
+                    <p className="analytics-hint analytics-stat__hint">
+                      This test sets no pass mark, so there is no pass rate to compute. Not zero, and not pending.
+                    </p>
+                  </>
+                ) : (
+                  <span className="analytics-stat__value">{pct(analytics.passRate)}</span>
+                )}
+              </div>
+              <div className="analytics-stat">
+                <span className="analytics-meta">Completion rate</span>
+                <span className="analytics-stat__value">{pct(analytics.completionRate)}</span>
+                <p className="analytics-hint analytics-stat__hint">
+                  Excludes {counts.locked} locked attempt{counts.locked === 1 ? "" : "s"} from the denominator.
+                </p>
+              </div>
+              <div className="analytics-stat">
+                <span className="analytics-meta">Average time taken</span>
+                <span className="analytics-stat__value">
+                  {analytics.averageSeconds === null ? "—" : `${Math.round(analytics.averageSeconds / 60)} min`}
+                </span>
+              </div>
+            </div>
+          </section>
+
+          <section className="card-hairline" aria-label="Integrity">
+            <div className="analytics-panel__head">
+              <h3 className="analytics-panel__title">Integrity</h3>
+              <span className="analytics-meta">{totalIntegrity} attempts</span>
+            </div>
+            <div className="analytics-integrity">
+              <div className="analytics-integrity__row">
+                <span className="analytics-integrity__glyph" aria-hidden="true">
+                  {"○"}
+                </span>
+                <progress
+                  className="analytics-progress analytics-integrity__progress"
+                  data-tone="clean"
+                  value={analytics.integrity.clean}
+                  max={Math.max(1, totalIntegrity)}
+                  aria-label="Clean"
+                />
+                <span className="analytics-meta">{analytics.integrity.clean}</span>
+                <span className="analytics-label analytics-integrity__name">Clean</span>
+              </div>
+              <div className="analytics-integrity__row">
+                <span className="analytics-integrity__glyph" aria-hidden="true">
+                  {"△"}
+                </span>
+                <progress
+                  className="analytics-progress analytics-integrity__progress"
+                  data-tone="review"
+                  value={analytics.integrity.review}
+                  max={Math.max(1, totalIntegrity)}
+                  aria-label="Review"
+                />
+                <span className="analytics-meta">{analytics.integrity.review}</span>
+                <span className="analytics-label analytics-integrity__name">Review</span>
+              </div>
+              <div className="analytics-integrity__row">
+                <span className="analytics-integrity__glyph" aria-hidden="true">
+                  {"◆"}
+                </span>
+                <progress
+                  className="analytics-progress analytics-integrity__progress"
+                  data-tone="high_risk"
+                  value={analytics.integrity.high_risk}
+                  max={Math.max(1, totalIntegrity)}
+                  aria-label="High risk"
+                />
+                <span className="analytics-meta">{analytics.integrity.high_risk}</span>
+                <span className="analytics-label analytics-integrity__name">High risk</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      {analytics.perSet.length > 0 && (
+        <section className="card-hairline" aria-label="Per-set comparison">
+          <div className="analytics-panel__head">
+            <h3 className="analytics-panel__title">Sets</h3>
+            <span className="analytics-meta">were the shuffled papers equally hard?</span>
+          </div>
+          <div className="analytics-sets">
+            {analytics.perSet.map((set) => (
+              <div className="analytics-set" key={set.setNo}>
+                <span className="analytics-set__name">Set {set.setNo}</span>
+                <span className="analytics-meta">n={set.n}</span>
+                <progress className="analytics-progress" value={set.mean ?? 0} max={100} aria-label={`Set ${set.setNo} mean`} />
+                <span className="analytics-meta analytics-set__value">{set.mean === null ? "—" : set.mean.toFixed(1)}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="analytics-band">
+        <h2 className="analytics-band__title">Item analysis</h2>
+        <span className="analytics-meta analytics-band__meta">R-07 · {sorted.length} questions</span>
+      </div>
+
+      <section className="card-hairline" aria-label="Item analysis">
+        <div className="analytics-panel__head">
+          <h3 className="analytics-panel__title">Every question</h3>
+          <div className="field">
+            <label className="field-label" htmlFor="analytics-sort">
+              Sort by
+            </label>
+            <select
+              className="text-input"
+              id="analytics-sort"
+              value={sort.key}
+              onChange={(event) => setSort({ key: event.target.value as SortKey, dir: "desc" })}
+            >
+              <option value="order">Question order</option>
+              <option value="shareCorrect">Share correct</option>
+              <option value="discrimination">Discrimination</option>
+            </select>
+          </div>
+        </div>
+        <div className="analytics-items">
+          <table>
+            <thead>
+              <tr>
+                <th scope="col">Question</th>
+                <th scope="col">n</th>
+                <th scope="col" aria-sort={ariaSortOf(sort, "shareCorrect")}>
+                  <SortButton label="Share correct" column="shareCorrect" sort={sort} onSort={setSort} />
+                </th>
+                <th scope="col" aria-sort={ariaSortOf(sort, "discrimination")}>
+                  <SortButton label="Discrimination" column="discrimination" sort={sort} onSort={setSort} />
+                </th>
+                <th scope="col">Option pick rates</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((item) => (
+                <tr key={item.questionId}>
+                  <td>
+                    <span className="analytics-meta">{item.questionId}</span>
+                  </td>
+                  <td>
+                    <span className="analytics-meta">{item.n}</span>
+                  </td>
+                  <td>
+                    <progress className="analytics-progress" value={item.shareCorrect} max={1} aria-label="Share correct" />{" "}
+                    <span className="analytics-meta">{item.shareCorrect.toFixed(2)}</span>
+                  </td>
+                  <td>
+                    <DiscriminationCell item={item} />
+                  </td>
+                  <td>
+                    <OptionPickRates item={item} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* `K2`, stated on the surface. */}
+      <p className="analytics-hint">
+        <strong className="analytics-label">
+          There is no time column here, and there is not one anywhere else either.
+        </strong>{" "}
+        Per-question time has never been measured by this product, so no figure is shown rather than a wrong one.
+      </p>
+    </div>
+  );
+}

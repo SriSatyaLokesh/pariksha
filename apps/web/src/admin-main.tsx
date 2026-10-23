@@ -4,6 +4,7 @@ import "./styles/base.css";
 import "./styles/admin.css";
 import "./styles/testbuilder.css";
 import "./styles/grading.css";
+import "./styles/analytics.css";
 import { OrganiserApp } from "./routes/organiser";
 import { createApiClient } from "./lib/api";
 import { readGround } from "./lib/ground";

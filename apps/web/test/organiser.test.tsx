@@ -1406,6 +1406,120 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
+  // Phase 8c Task 1 (`R-06`, #94): same shape as the grading reachability
+  // test above — `AnalyticsRoute` had no caller in the running app until
+  // `organiser.tsx`'s `"analytics"` view and the builder's "Analytics"
+  // button wired it in.
+  it("reaches the analytics screen from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      closesAt: null,
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const analytics = vi.fn(async () => ({
+      analytics: {
+        counts: { registered: 3, inProgress: 0, submitted: 2, autoSubmitted: 0, locked: 0 },
+        distribution: [0, 0, 0, 0, 0, 1, 1, 0, 0, 0],
+        mean: 58,
+        median: 58,
+        passRate: null,
+        completionRate: 1,
+        averageSeconds: 600,
+        integrity: { clean: 2, review: 0, high_risk: 0 },
+        perSet: [],
+      },
+      items: [],
+    }));
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+          analytics,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Analytics" }));
+
+    expect(await screen.findByText("Score distribution")).toBeInTheDocument();
+    expect(analytics).toHaveBeenCalledWith("wsp_1", "tst_1");
+  });
+
+  // The same `KG2` pairing the grading button's own absence test proves:
+  // a Viewer holds `results.export` (the matrix's own grant) and must see
+  // the entry; an Author (`tests.edit`) does not hold it and must not see
+  // a control that would 403 them.
+  it("an Author sees no entry to the analytics screen, which would refuse them", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      closesAt: null,
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await openSetting("Results");
+    expect(screen.queryByRole("button", { name: "Analytics" })).toBeNull();
+  });
+
   // An Author holds `tests.edit`, not `attempts.grade` — the same route the
   // button leads to would 403 them. `KG2`'s pairing, applied to a nav
   // affordance rather than a route: a control that leads nowhere an Author

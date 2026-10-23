@@ -280,6 +280,53 @@ export interface UsageProjection {
 }
 
 /**
+ * Phase 8c Task 1 (`R-06`, #94). Mirrors `TestAnalytics`
+ * (`packages/db/src/repo/analytics.ts`) field for field — a second
+ * declaration, same convention as `UsageProjection` above. **Not
+ * `TestSummary`** — that name is taken (`api.ts:114`, nine importers).
+ */
+export interface TestAnalytics {
+  counts: {
+    registered: number;
+    inProgress: number;
+    submitted: number;
+    autoSubmitted: number;
+    /** 7e's `attempt.locked_at`. Neither in progress nor submitted. */
+    locked: number;
+  };
+  /** Fixed 10-bucket histogram over percent, 0-10, 10-20, … 90-100. */
+  distribution: number[];
+  mean: number | null;
+  median: number | null;
+  /** null when the test sets no pass mark. */
+  passRate: number | null;
+  completionRate: number;
+  averageSeconds: number | null;
+  integrity: { clean: number; review: number; high_risk: number };
+  perSet: { setNo: number; n: number; mean: number | null }[];
+}
+
+/**
+ * Phase 8c Task 2 (`R-07`, #95). Mirrors `ItemStat`
+ * (`@pariksha/core/src/item-analysis.ts`) field for field. `DISCRIMINATION_MIN_N`
+ * is not redeclared here — it is a shared constant, not a wire shape, so
+ * the screen imports it from `@pariksha/core` directly.
+ */
+export interface ItemStat {
+  questionId: string;
+  /** 0-1. */
+  shareCorrect: number;
+  /** null below `DISCRIMINATION_MIN_N`, and null for a question with no
+   *  variance (everyone right or everyone wrong) — never NaN. */
+  discrimination: number | null;
+  /** Why it is null, for this surface to render. */
+  discriminationWithheld: "too_few_attempts" | "no_variance" | null;
+  /** optionId -> share. Empty for a non-choice question. */
+  optionPickRates: Record<string, number>;
+  n: number;
+}
+
+/**
  * Every failure response is `{ error: { code, message, details? } }`. This
  * carries all three so a screen can render `message` — the human half —
  * and never a bare status code.
@@ -566,6 +613,16 @@ export interface ApiClient {
       blind?: boolean;
     },
   ): Promise<{ rows: GradingQueueRow[]; nextCursor: string | null }>;
+
+  /**
+   * Phase 8c Task 1/2 (`R-06`/`R-07`, #94/#95): test and item analytics, one
+   * screen, one request — `TestAnalytics` is `packages/db/src/repo/
+   * analytics.ts`'s own type, redeclared here the way `TestSummary` and
+   * `UsageProjection` redeclare theirs rather than importing across apps.
+   * Not `TestSummary` — that name already means something else at
+   * `api.ts:114` and is imported by nine files.
+   */
+  analytics(workspaceId: string, testId: string): Promise<{ analytics: TestAnalytics; items: ItemStat[] }>;
 
   /**
    * Phase 8b Task 1 (`K14`): records a rubric award and rescores the
@@ -1212,6 +1269,11 @@ export function createApiClient(): ApiClient {
       json<{ reviewId: string }>(
         `/workspaces/${workspaceId}/attempts/${attemptId}/verdict`,
         post(input),
+      ),
+
+    analytics: (workspaceId, testId) =>
+      json<{ analytics: TestAnalytics; items: ItemStat[] }>(
+        `/workspaces/${workspaceId}/tests/${testId}/analytics`,
       ),
 
     async exportCandidateData(workspaceId, candidateId) {
