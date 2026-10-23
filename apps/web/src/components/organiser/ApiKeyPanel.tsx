@@ -249,6 +249,14 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
                 {" — "}
                 {key.revokedAt !== null ? "Revoked" : "Active"}
               </p>
+              {/* MAJOR-2 (whole-branch review): the column the API already
+                  wrote and paid 86,400 writes/day for showed up nowhere on
+                  this screen. Same `toLocaleDateString()` the rest of the
+                  organiser app uses for a stored epoch-ms timestamp
+                  (`tests.tsx`'s version table). */}
+              <p className="release-panel__fact">
+                {key.lastUsedAt === null ? "Never used" : `Last used ${new Date(key.lastUsedAt).toLocaleDateString()}`}
+              </p>
               {key.revokedAt === null && (
                 <div className="webhook-list__actions">
                   {confirmingRevoke === key.id ? (

@@ -112,6 +112,13 @@ describe("ApiKeyPanel — loading and the empty state", () => {
     );
     expect(await screen.findByText(KEY.name)).toBeInTheDocument();
     expect(screen.getByText(/Export results — Active/)).toBeInTheDocument();
+    expect(screen.getByText("Never used")).toBeInTheDocument();
+  });
+
+  it("renders the stored last-used date (MAJOR-2, whole-branch review) — the column the API writes and this screen used to never show", async () => {
+    const used: ApiKey = { ...KEY, lastUsedAt: 1_700_000_000_000 };
+    render(<ApiKeyPanel workspaceId={WORKSPACE_ID} client={fakeClient({ listApiKeys: async () => ({ keys: [used] }) })} />);
+    expect(await screen.findByText(`Last used ${new Date(used.lastUsedAt!).toLocaleDateString()}`)).toBeInTheDocument();
   });
 
   it("shows a revoked key as Revoked, with no revoke action", async () => {
