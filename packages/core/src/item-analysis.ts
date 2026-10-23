@@ -43,27 +43,29 @@ interface Accumulator {
   bottomCorrect: number;
   bottomTotal: number;
   optionCounts: Record<string, number>;
-  optionTotal: number;
+  /** Responses that named at least one option — the pick-rate denominator.
+   *  Not the same as the sum of `optionCounts`: a multi-select response
+   *  names several options but is still one response. */
+  optionResponses: number;
 }
 
 function emptyAccumulator(): Accumulator {
-  return { correct: 0, total: 0, topCorrect: 0, topTotal: 0, bottomCorrect: 0, bottomTotal: 0, optionCounts: {}, optionTotal: 0 };
+  return { correct: 0, total: 0, topCorrect: 0, topTotal: 0, bottomCorrect: 0, bottomTotal: 0, optionCounts: {}, optionResponses: 0 };
 }
 
 // A response's `value` is `unknown` at this boundary (Task 1's fetch hands
-// back whatever was stored as JSON); only `ResponseValue`'s single-choice
-// "option" kind contributes to pick rates. Anything else — text, number,
-// blank, a non-choice question entirely — is simply never recognised here,
-// which is what leaves `optionPickRates` empty for it without a special
-// case.
-// ponytail: multi-select ("options", plural) isn't handled — none of this
-// task's tests exercise checkbox questions. Add a branch for `v.options`
-// (array) alongside a test for it if checkbox pick-rate analytics are
-// needed.
+// back whatever was stored as JSON); only `ResponseValue`'s choice-family
+// kinds — single-choice "option" and multi-select "options" — contribute to
+// pick rates. Anything else — text, number, blank, a non-choice question
+// entirely — is simply never recognised here, which is what leaves
+// `optionPickRates` empty for it without a special case.
 function pickedOptions(value: unknown): string[] {
   if (value === null || typeof value !== "object") return [];
   const v = value as Record<string, unknown>;
   if (v.kind === "option" && typeof v.option === "string") return [v.option];
+  if (v.kind === "options" && Array.isArray(v.options)) {
+    return v.options.filter((o): o is string => typeof o === "string");
+  }
   return [];
 }
 
@@ -111,9 +113,12 @@ export function itemAnalysis(input: {
       }
     }
 
-    for (const option of pickedOptions(r.value)) {
-      acc.optionCounts[option] = (acc.optionCounts[option] ?? 0) + 1;
-      acc.optionTotal++;
+    const picks = pickedOptions(r.value);
+    if (picks.length > 0) {
+      acc.optionResponses++;
+      for (const option of picks) {
+        acc.optionCounts[option] = (acc.optionCounts[option] ?? 0) + 1;
+      }
     }
   }
 
@@ -135,9 +140,17 @@ export function itemAnalysis(input: {
       discrimination = topShare - bottomShare;
     }
 
+    // Divided by respondents, not by picks: a single-choice respondent
+    // picks exactly one option, so those rates sum to 1 — but a
+    // multi-select respondent can name several, so dividing by the pick
+    // count would understate every option on a checkbox question. Dividing
+    // by `optionResponses` instead makes each rate read "share of
+    // candidates who selected this option", which is the number worth
+    // hunting a bad distractor with; multi-select rates are expected to sum
+    // above 1.
     const optionPickRates: Record<string, number> =
-      acc.optionTotal > 0
-        ? Object.fromEntries(Object.entries(acc.optionCounts).map(([id, count]) => [id, count / acc.optionTotal]))
+      acc.optionResponses > 0
+        ? Object.fromEntries(Object.entries(acc.optionCounts).map(([id, count]) => [id, count / acc.optionResponses]))
         : {};
 
     return { questionId, shareCorrect, discrimination, discriminationWithheld, optionPickRates, n };

@@ -105,6 +105,23 @@ function instrumentedCohort(attempts: number, questions: number, spy: () => void
   return { attempts: made, responses };
 }
 
+/** A multi-select question ("choose all that apply"): four respondents,
+ *  each naming one or two options, so pick counts overlap and the per-
+ *  option share (counted against 4 *respondents*, not against the 8 picks)
+ *  comes out to a clean 0.5 for every option while summing to 1.5. */
+function cohortWithMultiSelect() {
+  const picks: string[][] = [["optA", "optB"], ["optA"], ["optB", "optC"], ["optC"]];
+  return {
+    attempts: makeAttempts(picks.length),
+    responses: picks.map((options, i) => ({
+      attemptId: attemptId(i),
+      questionId: "qMulti",
+      correct: null,
+      value: { kind: "options" as const, options },
+    })),
+  };
+}
+
 describe("itemAnalysis", () => {
   it("computes share correct per question", () => {
     expect(itemAnalysis(cohortOf(20)).find((s) => s.questionId === "q1")!.shareCorrect).toBe(0.6);
@@ -140,5 +157,28 @@ describe("itemAnalysis", () => {
     const spy = vi.fn();
     itemAnalysis(instrumentedCohort(300, 60, spy));
     expect(spy.mock.calls.length).toBeLessThanOrEqual(300 * 60);
+  });
+
+  it("gives multi-select pick rates as a share of respondents, not of picks", () => {
+    const s = itemAnalysis(cohortWithMultiSelect()).find((x) => x.questionId === "qMulti")!;
+    expect(s.optionPickRates.optA).toBeCloseTo(0.5, 6);
+    expect(s.optionPickRates.optB).toBeCloseTo(0.5, 6);
+    expect(s.optionPickRates.optC).toBeCloseTo(0.5, 6);
+  });
+
+  it("lets multi-select rates sum above one, since one respondent can pick several options", () => {
+    const s = itemAnalysis(cohortWithMultiSelect()).find((x) => x.questionId === "qMulti")!;
+    expect(Object.values(s.optionPickRates).reduce((a, b) => a + b, 0)).toBeCloseTo(1.5, 6);
+  });
+
+  it("gets a single-choice and a multi-select question right in the same pass", () => {
+    const singleChoice = cohortOf(20);
+    const multi = cohortWithMultiSelect();
+    const result = itemAnalysis({
+      attempts: singleChoice.attempts,
+      responses: [...singleChoice.responses, ...multi.responses],
+    });
+    expect(result.find((x) => x.questionId === "q1")!.shareCorrect).toBe(0.6);
+    expect(result.find((x) => x.questionId === "qMulti")!.optionPickRates.optA).toBeCloseTo(0.5, 6);
   });
 });
