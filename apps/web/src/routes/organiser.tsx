@@ -20,6 +20,7 @@ import { TestList } from "./tests";
 import { TestBuilder } from "./test";
 import { ImportScreen } from "./import";
 import { GradingRoute } from "./grading";
+import { AnalyticsRoute } from "./analytics";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 
@@ -71,6 +72,10 @@ type View =
   // from the top nav — `D3` (`OrganiserShell.tsx:141-144`) keeps it off
   // `NAV` until a cross-test inbox is actually wanted.
   | { kind: "grading"; actor: Actor; workspace: Workspace; testId: string }
+  // Phase 8c Task 1 (`R-06`, #94): the analytics screen, the same shape as
+  // `grading` above and for the same reason — reached from the test
+  // builder, not the top nav.
+  | { kind: "analytics"; actor: Actor; workspace: Workspace; testId: string }
   // `bankName` is absent exactly when the browser was deep-linked rather
   // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
   // not in `ViewParams` and no call in this component fetches one.
@@ -339,6 +344,9 @@ export function OrganiserApp({
           onOpenGrading={(testId) =>
             go({ kind: "grading", actor: view.actor, workspace: view.workspace, testId })
           }
+          onOpenAnalytics={(testId) =>
+            go({ kind: "analytics", actor: view.actor, workspace: view.workspace, testId })
+          }
         />,
       );
     case "grading":
@@ -350,6 +358,15 @@ export function OrganiserApp({
         view.workspace,
         { title: "Grading queue", crumb: "Grading" },
         <GradingRoute client={client} workspaceId={view.workspace.id} testId={view.testId} />,
+      );
+    case "analytics":
+      // Same non-nav placement as `grading` above, for the same reason.
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        { title: "Analytics", crumb: "Analytics" },
+        <AnalyticsRoute client={client} workspaceId={view.workspace.id} testId={view.testId} />,
       );
     case "banks":
       return shell(
@@ -507,6 +524,10 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
       return params.test === undefined
         ? home
         : { kind: "grading", actor, workspace, testId: params.test };
+    case "analytics":
+      return params.test === undefined
+        ? home
+        : { kind: "analytics", actor, workspace, testId: params.test };
     case "bank":
       return params.bank === undefined
         ? home
@@ -544,6 +565,8 @@ function paramsOf(view: View): ViewParams | null {
       return { view: "test", test: view.testId };
     case "grading":
       return { view: "grading", test: view.testId };
+    case "analytics":
+      return { view: "analytics", test: view.testId };
     case "bank":
       return { view: "bank", bank: view.bankId };
     case "question":

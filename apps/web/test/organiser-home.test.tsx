@@ -21,6 +21,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Actor, ApiClient, Bank, TestSummary, Workspace } from "../src/lib/api";
+import { fakeClient as sharedClient } from "./fixtures/api-client";
 import { OrganiserApp } from "../src/routes/organiser";
 import {
   declarations,
@@ -98,52 +99,26 @@ const bank = (questionCount: number): Bank => ({
 let calls: string[] = [];
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  const notUsed = () => {
-    throw new Error("not used by this test file");
-  };
-  const base = {
+  const base = sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
-    completeSetup: notUsed,
-    requestMagicLink: async () => undefined,
-    signOut: async () => undefined,
     listBanks: async () => [bank(12)],
-    createBank: notUsed,
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: notUsed,
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: notUsed,
-    updateGroup: notUsed,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: notUsed,
     tests: async () => [],
-    createTest: notUsed,
-    test: notUsed,
-    updateTest: notUsed,
-    draft: notUsed,
-    patchDraft: notUsed,
-    publishTest: notUsed,
-    closeTest: notUsed,
-    archiveTest: notUsed,
     versions: async () => [],
     checklist: async () => [],
     readiness: async () => ({}),
-    cloneTest: notUsed,
-    exportTest: notUsed,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: notUsed,
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: notUsed,
-    uploadMedia: notUsed,
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: notUsed,
-    importCandidates: notUsed,
     // Phase 8e Task 3 (`K31`, `K36`, #102): `undefined` is the default here
     // for the same reason it is the prop's own default — a fixture that
     // said nothing about usage should render Home exactly as it did before
@@ -151,7 +126,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     // for.
     usage: async () => undefined,
     ...overrides,
-  } as unknown as ApiClient;
+  });
 
   // One recording proxy rather than a hand-written wrapper per method: a
   // method added to `ApiClient` later is recorded without this file changing.

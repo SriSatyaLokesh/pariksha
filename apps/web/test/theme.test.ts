@@ -594,11 +594,12 @@ describe("no organiser-only stylesheet reads the cream palette (D1, G5)", () => 
 
   it("finds the organiser's own stylesheets, so the sweep is not empty", () => {
     // Named rather than counted: these were the six files `D1` moved, plus
-    // `grading.css` (Phase 8b Task 2, `K15`) — a rename that silently
-    // emptied the list would make every assertion below pass by checking
-    // nothing.
+    // `grading.css` (Phase 8b Task 2, `K15`) and `analytics.css` (Phase 8c
+    // Task 1, `R-06`) — a rename that silently emptied the list would make
+    // every assertion below pass by checking nothing.
     expect(organiserOnly).toEqual([
       "admin.css",
+      "analytics.css",
       "authoring.css",
       "grading.css",
       "home.css",

@@ -1,0 +1,425 @@
+/* Phase 8c Task 1/2 (`R-06`/`R-07`, #94/#95): the test-and-item analytics
+   screen. Built from `.prototypes/analytics.html` (D11), which solved the
+   hard part — telling the discrimination index's two absences apart
+   without hue, and keeping the integrity band the one place hue carries
+   meaning. Every dynamic proportion below (the histogram, the integrity
+   split, the per-set comparison, share correct) is a native `<progress>`
+   element rather than an inline `style="width:…"`: `no inline style
+   attributes` forbids the latter outright, and `<progress>` is also the
+   more accessible of the two — a screen reader announces its value with
+   no extra markup. `accent-color` tints it; that property is not `color`
+   (the no-hex-colors / contrast-usage scans both key off the literal
+   `color` declaration) and is not scored, which is also why it is the one
+   place this file applies the integrity band's three tones. */
+
+.analytics {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2xl);
+}
+
+.analytics-band {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--edge-2);
+}
+
+.analytics-band__title {
+  margin: 0;
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+}
+
+/* Mono caption text. Appears directly on the page ground (a band's own
+   meta line) and inside every `.card-hairline` panel this screen draws —
+   both are real and both are scored (contrast-usage.test.ts SURFACE). */
+.analytics-meta {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-band__meta {
+  margin-left: auto;
+}
+
+/* Explanatory prose — a count's qualifier, a stat's hint (including the
+   absent pass rate's own explanation), the histogram's pass-line note, and
+   K2's missing-time line. Same two grounds as `.analytics-meta` above. */
+.analytics-hint {
+  margin: 0;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+  color: var(--ink-3);
+}
+
+/* Secondary label ink, surface only: integrity row names and an absent
+   discrimination's own word ("withheld" / "no variance"). */
+.analytics-label {
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  color: var(--ink-2);
+}
+
+/* Always paired with `.analytics-meta` in practice (the negative
+   discrimination value) — the mono size is restated here, not inherited,
+   so the selector also resolves on its own for the audit above. */
+.analytics-risk {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  color: var(--risk);
+}
+
+/* ===== the native progress bars ====================================== */
+
+.analytics-progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  border: 0;
+  border-radius: var(--rounded-full);
+  accent-color: var(--accent);
+}
+.analytics-progress::-webkit-progress-bar {
+  background: var(--wash-2);
+  border-radius: var(--rounded-full);
+}
+.analytics-progress::-moz-progress-bar {
+  border-radius: var(--rounded-full);
+}
+
+/* ===== 1. the count strip ============================================= */
+
+.analytics-counts {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 0;
+  overflow: hidden;
+}
+
+.analytics-count {
+  padding: var(--space-lg);
+  border-left: 1px solid var(--edge);
+  min-width: 0;
+}
+.analytics-count:first-child {
+  border-left: 0;
+}
+
+.analytics-count__label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+/* The one accent in the strip (`in progress`, the only figure still
+   moving) and the locked dot, which stays the SAME neutral tone every
+   other count's dot has — `color-not-only`: locked is a word and a
+   qualifier sentence, never a colour standing in for either. */
+.analytics-count__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--rounded-full);
+  background: var(--edge-strong);
+  flex: none;
+}
+.analytics-count__dot[data-live="true"] {
+  background: var(--accent);
+}
+
+.analytics-count__value {
+  margin: var(--space-sm) 0 0;
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+  font-variant-numeric: tabular-nums;
+}
+
+.analytics-count__hint {
+  margin-top: var(--space-sm);
+}
+
+@media (max-width: 760px) {
+  .analytics-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .analytics-count {
+    border-left: 0;
+    border-top: 1px solid var(--edge);
+  }
+  .analytics-count:nth-child(-n + 2) {
+    border-top: 0;
+  }
+}
+
+/* ===== 2 & 3. the histogram and the summary stats ===================== */
+
+.analytics-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: var(--space-xl);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .analytics-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.analytics-side {
+  display: grid;
+  gap: var(--space-xl);
+}
+
+.analytics-panel__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  margin: 0 0 var(--space-lg);
+}
+.analytics-panel__title {
+  margin: 0;
+  font-size: var(--type-body-md-size);
+  font-weight: 600;
+}
+
+.analytics-hist {
+  display: grid;
+  gap: var(--space-sm);
+}
+.analytics-hist__row {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) 34px;
+  align-items: center;
+  gap: var(--space-md);
+}
+
+.analytics-hist__note {
+  margin-top: var(--space-md);
+}
+
+/* ===== the summary stats ============================================= */
+
+.analytics-stats {
+  display: grid;
+}
+.analytics-stat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--edge);
+}
+.analytics-stat:last-child {
+  border-bottom: 0;
+}
+.analytics-stat__value {
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  font-variant-numeric: tabular-nums;
+}
+/* An absent pass rate (`K-20`'s sibling ruling for `R-06`): the slot keeps
+   its height, the value says so in words at the weight of a label rather
+   than the size of a figure, and `.analytics-hint` beneath states why
+   there is no number — never a dash, a zero, or a blank. */
+.analytics-stat__value--absent {
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+}
+.analytics-stat__hint {
+  grid-column: 1 / -1;
+}
+
+/* ===== 4. the integrity band ========================================== */
+
+.analytics-integrity {
+  display: grid;
+  gap: var(--space-md);
+}
+.analytics-integrity__row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-md);
+}
+.analytics-integrity__glyph {
+  text-align: center;
+}
+.analytics-integrity__progress[data-tone="review"] {
+  accent-color: var(--warn);
+}
+.analytics-integrity__progress[data-tone="high_risk"] {
+  accent-color: var(--risk);
+}
+.analytics-integrity__name {
+  grid-column: 2;
+}
+
+/* ===== 5. the per-set comparison ======================================= */
+
+.analytics-sets {
+  display: grid;
+}
+.analytics-set {
+  display: grid;
+  grid-template-columns: 90px 64px minmax(0, 1fr) 70px;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) 0;
+  border-bottom: 1px solid var(--edge);
+}
+.analytics-set:last-child {
+  border-bottom: 0;
+}
+.analytics-set__name {
+  font-weight: 600;
+}
+.analytics-set__value {
+  text-align: right;
+}
+@media (max-width: 500px) {
+  .analytics-set {
+    grid-template-columns: 70px 50px minmax(0, 1fr) 56px;
+  }
+}
+
+/* ===== 6. item analysis ================================================ */
+
+.analytics-items {
+  max-height: 620px;
+  overflow: auto;
+  border-top: 1px solid var(--edge-2);
+}
+.analytics-items table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.analytics-items th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  text-align: left;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface-2);
+  color: var(--ink-3);
+  font-family: var(--type-mono-sm-family);
+  font-size: 10px;
+  font-weight: var(--type-mono-sm-weight);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  white-space: nowrap;
+  border-bottom: 1px solid var(--edge-2);
+}
+.analytics-items td {
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--edge);
+  font-size: var(--type-body-sm-size);
+  vertical-align: middle;
+}
+.analytics-items tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Sortable column headers: a plain reset button, `color` deliberately left
+   undeclared so it inherits the `th`'s own `--ink-3` rather than adding a
+   second selector this file would owe a SURFACE entry for. */
+.analytics-sort-button {
+  background: none;
+  border: 0;
+  font: inherit;
+  letter-spacing: inherit;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* Fix round 1, Important 2: the question stem, one line with no overflow
+   affordance (the approved prototype's own named-unfinished item). Applied
+   to the inner span, not the `<td>`: a block box with its own hard
+   `max-width` truncates reliably under `table-layout: auto` (the table's
+   default — every other column still sizes itself to its own content),
+   where a `max-width` on the cell itself would need `table-layout: fixed`
+   and an explicit width on every other column besides. */
+.analytics-items__stem {
+  display: block;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The discrimination cell: one three-track grid so the column stays
+   aligned whichever of the three renderings a row needs. */
+.analytics-disc {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-md);
+}
+.analytics-disc__gauge {
+  height: 16px;
+  position: relative;
+}
+/* Centers the gauge's 8px bar within the 16px box — static, not per-row. */
+.analytics-disc__gauge .analytics-progress {
+  position: relative;
+  top: 4px;
+}
+/* The zero baseline every present value is measured from — a static tick
+   at the gauge's own centre, `--edge-strong` for the same 3:1 non-text
+   reason the hatch and flat marks below use it. */
+.analytics-disc__zero {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 50%;
+  width: 1px;
+  background: var(--edge-strong);
+}
+/* A negative index is the thing this table exists to surface: the bar's
+   own fill shortens below the centre tick (shape), a triangle precedes the
+   figure (glyph), and only then does the risk tint arrive (hue). */
+.analytics-disc__progress--neg {
+  accent-color: var(--risk);
+}
+/* Nothing was gathered (`too_few_attempts`) — a diagonal hatch. */
+.analytics-disc__hatch {
+  position: absolute;
+  inset: 2px 0;
+  border: 1px solid var(--edge-strong);
+  border-radius: 3px;
+  background: repeating-linear-gradient(135deg, var(--edge-strong) 0 1px, transparent 1px 5px);
+}
+/* There was nothing to spread (`no_variance`) — one flat rule, no height. */
+.analytics-disc__flat {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  border-top: 1px solid var(--edge-strong);
+}
+.analytics-disc__absent {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-sm);
+  min-width: 0;
+}
+.analytics-disc__qualifier::before {
+  content: "\00b7\00a0";
+}
+
+/* ===== option pick rates =============================================== */
+
+.analytics-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
