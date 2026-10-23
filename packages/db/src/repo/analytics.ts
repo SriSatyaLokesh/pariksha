@@ -62,12 +62,18 @@ const HISTOGRAM_BUCKETS = 10;
 // `testAnalytics` and `testItemAnalysis` pages independently, so the
 // worst-case cost this adds to the route is `2 * MAX_ATTEMPT_PAGES`
 // statements. At 10 that is 20, which together with the route's other
-// fixed reads (auth 2, `getTest` 1, the registered-candidate `COUNT` 1,
-// the response join 1) stays at 25 against `SUBREQUEST_LIMIT`'s 50 even at
-// the cap — "well under the ceiling", not merely under it — while still
-// covering 5,000 attempts per function before truncation, far past any
-// realistic cohort. Reaching the cap is **stated**, never silent: both
-// functions return whether they did, and the screen renders it.
+// fixed reads (auth 2, `getTest` 1, `workspaceQuestions` 1, the
+// registered-candidate `COUNT` 1, the response join 1) totals **26**
+// against `SUBREQUEST_LIMIT`'s 50 even at the cap — "well under the
+// ceiling", not merely under it — while still covering 5,000 attempts per
+// function before truncation, far past any realistic cohort. Fix round 2
+// pinned this by an executed test rather than this comment's own
+// arithmetic alone (`apps/api/test/analytics.test.ts`'s "stays under the
+// subrequest ceiling at the hard page cap"), which is also what caught
+// that an earlier draft of this comment undercounted by one (omitted
+// `workspaceQuestions`, said 25). Reaching the cap is **stated**, never
+// silent: both functions return whether they did, and the screen renders
+// it.
 const MAX_ATTEMPT_PAGES = 10;
 
 /**

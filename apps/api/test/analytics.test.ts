@@ -16,7 +16,7 @@ import {
 } from "@pariksha/db";
 import type { Question } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS, type AppDeps } from "../src/app.js";
-import { countingDeps } from "../src/instrument.js";
+import { countingDeps, SUBREQUEST_LIMIT } from "../src/instrument.js";
 import { issueSession } from "../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
 import { seedTest, seedWorkspace } from "./run/fixtures.js";
@@ -272,3 +272,85 @@ it("states a removed question rather than an empty stem", async () => {
   expect(json.items[0]!.stem).toBe("(question removed from the bank)");
   await closeClient(deps.db);
 });
+
+// --- Fix round 2: the hard page cap, not just the common one-page case ----
+
+it("stays under the subrequest ceiling at the hard page cap, the real worst case — not just the common one-page case", async () => {
+  // Fix round 1's budget (8) was measured against the common case: a
+  // 300-candidate, one-page cohort. The re-review confirmed the worst-case
+  // arithmetic by hand (both `testAnalytics` and `testItemAnalysis` paging
+  // independently to `MAX_ATTEMPT_PAGES`) but asked for an executed test —
+  // a hardcoded `limit: 500` shipped once already and nothing executed
+  // against its bound is exactly how it survived. This one drives the real
+  // route, with no test-only override, past the real cap.
+  const { deps } = await testDeps();
+  const workspaceId = await seedWorkspace(deps);
+  const testId = await seedTest(deps, workspaceId, { name: "Huge cohort", slug: "huge-cohort", body });
+  const testVersionId = await testVersionIdOf(deps, workspaceId, testId);
+  const candidateId = "cnd_huge";
+  await deps.db.run(
+    "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, form_values_json, consent_version, consent_at, created_at) " +
+      "VALUES (?, ?, ?, NULL, NULL, 'registration', '{}', NULL, ?, ?)",
+    [candidateId, workspaceId, testId, FIXED_NOW, FIXED_NOW],
+  );
+
+  // One past `MAX_ATTEMPT_PAGES` (10) * the 500-row page size — the
+  // smallest cohort that forces both `testAnalytics` and `testItemAnalysis`
+  // to exhaust the cap rather than the cursor, so `truncated` reads `true`
+  // on both halves of the response below. `db.batch`, chunked, rather than
+  // 5,001 individually-awaited inserts: one subrequest per chunk against
+  // this in-memory client, and the whole fixture seeds in well under a
+  // second rather than minutes.
+  const ATTEMPTS = 5001;
+  const CHUNK = 500;
+  for (let start = 0; start < ATTEMPTS; start += CHUNK) {
+    const end = Math.min(start + CHUNK, ATTEMPTS);
+    await deps.db.batch(
+      Array.from({ length: end - start }, (_, j) => {
+        const i = start + j;
+        return {
+          sql:
+            "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, " +
+            "started_at, deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, " +
+            "section_started_at, integrity_flag, observed, locked_at) " +
+            "VALUES (?, ?, ?, ?, 1, '{}', ?, ?, NULL, NULL, NULL, 'clean', ?, 0, NULL, 'clean', 1, NULL)",
+          params: [
+            `att_huge_${i}`,
+            workspaceId,
+            candidateId,
+            testVersionId,
+            FIXED_NOW + i,
+            FIXED_NOW + i + 60_000,
+            `hash_huge_${i}`,
+          ],
+        };
+      }),
+    );
+  }
+
+  const cookie = await cookieFor(deps, workspaceId, "viewer");
+  const counting = countingDeps(deps);
+
+  const res = await createApp(counting.deps).request(
+    `/api/v1/workspaces/${workspaceId}/tests/${testId}/analytics`,
+    { headers: { cookie } },
+  );
+
+  expect(res.status).toBe(200);
+  const json = (await res.json()) as {
+    analytics: { truncated: boolean };
+    itemsTruncated: boolean;
+  };
+  // Proves this test actually reached the cap, not the one-page case under
+  // a new name — if either read false, the cost measured below would be
+  // the wrong case's number.
+  expect(json.analytics.truncated).toBe(true);
+  expect(json.itemsTruncated).toBe(true);
+  // Measured at 26 (auth 2 + getTest 1 + workspaceQuestions 1 +
+  // testAnalytics's 11 [10 pages + the registered-candidate COUNT] +
+  // testItemAnalysis's 11 [10 pages + the response join]) against a
+  // ceiling of 50 — comfortably under even at the real worst case, not
+  // merely by the hand arithmetic in `analytics.ts`'s own comment.
+  expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
+  await closeClient(deps.db);
+}, 60_000);

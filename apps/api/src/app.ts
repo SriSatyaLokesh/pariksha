@@ -823,10 +823,15 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // a shared fetch, `routes/analytics.ts`'s own header — and the response
   // join) + `workspaceQuestions` (1, the stem join) = 8. A cohort past 500
   // attempts costs one more statement per extra page, per function
-  // (`fetchAllAttempts`'s own pagination, fix round 1's Important 1) — still
-  // nowhere near `SUBREQUEST_LIMIT` (50) even at the hard page cap (see
-  // `packages/db/src/repo/analytics.ts`'s own `MAX_ATTEMPT_PAGES` comment
-  // for the worst-case arithmetic).
+  // (`fetchAllAttempts`'s own pagination, fix round 1's Important 1) — at
+  // the hard page cap (`MAX_ATTEMPT_PAGES`, `packages/db/src/repo/
+  // analytics.ts`) that is **26**, measured by an executed test
+  // (`apps/api/test/analytics.test.ts`'s "stays under the subrequest
+  // ceiling at the hard page cap", fix round 2) rather than left as
+  // arithmetic in a comment — still nowhere near `SUBREQUEST_LIMIT` (50).
+  // `ROUTE_BUDGETS` itself stays at the common-case number (8): the cap is
+  // a declared, tested ceiling this route is proven to survive, not the
+  // number every request is expected to cost.
   "/api/v1/workspaces/:id/tests/:testId/analytics": 8,
 };
 
