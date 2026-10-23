@@ -312,6 +312,7 @@ function viewClient(): ApiClient {
     importCandidates: notUsed,
     exportCandidateData: notUsed,
     deleteCandidateData: notUsed,
+    usage: async () => undefined,
   };
 }
 

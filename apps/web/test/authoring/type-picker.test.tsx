@@ -161,6 +161,7 @@ function fakeClient(): ApiClient {
     importCandidates: unused,
     exportCandidateData: unused,
     deleteCandidateData: unused,
+    usage: async () => undefined,
   };
 }
 

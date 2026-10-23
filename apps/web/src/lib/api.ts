@@ -258,6 +258,20 @@ export interface Workspace {
 }
 
 /**
+ * Phase 8e Task 3 (`K31`, `K36`, issue 102). Mirrors `UsageProjection`
+ * (`apps/api/src/usage/project.ts`) field for field — a second declaration
+ * rather than a cross-app import, the same way `TestSummary` above
+ * redeclares its own wire shape instead of reaching into `apps/api`.
+ */
+export interface UsageProjection {
+  spentToday: number;
+  projected: number;
+  limit: number;
+  warn: boolean;
+  estimated: true;
+}
+
+/**
  * Every failure response is `{ error: { code, message, details? } }`. This
  * carries all three so a screen can render `message` — the human half —
  * and never a bare status code.
@@ -461,6 +475,13 @@ export interface ApiClient {
     candidateId: string,
     keepAnonymisedScore: boolean,
   ): Promise<{ tablesTouched: string[] }>;
+
+  // Phase 8e Task 3 (`K31`, `K36`, issue 102): the free-tier meter. `undefined`,
+  // not `null` — `GET .../usage` omits the field entirely on the `node`
+  // target (`K36`), and `undefined` is what reading an absent key off a
+  // parsed body already gives for free, with no `?? null` to invent a
+  // second "nothing" the type does not need.
+  usage(workspaceId: string): Promise<UsageProjection | undefined>;
 }
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
@@ -838,6 +859,9 @@ export function createApiClient(): ApiClient {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ keepAnonymisedScore }),
       }),
+
+    usage: async (workspaceId) =>
+      (await json<{ usage?: UsageProjection }>(`/workspaces/${workspaceId}/usage`)).usage,
   };
 }
 

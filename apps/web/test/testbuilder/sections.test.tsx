@@ -135,6 +135,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteCandidateData: async () => {
       throw new Error("not used by this test file");
     },
+    usage: async () => undefined,
     ...overrides,
   };
 }

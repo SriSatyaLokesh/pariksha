@@ -141,6 +141,12 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadMedia: notUsed,
     candidates: async () => [],
     importCandidates: notUsed,
+    // Phase 8e Task 3 (`K31`, `K36`, #102): `undefined` is the default here
+    // for the same reason it is the prop's own default — a fixture that
+    // said nothing about usage should render Home exactly as it did before
+    // this task, not grow a meter every other test in this file never asked
+    // for.
+    usage: async () => undefined,
     ...overrides,
   } as unknown as ApiClient;
 
@@ -679,10 +685,12 @@ describe("a load that fails says so once (and stops saying Loading)", () => {
 });
 
 describe("Home reads only what already exists (D6)", () => {
-  it("calls only tests() and listBanks()", async () => {
+  // Phase 8e Task 3 (`K31`, #102) widened this to three — see `home.tsx`'s
+  // own header, which amends `D6` to say why.
+  it("calls only tests(), listBanks() and usage()", async () => {
     await openHome();
 
-    expect(calls).toEqual(["setupStatus", "me", "workspaces", "tests", "listBanks"]);
+    expect(calls).toEqual(["setupStatus", "me", "workspaces", "tests", "listBanks", "usage"]);
   });
 });
 

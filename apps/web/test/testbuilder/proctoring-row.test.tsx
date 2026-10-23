@@ -114,6 +114,7 @@ function fakeClient(draft: TestVersionRow): ApiClient {
     importCandidates: notUsed,
     exportCandidateData: notUsed,
     deleteCandidateData: notUsed,
+    usage: async () => undefined,
   };
 }
 

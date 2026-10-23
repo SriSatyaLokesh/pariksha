@@ -417,6 +417,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".home__figure": { dark: "signal-bg", light: "signal-l-bg" },
   ".home__sep": { dark: "signal-bg", light: "signal-l-bg" },
 
+  // Phase 8e Task 3 (`K31`, `K36`, #102): the free-tier meter, same tier as
+  // the page lead above it — `.home__usage-figure` carries no entry of its
+  // own; it declares no `color`, only `font-weight`, so it never reaches
+  // `colorSelectors` in the first place.
+  ".home__usage-text": { dark: "signal-bg", light: "signal-l-bg" },
+
   ".home__pane-title": { dark: "signal-surface", light: "signal-l-surface" },
   ".home__group-name, .home__group-count": {
     dark: "signal-surface",

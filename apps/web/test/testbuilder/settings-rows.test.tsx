@@ -129,6 +129,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     importCandidates: notUsed,
     exportCandidateData: notUsed,
     deleteCandidateData: notUsed,
+    usage: async () => undefined,
     ...overrides,
   };
 }
