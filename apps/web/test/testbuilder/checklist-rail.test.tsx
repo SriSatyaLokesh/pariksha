@@ -188,6 +188,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     deleteWebhook: async () => {
       throw new Error("not used by this test file");
     },
+    listApiKeys: async () => ({ keys: [] }),
+    createApiKey: async () => {
+      throw new Error("not used by this test file");
+    },
+    revokeApiKey: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

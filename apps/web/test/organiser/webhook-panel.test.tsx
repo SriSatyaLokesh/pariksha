@@ -70,6 +70,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createWebhook: notUsed,
     setWebhookActive: notUsed,
     deleteWebhook: notUsed,
+    listApiKeys: notUsed,
+    createApiKey: notUsed,
+    revokeApiKey: notUsed,
     ...overrides,
   };
 }
