@@ -462,3 +462,22 @@ export type CopyBlockedDetail = Record<string, never>;
 export type PasteBlockedDetail = Record<string, never>;
 export type ContextmenuBlockedDetail = Record<string, never>;
 export type ExtraMonitorDetail = Record<string, never>;
+
+/**
+ * Phase 8f Task 1 (`Q7b`, `#209`): `noise_above_threshold`'s own detail
+ * shape — `monitorNoise` (`apps/web/src/lib/noise.ts`) is the emitter, so
+ * this declares its own contract the same way the eight above do.
+ *
+ * `#209`'s own wording, pinned by a test asserting the serialised shape
+ * exactly: *"The event's `detail` contains only a duration — no samples,
+ * no levels, no derived audio features."* `durationMs` is the one field;
+ * `detailFor` is the one place this object gets constructed, so nothing
+ * emitting this event can reach for anything else by accident.
+ */
+export interface NoiseAboveThresholdDetail {
+  durationMs: number;
+}
+
+export function detailFor(durationMs: number): NoiseAboveThresholdDetail {
+  return { durationMs };
+}
