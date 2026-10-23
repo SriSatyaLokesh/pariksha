@@ -68,7 +68,37 @@ another the same way — by cloning, never by `git worktree add`.
 two full suites at once produced a 37-failure cascade across 5 unrelated files,
 three separate times, each a different subset. With several waves in flight,
 keep implementers on targeted tests and run the full suite once, alone, before
-review — or pass `--no-file-parallelism`.
+review.
+
+**`--no-file-parallelism` alone does not prevent the cascade, and believing it
+did is how the cascade kept happening.** That flag serialises files *within*
+one vitest process. `turbo run test` still runs each package's test task
+**concurrently**, so `apps/api` and `apps/web` fight over the same machine.
+Measured on one commit, one machine, 2026-10-23:
+
+| command | result |
+| --- | --- |
+| `turbo run test -- --no-file-parallelism` | **15 files / 43 tests failed** |
+| `turbo run test --concurrency=1 -- --no-file-parallelism` | 1 file failed |
+| `apps/api` alone, `apps/web` alone | **0 failed** (957 and 2346 tests) |
+
+So the full-suite incantation is:
+
+```
+npx turbo run test --concurrency=1 -- --no-file-parallelism
+```
+
+Note the bare `--`: without it, turbo eats the flag and exits with
+`unexpected argument '--no-file-parallelism' found` — **and the wrapper still
+reports exit 0**, so a run that executed no tests at all looks green. Read the
+output, never the status.
+
+**One failure under load is still not a real failure until you reproduce it
+alone.** Even at `--concurrency=1` a timing-sensitive test (the `SignIn`
+magic-link wait) can miss its deadline on a loaded machine and pass in
+isolation. Re-run the single file before reporting it as broken — and re-run
+the whole file in order rather than with `-t`, because fixtures that advance a
+clock are file-wide and FIFO-sensitive.
 
 ## Git
 
