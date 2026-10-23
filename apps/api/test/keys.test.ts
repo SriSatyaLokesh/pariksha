@@ -4,7 +4,7 @@
 
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import type { Hono } from "hono";
-import { addMembership, closeClient, createUser } from "@pariksha/db";
+import { addMembership, closeClient, createUser, listAudit } from "@pariksha/db";
 import { createApp, ROUTE_AUTH, type AppBindings, type AppDeps } from "../src/app.js";
 import { issueSession } from "../src/auth/session.js";
 import { requires } from "../src/middleware/authorize.js";
@@ -362,6 +362,50 @@ describe("CRITICAL-1 — a key cannot reach an authority that names no action", 
     expect((await app.request("/api/v1/workspaces", send("GET", ownerCookie))).status).toBe(200);
     expect((await app.request("/api/v1/me", send("GET", ownerCookie))).status).toBe(200);
     expect((await app.request(`/api/v1/workspaces/${workspaceId}`, send("GET", ownerCookie))).status).toBe(200);
+  });
+});
+
+// CRITICAL-1 re-review: `POST /auth/signout` is `public` (no action), so a
+// results.export-only key reaches it — and before this fix `audit()` wrote
+// one `auth.signout` row per call, attributed to the key's own id, with no
+// scope checked and no rate limit (MAJOR-2's write-amplification arithmetic
+// again, plus a corrupted audit log). A key has no session to end, so the
+// fix skips the audit for a key actor rather than gating the route —
+// anonymous and session callers must behave exactly as before.
+describe("POST /auth/signout must not audit a key (CRITICAL-1 re-review)", () => {
+  it("a key caller gets 204 and writes no audit row — the row count is unchanged", async () => {
+    const { secret } = await createKey(["results.export"]);
+    const before = (await listAudit(deps.db, workspaceId)).length;
+
+    const res = await app.request("/api/v1/auth/signout", {
+      method: "POST",
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(res.status).toBe(204);
+
+    const after = await listAudit(deps.db, workspaceId);
+    expect(after.length).toBe(before);
+    expect(after.some((row) => row.action === "auth.signout")).toBe(false);
+  });
+
+  it("an anonymous caller is unaffected — still 204, still no audit row", async () => {
+    const before = (await listAudit(deps.db, workspaceId)).length;
+
+    const res = await app.request("/api/v1/auth/signout", { method: "POST" });
+    expect(res.status).toBe(204);
+
+    expect((await listAudit(deps.db, workspaceId)).length).toBe(before);
+  });
+
+  it("a real session caller still gets an audit row", async () => {
+    const before = (await listAudit(deps.db, workspaceId)).length;
+
+    const res = await app.request("/api/v1/auth/signout", send("POST", ownerCookie));
+    expect(res.status).toBe(204);
+
+    const after = await listAudit(deps.db, workspaceId);
+    expect(after.length).toBe(before + 1);
+    expect(after[0]?.action).toBe("auth.signout");
   });
 });
 

@@ -131,6 +131,16 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
  * the wizard has run — writes none: there is no workspace to scope the row
  * to, and an audit table readable across tenants is the thing `scoped()`
  * exists to prevent.
+ *
+ * A key actor (`apiKeyScopes` set) also writes none (whole-branch re-review,
+ * CRITICAL-1): `POST /signout` is `public` so a key can call it, but a key
+ * has no session to end and nothing it did here, so there is no event to
+ * record — not a null actor's "nowhere to scope it", but "this did not
+ * happen". Skipping here, in the one function both `/signout` and
+ * `/signout-everywhere` call through, covers both rather than guarding each
+ * route's own call site; `/signout-everywhere` never reaches a key actor at
+ * all (`actorOnly()`), so this is a no-op there and the fix for the one
+ * route that does.
  */
 async function audit(
   deps: AppDeps,
@@ -138,7 +148,7 @@ async function audit(
   action: string,
   detail: Record<string, unknown>,
 ): Promise<void> {
-  if (!actor) return;
+  if (!actor || actor.apiKeyScopes !== undefined) return;
   for (const membership of actor.memberships) {
     await appendAudit(deps.db, membership.workspaceId, {
       actor: actor.userId,
