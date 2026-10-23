@@ -380,6 +380,27 @@ export const getDraftVersion = scoped(
 );
 
 /**
+ * Every open draft in the workspace, keyed by test id — one statement
+ * regardless of how many tests the workspace holds, for the readiness
+ * aggregate (`apps/api/src/publish/readiness.ts`, `D7c`, Phase 8c Task 5):
+ * the single-test `GET .../checklist` reads exactly one of these
+ * (`getDraftVersion`); the aggregate reads every test's at once instead of
+ * once per test (`K21`).
+ */
+export const draftVersionsByWorkspace = scoped(
+  "draftVersionsByWorkspace",
+  async (db: DbClient, workspaceId: string): Promise<Map<string, TestVersionRow>> => {
+    const rows = await db.query<TestVersionRecord>(
+      `SELECT ${TEST_VERSION_COLUMNS} FROM test_version WHERE workspace_id = ? AND published_at IS NULL`,
+      [workspaceId],
+    );
+    const map = new Map<string, TestVersionRow>();
+    for (const row of rows) map.set(row.test_id, toTestVersionRow(db, row));
+    return map;
+  },
+);
+
+/**
  * Replaces the draft's whole stored body on the one row `existing` names.
  *
  * Fix round (task 3 review, I7/I8 — "settle the missing-draft contract

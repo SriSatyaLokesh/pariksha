@@ -161,6 +161,30 @@ export const countCandidates = scoped(
 );
 
 /**
+ * `countCandidates`'s own two numbers, for every test in the workspace at
+ * once — one `GROUP BY test_id`, never one query per test. The readiness
+ * aggregate's fourth statement (`apps/api/src/publish/readiness.ts`, `D7c`,
+ * Phase 8c Task 5, `K21`). A test absent from the map has no candidate rows
+ * at all, the same way `SUM`/`COUNT` over no rows reads in `countCandidates`
+ * above.
+ */
+export const candidateCountsByWorkspace = scoped(
+  "candidateCountsByWorkspace",
+  async (db: DbClient, workspaceId: string): Promise<Map<string, { total: number; withoutSet: number }>> => {
+    const rows = await db.query<{ test_id: string; total: number; without_set: number }>(
+      "SELECT test_id, COUNT(*) AS total, SUM(CASE WHEN set_label IS NULL THEN 1 ELSE 0 END) AS without_set " +
+        "FROM candidate WHERE workspace_id = ? GROUP BY test_id",
+      [workspaceId],
+    );
+    const map = new Map<string, { total: number; withoutSet: number }>();
+    for (const row of rows) {
+      map.set(row.test_id, { total: Number(row.total), withoutSet: Number(row.without_set) });
+    }
+    return map;
+  },
+);
+
+/**
  * Replaces the uploaded list for this test, in one `db.batch` — so it is a
  * single subrequest on D1 however many rows the file had, and a
  * half-replaced list cannot exist.
