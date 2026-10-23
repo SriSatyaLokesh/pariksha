@@ -178,50 +178,62 @@ export const listActiveWebhooksForEvent = scoped(
   },
 );
 
+/** One `webhook_delivery` row, as `queueWebhookDeliveries` writes it.
+ *  `attemptCount`/`lastStatus`/`lastError` are the caller's own record of
+ *  what just happened — `0` and two `null`s for a hook that was never
+ *  tried at all (`attempt.started`/`test.closed`, `K37`/`K43`, and any
+ *  hook past Task 3's `INLINE_FANOUT_LIMIT`, fix round 1 `F1`), and `1`
+ *  plus whatever the one inline try came back with for a hook that was. */
+export interface QueuedWebhookDelivery {
+  webhookId: string;
+  event: WebhookEvent;
+  payload: unknown;
+  attemptCount: number;
+  lastStatus: number | null;
+  lastError: string | null;
+  now: number;
+}
+
 /**
- * Task 3's write: one `webhook_delivery` row for Task 4's drain to pick up
- * off `webhook_delivery_next_attempt_idx`. `attemptCount`/`lastStatus`/
- * `lastError` are the caller's own record of what just happened — `0` and
- * two `null`s for `attempt.started`/`test.closed`, which are never tried
- * inline (`K37`/`K43`) and so have nothing yet to report, and `1` plus
- * whatever the one inline try came back with for a queued
- * `attempt.submitted`. Never the signing secret (`KG5`): nothing here
- * reads `signing_secret` at all.
+ * Task 3's write: one `webhook_delivery` row per entry for Task 4's drain
+ * to pick up off `webhook_delivery_next_attempt_idx`. Never the signing
+ * secret (`KG5`): nothing here reads `signing_secret` at all.
+ *
+ * **One `db.batch()` call, not one `INSERT` per row** (fix round 1, F1) —
+ * the same rule `writeImportedBank` (`banks.ts`) already follows: N
+ * single-row writes cost ~N subrequests, one `batch()` costs one no
+ * matter how big N gets. This is what keeps an organiser's own webhook
+ * count from being able to grow the candidate's submit request's
+ * subrequest cost — `deliver.ts`'s `INLINE_FANOUT_LIMIT` bounds the
+ * `fetch` side of that same problem, this bounds the write side. A no-op,
+ * not an empty `batch()` call, when there is nothing to queue.
  */
-export const queueWebhookDelivery = scoped(
-  "queueWebhookDelivery",
-  async (
-    db: DbClient,
-    workspaceId: string,
-    input: {
-      webhookId: string;
-      event: WebhookEvent;
-      payload: unknown;
-      attemptCount: number;
-      lastStatus: number | null;
-      lastError: string | null;
-      now: number;
-    },
-  ): Promise<void> => {
-    await db.run(
-      "INSERT INTO webhook_delivery " +
-        "(id, workspace_id, webhook_id, event, payload_json, attempt_count, next_attempt_at, last_status, last_error, delivered_at, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-      [
-        newId("whd"),
-        workspaceId,
-        input.webhookId,
-        input.event,
-        db.jsonParam(input.payload),
-        input.attemptCount,
-        // Ready for the drain the moment it exists — Task 4 owns backoff,
-        // not this write.
-        input.now,
-        input.lastStatus,
-        input.lastError,
-        null,
-        input.now,
-      ],
+export const queueWebhookDeliveries = scoped(
+  "queueWebhookDeliveries",
+  async (db: DbClient, workspaceId: string, rows: readonly QueuedWebhookDelivery[]): Promise<void> => {
+    if (rows.length === 0) return;
+    await db.batch(
+      rows.map((row) => ({
+        sql:
+          "INSERT INTO webhook_delivery " +
+          "(id, workspace_id, webhook_id, event, payload_json, attempt_count, next_attempt_at, last_status, last_error, delivered_at, created_at) " +
+          "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        params: [
+          newId("whd"),
+          workspaceId,
+          row.webhookId,
+          row.event,
+          db.jsonParam(row.payload),
+          row.attemptCount,
+          // Ready for the drain the moment it exists — Task 4 owns
+          // backoff, not this write.
+          row.now,
+          row.lastStatus,
+          row.lastError,
+          null,
+          row.now,
+        ],
+      })),
     );
   },
 );

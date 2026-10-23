@@ -18,7 +18,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { closeClient, createWebhook, newId, WEBHOOK_EVENTS } from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS, type AppDeps } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
-import { DELIVERY_TIMEOUT_MS, fireWebhooks } from "../../src/webhooks/deliver.js";
+import { DELIVERY_TIMEOUT_MS, fireWebhooks, INLINE_FANOUT_LIMIT } from "../../src/webhooks/deliver.js";
 import { SIGNATURE_HEADER } from "../../src/webhooks/sign.js";
 import { FIXED_NOW, testDeps } from "../deps.js";
 import { seedPublishedTest } from "../run/fixtures.js";
@@ -204,6 +204,72 @@ describe("fireWebhooks", () => {
     // never a second call to `signatureHeader` — the whole point is to
     // catch `deliver.ts` signing one string and sending another.
     expect(verifyIndependently(capturedSignature!, capturedBody!, signingSecret)).toBe(true);
+  });
+
+  // --- Fix round 1, F1: bounded fan-out -----------------------------------
+
+  it(`F1: caps attempt.submitted at INLINE_FANOUT_LIMIT (${INLINE_FANOUT_LIMIT}) fetches and queues the rest in one call, not dropped`, async () => {
+    const wsp = newId("wsp");
+    const hookIds: string[] = [];
+    for (let i = 0; i < INLINE_FANOUT_LIMIT + 2; i++) {
+      hookIds.push((await hookIn(wsp, ["attempt.submitted"])).webhookId);
+    }
+    const http = failingHttp();
+
+    const result = await fireWebhooks(withHttp(http), {
+      workspaceId: wsp,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_overflow" },
+      now: FIXED_NOW,
+    });
+
+    // Every registered hook failed or was never attempted — none delivered,
+    // and `queued` is the whole set: an overflow hook is still a hook, not
+    // a dropped one.
+    expect(result).toEqual({ delivered: 0, queued: INLINE_FANOUT_LIMIT + 2 });
+    expect(http).toHaveBeenCalledTimes(INLINE_FANOUT_LIMIT);
+
+    const rows = await deps.db.query<{ webhook_id: string; attempt_count: number }>(
+      "SELECT webhook_id, attempt_count FROM webhook_delivery WHERE workspace_id = ?",
+      [wsp],
+    );
+    // Not dropped: a row for every one of the hooks that were registered,
+    // `INLINE_FANOUT_LIMIT` of them actually tried (attempt_count 1) and
+    // the overflow never touched (attempt_count 0) — exactly the shape
+    // `attempt.started`/`test.closed` rows already have, so Task 4's drain
+    // sees one consistent "never tried yet" state either way.
+    expect(rows.map((r) => r.webhook_id).sort()).toEqual([...hookIds].sort());
+    expect(rows.filter((r) => r.attempt_count === 1)).toHaveLength(INLINE_FANOUT_LIMIT);
+    expect(rows.filter((r) => r.attempt_count === 0)).toHaveLength(2);
+  });
+
+  it("F1: the subrequest cost is the same at the limit and past it — the bound ROUTE_BUDGETS relies on", async () => {
+    const atLimit = newId("wsp");
+    for (let i = 0; i < INLINE_FANOUT_LIMIT; i++) await hookIn(atLimit, ["attempt.submitted"]);
+    const pastLimit = newId("wsp");
+    for (let i = 0; i < INLINE_FANOUT_LIMIT + 20; i++) await hookIn(pastLimit, ["attempt.submitted"]);
+
+    const atCounting = countingDeps(withHttp(failingHttp()));
+    await fireWebhooks(atCounting.deps, {
+      workspaceId: atLimit,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_a" },
+      now: FIXED_NOW,
+    });
+
+    const pastCounting = countingDeps(withHttp(failingHttp()));
+    await fireWebhooks(pastCounting.deps, {
+      workspaceId: pastLimit,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_b" },
+      now: FIXED_NOW,
+    });
+
+    // 20 more hooks registered, and the same subrequest total: 1 read
+    // (`listActiveWebhooksForEvent`) + `INLINE_FANOUT_LIMIT` fetches + 1
+    // batched insert for everything that did not deliver, regardless of N.
+    expect(pastCounting.counts().total).toBe(atCounting.counts().total);
+    expect(atCounting.counts()).toEqual({ db: 2, storage: 0, http: INLINE_FANOUT_LIMIT, total: 2 + INLINE_FANOUT_LIMIT });
   });
 });
 

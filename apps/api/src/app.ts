@@ -280,7 +280,10 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `listActiveWebhooksForEvent`'s one read for `test.closed`, paid even
   // with no webhook registered. Never tried inline (it is an organiser
   // action, not a candidate hot path), so no `http` line: the event is
-  // only ever queued. Archive stays at 6 — it fires no event.
+  // only ever queued — and, fix round 1 (F1), queued through one
+  // `db.batch()` call regardless of how many hooks subscribed, so this
+  // number is a bound here too, not a one-hook measurement. Archive stays
+  // at 6 — it fires no event.
   "/api/v1/workspaces/:id/tests/:testId/close": 7,
   "/api/v1/workspaces/:id/tests/:testId/archive": 6,
   // Auth (2) + `listVersions` (1, one correlated subquery for the attempt
@@ -490,13 +493,18 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // the single active `attempt.submitted` hook the measuring fixture
   // registers (`test/webhooks/deliver.test.ts`'s "keeps the submit route
   // inside its declared budget with a webhook firing", measured the same
-  // way this file's other budgets are, via `countingDeps`). N active hooks
-  // on the event is N more subrequests on top of that — sequential, one
-  // `fetch` per hook — so this number holds only for a workspace with one
-  // `attempt.submitted` hook registered; a self-hoster who registers more
-  // is trading headroom under the 50-subrequest ceiling for each one past
-  // the first, the same trade-off `webhookCostPerCandidate` already prices
-  // for them before they save it (`K35`/`K36`, `routes/webhooks.ts`).
+  // way this file's other budgets are, via `countingDeps`).
+  //
+  // **Fix round 1, F1: this is a bound, not a one-hook measurement.**
+  // `webhooks/deliver.ts`'s `INLINE_FANOUT_LIMIT` caps how many hooks on
+  // this event ever reach `fetch` (3, at the time of writing), and every
+  // hook past it — plus every one inside it that failed — is written in
+  // one `db.batch()` call, never one `INSERT` per row. So 8 holds for a
+  // workspace with 1 active `attempt.submitted` hook *or* 50 of them:
+  // `test/webhooks/deliver.test.ts`'s "the subrequest cost is the same at
+  // the limit and past it" proves the total does not move with hook count.
+  // Raising `INLINE_FANOUT_LIMIT` raises this number with it — see that
+  // constant's own comment for the arithmetic before changing either.
   "/api/v1/run/attempt/submit": 8,
   // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
   // **4** in `test/run/events.test.ts`'s own counting test: the attempt

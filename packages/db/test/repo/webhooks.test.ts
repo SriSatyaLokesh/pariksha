@@ -150,23 +150,26 @@ describe("listActiveWebhooksForEvent", () => {
   });
 });
 
-// Phase 8d Task 3 (K23): the row `fireWebhooks` (apps/api) writes for
-// Task 4's drain when the inline attempt is skipped or fails.
-describe("queueWebhookDelivery", () => {
-  it("mints a whd_-prefixed id and stores the payload, never the signing secret", async () => {
+// Phase 8d Task 3 (K23), batched per fix round 1 (F1): the rows
+// `fireWebhooks` (apps/api) writes for Task 4's drain when the inline
+// attempt is skipped, overflows `INLINE_FANOUT_LIMIT` or fails.
+describe("queueWebhookDeliveries", () => {
+  it("mints a whd_-prefixed id per row and stores the payload, never the signing secret", async () => {
     const ws = newId("wsp");
     await repo.createWorkspace(db, ws, { slug: "queue-ws", name: "Queue" });
     const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["attempt.submitted"], now: T });
 
-    await repo.queueWebhookDelivery(db, ws, {
-      webhookId,
-      event: "attempt.submitted",
-      payload: { attemptId: "att_x" },
-      attemptCount: 1,
-      lastStatus: 500,
-      lastError: null,
-      now: T,
-    });
+    await repo.queueWebhookDeliveries(db, ws, [
+      {
+        webhookId,
+        event: "attempt.submitted",
+        payload: { attemptId: "att_x" },
+        attemptCount: 1,
+        lastStatus: 500,
+        lastError: null,
+        now: T,
+      },
+    ]);
 
     const rows = await db.query<{
       id: string;
@@ -192,5 +195,34 @@ describe("queueWebhookDelivery", () => {
     expect(row.last_error).toBeNull();
     expect(row.delivered_at).toBeNull();
     expect(JSON.stringify(row)).not.toContain("whsec_");
+  });
+
+  it("writes every row of a multi-row call, and does nothing for an empty one", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "queue-batch-ws", name: "Queue Batch" });
+    const hooks = await Promise.all(
+      [0, 1, 2].map((i) => repo.createWebhook(db, ws, { url: `${url}/${i}`, events: ["attempt.submitted"], now: T })),
+    );
+
+    await repo.queueWebhookDeliveries(
+      db,
+      ws,
+      hooks.map((h) => ({
+        webhookId: h.webhookId,
+        event: "attempt.submitted" as const,
+        payload: { attemptId: "att_batch" },
+        attemptCount: 0,
+        lastStatus: null,
+        lastError: null,
+        now: T,
+      })),
+    );
+    await repo.queueWebhookDeliveries(db, ws, []);
+
+    const rows = await db.query<{ webhook_id: string }>(
+      "SELECT webhook_id FROM webhook_delivery WHERE workspace_id = ?",
+      [ws],
+    );
+    expect(rows.map((r) => r.webhook_id).sort()).toEqual(hooks.map((h) => h.webhookId).sort());
   });
 });

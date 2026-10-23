@@ -20,14 +20,59 @@
 // never answers, which would otherwise consume the invocation along with
 // the submit request riding it. The outer `try` in `fireWebhooks` bounds
 // everything else: a thrown read, a thrown insert, anything.
+//
+// **Fix round 1, F1**: the candidate-facing half of the same principle.
+// Fail-open bounds *how a single webhook can fail*; `INLINE_FANOUT_LIMIT`
+// bounds *how many of them the submit path will ever touch*, because an
+// organiser's own webhook count must never be able to turn the candidate's
+// submit request into an open-ended sequence of outbound `fetch`es. Past
+// the limit, a hook is written straight to `webhook_delivery` — exactly
+// the `attempt.started`/`test.closed` path above, just reached by a
+// different hook instead of a different event.
 
-import { listActiveWebhooksForEvent, queueWebhookDelivery, type WebhookEvent } from "@pariksha/db";
+import {
+  listActiveWebhooksForEvent,
+  queueWebhookDeliveries,
+  type QueuedWebhookDelivery,
+  type WebhookEvent,
+} from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import { signatureHeader, SIGNATURE_HEADER } from "./sign.js";
 
 /** How long one outbound delivery may hang before it is treated as a
  *  failure and queued for the drain (Task 4) instead. */
 export const DELIVERY_TIMEOUT_MS = 5_000;
+
+/**
+ * The most hooks one `fireWebhooks` call will ever `fetch` inline, on
+ * `attempt.submitted` — the one event reachable from the candidate's own
+ * submit request. The arithmetic (`K23`, fix round 1 `F1`):
+ *
+ * - The submit route's own worst case before any webhook cost is 8
+ *   subrequests (`ROUTE_BUDGETS["/api/v1/run/attempt/submit"]` minus this
+ *   module's own contribution — see `app.ts`).
+ * - Each hook inside the limit costs at most one `fetch` subrequest; the
+ *   whole overflow — every hook past the limit, plus every one inside it
+ *   that failed — is written in **one** `db.batch()` call (`K23`'s sibling
+ *   fix: one subrequest no matter how many rows), never one `INSERT` per
+ *   row. So this module's worst-case contribution is a flat
+ *   `INLINE_FANOUT_LIMIT + 1`, independent of how many webhooks the
+ *   workspace has registered — the 50-subrequest Workers ceiling is a
+ *   function of this constant, not of an organiser's integration count.
+ * - Each inline hook can also hang for the full `DELIVERY_TIMEOUT_MS`
+ *   (sequential, not parallel — concern (2), accepted, see the task
+ *   report): worst-case added latency is `INLINE_FANOUT_LIMIT *
+ *   DELIVERY_TIMEOUT_MS`. At 3, that is 15s on top of the route's own
+ *   work — real, but bounded, and never open-ended.
+ * - `AC-28` (signature at the endpoint within 10s) still holds for the
+ *   ordinary case this product expects — one or two integrations per
+ *   workspace, both inside the limit. Only a workspace that has
+ *   registered *more* than `INLINE_FANOUT_LIMIT` hooks on the same event
+ *   trades the overflow ones for the drain instead, which runs seconds
+ *   behind the inline attempt, not hours. Do not raise this number to
+ *   "optimise away" that trade without re-deriving the arithmetic above.
+ */
+export const INLINE_FANOUT_LIMIT = 3;
 
 interface Attempt {
   ok: boolean;
@@ -79,14 +124,16 @@ async function deliverAll(
   const attemptInline = input.event === "attempt.submitted";
 
   let delivered = 0;
-  let queued = 0;
+  const toQueue: QueuedWebhookDelivery[] = [];
 
-  // N active webhooks on this event is N subrequests, sequential: the
-  // route's own budget (`ROUTE_BUDGETS`, `app.ts`) is what bounds N in
-  // practice, the same way it already bounds every other per-row cost in
-  // this codebase.
-  for (const hook of hooks) {
-    const attempt: Attempt = attemptInline
+  // Fix round 1, F1: at most `INLINE_FANOUT_LIMIT` hooks ever reach
+  // `fetch`, by position in the list — everything past it is written
+  // straight to the queue, same as a non-inline event. `index` (not the
+  // hook itself) decides "inside the limit", so this reads the same way
+  // whichever hooks happen to be first.
+  for (const [index, hook] of hooks.entries()) {
+    const withinLimit = attemptInline && index < INLINE_FANOUT_LIMIT;
+    const attempt: Attempt = withinLimit
       ? await tryDeliver(http, hook.url, rawBody, hook.signingSecret, nowSeconds)
       : { ok: false, status: null, error: null };
 
@@ -95,19 +142,28 @@ async function deliverAll(
       continue;
     }
 
-    await queueWebhookDelivery(deps.db, input.workspaceId, {
+    toQueue.push({
       webhookId: hook.id,
       event: input.event,
       payload: input.payload,
-      attemptCount: attemptInline ? 1 : 0,
+      // `1` only for a hook that was actually tried; a limit-overflow hook
+      // (like a non-inline event's) was never attempted at all.
+      attemptCount: withinLimit ? 1 : 0,
       lastStatus: attempt.status,
       lastError: attempt.error,
       now: input.now,
     });
-    queued++;
   }
 
-  return { delivered, queued };
+  // One `db.batch()` call for everything that did not deliver — the
+  // overflow past `INLINE_FANOUT_LIMIT` included — so this module's queue
+  // cost is one subrequest regardless of how many rows it is writing
+  // (`K23`'s own "N rows, one batch" rule, `client.ts`'s `batch()`).
+  if (toQueue.length > 0) {
+    await queueWebhookDeliveries(deps.db, input.workspaceId, toQueue);
+  }
+
+  return { delivered, queued: toQueue.length };
 }
 
 /**
