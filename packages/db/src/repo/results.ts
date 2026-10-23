@@ -30,6 +30,11 @@ export interface AttemptSummary {
   observed: boolean;
   violations: number;
   answered: number;
+  /** 7e's `0011`. Null means "never locked" — the same shape `submittedAt`
+   *  already has. Phase 8c Task 1 added this projection: a locked attempt
+   *  has no `submittedAt`, so a reader that only sees that column files it
+   *  under "in progress" forever. */
+  lockedAt: number | null;
 }
 
 // Same construction `attempts.ts` uses for `countViolations`: generated once
@@ -64,6 +69,7 @@ interface AttemptSummaryRecord {
   observed: unknown;
   violations: number;
   answered: number;
+  locked_at: number | null;
 }
 
 function toAttemptSummary(db: DbClient, row: AttemptSummaryRecord): AttemptSummary {
@@ -81,6 +87,7 @@ function toAttemptSummary(db: DbClient, row: AttemptSummaryRecord): AttemptSumma
     observed: Boolean(row.observed),
     violations: Number(row.violations),
     answered: Number(row.answered),
+    lockedAt: row.locked_at === null ? null : Number(row.locked_at),
   };
 }
 
@@ -127,7 +134,7 @@ export const listAttemptsForTest = scoped(
       "SELECT a.id AS id, a.candidate_id AS candidate_id, a.set_no AS set_no, " +
         "a.started_at AS started_at, a.deadline_at AS deadline_at, a.submitted_at AS submitted_at, " +
         "a.submit_reason AS submit_reason, a.score_json AS score_json, a.flag AS flag, " +
-        "a.integrity_flag AS integrity_flag, a.observed AS observed, " +
+        "a.integrity_flag AS integrity_flag, a.observed AS observed, a.locked_at AS locked_at, " +
         "(SELECT COUNT(*) FROM event e WHERE e.workspace_id = a.workspace_id AND e.attempt_id = a.id " +
         `AND e.type IN (${VIOLATION_PLACEHOLDERS})) AS violations, ` +
         "(SELECT COUNT(*) FROM response r WHERE r.workspace_id = a.workspace_id AND r.attempt_id = a.id) " +
