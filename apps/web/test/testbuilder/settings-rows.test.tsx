@@ -23,6 +23,7 @@ import {
   type TestVersionRow,
   type Workspace,
 } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 import { OrganiserApp } from "../../src/routes/organiser";
 
 const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
@@ -83,10 +84,7 @@ const DRAFT: TestVersionRow = {
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  const notUsed = () => {
-    throw new Error("not used by this test file");
-  };
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
@@ -94,68 +92,28 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [],
-    createBank: notUsed,
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: notUsed,
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: notUsed,
-    updateGroup: notUsed,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: notUsed,
     tests: async () => [TEST_ROW],
-    createTest: notUsed,
     test: async () => TEST_ROW,
-    updateTest: notUsed,
     draft: async () => DRAFT,
     patchDraft: async () => DRAFT,
-    publishTest: notUsed,
-    closeTest: notUsed,
-    archiveTest: notUsed,
     versions: async () => [],
     checklist: async () => [],
-    cloneTest: notUsed,
-    exportTest: notUsed,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: notUsed,
     // The workspace half of branding: the logo lives here, not on the draft.
     workspaceBranding: async () => ({ logo: "media/wsp_1/abc.png", logo_alt: "Alpha College" }),
-    saveWorkspaceBranding: notUsed,
-    uploadMedia: notUsed,
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: notUsed,
-    importCandidates: notUsed,
-    gradingQueue: notUsed,
-    grade: notUsed,
-    recordVerdict: notUsed,
-    exportCandidateData: notUsed,
-    deleteCandidateData: notUsed,
     usage: async () => undefined,
-    listWebhooks: async () => {
-      throw new Error("not used by this test file");
-    },
-    createWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
-    setWebhookActive: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
     listApiKeys: async () => ({ keys: [] }),
-    createApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
-    revokeApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
     ...overrides,
-  };
+  });
 }
 
 /** Clicks from the app's entry point to the builder (`D14`). */

@@ -29,6 +29,7 @@ import type {
   TestVersionRow,
   Workspace,
 } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 import { OrganiserApp } from "../../src/routes/organiser";
 
 const ACTOR: Actor = {
@@ -88,7 +89,7 @@ const ROWS: ChecklistRow[] = [
 ];
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
@@ -96,32 +97,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [],
-    createBank: async () => {
-      throw new Error("not used");
-    },
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: async () => {
-      throw new Error("not used");
-    },
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: async () => {
-      throw new Error("not used");
-    },
-    updateGroup: async () => {
-      throw new Error("not used");
-    },
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: async () => {
-      throw new Error("not used");
-    },
     tests: async () => [TEST_ROW],
-    createTest: async () => {
-      throw new Error("not used");
-    },
     test: async () => TEST_ROW,
     updateTest: async () => TEST_ROW,
     draft: async () => DRAFT,
@@ -131,68 +114,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     archiveTest: async () => TEST_ROW,
     versions: async () => [],
     checklist: async () => ROWS,
-    cloneTest: async () => {
-      throw new Error("not used by this test file");
-    },
-    exportTest: async () => {
-      throw new Error("not used by this test file");
-    },
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: async () => {
-      throw new Error("not used");
-    },
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: async () => {
-      throw new Error("not used");
-    },
-    uploadMedia: async () => {
-      throw new Error("not used");
-    },
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: async () => {
-      throw new Error("not used");
-    },
-    importCandidates: async () => {
-      throw new Error("not used");
-    },
-    gradingQueue: async () => {
-      throw new Error("not used by this test file");
-    },
-    grade: async () => {
-      throw new Error("not used by this test file");
-    },
-    recordVerdict: async () => {
-      throw new Error("not used by this test file");
-    },
-    exportCandidateData: async () => {
-      throw new Error("not used");
-    },
-    deleteCandidateData: async () => {
-      throw new Error("not used");
-    },
     usage: async () => undefined,
-    listWebhooks: async () => {
-      throw new Error("not used by this test file");
-    },
-    createWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
-    setWebhookActive: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
     listApiKeys: async () => ({ keys: [] }),
-    createApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
-    revokeApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
     ...overrides,
-  };
+  });
 }
 
 const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };

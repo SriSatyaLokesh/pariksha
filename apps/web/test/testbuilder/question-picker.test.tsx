@@ -43,6 +43,7 @@ import {
   type TestVersionRow,
   type Workspace,
 } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 import { OrganiserApp } from "../../src/routes/organiser";
 import { declaredFor, organiserStylesheets, paintsIn, readResolvedCss } from "../css-chain";
 
@@ -143,10 +144,7 @@ function draftWith(sections: StoredSection[]): TestVersionRow {
 }
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  const notUsed = () => {
-    throw new Error("not used by this test file");
-  };
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
@@ -154,67 +152,27 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [BANK],
-    createBank: notUsed,
     listQuestions: async () => ({ questions: [QUESTION] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: notUsed,
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: notUsed,
-    updateGroup: notUsed,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: notUsed,
     tests: async () => [TEST_ROW],
-    createTest: notUsed,
     test: async () => TEST_ROW,
-    updateTest: notUsed,
     draft: async () => draftWith([WRITTEN]),
     patchDraft: async () => draftWith([WRITTEN]),
-    publishTest: notUsed,
-    closeTest: notUsed,
-    archiveTest: notUsed,
     versions: async () => [],
     checklist: async () => [],
-    cloneTest: notUsed,
-    exportTest: notUsed,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: notUsed,
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: notUsed,
-    uploadMedia: notUsed,
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: notUsed,
-    importCandidates: notUsed,
-    gradingQueue: notUsed,
-    grade: notUsed,
-    recordVerdict: notUsed,
-    exportCandidateData: notUsed,
-    deleteCandidateData: notUsed,
     usage: async () => undefined,
-    listWebhooks: async () => {
-      throw new Error("not used by this test file");
-    },
-    createWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
-    setWebhookActive: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
     listApiKeys: async () => ({ keys: [] }),
-    createApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
-    revokeApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
     ...overrides,
-  };
+  });
 }
 
 /** `D14`: Home -> Tests -> the test -> the section -> "Add questions" -> a
