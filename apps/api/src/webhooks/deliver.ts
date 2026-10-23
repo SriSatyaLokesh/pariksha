@@ -107,8 +107,18 @@ export async function tryDeliver(
       headers: { "content-type": "application/json", [SIGNATURE_HEADER]: signature },
       body: rawBody,
       signal: AbortSignal.timeout(DELIVERY_TIMEOUT_MS),
+      // MAJOR-1 (whole-branch review): without this, `fetch`'s default
+      // `"follow"` bypasses `urlRefusal` entirely — a URL that passed the
+      // SSRF check once can 307/308 to loopback, RFC1918 or the cloud
+      // metadata endpoint on every retry, forever, and `fetch` preserves
+      // method and signed body across both. `reachable.ts:115` already
+      // made this call for the same refusal table; this is the one caller
+      // of it that had missed the decision. A 3xx now just falls out of
+      // `response.ok` and is recorded as an ordinary failure, which is
+      // the right read: a webhook receiver that redirects is misconfigured.
+      redirect: "manual",
     });
-    return { ok: response.ok, status: response.status, error: null };
+    return { ok: response.ok, status: response.status, error: response.ok ? null : `http ${response.status}` };
   } catch (error) {
     // A hang surfaces here as `AbortSignal.timeout`'s own `TimeoutError`;
     // a refused connection, a DNS failure and a thrown signer are every

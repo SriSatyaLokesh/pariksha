@@ -43,7 +43,7 @@ const MAX_RETRY_WINDOW_MS = 24 * 3600_000;
  *  bound as a SQL parameter and must round-trip through three dialects as
  *  an integer, and better-sqlite3 throws on reading back anything past
  *  this exact number (no `safeIntegers` mode here — see `client.ts`). */
-const NEVER_AGAIN = Number.MAX_SAFE_INTEGER;
+export const NEVER_AGAIN = Number.MAX_SAFE_INTEGER;
 
 /**
  * The most due deliveries one tick will ever attempt. The arithmetic
@@ -99,11 +99,23 @@ function nextState(row: DueRow, now: number, attempt: Attempt): { sql: string; p
   const attemptCount = row.attempt_count + 1;
 
   if (attempt.ok) {
+    // CRITICAL-1 (whole-branch review): a delivered row that keeps its old
+    // `next_attempt_at` stays inside the due-row index range forever —
+    // nothing else ever deletes a `webhook_delivery` row, so every row this
+    // drain has ever delivered would be re-read by the `SELECT` on every
+    // one of the 288 daily ticks. Measured on this schema: 50,000 delivered
+    // rows left in range cost 5.67ms and a full index scan per tick; moved
+    // to `NEVER_AGAIN`, the same tick costs 0.17ms. At ~20,000 accumulated
+    // rows that is 5.76M **D1 rows read** per day against the Free plan's
+    // 5M/day allowance — on a day with zero webhook traffic. `NEVER_AGAIN`
+    // now means one thing uniformly: this row is finished, delivered or
+    // not, and the drain's only reader of `next_attempt_at` never sees it
+    // again either way.
     return {
       sql:
-        "UPDATE webhook_delivery SET attempt_count = ?, last_status = ?, last_error = NULL, delivered_at = ? " +
-        "WHERE id = ?",
-      params: [attemptCount, attempt.status, now, row.id],
+        "UPDATE webhook_delivery SET attempt_count = ?, last_status = ?, last_error = NULL, " +
+        "delivered_at = ?, next_attempt_at = ? WHERE id = ?",
+      params: [attemptCount, attempt.status, now, NEVER_AGAIN, row.id],
     };
   }
 
@@ -142,7 +154,14 @@ async function drain(deps: AppDeps): Promise<{ summary: string }> {
     "SELECT wd.id, wd.workspace_id, wd.webhook_id, wd.event, wd.payload_json, wd.attempt_count, " +
       "wd.created_at, w.url, w.signing_secret " +
       "FROM webhook_delivery wd JOIN webhook w ON w.id = wd.webhook_id " +
-      "WHERE wd.delivered_at IS NULL AND wd.next_attempt_at <= ? " +
+      // MAJOR-2 (whole-branch review): the inline path only ever reads
+      // through `listActiveWebhooksForEvent` (`active = 1`); this join had
+      // no such filter, so Pause did nothing for a row already queued —
+      // it kept being retried for up to 24h after the organiser paused it.
+      // A paused row's age (from `created_at`) keeps advancing in real
+      // time while it waits here, so a long pause does not store up a
+      // burst on resume — it lets the 24h give-up deadline do its job.
+      "WHERE w.active = 1 AND wd.delivered_at IS NULL AND wd.next_attempt_at <= ? " +
       "ORDER BY wd.next_attempt_at ASC LIMIT ?",
     [now, DRAIN_BATCH_LIMIT],
   );

@@ -380,7 +380,10 @@ export async function submitAttempt(
     // for the race's winner — the loser writes nothing above and must not
     // fire a second webhook for the same submission either. `fireWebhooks`
     // never throws; a dead or slow receiver costs this request at most
-    // `DELIVERY_TIMEOUT_MS` and never the receipt.
+    // `INLINE_FANOUT_LIMIT * DELIVERY_TIMEOUT_MS` — 15s at the shipped
+    // limit of 3 (sequential, not parallel; `deliver.ts`'s own arithmetic),
+    // never the receipt. Branch review MINOR-10: this comment previously
+    // named `DELIVERY_TIMEOUT_MS` alone, understating the bound 3x.
     await fireWebhooks(deps, {
       workspaceId: attempt.workspaceId,
       event: "attempt.submitted",

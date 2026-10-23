@@ -140,6 +140,55 @@ describe("fireWebhooks", () => {
     expect(await deliveryRows(wsp)).toEqual([{ event: "attempt.submitted", webhook_id: webhookId }]);
   });
 
+  // MAJOR-1 (whole-branch review): without `redirect: "manual"`, `fetch`'s
+  // default `"follow"` bypasses `urlRefusal` entirely — a URL that passed
+  // the SSRF check once can 307/308 an organiser's own signed payload to
+  // loopback, RFC1918 or the cloud metadata endpoint on every retry.
+  // `reachable.ts:115` already made this call for the same refusal table
+  // (`reachable.test.ts`'s own precedent for how to prove it); this is the
+  // one caller of it that had missed the decision.
+  it("MAJOR-1: never follows a redirect — the request is sent with redirect: manual", async () => {
+    const wsp = newId("wsp");
+    await hookIn(wsp, ["attempt.submitted"]);
+    let capturedInit: RequestInit | undefined;
+    const http = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      capturedInit = init;
+      return new Response(null, { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    await fireWebhooks(withHttp(http), {
+      workspaceId: wsp,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_x" },
+      now: FIXED_NOW,
+    });
+
+    expect(capturedInit?.redirect).toBe("manual");
+  });
+
+  // A `redirect: "manual"` response surfaces to the WHATWG fetch caller as
+  // an opaque, not-ok response (`type: "opaqueredirect"`, `ok: false`) —
+  // never an automatic second request. Simulated here as any non-2xx,
+  // since `tryDeliver` only ever inspects `response.ok`/`status`, exactly
+  // as it does for an ordinary 500: a receiver that redirects is recorded
+  // as a failure and queued for the drain, same as any other failure.
+  it("MAJOR-1: a redirecting receiver is treated as a failure, not followed a second time", async () => {
+    const wsp = newId("wsp");
+    const { webhookId } = await hookIn(wsp, ["attempt.submitted"]);
+    const http = vi.fn(async () => new Response(null, { status: 0 })) as unknown as typeof globalThis.fetch;
+
+    const result = await fireWebhooks(withHttp(http), {
+      workspaceId: wsp,
+      event: "attempt.submitted",
+      payload: { attemptId: "att_x" },
+      now: FIXED_NOW,
+    });
+
+    expect(http).toHaveBeenCalledTimes(1); // never a second call to the redirect target
+    expect(result).toEqual({ delivered: 0, queued: 1 });
+    expect(await deliveryRows(wsp)).toEqual([{ event: "attempt.submitted", webhook_id: webhookId }]);
+  });
+
   it("queues attempt.started without attempting it inline", async () => {
     const wsp = newId("wsp");
     const http = okHttp();
