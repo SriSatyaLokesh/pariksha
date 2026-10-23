@@ -2,7 +2,8 @@ import { describe, it, expect } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import type { QuestionType, SingleQuestion } from "@pariksha/core";
 
-import type { Actor, ApiClient, Bank, Workspace } from "../../src/lib/api";
+import type { Actor, Bank, Workspace } from "../../src/lib/api";
+import { fakeClient } from "../fixtures/api-client";
 import { OrganiserApp } from "../../src/routes/organiser";
 import { TYPE_GROUPS, TYPE_LABELS } from "../../src/components/authoring/TypePicker";
 import {
@@ -95,19 +96,12 @@ const SINGLE: SingleQuestion = {
   key: "a",
 };
 
-function fakeClient(): ApiClient {
-  const unused = () => {
-    throw new Error("not used by this test file");
-  };
-  return {
+function typePickerClient() {
+  return fakeClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
-    completeSetup: unused,
-    requestMagicLink: async () => undefined,
-    signOut: async () => undefined,
     listBanks: async () => [BANK],
-    createBank: unused,
     listQuestions: async () => ({
       questions: [
         {
@@ -133,48 +127,18 @@ function fakeClient(): ApiClient {
     }),
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: unused,
-    updateGroup: unused,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: unused,
     tests: async () => [],
-    createTest: unused,
-    test: unused,
-    updateTest: unused,
-    draft: unused,
-    patchDraft: unused,
-    publishTest: unused,
-    closeTest: unused,
-    archiveTest: unused,
     versions: async () => [],
     checklist: async () => [],
-    cloneTest: unused,
-    exportTest: unused,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: unused,
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: unused,
-    uploadMedia: unused,
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: unused,
-    importCandidates: unused,
-    gradingQueue: unused,
-    grade: unused,
-    recordVerdict: unused,
-    exportCandidateData: unused,
-    deleteCandidateData: unused,
     usage: async () => undefined,
-    listWebhooks: unused,
-    createWebhook: unused,
-    setWebhookActive: unused,
-    deleteWebhook: unused,
-    listApiKeys: unused,
-    createApiKey: unused,
-    revokeApiKey: unused,
-  };
+  });
 }
 
 /**
@@ -183,7 +147,7 @@ function fakeClient(): ApiClient {
  * only route an Author has to the picker this file is about.
  */
 async function openPicker() {
-  render(<OrganiserApp client={fakeClient()} />);
+  render(<OrganiserApp client={typePickerClient()} />);
   fireEvent.click(await screen.findByRole("button", { name: "Banks" }));
   fireEvent.click(await screen.findByRole("button", { name: /SQL basics/ }));
   fireEvent.click(await screen.findByRole("button", { name: /^edit question:/i }));

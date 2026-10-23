@@ -4,6 +4,7 @@ import { axe } from "jest-axe";
 import type { SingleQuestion } from "@pariksha/core";
 
 import type { Actor, ApiClient, Bank, Workspace } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 import { OrganiserApp } from "../../src/routes/organiser";
 
 const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
@@ -37,7 +38,7 @@ const SINGLE: SingleQuestion = {
 };
 
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => ACTOR,
     workspaces: async () => [WORKSPACE],
@@ -45,9 +46,6 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [BANK],
-    createBank: async () => {
-      throw new Error("not used");
-    },
     listQuestions: async () => ({
       questions: [
         {
@@ -73,109 +71,20 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     }),
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: async () => {
-      throw new Error("not used");
-    },
-    updateGroup: async () => {
-      throw new Error("not used");
-    },
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: async () => {
-      throw new Error("not used");
-    },
     tests: async () => [],
-    createTest: async () => {
-      throw new Error("not used");
-    },
-    test: async () => {
-      throw new Error("not used");
-    },
-    updateTest: async () => {
-      throw new Error("not used");
-    },
-    draft: async () => {
-      throw new Error("not used");
-    },
-    patchDraft: async () => {
-      throw new Error("not used");
-    },
-    publishTest: async () => {
-      throw new Error("not used by this test file");
-    },
-    closeTest: async () => {
-      throw new Error("not used by this test file");
-    },
-    archiveTest: async () => {
-      throw new Error("not used by this test file");
-    },
     versions: async () => [],
     checklist: async () => [],
-    cloneTest: async () => {
-      throw new Error("not used by this test file");
-    },
-    exportTest: async () => {
-      throw new Error("not used by this test file");
-    },
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    // Task 6 (#58, P5.5): present only to satisfy `ApiClient`'s shape --
-    // nothing in this file reaches T-19's link check.
-    checkUrl: async () => {
-      throw new Error("not used by this test file");
-    },
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: async () => {
-      throw new Error("not used by this test file");
-    },
-    uploadMedia: async () => {
-      throw new Error("not used by this test file");
-    },
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: async () => {
-      throw new Error("not used by this test file");
-    },
-    importCandidates: async () => {
-      throw new Error("not used by this test file");
-    },
-    gradingQueue: async () => {
-      throw new Error("not used by this test file");
-    },
-    grade: async () => {
-      throw new Error("not used by this test file");
-    },
-    recordVerdict: async () => {
-      throw new Error("not used by this test file");
-    },
-    exportCandidateData: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteCandidateData: async () => {
-      throw new Error("not used by this test file");
-    },
     usage: async () => undefined,
-    listWebhooks: async () => {
-      throw new Error("not used by this test file");
-    },
-    createWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
-    setWebhookActive: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
     listApiKeys: async () => ({ keys: [] }),
-    createApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
-    revokeApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
     ...overrides,
-  };
+  });
 }
 
 // Fix round (whole-branch review, M4): `justSaved` used to be set `true` on

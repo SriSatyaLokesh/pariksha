@@ -7,8 +7,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { ApiError, type ApiClient, type Webhook } from "../../src/lib/api";
+import { ApiError, type Webhook } from "../../src/lib/api";
 import { WebhookPanel } from "../../src/components/organiser/WebhookPanel";
+import { fakeClient } from "../fixtures/api-client";
 
 const WORKSPACE_ID = "wsp_1";
 
@@ -20,82 +21,14 @@ const HOOK: Webhook = {
   createdAt: 0,
 };
 
-// One typed object literal implementing ApiClient, same convention as
-// apps/web/test/organiser.test.tsx's `fakeClient` — no MSW, no fetch mock.
-function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  const notUsed = async (): Promise<never> => {
-    throw new Error("not used by this test file");
-  };
-  return {
-    setupStatus: async () => ({ needed: false, providers: [] }),
-    me: async () => null,
-    workspaces: async () => [],
-    completeSetup: notUsed,
-    requestMagicLink: async () => undefined,
-    signOut: async () => undefined,
-    listBanks: async () => [],
-    createBank: notUsed,
-    listQuestions: async () => ({ questions: [] }),
-    deleteQuestion: async () => undefined,
-    saveQuestion: notUsed,
-    listTags: async () => [],
-    listGroups: async () => [],
-    createGroup: notUsed,
-    updateGroup: notUsed,
-    deleteGroup: async () => undefined,
-    importBank: async () => ({ imported: 0, issues: [] }),
-    exportBank: notUsed,
-    exportQuestion: notUsed,
-    tests: async () => [],
-    createTest: notUsed,
-    test: notUsed,
-    updateTest: notUsed,
-    draft: notUsed,
-    patchDraft: notUsed,
-    publishTest: notUsed,
-    closeTest: notUsed,
-    archiveTest: notUsed,
-    versions: async () => [],
-    checklist: async () => [],
-    cloneTest: notUsed,
-    exportTest: notUsed,
-    importTest: notUsed,
-    checkUrl: notUsed,
-    workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: notUsed,
-    uploadMedia: notUsed,
-    candidates: async () => [],
-    importCandidates: notUsed,
-    listWebhooks: async () => ({ webhooks: [] }),
-    createWebhook: notUsed,
-    setWebhookActive: notUsed,
-    deleteWebhook: notUsed,
-    // 8e's additions to `ApiClient`, then this branch's. Neither set overlaps
-    // a line the other touched, so only the type ever catches a missing one.
-    // See #228: every test file hand-rolls this fixture, which is why one
-    // interface change conflicts in twenty-odd places.
-    exportCandidateData: notUsed,
-    deleteCandidateData: notUsed,
-    usage: async () => undefined,
-    listApiKeys: notUsed,
-    createApiKey: notUsed,
-    revokeApiKey: notUsed,
-    // 8b's additions to `ApiClient` (#228 again — fourth time today that one
-    // interface change broke a hand-rolled copy of this fixture).
-    gradingQueue: notUsed,
-    grade: notUsed,
-    recordVerdict: notUsed,
-    // 7e's additions to `ApiClient` — fifth time today one interface change
-    // has broken a hand-rolled copy of this fixture (#228).
-    lockedAttempts: notUsed,
-    unlockAttempt: notUsed,
-    ...overrides,
-  };
-}
-
 describe("WebhookPanel — loading and the empty state", () => {
   it("shows the empty state when the workspace has no webhooks", async () => {
-    render(<WebhookPanel workspaceId={WORKSPACE_ID} client={fakeClient()} />);
+    render(
+      <WebhookPanel
+        workspaceId={WORKSPACE_ID}
+        client={fakeClient({ listWebhooks: async () => ({ webhooks: [] }) })}
+      />,
+    );
     expect(await screen.findByText(/No webhooks yet/)).toBeInTheDocument();
   });
 
@@ -351,7 +284,12 @@ describe("WebhookPanel — pause/resume and revoke", () => {
 
 describe("WebhookPanel — axe", () => {
   it("the create form and an empty list have no axe violations", async () => {
-    const { container } = render(<WebhookPanel workspaceId={WORKSPACE_ID} client={fakeClient()} />);
+    const { container } = render(
+      <WebhookPanel
+        workspaceId={WORKSPACE_ID}
+        client={fakeClient({ listWebhooks: async () => ({ webhooks: [] }) })}
+      />,
+    );
     await screen.findByText(/No webhooks yet/);
     expect(await axe(container)).toHaveNoViolations();
   });
