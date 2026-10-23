@@ -8,12 +8,14 @@ import { GradingQueue } from "../components/organiser/GradingQueue";
 // instance and the actor/workspace chrome around it, and slots a screen's
 // content in; this is the screen, not a second shell.
 //
-// NOT YET WIRED INTO `organiser.tsx`'s view switch — `D3`'s own ruling
-// (`OrganiserShell.tsx:141-144`) is that Results and Grading arrive with
-// the phase that has something behind them, and reached this far "from a
-// test, not the top nav" (task brief). Reachable by passing it explicit
-// props the way `test/organiser/grading-queue.test.tsx` does; the
-// navigation wire is a later task's, not this one's.
+// REACHED FROM THE TEST BUILDER, NOT THE TOP NAV (fix round 1, `AC-26`).
+// `D3`'s own ruling (`OrganiserShell.tsx:141-144`) keeps Grading off `NAV` —
+// a grader is working on *a test* and goes to its queue, never opens
+// "Grading" first and picks a test — so the entry point is the "Grading
+// queue" button `routes/test.tsx` renders beside its Results row, gated on
+// `attempts.grade`, wired through `organiser.tsx`'s `"grading"` view kind
+// (`?view=grading&test=…`, `lib/view-url.ts`). `organiser.tsx` is this
+// component's production caller.
 //
 // `blind` is the one control that re-fetches: whether a candidate's
 // registration answers are even IN the payload is a server decision
