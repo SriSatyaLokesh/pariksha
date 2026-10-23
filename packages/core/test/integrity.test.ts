@@ -146,6 +146,19 @@ describe("integrityFor", () => {
     expect(integrityFor(standardWithNoEvidence)).toEqual({ flag: "clean", observed: true });
   });
 
+  // The scoping half of the ruling, proved under a signal that *would* flip
+  // a watching-configured profile — unlike `standardWithNoEvidence` above
+  // (which has no failure or shortfall signal at all and so would pass even
+  // if `watchingConfigured` were wrongly hardcoded `true`), this fails if
+  // the `requireCamera && snapshotIntervalSeconds > 0` gate is ever dropped.
+  it("stays observed on Standard even with a failure-event flood that would unobserve a watching profile", () => {
+    const r = integrityFor(base({
+      resolved: PROCTORING_DEFAULTS.standard,
+      events: Array(20).fill({ type: "snapshot_failed" }),
+    }));
+    expect(r).toEqual({ flag: "clean", observed: true });
+  });
+
   // A genuine high_risk still wins over an unwatched attempt (P7E-R9).
   it("stays high_risk, not merely review, when an unwatched attempt also crosses a threshold", () => {
     expect(integrityFor(base({
