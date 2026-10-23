@@ -263,6 +263,8 @@ export const attempt = pgTable(
     // Phase 7a Task 3 (Q6): a separate axis from `flag` (grading).
     integrityFlag: text("integrity_flag").notNull(),
     observed: boolean("observed").notNull(),
+    // Phase 7e Task 3 (`E-R1`): the sqlite.ts sibling's own comment.
+    lockedAt: bigint("locked_at", { mode: "number" }),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

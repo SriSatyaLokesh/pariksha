@@ -145,6 +145,9 @@ export const sqliteMigrations: Migration[] = [
   { name: "0010_violation_limit_claim.sql", statements: [
     "-- Phase 7e Task 1 fix round (F2, Major, code review of #213): the atomic\n-- claim that makes \"the violation limit fires once\" true under concurrency,\n-- not just in sequence.\n--\n-- `claimViolationLimit` (packages/db/src/repo/attempts.ts) used to be a\n-- `SELECT COUNT(*)` read, several lines before a conditional `INSERT` in the\n-- ingest route — a plain read-then-write race. Two concurrent posts for the\n-- same attempt, both past the limit, could both read \"not yet fired\" and\n-- both fire the configured action, which auto-submits or locks a candidate\n-- twice once Tasks 2 and 3 wire those actions to this outcome.\n--\n-- This partial unique index is the conflict target `INSERT … ON CONFLICT\n-- (attempt_id) WHERE type = 'violation_limit_reached' DO NOTHING` names:\n-- whichever of two concurrent inserts the database serialises first is the\n-- only one that ever gets a row back.\n--\n-- Filtered to this one event type on purpose, not a plain unique on\n-- `(attempt_id, type)`: an attempt can carry many rows of every other type\n-- (`window_blur`, `camera_lost`, …) and a non-partial unique would refuse\n-- every one of those after the first.\nCREATE UNIQUE INDEX `event_violation_limit_uq` ON `event` (`attempt_id`) WHERE `type` = 'violation_limit_reached';",
   ] },
+  { name: "0011_attempt_locked_at.sql", statements: [
+    "-- Phase 7e Task 3 (`E-R1`, a correction over the plan's own \"Migrations:\n-- none\"): the lock needs somewhere to live. There is no `status` column on\n-- `attempt` — `submitted_at` is the only lifecycle stamp that exists — so\n-- a locked attempt has nowhere to record it without this.\n--\n-- A nullable `locked_at`, the same shape `submitted_at` already has: null\n-- means \"never locked\", a timestamp is the moment `violationOutcome`'s\n-- `lock` branch first fired for this attempt (`lockAttempt`, packages/db/\n-- src/repo/attempts.ts). No DEFAULT needed — unlike 0008's NOT NULL\n-- columns, a nullable `ADD COLUMN` needs none on either dialect, and every\n-- attempt written before this migration correctly reads back \"not locked\".\nALTER TABLE `attempt` ADD `locked_at` integer;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -271,5 +274,8 @@ export const pgMigrations: Migration[] = [
   ] },
   { name: "0010_violation_limit_claim.sql", statements: [
     "-- Phase 7e Task 1 fix round (F2, Major, code review of #213): the\n-- sqlite/0010_violation_limit_claim.sql sibling. Postgres supports the same\n-- partial unique index and the same `ON CONFLICT (attempt_id) WHERE type =\n-- 'violation_limit_reached' DO NOTHING` conflict target.\nCREATE UNIQUE INDEX \"event_violation_limit_uq\" ON \"event\" USING btree (\"attempt_id\") WHERE \"type\" = 'violation_limit_reached';",
+  ] },
+  { name: "0011_attempt_locked_at.sql", statements: [
+    "-- Phase 7e Task 3 (`E-R1`): the sqlite/0011_attempt_locked_at.sql sibling.\n-- Nullable, so Postgres needs no DEFAULT either — every attempt written\n-- before this migration reads back \"not locked\" on both dialects.\nALTER TABLE \"attempt\" ADD COLUMN \"locked_at\" bigint;",
   ] },
 ];

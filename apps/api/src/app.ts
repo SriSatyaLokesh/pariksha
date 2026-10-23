@@ -504,6 +504,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // own attempt-context join). Measured in `test/run/auto-submit.test.ts`'s
   // own counting test. An empty `events` array costs one less than the
   // common path — `appendEvents` is a no-op on it.
+  //
+  // Phase 7e Task 3: the first batch that first locks under `lock` costs
+  // **7** (the 5 above, plus `lockAttempt`'s own write and one more
+  // `appendEvents` call for the `attempt_locked` marker) — measured in
+  // `test/run/lock.test.ts`'s own counting test, cheaper than
+  // `auto_submit`'s 10 and so no reason to move the ceiling this already
+  // declares.
   "/api/v1/run/attempt/events": 10,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the

@@ -230,6 +230,15 @@ export interface AttemptPaper {
   serverNow: number;
   submittedAt: number | null;
   /**
+   * Phase 7e Task 3 (`E-R1`): the interface's own "surfaced by `GET
+   * /api/v1/run/attempt`" line. `null` until `violationOutcome`'s `lock`
+   * branch fires; the same shape `submittedAt` already carries, read off
+   * `AttemptRecord.lockedAt` on resume. This is what lets a reload mid-lock
+   * raise the overlay again (`ProctoringLayer`'s `initialLocked`) rather
+   * than a resumed candidate landing back on a paper that looks live.
+   */
+  lockedAt: number | null;
+  /**
    * Phase 7c Task 1 (`Q7a`), fixed in the Task 5 follow-up round: **both
    * required, set by `paperFrom` for every caller**. `proctoring` is
    * `resolvedProctoringOf(settings)` — a pure function of the `settings`
@@ -272,6 +281,28 @@ const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(set
 
 const conflict = (code: string, message: string, details?: unknown): ApiError =>
   new ApiError(409, code, message, details);
+
+/**
+ * Phase 7e Task 3 (`E-R1`/`E-R2`): the lock's own refusal — called from
+ * each attempt-authority WRITE route, never from `attemptContext`. That
+ * middleware's own doc comment forbids refusing a resolved attempt there,
+ * and a 409 at that layer would also refuse `GET /attempt`, the one
+ * request a locked candidate must still be able to make (to learn they
+ * are locked, and to notice an organiser has cleared it). `PUT
+ * /attempt/answer` and `POST /attempt/submit` are the two routes a
+ * candidate's own gesture can use to change an attempt's state, so each
+ * calls this directly — the same shape `assertWritable`/`assertSectionOpen`
+ * already take for their own refusals in `/answer` below, rather than a
+ * second, hidden mechanism.
+ */
+function assertNotLocked(attempt: { lockedAt: number | null }): void {
+  if (attempt.lockedAt !== null) {
+    throw conflict(
+      "attempt_locked",
+      "This attempt is locked. Contact your organiser to continue.",
+    );
+  }
+}
 
 /**
  * The stale-version refusals. All 409, all audited, never a 500: a
@@ -532,6 +563,9 @@ export function paperFrom(input: {
   startedAt: number;
   deadlineAt: number;
   submittedAt: number | null;
+  /** Phase 7e Task 3 (`E-R1`): `null` from `/start` (a just-minted attempt
+   *  cannot be locked), `AttemptRecord.lockedAt` from `GET /attempt`. */
+  lockedAt: number | null;
   sectionStartedAt: number | null;
   maxIndex: number;
   responses: Record<string, ResponseValue | null>;
@@ -558,6 +592,7 @@ export function paperFrom(input: {
     allowCalculator: allowCalculator(input.settings),
     serverNow: input.now,
     submittedAt: input.submittedAt,
+    lockedAt: input.lockedAt,
     // `resolvedProctoringOf` is a pure read of `input.settings`, already
     // fetched for `timingOf` above — free for every caller, which is why
     // this is set here rather than left to `/start` and `GET /attempt`
@@ -724,6 +759,7 @@ export async function startAttempt(
       startedAt: now,
       deadlineAt,
       submittedAt: null,
+      lockedAt: null,
       sectionStartedAt: null,
       maxIndex: 0,
       responses: {},
@@ -881,6 +917,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         startedAt: attempt.startedAt,
         deadlineAt: attempt.deadlineAt,
         submittedAt,
+        lockedAt: attempt.lockedAt,
         sectionStartedAt: attempt.sectionStartedAt,
         maxIndex: attempt.maxIndex,
         responses,
@@ -944,6 +981,9 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         "You have already submitted this test, so this answer was not saved.",
       );
     }
+    // Phase 7e Task 3 (`E-R1`/`E-R2`): refused here, not in `attemptContext`
+    // — see `assertNotLocked`'s own doc comment.
+    assertNotLocked(attempt);
     // `AC-13`'s server half, and the only clock a write is judged by:
     // `deadline_at + late_sync_grace_seconds`, never the test's window.
     // `deriveState(...) === "open"` gates ENTRY only — re-checking it here
@@ -1134,6 +1174,13 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
    */
   routes.post("/attempt/submit", attemptContext(deps), async (c) => {
     const attempt = c.get("attempt");
+    // Phase 7e Task 3 (`E-R1`/`E-R2`): a locked attempt's own Submit press
+    // is refused too — the brief's own "the only way out is an organiser"
+    // would otherwise have a candidate end the very attempt an organiser
+    // is meant to review. A timed-out lock still finishes on its own: `GET
+    // /attempt`'s timeout materialisation is a different, unguarded path
+    // (`E-R2`) that does not go through this route at all.
+    assertNotLocked(attempt);
     const now = deps.now();
     // Whichever of the candidate's press and the clock got here first is
     // what this is called. `timedOut` already folds in the grace, so an

@@ -764,6 +764,11 @@ function AttemptView({
             attemptId={paper.attemptId}
             proctoring={paper.proctoring}
             initialViolations={paper.violations ?? 0}
+            // Phase 7e Task 3 (`E-R1`): `paper.lockedAt` is an older cached
+            // payload's missing field under the same `?.`/`??` guard every
+            // other optional-on-an-old-payload field here already takes —
+            // `undefined` reads as "not locked", the correct default.
+            initialLocked={paper.lockedAt != null}
             cameraStream={cameraStream}
             cameraUnavailable={cameraUnavailable}
           />

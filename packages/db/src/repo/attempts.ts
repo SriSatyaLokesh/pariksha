@@ -505,6 +505,40 @@ export const claimViolationLimit = scoped(
 );
 
 /**
+ * Phase 7e Task 3 (`E-R1`): the lock itself — `locked_at`, nullable,
+ * migration 0011. The caller (`routes/proctoring.ts`'s ingest) reaches
+ * this only once per attempt: `claimViolationLimit` above is the atomic
+ * claim that decides "has the limit already fired", and this function does
+ * not re-decide that — the same division `claimViolationLimit`'s own doc
+ * comment draws between deciding and counting. No second idempotency
+ * check is built here on top of it.
+ *
+ * `WHERE submitted_at IS NULL AND locked_at IS NULL` is defence in depth,
+ * not the thing that makes "once" true — it mirrors `finishAttempt`'s own
+ * `WHERE submitted_at IS NULL` idiom so a caller that somehow reached this
+ * twice (or reached it for an attempt that finished between the route's own
+ * `attempt.submittedAt === null` check and this write) still cannot lock a
+ * submitted attempt or re-stamp an already-locked one. `locked` reports
+ * whether this call is the one that actually wrote it, the same shape
+ * `finishAttempt`'s own `{ submitted }` already answers with.
+ */
+export const lockAttempt = scoped(
+  "lockAttempt",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; now: number },
+  ): Promise<{ locked: boolean }> => {
+    const { changes } = await db.run(
+      "UPDATE attempt SET locked_at = ? " +
+        "WHERE workspace_id = ? AND id = ? AND submitted_at IS NULL AND locked_at IS NULL",
+      [input.now, workspaceId, input.attemptId],
+    );
+    return { locked: changes > 0 };
+  },
+);
+
+/**
  * `Q4f`: call this only after the object `input.storageKey` names has
  * actually been written — that ordering is the route's job, not this
  * function's, the same way `upsertResponse` trusts its caller on sequencing.

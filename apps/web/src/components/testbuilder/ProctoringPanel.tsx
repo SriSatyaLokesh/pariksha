@@ -48,11 +48,14 @@ import { useDialogKeys } from "../useDialogKeys";
 // or consequence goes in a field's own help line, and an explanation of the
 // WHOLE GROUP is one note under the row — never help per field, which is
 // what would otherwise repeat the same sentence five or six times. `Q3`'s
-// face-check copy, `Q12b`'s microphone copy (issue 209) and the
-// violation-action copy (issue 214) are the three deliberate exceptions:
-// each is not a group fact, it is the reason ONE control is unusable, and
-// `D16a` requires every id that copy is reached by to come from this
-// instance's own `useId()`.
+// face-check copy and `Q12b`'s microphone copy (issue 209) are the two
+// remaining deliberate exceptions — each is not a group fact, it is the
+// reason ONE control is unusable — and `violation_action`'s own help line
+// is a third, different kind: `lock`'s own consequence (`proctoring_lock_
+// without_recourse`, `apps/api/src/publish/checklist.ts`), now that Phase
+// 7e Task 3 re-enabled the control issue 214 shipped disabled. `D16a`
+// requires every id that copy is reached by to come from this instance's
+// own `useId()`.
 //
 // `R2` (pre-flight ruling, progress.md): `.field-row` / `.field` /
 // `.field-row > .field > *` are `primitives.css:194-233`'s existing D16
@@ -503,13 +506,13 @@ export function ProctoringPanel({
         "Consequences",
         [
           numberField("violation_limit", "Warn after", 1, "violations", resolved.violationLimit),
-          // Issue 214: pre-cut and shipped disabled, the same treatment as
-          // `face_check` and `require_microphone` above. The raw document
-          // value is shown, not `resolved.violationAction` (always
-          // "warn_only" — the enforcement refusal is `resolveProctoring`'s,
-          // not a fact about what an imported document holds), so a
-          // document authored for issue 213 round-trips visibly even
-          // though nothing here can act on it yet.
+          // Phase 7e Task 3 (controller addition, issues 213/214):
+          // re-enabled. Issue 214 shipped this disabled because nothing
+          // enforced anything past the warning; Phase 7e's four tasks
+          // closed that gap one action at a time (flag, auto-submit,
+          // lock) and this is the last of the four — the select now
+          // drives a real control again, same as every other field in
+          // this panel.
           <div className="field" key="violation_action">
             <label className="field-label" htmlFor={`${ids}-violation_action`}>
               When the limit is reached
@@ -518,7 +521,7 @@ export function ProctoringPanel({
               className="text-input"
               id={`${ids}-violation_action`}
               value={value.overrides.violation_action ?? "warn_only"}
-              disabled
+              onChange={(event) => setOverride("violation_action", event.target.value as ViolationAction)}
               aria-describedby={
                 violationActionMarker === undefined
                   ? violationActionHelpId
@@ -532,8 +535,7 @@ export function ProctoringPanel({
               ))}
             </select>
             <p className="field-help" id={violationActionHelpId}>
-              Only the warning above is enforced. Auto-submit, locking and flagging are not built
-              yet — see issue 214. This control is disabled until then.
+              Lock has no way out but an organiser opening the attempt — see the publish checklist.
             </p>
             {violationActionMarker?.node}
           </div>,

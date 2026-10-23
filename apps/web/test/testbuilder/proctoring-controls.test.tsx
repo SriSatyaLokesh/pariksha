@@ -150,23 +150,22 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
     expect(control).toHaveAccessibleDescription(/Phase 8/);
   });
 
-  // Issue 214: the violation-action select gets the same disabled
-  // treatment as face check and the microphone above — the organiser can
-  // still read every value this control holds (the raw document value, not
-  // the resolved one), but cannot drive it, because nothing in this phase
-  // enforces auto-submit, lock or the flag half of warn_then_flag.
-  it("names the issue in the violation action's own accessible description", async () => {
+  // Phase 7e Task 3: re-enabled — issue 214's disabled treatment is gone
+  // now that all four actions are enforced. The help line states lock's
+  // own consequence rather than the control's own unusability.
+  it("is enabled, and states lock's own consequence in its accessible description", async () => {
     await openProctoringPanel({});
     const control = screen.getByLabelText(/When the limit is reached/i);
-    expect(control).toBeDisabled();
-    expect(control).toHaveAccessibleDescription(/214/);
+    expect(control).not.toBeDisabled();
+    expect(control).toHaveAccessibleDescription(/organiser opening the attempt/i);
   });
 
-  // A positive control beside the three disabled assertions above, per the
-  // standing ruling (progress.md, "a negative assertion needs a positive
-  // control"): an enabled checkbox right beside them proves `toBeDisabled()`
-  // can fail — it is not disabled, and the assertion below is run against
-  // it too, the other way round, to show it is really reading the attribute.
+  // A positive control beside the two disabled assertions above (face
+  // check, microphone), per the standing ruling (progress.md, "a negative
+  // assertion needs a positive control"): an enabled checkbox right beside
+  // them proves `toBeDisabled()` can fail — it is not disabled, and the
+  // assertion below is run against it too, the other way round, to show it
+  // is really reading the attribute.
   it("leaves every other checkbox enabled, so the disabled assertions above are not vacuous", async () => {
     await openProctoringPanel({});
     expect(screen.getByLabelText(/Require a camera/i)).not.toBeDisabled();
@@ -190,19 +189,17 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
 // in the branch green. This table drives each control the way an organiser
 // would and asserts the key in the resulting `onChange` payload.
 //
-// Twelve of the panel's fifteen override keys are driven below — eight
-// checkboxes, four number boxes. The other three, `face_check`,
-// `require_microphone` and `violation_action`, ship permanently `disabled`
-// (`Q3`, `Q12b`/#209, and issue 214 — all pre-cut, the first two Phase 8
-// features and the third a consequence this phase does not enforce), so
-// there is no organiser gesture that can drive any of them; "checking %s
-// writes true" above has nothing to click for them, and the select has
-// nothing above either. Their labels and accessible descriptions are
-// pinned by "names the phase/issue in the face check's/microphone's/
-// violation action's own accessible description" above, and what each
-// renders — the raw imported document value, never the resolved one — is
-// exercised by `proctoring-profile.test.tsx`'s profile-change coverage of
-// the same keys.
+// Thirteen of the panel's fifteen override keys are driven below — eight
+// checkboxes, four number boxes, and (since Phase 7e Task 3 re-enabled it)
+// `violation_action`'s own select. The other two, `face_check` and
+// `require_microphone`, ship permanently `disabled` (`Q3`, `Q12b`/#209 —
+// both pre-cut Phase 8 features), so there is no organiser gesture that can
+// drive either; "checking %s writes true" above has nothing to click for
+// them. Their labels and accessible descriptions are pinned by "names the
+// phase in the face check's/microphone's own accessible description"
+// above, and what each renders — the raw imported document value, never
+// the resolved one — is exercised by `proctoring-profile.test.tsx`'s
+// profile-change coverage of the same keys.
 describe("each override key is written by the control its label names (branch-review Finding 2)", () => {
   it.each([
     ["Block phones and tablets", "desktop_only"],
@@ -238,19 +235,17 @@ describe("each override key is written by the control its label names (branch-re
     );
   });
 
-  // Issue 214: this used to be "selecting an option in When the limit is
-  // reached writes override.violation_action" — the control drove an
-  // override nothing enforced. It carries no `onChange` at all now, the
-  // same shape `face_check`/`require_microphone` already have above, so
-  // there is no handler left for even a `fireEvent.change` dispatched
-  // straight at it (bypassing `disabled`, the way a real click or keyboard
-  // interaction could not) to reach.
-  it("writes nothing when the disabled When the limit is reached select is driven", async () => {
+  // Phase 7e Task 3: the reverse of what this test pinned under issue 214
+  // ("writes nothing when the disabled select is driven") — the control is
+  // enabled again and drives a real override.
+  it("selecting an option in When the limit is reached writes override.violation_action", async () => {
     const onChange = vi.fn();
     await openProctoringPanel({}, { onChange });
     fireEvent.change(screen.getByLabelText(/When the limit is reached/i), {
       target: { value: "lock" },
     });
-    expect(onChange).not.toHaveBeenCalled();
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ overrides: expect.objectContaining({ violation_action: "lock" }) }),
+    );
   });
 });

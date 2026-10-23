@@ -45,6 +45,11 @@ export interface EventsResponse {
    *  predates the field, and treating an absent key as "not this response"
    *  is the correct reading for every one of them, not a gap to patch. */
   submitted?: boolean;
+  /** Phase 7e Task 3: the `submitted` field's own mirror — `true` only on
+   *  the one response whose own batch locked this attempt under `lock`.
+   *  Optional for the identical reason `submitted` is: every pre-existing
+   *  fixture predates it, and an absent key reads as "not this response". */
+  locked?: boolean;
 }
 
 /** The brief's own ruling: a dead network for twenty minutes must not grow
@@ -69,10 +74,17 @@ export interface ProctoringQueue {
 
 export function createProctoringQueue(opts: {
   send: (events: QueuedEvent[]) => Promise<EventsResponse>;
-  /** `submitted`: Phase 7e Task 2's own addition — see `EventsResponse`'s
-   *  doc comment. Defaults `false` for every pre-existing caller, which is
-   *  also the correct reading of a response that omits the field. */
-  onCount: (violations: number, limit: number, action: ViolationAction, submitted: boolean) => void;
+  /** `submitted`/`locked`: Phase 7e Tasks 2 and 3's own additions — see
+   *  `EventsResponse`'s doc comment on each. Both default `false` for
+   *  every pre-existing caller, which is also the correct reading of a
+   *  response that omits either field. */
+  onCount: (
+    violations: number,
+    limit: number,
+    action: ViolationAction,
+    submitted: boolean,
+    locked: boolean,
+  ) => void;
   flushMs: number;
 }): ProctoringQueue {
   let buffer: QueuedEvent[] = [];
@@ -119,7 +131,13 @@ export function createProctoringQueue(opts: {
       owesGap = false;
       if (!stopped) {
         try {
-          opts.onCount(answer.violations, answer.limit, answer.action, answer.submitted === true);
+          opts.onCount(
+            answer.violations,
+            answer.limit,
+            answer.action,
+            answer.submitted === true,
+            answer.locked === true,
+          );
         } catch {
           // A consumer's own callback must not break the queue either.
         }

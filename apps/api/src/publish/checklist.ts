@@ -423,12 +423,13 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
-  // Phase 7a Task 6 (`Q1c`): proctoring's three rows (issue 214 removed the
-  // fourth, `proctoring_lock_without_recourse` — see below). All three are
-  // advisory — Phase 7 adds no blocking row. `resolveProctoring` is the
-  // one reader every Phase 7 consumer resolves settings through (`Q1`),
-  // so this reads it the same way the candidate-side gates do rather than
-  // branching on `profile` itself.
+  // Phase 7a Task 6 (`Q1c`): proctoring's four rows — `proctoring_lock_
+  // without_recourse` (below) is the fourth, restored by Phase 7e Task 3
+  // after issue 214 removed it and issue 213/this task gave `lock` a real
+  // consumer again. All four are advisory — Phase 7 adds no blocking row.
+  // `resolveProctoring` is the one reader every Phase 7 consumer resolves
+  // settings through (`Q1`), so this reads it the same way the
+  // candidate-side gates do rather than branching on `profile` itself.
   const proctoring = resolveProctoring(settings.proctoring);
 
   // Strict's whole point is a camera-observed candidate; without one it
@@ -499,10 +500,28 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
     });
   }
 
-  // Issue 214: this used to be the `proctoring_lock_without_recourse` row —
-  // advisory when `violationAction === "lock"`, since a locked attempt had
-  // no way out but an organiser opening it. `resolveProctoring` now refuses
-  // `lock` outright (it always resolves `"warn_only"`), so the branch is
-  // unreachable and goes with it; see issue 213 for where it comes back.
+  // This was going to be the one blocking row in Phase 7 — a `lock` has no
+  // way out but an organiser opening the attempt, and an organiser who
+  // cannot be reached is a candidate stuck for good. It stays advisory
+  // because nothing in the schema names where to reach that organiser: no
+  // support-email, reply-to or from-address field exists anywhere yet, and
+  // inventing one belongs to whoever owns organiser contact details, not
+  // this task.
+  //
+  // Issue 214 removed this row when `resolveProctoring` refused `lock`
+  // outright (it then always resolved `"warn_only"`) — a control nothing
+  // enforced had nothing to advise about. Phase 7e Task 3 restores it:
+  // `lock` is real again (Task 1 restored the resolution, Task 3 restored
+  // the enforcement), so the advisory it was always meant to carry is due
+  // back too.
+  if (proctoring.violationAction === "lock") {
+    rows.push({
+      id: "proctoring_lock_without_recourse",
+      severity: "advisory",
+      field: "proctoring.overrides.violation_action",
+      message: "a locked attempt clears only when an organiser opens it — phase 8 adds the monitor",
+    });
+  }
+
   return rows;
 }

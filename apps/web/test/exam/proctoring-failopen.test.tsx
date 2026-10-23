@@ -59,6 +59,7 @@ function paperFixture(opts: { proctoring: ResolvedProctoring; violations?: numbe
     allowCalculator: false,
     serverNow: NOW,
     submittedAt: null,
+    lockedAt: null,
     proctoring: opts.proctoring,
     violations: opts.violations ?? 0,
   };

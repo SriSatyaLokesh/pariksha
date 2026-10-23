@@ -414,11 +414,12 @@ it("every row names a field a screen can navigate to", async () => {
 
 // --- proctoring advisories (Phase 7a Task 6, Q1c) -----------------------
 //
-// All three are advisory — Phase 7 adds no blocking row (`Q1c`). A fourth,
-// `proctoring_lock_without_recourse`, used to fire on `violation_action:
-// "lock"`; issue 214 made `resolveProctoring` refuse `lock` outright (it
-// always resolves `"warn_only"`), so that branch — and its row — are gone.
-// The test below pins the row's absence rather than its advisory severity.
+// All four are advisory — Phase 7 adds no blocking row (`Q1c`). The fourth,
+// `proctoring_lock_without_recourse`, fires on `violation_action: "lock"`;
+// issue 214 made `resolveProctoring` refuse `lock` outright and the row
+// went with it, and Phase 7e Task 1 (resolution) and Task 3 (enforcement)
+// brought both back. The test below pins the row's presence, the opposite
+// of what it pinned while `lock` was refused.
 
 it("advises on Strict without a camera, and never blocks", async () => {
   await saveDraft({ settings: { proctoring: { profile: "strict", overrides: { require_camera: false } } } });
@@ -488,15 +489,29 @@ it("is silent about cost when there is no camera to take it, even past the image
   expect(ids(await rows())).not.toContain("proctoring_snapshot_cost");
 });
 
-// Issue 214: this used to be "a lock with no way to reach the organiser is
-// advisory, and never blocks" — `proctoring_lock_without_recourse` fired on
-// `violation_action: "lock"`. `resolveProctoring` refuses `lock` outright
-// now, so the row is gone even though the document still holds the value
-// it used to fire on — pinning the row's absence, not just its severity.
-it("never advises on a lock without recourse, because resolveProctoring refuses lock outright", async () => {
+// Phase 7e Task 3: `lock` is real again (Task 1 restored the resolution,
+// this task restored the enforcement), so the advisory this row always
+// meant — "a lock with no way to reach the organiser" — is due back too.
+// Issue 214 briefly made this row's absence the pinned behaviour; this is
+// the reverse of that test, not a new one.
+it("advises on a lock without recourse, and never blocks", async () => {
   await saveDraft({ settings: { proctoring: { profile: "standard", overrides: { violation_action: "lock" } } } });
-  const list = ids(await rows());
-  expect(list).not.toContain("proctoring_lock_without_recourse");
+  const list = await rows();
+  expect(list.find((r) => r.id === "proctoring_lock_without_recourse")).toMatchObject({
+    severity: "advisory",
+    field: "proctoring.overrides.violation_action",
+  });
+  expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
+});
+
+// A positive control beside the above: warn_only and warn_then_flag never
+// carry this row at all, so its presence above is really reading the
+// document's own `violation_action`, not firing unconditionally.
+it("is silent about recourse for every action other than lock", async () => {
+  for (const violation_action of ["warn_only", "warn_then_flag", "auto_submit"] as const) {
+    await saveDraft({ settings: { proctoring: { profile: "standard", overrides: { violation_action } } } });
+    expect(ids(await rows())).not.toContain("proctoring_lock_without_recourse");
+  }
 });
 
 it("measures the real subrequest cost of the checklist route, flat in candidates and sections", async () => {

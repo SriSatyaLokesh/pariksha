@@ -255,6 +255,10 @@ export const attempt = sqliteTable(
     // Phase 7a Task 3 (Q6): a separate axis from `flag` (grading).
     integrityFlag: text("integrity_flag").notNull(),
     observed: integer("observed", { mode: "boolean" }).notNull(),
+    // Phase 7e Task 3 (`E-R1`): null means never locked, a timestamp is
+    // when `violationOutcome`'s `lock` branch fired. No `status` column
+    // exists on this table — this is `submitted_at`'s own shape.
+    lockedAt: integer("locked_at"),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

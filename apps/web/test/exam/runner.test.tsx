@@ -76,6 +76,7 @@ const paper: AttemptPaper = {
   allowCalculator: true,
   serverNow: NOW,
   submittedAt: null,
+  lockedAt: null,
   // Whole-branch review (point 7, minor): `allowCalculator` above and
   // `proctoring.allowCalculator` are the same fact twice (`paperFrom`
   // derives both from one `resolveProctoring` call) — `off`'s own

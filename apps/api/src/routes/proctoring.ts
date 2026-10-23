@@ -30,9 +30,14 @@ import {
   appendEvents,
   claimViolationLimit,
   countViolations,
+  lockAttempt,
   recordSnapshot,
 } from "@pariksha/db";
-import { CANDIDATE_PROCTORING_EVENTS, violationOutcome } from "@pariksha/core";
+import {
+  CANDIDATE_PROCTORING_EVENTS,
+  violationOutcome,
+  type ProctoringEventType,
+} from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
@@ -205,6 +210,10 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // the same fallback every other proctoring failure in this phase
     // degrades to.
     let submitted = false;
+    // Phase 7e Task 3 (`E-R1`/`E-R2`): `true` only on the one response
+    // whose own batch locks this attempt — `ProctoringLayer`'s own
+    // `initialLocked`/`locked` doc comment is the mirror of `submitted`'s.
+    let locked = false;
     if (attempt.submittedAt === null) {
       const atLimit = violations >= resolved.violationLimit;
       const alreadyActioned = atLimit
@@ -223,17 +232,44 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
         } catch {
           /* AG1: degrade — see the comment above. */
         }
+      } else if (outcome.kind === "lock") {
+        // Phase 7e Task 3: the fourth and most intrusive action, made real.
+        // `claimViolationLimit` above is the one and only idempotency
+        // check — `alreadyActioned` already gates this whole branch to a
+        // single firing, so `lockAttempt` (`packages/db/src/repo/
+        // attempts.ts`) does not re-decide anything, only writes. `AG1`:
+        // same posture as `auto_submit` just above — a failure here leaves
+        // `alreadyActioned` true and the attempt unlocked; nothing throws
+        // into or stalls the candidate's own request.
+        try {
+          const result = await lockAttempt(deps.db, attempt.workspaceId, {
+            attemptId: attempt.attemptId,
+            now: deps.now(),
+          });
+          if (result.locked) {
+            await appendEvents(deps.db, attempt.workspaceId, {
+              attemptId: attempt.attemptId,
+              events: [{ type: "attempt_locked" satisfies ProctoringEventType, clientTs: deps.now() }],
+              serverTs: deps.now(),
+            });
+            locked = true;
+          }
+        } catch {
+          /* AG1: degrade — see the comment above. */
+        }
       }
     }
 
-    // `submitted` tells the browser this very request is the one that
-    // ended the attempt, so the runner can move itself to the receipt
-    // instead of finding out on its next save (a 409) or its next reload.
+    // `submitted`/`locked` tell the browser this very request is the one
+    // that ended or froze the attempt, so the runner can move itself to
+    // the receipt or raise the lock overlay instead of finding out on its
+    // next save (a 409) or its next reload.
     return c.json({
       violations,
       limit: resolved.violationLimit,
       action: resolved.violationAction,
       submitted,
+      locked,
     });
   });
 

@@ -167,6 +167,12 @@ export interface AttemptRecord {
   sectionStartedAt: number | null;
   maxIndex: number;
   flag: string;
+  /** Phase 7e Task 3 (`E-R1`): null means never locked, a timestamp is
+   *  when the lock fired (`lockAttempt`, `repo/attempts.ts`). On the
+   *  record for the same reason `submittedAt` is — the write routes that
+   *  refuse a locked attempt (`run/attempt.ts`'s `assertNotLocked`) read
+   *  it off the row this middleware already resolved, no second read. */
+  lockedAt: number | null;
   /** `AttemptScore`, as `finishAttempt` stored it, and `null` until an
    *  attempt has been scored. On the record because the receipt and the
    *  result are read through the same cookie *after* submission (Task 11):
@@ -195,6 +201,7 @@ interface AttemptRecordRow {
   section_started_at: number | null;
   max_index: number;
   flag: string;
+  locked_at: number | null;
   score_json: unknown;
   settings_json: unknown;
   sections_json: unknown;
@@ -207,7 +214,7 @@ export async function readAttemptByTokenHash(
   const rows = await db.query<AttemptRecordRow>(
     "SELECT a.id, a.workspace_id, a.candidate_id, a.test_version_id, a.set_no, a.layout_json, " +
       "a.started_at, a.deadline_at, a.submitted_at, a.submit_reason, a.section_started_at, " +
-      "a.max_index, a.flag, a.score_json, " +
+      "a.max_index, a.flag, a.locked_at, a.score_json, " +
       "v.test_id AS test_id, v.version AS version, v.settings_json AS settings_json, " +
       "v.sections_json AS sections_json " +
       "FROM attempt a JOIN test_version v ON v.id = a.test_version_id " +
@@ -232,6 +239,7 @@ export async function readAttemptByTokenHash(
     sectionStartedAt: row.section_started_at === null ? null : Number(row.section_started_at),
     maxIndex: Number(row.max_index),
     flag: row.flag,
+    lockedAt: row.locked_at === null ? null : Number(row.locked_at),
     score: row.score_json == null ? null : db.jsonValue(row.score_json),
     settings: db.jsonValue(row.settings_json),
     sections: db.jsonValue(row.sections_json),
