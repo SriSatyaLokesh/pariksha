@@ -29,9 +29,10 @@ export interface ScheduledJob {
  * not rely on where a merge happened to put the lines.
  *
  * `retentionJob` and `rateLimitJob` satisfy that rule between themselves —
- * one expires `snapshot`/`response` rows, the other `rate_limit` rows, and
- * neither reads what the other writes — so their relative order here is
- * arbitrary.
+ * one expires `snapshot` rows and overdue `candidate` rows (Task 4's
+ * `AC-24` pass subsumed the retired `response` pass — see `sweep.ts`'s own
+ * header), the other `rate_limit` rows, and neither reads what the other
+ * writes — so their relative order here is arbitrary.
  */
 export const SCHEDULED_JOBS: ScheduledJob[] = [retentionJob, rateLimitJob];
 

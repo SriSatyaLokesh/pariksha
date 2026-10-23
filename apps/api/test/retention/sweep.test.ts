@@ -15,6 +15,7 @@ import {
   newId,
   recordSnapshot,
   upsertResponse,
+  type DbClient,
 } from "@pariksha/db";
 import type { TestRetention } from "@pariksha/core";
 import { testDeps, FIXED_NOW } from "../deps.js";
@@ -342,12 +343,13 @@ it("stays inside the subrequest ceiling on one tick", async () => {
   const counting = countingDeps(deps);
   await retentionJob.run(counting.deps);
 
-  // Exact, not just under the ceiling: 1 snapshot SELECT + the chunked
-  // DELETEs a full RETENTION_BATCH needs (Fix round 2, F3) + 1 batched
-  // storage.delete + 1 (empty) response SELECT + 1 audit row for the one
-  // workspace this run touched.
+  // Exact, not just under the ceiling: `C1`'s `minSnapshotsDaysCutoff`
+  // SELECT + the snapshot SELECT itself + the chunked DELETEs a full
+  // RETENTION_BATCH needs (Fix round 2, F3) + 1 batched storage.delete +
+  // 1 `dueCandidates` SELECT (empty — no candidates seeded here) + 1 audit
+  // row for the one workspace this run touched.
   const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
-  expect(counting.counts().total).toBe(1 + deleteChunks + 1 + 1 + 1);
+  expect(counting.counts().total).toBe(1 + 1 + deleteChunks + 1 + 1 + 1);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 
@@ -372,9 +374,10 @@ it("stays inside the subrequest ceiling when the batch spans several workspaces"
   await retentionJob.run(counting.deps);
 
   const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
-  // 1 snapshot SELECT + the chunked DELETEs + 1 batched storage.delete +
-  // 1 (empty) response SELECT + one audit row per workspace touched.
-  expect(counting.counts().total).toBe(1 + deleteChunks + 1 + 1 + workspaceCount);
+  // `C1`'s cutoff SELECT + the snapshot SELECT + the chunked DELETEs +
+  // 1 batched storage.delete + 1 `dueCandidates` SELECT (empty) + one
+  // audit row per workspace touched.
+  expect(counting.counts().total).toBe(1 + 1 + deleteChunks + 1 + 1 + workspaceCount);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 
@@ -691,11 +694,12 @@ it("stays inside the subrequest ceiling on one tick (candidates, one workspace a
 
   // 1 `dueCandidates` select + 1 attempt select + 1 snapshot select +
   // 1 `storage.delete` + 1 `db.batch` (candidate/candidate_unique/
-  // response/event/snapshot/audit, one round trip) + 1 `sweepSnapshots`
-  // select (0 due here, its own clock overridden past the fixture) +
-  // 1 `retention.sweep` audit row for the one workspace touched — the same
-  // 7 regardless of whether this loop runs 8 or 98 times.
-  expect(counting.counts().total).toBe(7);
+  // response/event/snapshot/audit, one round trip) + `C1`'s
+  // `minSnapshotsDaysCutoff` select + 1 `sweepSnapshots` select (0 due
+  // here, its own clock overridden past the fixture) + 1 `retention.sweep`
+  // audit row for the one workspace touched — the same 8 regardless of
+  // whether this loop runs 8 or 98 times.
+  expect(counting.counts().total).toBe(8);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 
@@ -718,15 +722,168 @@ it("stays inside the subrequest ceiling when due candidates are spread one-per-w
   const counting = countingDeps(deps);
   await retentionJob.run(counting.deps);
 
-  // 1 `dueCandidates` select + 1 `sweepSnapshots` select (0 due) +
-  // `CANDIDATE_WORKSPACE_LIMIT` workspaces, each paying its own
-  // `deleteCandidates` (attempt select + snapshot select +
-  // `storage.delete` + `db.batch` = 4) plus its own `retention.sweep`
-  // audit row (5 per workspace) — the measured worst case this constant
-  // is sized against, unchanged by fix round 1 (it bounds the other
-  // dimension).
-  expect(counting.counts().total).toBe(2 + 5 * CANDIDATE_WORKSPACE_LIMIT);
+  // 1 `dueCandidates` select + `C1`'s `minSnapshotsDaysCutoff` select +
+  // 1 `sweepSnapshots` select (0 due) + `CANDIDATE_WORKSPACE_LIMIT`
+  // workspaces, each paying its own `deleteCandidates` (attempt select +
+  // snapshot select + `storage.delete` + `db.batch` = 4) plus its own
+  // `retention.sweep` audit row (5 per workspace) — the measured worst
+  // case this constant is sized against, unchanged by fix round 1 (it
+  // bounds the other dimension).
+  expect(counting.counts().total).toBe(3 + 5 * CANDIDATE_WORKSPACE_LIMIT);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
+});
+
+// Branch review `M2` (MAJOR): the two tests above each zero out the other
+// half — `SURVIVING_SNAPSHOT` exists specifically so the candidate-ceiling
+// tests find no due snapshots, and the snapshot-ceiling tests (above this
+// pair) seed no due candidates. **Composed**, which is what one real cron
+// tick actually runs, was never measured — `progress.md`'s Task 4 fix
+// round recorded "42 subrequests, worst case" against the candidate half
+// alone. This test loads both halves in the same tick, at each one's own
+// worst-case size, and pins the exact composed total rather than bounding
+// either half in isolation. `rateLimitJob` (the other job `K27`'s cron
+// registers) is not included: it is `SCHEDULED_JOBS`'s other, independent
+// entry (`scheduled.ts`), one `sweepRateLimits` DELETE, isolated from
+// `retentionJob` by the same design that keeps either job's failure from
+// touching the other — this test is `retentionJob.run`'s own ceiling, the
+// one `CANDIDATE_WORKSPACE_LIMIT` is sized against.
+/**
+ * Like `addDueCandidateWithSnapshot` above, except the snapshot it leaves
+ * behind is recent (`FIXED_NOW - 1 * DAY`) rather than 400 days old. The
+ * candidate itself is still due — that clock is `COALESCE(MAX(attempt.
+ * deadline_at), candidate.created_at)`, unrelated to the snapshot's own
+ * `taken_at` — but `sweepSnapshots`'s global `ORDER BY taken_at ASC LIMIT
+ * ?` has no per-workspace fairness of its own (`C1`'s fix bounds rows
+ * *scanned*, not which workspace's rows sort first — that batch-fairness
+ * gap is explicitly #226's, not this branch's). A recent snapshot sorts
+ * to the *back* of that order and fails the cutoff `WHERE` outright, so it
+ * cannot crowd the genuinely-due `RETENTION_BATCH` rows out of the LIMIT
+ * the way a second batch of 400-day-old, long-retention snapshots would —
+ * which is exactly what using the shared helper here measured by
+ * accident on the first pass of this test (`deleteChunks` came back 2, not
+ * 5, because 392 old-but-not-due candidate-workspace snapshots outranked
+ * genuinely-due ones in the ASC sort). This test's subject is the
+ * **composed subrequest cost**, not that pre-existing, deferred ordering
+ * gap, so the fixture is built to not trip over it.
+ */
+async function addDueCandidateWithRecentSnapshot(
+  deps: AppDeps,
+  wsp: string,
+  testId: string,
+  versionId: string,
+): Promise<void> {
+  const { attemptId } = await addCandidateWithAttempt(deps, wsp, versionId, testId, {
+    createdAt: FIXED_NOW - 400 * DAY,
+    deadlineAt: FIXED_NOW - 400 * DAY,
+  });
+  await addSnapshot(deps, wsp, attemptId, FIXED_NOW - 1 * DAY);
+}
+
+it("stays inside the subrequest ceiling with both halves loaded in the same tick", async () => {
+  const { deps } = await testDeps();
+
+  // The snapshot half, at a full RETENTION_BATCH, in its own workspace —
+  // left at the default retention, so these ARE due and pay the full
+  // delete-chunk cost `C1`'s cutoff query does not prune away.
+  const { wsp: snapshotWsp, attemptId } = await seedAttempt(deps, undefined, "combined-snapshots");
+  for (let i = 0; i < RETENTION_BATCH; i++) {
+    await addSnapshot(deps, snapshotWsp, attemptId, FIXED_NOW - 100 * DAY, `snap/${attemptId}/${i}`);
+  }
+
+  // The candidate half, at its own worst case: CANDIDATE_WORKSPACE_LIMIT
+  // distinct workspaces, each at its own full MAX_IDS_PER_CHUNK cap —
+  // `SURVIVING_SNAPSHOT` keeps each one's own attempt snapshot out of the
+  // snapshot half's scan on retention grounds; `addDueCandidateWithRecentSnapshot`
+  // (above) also keeps it out of the snapshot half's *ordering*, so the two
+  // halves' costs stay separable and additive rather than one masking the
+  // other.
+  for (let w = 0; w < CANDIDATE_WORKSPACE_LIMIT; w++) {
+    const { wsp, testId, versionId } = await seedCandidateTest(deps, {
+      slug: `combined-candidates-${String(w)}`,
+      retention: SURVIVING_SNAPSHOT,
+    });
+    if (!versionId) throw new Error("fixture: expected a published version");
+    for (let i = 0; i < MAX_IDS_PER_CHUNK; i++) {
+      await addDueCandidateWithRecentSnapshot(deps, wsp, testId, versionId);
+    }
+  }
+
+  const counting = countingDeps(deps);
+  await retentionJob.run(counting.deps);
+
+  // `C1`'s cutoff select (1) + the snapshot select (1) + its chunked
+  // DELETEs (`ceil(RETENTION_BATCH / DELETE_CHUNK)`) + 1 batched
+  // `storage.delete` + 1 `dueCandidates` select (shared across every
+  // candidate workspace) + `CANDIDATE_WORKSPACE_LIMIT` workspaces each
+  // paying `deleteCandidates`'s own 4 (attempt select + snapshot select +
+  // `storage.delete` + `db.batch`) + one `retention.sweep` audit row per
+  // workspace touched (the one snapshot workspace plus the
+  // `CANDIDATE_WORKSPACE_LIMIT` candidate ones).
+  const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
+  const expected =
+    1 + // minSnapshotsDaysCutoff
+    1 + // sweepSnapshots select
+    deleteChunks +
+    1 + // storage.delete (snapshots)
+    1 + // dueCandidates select
+    4 * CANDIDATE_WORKSPACE_LIMIT + // deleteCandidates, per workspace
+    (1 + CANDIDATE_WORKSPACE_LIMIT); // audit rows: 1 snapshot workspace + N candidate workspaces
+  expect(counting.counts().total).toBe(expected);
+  expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
+}, 30_000);
+
+// Branch review `m5` (MINOR): `sweep.ts`'s two `pg`-dialect branches
+// (`alreadyBlanked`, `daysExtract` inside `dueCandidates`) have never
+// executed anywhere — #229 records no Postgres test infrastructure at
+// all. What this test CAN prove cheaply, without a real Postgres: that
+// `dueCandidates` really does build the `pg`-shaped SQL (not the sqlite
+// one) when `db.dialect === "pg"`, matching the file header's own
+// documented text exactly — so a future edit that mistypes an operator or
+// drops the dialect check fails here. **What remains genuinely
+// unprovable without #229: whether Postgres accepts and correctly
+// evaluates `'{}'::jsonb` and `#>> '{retention,personal_data_days}'`
+// against this schema's real `jsonb` columns** — that is a fact about
+// Postgres's own engine, not one a fake `DbClient` can know. `daysExtract`
+// fails *safe* if wrong (a bad cast throws, nothing is erased);
+// `alreadyBlanked` fails *stuck but harmless* if wrong (idempotent,
+// reprocesses forever); the one that would matter if this ever diverges
+// silently is `candidateIdExtract`, covered the same way in
+// `candidate.test.ts`.
+it("builds the pg-dialect dueCandidates SQL with the documented jsonb operators, not the sqlite ones", async () => {
+  const queries: { sql: string; params: unknown[] }[] = [];
+  const fakePg: DbClient = {
+    dialect: "pg",
+    drizzle: undefined as never,
+    exec: async () => undefined,
+    all: async () => [],
+    query: async (sql: string, params: unknown[] = []) => {
+      queries.push({ sql, params });
+      return [];
+    },
+    run: async () => ({ changes: 0 }),
+    batch: async (stmts) => stmts.map(() => ({ changes: 0 })),
+    jsonParam: (value) => JSON.stringify(value),
+    jsonValue: (raw) => (typeof raw === "string" ? (JSON.parse(raw) as never) : (raw as never)),
+    close: async () => undefined,
+  };
+  const fakeStorage = {
+    put: async () => undefined,
+    get: async () => null,
+    delete: async () => undefined,
+    signedUrl: () => "",
+  };
+
+  await retentionJob.run({
+    db: fakePg,
+    storage: fakeStorage,
+    now: () => FIXED_NOW,
+    env: { target: "workers", sessionSecret: "s" },
+  });
+
+  const dueCandidatesQuery = queries.find((q) => q.sql.includes("FROM candidate c"));
+  expect(dueCandidatesQuery?.sql).toContain("c.form_values_json = '{}'::jsonb");
+  expect(dueCandidatesQuery?.sql).toContain("(raw.settings_json #>> '{retention,personal_data_days}')::numeric");
+  expect(dueCandidatesQuery?.sql).not.toContain("json_extract");
 });
 
 // --- rateLimitJob: Phase 6's sweepRateLimits, finally scheduled -----------

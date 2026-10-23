@@ -1,10 +1,13 @@
 // K27's nightly cron, S-13 / AC-24: two independent jobs.
 //
 // `retentionJob` expires `snapshot` rows (and their R2 objects) past each
-// test's `snapshots_days`, and `response` rows past each test's
-// `personal_data_days` — both resolved per test through `resolveRetention`
-// (8a), which is also where the K28 defaults (90 / 365 days) live, so a test
-// with no `retention` block never reads as "zero days" here.
+// test's `snapshots_days`, and erases candidates past each test's
+// `personal_data_days` (`AC-24`, `sweepCandidates` below — the retired
+// `response`-only pass it replaced is gone, not kept beside it: see this
+// file's header on `sweepCandidates`) — both resolved per test through
+// `resolveRetention` (8a), which is also where the K28 defaults (90 / 365
+// days) live, so a test with no `retention` block never reads as "zero
+// days" here.
 //
 // `rateLimitJob` is the scheduled caller `sweepRateLimits` (Phase 6,
 // packages/db/src/repo/rate-limit.ts) never had — `limitOrThrow` already
@@ -65,8 +68,23 @@ export const DELETE_CHUNK = 100;
  * `AC-24`'s "after the retention period, the daily job deletes ... for
  * that test." See "stays inside the subrequest ceiling" below for the
  * measured number this constant is sized against.
+ *
+ * Branch review `M2`: lowered from 8 to **4**. The ledger's "42
+ * subrequests, worst case" (`progress.md`, Task 4 fix round 1) was the
+ * candidate half alone; composed with `sweepSnapshots`'s own full-batch
+ * cost (`C1`'s new cutoff query included) and the per-workspace
+ * `retention.sweep` audit row either half can add, the real worst case on
+ * one cron tick was 49 subrequests plus one per snapshot-only workspace —
+ * already at the 50-subrequest ceiling with zero headroom, and over it the
+ * moment more than one workspace's snapshots cleared on the same tick as a
+ * full candidate batch. At 4, the same arithmetic (see
+ * `sweep.test.ts`'s own "stays inside the subrequest ceiling, both halves
+ * loaded in the same tick" test) leaves real margin. A 300-candidate
+ * single-workspace cohort still clears in `ceil(300 / MAX_IDS_PER_CHUNK)`
+ * nights regardless — `MAX_IDS_PER_CHUNK`, not this constant, is what
+ * bounds one workspace's own throughput, untouched by this change.
  */
-export const CANDIDATE_WORKSPACE_LIMIT = 8;
+export const CANDIDATE_WORKSPACE_LIMIT = 4;
 
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const groups: T[][] = [];
@@ -126,6 +144,37 @@ interface SnapshotCandidate extends Candidate {
 }
 
 /**
+ * Branch review `C1`: the shortest `snapshots_days` configured anywhere
+ * right now (default included), which is the only bound that is SAFE to
+ * put in `sweepSnapshots`'s own `WHERE` without a per-row join ahead of
+ * the fetch. A row is due when `age >= days_for_its_own_test`; filtering
+ * on `taken_at <= now - D` only ever admits a true positive when `D` is
+ * no larger than the smallest `days_for_its_own_test` in play — a bigger
+ * `D` would silently drop a row whose own test overrides to something
+ * shorter than the default, which is a correctness bug (a promised
+ * deletion that never happens), not just a slow one. `MIN` across every
+ * `test_version` row, not only published or current ones: including a
+ * draft's override only ever makes `D` smaller, which is the safe
+ * direction, and it is one statement over a table sized by test count,
+ * never by event volume — unlike `snapshot` or `candidate`, which is the
+ * whole reason this query is cheap enough to add.
+ */
+async function minSnapshotsDaysCutoff(deps: AppDeps): Promise<number> {
+  const pg = deps.db.dialect === "pg";
+  const daysExpr = pg
+    ? "(settings_json #>> '{retention,snapshots_days}')::numeric"
+    : "json_extract(settings_json, '$.retention.snapshots_days')";
+  const rows = await deps.db.query<{ min_days: number | null }>(
+    `SELECT MIN(COALESCE(${daysExpr}, ?)) AS min_days FROM test_version`,
+    [RETENTION_DEFAULTS.snapshotsDays],
+  );
+  // `MIN` over zero rows (no test has ever been created) is NULL — read as
+  // the default, which is also then the whole point moot: an empty
+  // `test_version` table means an empty `snapshot` table too.
+  return Number(rows[0]?.min_days ?? RETENTION_DEFAULTS.snapshotsDays);
+}
+
+/**
  * Deletes the object before the row (plan Step 3): the reverse leaves an
  * object nothing can ever find again, where this order only ever leaves a
  * row with no object — which the next tick's `storage.delete` no-ops on
@@ -133,22 +182,47 @@ interface SnapshotCandidate extends Candidate {
  * cleans up by deleting the row anyway. That is what makes a run
  * interrupted between the two calls safe to just run again.
  *
- * ponytail: a test whose own override is longer than every other test's
- * lets its oldest-but-not-yet-expired rows occupy the front of this
- * `ORDER BY` and spend batch slots doing nothing, run after run. No
- * fixture here has that shape; if one in production ever does, the fix is
- * a per-row cutoff computed in SQL (or a covering index on the resolved
- * cutoff) rather than a filter applied after the fetch.
+ * Branch review `m3` (MINOR, accepted rather than closed): the deletes
+ * here are NOT in the same `db.batch` as the per-workspace
+ * `retention.sweep` audit row — that row is written once, in
+ * `retentionJob.run`, after both `sweepSnapshots` and `sweepCandidates`
+ * have finished, because it combines both halves' counts for one
+ * workspace into one row (`K30`: "one audit row per workspace", not two).
+ * A throw between this function's deletes and that later audit write
+ * loses the one accounting row for this tick, never any data — the
+ * deletes themselves already happened and will not repeat on the next
+ * tick for the same rows (they are gone). `deleteCandidates` closes the
+ * equivalent gap on its own path (`P8E-R15`) because there the audit
+ * statement is built at the same time as the erasure and can ride the
+ * same batch; here the audit row's shape genuinely depends on a later
+ * function this one does not call. Splitting it into two audit rows per
+ * workspace (one partial, written here, one for the candidate half) would
+ * close the gap at the cost of `K30`'s one-row contract — judged the
+ * larger regression for a MINOR finding whose only consequence is a
+ * crash-window loss of bookkeeping, never of data.
+ *
+ * Branch review `C1`: `WHERE sn.taken_at <= ?` (bound by
+ * `minSnapshotsDaysCutoff` above) replaces what used to be no `WHERE` at
+ * all. D1 bills rows *examined*, not rows returned, and `ORDER BY
+ * sn.taken_at ASC LIMIT ?` with no `WHERE` forced a full scan of `snapshot`
+ * plus a sort before the `LIMIT` could apply — every row, every tick,
+ * forever, including every already-blanked or not-yet-due row the batch
+ * was never going to touch. The old ponytail note here ("the fix is a
+ * per-row cutoff computed in SQL") was this finding, predicted and
+ * deferred; this is that fix. The real fix — `snapshot(taken_at)`, a
+ * migration — is #226's, not this branch's (`K10`: no migration here).
  */
 async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
+  const cutoffDays = await minSnapshotsDaysCutoff(deps);
   const rows = await deps.db.query<SnapshotCandidate>(
     "SELECT sn.id AS id, sn.workspace_id AS workspace_id, sn.taken_at AS at, sn.storage_key AS storage_key, " +
       "tv.settings_json AS settings_json " +
       "FROM snapshot sn " +
       "JOIN attempt a ON a.id = sn.attempt_id " +
       "JOIN test_version tv ON tv.id = a.test_version_id " +
+      "WHERE sn.taken_at <= ? " +
       "ORDER BY sn.taken_at ASC LIMIT ?",
-    [RETENTION_BATCH],
+    [deps.now() - cutoffDays * DAY_MS, RETENTION_BATCH],
   );
   const due = expired(deps.db, rows, deps.now(), (r) => r.snapshotsDays);
   if (due.length === 0) return { deleted: 0, byWorkspace: new Map() };
