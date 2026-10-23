@@ -18,6 +18,7 @@ import {
   type QuestionType,
   type Role,
   type Action,
+  type RubricAward,
   type Section,
   type Test,
   type TestBranding,
@@ -158,7 +159,10 @@ export interface TestPatch {
  * `retention` — rides along inside this type as an unlisted field exactly
  * the way it rides through the server's own mapper: nothing here needs to
  * name it for a `{ ...settings, access: {...} }` patch to leave it alone. */
-export type TestSettings = Omit<Test, "$schema" | "format" | "name" | "slug" | "sections">;
+export type TestSettings = Omit<
+  Test,
+  "$schema" | "format" | "name" | "slug" | "sections"
+>;
 /** A `Section` naming `qst_`/`bnk_` row ids — what the builder works in
  * throughout; only export (a later task) ever sees the bank file's own
  * ids. */
@@ -320,21 +324,52 @@ export interface ApiClient {
     bankId: string,
     filter?: QuestionListFilter,
   ): Promise<{ questions: QuestionSummary[]; cursor?: string }>;
-  deleteQuestion(workspaceId: string, bankId: string, questionId: string): Promise<void>;
+  deleteQuestion(
+    workspaceId: string,
+    bankId: string,
+    questionId: string,
+  ): Promise<void>;
   /**
    * Phase 4 Task 3. One route for create and update: `POST
    * /banks/:bankId/questions` (`apps/api/src/routes/questions.ts`) matches
    * on `(bankId, doc.id)` and upserts either way, returning the saved row
    * directly — no follow-up GET, and no second method for "update".
    */
-  saveQuestion(workspaceId: string, bankId: string, doc: Question): Promise<QuestionSummary>;
+  saveQuestion(
+    workspaceId: string,
+    bankId: string,
+    doc: Question,
+  ): Promise<QuestionSummary>;
+  /**
+   * Phase 8b Task 4 (`K17`/`K18`): the regrade offer after a key change
+   * (`POST .../questions/:qid/regrade`, `apps/api/src/grade/regrade.ts`).
+   * `questionId` is the row id (`QuestionSummary.id`), the same id
+   * `deleteQuestion`/`exportQuestion` already take. Resolves every
+   * published test version the question's key now belongs to and enqueues
+   * one regrade per version server-side — `versions` is how many that was,
+   * `queued` the attempts across all of them.
+   *
+   * **Optional**, unlike every other method here: two dozen test files
+   * each hand-build a full `ApiClient` fake (no shared fixture exists),
+   * and `question.tsx` is the only caller — making this required would
+   * turn a one-screen addition into an unrelated edit of every one of
+   * them for a stub neither asks for nor exercises.
+   */
+  regradeQuestion?(
+    workspaceId: string,
+    bankId: string,
+    questionId: string,
+  ): Promise<{ queued: number; versions: number }>;
   /** Tags already used anywhere in the workspace (UX-03's autocomplete). */
   listTags(workspaceId: string): Promise<string[]>;
 
   /** Phase 4 Task 6: a bank's passage groups — a handful at most, so one
    * route answers all of them (`GET /banks/:bankId/groups`), the same shape
    * `listQuestions` for tags already follows. */
-  listGroups(workspaceId: string, bankId: string): Promise<PassageGroupSummary[]>;
+  listGroups(
+    workspaceId: string,
+    bankId: string,
+  ): Promise<PassageGroupSummary[]>;
   createGroup(
     workspaceId: string,
     bankId: string,
@@ -346,7 +381,11 @@ export interface ApiClient {
     groupId: string,
     patch: { title?: string; passage?: string },
   ): Promise<PassageGroupSummary>;
-  deleteGroup(workspaceId: string, bankId: string, groupId: string): Promise<void>;
+  deleteGroup(
+    workspaceId: string,
+    bankId: string,
+    groupId: string,
+  ): Promise<void>;
 
   /**
    * Task 7 (#51, P4.7): whole-bank JSON import. `dryRun: true` validates and
@@ -375,7 +414,11 @@ export interface ApiClient {
    * row id a URL path segment uses), not by how many are selected: the
    * route's cost is the same either way.
    */
-  exportBank(workspaceId: string, bankId: string, ids?: string[]): Promise<BankDocument>;
+  exportBank(
+    workspaceId: string,
+    bankId: string,
+    ids?: string[],
+  ): Promise<BankDocument>;
 
   /**
    * Fix round (whole-branch review, M3): `exportBank`'s single-question
@@ -385,20 +428,35 @@ export interface ApiClient {
    * itself, not a whole `pariksha/bank@1` — `questionId` is the row id
    * (`QuestionSummary.id`), the same id `deleteQuestion` already takes.
    */
-  exportQuestion(workspaceId: string, bankId: string, questionId: string): Promise<Question>;
+  exportQuestion(
+    workspaceId: string,
+    bankId: string,
+    questionId: string,
+  ): Promise<Question>;
 
   // Phase 5 Task 2 (#54): test CRUD. `tests` takes a filter rather than the
   // raw query-string shape `apps/api/src/routes/tests.ts` reads — the
   // screen builds a `TestFilter`, this is the one place that becomes `?`.
   tests(workspaceId: string, filter?: TestFilter): Promise<TestSummary[]>;
-  createTest(workspaceId: string, input: { name: string; slug: string }): Promise<TestSummary>;
+  createTest(
+    workspaceId: string,
+    input: { name: string; slug: string },
+  ): Promise<TestSummary>;
   test(workspaceId: string, testId: string): Promise<TestSummary>;
-  updateTest(workspaceId: string, testId: string, patch: TestPatch): Promise<TestSummary>;
+  updateTest(
+    workspaceId: string,
+    testId: string,
+    patch: TestPatch,
+  ): Promise<TestSummary>;
 
   // Task 3 (#55, P5.2): the draft itself — the one pair Tasks 4 through 9
   // all write through.
   draft(workspaceId: string, testId: string): Promise<TestVersionRow>;
-  patchDraft(workspaceId: string, testId: string, patch: DraftPatch): Promise<TestVersionRow>;
+  patchDraft(
+    workspaceId: string,
+    testId: string,
+    patch: DraftPatch,
+  ): Promise<TestVersionRow>;
 
   // Task 11 (#62, P5.9): the lifecycle. Each answers with the same
   // `TestSummary` every other test route returns, so the screen that
@@ -418,20 +476,32 @@ export interface ApiClient {
   /** One `pariksha/test@1` document. `version` names a frozen one; the
    * default is the current published version, or the draft head when
    * nothing is published. */
-  exportTest(workspaceId: string, testId: string, version?: number): Promise<TestDocument>;
+  exportTest(
+    workspaceId: string,
+    testId: string,
+    version?: number,
+  ): Promise<TestDocument>;
   /** Whole-test import. `dryRun: true` validates and reports without
    * writing. A 422 comes back as a report rather than a thrown `ApiError`,
    * the same normalisation `importBank` does and for the same reason —
    * `ImportDialog` renders one shape either way. A **409** (`T-05`: a slug
    * the file named is already taken) still throws: there is nothing
    * positioned to render, and the organiser has to change the slug. */
-  importTest(workspaceId: string, doc: unknown, opts?: { dryRun?: boolean }): Promise<TestImportReport>;
+  importTest(
+    workspaceId: string,
+    doc: unknown,
+    opts?: { dryRun?: boolean },
+  ): Promise<TestImportReport>;
 
   // Task 6 (#58, P5.5). `workspaceId` first, like every sibling above — the
   // plan's own sketch wrote `checkUrl(testId, url)`, which cannot reach the
   // API at all (the path is workspace-scoped, and `requires()` reads the
   // workspace out of its own `:id` segment).
-  checkUrl(workspaceId: string, testId: string, url: string): Promise<ReachResult>;
+  checkUrl(
+    workspaceId: string,
+    testId: string,
+    url: string,
+  ): Promise<ReachResult>;
 
   // T-23's workspace half (Task 10, #61, P5.8). Three methods rather than
   // one, because the PRD splits branding across two owners: the logo, the
@@ -440,13 +510,20 @@ export interface ApiClient {
   // test's own and ride `patchDraft` with everything else.
   /** The workspace's own branding, or `{}` when it has none yet. */
   workspaceBranding(workspaceId: string): Promise<TestBranding>;
-  saveWorkspaceBranding(workspaceId: string, branding: TestBranding): Promise<TestBranding>;
+  saveWorkspaceBranding(
+    workspaceId: string,
+    branding: TestBranding,
+  ): Promise<TestBranding>;
   /**
    * The logo's bytes, through Phase 4's existing media route — the only
    * one this product has. Answers the content-addressed key, which is
    * what `branding.logo` stores.
    */
-  uploadMedia(workspaceId: string, bankId: string, file: File): Promise<{ key: string }>;
+  uploadMedia(
+    workspaceId: string,
+    bankId: string,
+    file: File,
+  ): Promise<{ key: string }>;
 
   // Task 9 (#60 / #56, P5.7b): the candidate list. `workspaceId` first,
   // like every sibling — the plan's sketch wrote `candidates(testId)`,
@@ -472,6 +549,45 @@ export interface ApiClient {
   // monitor replaces both.
   lockedAttempts(workspaceId: string, testId: string): Promise<LockedAttemptRow[]>;
   unlockAttempt(workspaceId: string, testId: string, attemptId: string): Promise<void>;
+  /**
+   * Phase 8b Task 2 (`K15`): the grading queue. `blind: true` is what makes
+   * a request blind — the server never puts a candidate-identifying field
+   * in the payload at all (`GradingQueueRow["formValues"]` is simply
+   * absent), not merely unrendered. `questionId` narrows to one question,
+   * for "by question" mode.
+   */
+  gradingQueue(
+    workspaceId: string,
+    testId: string,
+    opts?: {
+      questionId?: string;
+      cursor?: string;
+      limit?: number;
+      blind?: boolean;
+    },
+  ): Promise<{ rows: GradingQueueRow[]; nextCursor: string | null }>;
+
+  /**
+   * Phase 8b Task 1 (`K14`): records a rubric award and rescores the
+   * attempt through the one path `POST .../grade` already is. Task 2's own
+   * first caller of this route from the browser.
+   */
+  grade(
+    workspaceId: string,
+    testId: string,
+    input: { attemptId: string; questionId: string; award: RubricAward },
+  ): Promise<{ points: number; written: boolean }>;
+
+  /**
+   * Phase 8b Task 3 (`K16`): records a reviewer's verdict on an attempt.
+   * Append-only, same as the server's own `review` row — a second call for
+   * the same attempt records a second verdict, never edits the first.
+   */
+  recordVerdict(
+    workspaceId: string,
+    attemptId: string,
+    input: { verdict: Verdict; note?: string },
+  ): Promise<{ reviewId: string }>;
 
   // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete`, Owner-only —
   // both methods share the one permission. `exportCandidateData` hands
@@ -516,6 +632,12 @@ export interface ApiClient {
   ): Promise<{ id: string; name: string; scopes: Action[]; secret: string }>;
   revokeApiKey(workspaceId: string, keyId: string): Promise<void>;
 }
+
+/** Mirrors `Verdict` in `packages/db/src/repo/review.ts`, duplicated rather
+ *  than imported — this file's domain types come from `@pariksha/core`
+ *  only, never from `@pariksha/db`, which is a server-only package the
+ *  browser bundle must not pull in. */
+export type Verdict = "clear" | "suspicious" | "disqualified";
 
 /** Mirrors `packages/db/src/repo/webhooks.ts`'s `WebhookRow` — the wire
  * shape, never `signingSecret`. */
@@ -585,6 +707,31 @@ export interface CandidateIssue {
 export interface CandidateImportReport {
   imported: number;
   issues: CandidateIssue[];
+}
+
+/** Phase 8b Task 2 (`K15`): one row of the grading queue. Mirrors
+ *  `GradingQueueRow` (`apps/api/src/grade/award.ts`), which widens
+ *  `PendingAward` (`packages/db/src/repo/grading.ts`) with the question
+ *  itself — a Reviewer holds no `tests.edit` and has no other route to a
+ *  question's prompt or rubric. */
+export interface GradingQueueRow {
+  attemptId: string;
+  questionId: string;
+  /** The candidate's answer. Never the model answer. */
+  value: unknown;
+  /** The question a Reviewer is grading against — just enough to grade by,
+   *  not the full authoring document. */
+  question: {
+    prompt: string;
+    rubric?: { level: string; points: number; description?: string }[];
+  };
+  /** Present only once a grader has recorded one. */
+  award: RubricAward | null;
+  points: number | null;
+  /** The candidate's registration answers. **Absent, not an empty object,
+   *  off the blind path** (`K15`) — `"formValues" in row` is false, so a
+   *  blind payload carries no key for it at all. */
+  formValues?: Record<string, unknown>;
 }
 
 const API = "/api/v1";
@@ -748,21 +895,41 @@ export function createApiClient(): ApiClient {
     },
 
     async deleteQuestion(workspaceId, bankId, questionId) {
-      await request(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`, {
-        method: "DELETE",
-      });
+      await request(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}`,
+        {
+          method: "DELETE",
+        },
+      );
     },
 
     saveQuestion: (workspaceId, bankId, doc) =>
-      json<QuestionSummary>(`/workspaces/${workspaceId}/banks/${bankId}/questions`, post(doc)),
+      json<QuestionSummary>(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions`,
+        post(doc),
+      ),
 
-    listTags: async (workspaceId) => (await json<{ tags: string[] }>(`/workspaces/${workspaceId}/tags`)).tags,
+    regradeQuestion: (workspaceId, bankId, questionId) =>
+      json<{ queued: number; versions: number }>(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/regrade`,
+        { method: "POST" },
+      ),
+
+    listTags: async (workspaceId) =>
+      (await json<{ tags: string[] }>(`/workspaces/${workspaceId}/tags`)).tags,
 
     listGroups: async (workspaceId, bankId) =>
-      (await json<{ groups: PassageGroupSummary[] }>(`/workspaces/${workspaceId}/banks/${bankId}/groups`)).groups,
+      (
+        await json<{ groups: PassageGroupSummary[] }>(
+          `/workspaces/${workspaceId}/banks/${bankId}/groups`,
+        )
+      ).groups,
 
     createGroup: (workspaceId, bankId, input) =>
-      json<PassageGroupSummary>(`/workspaces/${workspaceId}/banks/${bankId}/groups`, post(input)),
+      json<PassageGroupSummary>(
+        `/workspaces/${workspaceId}/banks/${bankId}/groups`,
+        post(input),
+      ),
 
     // Fix round 1, finding 2: `groupId` is author-written (`newGroup.id`,
     // `apps/api/src/routes/banks.ts`), unlike every other ID this client
@@ -776,9 +943,12 @@ export function createApiClient(): ApiClient {
       ),
 
     async deleteGroup(workspaceId, bankId, groupId) {
-      await request(`/workspaces/${workspaceId}/banks/${bankId}/groups/${encodeURIComponent(groupId)}`, {
-        method: "DELETE",
-      });
+      await request(
+        `/workspaces/${workspaceId}/banks/${bankId}/groups/${encodeURIComponent(groupId)}`,
+        {
+          method: "DELETE",
+        },
+      );
     },
 
     async importBank(workspaceId, bankId, doc, opts = {}) {
@@ -790,10 +960,20 @@ export function createApiClient(): ApiClient {
       // method's own doc comment) as the body verbatim; JSON keeps `post`'s
       // existing `JSON.stringify` + `Content-Type: application/json`.
       const init: RequestInit = opts.format
-        ? { method: "POST", headers: { "Content-Type": "text/plain", Accept: "application/json" }, body: doc as string }
+        ? {
+            method: "POST",
+            headers: {
+              "Content-Type": "text/plain",
+              Accept: "application/json",
+            },
+            body: doc as string,
+          }
         : post(doc);
       try {
-        return await json<ImportReport>(`/workspaces/${workspaceId}/banks/${bankId}/import${qs}`, init);
+        return await json<ImportReport>(
+          `/workspaces/${workspaceId}/banks/${bankId}/import${qs}`,
+          init,
+        );
       } catch (error) {
         // Fix round 1, finding 9: a validation failure
         // (apps/api/src/import/json.ts) is a 422 whose `details` *is* an
@@ -804,7 +984,11 @@ export function createApiClient(): ApiClient {
         // so `ImportDialog` renders one report shape whether the import
         // succeeded or not, rather than a try/catch of its own around every
         // call.
-        if (error instanceof ApiError && error.status === 422 && isImportReport(error.details)) {
+        if (
+          error instanceof ApiError &&
+          error.status === 422 &&
+          isImportReport(error.details)
+        ) {
           return error.details;
         }
         throw error;
@@ -812,12 +996,19 @@ export function createApiClient(): ApiClient {
     },
 
     exportBank: (workspaceId, bankId, ids) => {
-      const qs = ids && ids.length > 0 ? `?ids=${ids.map(encodeURIComponent).join(",")}` : "";
-      return json<BankDocument>(`/workspaces/${workspaceId}/banks/${bankId}/export${qs}`);
+      const qs =
+        ids && ids.length > 0
+          ? `?ids=${ids.map(encodeURIComponent).join(",")}`
+          : "";
+      return json<BankDocument>(
+        `/workspaces/${workspaceId}/banks/${bankId}/export${qs}`,
+      );
     },
 
     exportQuestion: (workspaceId, bankId, questionId) =>
-      json<Question>(`/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/export`),
+      json<Question>(
+        `/workspaces/${workspaceId}/banks/${bankId}/questions/${questionId}/export`,
+      ),
 
     async tests(workspaceId, filter = {}) {
       const qs = query({
@@ -825,29 +1016,58 @@ export function createApiClient(): ApiClient {
         search: filter.search,
         sort: filter.sort,
       });
-      return (await json<{ tests: TestSummary[] }>(`/workspaces/${workspaceId}/tests${qs}`)).tests;
+      return (
+        await json<{ tests: TestSummary[] }>(
+          `/workspaces/${workspaceId}/tests${qs}`,
+        )
+      ).tests;
     },
 
-    createTest: (workspaceId, input) => json<TestSummary>(`/workspaces/${workspaceId}/tests`, post(input)),
+    createTest: (workspaceId, input) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests`, post(input)),
 
-    test: (workspaceId, testId) => json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`),
+    test: (workspaceId, testId) =>
+      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`),
 
     updateTest: (workspaceId, testId, patch) =>
-      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}`, patchBody(patch)),
+      json<TestSummary>(
+        `/workspaces/${workspaceId}/tests/${testId}`,
+        patchBody(patch),
+      ),
 
     publishTest: (workspaceId, testId) =>
-      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/publish`, post({})),
+      json<TestSummary>(
+        `/workspaces/${workspaceId}/tests/${testId}/publish`,
+        post({}),
+      ),
     closeTest: (workspaceId, testId) =>
-      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/close`, post({})),
+      json<TestSummary>(
+        `/workspaces/${workspaceId}/tests/${testId}/close`,
+        post({}),
+      ),
     archiveTest: (workspaceId, testId) =>
-      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/archive`, post({})),
+      json<TestSummary>(
+        `/workspaces/${workspaceId}/tests/${testId}/archive`,
+        post({}),
+      ),
     versions: async (workspaceId, testId) =>
-      (await json<{ versions: TestVersionSummary[] }>(`/workspaces/${workspaceId}/tests/${testId}/versions`)).versions,
+      (
+        await json<{ versions: TestVersionSummary[] }>(
+          `/workspaces/${workspaceId}/tests/${testId}/versions`,
+        )
+      ).versions,
     checklist: async (workspaceId, testId) =>
-      (await json<{ rows: ChecklistRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/checklist`)).rows,
+      (
+        await json<{ rows: ChecklistRow[] }>(
+          `/workspaces/${workspaceId}/tests/${testId}/checklist`,
+        )
+      ).rows,
 
     cloneTest: (workspaceId, testId) =>
-      json<TestSummary>(`/workspaces/${workspaceId}/tests/${testId}/clone`, post({})),
+      json<TestSummary>(
+        `/workspaces/${workspaceId}/tests/${testId}/clone`,
+        post({}),
+      ),
 
     exportTest: (workspaceId, testId, version) =>
       json<TestDocument>(
@@ -868,52 +1088,91 @@ export function createApiClient(): ApiClient {
         // nothing happened and not why. Guarded now, and the fallbacks go
         // with the cast: a report with no issues is not a thing this route
         // produces, so inventing one hides whatever really went wrong.
-        if (error instanceof ApiError && error.status === 422 && isTestImportDetails(error.details)) {
-          return { testId: null, imported: false, issues: error.details.issues, rebound: error.details.rebound };
+        if (
+          error instanceof ApiError &&
+          error.status === 422 &&
+          isTestImportDetails(error.details)
+        ) {
+          return {
+            testId: null,
+            imported: false,
+            issues: error.details.issues,
+            rebound: error.details.rebound,
+          };
         }
         throw error;
       }
     },
 
-    draft: (workspaceId, testId) => json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
+    draft: (workspaceId, testId) =>
+      json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`),
 
     patchDraft: (workspaceId, testId, patch) =>
-      json<TestVersionRow>(`/workspaces/${workspaceId}/tests/${testId}/draft`, patchBody(patch)),
+      json<TestVersionRow>(
+        `/workspaces/${workspaceId}/tests/${testId}/draft`,
+        patchBody(patch),
+      ),
 
     checkUrl: (workspaceId, testId, url) =>
-      json<ReachResult>(`/workspaces/${workspaceId}/tests/${testId}/check-url`, post({ url })),
+      json<ReachResult>(
+        `/workspaces/${workspaceId}/tests/${testId}/check-url`,
+        post({ url }),
+      ),
 
     workspaceBranding: async (workspaceId) =>
-      (await json<{ branding: TestBranding | null }>(`/workspaces/${workspaceId}`)).branding ?? {},
+      (
+        await json<{ branding: TestBranding | null }>(
+          `/workspaces/${workspaceId}`,
+        )
+      ).branding ?? {},
 
     saveWorkspaceBranding: async (workspaceId, branding) =>
-      (await json<{ branding: TestBranding | null }>(`/workspaces/${workspaceId}`, patchBody({ branding })))
-        .branding ?? {},
+      (
+        await json<{ branding: TestBranding | null }>(
+          `/workspaces/${workspaceId}`,
+          patchBody({ branding }),
+        )
+      ).branding ?? {},
 
     uploadMedia: (workspaceId, bankId, file) =>
-      json<{ key: string }>(`/workspaces/${workspaceId}/banks/${bankId}/media`, {
-        method: "POST",
-        // The route reads the image type off `Content-Type` and the bytes
-        // off the body — no multipart wrapper to unpick on a Worker.
-        headers: { "Content-Type": file.type, Accept: "application/json" },
-        body: file,
-      }),
+      json<{ key: string }>(
+        `/workspaces/${workspaceId}/banks/${bankId}/media`,
+        {
+          method: "POST",
+          // The route reads the image type off `Content-Type` and the bytes
+          // off the body — no multipart wrapper to unpick on a Worker.
+          headers: { "Content-Type": file.type, Accept: "application/json" },
+          body: file,
+        },
+      ),
 
     candidates: async (workspaceId, testId) =>
-      (await json<{ candidates: CandidateRow[] }>(`/workspaces/${workspaceId}/tests/${testId}/candidates`)).candidates,
+      (
+        await json<{ candidates: CandidateRow[] }>(
+          `/workspaces/${workspaceId}/tests/${testId}/candidates`,
+        )
+      ).candidates,
 
     async importCandidates(workspaceId, testId, csv, opts = {}) {
       const qs = opts.dryRun ? "?dryRun=1" : "";
       try {
         return await json<CandidateImportReport>(
           `/workspaces/${workspaceId}/tests/${testId}/candidates/import${qs}`,
-          { method: "POST", headers: { "Content-Type": "text/csv", Accept: "application/json" }, body: csv },
+          {
+            method: "POST",
+            headers: { "Content-Type": "text/csv", Accept: "application/json" },
+            body: csv,
+          },
         );
       } catch (error) {
         // The 422's `details` *is* the report (`imported: 0`, `issues`
         // populated), so the panel renders one shape whether the upload
         // landed or not. Anything else — 403, 404, 413 — still throws.
-        if (error instanceof ApiError && error.status === 422 && isCandidateReport(error.details)) {
+        if (
+          error instanceof ApiError &&
+          error.status === 422 &&
+          isCandidateReport(error.details)
+        ) {
           return error.details;
         }
         throw error;
@@ -930,6 +1189,30 @@ export function createApiClient(): ApiClient {
     async unlockAttempt(workspaceId, testId, attemptId) {
       await json(`/workspaces/${workspaceId}/tests/${testId}/attempts/${attemptId}/unlock`, post({}));
     },
+
+    async gradingQueue(workspaceId, testId, opts = {}) {
+      const qs = query({
+        questionId: opts.questionId,
+        cursor: opts.cursor,
+        limit: opts.limit === undefined ? undefined : String(opts.limit),
+        blind: opts.blind ? "1" : undefined,
+      });
+      return json<{ rows: GradingQueueRow[]; nextCursor: string | null }>(
+        `/workspaces/${workspaceId}/tests/${testId}/grading-queue${qs}`,
+      );
+    },
+
+    grade: (workspaceId, testId, input) =>
+      json<{ points: number; written: boolean }>(
+        `/workspaces/${workspaceId}/tests/${testId}/grade`,
+        post(input),
+      ),
+
+    recordVerdict: (workspaceId, attemptId, input) =>
+      json<{ reviewId: string }>(
+        `/workspaces/${workspaceId}/attempts/${attemptId}/verdict`,
+        post(input),
+      ),
 
     async exportCandidateData(workspaceId, candidateId) {
       const response = await request(`/workspaces/${workspaceId}/candidates/${candidateId}/data`);

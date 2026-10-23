@@ -121,11 +121,16 @@ export function TestBuilder({
   testId,
   client,
   actor,
+  onOpenGrading,
 }: {
   workspaceId: string;
   testId: string;
   client: ApiClient;
   actor: Actor;
+  /** Phase 8b Task 2 fix round 1 (`K15`): a grader is working on *this*
+   *  test and goes to its queue — there is no cross-test grading inbox and
+   *  no top-nav entry (`OrganiserShell.tsx:141-144`'s own `D3` ruling). */
+  onOpenGrading: (testId: string) => void;
 }) {
   // T-23: only an owner holds `workspace.settings`, and the workspace half
   // of the branding panel is read-only without it. The server refuses
@@ -174,6 +179,12 @@ export function TestBuilder({
   // independently rather than one standing in for the other.
   const canMonitorAttempts = role !== undefined && can({ role, action: "attempts.monitor" });
   const [lockedAttempts, setLockedAttempts] = useState<readonly LockedAttemptRow[]>([]);
+  // Phase 8b Task 2 fix round 1 (`K15`, `AC-26`): the grading queue's own
+  // entry point. Gated on the action the route itself requires
+  // (`attempts.grade`) — a Viewer or an Author must not see a link to a
+  // surface they would be refused at, the same discipline `canPublish` and
+  // `canManageCandidates` already apply to theirs.
+  const canGrade = role !== undefined && can({ role, action: "attempts.grade" });
   // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete` is Owner-only and
   // in no other role — the real gate the ResultsPanel lookup-then-act
   // control below is told about, the same way every other role-gated
@@ -895,6 +906,20 @@ export function TestBuilder({
               onDeleteCandidateData={deleteCandidateData}
             />
           </SettingRow>
+
+          {/* Phase 8b Task 2 fix round 1 (`K15`, `AC-26`): the grading
+              queue's entry point, beside Results rather than a row inside
+              it — grading is a destination, not one more draft setting to
+              collapse in place, so it is not a `SettingRow` (whose own
+              contract is "every summary is a pure function of the draft";
+              a queue is live attempt data, not a setting). Gated on
+              `attempts.grade`, the action the route itself requires, the
+              same way `canPublish`/`canManageCandidates` gate theirs. */}
+          {canGrade && (
+            <button type="button" className="button-secondary" onClick={() => onOpenGrading(testId)}>
+              Grading queue
+            </button>
+          )}
 
           <SettingRow
             id="branding"

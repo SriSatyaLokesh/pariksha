@@ -7,11 +7,15 @@
 // No I/O, no runtime dependencies, nothing time- or randomness-based:
 // packages/core is a pure, leaf package.
 
-import type { LongAnswerQuestion, ShortAnswerQuestion } from "../types.js";
+import type { LongAnswerQuestion, Question, ShortAnswerQuestion } from "../types.js";
 import type { GradeResult, ScoringDefaults } from "./result.js";
 import { resolveScoring, round2 } from "./result.js";
 
 export type ManualQuestion = ShortAnswerQuestion | LongAnswerQuestion;
+
+export function isManualQuestion(q: Question): q is ManualQuestion {
+  return q.type === "short_answer" || q.type === "long_answer";
+}
 
 /**
  * A reviewer's rubric selection for one question: the `rubric[].level`
@@ -48,4 +52,31 @@ export function gradeManual(q: ManualQuestion, award: RubricAward | null, d: Sco
   const pointsByLevel = new Map((q.rubric ?? []).map((l) => [l.level, l.points]));
   const sum = award.levels.reduce((total, level) => total + (pointsByLevel.get(level) ?? 0), 0);
   return { points: round2(sum), max, correct: null };
+}
+
+/**
+ * Reconstructs a `RubricAward` from a graded response's stored `points`,
+ * matched against the question's **current** rubric — the replay a caller
+ * needs wherever only `points` was persisted and the original `levels` a
+ * reviewer picked were not (`K14`: grading writes `response.points`/
+ * `graded_by` and nothing else, so this is how "what was this question
+ * awarded" is answered back out, by both `packages/db`'s `listPendingAwards`
+ * and `apps/api`'s `recordAward` rescore replay — one definition, because a
+ * second one is exactly how the two would drift).
+ *
+ * Returns `null`, not `{ levels: [] }`, when the stored points cannot be
+ * reproduced from the current rubric — `{ levels: [] }` is a real, different
+ * state ("awarded zero"). A caller that inserted a zero-scoring award here
+ * would silently erase a candidate's credit the moment an organiser edited
+ * the rubric level that had earned it; `null` is "not reconstructable",
+ * which a caller must treat as still pending a human, never as zero.
+ *
+ * 0 points is the one amount that never needs a rubric at all — `{ levels:
+ * [] }` sums to 0 under any rubric, so it round-trips exactly always.
+ */
+export function deriveAward(q: Question | undefined, points: number): RubricAward | null {
+  if (points === 0) return { levels: [] };
+  if (q === undefined || !isManualQuestion(q)) return null;
+  const level = (q.rubric ?? []).find((l) => l.points === points);
+  return level ? { levels: [level.level] } : null;
 }

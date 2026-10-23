@@ -15,6 +15,11 @@ export interface ResponseRow {
   clientSeq: number;
   savedAt: number;
   points: number | null;
+  /** Phase 8b Task 1 (`K14`): who recorded the current `points`, or `null`
+   *  for a question no reviewer has graded yet — the same signal
+   *  `grading.ts`'s award reconstruction and `grade/award.ts`'s rescore
+   *  replay both key on. */
+  gradedBy: string | null;
 }
 
 export const createCandidate = scoped(
@@ -121,6 +126,9 @@ export const getAttempt = scoped(
     startedAt: number;
     deadlineAt: number;
     submittedAt: number | null;
+    /** `AttemptScore`, as `finishAttempt`/`writeScore` (`grading.ts`)
+     *  stored it — `null` until an attempt has been scored. */
+    scoreJson: unknown;
     flag: string;
     integrityFlag: string;
     observed: boolean;
@@ -134,11 +142,12 @@ export const getAttempt = scoped(
       started_at: number;
       deadline_at: number;
       submitted_at: number | null;
+      score_json: unknown;
       flag: string;
       integrity_flag: string;
       observed: unknown;
     }>(
-      "SELECT id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, flag, integrity_flag, observed FROM attempt WHERE workspace_id = ? AND id = ?",
+      "SELECT id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, submitted_at, score_json, flag, integrity_flag, observed FROM attempt WHERE workspace_id = ? AND id = ?",
       [workspaceId, attemptId],
     );
     const row = rows[0];
@@ -152,6 +161,7 @@ export const getAttempt = scoped(
       startedAt: Number(row.started_at),
       deadlineAt: Number(row.deadline_at),
       submittedAt: row.submitted_at === null ? null : Number(row.submitted_at),
+      scoreJson: row.score_json == null ? null : db.jsonValue(row.score_json),
       flag: row.flag,
       integrityFlag: row.integrity_flag,
       // SQLite hands this back as 0/1; Boolean(...) is what the same
@@ -781,7 +791,7 @@ export const recordSnapshot = scoped(
 );
 
 const RESPONSE_COLUMNS =
-  "question_id, value_json, client_seq, saved_at, points";
+  "question_id, value_json, client_seq, saved_at, points, graded_by";
 
 interface ResponseRecord {
   question_id: string;
@@ -789,6 +799,7 @@ interface ResponseRecord {
   client_seq: number;
   saved_at: number;
   points: number | null;
+  graded_by: string | null;
 }
 
 const toResponseRow = (db: DbClient, row: ResponseRecord): ResponseRow => ({
@@ -797,4 +808,5 @@ const toResponseRow = (db: DbClient, row: ResponseRecord): ResponseRow => ({
   clientSeq: Number(row.client_seq),
   savedAt: Number(row.saved_at),
   points: row.points === null ? null : Number(row.points),
+  gradedBy: row.graded_by,
 });

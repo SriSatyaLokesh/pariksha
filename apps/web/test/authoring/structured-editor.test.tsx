@@ -108,6 +108,15 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     importCandidates: async () => {
       throw new Error("not used by this test file");
     },
+    gradingQueue: async () => {
+      throw new Error("not used by this test file");
+    },
+    grade: async () => {
+      throw new Error("not used by this test file");
+    },
+    recordVerdict: async () => {
+      throw new Error("not used by this test file");
+    },
     exportCandidateData: async () => {
       throw new Error("not used by this test file");
     },

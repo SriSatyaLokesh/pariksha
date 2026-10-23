@@ -195,6 +195,40 @@ async function testsUsingQuestion(
   return rows.map((row) => row.name);
 }
 
+/**
+ * Published `test_version` ids referencing `questionId` — the same
+ * correlated-`LIKE` shape as `testsUsingQuestion` above, exported because
+ * Phase 8b Task 4's regrade offer (`apps/api/src/grade/regrade.ts`) is this
+ * query's first caller outside this file: the question editor knows a
+ * `bankId` and a `questionId` and nothing about tests, so it is the one
+ * screen that genuinely needs the *ids*, not just the name list
+ * `testsUsingQuestion` returns for `deleteQuestion`'s 409 message.
+ *
+ * **Branch review M5(b): the `bankId` arm over-matches for this caller.**
+ * It answers "every published version drawing from this bank at all" (any
+ * `pool` source), which is the right, deliberately broad question for
+ * `testsUsingQuestion`'s own job — refusing a delete must never miss a real
+ * reference. For the regrade route it is too broad: a version whose only
+ * draw from the bank is a `pool` section that happens never to include this
+ * particular question still matches, and gets a regrade enqueued for work
+ * it was never actually doing. Not fixed here — the correct long-run test
+ * is the attempt's own pinned `layout_json`/pool-draw record, a later
+ * phase's work — named at the regrade route's own call site too, not left
+ * as a silently-borrowed semantics mismatch.
+ */
+export const publishedVersionsForQuestion = scoped(
+  "publishedVersionsForQuestion",
+  async (db: DbClient, workspaceId: string, bankId: string, questionId: string): Promise<string[]> => {
+    const rows = await db.query<{ id: string }>(
+      "SELECT DISTINCT tv.id AS id FROM test_version tv " +
+        "WHERE tv.workspace_id = ? AND tv.published_at IS NOT NULL " +
+        "AND (CAST(tv.sections_json AS TEXT) LIKE ? OR CAST(tv.sections_json AS TEXT) LIKE ?)",
+      [workspaceId, `%${questionId}%`, `%${bankId}%`],
+    );
+    return rows.map((row) => row.id);
+  },
+);
+
 /** The tests (by name) whose *published* version references `bankId` —
  * either a `pool` source naming the bank directly, or a `fixed`/`sets`
  * source naming one of its questions (Review Focus 1: a draft never

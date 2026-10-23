@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { join } from "node:path";
 import type { Question } from "../../src/types.js";
 import type { ScoringDefaults } from "../../src/grade/result.js";
-import { gradeManual, type ManualQuestion, type RubricAward } from "../../src/grade/manual.js";
+import { deriveAward, gradeManual, isManualQuestion, type ManualQuestion, type RubricAward } from "../../src/grade/manual.js";
 import { gradeQuestion } from "../../src/grade/index.js";
 
 const repoRoot = fileURLToPath(new URL("../../../../", import.meta.url));
@@ -65,6 +65,59 @@ describe("gradeManual", () => {
     const result = gradeManual(TWO_LEVEL_RUBRIC, { levels: [] }, defaults);
     expect(result.points).toBe(0);
     expect(result.correct).toBeNull();
+  });
+});
+
+describe("isManualQuestion", () => {
+  it("is true for both manual types", () => {
+    expect(isManualQuestion(byId("WRI-001"))).toBe(true);
+    expect(isManualQuestion(byId("WRI-002"))).toBe(true);
+  });
+
+  it("is false for an auto-graded type", () => {
+    expect(isManualQuestion(byId("LOG-007"))).toBe(false);
+  });
+});
+
+// Fix round 1, F2/F3: shared by `packages/db`'s `listPendingAwards` and
+// `apps/api`'s `recordAward` rescore replay — one definition, tested once.
+describe("deriveAward", () => {
+  it("0 points always reconstructs as an empty award, under any rubric", () => {
+    expect(deriveAward(TWO_LEVEL_RUBRIC, 0)).toEqual({ levels: [] });
+  });
+
+  it("0 points reconstructs as an empty award even with no question at all", () => {
+    expect(deriveAward(undefined, 0)).toEqual({ levels: [] });
+  });
+
+  it("matches a nonzero amount to the rubric level carrying it", () => {
+    expect(deriveAward(TWO_LEVEL_RUBRIC, 3)).toEqual({ levels: ["names-the-flaw"] });
+    expect(deriveAward(TWO_LEVEL_RUBRIC, 2)).toEqual({ levels: ["proposes-evidence"] });
+  });
+
+  it("returns null, not a zero-scoring award, when no rubric level carries the amount", () => {
+    // Nothing on TWO_LEVEL_RUBRIC is worth 5 — the two levels sum to it
+    // together, but gradeManual's original award is not reconstructable
+    // from the total alone.
+    expect(deriveAward(TWO_LEVEL_RUBRIC, 5)).toBeNull();
+  });
+
+  it("returns null for a question that is not manually graded", () => {
+    expect(deriveAward(byId("LOG-007"), 4)).toBeNull();
+  });
+
+  it("returns null when there is no question to match against at all", () => {
+    expect(deriveAward(undefined, 4)).toBeNull();
+  });
+
+  it("returns null for a manual question authored with no rubric", () => {
+    const noRubric: ManualQuestion = {
+      id: "RUB-002",
+      type: "short_answer",
+      prompt: "Explain",
+      scoring: { points: 4 },
+    };
+    expect(deriveAward(noRubric, 4)).toBeNull();
   });
 });
 

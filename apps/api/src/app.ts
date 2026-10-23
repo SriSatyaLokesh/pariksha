@@ -30,6 +30,9 @@ import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
+import { gradeRoutes } from "./grade/award.js";
+import { verdictRoutes } from "./grade/verdict.js";
+import { regradeRoutes } from "./grade/regrade.js";
 import { candidateDataRoutes } from "./retention/candidate.js";
 import { usageRoute } from "./usage/project.js";
 import { requireMember } from "./middleware/authorize.js";
@@ -687,6 +690,56 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // write) + `appendEvents` (1, the `attempt_unlocked` marker) +
   // `appendAudit` (1).
   "/api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": 6,
+  // Phase 8b Task 1 (`K14`): recording a rubric award. Measured
+  // (`apps/api/test/grade/award.test.ts`'s own "measures the real
+  // subrequest cost" test, against a 300-candidate workspace), not
+  // estimated: auth (2) + `liveQuestions` (1, the rubric check and the
+  // question map every stored award is matched against) +
+  // `attemptForGrading` (1) + `writeAward` (1) + `listResponses` (1 — also
+  // where every other stored award is reconstructed from, so it is read
+  // only once) + `rescoreAttempt`'s own `liveQuestions` (1 — it cannot
+  // share this route's, `rescoreAttempt` is reused as-is) + `writeScore`
+  // (1) = 8. Flat in how many candidates the workspace holds — this route
+  // touches exactly one attempt.
+  "/api/v1/workspaces/:id/tests/:testId/grade": 8,
+
+  // Phase 8b Task 2 (`K15`): the grading queue, `listPendingAwards`'s first
+  // production caller. Measured (`apps/api/test/grade/award.test.ts`'s own
+  // "measures the real subrequest cost" test for this route, against a
+  // 300-candidate workspace), on the non-blind path — the more expensive
+  // of the two and the one a shared bare-path budget has to cover: auth
+  // (2) + `listPendingAwards` (2 — `workspaceQuestions`, then its own
+  // paginated select) + `identityForAttempts` (1, one batched query over
+  // every distinct attempt on the page, never one per row or per
+  // candidate) = 5. The blind path (`?blind=1`) skips the identity read
+  // entirely and spends less, never more. Flat in how many candidates the
+  // workspace holds.
+  "/api/v1/workspaces/:id/tests/:testId/grading-queue": 5,
+
+  // Phase 8b Task 3 (`K16`): the reviewer's verdict. Measured
+  // (`apps/api/test/review.test.ts`'s own "measures the real subrequest
+  // cost" test, against a 300-candidate workspace), not estimated: auth
+  // (2) + `getAttempt` (1, the 404 check) + `recordVerdict`'s one insert
+  // (1) = 4. Flat in cohort size — this route touches exactly one attempt,
+  // same as `.../grade` above.
+  "/api/v1/workspaces/:id/attempts/:attemptId/verdict": 4,
+
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Measured
+  // (`apps/api/test/grade/regrade.test.ts`'s own "measures the real
+  // subrequest cost" test): auth (2) + `publishedVersionsForQuestion` (1) +
+  // `countSubmittedAttemptsForVersions`'s one grouped count (1) +
+  // `appendAuditBatch`'s one batched write (1) = 5.
+  //
+  // **Flat in how many published versions matched** (branch review M5(a) —
+  // this budget line used to be measured against exactly one match and
+  // declared itself flat while the route looped `enqueueRegrade` once per
+  // version at 2 subrequests each; past ~24 matches it would have hit the
+  // 50-subrequest ceiling the budget table exists to catch). The grouped
+  // count is chunked at 99 ids (D1's 100-bound-parameter cap,
+  // `packages/db/src/repo/regrade.ts`'s own comment) — a question matched
+  // by more published versions than that pays one more subrequest per 99,
+  // which this product has never approached.
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": 5,
 
   // Phase 8e Task 2 (`S-14`, #101): the candidate's own data, and its
   // erasure. `candidates.delete` gets its first production caller here.
@@ -790,7 +843,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
 
   // Task 9.
   "GET /api/v1/workspaces/:id/banks/:bankId/export": "banks.edit",
-  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export":
+    "banks.edit",
 
   // Phase 5 Task 2. There is no `tests.view` either — reads are guarded the
   // same way banks' reads are, by the one action there is.
@@ -821,7 +875,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/tests/:testId/export": "tests.edit",
   "POST /api/v1/workspaces/:id/tests/import": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
-  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
+  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import":
+    "candidates.manage",
 
   // Phase 6 Task 2 (#66, P6.2). The invite is a credential for a row on
   // the candidate list, so it is the same permission that uploaded the
@@ -853,6 +908,25 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // nothing wider than it needs to.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "attempts.monitor",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "attempts.monitor",
+  // Phase 8b Task 1 (`K14`): `attempts.grade`'s first production caller —
+  // zero routes named this action before this line (only
+  // `permissions.test.ts` did). A Reviewer or Admin holds it; an Author
+  // (`tests.edit`) does not.
+  "POST /api/v1/workspaces/:id/tests/:testId/grade": "attempts.grade",
+  // Phase 8b Task 2 (`K15`): reading the queue is part of grading, the same
+  // action the POST above requires — a Reviewer or Admin holds it, an
+  // Author (`tests.edit`) does not.
+  "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "attempts.grade",
+  // Phase 8b Task 3 (`K16`): the verdict. Same action as grading itself —
+  // a verdict is part of the review a Reviewer or Admin performs, and an
+  // Author (`tests.edit`) holds neither.
+  "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "attempts.grade",
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Same action as
+  // grading and the verdict — a Reviewer or Admin holds it, an Author
+  // (`banks.edit`, the permission that saved the key change this route
+  // reacts to) does not.
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": "attempts.grade",
+
   // Phase 8e Task 2 (`S-14`, #101): `candidates.delete` is Owner-only in the
   // matrix — `owner: ACTIONS` and nobody else — which is what makes an
   // Admin's 403 here the real boundary, not a looser `candidates.manage`.
@@ -905,7 +979,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
  *
  * Every task that mounts a route adds its line here in the same commit.
  */
-export type RouteAuthority = "workspace" | "attempt" | "entry" | "actor" | "public";
+export type RouteAuthority =
+  "workspace" | "attempt" | "entry" | "actor" | "public";
 
 export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // --- public: no credential at all ------------------------------------
@@ -1069,6 +1144,14 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // Phase 7e Task 4 (`Q5a`): the minimal pair.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "workspace",
+  // Phase 8b Task 1 (`K14`): recording a rubric award.
+  "POST /api/v1/workspaces/:id/tests/:testId/grade": "workspace",
+  // Phase 8b Task 2 (`K15`): the grading queue.
+  "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "workspace",
+  // Phase 8b Task 3 (`K16`): the verdict.
+  "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "workspace",
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer.
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": "workspace",
   // Phase 8e Task 2 (`S-14`, #101).
   "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
   "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
@@ -1135,6 +1218,16 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 8b Task 1 (`K14`): manual grading. Same `/api/v1/workspaces`
+  // prefix as every other organiser route, mounted here for locality with
+  // `inviteRoutes` rather than out of necessity.
+  app.route("/api/v1/workspaces", gradeRoutes(deps));
+  // Phase 8b Task 3 (`K16`): the verdict. Same prefix, mounted next to
+  // `gradeRoutes` for the same locality reason.
+  app.route("/api/v1/workspaces", verdictRoutes(deps));
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Same prefix, mounted
+  // next to `gradeRoutes`/`verdictRoutes` for the same locality reason.
+  app.route("/api/v1/workspaces", regradeRoutes(deps));
   // Phase 8e Task 2 (`S-14`, #101): a candidate's export and erasure.
   app.route("/api/v1/workspaces", candidateDataRoutes(deps));
   // Phase 8e Task 3 (`K31`, #102): the free-tier meter. Mounted directly,
