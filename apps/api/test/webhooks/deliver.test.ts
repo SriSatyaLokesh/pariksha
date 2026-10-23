@@ -439,10 +439,10 @@ describe("the submit route, with a webhook registered", () => {
 
   it("keeps the submit route inside its declared budget with a webhook firing", async () => {
     const http = okHttp();
-    const { app, cookie } = await startWith(http);
-    // `app` above was built over plain `withHttp(http)`; this call rebuilds
-    // one more time over `countingDeps` so the attempt-start subrequests
-    // are never counted — only the submit request itself is.
+    const { cookie } = await startWith(http);
+    // `startWith` built an app over plain `withHttp(http)` and we discard it:
+    // this call rebuilds one more time over `countingDeps` so the
+    // attempt-start subrequests are never counted — only the submit is.
     const counting = countingDeps(withHttp(http));
 
     const res = await createApp(counting.deps).request(SUBMIT_PATH, { method: "POST", headers: { cookie } });
