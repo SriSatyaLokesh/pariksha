@@ -12,6 +12,7 @@ import { CardHairline } from "../components/CardHairline";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
 import { Icon } from "../components/OrganiserShell";
+import { ALL_CLEAR } from "../components/testbuilder/PublishChecklist";
 
 // Screen 6 (docs/design.md's screen inventory): the test list. T-01 (CRUD),
 // T-02 (short link and QR code), T-03 (filter/search/sort) and UX-10's "In
@@ -96,13 +97,26 @@ function versionSummary(test: TestSummary): string {
 }
 
 /** `D7c`'s own arithmetic (`PublishChecklist.tsx`): how many of the
- *  checklist's own rows do not stop a publish, over how many it raised. An
- *  em dash while the aggregate is still loading or has nothing for this
- *  test — not "0 / 0", which would read as "all clear" instead of
- *  "unknown". Plain text, no hue: the same `D1` rule `versionSummary`
- *  follows, and the numbers alone are what a screen reader needs. */
+ *  checklist's own rows do not stop a publish, over how many it raised.
+ *
+ *  Fix round 1, Important 1: a test with nothing outstanding has
+ *  `total === 0`, and that is `ALL_CLEAR` here exactly as it is in the
+ *  rail — not `"0 / 0"`, which reads as a measurement that came out empty
+ *  rather than a test with nothing left to fix, and would have this column
+ *  disagreeing with the rail about the very test both are describing
+ *  (`K33`).
+ *
+ *  An em dash is the THIRD state, and a different one: the aggregate is
+ *  still loading or has nothing for this test at all (no entry in the map),
+ *  which is "unknown" and must never be spelled the same as either "zero
+ *  rows" above or `ALL_CLEAR` (Phase 8c Task 5 fix round 1 named this
+ *  conflation directly: "0 / 0" reading as "all clear" is the shape of the
+ *  defect, whichever side of it is wrong). Plain text, no hue throughout:
+ *  the same `D1` rule `versionSummary` follows, and the words and numbers
+ *  alone are what a screen reader needs. */
 function readinessSummary(summary: ReadinessSummary | undefined): string {
-  return summary === undefined ? "—" : `${summary.ready} / ${summary.total}`;
+  if (summary === undefined) return "—";
+  return summary.total === 0 ? ALL_CLEAR : `${summary.ready} / ${summary.total}`;
 }
 
 type Sort = "name" | "updated" | "created";

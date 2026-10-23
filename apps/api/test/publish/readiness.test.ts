@@ -96,6 +96,52 @@ it("answers for every test in one response", async () => {
   }
 });
 
+// Fix round 1, Important 2: T-02's invariant is that a test always carries
+// exactly one open draft, so nothing through the ordinary API ever leaves
+// one without — `readinessFor`'s `if (!draft) continue` is defensive,
+// written (its own comment says so) on the premise that the invariant
+// might not hold forever. Correct-by-inspection is not pinned, so this
+// reaches past the API and breaks the invariant on purpose, the only way
+// to reach the branch at all.
+it("omits a test with no open draft version, rather than throwing or reporting 0 / 0", async () => {
+  const before = await readiness();
+  const [testId] = Object.keys(before);
+
+  await deps.db.run(
+    "UPDATE test_version SET published_at = ? WHERE workspace_id = ? AND test_id = ? AND published_at IS NULL",
+    [FIXED_NOW, workspaceId, testId],
+  );
+
+  const after = await readiness();
+  expect(after[testId]).toBeUndefined();
+  expect(Object.keys(after)).toHaveLength(TEST_COUNT - 1);
+});
+
+// Fix round 1, Important 2: the other correct-by-inspection path —
+// `listTests` answers `[]`, the loop body never runs, and the result is
+// `{}`. A fresh workspace, not `beforeEach`'s (which always seeds
+// `TEST_COUNT` tests), so the empty case is real rather than filtered down
+// to it.
+it("answers {} for a workspace with no tests at all", async () => {
+  const tag = `empty${suffix}`;
+  const ownerId = await createUser(deps.db, {
+    email: `owner-${tag}@alpha.test`,
+    authProvider: "magic_link",
+    now: FIXED_NOW,
+  });
+  const ownerCookie = await sessionCookie(deps, (await issueSession(deps, ownerId)).token);
+  const emptyWorkspaceId = (
+    await (
+      await app.request("/api/v1/workspaces", send("POST", ownerCookie, { slug: `empty-${tag}`, name: "Empty Co" }))
+    ).json()
+  ).id;
+  const emptyAuthorCookie = await member(emptyWorkspaceId, "author", tag);
+
+  const res = await app.request(`/api/v1/workspaces/${emptyWorkspaceId}/tests/readiness`, get(emptyAuthorCookie));
+  expect(res.status, await res.clone().text()).toBe(200);
+  expect(await res.json()).toEqual({});
+});
+
 it("costs a bounded number of statements for twelve tests", async () => {
   const counting = countingDeps(deps);
   await readinessFor(counting.deps, workspaceId);

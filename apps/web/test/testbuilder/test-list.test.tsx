@@ -614,6 +614,24 @@ describe("TestList", () => {
     expect(await screen.findByText(/\d+ \/ \d+/)).toBeInTheDocument();
   });
 
+  // Fix round 1, Important 1: `PublishChecklist.tsx:219` already renders
+  // `ALL_CLEAR` for a zero-row checklist, not "0 / 0" — a test with nothing
+  // outstanding has to read the same way in both places, or the rail and
+  // this column disagree about the very test they are both describing
+  // (`K33`). `0 / 0` is the worse of the two readings: it looks like a
+  // measurement that came out empty rather than a test that is done.
+  it('reads a fully-ready test as "All clear", not "0 / 0"', async () => {
+    await renderList(
+      fakeClient({
+        tests: async () => [PUBLISHED],
+        readiness: async () => ({ [PUBLISHED.id]: { ready: 0, total: 0 } }),
+      }),
+    );
+    const row = (await screen.findByText(PUBLISHED.name)).closest("tr") as HTMLElement;
+    expect(within(row).getByText("All clear")).toBeInTheDocument();
+    expect(within(row).queryByText(/\d+ \/ \d+/)).toBeNull();
+  });
+
   // The budget half of the same ruling, and the half that actually bites:
   // thirteen rows must not become thirteen round trips. Behaviour, not text
   // — the client is a spy and the assertion is on what the screen asked for.
