@@ -4,7 +4,7 @@
 // exist, and the measured subrequest cost — the same split every other
 // route test in this directory keeps.
 
-import { afterAll, expect, it } from "vitest";
+import { expect, it } from "vitest";
 import {
   addMembership,
   closeClient,
