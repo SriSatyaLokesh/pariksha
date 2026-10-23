@@ -850,6 +850,7 @@ export function TestBuilder({
               // through) — omitted here, not a stray `undefined`, which is
               // also `K36`'s own shape on `node`: absent is correct on
               // both targets until one exists.
+              candidates={candidates}
               canDeleteCandidateData={canDeleteCandidateData}
               onExportCandidateData={(candidateId) => void exportCandidateData(candidateId)}
               onDeleteCandidateData={deleteCandidateData}
