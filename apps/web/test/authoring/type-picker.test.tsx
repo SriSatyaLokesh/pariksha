@@ -162,6 +162,10 @@ function fakeClient(): ApiClient {
     exportCandidateData: unused,
     deleteCandidateData: unused,
     usage: async () => undefined,
+    listWebhooks: unused,
+    createWebhook: unused,
+    setWebhookActive: unused,
+    deleteWebhook: unused,
   };
 }
 

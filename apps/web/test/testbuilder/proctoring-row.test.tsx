@@ -115,6 +115,10 @@ function fakeClient(draft: TestVersionRow): ApiClient {
     exportCandidateData: notUsed,
     deleteCandidateData: notUsed,
     usage: async () => undefined,
+    listWebhooks: notUsed,
+    createWebhook: notUsed,
+    setWebhookActive: notUsed,
+    deleteWebhook: notUsed,
   };
 }
 

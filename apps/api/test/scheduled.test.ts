@@ -3,6 +3,8 @@
 
 import { beforeEach, expect, it, vi } from "vitest";
 import { SCHEDULED_JOBS, runScheduled, type ScheduledJob } from "../src/scheduled.js";
+import { webhookDrainJob } from "../src/webhooks/drain.js";
+import { rateLimitJob, retentionJob } from "../src/retention/sweep.js";
 import { testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
@@ -31,12 +33,12 @@ function throwing(name: string, cron: string): ScheduledJob {
 
 // Pinned before any test pushes a job, per K27: a plan that registers one
 // must edit this line, which is how the registry's contents stay visible
-// rather than accumulating unseen.
-it("ships with 8e's two jobs registered", async () => {
-  expect(shippedWith).toEqual([
-    expect.objectContaining({ name: "retention.sweep", cron: "17 3 * * *" }),
-    expect.objectContaining({ name: "rate_limit.sweep", cron: "17 3 * * *" }),
-  ]); // 8b and 8d still change this line
+// rather than accumulating unseen. 8d is the first to land
+// (`webhookDrainJob`, K22); 8e adds `retentionJob` and `rateLimitJob`
+// beside it (`apps/api/src/scheduled.ts`'s own header on declaration
+// order); 8b still changes this line.
+it("ships with exactly the jobs registered so far", async () => {
+  expect(shippedWith).toEqual([webhookDrainJob, retentionJob, rateLimitJob]); // 8b still changes this line
 });
 
 beforeEach(() => {
