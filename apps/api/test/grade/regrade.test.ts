@@ -189,7 +189,7 @@ async function changeKeyToB(bankId: string, doc: Question): Promise<void> {
 }
 
 async function drainFully(): Promise<void> {
-  let summary = "";
+  let summary: string;
   do {
     ({ summary } = await runTick());
   } while (!summary.includes("done") && summary !== "no regrades pending");
@@ -354,6 +354,10 @@ describe("enqueueRegrade / regradeJob", () => {
   });
 
   it("rescores a bounded batch per tick and resumes on the next", async () => {
+    // Explicit timeout: the cleanup `drainFully()` below runs the rest of a
+    // ten-tick, 300-attempt drain for real, on top of however many other
+    // 300-attempt fixtures this file has already built by the time this
+    // test runs — slow, not stuck.
     const { bankId, testVersionId, doc } = await seedVersion({ total: 300, points: 12 });
     await changeKeyToB(bankId, doc);
     await enqueueRegrade(deps.db, workspaceId, { testVersionId: testVersionId, requestedBy: "usr_1", now: deps.now() });
@@ -392,7 +396,7 @@ describe("enqueueRegrade / regradeJob", () => {
     // left behind here would silently absorb every later test's own
     // `runTick()` calls instead of their fresh fixtures.
     await drainFully();
-  });
+  }, 20_000);
 
   it("stays inside the subrequest ceiling on one tick, at exactly the declared figure", async () => {
     const { bankId, testVersionId, doc } = await seedVersion({ total: 300, points: 12 });
