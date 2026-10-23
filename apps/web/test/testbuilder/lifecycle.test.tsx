@@ -13,7 +13,14 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 
-import type { ApiClient, Actor, TestSummary, TestVersionRow } from "../../src/lib/api";
+import {
+  ApiError,
+  type ApiClient,
+  type Actor,
+  type TestSummary,
+  type TestVersionRow,
+  type LockedAttemptRow,
+} from "../../src/lib/api";
 import { OrganiserApp } from "../../src/routes/organiser";
 
 const WORKSPACE = { id: "wsp_1", name: "Placement cell" };
@@ -111,6 +118,10 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used");
     },
     candidates: async () => [],
+    lockedAttempts: async () => [],
+    unlockAttempt: async () => {
+      throw new Error("not used");
+    },
     importCandidates: async () => {
       throw new Error("not used");
     },
@@ -351,5 +362,60 @@ describe("closing and archiving", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^close$/i }));
     expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+// Phase 7e fix wave (M4, M5): the route's own `onUnlock` handler — the half
+// of the unlock surface `locked-attempts.test.tsx` cannot reach, since that
+// file mounts `LockedAttempts` directly rather than through `routes/
+// test.tsx`'s real wiring.
+describe("the locked-attempts unlock surface (M4, M5)", () => {
+  const LOCKED: LockedAttemptRow = {
+    attemptId: "att_1",
+    candidateLabel: "21CS0147",
+    lockedAt: 1_760_000_000_000,
+    violations: 5,
+    remainingSeconds: 600,
+  };
+
+  it("M5: a single click does not unlock — a second, explicit confirm is required", async () => {
+    const unlockAttempt = vi.fn(async () => undefined);
+    await openBuilder(fakeClient({ lockedAttempts: async () => [LOCKED], unlockAttempt }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Unlock 21CS0147/i }));
+    expect(unlockAttempt).not.toHaveBeenCalled();
+    expect(screen.getByText(/Unlock 21CS0147\?/)).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: /^Confirm unlock$/i }));
+    await waitFor(() => expect(unlockAttempt).toHaveBeenCalledWith("wsp_1", "tst_1", "att_1"));
+  });
+
+  it("M5: Cancel backs out without unlocking", async () => {
+    const unlockAttempt = vi.fn(async () => undefined);
+    await openBuilder(fakeClient({ lockedAttempts: async () => [LOCKED], unlockAttempt }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Unlock 21CS0147/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Cancel$/i }));
+
+    expect(unlockAttempt).not.toHaveBeenCalled();
+    expect(await screen.findByRole("button", { name: /Unlock 21CS0147/i })).toBeVisible();
+  });
+
+  it("M4: a failed unlock reports the error instead of silently leaving the row", async () => {
+    await openBuilder(
+      fakeClient({
+        lockedAttempts: async () => [LOCKED],
+        unlockAttempt: async () => {
+          throw new ApiError(409, "not_locked", "That attempt is no longer locked.");
+        },
+      }),
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: /Unlock 21CS0147/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Confirm unlock$/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("That attempt is no longer locked.");
+    // The row is still there — the organiser is not told it succeeded.
+    expect(screen.getByRole("button", { name: /Unlock 21CS0147/i })).toBeVisible();
   });
 });

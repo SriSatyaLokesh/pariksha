@@ -418,6 +418,7 @@ const resumedPaper: AttemptPaper = {
   allowCalculator: false,
   serverNow: 1_760_000_000_000,
   submittedAt: null,
+  lockedAt: null,
   proctoring: PROCTORING_DEFAULTS.off,
   violations: 0,
 };

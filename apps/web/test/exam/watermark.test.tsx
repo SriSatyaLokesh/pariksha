@@ -65,6 +65,7 @@ function paperFixture(opts: { proctoring: ResolvedProctoring }): AttemptPaper {
     allowCalculator: false,
     serverNow: NOW,
     submittedAt: null,
+    lockedAt: null,
     proctoring: opts.proctoring,
     violations: 0,
   };

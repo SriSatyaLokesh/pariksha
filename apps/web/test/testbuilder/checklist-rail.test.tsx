@@ -173,6 +173,10 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used");
     },
     candidates: async () => [],
+    lockedAttempts: async () => [],
+    unlockAttempt: async () => {
+      throw new Error("not used");
+    },
     importCandidates: async () => {
       throw new Error("not used");
     },

@@ -178,6 +178,10 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used by this test file");
     },
     candidates: async () => [],
+    lockedAttempts: async () => [],
+    unlockAttempt: async () => {
+      throw new Error("not used by this test file");
+    },
     importCandidates: async () => {
       throw new Error("not used by this test file");
     },

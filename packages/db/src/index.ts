@@ -4,6 +4,11 @@ export * from "./ids.js";
 export * from "./schema/index.js";
 export * from "./client.js";
 export * from "./migrate.js";
+// The generated bundle `migrate()` itself reads. Exported so a test can run
+// one migration's own statements against a real engine instead of retyping
+// its SQL: a retyped copy keeps passing while the migration it claims to
+// cover drifts away from it.
+export * from "./migrations.generated.js";
 export * from "./repo/index.js";
 // Deliberately outside repo/index.js — see the header of identity.ts.
 export * from "./repo/identity.js";

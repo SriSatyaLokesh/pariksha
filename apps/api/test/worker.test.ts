@@ -7,7 +7,7 @@
 
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
-import { d1Client, migrate } from "@pariksha/db";
+import { claimViolationLimit, d1Client, migrate, newId, sqliteMigrations } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
 import { SCHEDULED_JOBS } from "../src/scheduled.js";
@@ -41,6 +41,8 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0007_attempt_progress.sql",
     "0008_attempt_integrity.sql",
     "0009_results_and_delivery.sql",
+    "0010_violation_limit_claim.sql",
+    "0011_attempt_locked_at.sql",
   ]);
 
   // The four table rebuilds are the statements D1 could reject, so the test
@@ -73,12 +75,109 @@ it("every migration applies against the Miniflare D1 binding", async () => {
   expect(await sql("response_workspace_question_idx")).toContain(
     "`workspace_id`,`question_id`",
   );
+  // 0010 (F2, Major, code review of #213): the partial unique index D1
+  // could in principle reject the `WHERE` clause of — proved here rather
+  // than trusted from the bundle, the same reason every statement above is.
+  expect(await sql("event_violation_limit_uq")).toContain("violation_limit_reached");
+  // 0011 (`E-R1`): a nullable `ADD COLUMN`, same family as 0008's two above
+  // but never itself proved against the real engine until now.
+  expect(await sql("attempt")).toContain("`locked_at` integer");
+});
+
+// Branch-review m7: `worker.test.ts`'s own opening comment is that
+// better-sqlite3 "accepts SQL D1 rejects" — `violation-limit.test.ts` only
+// ever exercises `claimViolationLimit`'s `INSERT … ON CONFLICT (attempt_id)
+// WHERE type = '…' DO NOTHING RETURNING id` under better-sqlite3, and that
+// statement is on the candidate hot path, outside either of the handler's
+// two AG1 `try` blocks (`routes/proctoring.ts`) — a rejection there would be
+// a 500 on every at-limit event POST, on live data. Partial-index conflict
+// targets have been in SQLite since 3.24 and are "almost certainly" fine,
+// which is exactly what this file exists to replace with proof.
+it("claimViolationLimit's own ON CONFLICT (attempt_id) WHERE … DO NOTHING RETURNING id works against the real D1 engine", async () => {
+  const db = binding();
+  await migrate(db);
+
+  const workspaceId = newId("wsp");
+  const attemptId = newId("att");
+  const first = await claimViolationLimit(db, workspaceId, { attemptId, now: 0 });
+  expect(first.claimed).toBe(true);
+  const second = await claimViolationLimit(db, workspaceId, { attemptId, now: 1 });
+  expect(second.claimed).toBe(false);
 });
 
 it("a second run applies nothing", async () => {
   await migrate(binding());
 
   expect((await migrate(binding())).applied).toEqual([]);
+});
+
+// Branch-review `C1`, and the re-review's one non-blocking ask: the dedupe in
+// `0010` was proved once by a disposable probe and then had no standing test.
+// It runs **once, against live candidate data, irreversibly**, and the thing
+// it guards against is real — #227 left `violation_limit_reached`
+// candidate-submittable on `main` from Phase 7a until this branch narrowed the
+// ingest, so production may hold duplicates. Without the `DELETE`, `CREATE
+// UNIQUE INDEX` aborts: the ledger stops at 9, `0011` never runs, and the
+// auto-deploy ships code declaring `locked_at` against a table without it.
+// That is the `0008` scar, which cost this project four days.
+//
+// The statements come from the committed bundle rather than being retyped, so
+// this cannot pass while the migration drifts away from it. Dropping the index
+// puts the database back in its pre-`0010` shape, which is the only way to get
+// duplicate markers past the index that forbids them.
+it("0010's dedupe survives duplicate markers, keeps the earliest, and touches nothing else", async () => {
+  const db = binding();
+  await migrate(db);
+
+  const [zeroTen] = sqliteMigrations.filter((m) => m.name === "0010_violation_limit_claim.sql");
+  expect(zeroTen?.statements).toHaveLength(2);
+
+  await db.exec("DROP INDEX event_violation_limit_uq");
+
+  const workspaceId = newId("wsp");
+  const duplicated = newId("att");
+  const lone = newId("att");
+  const row = async (attemptId: string, type: string, serverTs: number) =>
+    db.exec(
+      `INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) ` +
+        `VALUES ('${newId("evt")}', '${workspaceId}', '${attemptId}', '${type}', 0, ${serverTs})`,
+    );
+
+  // Three markers for one attempt, inserted out of order so "the earliest"
+  // cannot be satisfied by insertion order alone.
+  await row(duplicated, "violation_limit_reached", 300);
+  await row(duplicated, "violation_limit_reached", 100);
+  await row(duplicated, "violation_limit_reached", 200);
+  // The single-marker case: an attempt the dedupe must leave completely alone.
+  await row(lone, "violation_limit_reached", 500);
+  // And a type the partial index does not cover, which an over-broad DELETE
+  // would take with it.
+  await row(duplicated, "window_blur", 50);
+
+  for (const statement of zeroTen!.statements) await db.exec(statement);
+
+  // Scoped to this test's own workspace: the D1 instance is shared across the
+  // file, and an earlier test leaves a marker of its own behind.
+  const markers = await db.query<{ attempt_id: string; server_ts: number }>(
+    "SELECT attempt_id, server_ts FROM event WHERE type = 'violation_limit_reached' " +
+      "AND workspace_id = ? ORDER BY server_ts",
+    [workspaceId],
+  );
+  expect(markers).toEqual([
+    { attempt_id: duplicated, server_ts: 100 },
+    { attempt_id: lone, server_ts: 500 },
+  ]);
+
+  const others = await db.query<{ type: string }>(
+    "SELECT type FROM event WHERE type <> 'violation_limit_reached' AND workspace_id = ?",
+    [workspaceId],
+  );
+  expect(others).toEqual([{ type: "window_blur" }]);
+
+  // The index is back, and still refuses a second marker — the dedupe has to
+  // leave the database in the state the migration promises, not merely survive.
+  expect(await sql("event_violation_limit_uq")).toContain("violation_limit_reached");
+  await expect(row(duplicated, "violation_limit_reached", 400)).rejects.toThrow();
 });
 
 // Task 7 (#51), Review Focus item 3: `d1Client`'s `batch()` is
@@ -143,7 +242,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 10,
+    migrations: 12,
   });
 });
 

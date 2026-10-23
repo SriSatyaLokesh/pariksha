@@ -41,8 +41,11 @@ export interface ResolvedProctoring {
   requireMicrophone: boolean;
   extraMonitorCheck: boolean;
   violationLimit: number;
-  /** Always resolves "warn_only" in Phase 7: `auto_submit`, `lock` and the
-   *  flag half of `warn_then_flag` are pre-cut (issue #214). */
+  /** Phase 7e Task 1 (issue #213) restores this: `resolveProctoring`
+   *  resolves the real override/default again, the same as every other
+   *  control. Was hardcoded to `"warn_only"` from #214 until a consumer
+   *  existed — `violationOutcome` (`proctoring-outcome.ts`) is that
+   *  consumer, called from `apps/api/src/routes/proctoring.ts`'s ingest. */
   violationAction: ViolationAction;
   cameraOutageSeconds: number;
   multiFaceSnapshots: number;
@@ -82,10 +85,11 @@ export const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
 // - `require_microphone` is `false` on every row too, for the same reason:
 //   `Q12b`'s noise monitoring is pre-cut (issue #209), and `resolveProctoring`
 //   refuses the override below exactly as it refuses `face_check`'s.
-// - `violation_action` is `warn_only` on every row too, Standard and Strict
-//   included — issue #214: the consequence half of Phase 7 (auto-submit,
-//   lock, the flag half of `warn_then_flag`) is deferred to #213, and
-//   `resolveProctoring` refuses the override below the same way.
+// - `violation_action` was `warn_only` on every row from issue #214 until
+//   Phase 7e Task 1 (#213) gave it a consumer (`violationOutcome`) and
+//   restored Standard and Strict to their intended `warn_then_flag` —
+//   `resolveProctoring` resolves the real value again below. `off` stays
+//   `warn_only`: it never defaulted to anything else, #214 or not.
 export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedProctoring>> = {
   off: {
     profile: "off",
@@ -118,7 +122,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     requireMicrophone: false,
     extraMonitorCheck: false,
     violationLimit: 5,
-    violationAction: "warn_only",
+    violationAction: "warn_then_flag",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
     allowCalculator: false,
@@ -136,7 +140,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     requireMicrophone: false,
     extraMonitorCheck: true,
     violationLimit: 5,
-    violationAction: "warn_only",
+    violationAction: "warn_then_flag",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
     allowCalculator: false,
@@ -196,18 +200,27 @@ export function resolveProctoring(
     // act on it.
     requireMicrophone: false,
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
-    violationLimit: overrideOr(overrides, "violation_limit", defaults.violationLimit),
-    // #214: pre-cut, same shape as `faceCheck`/`requireMicrophone` above.
-    // Accepted and round-tripped (the select in `ProctoringPanel.tsx` still
-    // shows the raw document value) so a document authored for #213
-    // survives, but resolution refuses it outright — `auto_submit`, `lock`
-    // and the flag half of `warn_then_flag` have no consumer in this phase,
-    // so nothing may resolve to them regardless of profile or override.
-    // `violation_limit` above is untouched: the count and the candidate's
-    // warning against it are real.
-    violationAction: "warn_only",
-    cameraOutageSeconds: overrideOr(overrides, "camera_outage_seconds", defaults.cameraOutageSeconds),
-    multiFaceSnapshots: overrideOr(overrides, "multi_face_snapshots", defaults.multiFaceSnapshots),
+    // M7: `PUT /draft` and `POST /tests/import` accept arbitrary JSON —
+    // `violation_limit: 0` would lock (or flag `high_risk`) every candidate
+    // on their very first event batch, `0 >= 0` being true from the start.
+    // The UI already floors this control at 1; this is the server-side
+    // floor that a hand-edited or imported document cannot route around.
+    // `snapshotIntervalSeconds` above keeps accepting 0 on purpose — that
+    // one really does mean "off".
+    violationLimit: Math.max(1, overrideOr(overrides, "violation_limit", defaults.violationLimit)),
+    // Phase 7e Task 1 (#213): restored to a real `overrideOr`, the same
+    // shape as every other control. Was hardcoded `"warn_only"` from #214
+    // until a consumer existed — `violationOutcome` (`proctoring-outcome.ts`)
+    // is that consumer. `apps/web/ProctoringPanel.tsx`'s select stays
+    // `disabled` (unchanged by this task; it shows the raw document value
+    // either way), so an organiser cannot yet *drive* this from the UI, but
+    // a document that already holds `auto_submit`/`lock`/`warn_then_flag`
+    // (round-tripped since #214) now resolves to it for real.
+    violationAction: overrideOr(overrides, "violation_action", defaults.violationAction),
+    // M7: same floor, same reason — `0` would make `high_risk` unconditional
+    // in `integrityFor`.
+    cameraOutageSeconds: Math.max(1, overrideOr(overrides, "camera_outage_seconds", defaults.cameraOutageSeconds)),
+    multiFaceSnapshots: Math.max(1, overrideOr(overrides, "multi_face_snapshots", defaults.multiFaceSnapshots)),
     allowCalculator: overrideOr(overrides, "allow_calculator", defaults.allowCalculator),
   };
 }
@@ -407,6 +420,49 @@ export const VIOLATION_EVENTS: ReadonlySet<ProctoringEventType> = new Set([
 export const FAILURE_EVENTS: ReadonlySet<ProctoringEventType> = new Set([
   "proctoring_unavailable", "snapshot_failed",
 ]);
+
+// Phase 7e Task 1 fix round (F1, Critical): `PROCTORING_EVENTS` above is
+// every type `appendEvents` can store, but three of them are written only
+// by server-side route logic — never a candidate's own POST. Before this,
+// `apps/api/src/routes/proctoring.ts`'s `eventItem` accepted the whole
+// union from the candidate's own request body, which let a candidate POST
+// `{"type":"violation_limit_reached"}` at violation 0 and forge the one
+// fact `violationOutcome`'s `alreadyActioned` is gated on — permanently
+// switching their own attempt's consequences off (`Q7a` exactly inverted:
+// the client handing the server its own decision).
+//
+// Two independent, hand-written lists, not one computed as "whatever's
+// left" from the other: a derived complement is complete by construction,
+// so a test asserting it partitions `PROCTORING_EVENTS` could never fail —
+// which is exactly how a third server-only type joined this union
+// unnoticed in the first place (Phase 7d). `proctoring.test.ts`'s own
+// partition test can fail two real ways: a type in neither list (added to
+// `PROCTORING_EVENTS` but never classified) or a type in both (misclassified
+// — the shape of this very bug, run in reverse).
+
+/**
+ * Written only by this package's own server-side route logic — a lock
+ * firing, an unlock, the violation limit being reached. Never legitimately
+ * present in a candidate's own `POST /attempt/events` body.
+ */
+export const SERVER_SYNTHESIZED_EVENTS = [
+  "violation_limit_reached", "attempt_locked", "attempt_unlocked",
+] as const satisfies readonly ProctoringEventType[];
+
+/**
+ * The events a candidate's browser can legitimately observe and report.
+ * `eventItem` (`apps/api/src/routes/proctoring.ts`) is built from this, not
+ * from `PROCTORING_EVENTS` — a server-synthesized type is refused with a
+ * 400 at the schema, before anything is written.
+ */
+export const CANDIDATE_PROCTORING_EVENTS = [
+  "fullscreen_exit", "fullscreen_restore",
+  "window_blur", "visibility_hidden",
+  "copy_blocked", "paste_blocked", "contextmenu_blocked",
+  "extra_monitor", "camera_lost", "camera_restored",
+  "identity_photo_captured", "noise_above_threshold",
+  "proctoring_unavailable", "snapshot_failed",
+] as const satisfies readonly ProctoringEventType[];
 
 // Deliberately neither: the four restore/capture/lifecycle types
 // (`fullscreen_restore`, `camera_restored`, `identity_photo_captured`,

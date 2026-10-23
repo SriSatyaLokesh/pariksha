@@ -26,13 +26,26 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { appendEvents, countViolations, recordSnapshot } from "@pariksha/db";
-import { PROCTORING_EVENTS } from "@pariksha/core";
+import {
+  appendEvents,
+  claimViolationLimit,
+  countViolations,
+  lockAttempt,
+  recordSnapshot,
+} from "@pariksha/db";
+import {
+  CANDIDATE_PROCTORING_EVENTS,
+  FAILURE_EVENTS,
+  VIOLATION_EVENTS,
+  violationOutcome,
+  type ProctoringEventType,
+} from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { attemptContext } from "../middleware/attemptContext.js";
 import { limitOrThrow } from "../run/limit.js";
 import { resolvedProctoringOf } from "../run/attempt.js";
+import { recomputeIntegrity, submitAttempt } from "../run/submit.js";
 import { readBodyWithLimit } from "./media.js";
 
 /** `Q7`: the cap `appendEvents` already documents and the daily write
@@ -54,8 +67,20 @@ export const EVENTS_PATH = "/api/v1/run/attempt/events";
  *  deliberately, per that ruling) — nothing has ever bounded its size. */
 const MAX_DETAIL_BYTES = 512;
 
+// Phase 7e Task 1 fix round (F1, Critical): `PROCTORING_EVENTS` is the
+// *storage* vocabulary — `appendEvents` can write any of it — but three of
+// its members (`violation_limit_reached`, `attempt_locked`,
+// `attempt_unlocked`) are server-synthesized and must never come from a
+// candidate's own POST body. The full union here let a candidate forge
+// `violation_limit_reached` at violation 0 and permanently switch their own
+// attempt's consequences off (`alreadyActioned` has no origin column to
+// tell a server row from a client one) — `Q7a` exactly inverted, the client
+// handing the server the one fact its decision is gated on.
+// `CANDIDATE_PROCTORING_EVENTS` is the closed set a candidate's browser can
+// legitimately observe; the three server types are refused with a 400
+// before anything is written, not merely trusted not to be sent.
 const eventItem = z.object({
-  type: z.enum(PROCTORING_EVENTS),
+  type: z.enum(CANDIDATE_PROCTORING_EVENTS),
   detail: z
     .unknown()
     .optional()
@@ -131,7 +156,17 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // the candidate (`AG1`), and a 409 here would make the fail-open queue
     // retry a write that can never succeed again until its 100-item buffer
     // fills.
-    if (attempt.submittedAt === null) {
+    // Fix round 2 (`E-R2`'s third hole): `attempt.lockedAt !== null` added
+    // beside the pre-existing `submittedAt` no-op. This route was never one
+    // of `E-R2`'s enumerated guarded routes either — it is neither a read
+    // nor one of the two write routes `assertNotLocked` covers — so without
+    // this a locked candidate's browser kept driving real `appendEvents`
+    // inserts into `event` on every further violation, indefinitely,
+    // against the same metered D1 budget the MAJOR fix (the snapshot route,
+    // same shape) closed for R2. Same silent-no-op posture, same `AG1`
+    // reason: a proctoring failure — and a lock is exactly that, from this
+    // route's point of view — must never surface anything to the candidate.
+    if (attempt.submittedAt === null && attempt.lockedAt === null) {
       await appendEvents(deps.db, attempt.workspaceId, {
         attemptId: attempt.attemptId,
         events: parsed.data.events,
@@ -146,7 +181,171 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // cast from the stored, `unknown` settings column, not two.
     const resolved = resolvedProctoringOf(attempt.settings);
 
-    return c.json({ violations, limit: resolved.violationLimit, action: resolved.violationAction });
+    // Phase 7e Task 1 (`P-09`, issue #213): the count has a limit, and
+    // `violationOutcome` is the one place `violations >= limit` turns into
+    // a decision. Guarded by the same `submittedAt === null` check as the
+    // write above, for the same reason: a stale tab's flush past
+    // submission must not mark an attempt that is already over as newly
+    // actioned.
+    //
+    // `flag`/`auto_submit`/`lock` are the three kinds a first firing can
+    // be; `warn` and `none` are not a firing at all, so nothing is marked.
+    // The marker — a `violation_limit_reached` event — is what makes
+    // `alreadyActioned` true on the next request (`Review Focus 1`: once,
+    // not twice) and what `warn_then_flag`'s whole action amounts to today:
+    // Task 3 of this plan is what makes `lock` actually lock, reusing this
+    // same outcome.
+    //
+    // Phase 7e Task 1 fix round (F2, Major): `claimViolationLimit` replaces
+    // a `SELECT`-then-`INSERT` that raced under concurrency — see its own
+    // doc comment (`packages/db/src/repo/attempts.ts`). It is attempted
+    // only at or past the limit (`atLimit`): below it, `alreadyActioned` is
+    // always `false` and no write — atomic or otherwise — is needed to know
+    // that, so the common case pays nothing extra here at all.
+    //
+    // Phase 7e Task 2: `auto_submit` is made real here, the first consumer
+    // of that branch. `submitAttempt` is the same function `POST
+    // /attempt/submit` calls — not re-derived — so a candidate submitted
+    // this way gets the exact same idempotent, scored, audited ending a
+    // manual press does, with `reason: "limit"` collecting the value
+    // `SubmitReason` has reserved since Task 11 (`submit.ts`).
+    //
+    // `AG1`: this must not throw into, or surface anything to, the
+    // candidate's own request — the same posture every other write in this
+    // handler already takes. `submitAttempt` itself only ever performs
+    // fast, local D1 statements (no upload, no third-party call) so there
+    // is nothing here that can *stall* the response either; the `try` is
+    // for the unlikely case a statement itself fails, not for a slow one.
+    // A failure here leaves `alreadyActioned` true (the marker above is
+    // still written) and the attempt not yet submitted — the candidate's
+    // own Submit press or the exam's own timeout still ends it normally,
+    // the same fallback every other proctoring failure in this phase
+    // degrades to.
+    let submitted = false;
+    // Phase 7e Task 3 (`E-R1`/`E-R2`): `true` only on the one response
+    // whose own batch locks this attempt — `ProctoringLayer`'s own
+    // `initialLocked`/`locked` doc comment is the mirror of `submitted`'s.
+    let locked = false;
+    // Same fix round 2 guard as the append above: once locked, there is
+    // nothing left for this block to decide — `claimViolationLimit` would
+    // only ever lose its own claim from here on — so it no longer spends a
+    // D1 write finding that out on every subsequent violation.
+    if (attempt.submittedAt === null && attempt.lockedAt === null) {
+      // m4: `warn_only` has no consequence to claim — `violationOutcome`'s
+      // own doc comment promises "a candidate at violation 9 of a 5-limit
+      // `warn_only` test still reads 'Warning 9 of 5' forever", but without
+      // this, `claimViolationLimit` still wins the marker once, and every
+      // later at-limit batch reads `alreadyActioned: true` and gets
+      // `{kind:"none"}` instead of the warning — a contract `warn_only`'s
+      // only caller never actually gets. Excluding it here also saves the
+      // wasted `INSERT … ON CONFLICT DO NOTHING` a `warn_only` test would
+      // otherwise pay on every at-limit batch forever, to learn nothing.
+      const atLimit = violations >= resolved.violationLimit && resolved.violationAction !== "warn_only";
+      const alreadyActioned = atLimit
+        ? !(
+            await claimViolationLimit(deps.db, attempt.workspaceId, {
+              attemptId: attempt.attemptId,
+              now: deps.now(),
+            })
+          ).claimed
+        : false;
+      const outcome = violationOutcome({ violations, resolved, alreadyActioned });
+      if (outcome.kind === "auto_submit") {
+        try {
+          await submitAttempt(deps, attempt, "limit", deps.now());
+          submitted = true;
+        } catch {
+          /* AG1: degrade — see the comment above. */
+        }
+      } else if (outcome.kind === "lock") {
+        // Phase 7e Task 3: the fourth and most intrusive action, made real.
+        // `claimViolationLimit` above is the one and only idempotency
+        // check — `alreadyActioned` already gates this whole branch to a
+        // single firing, so `lockAttempt` (`packages/db/src/repo/
+        // attempts.ts`) does not re-decide anything, only writes. `AG1`:
+        // same posture as `auto_submit` just above — a failure here leaves
+        // `alreadyActioned` true and the attempt unlocked; nothing throws
+        // into or stalls the candidate's own request.
+        try {
+          const result = await lockAttempt(deps.db, attempt.workspaceId, {
+            attemptId: attempt.attemptId,
+            now: deps.now(),
+          });
+          if (result.locked) {
+            await appendEvents(deps.db, attempt.workspaceId, {
+              attemptId: attempt.attemptId,
+              events: [{ type: "attempt_locked" satisfies ProctoringEventType, clientTs: deps.now() }],
+              serverTs: deps.now(),
+            });
+            locked = true;
+          }
+        } catch {
+          /* AG1: degrade — see the comment above. */
+        }
+      }
+    }
+
+    // Phase 7e Task 5 (`Q6a`): "recomputed on submit and whenever a
+    // violation lands." This batch landed one (or a `FAILURE_EVENTS` type,
+    // `Q6b`: not a violation, but still where `observed` is read) only when
+    // `hasIntegritySignal` is true — the other 7 of `PROCTORING_EVENTS`' 17
+    // types (restores, lifecycle markers, `noise_above_threshold`, identity
+    // capture) never move `integrityFor`'s output, so a batch of only those
+    // recomputes nothing: this is what keeps `events.test.ts`'s "ten events
+    // as one batched insert" measurement (all `fullscreen_restore`) at its
+    // existing cost.
+    //
+    // `!submitted`: when this same batch's violation already crossed into
+    // `auto_submit`, `submitAttempt` above already recomputed against the
+    // post-submit state — recomputing again here would read stale
+    // pre-submit evidence into a second, wasted write. A `lock` outcome
+    // still falls through to here: locking does not submit, and the
+    // organiser reading a freshly-locked attempt needs the flag current.
+    //
+    // Branch re-review (post-M1): this gate used to be `atLimit &&
+    // !alreadyActioned` — M1 bounded `listSnapshotFaceCounts` to an
+    // aggregate query but left `listIntegrityEvents` projecting every
+    // matching row, so recomputing on *every* integrity-bearing batch was
+    // quadratic in rows read across a session (`sum(1..n)`) on
+    // `warn_then_flag`, the default action, which never locks or
+    // auto-submits to stop the growth. Narrowing the gate to the one batch
+    // that first crosses the limit hid that cost, but it also meant a
+    // `warn_then_flag` organiser watching a *live* attempt read `clean`
+    // forever when the limit was never crossed before submit — `Q6`'s own
+    // "review on any violation" promise, silently broken, and exactly what
+    // `integrity.test.ts`'s "recomputes on every violation, not only on
+    // submit" exists to catch. `listIntegrityCounts` (`@pariksha/db`) is the
+    // other half of M1's fix, applied to the side M1 left alone: one
+    // aggregate query, flat in the attempt's history, same as
+    // `listSnapshotFaceCounts` already was — so there is no cost reason left
+    // to gate this to one firing per attempt, and it no longer is.
+    const hasIntegritySignal = parsed.data.events.some(
+      (event) => VIOLATION_EVENTS.has(event.type) || FAILURE_EVENTS.has(event.type),
+    );
+    if (
+      attempt.submittedAt === null &&
+      attempt.lockedAt === null &&
+      !submitted &&
+      hasIntegritySignal
+    ) {
+      try {
+        await recomputeIntegrity(deps, attempt, deps.now());
+      } catch {
+        /* AG1: degrade — see the comment above. */
+      }
+    }
+
+    // `submitted`/`locked` tell the browser this very request is the one
+    // that ended or froze the attempt, so the runner can move itself to
+    // the receipt or raise the lock overlay instead of finding out on its
+    // next save (a 409) or its next reload.
+    return c.json({
+      violations,
+      limit: resolved.violationLimit,
+      action: resolved.violationAction,
+      submitted,
+      locked,
+    });
   });
 
   routes.post("/attempt/snapshot", attemptContext(deps), async (c) => {
@@ -188,7 +387,17 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // proctoring failure must never surface anything to the candidate
     // (`AG1`), and this route previously kept writing R2 objects and
     // `snapshot` rows against an attempt that was already over.
-    if (attempt.submittedAt !== null) {
+    //
+    // Fix round 1 (MAJOR): `attempt.lockedAt !== null` added. This route
+    // was never in `E-R2`'s enumerated guard list — it is neither a read
+    // nor one of the two write routes `assertNotLocked` covers — so a
+    // locked candidate kept driving real R2 object writes and real
+    // `snapshot` inserts indefinitely against a metered live Cloudflare
+    // account. Same silent-no-op shape as the `submittedAt` case
+    // immediately above, for the same `AG1` reason: a proctoring failure —
+    // and a lock is exactly that, from this route's point of view — must
+    // never surface anything to the candidate.
+    if (attempt.submittedAt !== null || attempt.lockedAt !== null) {
       return c.json({ stored: true });
     }
 

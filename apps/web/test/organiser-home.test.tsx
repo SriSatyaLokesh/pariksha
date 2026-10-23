@@ -140,6 +140,8 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     saveWorkspaceBranding: notUsed,
     uploadMedia: notUsed,
     candidates: async () => [],
+    lockedAttempts: async () => [],
+    unlockAttempt: notUsed,
     importCandidates: notUsed,
     // Phase 8e Task 3 (`K31`, `K36`, #102): `undefined` is the default here
     // for the same reason it is the prop's own default — a fixture that

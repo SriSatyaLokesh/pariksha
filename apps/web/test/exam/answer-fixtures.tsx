@@ -136,6 +136,7 @@ export const examPaper: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  lockedAt: null,
   // These answer screens never touch proctoring; `off` is `paperFrom`'s
   // own real resolution of a test with no `proctoring` block at all.
   proctoring: PROCTORING_DEFAULTS.off,

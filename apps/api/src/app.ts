@@ -25,6 +25,7 @@ import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
+import { attemptsRoutes } from "./routes/attempts.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
@@ -469,60 +470,170 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // here would mean the route had gone looking at the workspace
   // instead, which is precisely the reading it exists not to take.
   "/api/v1/run/attempt/media/:key": 2,
-  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **7**
-  // in `test/run/submit.test.ts`, on the path that actually scores: the
-  // attempt join the cookie resolves through, the answers, the
-  // candidate's attempt count (which is what prints "Attempt 2 of 3" and
-  // what the `full_review` degrade is judged by), the workspace's bank
-  // read **once** for the whole paper, the one `finishAttempt` write, the
-  // audit row, and — Phase 8a Task 3 (`K6`/`K7`) — `attemptFiguresForCandidate`'s
-  // one read of this candidate's own prior attempts, paid only on the last
-  // attempt of a test whose `counted_attempt` is set to anything but
-  // `"latest"` **and** whose release actually discloses something (`show
-  // !== null`, M-1 — a `release.when: "never"` test on the same
-  // last-attempt shape stays at the common path's 6, measured by
+  // Phase 6 Task 11 (#75, P6.11): ending the attempt. Measured at **6**
+  // in `test/run/submit.test.ts`, on the common first-press path that
+  // actually scores: the attempt join the cookie resolves through, the
+  // answers, the candidate's attempt count (which is what prints "Attempt
+  // 2 of 3" and what the `full_review` degrade is judged by), the
+  // workspace's bank read **once** for the whole paper, the one
+  // `finishAttempt` write, the audit row.
+  //
+  // Phase 7e Task 5 (`Q6a`): `recomputeIntegrity` adds exactly **3** more
+  // to every first press that actually writes — `listIntegrityCounts`,
+  // `listSnapshotFaceCounts`, `setIntegrity` — so the common path moves
+  // from 6 to **9**, and the worst case below moves the same +3. The
+  // already-submitted second press (below) is unaffected: it returns
+  // before the `submitted` branch `recomputeIntegrity` lives in, so it
+  // never pays this.
+  //
+  // The worst case: — Phase 8a Task 3 (`K6`/`K7`) —
+  // `attemptFiguresForCandidate`'s one read of this candidate's own prior
+  // attempts, paid only on the last attempt of a test whose
+  // `counted_attempt` is set to anything but `"latest"` **and** whose
+  // release actually discloses something (`show !== null`, M-1 — a
+  // `release.when: "never"` test on the same last-attempt shape stays at
+  // the common path's 9 (10 with the webhook check below), measured by
   // `"rel-never-counted"`'s own test in `submit.test.ts`, with
-  // `"rel-counted"` below as its released, 7-paying twin)
-  // (`apps/api/test/run/release.test.ts`'s "K7, live" test
-  // measures this exact combination). A second press writes nothing — the
-  // row the cookie resolved already carries the score and the stamp — but
-  // it is not free: it still pays the join, the answers and the attempt
-  // count, so **3**, and **4** at `full_review` where the bank is read
-  // again for the key (neither fixture that measures those two numbers
-  // sets `counted_attempt`, so the counted read adds nothing to them).
-  // Both measured in `test/run/submit.test.ts`.
+  // `"rel-counted"` below as its released twin)
+  // (`apps/api/test/run/release.test.ts`'s "K7, live" test exercises this
+  // combination, uncounted there). The old 7 was the pre-Task-5 worst case
+  // (6 + the counted read); Task 5's +3 moves it the same way it moves the
+  // common path.
   //
-  // A number above 7 means the bank, or the counted read, is being spent
-  // more than once a request — the failure this line exists to catch on a
+  // A second press writes nothing — the row the cookie resolved already
+  // carries the score and the stamp, and `recomputeIntegrity` never runs
+  // for it either, and nor does `fireWebhooks` below (both live inside the
+  // `submitted` branch) — but it is not free: it still pays the join, the
+  // answers and the attempt count, so **3**, and **4** at `full_review`
+  // where the bank is read again for the key (neither fixture that
+  // measures those two numbers sets `counted_attempt`, so the counted
+  // read adds nothing to them). Both measured in `test/run/submit.test.ts`
+  // and both unchanged by Task 5 or Phase 8d.
+  //
+  // Phase 8d Task 3 (`K23`): `fireWebhooks` adds a variable amount on top
+  // of whichever of the two paths above actually writes —
+  // `listActiveWebhooksForEvent`'s one read, unconditional, plus one
+  // `http` for every active `attempt.submitted` hook this request actually
+  // reaches inline, plus one `db.batch()` write for every hook that did not
+  // deliver (queued, including everything past `INLINE_FANOUT_LIMIT`).
+  //
+  // **Branch-review M6: both `app.ts` comments on this route used to claim
+  // "+1", and that is only true with zero active hooks — a no-op path that
+  // pays the read and nothing else.** `webhooks/deliver.test.ts:388`
+  // measures `fireWebhooks`'s own real worst case directly:
+  // `{ db: 2, http: INLINE_FANOUT_LIMIT, total: 5 }` — the read,
+  // `INLINE_FANOUT_LIMIT` (3, at the time of writing) hooks that all fail
+  // inline, and one batched write queuing all of them. Raising
+  // `INLINE_FANOUT_LIMIT` raises this number with it — see that constant's
+  // own comment for the arithmetic before changing either. One delivering
+  // hook costs **+2** (the read plus the one `http`; a success is never
+  // queued, so no write) — `test/webhooks/deliver.test.ts`'s "keeps the
+  // submit route inside its declared budget with a webhook firing" exercises
+  // exactly that shape.
+  //
+  // The declared ceiling is the worst case combining **both** deltas that
+  // were previously measured only apart: the counted read (+1, Task5's 9 to
+  // 10) **and** `fireWebhooks`'s own worst case (+5, not +1) —
+  // `test/run/combined-budgets.test.ts`'s "the submit route's real worst
+  // case is 15" is the fixture neither `submit.test.ts` (counted read, zero
+  // hooks) nor `deliver.test.ts` (one delivering hook, no counted read)
+  // combines on its own: 9 + 1 + 5 = **15**. No functional change — 15 is
+  // still far under the 50-subrequest ceiling — only the declared number and
+  // the comments claiming a flat "+1" were wrong.
+  //
+  // A number above 15 means the bank, the counted read, the integrity
+  // recompute or the webhook fan-out is being spent more than its own
+  // measured worst case — the failure this line exists to catch on a
   // 50-subrequest ceiling.
-  //
-  // Phase 8d Task 3 (`K23`): **8**, not 7, once `fireWebhooks` is in the
-  // picture — `listActiveWebhooksForEvent`'s one read, plus one `http` for
-  // the single active `attempt.submitted` hook the measuring fixture
-  // registers (`test/webhooks/deliver.test.ts`'s "keeps the submit route
-  // inside its declared budget with a webhook firing", measured the same
-  // way this file's other budgets are, via `countingDeps`).
-  //
-  // **Fix round 1, F1: this is a bound, not a one-hook measurement.**
-  // `webhooks/deliver.ts`'s `INLINE_FANOUT_LIMIT` caps how many hooks on
-  // this event ever reach `fetch` (3, at the time of writing), and every
-  // hook past it — plus every one inside it that failed — is written in
-  // one `db.batch()` call, never one `INSERT` per row. So 8 holds for a
-  // workspace with 1 active `attempt.submitted` hook *or* 50 of them:
-  // `test/webhooks/deliver.test.ts`'s "the subrequest cost is the same at
-  // the limit and past it" proves the total does not move with hook count.
-  // Raising `INLINE_FANOUT_LIMIT` raises this number with it — see that
-  // constant's own comment for the arithmetic before changing either.
-  "/api/v1/run/attempt/submit": 8,
-  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. Measured at
-  // **4** in `test/run/events.test.ts`'s own counting test: the attempt
-  // join the cookie resolves through, the `attempt_events` rate token,
+  "/api/v1/run/attempt/submit": 15,
+  // Phase 7c Task 1 (`Q7`/`Q7c`): the proctoring event ingest. The base
+  // cost — a batch with no `VIOLATION_EVENTS`/`FAILURE_EVENTS` type in it,
+  // restores and lifecycle markers only — is **4**, measured in
+  // `test/run/events.test.ts`'s own counting test: the attempt join the
+  // cookie resolves through, the `attempt_events` rate token,
   // `appendEvents`'s one batched insert (capped at 10 rows a request, so
   // this number is flat in how many events the request actually carries),
-  // and `countViolations`'s one read for the response's authoritative
-  // count. An empty `events` array costs one less — `appendEvents` is a
-  // no-op on it — so 4 is the ceiling, not the floor.
-  "/api/v1/run/attempt/events": 4,
+  // and `countViolations`'s one read for the response's authoritative count.
+  // "ten events as one batched insert" (all `fullscreen_restore`) is this
+  // base case. Phase 7e Task 1's fix round (F2, Major): `claimViolationLimit`
+  // (`packages/db/src/repo/attempts.ts`) is paid only when `violations >=
+  // limit` — below it, no read or write of its own happens at all, which is
+  // one cheaper than the `violationLimitAlreadyReached` read this route used
+  // to spend on every request regardless.
+  //
+  // Branch re-review (post-M1): a batch that *does* carry a violation or
+  // failure type costs the base 4 plus `recomputeIntegrity`'s own +3
+  // (`listIntegrityCounts`, `listSnapshotFaceCounts`, `setIntegrity`) —
+  // **7**, measured in `test/run/events.test.ts`'s own counting test — on
+  // every such batch, not only the one that first crosses the limit. M1 had
+  // narrowed this to `atLimit && !alreadyActioned` (at most once per
+  // attempt) because `listIntegrityEvents` then projected the attempt's
+  // *whole* matching history on every call — quadratic rows read across a
+  // session on `warn_then_flag`, the default action, which never locks or
+  // auto-submits to stop the growth (M1: "roughly 2M rows for one bad
+  // session against a 5M/day allowance"). That gate also silently broke
+  // `Q6`'s "review on any violation" for a live attempt
+  // (`test/run/integrity.test.ts`'s "recomputes on every violation, not
+  // only on submit") — `listIntegrityCounts` is the M1 fix applied to the
+  // side M1 left alone, flat in the attempt's history the same way
+  // `listSnapshotFaceCounts` already was, so there is no cost reason left
+  // to gate this to one firing per attempt and the gate is gone: every
+  // integrity-bearing batch costs the same flat **+3**, never more, however
+  // many of them a session has.
+  //
+  // A batch that reaches the limit costs one more on top of the base 4:
+  // `claimViolationLimit`'s own atomic insert, which both decides and marks
+  // "has this fired before" in the one statement — 5 — plus the same +3
+  // recompute (a limit-reaching batch always carries a violation) —
+  // **8** (`test/run/violation-limit.test.ts`). Every later batch past the
+  // limit costs the same **8**: `claimViolationLimit` is still attempted
+  // (and loses, `alreadyActioned: true`) and the recompute still runs —
+  // there is no longer a cheaper "already actioned" case at the ingest
+  // side, only `violationOutcome`'s own decision (`{kind:"none"}` past a
+  // `warn_then_flag` firing) changes.
+  //
+  // The first batch that reaches the limit under `auto_submit` costs the 5
+  // above, plus `submitAttempt`'s own common-case cost, which Task 5 moved
+  // from 5 to 8 (`listResponses`, `countAttemptsForCandidate`,
+  // `rescoreAttempt`'s one bank read, `finishAttempt`'s write,
+  // `appendAudit`'s write, `recomputeIntegrity`'s own +3) — **13**,
+  // measured in `test/run/auto-submit.test.ts`'s own counting test on an
+  // uncounted attempt with no webhook registered. This route's own
+  // `recomputeIntegrity` call is skipped when `submitAttempt` already fired
+  // one this request (the `!submitted` guard in `routes/proctoring.ts`) —
+  // paying it twice would be two writes for one answer. An empty `events`
+  // array costs one less than the base common path — `appendEvents` is a
+  // no-op on it, and an empty batch carries no integrity signal either.
+  //
+  // **Branch-review M6: the declared ceiling used to add a flat "+1" for
+  // `fireWebhooks`'s unconditional read and never combined it with the
+  // counted-attempt delta** — the same error as `/attempt/submit`'s own
+  // comment, inherited because `fireWebhooks` lives inside `submitAttempt`,
+  // which this route reaches the same way `/attempt/submit` does, on the
+  // `auto_submit` branch. `test/run/combined-budgets.test.ts`'s "the events
+  // route's real worst case is 19" is the fixture that combines both: the
+  // 13 above, on a *last, counted* attempt (`countedFor`'s own +1 read,
+  // `/attempt/submit`'s identical delta) and `fireWebhooks`'s own worst
+  // case of **5**, not 1 (`deliver.test.ts:388`,
+  // `{ db: 2, http: INLINE_FANOUT_LIMIT, total: 5 }`) — 13 + 1 + 5 = **19**.
+  // `fireWebhooks` is guarded the same way `recomputeIntegrity` is, inside
+  // `submitAttempt` itself, so it cannot double-fire even though both
+  // `/attempt/submit` and the `auto_submit` branch here can reach it.
+  //
+  // A number above 19 means the ingest base, the claim, the counted read,
+  // the integrity recompute or the webhook fan-out is being spent more than
+  // its own measured worst case — the failure this line exists to catch on
+  // a 50-subrequest ceiling.
+  //
+  // Phase 7e Task 3: the first batch that first locks under `lock` costs
+  // **10** (the 5 above, plus `lockAttempt`'s own write and one more
+  // `appendEvents` call for the `attempt_locked` marker — 7 — plus the +3
+  // recompute, since locking never submits and so never skips it) —
+  // measured in `test/run/lock.test.ts`'s own counting test, cheaper than
+  // `auto_submit`'s 19 and so no reason to move the ceiling this already
+  // declares. Locking never calls `submitAttempt`, so it never pays the
+  // webhook check either.
+  "/api/v1/run/attempt/events": 19,
   // Phase 7d Task 1 (`Q4e`), `B3` follow-up: the snapshot route. Measured
   // at **4** in `test/run/snapshot.test.ts`'s own counting test: the
   // attempt join the cookie resolves through, `attempt_snapshot`'s rate
@@ -552,6 +663,33 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // Flat in the list's size, which `test/invites.test.ts` measures at 200.
   "/api/v1/workspaces/:id/tests/:testId/invites": 7,
 
+  // Phase 7e Task 4 (`Q5a`): the minimal pair — a locked-attempts read and
+  // the unlock. Measured (`apps/api/test/attempts/unlock.test.ts`'s own
+  // "measures the real subrequest cost" tests), not estimated.
+  //
+  // The list: auth (2) + `getTest` (1, the existence check) +
+  // `listLockedAttempts` (1, one statement whatever the row count — the
+  // violation count rides a correlated subquery rather than a second
+  // round trip per row). Flat in how many attempts are locked.
+  //
+  // Branch-review m2: flat in SUBREQUESTS, not in ROWS READ — there is no
+  // index on `attempt.locked_at` (`packages/db/src/schema/sqlite.ts`'s
+  // `attempt` table lists `workspace_id`, `candidate_id`,
+  // `test_version_id`), so the planner reads every attempt on this test
+  // (plus the correlated subquery's own per-row violation scan) to find the
+  // locked ones — unbounded in a test's candidate history, not in how many
+  // rows this route happens to return. Not blocking: this is the organiser's
+  // own page-load frequency, not the candidate hot path, and the fix wants
+  // `CREATE INDEX attempt_locked_idx ON attempt (workspace_id, locked_at)
+  // WHERE locked_at IS NOT NULL` — a migration this branch's own pin
+  // (`worker.test.ts`'s `migrations: 12`) should not grow for. Add it in
+  // whichever later phase already carries one.
+  "/api/v1/workspaces/:id/tests/:testId/attempts": 4,
+  // The unlock: auth (2) + `getAttemptLockState` (1, the existence-and-
+  // scope read that is this route's own 404) + `unlockAttempt` (1, the
+  // write) + `appendEvents` (1, the `attempt_unlocked` marker) +
+  // `appendAudit` (1).
+  "/api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": 6,
   // Phase 8b Task 1 (`K14`): recording a rubric award. Measured
   // (`apps/api/test/grade/award.test.ts`'s own "measures the real
   // subrequest cost" test, against a 300-candidate workspace), not
@@ -765,6 +903,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 
+  // Phase 7e Task 4 (`Q5a`): the minimal pair. `attempts.monitor` is the
+  // matrix's own permission for this — the `proctor` role holds it and
+  // nothing wider than it needs to.
+  "GET /api/v1/workspaces/:id/tests/:testId/attempts": "attempts.monitor",
+  "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "attempts.monitor",
   // Phase 8b Task 1 (`K14`): `attempts.grade`'s first production caller —
   // zero routes named this action before this line (only
   // `permissions.test.ts` did). A Reviewer or Admin holds it; an Author
@@ -998,6 +1141,9 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
+  // Phase 7e Task 4 (`Q5a`): the minimal pair.
+  "GET /api/v1/workspaces/:id/tests/:testId/attempts": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "workspace",
   // Phase 8b Task 1 (`K14`): recording a rubric award.
   "POST /api/v1/workspaces/:id/tests/:testId/grade": "workspace",
   // Phase 8b Task 2 (`K15`): the grading queue.
@@ -1058,6 +1204,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", questionRoutes(deps));
   app.route("/api/v1/workspaces", mediaRoutes(deps));
   app.route("/api/v1/workspaces", testRoutes(deps));
+  // Phase 7e Task 4: the minimal pair — locality with `testRoutes` rather
+  // than necessity, the same reason `proctoringRoutes`' own position below
+  // is.
+  app.route("/api/v1/workspaces", attemptsRoutes(deps));
   // The one route outside `/api/v1/workspaces/:id/...` this phase mounts —
   // deliberately public and unguarded (Review Focus 5, ADR 0006's
   // precedent). `apps/api/src/index.ts` has its own matching change so this

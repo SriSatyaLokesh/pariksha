@@ -76,6 +76,7 @@ const paper: AttemptPaper = {
   allowCalculator: false,
   serverNow: NOW,
   submittedAt: null,
+  lockedAt: null,
   proctoring: PROCTORING_DEFAULTS.off,
   violations: 0,
 };

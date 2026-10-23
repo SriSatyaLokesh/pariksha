@@ -158,6 +158,8 @@ function fakeClient(): ApiClient {
     saveWorkspaceBranding: unused,
     uploadMedia: unused,
     candidates: async () => [],
+    lockedAttempts: async () => [],
+    unlockAttempt: unused,
     importCandidates: unused,
     gradingQueue: unused,
     grade: unused,

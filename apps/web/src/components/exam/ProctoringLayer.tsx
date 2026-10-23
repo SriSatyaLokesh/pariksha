@@ -64,6 +64,25 @@
  *   one call in that API surface that raises a Window Management
  *   permission dialog mid-exam, which is a `Q2` hazard this task's own
  *   ruling refuses.
+ *
+ * Phase 7e Task 2 (`AC-21`) adds the terminal case: `EventsResponse.
+ * submitted` (`proctoring-queue.ts`), set true on the one response whose
+ * own batch carried the attempt past its limit under `auto_submit`, flips
+ * `autoSubmitted` — a one-way flag reusing `ProctoringOverlay` the same
+ * no-recourse way the camera block already does, because there genuinely
+ * is nothing left to press. The actual submission (`finishAttempt`'s own
+ * idempotent statement) happened server-side, inside the ingest route,
+ * before this response ever arrived — this component only has to tell the
+ * candidate it happened, not make it happen.
+ *
+ * Phase 7e Task 3 adds the fourth and most intrusive action's own overlay:
+ * `EventsResponse.locked`, set true on the one response whose own batch
+ * locked the attempt under `lock`, flips `locked` the same one-way way
+ * `autoSubmitted` flips. Unlike `autoSubmitted`, this one can also be
+ * seeded on mount — `initialLocked`, off `AttemptPaper.lockedAt` — because
+ * a lock does not submit the attempt: a reload mid-lock resumes straight
+ * back to this component rather than to the finish page, and without the
+ * seed it would raise no overlay at all until the next violation batch.
  */
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -206,6 +225,17 @@ export interface ProctoringLayerProps {
    * (default `false`) so every existing caller is unaffected.
    */
   cameraUnavailable?: boolean;
+  /**
+   * Phase 7e Task 3 (`E-R1`): `AttemptPaper.lockedAt !== null`, off
+   * `routes/exam.tsx`'s own resume path — the `initialViolations` seed's
+   * own shape, for the one state that (unlike `autoSubmitted`) really can
+   * still be live on a reload: a locked attempt is not submitted, so it
+   * resumes straight back to this component rather than to the finish
+   * page. Optional (default `false`) so every existing caller — a fresh
+   * `/start`, and every fixture in this package's own test suite — is
+   * unaffected.
+   */
+  initialLocked?: boolean;
 }
 
 export function ProctoringLayer({
@@ -214,6 +244,7 @@ export function ProctoringLayer({
   initialViolations,
   cameraStream = null,
   cameraUnavailable = false,
+  initialLocked = false,
 }: ProctoringLayerProps) {
   /**
    * The paper's fullscreen state **at the moment this layer first
@@ -258,6 +289,54 @@ export function ProctoringLayer({
    *  this effect's own `onCount` next runs — never seeded optimistically
    *  (`Q7a` stays true: the server is still the only counter). */
   const [leaveCountKnown, setLeaveCountKnown] = useState(true);
+
+  /**
+   * Phase 7e Task 2 (`AC-21`): `true` once the ingest has told this layer
+   * that THIS batch is what carried the attempt over its violation limit
+   * under `auto_submit` (`EventsResponse.submitted`). Terminal — nothing
+   * below ever sets it back to `false` — because the attempt really is
+   * over: `submitAttempt` (`apps/api/src/run/submit.ts`) already stamped
+   * `submitted_at` by the time this flag can be true, the same statement
+   * every other way an attempt ends uses. `initialViolations` seeds
+   * `count` above but never this: a resumed attempt that was auto-submitted
+   * on an earlier page load reloads straight to the finish page before
+   * `ProctoringLayer` is ever mounted again (`routes/exam.tsx`'s own
+   * resume path), so this flag only ever needs to catch the live case.
+   */
+  const [autoSubmitted, setAutoSubmitted] = useState(false);
+
+  /**
+   * Phase 7e Task 3 (`E-R1`): the lock's own mirror of `autoSubmitted`
+   * immediately above — `true` once the ingest has told this layer that
+   * THIS batch is what locked the attempt under `lock`
+   * (`EventsResponse.locked`), **or** seeded `true` from `initialLocked`
+   * on a reload mid-lock (the one way this state really does differ from
+   * `autoSubmitted`'s: a lock does not submit the attempt, so a reload
+   * resumes straight back to this component rather than to the finish
+   * page — `routes/exam.tsx`'s own resume path). Terminal in the same
+   * direction `autoSubmitted` is — nothing below ever sets it back to
+   * `false` — because only an organiser clearing the lock (Phase 8) ends
+   * it, and that is a fresh page load this component does not live through
+   * either way.
+   */
+  const [locked, setLocked] = useState(initialLocked);
+
+  /**
+   * Fix round 1 (MAJOR, mirrors the server's own `apps/api/src/routes/
+   * proctoring.ts` `attempt.lockedAt !== null` no-op): every violation and
+   * interval capture below reads this ref rather than the `locked` state
+   * directly, the same `liveStreamRef` shape this file already uses for a
+   * value several long-lived effects need to read FRESH without listing it
+   * as a dependency (which would tear down and rebuild listeners on every
+   * lock transition for no reason — the effects themselves do not change
+   * shape when a lock fires, only whether their one `captureAndUpload` call
+   * should still run). Without this, a locked candidate's browser kept
+   * calling `POST /attempt/snapshot` on every subsequent violation —
+   * wasted requests the server-side no-op alone would still refuse, but a
+   * request this component should simply stop making.
+   */
+  const lockedRef = useRef(locked);
+  lockedRef.current = locked;
 
   /**
    * The live queue — owned by the effect below, not by `useMemo`.
@@ -345,7 +424,7 @@ export function ProctoringLayer({
     }
     const queue = createProctoringQueue({
       send: sendEvents,
-      onCount: (violations, limit, action) => {
+      onCount: (violations, limit, action, submitted, lockedNow) => {
         // Checked against the ref, not a boolean: a state update from
         // *this* queue instance only lands while it is still the live
         // one. A stale closure from a queue this same effect has already
@@ -355,6 +434,12 @@ export function ProctoringLayer({
         if (queueRef.current !== queue) return;
         setCount({ violations, limit, action });
         setLeaveCountKnown(true);
+        // Phase 7e Task 2: never unset — see `autoSubmitted`'s own doc
+        // comment above.
+        if (submitted) setAutoSubmitted(true);
+        // Phase 7e Task 3: never unset — see `locked`'s own doc comment
+        // above.
+        if (lockedNow) setLocked(true);
       },
       flushMs: FLUSH_MS,
     });
@@ -441,7 +526,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
       setInFullscreen(next);
     }
@@ -494,7 +579,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
     }
     function endAway(type: "window_blur" | "visibility_hidden"): void {
@@ -627,7 +712,7 @@ export function ProctoringLayer({
     // depends on exactly that to detect the condition at all), so a
     // capture here is both obtainable and the single most useful
     // evidence a `camera_lost` event can ever produce.
-    if (reason === "covered" && liveStreamRef.current) {
+    if (reason === "covered" && liveStreamRef.current && !lockedRef.current) {
       void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
     }
   }
@@ -821,6 +906,12 @@ export function ProctoringLayer({
     const timer = setInterval(() => {
       const due = nextSnapshotAtRef.current;
       if (due === null || Date.now() < due) return;
+      // Fix round 1 (MAJOR): a locked attempt is terminal (only a fresh
+      // page load after an organiser clears it ever reaches this component
+      // again), so there is no "restore" to resume a cadence for — unlike
+      // the camera-lost skip below, this one need not preserve `due` for
+      // anything.
+      if (lockedRef.current) return;
       // M2 (whole-branch review): a frameless outage ("ended"/"muted")
       // must not manufacture coverage from the frozen last frame a real
       // browser keeps showing on a dead `<video>` — `camera_lost`/
@@ -872,7 +963,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       };
     }
     const onCopy = blocked("copy_blocked");
@@ -915,7 +1006,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
       }
     } catch {
       /* Q2: degrade — an unreadable screen is not a violation */
@@ -925,7 +1016,7 @@ export function ProctoringLayer({
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 
   const fullscreenBlocked = fullscreenEnforced && !inFullscreen;
-  const overlayOpen = cameraLost || fullscreenBlocked || leaveWarning !== null;
+  const overlayOpen = autoSubmitted || locked || cameraLost || fullscreenBlocked || leaveWarning !== null;
 
   useEffect(() => {
     // `ProctoringLayer` mounts as `Runner`'s sibling, never its parent
@@ -972,14 +1063,34 @@ export function ProctoringLayer({
           </span>
         )}
       </div>
-      {/* The camera wins the floor over everything else — `Q2`'s one
-          deliberate `AG1` exception, and the only one of the three with no
-          control at all: no "Enter fullscreen", no "Continue", nothing a
-          candidate can press to make it go away. Fullscreen still wins over
-          a leave warning — it is indefinite and still wrong; the leave
-          warning is already resolved (the candidate is back) and only
-          needs acknowledging. */}
-      {cameraLost ? (
+      {/* `autoSubmitted` wins the floor over everything else: the attempt
+          is over, not merely blocked, so there is nothing left for a
+          camera or fullscreen overlay to be about. No control, the same
+          as the camera overlay below and for the same reason — there is
+          no action that makes this one go away, because nothing the
+          candidate does now can un-submit the attempt. `locked` wins next,
+          over the camera too: a locked attempt is frozen regardless of
+          *why* a camera or fullscreen check might also be failing right
+          now, and the recourse is the same either way — an organiser, not
+          a control on this screen. The camera wins the floor over
+          everything else beneath this — `Q2`'s one deliberate `AG1`
+          exception, and the only one of the three with no control at
+          all: no "Enter fullscreen", no "Continue", nothing a candidate
+          can press to make it go away. Fullscreen still wins over a leave
+          warning — it is indefinite and still wrong; the leave warning is
+          already resolved (the candidate is back) and only needs
+          acknowledging. */}
+      {autoSubmitted ? (
+        <ProctoringOverlay
+          title="Test submitted"
+          message="Submitted because the warning limit was reached. Your answers up to this point are saved."
+        />
+      ) : locked ? (
+        <ProctoringOverlay
+          title="Test locked"
+          message="This attempt is locked after reaching the warning limit. Contact the organiser to unlock it — the timer keeps running while this is up, and nothing you have answered is lost."
+        />
+      ) : cameraLost ? (
         <ProctoringOverlay
           title="Camera connection lost"
           message="This test requires a working camera for the whole attempt. Reconnect or uncover your camera — your answers and the timer are unaffected while this is up, and it clears itself the moment the camera is back."

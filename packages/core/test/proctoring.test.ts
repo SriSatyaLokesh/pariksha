@@ -8,6 +8,7 @@
 import { describe, expect, it } from "vitest";
 import {
   anyProctoringControlActive,
+  CANDIDATE_PROCTORING_EVENTS,
   FAILURE_EVENTS,
   isViolation,
   KB_PER_MB,
@@ -15,6 +16,7 @@ import {
   PROCTORING_EVENTS,
   proctoringRequirements,
   resolveProctoring,
+  SERVER_SYNTHESIZED_EVENTS,
   snapshotCost,
   SNAPSHOT_KB,
   VIOLATION_EVENTS,
@@ -71,7 +73,7 @@ describe("resolveProctoring", () => {
       requireMicrophone: false,
       extraMonitorCheck: false,
       violationLimit: 5,
-      violationAction: "warn_only",
+      violationAction: "warn_then_flag",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
       allowCalculator: false,
@@ -92,7 +94,7 @@ describe("resolveProctoring", () => {
       requireMicrophone: false,
       extraMonitorCheck: true,
       violationLimit: 5,
-      violationAction: "warn_only",
+      violationAction: "warn_then_flag",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
       allowCalculator: false,
@@ -139,23 +141,49 @@ describe("resolveProctoring", () => {
     expect(r.requireMicrophone).toBe(false);
   });
 
-  // Issue #214 — pre-cut the same way Q3/Q12b cut faceCheck/requireMicrophone.
-  // Positive control first: the same override object resolves every OTHER
-  // control it sets, proving the input is real and the query is right,
-  // before the negative assertion that violationAction alone is refused —
-  // each of its three live siblings (`auto_submit`, `lock`, the document
-  // asking for `warn_then_flag`) is tried in turn.
-  it.each(["warn_then_flag", "auto_submit", "lock"] as const)(
-    "resolves violationAction warn_only even when the document asks for %s, leaving its sibling overrides honoured",
+  // Phase 7e Task 1 (#213) restores this: `violationAction` was refused
+  // outright from #214 until `violationOutcome` gave it a consumer. Same
+  // shape as the positive-control tests above — the override is honoured
+  // exactly like every sibling control, for each of the four real values.
+  it.each(["warn_only", "warn_then_flag", "auto_submit", "lock"] as const)(
+    "resolves violationAction to whatever the document asks for (%s), leaving its sibling overrides honoured",
     (violation_action) => {
       const r = resolveProctoring({
         profile: "off",
         overrides: { violation_action, desktop_only: true },
       });
       expect(r.desktopOnly).toBe(true);
-      expect(r.violationAction).toBe("warn_only");
+      expect(r.violationAction).toBe(violation_action);
     },
   );
+
+  // M7: `violation_limit: 0` would make `claimViolationLimit`'s own
+  // `violations (0) >= limit (0)` true on the first batch, and
+  // `integrityFor`'s identical comparison `high_risk` unconditional —
+  // unlike `snapshot_interval_seconds`, 0 here has no legitimate meaning.
+  it.each([
+    ["violation_limit", "violationLimit"],
+    ["camera_outage_seconds", "cameraOutageSeconds"],
+    ["multi_face_snapshots", "multiFaceSnapshots"],
+  ] as const)("floors %s at 1 — a document-supplied 0 cannot make every attempt high_risk", (override, field) => {
+    const r = resolveProctoring({ profile: "strict", overrides: { [override]: 0 } });
+    expect(r[field]).toBe(1);
+  });
+
+  it.each([
+    ["violation_limit", "violationLimit"],
+    ["camera_outage_seconds", "cameraOutageSeconds"],
+    ["multi_face_snapshots", "multiFaceSnapshots"],
+  ] as const)("leaves %s honoured above the floor", (override, field) => {
+    const r = resolveProctoring({ profile: "strict", overrides: { [override]: 3 } });
+    expect(r[field]).toBe(3);
+  });
+
+  it("snapshot_interval_seconds keeps no floor — 0 still means off", () => {
+    expect(
+      resolveProctoring({ profile: "strict", overrides: { snapshot_interval_seconds: 0 } }).snapshotIntervalSeconds,
+    ).toBe(0);
+  });
 
   it("has no undefined on any key for any profile", () => {
     for (const profile of ["off", "standard", "strict"] as const) {
@@ -360,5 +388,34 @@ describe("proctoring events", () => {
   it("does not count noise toward a limit", () => {
     expect(isViolation("noise_above_threshold")).toBe(false);
     expect(FAILURE_EVENTS.has("noise_above_threshold")).toBe(false);
+  });
+});
+
+// Phase 7e Task 1 fix round (F1, Critical): the guard that stops a server-
+// synthesized type from silently becoming candidate-submittable again.
+// `CANDIDATE_PROCTORING_EVENTS` and `SERVER_SYNTHESIZED_EVENTS` are two
+// independent, hand-written lists — neither is computed from the other or
+// from `PROCTORING_EVENTS` — so both assertions below are real: a type
+// added to `PROCTORING_EVENTS` and left off both lists breaks the union,
+// and a type listed on both breaks the intersection. Probed (task-1-report.
+// md): adding `"attempt_locked"` to `CANDIDATE_PROCTORING_EVENTS` failed
+// the intersection assertion with the verbatim array `["attempt_locked"]`.
+describe("CANDIDATE_PROCTORING_EVENTS / SERVER_SYNTHESIZED_EVENTS", () => {
+  it("partitions PROCTORING_EVENTS exhaustively, with no event type in both", () => {
+    const union = new Set<string>([...CANDIDATE_PROCTORING_EVENTS, ...SERVER_SYNTHESIZED_EVENTS]);
+    expect(union).toEqual(new Set(PROCTORING_EVENTS));
+
+    const intersection = CANDIDATE_PROCTORING_EVENTS.filter((t) =>
+      (SERVER_SYNTHESIZED_EVENTS as readonly string[]).includes(t),
+    );
+    expect(intersection).toEqual([]);
+  });
+
+  it("marks exactly the three server-synthesized lifecycle types as not candidate-submittable", () => {
+    expect(SERVER_SYNTHESIZED_EVENTS).toEqual([
+      "violation_limit_reached",
+      "attempt_locked",
+      "attempt_unlocked",
+    ]);
   });
 });

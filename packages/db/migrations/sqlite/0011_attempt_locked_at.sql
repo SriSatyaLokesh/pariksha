@@ -1,0 +1,12 @@
+-- Phase 7e Task 3 (`E-R1`, a correction over the plan's own "Migrations:
+-- none"): the lock needs somewhere to live. There is no `status` column on
+-- `attempt` — `submitted_at` is the only lifecycle stamp that exists — so
+-- a locked attempt has nowhere to record it without this.
+--
+-- A nullable `locked_at`, the same shape `submitted_at` already has: null
+-- means "never locked", a timestamp is the moment `violationOutcome`'s
+-- `lock` branch first fired for this attempt (`lockAttempt`, packages/db/
+-- src/repo/attempts.ts). No DEFAULT needed — unlike 0008's NOT NULL
+-- columns, a nullable `ADD COLUMN` needs none on either dialect, and every
+-- attempt written before this migration correctly reads back "not locked".
+ALTER TABLE `attempt` ADD `locked_at` integer;

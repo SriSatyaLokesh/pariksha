@@ -544,6 +544,11 @@ export interface ApiClient {
     opts?: { dryRun?: boolean },
   ): Promise<CandidateImportReport>;
 
+  // Phase 7e Task 4 (`Q5a`): the minimal pair — a locked-attempts read and
+  // the unlock. Both gated server-side on `attempts.monitor`; Phase 8's
+  // monitor replaces both.
+  lockedAttempts(workspaceId: string, testId: string): Promise<LockedAttemptRow[]>;
+  unlockAttempt(workspaceId: string, testId: string, attemptId: string): Promise<void>;
   /**
    * Phase 8b Task 2 (`K15`): the grading queue. `blind: true` is what makes
    * a request blind — the server never puts a candidate-identifying field
@@ -680,6 +685,16 @@ export interface CandidateRow {
   source: "list" | "registration";
   consentVersion: string | null;
   createdAt: number;
+}
+
+// Phase 7e Task 4 (`Q5a`): the minimal pair — mirrors `LockedAttemptRow`
+// (`apps/api/src/routes/attempts.ts`), the wire shape verbatim.
+export interface LockedAttemptRow {
+  attemptId: string;
+  candidateLabel: string;
+  lockedAt: number;
+  violations: number;
+  remainingSeconds: number;
 }
 
 export interface CandidateIssue {
@@ -1162,6 +1177,17 @@ export function createApiClient(): ApiClient {
         }
         throw error;
       }
+    },
+
+    lockedAttempts: async (workspaceId, testId) =>
+      (
+        await json<{ attempts: LockedAttemptRow[] }>(
+          `/workspaces/${workspaceId}/tests/${testId}/attempts?status=locked`,
+        )
+      ).attempts,
+
+    async unlockAttempt(workspaceId, testId, attemptId) {
+      await json(`/workspaces/${workspaceId}/tests/${testId}/attempts/${attemptId}/unlock`, post({}));
     },
 
     async gradingQueue(workspaceId, testId, opts = {}) {

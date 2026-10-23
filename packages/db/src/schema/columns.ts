@@ -416,6 +416,12 @@ export const TABLE_MANIFEST: TableSpec[] = [
       // already in flight when this migration runs.
       text("integrity_flag"),
       bool("observed"),
+      // Phase 7e Task 3 (`E-R1`, migration 0011, both dialects): nullable,
+      // the same shape `submitted_at` already has — null means "never
+      // locked". Added to the manifest alongside the migration so
+      // `parity.test.ts` checks it the same as every other column instead
+      // of silently drifting from what the migration actually shipped.
+      ts("locked_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
     uniques: [["token_hash"]],
@@ -455,7 +461,13 @@ export const TABLE_MANIFEST: TableSpec[] = [
       ts("server_ts"),
     ],
     indexes: [["workspace_id"], ["attempt_id"]],
-    uniques: [],
+    // Phase 7e Task 1 fix round (F2, Major): `event_violation_limit_uq`, a
+    // partial unique index (`attempt_id` only, filtered to `type =
+    // 'violation_limit_reached'` — see `schema/sqlite.ts`/`pg.ts`'s own
+    // comment). The manifest and `parity.test.ts` only compare column
+    // groupings, not the `WHERE` clause, so this reads the same as a plain
+    // unique on `attempt_id` here.
+    uniques: [["attempt_id"]],
   },
   {
     name: "snapshot",

@@ -32,14 +32,14 @@ const app = createApp(deps);
 const workspaceId = await seedWorkspace(deps, SLUG.workspace, "Gamma Inc");
 const q = await seedBank(deps, workspaceId);
 
-// Standard profile — `limit: 5, action: "warn_only"` and
+// Standard profile — `limit: 5, action: "warn_then_flag"` and
 // `requireFullscreen: true, faceCheck: false` are what `PROCTORING_DEFAULTS.
 // standard` resolves to, and what every assertion below is pinned against.
 //
-// `action` was `warn_then_flag` until #214: `resolveProctoring` now refuses
-// every action but `warn_only`, because nothing in this phase consumes one.
-// The route still answers with it — the field is real and 7e's successor
-// (#213) is what makes it mean something again.
+// `action` resolved `warn_only` between #214 and Phase 7e Task 1 (#213):
+// `resolveProctoring` refused every other action because nothing consumed
+// one. `violationOutcome` is that consumer now, so Standard's real default
+// (`warn_then_flag`) is what this route answers with again.
 await seedTest(deps, workspaceId, {
   name: "Proctored",
   slug: SLUG.test,
@@ -127,7 +127,7 @@ it("writes events and answers with the authoritative count", async () => {
     attemptCookie,
   );
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_only" });
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
 });
 
 it("counts only violation types toward the figure", async () => {
@@ -169,7 +169,7 @@ it("ships the resolved proctoring object on the attempt", async () => {
 
 // --- `Q7c`: measured, not estimated ---------------------------------------
 
-it("the ingest's budget is measured at exactly 4, and the route's authority is the attempt", async () => {
+it("the ingest's common-path cost is measured at 7, under the declared ceiling, and the route's authority is the attempt", async () => {
   const counting = countingDeps(deps);
   const res = await post(
     EVENTS_PATH,
@@ -179,14 +179,87 @@ it("the ingest's budget is measured at exactly 4, and the route's authority is t
   );
   await res.json();
   // The attempt join, the `attempt_events` rate token, `appendEvents`'s one
-  // batched insert and `countViolations`'s one read.
-  expect(counting.counts().total).toBe(ROUTE_BUDGETS[EVENTS_PATH]);
-  expect(counting.counts().total).toBe(4);
+  // batched insert and `countViolations`'s one read — base **4**. Phase 7e
+  // Task 1's fix round (F2) made `claimViolationLimit` conditional on
+  // `atLimit` — below the limit, no read or write of its own is paid at
+  // all, so a batch nowhere near Standard's limit of 5 costs one less than
+  // this route used to (5, when `violationLimitAlreadyReached` ran on every
+  // request regardless). The fifth, worst-case subrequest — the atomic
+  // claim's own insert — is not paid here; `violation-limit.test.ts`
+  // measures that path.
+  //
+  // Branch re-review (post-M1): `window_blur` is a `VIOLATION_EVENTS` type,
+  // so this batch carries an integrity signal and `recomputeIntegrity`
+  // fires on it — +3 (`listIntegrityCounts`, `listSnapshotFaceCounts`,
+  // `setIntegrity`) — **7**, on every such batch, not only the one that
+  // first reaches the limit. M1 had gated this to `atLimit &&
+  // !alreadyActioned` (at most once per attempt) to keep
+  // `listIntegrityEvents`'s then-unbounded row projection from growing
+  // quadratic across a session; `listIntegrityCounts` is flat in the
+  // attempt's history the same way `listSnapshotFaceCounts` already was, so
+  // the gate cost nothing to remove and `Q6`'s "review on any violation"
+  // is live again (`test/run/integrity.test.ts`).
+  expect(counting.counts().total).toBe(7);
+  expect(counting.counts().total).toBeLessThan(ROUTE_BUDGETS[EVENTS_PATH] as number);
   expect(ROUTE_AUTH[`POST ${EVENTS_PATH}`]).toBe("attempt");
 });
 
+// Branch re-review (post-M1): the quadratic shape M1 fixed was
+// `listIntegrityEvents` re-reading the attempt's whole matching history on
+// every call; gating the caller to one firing per attempt hid that cost but
+// also broke `Q6` for a live, never-crossing `warn_then_flag` attempt. These
+// two tests are the before/after of the real fix: every integrity-bearing
+// batch pays the same flat recompute, however many of them a session has.
+it("every violation batch pays the integrity recompute, flat per batch", async () => {
+  const counting = countingDeps(deps);
+  const countingApp = createApp(counting.deps);
+  // Four separate requests, one `window_blur` each — violations 1..4,
+  // Standard's limit is 5. None of these crosses it.
+  for (let i = 0; i < 4; i += 1) {
+    const res = await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: i }] }, attemptCookie, countingApp);
+    await res.json();
+  }
+  // Each of the four pays the same 7 as the single-event test above — 28
+  // total, flat per batch rather than growing with the session.
+  expect(counting.counts().total).toBe(28);
+});
+
+it("the batch that crosses the limit, and every batch after it, pays the recompute", async () => {
+  // Four below-limit batches first, uncounted — violations 1..4.
+  for (let i = 0; i < 4; i += 1) {
+    await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: i }] }, attemptCookie);
+  }
+  const counting = countingDeps(deps);
+  const countingApp = createApp(counting.deps);
+  // Violation 5: crosses Standard's limit of 5. Base 4 + the atomic claim
+  // (+1, it is attempted at or past the limit) + the recompute's own +3
+  // (`listIntegrityCounts`, `listSnapshotFaceCounts`, `setIntegrity`) = 8.
+  const crossing = await post(
+    EVENTS_PATH,
+    { events: [{ type: "window_blur", clientTs: 10 }] },
+    attemptCookie,
+    countingApp,
+  );
+  await crossing.json();
+  expect(counting.counts().total).toBe(8);
+
+  // Violation 6: still past the limit, and `alreadyActioned` is now true —
+  // the claim is attempted and loses, but the recompute runs regardless of
+  // `alreadyActioned`: the gate it used to sit behind is gone. Same 8, not
+  // the 5 a one-shot gate would have left it at.
+  const after = countingDeps(deps);
+  const afterApp = createApp(after.deps);
+  const res = await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 11 }] }, attemptCookie, afterApp);
+  await res.json();
+  expect(after.counts().total).toBe(8);
+});
+
 it("the ten events a request carries are written as one batched insert, not ten", async () => {
-  const events = Array.from({ length: 10 }, (_, i) => ({ type: "window_blur" as const, clientTs: i }));
+  // `fullscreen_restore`, not `window_blur`: ten violations would cross
+  // Standard's limit of 5 and pay the marker-write subrequest this test
+  // does not mean to measure (`violation-limit.test.ts` does). The batching
+  // claim this test makes — one statement, not ten — holds for any type.
+  const events = Array.from({ length: 10 }, (_, i) => ({ type: "fullscreen_restore" as const, clientTs: i }));
   const counting = countingDeps(deps);
   const res = await post(EVENTS_PATH, { events }, attemptCookie, createApp(counting.deps));
   await res.json();
@@ -265,7 +338,7 @@ it("writes nothing and still answers the current count once the attempt is submi
     attemptCookie,
   );
   expect(res.status).toBe(200);
-  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_only" });
+  expect(await res.json()).toMatchObject({ violations: 1, limit: 5, action: "warn_then_flag" });
 
   const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM event", []);
   // The one pre-submission event, and nothing from the post-submission

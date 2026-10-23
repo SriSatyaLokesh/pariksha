@@ -230,6 +230,15 @@ export interface AttemptPaper {
   serverNow: number;
   submittedAt: number | null;
   /**
+   * Phase 7e Task 3 (`E-R1`): the interface's own "surfaced by `GET
+   * /api/v1/run/attempt`" line. `null` until `violationOutcome`'s `lock`
+   * branch fires; the same shape `submittedAt` already carries, read off
+   * `AttemptRecord.lockedAt` on resume. This is what lets a reload mid-lock
+   * raise the overlay again (`ProctoringLayer`'s `initialLocked`) rather
+   * than a resumed candidate landing back on a paper that looks live.
+   */
+  lockedAt: number | null;
+  /**
    * Phase 7c Task 1 (`Q7a`), fixed in the Task 5 follow-up round: **both
    * required, set by `paperFrom` for every caller**. `proctoring` is
    * `resolvedProctoringOf(settings)` — a pure function of the `settings`
@@ -272,6 +281,28 @@ const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(set
 
 const conflict = (code: string, message: string, details?: unknown): ApiError =>
   new ApiError(409, code, message, details);
+
+/**
+ * Phase 7e Task 3 (`E-R1`/`E-R2`): the lock's own refusal — called from
+ * each attempt-authority WRITE route, never from `attemptContext`. That
+ * middleware's own doc comment forbids refusing a resolved attempt there,
+ * and a 409 at that layer would also refuse `GET /attempt`, the one
+ * request a locked candidate must still be able to make (to learn they
+ * are locked, and to notice an organiser has cleared it). `PUT
+ * /attempt/answer` and `POST /attempt/submit` are the two routes a
+ * candidate's own gesture can use to change an attempt's state, so each
+ * calls this directly — the same shape `assertWritable`/`assertSectionOpen`
+ * already take for their own refusals in `/answer` below, rather than a
+ * second, hidden mechanism.
+ */
+function assertNotLocked(attempt: { lockedAt: number | null }): void {
+  if (attempt.lockedAt !== null) {
+    throw conflict(
+      "attempt_locked",
+      "This attempt is locked. Contact your organiser to continue.",
+    );
+  }
+}
 
 /**
  * The stale-version refusals. All 409, all audited, never a 500: a
@@ -532,6 +563,9 @@ export function paperFrom(input: {
   startedAt: number;
   deadlineAt: number;
   submittedAt: number | null;
+  /** Phase 7e Task 3 (`E-R1`): `null` from `/start` (a just-minted attempt
+   *  cannot be locked), `AttemptRecord.lockedAt` from `GET /attempt`. */
+  lockedAt: number | null;
   sectionStartedAt: number | null;
   maxIndex: number;
   responses: Record<string, ResponseValue | null>;
@@ -558,6 +592,7 @@ export function paperFrom(input: {
     allowCalculator: allowCalculator(input.settings),
     serverNow: input.now,
     submittedAt: input.submittedAt,
+    lockedAt: input.lockedAt,
     // `resolvedProctoringOf` is a pure read of `input.settings`, already
     // fetched for `timingOf` above — free for every caller, which is why
     // this is set here rather than left to `/start` and `GET /attempt`
@@ -607,6 +642,14 @@ export async function startAttempt(
       "attempt_in_progress",
       "You already have this test open. Open it in the browser you started it in; a different device needs a proctor to unlock it.",
     );
+  }
+  // `M2`: a locked attempt stops being "live" once its own deadline
+  // passes (it never self-submits), but it is still locked. Without this
+  // check, waiting out the clock on a locked attempt and starting a fresh
+  // one is how a candidate walks straight around the product's one
+  // consequence for a violation limit.
+  if (attempts.lockedCount > 0) {
+    throw conflict("attempt_locked", "An earlier attempt is locked. Contact your organiser to continue.");
   }
   const allowed = timing.attempts_allowed ?? TIMING_DEFAULTS.attempts_allowed;
   if (attempts.count >= allowed) {
@@ -724,6 +767,7 @@ export async function startAttempt(
       startedAt: now,
       deadlineAt,
       submittedAt: null,
+      lockedAt: null,
       sectionStartedAt: null,
       maxIndex: 0,
       responses: {},
@@ -839,9 +883,28 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
      * avoid, and it is why the stamp is `deadline_at` itself rather than
      * `now` — the attempt ended when the clock ran out, not when somebody
      * next looked at it.
+     *
+     * Fix round 1 (CRITICAL): `attempt.lockedAt === null` added. Without
+     * it, this is the one path that clears a lock on its own — `GET
+     * /attempt` is the one route a locked candidate is explicitly allowed
+     * to keep polling (`E-R2`), so once the deadline plus grace passed, the
+     * very next poll stamped `submitted_at` here and
+     * `routes/exam.tsx`'s own `resumed.submittedAt !== null` check then
+     * walked the candidate straight to a clean receipt — no organiser
+     * involved, the exact outcome the restored `proctoring_lock_without_
+     * recourse` advisory promises cannot happen. A locked attempt now
+     * simply never times out on its own, same as before this file's own
+     * `C-07` existed: the paragraph above already documents that an
+     * attempt nobody ever reads again (a closed tab, no sweeper in this
+     * phase) stays `submitted_at IS NULL` forever today, lock or no lock —
+     * a permanently-locked attempt is one more instance of that same
+     * already-accepted shape, not a new one. Retention (`AC-24`, Phase 8e,
+     * not yet built in this codebase — `docs/superpowers/plans/
+     * 2026-10-22-phase-8e-the-sweep.md`) is that later plan's own problem
+     * to solve for every never-submitted attempt, this one included.
      */
     let submittedAt = attempt.submittedAt;
-    if (submittedAt === null && timedOut(attempt, now)) {
+    if (submittedAt === null && attempt.lockedAt === null && timedOut(attempt, now)) {
       submittedAt = attempt.deadlineAt;
       await finishAttempt(deps.db, attempt.workspaceId, {
         attemptId: attempt.attemptId,
@@ -881,6 +944,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         startedAt: attempt.startedAt,
         deadlineAt: attempt.deadlineAt,
         submittedAt,
+        lockedAt: attempt.lockedAt,
         sectionStartedAt: attempt.sectionStartedAt,
         maxIndex: attempt.maxIndex,
         responses,
@@ -944,6 +1008,9 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
         "You have already submitted this test, so this answer was not saved.",
       );
     }
+    // Phase 7e Task 3 (`E-R1`/`E-R2`): refused here, not in `attemptContext`
+    // — see `assertNotLocked`'s own doc comment.
+    assertNotLocked(attempt);
     // `AC-13`'s server half, and the only clock a write is judged by:
     // `deadline_at + late_sync_grace_seconds`, never the test's window.
     // `deriveState(...) === "open"` gates ENTRY only — re-checking it here
@@ -1134,6 +1201,13 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
    */
   routes.post("/attempt/submit", attemptContext(deps), async (c) => {
     const attempt = c.get("attempt");
+    // Phase 7e Task 3 (`E-R1`/`E-R2`): a locked attempt's own Submit press
+    // is refused too — the brief's own "the only way out is an organiser"
+    // would otherwise have a candidate end the very attempt an organiser
+    // is meant to review. A timed-out lock still finishes on its own: `GET
+    // /attempt`'s timeout materialisation is a different, unguarded path
+    // (`E-R2`) that does not go through this route at all.
+    assertNotLocked(attempt);
     const now = deps.now();
     // Whichever of the candidate's press and the clock got here first is
     // what this is called. `timedOut` already folds in the grace, so an

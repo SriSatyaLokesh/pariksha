@@ -106,6 +106,12 @@ export interface AttemptPaper {
   allowCalculator: boolean;
   serverNow: number;
   submittedAt: number | null;
+  /** Phase 7e Task 3 (`E-R1`): mirrors `apps/api/src/run/attempt.ts`'s own
+   *  `AttemptPaper.lockedAt` field for field — `null` until the limit's
+   *  `lock` action fires, read by `routes/exam.tsx` to seed
+   *  `ProctoringLayer`'s `initialLocked` so a reload mid-lock raises the
+   *  overlay again rather than resuming to a paper that looks live. */
+  lockedAt: number | null;
   /**
    * Phase 7c Task 2, fixed in the Task 5 follow-up round, mirroring
    * `apps/api/src/run/attempt.ts`'s own `AttemptPaper` field for field:

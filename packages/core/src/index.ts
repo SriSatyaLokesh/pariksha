@@ -100,6 +100,19 @@ export * from "./registration.js";
 // branching on `profile` itself.
 export * from "./proctoring.js";
 
+// Phase 7e Task 1 (`P-09`, issue #213): `violationOutcome()` is the one
+// place `violations >= limit` turns into a decision — warn, flag,
+// auto-submit or lock. `apps/api/src/routes/proctoring.ts` is the only
+// caller today; Tasks 2 and 3 of this plan branch on its `kind` to act.
+export * from "./proctoring-outcome.js";
+
+// Phase 7e Task 5 (`Q6`, `P7E-R9`): `integrityFor()` is the one place the
+// events, the snapshots and the resolved proctoring settings turn into the
+// flag an organiser reads — `clean` / `review` / `high_risk` — plus whether
+// anyone was watching. `apps/api/src/routes/proctoring.ts` and
+// `apps/api/src/run/submit.ts` are the two callers.
+export * from "./integrity.js";
+
 // Phase 8a Task 3 (`K6`): `countedScore()` turns a candidate's attempt
 // scores and `timing.counted_attempt` into the one counted figure —
 // `CountedAttempt` itself is already public off `types.js`, above. The
