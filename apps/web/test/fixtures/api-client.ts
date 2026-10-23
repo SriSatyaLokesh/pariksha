@@ -57,6 +57,7 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     archiveTest: notStubbed("archiveTest"),
     versions: notStubbed("versions"),
     checklist: notStubbed("checklist"),
+    readiness: notStubbed("readiness"),
 
     cloneTest: notStubbed("cloneTest"),
     exportTest: notStubbed("exportTest"),

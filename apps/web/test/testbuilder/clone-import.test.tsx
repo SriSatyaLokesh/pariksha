@@ -70,6 +70,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     archiveTest: async () => MIDTERM,
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
     cloneTest: async () => COPY,
     exportTest: async () => ({ format: "pariksha/test@1", name: "Midterm", slug: MIDTERM.slug, sections: [] }) as never,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),

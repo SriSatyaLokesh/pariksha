@@ -105,6 +105,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => DRAFT,
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     // The workspace half of branding: the logo lives here, not on the draft.
     workspaceBranding: async () => ({ logo: "media/wsp_1/abc.png", logo_alt: "Alpha College" }),

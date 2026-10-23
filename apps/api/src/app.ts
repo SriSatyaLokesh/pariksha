@@ -25,6 +25,7 @@ import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
+import { readinessRoutes } from "./publish/readiness.js";
 import { attemptsRoutes } from "./routes/attempts.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
@@ -308,6 +309,15 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // candidate count alike. The same five reads publish makes before it
   // decides, which is the point: one function, two callers.
   "/api/v1/workspaces/:id/tests/:testId/checklist": 6,
+  // Phase 8c Task 5 (`D7c`, `K21`): the readiness aggregate. Measured
+  // (`apps/api/test/publish/readiness.test.ts`'s own "measures the real
+  // subrequest cost" test), not estimated. Auth (2) + `listTests` (1) +
+  // `draftVersionsByWorkspace` (1, every open draft in one set read) +
+  // `workspaceQuestions` (1, shared by every test, not re-fetched per row)
+  // + `candidateCountsByWorkspace` (1, one `GROUP BY test_id`) = 6, flat in
+  // how many tests the workspace holds — twelve tests costs the same 6 as
+  // one, which is the whole point.
+  "/api/v1/workspaces/:id/tests/readiness": 6,
   // Task 12 (#63, P5.10): clone, export and import. Measured
   // (`apps/api/test/clone.test.ts` and `test/export/test-round-trip.test.ts`),
   // not estimated. Clone costs 8: auth (2) + `getTest` (1, the 404 *and*
@@ -889,6 +899,9 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // needs to see what is still wrong (UX-11).
   "GET /api/v1/workspaces/:id/tests/:testId/versions": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/checklist": "tests.edit",
+  // Phase 8c Task 5 (`D7c`): the readiness aggregate is the same reading
+  // the single-test checklist is — `tests.edit`, for the same reason.
+  "GET /api/v1/workspaces/:id/tests/readiness": "tests.edit",
   // Task 12 (#63, P5.10): clone, export and import are all `tests.edit` —
   // an Author builds tests, and none of these publishes one.
   "POST /api/v1/workspaces/:id/tests/:testId/clone": "tests.edit",
@@ -1159,6 +1172,7 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/archive": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/versions": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/checklist": "workspace",
+  "GET /api/v1/workspaces/:id/tests/readiness": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/clone": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/export": "workspace",
   "POST /api/v1/workspaces/:id/tests/import": "workspace",
@@ -1230,6 +1244,14 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", bankRoutes(deps));
   app.route("/api/v1/workspaces", questionRoutes(deps));
   app.route("/api/v1/workspaces", mediaRoutes(deps));
+  // Phase 8c Task 5 (`D7c`, `K21`): mounted BEFORE `testRoutes`, and that is
+  // load-bearing, not locality — `readinessRoutes`'s `/:id/tests/readiness`
+  // and `testRoutes`'s `/:id/tests/:testId` are both two segments past the
+  // prefix, and Hono answers whichever matches first in registration order
+  // (`runRoutes`'s own documented trap, `apps/api/src/routes/run.ts:361`).
+  // Swapping this pair would let `:testId` capture `"readiness"` and answer
+  // with a 404 instead.
+  app.route("/api/v1/workspaces", readinessRoutes(deps));
   app.route("/api/v1/workspaces", testRoutes(deps));
   // Phase 7e Task 4: the minimal pair — locality with `testRoutes` rather
   // than necessity, the same reason `proctoringRoutes`' own position below

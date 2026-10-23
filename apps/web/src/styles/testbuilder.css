@@ -84,6 +84,25 @@
   font-size: var(--type-mono-sm-size);
 }
 
+/* Fix round 3 (Phase 8c Task 5, `D7c`): the readiness figure, in the same
+   row as `.test-state`/`.test-badge` but not shaped like either — a
+   measurement, not a status word, and the re-review's whole point was that
+   sharing `.test-badge` made the two indistinguishable. The primary cue is
+   the self-naming text itself ("5 / 7 ready", "All clear"), set in
+   `routes/tests.tsx`'s `readinessSummary`; italic here is the secondary
+   one, a second way to say "different kind of fact" without a second
+   colour (`D1`) or an icon this table has none spare for. Renders directly
+   on the page's own ground, the same pairing `.test-version` beside it
+   already proves — nothing between this table and `.shell__page` fills a
+   surface. */
+.test-readiness {
+  margin-inline-start: var(--space-sm);
+  color: var(--ink-2);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-style: italic;
+}
+
 .testbuilder-shortlink {
   display: flex;
   flex-direction: column;

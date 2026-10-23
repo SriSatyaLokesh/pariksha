@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ApiError, type ApiClient, type TestFilter, type TestState, type TestSummary } from "../lib/api";
+import {
+  ApiError,
+  type ApiClient,
+  type ReadinessSummary,
+  type TestFilter,
+  type TestState,
+  type TestSummary,
+} from "../lib/api";
 import { downloadJson } from "../lib/download";
 import { CardHairline } from "../components/CardHairline";
 import { TextField } from "../components/TextField";
 import { QrCode } from "../components/QrCode";
 import { Icon } from "../components/OrganiserShell";
+import { ALL_CLEAR } from "../components/testbuilder/PublishChecklist";
 
 // Screen 6 (docs/design.md's screen inventory): the test list. T-01 (CRUD),
 // T-02 (short link and QR code), T-03 (filter/search/sort) and UX-10's "In
@@ -71,10 +79,28 @@ export function TestStateBadge({ state }: { state: TestState }) {
  *   draftVersion > currentVersion  v1 live, v2 being edited
  *   otherwise                      v1 live, and nothing newer
  *
- * NO READINESS METER, deliberately (`D7c`): this route loads version heads,
- * not draft bodies, so a real "5 / 7" would be one `GET …/checklist` per row.
- * The meter lives in the builder until Phase 8 adds an aggregate, and
- * `test-list.test.tsx` guards both the absence and the call budget.
+ * THE READINESS METER (`D7c`, Phase 8c Task 5): this route used to load only
+ * version heads, not draft bodies, so a real "5 / 7" per row would have been
+ * one `GET …/checklist` per test (`K21` forbids exactly that). `GET
+ * .../tests/readiness` answers for every test in the workspace in one call
+ * instead — `readinessFor` (`apps/api/src/publish/readiness.ts`) runs the
+ * same `buildChecklist` the builder's own rail does, over four statements
+ * total regardless of how many tests there are. `test-list.test.tsx` guards
+ * both the meter's presence and the call budget.
+ *
+ * WHERE IT RENDERS, fix round 2: not in its own column, and not folded onto
+ * this function's own Version line either — both measured **24px taller**
+ * in a real browser (`e2e/measurement/density.spec.ts`'s testList row,
+ * invisible to this package's jsdom suite: every cell in a table row shares
+ * one height, and `.test-version`'s `white-space: nowrap` makes that
+ * column's minimum width exactly its content width, so a single extra
+ * character there has nowhere to go but to steal width from a column that
+ * CAN shrink — the short-link cell's "Copy short link" button, which wraps
+ * to a second line the moment it loses that width). The State cell's flex
+ * line, beside `TestStateBadge`, is the one place on this row with width to
+ * spare; see that `<td>` in the markup below. Fix round 3 re-measured after
+ * widening the visible text (below) and it still holds at 182px — see
+ * `readinessSummary`'s own docblock for what changed and why.
  */
 function versionSummary(test: TestSummary): string {
   if (test.currentVersion === null) return "never published";
@@ -82,6 +108,47 @@ function versionSummary(test: TestSummary): string {
   return test.draftVersion !== null && test.draftVersion > test.currentVersion
     ? `${live} · v${test.draftVersion} draft`
     : live;
+}
+
+/** `D7c`'s own arithmetic (`PublishChecklist.tsx`): how many of the
+ *  checklist's own rows do not stop a publish, over how many it raised.
+ *
+ *  Fix round 3, Critical: every string this returns has to stand on its own
+ *  with no column header beside it — fix round 2 moved the figure off its
+ *  own line and into the State cell's, which deleted the "Readiness" header
+ *  that used to say what the number meant, and nothing replaced it. A
+ *  sighted reader saw a bare `5 / 7` next to a state badge with no cue it
+ *  was even a different kind of fact. So every branch below is a PHRASE,
+ *  not a number: `"5 / 7 ready"` names itself on sight, exactly the way
+ *  `versionSummary`'s `"v1 live · v2 draft"` does, and needs no `aria-label`
+ *  to carry a meaning the visible text does not.
+ *
+ *  Fix round 1, Important 1: a test with nothing outstanding has
+ *  `total === 0`, and that is `ALL_CLEAR` here exactly as it is in the
+ *  rail — not `"0 / 0"`, which reads as a measurement that came out empty
+ *  rather than a test with nothing left to fix, and would have this figure
+ *  disagreeing with the rail about the very test both are describing
+ *  (`K33`). `ALL_CLEAR` pairs with `"N / M ready"` the same way `"not
+ *  blocking"` pairs with `"must fix"` in the rail: two phrases for one
+ *  axis, not a number and a word.
+ *
+ *  The THIRD state is a different one, and not "still loading" — `load`
+ *  (below) fetches `tests` and this aggregate together in one `Promise.all`
+ *  and sets both in the same tick, so a row never renders before this map
+ *  is populated. A missing key means the route genuinely has nothing for
+ *  that test id (`readinessFor`'s own `if (!draft) continue`), which is
+ *  "unknown" and must never be spelled the same as either "zero rows" above
+ *  or `ALL_CLEAR` (fix round 1 named this conflation directly: "0 / 0"
+ *  reading as "all clear" is the shape of the defect, whichever side of it
+ *  is wrong). Fix round 3 spells it out instead of an em dash, for the same
+ *  reason every other branch is now a phrase: a dash said nothing on its
+ *  own once the header that used to frame it was gone.
+ *
+ *  Plain text, no hue throughout: the same `D1` rule `versionSummary`
+ *  follows. */
+function readinessSummary(summary: ReadinessSummary | undefined): string {
+  if (summary === undefined) return "Readiness unknown";
+  return summary.total === 0 ? ALL_CLEAR : `${summary.ready} / ${summary.total} ready`;
 }
 
 type Sort = "name" | "updated" | "created";
@@ -162,6 +229,14 @@ export function TestList({
 }) {
   const [filter, setFilter] = useState<UrlFilter>(() => filterFromSearch(window.location.search));
   const [tests, setTests] = useState<TestSummary[] | null>(null);
+  // `D7c`'s aggregate, keyed by test id — one call for the whole table,
+  // never one `checklist()` per row (`K21`). Fetched together with `tests`
+  // below (one `Promise.all`, both set in the same tick), so a row never
+  // renders before this is populated — a key missing from the map means the
+  // route genuinely has nothing for that test id, not "still loading",
+  // which is why `readinessSummary` spells that case out in words
+  // ("Readiness unknown") rather than an em dash.
+  const [readiness, setReadiness] = useState<Record<string, ReadinessSummary>>({});
   const [error, setError] = useState<string | undefined>(undefined);
 
   const [name, setName] = useState("");
@@ -182,7 +257,17 @@ export function TestList({
   const load = useCallback(
     async (f: UrlFilter) => {
       try {
-        setTests(await client.tests(workspaceId, toApiFilter(f)));
+        // One `tests()` call and one `readiness()` call, together — never a
+        // `checklist()` per row (`K21`). `readiness()` answers for the whole
+        // workspace, unaffected by `f`, but refreshing it alongside `tests()`
+        // is what keeps a freshly created or cloned test's figure current
+        // without a second effect to wire up.
+        const [rows, ready] = await Promise.all([
+          client.tests(workspaceId, toApiFilter(f)),
+          client.readiness(workspaceId),
+        ]);
+        setTests(rows);
+        setReadiness(ready);
         setError(undefined);
       } catch (cause) {
         setError(cause instanceof ApiError ? cause.message : "Tests could not be loaded.");
@@ -514,6 +599,20 @@ export function TestList({
                             <Icon name="review" /> In review
                           </span>
                         )}
+                        {/* Fix round 3, Critical: fix round 2 reused
+                            `.test-badge` here and relied on `aria-label` to
+                            say what the bare number meant — which worked for
+                            a screen reader and nobody else, the moment the
+                            column header that used to frame it was gone. No
+                            `aria-label` now: `readinessSummary` returns a
+                            self-describing phrase instead, so the same text
+                            every reader sees is the whole of the message —
+                            that phrase, sitting beside the upright status
+                            words above, is what tells a measurement from a
+                            status on sight; `.test-readiness`'s italic
+                            (testbuilder.css) is the secondary cue, not the
+                            whole of it. */}
+                        <span className="test-readiness">{readinessSummary(readiness[test.id])}</span>
                       </td>
                       <td className="test-version">{versionSummary(test)}</td>
                       <td>{new Date(test.updatedAt).toLocaleDateString()}</td>

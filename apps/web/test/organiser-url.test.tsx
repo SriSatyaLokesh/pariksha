@@ -90,6 +90,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     }),
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
+    cloneTest: async () => {
+      throw new Error("not used");
+    },
+    exportTest: async () => {
+      throw new Error("not used");
+    },
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     workspaceBranding: async () => ({}),
     candidates: async () => [],

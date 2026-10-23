@@ -116,6 +116,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     patchDraft: async () => draftWith([QUANT, VERBAL]),
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     workspaceBranding: async () => ({}),
     candidates: async () => [],

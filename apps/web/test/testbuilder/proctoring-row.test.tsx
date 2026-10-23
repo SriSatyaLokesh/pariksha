@@ -91,6 +91,7 @@ function fakeClient(draft: TestVersionRow): ApiClient {
     patchDraft: async () => draft,
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     workspaceBranding: async () => ({}),
     candidates: async () => [],

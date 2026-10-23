@@ -125,6 +125,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     updateTest: async (_workspaceId, _testId, patch) => ({ ...PUBLISHED, ...patch }),
     versions: async () => [],
     checklist: async () => [],
+    readiness: async () => ({}),
+    cloneTest: async () => {
+      throw new Error("not used by this test file");
+    },
+    exportTest: async () => {
+      throw new Error("not used by this test file");
+    },
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
     workspaceBranding: async () => ({}),
     candidates: async () => [],
@@ -504,32 +511,73 @@ describe("TestList", () => {
     }
   });
 
-  // `D7c`: "No readiness meter here — the list route loads version heads, not
-  // draft bodies, so a real 5 / 7 is one checklist call per row." An
-  // invariant, not a mechanism: it is green today and its job is to stay
-  // green. The probe that makes it mean something is rendering a meter into
-  // a row and watching this go red.
+  // `D7c` (Phase 8c Task 5): the aggregate that was missing is here now —
+  // `GET .../tests/readiness` answers for the whole table in one call, so a
+  // real "5 / 7" no longer costs one `checklist()` round trip per row.
   //
   // The pattern carries its spaces deliberately. `PublishChecklist.tsx:230`
   // renders the real meter as `${done} / ${total}` and the Last edited cell
   // renders `toLocaleDateString()`, which is `11/14/2023` in en-US — a
   // space-free `\d\/\d` would match the date on every row and this guard
   // would be red for a reason that has nothing to do with `D7c`.
-  it("shows no readiness meter in the list", async () => {
+  it("shows the readiness meter in the list", async () => {
     await renderList(
-      fakeClient({ tests: async () => [NEVER_PUBLISHED, CHANGED_SINCE_PUBLISH, PUBLISHED] }),
+      fakeClient({
+        tests: async () => [NEVER_PUBLISHED, CHANGED_SINCE_PUBLISH, PUBLISHED],
+        readiness: async () => ({ [NEVER_PUBLISHED.id]: { ready: 5, total: 7 } }),
+      }),
     );
     await screen.findByText("Midterm");
-    expect(screen.queryByText(/\d+ \/ \d+/)).toBeNull();
+    expect(await screen.findByText(/\d+ \/ \d+/)).toBeInTheDocument();
+  });
+
+  // Fix round 3, Critical: fix round 2 moved the figure into the State
+  // cell and deleted the "Readiness" column header with it — nothing
+  // replaced it, so a sighted reader saw a bare "5 / 7" beside a state
+  // badge with no visible cue what it was. `aria-label` would have fixed
+  // that for a screen reader only, and the regression was exactly that no
+  // test here asserted a visible label at all. This one does: the text on
+  // the page, not an accessible name nobody sighted can read.
+  it("names itself on the page, not only to a screen reader", async () => {
+    await renderList(
+      fakeClient({
+        tests: async () => [PUBLISHED],
+        readiness: async () => ({ [PUBLISHED.id]: { ready: 5, total: 7 } }),
+      }),
+    );
+    const row = (await screen.findByText(PUBLISHED.name)).closest("tr") as HTMLElement;
+    expect(within(row).getByText("5 / 7 ready")).toBeInTheDocument();
+  });
+
+  // Fix round 1, Important 1: `PublishChecklist.tsx:219` already renders
+  // `ALL_CLEAR` for a zero-row checklist, not "0 / 0" — a test with nothing
+  // outstanding has to read the same way in both places, or the rail and
+  // this figure disagree about the very test they are both describing
+  // (`K33`). `0 / 0` is the worse of the two readings: it looks like a
+  // measurement that came out empty rather than a test that is done.
+  it('reads a fully-ready test as "All clear", not "0 / 0"', async () => {
+    await renderList(
+      fakeClient({
+        tests: async () => [PUBLISHED],
+        readiness: async () => ({ [PUBLISHED.id]: { ready: 0, total: 0 } }),
+      }),
+    );
+    const row = (await screen.findByText(PUBLISHED.name)).closest("tr") as HTMLElement;
+    expect(within(row).getByText("All clear")).toBeInTheDocument();
+    expect(within(row).queryByText(/\d+ \/ \d+/)).toBeNull();
   });
 
   // The budget half of the same ruling, and the half that actually bites:
   // thirteen rows must not become thirteen round trips. Behaviour, not text
   // — the client is a spy and the assertion is on what the screen asked for.
-  it("loads the list with one tests() call and no checklist call", async () => {
+  // `readiness()` carries the same bound: one call for the table, never one
+  // per row, and `checklist()` — the per-test route the aggregate replaces
+  // — is still never called at all.
+  it("loads the list with one tests() call, one readiness() call and no checklist call", async () => {
     const tests = vi.fn(async () => [NEVER_PUBLISHED, CHANGED_SINCE_PUBLISH, PUBLISHED]);
+    const readiness = vi.fn(async () => ({}));
     const checklist = vi.fn(async () => []);
-    render(<OrganiserApp client={fakeClient({ tests, checklist })} />);
+    render(<OrganiserApp client={fakeClient({ tests, readiness, checklist })} />);
 
     // Home fetches `tests` for its own agenda (`D6b`), so the count is taken
     // from the navigation onward rather than from the mount — otherwise this
@@ -541,6 +589,7 @@ describe("TestList", () => {
     await screen.findByText("Midterm");
 
     expect(tests).toHaveBeenCalledTimes(1);
+    expect(readiness).toHaveBeenCalledTimes(1);
     // Three rows. `D7c`'s whole argument is that a readiness meter here
     // would be one of these per row — "thirteen round trips to decorate a
     // list" — so this is the assertion the ruling is made of.
