@@ -10,8 +10,8 @@
 
 import { Hono } from "hono";
 import { z } from "zod";
-import { ACTIONS, can } from "@pariksha/core";
-import { appendAudit, createApiKey, listApiKeys, revokeApiKey } from "@pariksha/db";
+import { ACTIONS, can, type Action } from "@pariksha/core";
+import { appendAudit, createApiKey, listApiKeys, revokeApiKey, KEY_FORBIDDEN_ACTIONS } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, membershipOr404, requires } from "../middleware/authorize.js";
@@ -20,6 +20,8 @@ const newApiKey = z.object({
   name: z.string().min(1).max(200),
   scopes: z.array(z.enum(ACTIONS)).min(1).max(ACTIONS.length),
 });
+
+const FORBIDDEN_SCOPES: ReadonlySet<Action> = new Set(KEY_FORBIDDEN_ACTIONS);
 
 function notFound(): never {
   throw new ApiError(404, "not_found", "No such resource.");
@@ -44,13 +46,25 @@ export function keyRoutes(deps: AppDeps): Hono<AppBindings> {
     const input = parse(newApiKey, await json(c.req.raw));
     const now = deps.now();
 
-    // "A key may never widen what its creator could do": each requested
-    // scope must be one this organiser's own role already holds, checked
-    // with no `testId` — a key is workspace-wide, so a grant narrowed to
-    // one test must never become workspace-wide through a key.
-    // `KEY_FORBIDDEN_ACTIONS` (`K26`) is enforced again inside
-    // `createApiKey` itself regardless of what this loop decides, so the
-    // rule holds even if this check is ever bypassed or miswritten.
+    // `K26`, checked here as its own clean refusal rather than left to
+    // fall through to `createApiKey`'s internal, defense-in-depth throw
+    // (which would surface as an undifferentiated 500 — `webhooks.ts`'s
+    // own MINOR-3 lesson in reverse: an *expected* business refusal
+    // deserves its own status, the same way a genuine failure must never
+    // borrow one). Independent of role: `can()` would pass this for an
+    // Owner or an Admin, since both hold `keys.manage` themselves — K26 is
+    // not "do you hold it", it is "no key may ever hold it, whoever asks".
+    for (const scope of input.scopes) {
+      if (FORBIDDEN_SCOPES.has(scope)) {
+        throw new ApiError(422, "scope_forbidden", `"${scope}" may never be a key's scope.`);
+      }
+    }
+
+    // "A key may never widen what its creator could do": each remaining
+    // requested scope must be one this organiser's own role already
+    // holds, checked with no `testId` — a key is workspace-wide, so a
+    // grant narrowed to one test must never become workspace-wide
+    // through a key.
     for (const scope of input.scopes) {
       if (!can({ role: membership.role, action: scope })) {
         throw new ApiError(
