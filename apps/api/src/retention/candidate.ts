@@ -148,9 +148,12 @@ export const CANDIDATE_DATA_EXEMPT: Readonly<Record<string, string>> = {
   webhook: "events_json is the subscribed event-type list (e.g. \"attempt.submitted\") — configuration, not data.",
   webhook_delivery:
     "payload_json is a queued delivery body for 8d's drain queue, UNBUILT as of this phase (no writer " +
-    "exists yet — grep confirms no INSERT anywhere). Flagged for re-review once 8d lands one: a webhook " +
-    "payload could plausibly embed a candidate identifier the way auth_token's did (F3), and this entry " +
-    "is not a claim that it won't, only that there is nothing to sweep today.",
+    "exists yet). Flagged for re-review once 8d lands one: a webhook payload could plausibly embed a " +
+    "candidate identifier the way auth_token's did (F3), and this entry is not a claim that it won't, " +
+    "only that there is nothing to sweep today — branch review M4: that claim is now enforced, not just " +
+    "stated. apps/api/test/retention/candidate.test.ts's \"webhook_delivery has no production writer " +
+    "yet\" fails the day 8d adds an INSERT for this table, so the exemption cannot silently outlive the " +
+    "fact it depends on.",
 };
 
 /** `KG4`. See the file header. */

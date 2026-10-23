@@ -351,6 +351,45 @@ it("empties every table holding candidate data, except the audit row that logged
   await closeClient(deps.db);
 });
 
+// Branch review `M3` (MAJOR): the sweep above runs only with
+// `keepAnonymisedScore: false`. The nightly `AC-24` path — this branch's
+// entire subject — calls `deleteCandidates` with `keepAnonymisedScore:
+// **true**` (`sweep.ts:317`), where `review` and `attempt` survive by
+// design (`K29`). A guard that never exercises that mode cannot catch a
+// table later moved into the `!keepAnonymisedScore` branch shipping
+// unguarded on the one path that matters most. Survivors are named
+// explicitly, not just "whatever is left" — a fourth survivor (a table
+// that should have been swept but was not) has to fail this test, not
+// pass it silently.
+it("empties every table holding candidate data except attempt and review, in nightly (keepAnonymisedScore: true) mode", async () => {
+  const { deps } = await testDeps();
+  const { wsp, candidateId } = await seedCandidate(deps);
+
+  await deleteCandidate(deps.db, wsp, {
+    candidateId,
+    keepAnonymisedScore: true,
+    actor: "usr_1",
+    now: FIXED_NOW,
+    storage: deps.storage,
+  });
+
+  const SURVIVORS = new Set(["attempt", "review"]);
+  const tables = TABLE_MANIFEST.filter((t) => holdsCandidateData(t) && !(t.name in CANDIDATE_DATA_EXEMPT));
+  // Sanity: both named survivors are real tables this manifest actually
+  // covers, so the assertion below is not vacuously skipping them.
+  expect(tables.map((t) => t.name)).toEqual(expect.arrayContaining([...SURVIVORS]));
+
+  for (const table of tables) {
+    const rows = await rowsMentioning(deps.db, table.name, candidateId);
+    if (SURVIVORS.has(table.name)) {
+      expect(rows, table.name).not.toEqual([]);
+    } else {
+      expect(rows, table.name).toEqual([]);
+    }
+  }
+  await closeClient(deps.db);
+});
+
 it("finds rows before the deletion — control for the sweep above", async () => {
   const { deps } = await testDeps();
   const { wsp, candidateId } = await seedCandidate(deps);
@@ -375,6 +414,46 @@ it("every TABLE_MANIFEST table is structurally resolved, explicitly handled out 
   // leak survived a structural scan undetected.
   const unclassified = TABLE_MANIFEST.filter((t) => candidateDataClassification(t) === null).map((t) => t.name);
   expect(unclassified).toEqual([]);
+});
+
+// Branch review `M4` (MAJOR): `CANDIDATE_DATA_EXEMPT.webhook_delivery`'s own
+// reason admits it is not a safety claim ("not a claim that it won't,
+// only that there is nothing to sweep today") — but `candidateDataClassification`
+// still reads the table as `"exempt"`, so the three-state completeness
+// test above passes today and keeps passing the day 8d lands a writer for
+// it, silently. That is `auth_token` a second time: a table affirmatively
+// classified safe while actually just unreached. This converts the dated
+// note into a trap that springs on that merge, the same idiom
+// `auditCallSitesPassingPersonalData` above already uses (grep the real
+// source tree, not a `TABLE_MANIFEST` entry's own say-so) — `listTsFiles`
+// is that function's own helper, reused rather than redeclared.
+it("webhook_delivery has no production writer yet — the exemption's one load-bearing claim", () => {
+  // Every package's own `src/` only — never `node_modules` (which a
+  // recursive walk from the repo root would otherwise drag in, slowly and
+  // pointlessly) and never `test/`, where this very scan's own planted
+  // fixtures and any future test double for a webhook writer legitimately
+  // say "INSERT INTO webhook_delivery" without being a real caller.
+  const repoRoot = fileURLToPath(new URL("../../../..", import.meta.url));
+  const sourceDirs = [
+    "apps/api/src",
+    "apps/web/src",
+    "packages/core/src",
+    "packages/db/src",
+    "packages/storage/src",
+  ].map((rel) => join(repoRoot, rel));
+
+  const hits: string[] = [];
+  for (const dir of sourceDirs) {
+    for (const file of listTsFiles(dir)) {
+      if (/INSERT\s+INTO\s+webhook_delivery/i.test(readFileSync(file, "utf8"))) hits.push(file);
+    }
+  }
+
+  expect(
+    hits,
+    "a webhook_delivery writer has landed — CANDIDATE_DATA_EXEMPT.webhook_delivery's own reason says to " +
+      "re-review it for a candidate-identifier leak the way auth_token's F3 was (candidate.ts's own comment)",
+  ).toEqual([]);
 });
 
 it("auth_token is named as explicitly handled, not silently exempt", () => {
@@ -404,6 +483,53 @@ it("deletes the invite's auth_token row — payload_json.candidateId, invisible 
 
   expect(await countAuthTokensFor(deps.db, candidateId)).toBe(0);
   await closeClient(deps.db);
+});
+
+// Branch review `m5` (MINOR): `candidateIdExtract`'s `pg` branch
+// (`payload_json ->> 'candidateId'`) has never executed anywhere — #229
+// records no Postgres test infrastructure at all, so no fixture here can
+// prove Postgres itself accepts or correctly evaluates it. What this CAN
+// prove cheaply, without a real Postgres: that `deleteCandidates` really
+// does select the `pg`-shaped expression (not the sqlite one) when
+// `db.dialect === "pg"`, and that the expression itself is exactly the
+// one the file header documents — so a future edit that mistypes the
+// operator, drops the dialect check, or silently falls back to the
+// sqlite branch on `pg` fails here. **What remains genuinely unprovable
+// without #229: whether Postgres actually matches a real
+// `payload_json ->> 'candidateId'` value this way** — that is a semantic
+// claim about Postgres's own `jsonb` operators, not a fact this file's
+// fake can know.
+it("builds the pg-dialect auth_token DELETE with the documented ->> operator, not the sqlite json_extract", async () => {
+  const statements: { sql: string; params: unknown[] }[] = [];
+  const fakePg: DbClient = {
+    dialect: "pg",
+    drizzle: undefined as never,
+    exec: async () => undefined,
+    all: async () => [],
+    // Only the attempt-select path is reached before the batch (no
+    // attempts seeded), so every `query` call here answers empty.
+    query: async () => [],
+    run: async () => ({ changes: 0 }),
+    batch: async (stmts) => {
+      statements.push(...stmts);
+      return stmts.map(() => ({ changes: 0 }));
+    },
+    jsonParam: (value) => JSON.stringify(value),
+    jsonValue: (raw) => (typeof raw === "string" ? (JSON.parse(raw) as never) : (raw as never)),
+    close: async () => undefined,
+  };
+
+  await deleteCandidates(fakePg, "wsp_fake", {
+    candidateIds: ["cnd_fake"],
+    keepAnonymisedScore: true,
+    actor: "usr_1",
+    now: FIXED_NOW,
+    storage: { put: async () => undefined, get: async () => null, delete: async () => undefined, signedUrl: () => "" },
+  });
+
+  const authTokenDelete = statements.find((s) => s.sql.includes("DELETE FROM auth_token"));
+  expect(authTokenDelete?.sql).toContain("payload_json ->> 'candidateId'");
+  expect(authTokenDelete?.sql).not.toContain("json_extract");
 });
 
 // --- behaviour --------------------------------------------------------------
