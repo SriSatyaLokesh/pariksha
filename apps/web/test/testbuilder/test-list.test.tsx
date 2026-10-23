@@ -614,10 +614,28 @@ describe("TestList", () => {
     expect(await screen.findByText(/\d+ \/ \d+/)).toBeInTheDocument();
   });
 
+  // Fix round 3, Critical: fix round 2 moved the figure into the State
+  // cell and deleted the "Readiness" column header with it — nothing
+  // replaced it, so a sighted reader saw a bare "5 / 7" beside a state
+  // badge with no visible cue what it was. `aria-label` would have fixed
+  // that for a screen reader only, and the regression was exactly that no
+  // test here asserted a visible label at all. This one does: the text on
+  // the page, not an accessible name nobody sighted can read.
+  it("names itself on the page, not only to a screen reader", async () => {
+    await renderList(
+      fakeClient({
+        tests: async () => [PUBLISHED],
+        readiness: async () => ({ [PUBLISHED.id]: { ready: 5, total: 7 } }),
+      }),
+    );
+    const row = (await screen.findByText(PUBLISHED.name)).closest("tr") as HTMLElement;
+    expect(within(row).getByText("5 / 7 ready")).toBeInTheDocument();
+  });
+
   // Fix round 1, Important 1: `PublishChecklist.tsx:219` already renders
   // `ALL_CLEAR` for a zero-row checklist, not "0 / 0" — a test with nothing
   // outstanding has to read the same way in both places, or the rail and
-  // this column disagree about the very test they are both describing
+  // this figure disagree about the very test they are both describing
   // (`K33`). `0 / 0` is the worse of the two readings: it looks like a
   // measurement that came out empty rather than a test that is done.
   it('reads a fully-ready test as "All clear", not "0 / 0"', async () => {

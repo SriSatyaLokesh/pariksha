@@ -98,7 +98,9 @@ export function TestStateBadge({ state }: { state: TestState }) {
  * CAN shrink — the short-link cell's "Copy short link" button, which wraps
  * to a second line the moment it loses that width). The State cell's flex
  * line, beside `TestStateBadge`, is the one place on this row with width to
- * spare; see that `<td>` in the markup below.
+ * spare; see that `<td>` in the markup below. Fix round 3 re-measured after
+ * widening the visible text (below) and it still holds at 182px — see
+ * `readinessSummary`'s own docblock for what changed and why.
  */
 function versionSummary(test: TestSummary): string {
   if (test.currentVersion === null) return "never published";
@@ -111,24 +113,39 @@ function versionSummary(test: TestSummary): string {
 /** `D7c`'s own arithmetic (`PublishChecklist.tsx`): how many of the
  *  checklist's own rows do not stop a publish, over how many it raised.
  *
+ *  Fix round 3, Critical: every string this returns has to stand on its own
+ *  with no column header beside it — fix round 2 moved the figure off its
+ *  own line and into the State cell's, which deleted the "Readiness" header
+ *  that used to say what the number meant, and nothing replaced it. A
+ *  sighted reader saw a bare `5 / 7` next to a state badge with no cue it
+ *  was even a different kind of fact. So every branch below is a PHRASE,
+ *  not a number: `"5 / 7 ready"` names itself on sight, exactly the way
+ *  `versionSummary`'s `"v1 live · v2 draft"` does, and needs no `aria-label`
+ *  to carry a meaning the visible text does not.
+ *
  *  Fix round 1, Important 1: a test with nothing outstanding has
  *  `total === 0`, and that is `ALL_CLEAR` here exactly as it is in the
  *  rail — not `"0 / 0"`, which reads as a measurement that came out empty
- *  rather than a test with nothing left to fix, and would have this column
+ *  rather than a test with nothing left to fix, and would have this figure
  *  disagreeing with the rail about the very test both are describing
- *  (`K33`).
+ *  (`K33`). `ALL_CLEAR` pairs with `"N / M ready"` the same way `"not
+ *  blocking"` pairs with `"must fix"` in the rail: two phrases for one
+ *  axis, not a number and a word.
  *
- *  An em dash is the THIRD state, and a different one: the aggregate is
- *  still loading or has nothing for this test at all (no entry in the map),
- *  which is "unknown" and must never be spelled the same as either "zero
- *  rows" above or `ALL_CLEAR` (Phase 8c Task 5 fix round 1 named this
- *  conflation directly: "0 / 0" reading as "all clear" is the shape of the
- *  defect, whichever side of it is wrong). Plain text, no hue throughout:
- *  the same `D1` rule `versionSummary` follows, and the words and numbers
- *  alone are what a screen reader needs. */
+ *  The THIRD state is a different one: the aggregate is still loading or
+ *  has nothing for this test at all (no entry in the map), which is
+ *  "unknown" and must never be spelled the same as either "zero rows" above
+ *  or `ALL_CLEAR` (fix round 1 named this conflation directly: "0 / 0"
+ *  reading as "all clear" is the shape of the defect, whichever side of it
+ *  is wrong). Fix round 3 spells it out instead of an em dash, for the same
+ *  reason every other branch is now a phrase: a dash said nothing on its
+ *  own once the header that used to frame it was gone.
+ *
+ *  Plain text, no hue throughout: the same `D1` rule `versionSummary`
+ *  follows. */
 function readinessSummary(summary: ReadinessSummary | undefined): string {
-  if (summary === undefined) return "—";
-  return summary.total === 0 ? ALL_CLEAR : `${summary.ready} / ${summary.total}`;
+  if (summary === undefined) return "Readiness unknown";
+  return summary.total === 0 ? ALL_CLEAR : `${summary.ready} / ${summary.total} ready`;
 }
 
 type Sort = "name" | "updated" | "created";
@@ -576,18 +593,20 @@ export function TestList({
                             <Icon name="review" /> In review
                           </span>
                         )}
-                        {/* Fix round 2: reuses `.test-badge` — already
-                            audited (`contrast-usage.test.ts`), already
-                            mono/quiet/no-hue — rather than a new selector.
-                            No visible label: the column header that would
-                            have named it cost 24px of row height in a real
-                            browser (see `versionSummary`'s own docblock,
-                            above), so the number stands alone for a sighted
-                            reader and `aria-label` carries the word for
-                            everyone else. */}
-                        <span className="test-badge" aria-label={`Readiness ${readinessSummary(readiness[test.id])}`}>
-                          {readinessSummary(readiness[test.id])}
-                        </span>
+                        {/* Fix round 3, Critical: fix round 2 reused
+                            `.test-badge` here and relied on `aria-label` to
+                            say what the bare number meant — which worked for
+                            a screen reader and nobody else, the moment the
+                            column header that used to frame it was gone. No
+                            `aria-label` now: `readinessSummary` returns a
+                            self-describing phrase instead, so the same text
+                            every reader sees is the whole of the message.
+                            `.test-readiness`, not `.test-badge` — italic, not
+                            the upright status words beside it, because a
+                            measurement and a status are two different kinds
+                            of fact and sharing one style made them read as
+                            one. */}
+                        <span className="test-readiness">{readinessSummary(readiness[test.id])}</span>
                       </td>
                       <td className="test-version">{versionSummary(test)}</td>
                       <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
