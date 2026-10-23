@@ -25,3 +25,7 @@ export * from "./repo/candidate-entry.js";
 // A `/t/:code` miss bucket has no workspace, so there is nothing for
 // `scoped()` to check (Phase 6 Task 3, #67).
 export * from "./repo/rate-limit.js";
+// Deliberately outside repo/index.js too — see the header of
+// regrade-scan.ts. A cron tick names no workspace, so there is nothing for
+// `scoped()` to check (Phase 8b Task 4, K18).
+export * from "./repo/regrade-scan.js";

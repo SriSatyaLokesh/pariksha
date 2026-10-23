@@ -23,3 +23,7 @@ export * from "./results.js";
 export * from "./grading.js";
 // Phase 8b Task 3 (K16): the reviewer's verdict, append-only.
 export * from "./review.js";
+// Phase 8b Task 4 (K17/K18): regrade's own, version-scoped attempt reads
+// and batched write. `regrade-scan.ts` sits beside this list, not in it —
+// see its own header for why.
+export * from "./regrade.js";

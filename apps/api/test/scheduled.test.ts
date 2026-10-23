@@ -3,6 +3,7 @@
 
 import { beforeEach, expect, it, vi } from "vitest";
 import { SCHEDULED_JOBS, runScheduled, type ScheduledJob } from "../src/scheduled.js";
+import { regradeJob } from "../src/grade/regrade.js";
 import { testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
@@ -31,9 +32,12 @@ function throwing(name: string, cron: string): ScheduledJob {
 
 // Pinned before any test pushes a job, per K27: a plan that registers one
 // must edit this line, which is how the registry's contents stay visible
-// rather than accumulating unseen.
-it("ships with no jobs registered", async () => {
-  expect(shippedWith).toEqual([]); // 8b, 8d and 8e each change this line
+// rather than accumulating unseen. Phase 8b Task 4 is the first to land —
+// `regradeJob` and nothing else this branch ships (`P8D-R2`: whichever of
+// 8d/8e merges second rebases and extends this array; never loosen it to
+// dodge that).
+it("ships with exactly the jobs this branch registers", async () => {
+  expect(shippedWith).toEqual([regradeJob]);
 });
 
 beforeEach(() => {

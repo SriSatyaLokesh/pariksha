@@ -94,8 +94,14 @@ bucket_name = "pariksha-files"
 # has no handler — it costs no quota, but it will show in the dashboard. If
 # that noise is unwelcome before Phase 8, comment this block out; nothing
 # reads it.
+#
+# Phase 8b Task 4 (`K18`): `*/5 * * * *` drains the regrade queue
+# (`apps/api/src/grade/regrade.ts`'s `regradeJob`) — the same frequent
+# trigger 8d's webhook drain also registers under. Expect this line to
+# conflict at merge with whichever of 8d/8e lands it first; the fix is one
+# cron array carrying both, not two `[triggers]` blocks.
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["17 3 * * *", "*/5 * * * *"]
 
 # No `[vars]` block: everything this Worker reads is a secret, and anything
 # under `[vars]` is plaintext here and in the dashboard. See

@@ -30,6 +30,7 @@ import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
 import { gradeRoutes } from "./grade/award.js";
 import { verdictRoutes } from "./grade/verdict.js";
+import { regradeRoutes } from "./grade/regrade.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -551,6 +552,23 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1) = 4. Flat in cohort size — this route touches exactly one attempt,
   // same as `.../grade` above.
   "/api/v1/workspaces/:id/attempts/:attemptId/verdict": 4,
+
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Measured
+  // (`apps/api/test/grade/regrade.test.ts`'s own "measures the real
+  // subrequest cost" test, one published version referencing the question):
+  // auth (2) + `publishedVersionsForQuestion` (1) + `enqueueRegrade`'s own
+  // count and audit write (2) = 5.
+  //
+  // ponytail: **not flat** in how many published versions reference the
+  // question — each adds one more `enqueueRegrade` call (2 more
+  // subrequests), because a key edit can regrade more than one still-live
+  // published version at once (`AC-08`: "any published version uses"). A
+  // question referenced by a couple of live versions stays nowhere near the
+  // ceiling; one referenced by dozens would not. If that is ever realistic
+  // for this product, the fix is batching `enqueueRegrade`'s count and
+  // audit write across versions in one `db.batch()`, not raising this
+  // number.
+  "/api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": 5,
 };
 
 /**
@@ -651,6 +669,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // a verdict is part of the review a Reviewer or Admin performs, and an
   // Author (`tests.edit`) holds neither.
   "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "attempts.grade",
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Same action as
+  // grading and the verdict — a Reviewer or Admin holds it, an Author
+  // (`banks.edit`, the permission that saved the key change this route
+  // reacts to) does not.
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": "attempts.grade",
 };
 
 /**
@@ -861,6 +884,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "workspace",
   // Phase 8b Task 3 (`K16`): the verdict.
   "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "workspace",
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer.
+  "POST /api/v1/workspaces/:id/banks/:bankId/questions/:qid/regrade": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -908,6 +933,9 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // Phase 8b Task 3 (`K16`): the verdict. Same prefix, mounted next to
   // `gradeRoutes` for the same locality reason.
   app.route("/api/v1/workspaces", verdictRoutes(deps));
+  // Phase 8b Task 4 (`K17`/`K18`): the regrade offer. Same prefix, mounted
+  // next to `gradeRoutes`/`verdictRoutes` for the same locality reason.
+  app.route("/api/v1/workspaces", regradeRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing
