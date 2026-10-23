@@ -9,17 +9,13 @@
 // that into a projection an organiser sees before they find out from a
 // bill, not after.
 //
-// `K31`: projected from rows this instance already holds, plus the
-// workspace's own configured open tests — no Cloudflare API token, no
-// outbound call, no per-request counter. `estimated: true` is not a label
-// bolted onto the UI; the surface renders the literal word "estimated"
-// because that is what `spentToday` and `projected` both are: the former
-// counts rows 1:1 as the requests that wrote them (the honest
-// simplification a first cut makes — an `attempt_events` request can batch
-// up to ten rows, so this leans toward counting more requests than were
-// actually spent, never fewer, which is the direction an early warning
-// should err in), and the latter composes `estimateCost` (8a) exactly as
-// the publish checklist and the webhook panel (8d) do.
+// `K31`: projected from the workspace's own configured open tests — no
+// Cloudflare API token, no outbound call, no per-request counter.
+// `estimated: true` is not a label bolted onto the UI; the surface renders
+// the literal word "estimated" because that is what `projected` is: it
+// composes `estimateCost` (8a) exactly as the publish checklist and the
+// webhook panel (8d) do, plus `BASELINE_REQUESTS_PER_CANDIDATE` (see
+// below, `M1`).
 //
 // `K31` also fixes the only production caller `estimateCost` has had since
 // Phase 8a shipped it (`ResultsPanel.tsx`'s own header: "No route emits a
@@ -36,6 +32,34 @@
 // This is the phase's first cut (`K40`'s cut order): cutting it does not
 // cut the cost surface, because `K35`'s per-control estimates live with
 // their controls in 8a's checklist and 8d's webhook panel, not here.
+//
+// **Branch review, `C2` (CRITICAL) — `spentToday`/`countsToday`/
+// `UsageCounts` are deleted.** They existed to report what today's rows
+// already imply was spent, and every one of the three tables they counted
+// (`attempt`, `snapshot`, `event`) is indexed on `workspace_id` alone — no
+// `(workspace_id, started_at)`/`(workspace_id, taken_at)`/
+// `(workspace_id, server_ts)`. A `COUNT(*) WHERE workspace_id = ? AND
+// <date> >= ?` against that index reads every row the workspace holds in
+// that table before the date half of the condition ever narrows anything,
+// because D1 bills rows *examined*, not rows returned — windowing the
+// query to "today" (which it already was) does not change that cost; only
+// a composite index would, and that is a migration this branch must not
+// add (`K10`). One call against the 216,000-snapshot workspace this same
+// module's own worst-case scenario names would read ~216,000 rows to
+// answer a number that is normally zero. `projected` below is the half
+// that was always cheap — `openTestCosts`'s three reads are each bounded
+// by configuration (test count, candidate count, webhook count), never by
+// event volume — and the half an organiser can actually act on: "you
+// already spent 12,400 requests today" changes no decision; "the test you
+// are about to open will spend 216,000" changes one.
+//
+// **Branch review, the `D6` amendment is reverted, not kept.** Home no
+// longer calls `usage()` automatically on mount — see `home.tsx`'s own
+// header, which no longer carries an amendment at all. This route is
+// reached only on an explicit organiser gesture now, which was the option
+// `D6` itself already named ("if it wants an aggregate endpoint, that is
+// Phase 8's analytics work and the answer is no") and the one the original
+// cut-this-call argument never compared against.
 //
 // The queries below are raw SQL rather than a `packages/db` repo function
 // behind `scoped()` (`packages/db/src/repo/guard.ts`): Tasks 1, 2 and 4 on
@@ -62,23 +86,30 @@ export const FREE_PLAN_REQUESTS_PER_DAY = 100_000;
 export const WARN_AT = 0.7;
 
 /**
- * What today's rows already imply was spent. One field per table this
- * instance counts, each a 1:1 stand-in for the request that wrote the row —
- * deliberately the simple (and, for `events`, which batches up to ten rows
- * a request, slightly generous-to-the-warning) reading, not a weighted one:
- * `K40`'s first cut.
+ * Branch review `M1` (MAJOR): `estimateCost` (`packages/core/src/cost.ts`)
+ * returns `null` unless snapshots, an identity photo or webhooks are
+ * configured — correct for *its own* job (a per-control panel answering
+ * "what do these controls add"), and wrong once reused as a *total*: the
+ * default proctoring profile (`off`) and `standard` both leave every one
+ * of those three off, so a 300-candidate test at the product's defaults
+ * projected as exactly **0** — a confident green reading on the single
+ * most common test shape, while the real spend (one `/start`, one
+ * `/submit` and a save per answer, per candidate) is in the tens of
+ * thousands. Every candidate costs requests whether or not anyone is
+ * watching them.
+ *
+ * A flat per-candidate floor, not a per-question one: `TestCostInput`
+ * carries no section/question count (only `estimateCost`'s own four
+ * fields), and threading one through `openTestCosts` to make this
+ * proportional is more than this fix wave's finding asks for.
+ *
+ * ponytail: flat, not proportional to paper length — the honest simple
+ * reading, the same direction `K40`'s other first-cut numbers already
+ * lean. Refine (a real per-question estimate) once `openTestCosts` carries
+ * enough of the paper to compute one; until then this is the floor that
+ * keeps the meter from ever reading exactly zero for a test with a roster.
  */
-export interface UsageCounts {
-  /** `attempt` rows started today — `/start` and the timeout-materialising
-   *  read both write one of these, so this undercounts slightly; the other
-   *  two fields' overcounting is the one this project leans toward. */
-  attempts: number;
-  /** `snapshot` rows today — one row per `/attempt/snapshot` request. */
-  snapshots: number;
-  /** `event` rows today — up to ten batch into one `/attempt/events`
-   *  request, so this overcounts the true request total, never under. */
-  events: number;
-}
+export const BASELINE_REQUESTS_PER_CANDIDATE = 50;
 
 /** Exactly `estimateCost`'s own parameter shape (`packages/core/src/cost.ts`)
  *  — composed, never re-derived. */
@@ -90,8 +121,6 @@ export interface TestCostInput {
 }
 
 export interface UsageProjection {
-  /** Backward: what rows we already hold imply was spent today. */
-  spentToday: number;
   /** Forward: what the workspace's configured open tests will spend. */
   projected: number;
   limit: number;
@@ -103,55 +132,22 @@ export interface UsageProjection {
 /** Returns null on the node target (`K36`). */
 export function projectUsage(input: {
   target: "workers" | "node";
-  counts: UsageCounts;
   openTests: TestCostInput[];
 }): UsageProjection | null {
   if (input.target === "node") return null;
 
-  const spentToday = input.counts.attempts + input.counts.snapshots + input.counts.events;
   const projected = input.openTests.reduce(
-    (total, test) => total + (estimateCost(test)?.totalRequests ?? 0),
+    (total, test) =>
+      total + (estimateCost(test)?.totalRequests ?? 0) + test.candidates * BASELINE_REQUESTS_PER_CANDIDATE,
     0,
   );
   const limit = FREE_PLAN_REQUESTS_PER_DAY;
 
   return {
-    spentToday,
     projected,
     limit,
-    warn: (spentToday + projected) / limit >= WARN_AT,
+    warn: projected / limit >= WARN_AT,
     estimated: true,
-  };
-}
-
-const DAY_MS = 86_400_000;
-
-interface CountsRow {
-  attempts: number;
-  snapshots: number;
-  events: number;
-}
-
-/** Today's row counts, scoped to one workspace — one statement, three
- *  correlated subqueries, flat regardless of how many rows any of the
- *  three tables holds. */
-async function countsToday(
-  db: DbClient,
-  workspaceId: string,
-  dayStart: number,
-): Promise<UsageCounts> {
-  const rows = await db.query<CountsRow>(
-    "SELECT " +
-      "(SELECT COUNT(*) FROM attempt WHERE workspace_id = ? AND started_at >= ?) AS attempts, " +
-      "(SELECT COUNT(*) FROM snapshot WHERE workspace_id = ? AND taken_at >= ?) AS snapshots, " +
-      "(SELECT COUNT(*) FROM event WHERE workspace_id = ? AND server_ts >= ?) AS events",
-    [workspaceId, dayStart, workspaceId, dayStart, workspaceId, dayStart],
-  );
-  const row = rows[0];
-  return {
-    attempts: Number(row?.attempts ?? 0),
-    snapshots: Number(row?.snapshots ?? 0),
-    events: Number(row?.events ?? 0),
   };
 }
 
@@ -231,6 +227,13 @@ async function openTestCosts(
  * `K36`: on the `node` target this issues no query at all (there is
  * nothing a self-hosted container needs projected against a plan it is not
  * on) and answers `{}` — the field is omitted, never sent as `null`.
+ *
+ * Branch review `C2`: reached only when the organiser's own browser calls
+ * it — no caller in `apps/web` issues this on a mount or a timer (see
+ * `UsagePanel.tsx`). The three reads below are each bounded by
+ * configuration, not by event volume, which is what makes an on-demand
+ * call here safe to repeat as often as an organiser actually presses the
+ * gesture.
  */
 export function usageRoute(deps: AppDeps): Handler<AppBindings> {
   return async (c) => {
@@ -242,7 +245,6 @@ export function usageRoute(deps: AppDeps): Handler<AppBindings> {
     // reason.
     const workspaceId = c.req.param("id") ?? "";
     const now = deps.now();
-    const dayStart = Math.floor(now / DAY_MS) * DAY_MS;
 
     // `target === "node"` short-circuits the ternary's `: null` branch
     // without ever evaluating the one that queries — so a self-hosted
@@ -254,11 +256,7 @@ export function usageRoute(deps: AppDeps): Handler<AppBindings> {
     const usage =
       target === "node"
         ? null
-        : projectUsage({
-            target,
-            counts: await countsToday(deps.db, workspaceId, dayStart),
-            openTests: await openTestCosts(deps.db, workspaceId, now),
-          });
+        : projectUsage({ target, openTests: await openTestCosts(deps.db, workspaceId, now) });
 
     return c.json(usage === null ? {} : { usage });
   };

@@ -6,6 +6,15 @@
 // missing-field assertion passes for free when the field was never named
 // right, so "it's there on `workers`" has to be proved beside "it's gone on
 // `node`", not trusted on its own).
+//
+// Branch review fix wave: `C2` (CRITICAL) deleted `spentToday`/
+// `countsToday`/`UsageCounts` outright (see `usage/project.ts`'s own
+// header) — every test here that exercised that half is gone with it, not
+// adapted to a shape that no longer exists. `M1` (MAJOR) added
+// `BASELINE_REQUESTS_PER_CANDIDATE`, asserted below by name. `m2` (MINOR):
+// the exact numbers are asserted with `toBe`, never `toBeGreaterThan` —
+// a regression that returns `candidates` instead of `totalRequests`, or
+// drops the baseline term, passed the old assertion and fails this one.
 
 import { expect, it } from "vitest";
 import { addMembership, closeClient, createUser } from "@pariksha/db";
@@ -16,38 +25,23 @@ import { issueSession } from "../../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "../deps.js";
 import { seedWorkspace } from "../run/fixtures.js";
 import {
+  BASELINE_REQUESTS_PER_CANDIDATE,
   FREE_PLAN_REQUESTS_PER_DAY,
   projectUsage,
   type TestCostInput,
-  type UsageCounts,
 } from "../../src/usage/project.js";
 
 // --- `projectUsage`: pure, no database -----------------------------------
-
-const ZERO: UsageCounts = { attempts: 0, snapshots: 0, events: 0 };
-
-/** 400 + 11,500 + 500 — three real-looking row counts that sum to a figure
- *  with nothing coincidental about it, so a regression that drops one
- *  field (summing only two of three) produces a visibly wrong total rather
- *  than one that could pass by accident. */
-const counts: UsageCounts = { attempts: 400, snapshots: 11_500, events: 500 };
-
-/** A `counts` that spends exactly `fraction` of the daily ceiling, on
- *  `attempts` alone — the simplest fixture that puts the backward half of
- *  the sum at a precise point either side of `WARN_AT`. */
-const at = (fraction: number): UsageCounts => ({
-  attempts: Math.round(FREE_PLAN_REQUESTS_PER_DAY * fraction),
-  snapshots: 0,
-  events: 0,
-});
 
 /**
  * The scenario `snapshotCost`'s own comment already names
  * (`packages/core/src/proctoring.ts`): a Strict test, 180 minutes, a
  * 15-second snapshot cadence, 300 candidates — "216,000 Worker requests
- * across 300 candidates against a free-plan 100,000/day limit". The exact
- * test this feature exists for: an organiser about to run this sees the
- * projection before they run it.
+ * across 300 candidates against a free-plan 100,000/day limit" is the
+ * snapshot half alone; `strict` also defaults `identityPhoto: true`, so
+ * `estimateCost`'s own total is 300 × (720 snapshots + 1 identity photo) =
+ * 216,300, and `BASELINE_REQUESTS_PER_CANDIDATE` (`M1`) adds
+ * 300 × 50 = 15,000 on top — **231,300** exactly, asserted below.
  */
 const strict300: TestCostInput = {
   durationMinutes: 180,
@@ -56,28 +50,49 @@ const strict300: TestCostInput = {
   candidates: 300,
 };
 
-it("projects from attempts, snapshots and events", () => {
-  expect(projectUsage({ target: "workers", counts, openTests: [] })!.spentToday).toBe(12_400);
+/** `off` — the product's own default proctoring profile (`M1`'s subject):
+ *  no camera, no identity photo, no webhooks, so `estimateCost` returns
+ *  `null` and every request `projectUsage` reports for this test comes
+ *  from the baseline alone. `durationMinutes: 0`, not `null` — a `null`
+ *  duration makes `estimateCost` return `null` for an unrelated reason
+ *  (#179's "no duration set yet"), which this fixture is not testing. */
+const unproctored = (candidates: number): TestCostInput => ({
+  durationMinutes: 0,
+  resolved: PROCTORING_DEFAULTS.off,
+  webhookCount: 0,
+  candidates,
+});
+
+it("projects the exact figure for a configured test (M1: estimateCost plus the per-candidate baseline)", () => {
+  const p = projectUsage({ target: "workers", openTests: [strict300] })!;
+  expect(p.projected).toBe(231_300);
+});
+
+it("never projects zero for the product's default (unproctored) test shape — M1", () => {
+  const p = projectUsage({ target: "workers", openTests: [unproctored(300)] })!;
+  expect(p.projected).toBe(300 * BASELINE_REQUESTS_PER_CANDIDATE);
+  expect(p.projected).toBeGreaterThan(0);
 });
 
 it("warns at 70 per cent", () => {
-  expect(projectUsage({ target: "workers", counts: at(0.71), openTests: [] })!.warn).toBe(true);
-  expect(projectUsage({ target: "workers", counts: at(0.69), openTests: [] })!.warn).toBe(false);
+  // 1,420 × 50 = 71,000 (71%); 1,380 × 50 = 69,000 (69%) — the baseline
+  // alone, isolating the boundary from estimateCost's own arithmetic.
+  expect(projectUsage({ target: "workers", openTests: [unproctored(1_420)] })!.warn).toBe(true);
+  expect(projectUsage({ target: "workers", openTests: [unproctored(1_380)] })!.warn).toBe(false);
 });
 
-it("projects forward for a configured test with no attempts yet", () => {
-  const p = projectUsage({ target: "workers", counts: ZERO, openTests: [strict300] })!;
-  expect(p.spentToday).toBe(0);
-  expect(p.projected).toBeGreaterThan(0);
-  expect(p.warn).toBe(true);
+it("projects zero, and does not warn, for a workspace with no open tests", () => {
+  const p = projectUsage({ target: "workers", openTests: [] })!;
+  expect(p.projected).toBe(0);
+  expect(p.warn).toBe(false);
 });
 
 it("returns null on the node target", () => {
-  expect(projectUsage({ target: "node", counts, openTests: [strict300] })).toBeNull();
+  expect(projectUsage({ target: "node", openTests: [strict300] })).toBeNull();
 });
 
 it("always marks itself an estimate", () => {
-  expect(projectUsage({ target: "workers", counts, openTests: [] })!.estimated).toBe(true);
+  expect(projectUsage({ target: "workers", openTests: [] })!.estimated).toBe(true);
 });
 
 // --- `KG8`: nothing reaches a `node` deployment, over the real route -----
@@ -122,7 +137,14 @@ it("includes it under workers — control for the test above", async () => {
   expect(res.status).toBe(200);
   const body = (await res.json()) as { usage?: unknown };
   expect(body.usage).toBeDefined();
-  expect(body.usage).toMatchObject({ estimated: true, limit: FREE_PLAN_REQUESTS_PER_DAY });
+  // An empty workspace (no open tests) projects exactly zero — this is
+  // the control's own exact assertion, not merely "present".
+  expect(body.usage).toEqual({
+    projected: 0,
+    limit: FREE_PLAN_REQUESTS_PER_DAY,
+    warn: false,
+    estimated: true,
+  });
   await closeClient(deps.db);
 });
 
