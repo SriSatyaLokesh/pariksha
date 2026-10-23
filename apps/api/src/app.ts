@@ -651,6 +651,19 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `listLockedAttempts` (1, one statement whatever the row count — the
   // violation count rides a correlated subquery rather than a second
   // round trip per row). Flat in how many attempts are locked.
+  //
+  // Branch-review m2: flat in SUBREQUESTS, not in ROWS READ — there is no
+  // index on `attempt.locked_at` (`packages/db/src/schema/sqlite.ts`'s
+  // `attempt` table lists `workspace_id`, `candidate_id`,
+  // `test_version_id`), so the planner reads every attempt on this test
+  // (plus the correlated subquery's own per-row violation scan) to find the
+  // locked ones — unbounded in a test's candidate history, not in how many
+  // rows this route happens to return. Not blocking: this is the organiser's
+  // own page-load frequency, not the candidate hot path, and the fix wants
+  // `CREATE INDEX attempt_locked_idx ON attempt (workspace_id, locked_at)
+  // WHERE locked_at IS NOT NULL` — a migration this branch's own pin
+  // (`worker.test.ts`'s `migrations: 12`) should not grow for. Add it in
+  // whichever later phase already carries one.
   "/api/v1/workspaces/:id/tests/:testId/attempts": 4,
   // The unlock: auth (2) + `getAttemptLockState` (1, the existence-and-
   // scope read that is this route's own 404) + `unlockAttempt` (1, the
