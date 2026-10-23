@@ -46,6 +46,7 @@ import { TestStateBadge } from "./tests";
 import { useDialogKeys } from "../components/useDialogKeys";
 import { readView, writeView } from "../lib/view-url";
 import { readRailState, writeRailState, type RailState } from "../lib/rail-state";
+import { downloadJson } from "../lib/download";
 
 // Screens 7, 9, 11, 12 (docs/design.md's screen inventory): the builder
 // shell. Task 3 is only Screen 7 (sections, `SectionList`) — the access,
@@ -166,6 +167,11 @@ export function TestBuilder({
   // inside `BrandingPanel`, so the panel stays a controlled component like
   // every other one in this shell and the shell keeps owning every call.
   const canManageCandidates = role !== undefined && can({ role, action: "candidates.manage" });
+  // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete` is Owner-only and
+  // in no other role — the real gate the ResultsPanel lookup-then-act
+  // control below is told about, the same way every other role-gated
+  // control in this screen is.
+  const canDeleteCandidateData = role !== undefined && can({ role, action: "candidates.delete" });
   const [workspaceBranding, setWorkspaceBranding] = useState<TestBranding>(NO_BRANDING);
   // Task 9 (#60 / #56, P5.7b). Loaded beside the draft, and only when this
   // actor holds `candidates.manage` — the route 403s otherwise, and an
@@ -536,6 +542,27 @@ export function TestBuilder({
     }
   }
 
+  // Phase 8e Task 2 (`S-14`, issue 101): `ResultsPanel`'s lookup-then-act
+  // control. Same shape as `bank.tsx`'s own `onExport` — try/catch around
+  // the client call, `setError` on failure — not a new error surface.
+  async function exportCandidateData(candidateId: string): Promise<void> {
+    setError(undefined);
+    try {
+      const { data, filename } = await client.exportCandidateData(workspaceId, candidateId);
+      downloadJson(data, filename);
+    } catch (cause) {
+      setError(cause instanceof ApiError ? cause.message : "This candidate's data could not be exported.");
+    }
+  }
+
+  // Rejects rather than setting the page-level `error` — `CandidateDataPanel`
+  // itself shows the server's own message (the 409 an in-progress attempt
+  // answers with, most likely) next to the control that caused it, which
+  // is more useful here than a banner at the top of a long settings screen.
+  async function deleteCandidateData(candidateId: string, keepAnonymisedScore: boolean): Promise<void> {
+    await client.deleteCandidateData(workspaceId, candidateId, keepAnonymisedScore);
+  }
+
   return (
     <>
       {/* No wrapper element here. `admin.css`'s `.organiser__panel` is
@@ -823,6 +850,9 @@ export function TestBuilder({
               // through) — omitted here, not a stray `undefined`, which is
               // also `K36`'s own shape on `node`: absent is correct on
               // both targets until one exists.
+              canDeleteCandidateData={canDeleteCandidateData}
+              onExportCandidateData={(candidateId) => void exportCandidateData(candidateId)}
+              onDeleteCandidateData={deleteCandidateData}
             />
           </SettingRow>
 

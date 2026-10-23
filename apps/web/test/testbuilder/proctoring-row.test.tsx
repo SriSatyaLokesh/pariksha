@@ -112,6 +112,8 @@ function fakeClient(draft: TestVersionRow): ApiClient {
     uploadMedia: notUsed,
     candidates: async () => [],
     importCandidates: notUsed,
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
   };
 }
 

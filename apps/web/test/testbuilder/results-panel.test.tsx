@@ -15,6 +15,10 @@ const props = {
   onReleaseChange: vi.fn(),
   retention: undefined as TestRetention | undefined,
   onRetentionChange: vi.fn(),
+  // Phase 8e Task 2 (`S-14`, fix round 1): the lookup-then-act control.
+  canDeleteCandidateData: true,
+  onExportCandidateData: vi.fn(),
+  onDeleteCandidateData: vi.fn().mockResolvedValue(undefined),
 };
 
 const estimate: CostEstimate = {
@@ -64,6 +68,62 @@ describe("ResultsPanel", () => {
 
   it("the results panel has no axe violations", async () => {
     const { container } = render(<ResultsPanel {...props} cost={estimate} />);
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+// Phase 8e Task 2 (`S-14`, fix round 1, `AC-25`): the lookup-then-act
+// control — a candidate id typed in, then `CandidateDataPanel` mounted for
+// it. The panel's own behaviour (the typed confirmation, the Owner gate)
+// is covered in `test/organiser/candidate-data-panel.test.tsx`; this file
+// only covers the lookup step and that the right id reaches the callbacks.
+describe("ResultsPanel's candidate-data lookup", () => {
+  it("shows no candidate panel until an id is looked up", () => {
+    render(<ResultsPanel {...props} />);
+    expect(screen.queryByRole("group", { name: /Candidate data/i })).toBeNull();
+    expect(screen.getByRole("button", { name: /Look up/i })).toBeDisabled();
+  });
+
+  it("mounts CandidateDataPanel for the typed id, and wires export/delete through it", async () => {
+    const onExportCandidateData = vi.fn();
+    const onDeleteCandidateData = vi.fn().mockResolvedValue(undefined);
+    render(
+      <ResultsPanel
+        {...props}
+        onExportCandidateData={onExportCandidateData}
+        onDeleteCandidateData={onDeleteCandidateData}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText(/Candidate id/i), { target: { value: "cnd_123" } });
+    fireEvent.click(screen.getByRole("button", { name: /Look up/i }));
+
+    expect(await screen.findByRole("group", { name: /Candidate data/i })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /Download their data/i }));
+    expect(onExportCandidateData).toHaveBeenCalledWith("cnd_123");
+
+    fireEvent.click(screen.getByRole("button", { name: /Erase this candidate's data/i }));
+    fireEvent.change(await screen.findByLabelText(/Type ERASE to confirm/i), { target: { value: "ERASE" } });
+    fireEvent.click(screen.getByRole("button", { name: /Erase permanently/i }));
+    await screen.findByText(/data has been erased/i);
+    expect(onDeleteCandidateData).toHaveBeenCalledWith("cnd_123", true);
+  });
+
+  it("disables export and erasure for a non-Owner", async () => {
+    render(<ResultsPanel {...props} canDeleteCandidateData={false} />);
+    fireEvent.change(screen.getByLabelText(/Candidate id/i), { target: { value: "cnd_123" } });
+    fireEvent.click(screen.getByRole("button", { name: /Look up/i }));
+
+    expect(await screen.findByRole("button", { name: /Download their data/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /Erase this candidate's data/i })).toBeDisabled();
+  });
+
+  it("has no axe violations with the candidate panel loaded", async () => {
+    const { container } = render(<ResultsPanel {...props} />);
+    fireEvent.change(screen.getByLabelText(/Candidate id/i), { target: { value: "cnd_123" } });
+    fireEvent.click(screen.getByRole("button", { name: /Look up/i }));
+    await screen.findByRole("group", { name: /Candidate data/i });
     expect(await axe(container)).toHaveNoViolations();
   });
 });

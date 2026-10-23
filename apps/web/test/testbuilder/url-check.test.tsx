@@ -310,6 +310,8 @@ function viewClient(): ApiClient {
     uploadMedia: notUsed,
     candidates: async () => [],
     importCandidates: notUsed,
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
   };
 }
 

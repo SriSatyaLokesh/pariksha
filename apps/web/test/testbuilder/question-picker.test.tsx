@@ -186,6 +186,8 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     uploadMedia: notUsed,
     candidates: async () => [],
     importCandidates: notUsed,
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
     ...overrides,
   };
 }

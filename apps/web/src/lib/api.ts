@@ -448,6 +448,19 @@ export interface ApiClient {
     csv: string,
     opts?: { dryRun?: boolean },
   ): Promise<CandidateImportReport>;
+
+  // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete`, Owner-only —
+  // both methods share the one permission. `exportCandidateData` hands
+  // back the parsed document and the filename the server named it, rather
+  // than the raw `Response`, so a caller can go straight to
+  // `downloadJson` (`lib/download.ts`) the same way `exportBank` already
+  // does.
+  exportCandidateData(workspaceId: string, candidateId: string): Promise<{ data: unknown; filename: string }>;
+  deleteCandidateData(
+    workspaceId: string,
+    candidateId: string,
+    keepAnonymisedScore: boolean,
+  ): Promise<{ tablesTouched: string[] }>;
 }
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
@@ -807,6 +820,24 @@ export function createApiClient(): ApiClient {
         throw error;
       }
     },
+
+    async exportCandidateData(workspaceId, candidateId) {
+      const response = await request(`/workspaces/${workspaceId}/candidates/${candidateId}/data`);
+      // The route names the file in `content-disposition` (`errors.ts`'s
+      // own envelope carries no filename, so this is the one place it
+      // lives); a filename here is only a fallback for a proxy that drops
+      // the header, never the expected path.
+      const match = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "");
+      const filename = match?.[1] ?? `candidate_${candidateId}_export.json`;
+      return { data: (await response.json()) as unknown, filename };
+    },
+
+    deleteCandidateData: (workspaceId, candidateId, keepAnonymisedScore) =>
+      json<{ tablesTouched: string[] }>(`/workspaces/${workspaceId}/candidates/${candidateId}/data`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keepAnonymisedScore }),
+      }),
   };
 }
 
