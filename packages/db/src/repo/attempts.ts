@@ -702,7 +702,7 @@ export const unlockAttempt = scoped(
   async (
     db: DbClient,
     workspaceId: string,
-    input: { attemptId: string; now: number },
+    input: { attemptId: string },
   ): Promise<{ unlocked: boolean }> => {
     const { changes } = await db.run(
       "UPDATE attempt SET locked_at = NULL " + "WHERE workspace_id = ? AND id = ? AND locked_at IS NOT NULL",

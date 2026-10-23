@@ -28,11 +28,6 @@ import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { actorOr401, requires } from "../middleware/authorize.js";
 
-/** `ROUTE_BUDGETS` and `ROUTE_AUTH` key on these literally, the same reason
- *  `EVENTS_PATH` (`routes/proctoring.ts`) does. */
-export const LOCKED_ATTEMPTS_PATH = "/api/v1/workspaces/:id/tests/:testId/attempts";
-export const UNLOCK_PATH = "/api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock";
-
 /** The brief's own wire type, verbatim. */
 export interface LockedAttemptRow {
   attemptId: string;
@@ -89,21 +84,21 @@ export function attemptsRoutes(deps: AppDeps): Hono<AppBindings> {
     const existing = await getAttemptLockState(deps.db, workspaceId, { attemptId, testId });
     if (!existing) throw new ApiError(404, "not_found", "No such resource.");
 
-    const { unlocked } = await unlockAttempt(deps.db, workspaceId, { attemptId, now });
+    const { unlocked } = await unlockAttempt(deps.db, workspaceId, { attemptId });
     if (!unlocked) {
       throw new ApiError(409, "not_locked", "This attempt is not locked.");
     }
 
-    // `attempt_unlocked` (`SERVER_SYNTHESIZED_EVENTS`, `packages/core/src/
-    // proctoring.ts`) — written directly through `appendEvents`, the exact
-    // shape `routes/proctoring.ts`'s own `attempt_locked` marker uses,
-    // never through the candidate's own ingest schema.
-    await appendEvents(deps.db, workspaceId, {
-      attemptId,
-      events: [{ type: "attempt_unlocked" satisfies ProctoringEventType, clientTs: now }],
-      serverTs: now,
-    });
-
+    // m5: the audit row is `Q5b`'s whole point of this route, so it goes
+    // right after the write it is auditing — before the event marker,
+    // which is the lower-stakes of the two. Writing it last (the original
+    // order) meant a throw between the two left the attempt unlocked with
+    // no audit row at all: a silently unaudited privileged write. This
+    // ordering cannot make that failure disappear (D1 has no multi-
+    // statement transaction across these three repo calls), but it shrinks
+    // the unaudited window to "the event marker didn't write" instead of
+    // "the audit never happened".
+    //
     // `Q5b`: Phase 3's append-only log, not a `review` row. `KG9`:
     // `detail_json` carries ids only — there is nothing else to say here
     // that is not already the actor (the row's own `actor`) and the
@@ -113,6 +108,16 @@ export function attemptsRoutes(deps: AppDeps): Hono<AppBindings> {
       action: "attempt.unlock",
       target: attemptId,
       now,
+    });
+
+    // `attempt_unlocked` (`SERVER_SYNTHESIZED_EVENTS`, `packages/core/src/
+    // proctoring.ts`) — written directly through `appendEvents`, the exact
+    // shape `routes/proctoring.ts`'s own `attempt_locked` marker uses,
+    // never through the candidate's own ingest schema.
+    await appendEvents(deps.db, workspaceId, {
+      attemptId,
+      events: [{ type: "attempt_unlocked" satisfies ProctoringEventType, clientTs: now }],
+      serverTs: now,
     });
 
     return c.json({ unlocked: true });
