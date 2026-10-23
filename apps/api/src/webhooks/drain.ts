@@ -62,6 +62,21 @@ const NEVER_AGAIN = Number.MAX_SAFE_INTEGER;
  * comfortably under 50 even with real headroom to spare — a backlog past
  * this bound simply waits for the next tick, five minutes later, rather
  * than growing this tick's cost.
+ *
+ * Fix round 1, MINOR 2 — the wall-clock question, answered rather than
+ * guessed: the Workers **Free plan has no duration limit at all** ("No
+ * charge for duration," per Cloudflare's own docs), so 20 sequential
+ * `fetch`es each waiting up to `DELIVERY_TIMEOUT_MS` is not a ceiling this
+ * can breach — that wait is wall clock, not CPU, and the plan does not
+ * meter wall clock. What the free plan *does* cap is **10 ms of CPU time
+ * per invocation**, and this handler's only CPU cost is `DRAIN_BATCH_LIMIT`
+ * HMAC-SHA256 signatures (`tryDeliver` → `signatureHeader`) over small
+ * JSON bodies, plus the `JSON.stringify`/`jsonValue` work around them —
+ * hashing a few hundred bytes is microseconds of actual CPU, not
+ * milliseconds, so 20 of them stay nowhere near 10 ms even accounting for
+ * `crypto.subtle`'s per-call overhead. `DRAIN_BATCH_LIMIT` is sized off
+ * the subrequest ceiling above, not the CPU one, because the CPU one is
+ * not the binding constraint here.
  */
 export const DRAIN_BATCH_LIMIT = 20;
 
@@ -92,9 +107,16 @@ function nextState(row: DueRow, now: number, attempt: Attempt): { sql: string; p
     };
   }
 
+  // `attempt.error` is only ever set by `tryDeliver`'s own `catch` — a
+  // thrown/aborted fetch. An ordinary non-2xx response leaves it `null`,
+  // so without this fallback a ten-hour-old retry would carry a bare
+  // `last_status` and no sentence anyone reading the row could act on.
+  // Fix round 1, MINOR 1: this used to be computed only inside the
+  // give-up branch below, so an ordinary retry wrote `last_error = NULL`.
+  const reason = attempt.error ?? (attempt.status !== null ? `http ${attempt.status}` : "unknown error");
+
   const age = now - row.created_at;
   if (age >= MAX_RETRY_WINDOW_MS) {
-    const reason = attempt.error ?? (attempt.status !== null ? `http ${attempt.status}` : "unknown error");
     return {
       sql:
         "UPDATE webhook_delivery SET attempt_count = ?, last_status = ?, last_error = ?, next_attempt_at = ? " +
@@ -108,7 +130,7 @@ function nextState(row: DueRow, now: number, attempt: Attempt): { sql: string; p
     sql:
       "UPDATE webhook_delivery SET attempt_count = ?, last_status = ?, last_error = ?, next_attempt_at = ? " +
       "WHERE id = ?",
-    params: [attemptCount, attempt.status, attempt.error, now + delay, row.id],
+    params: [attemptCount, attempt.status, reason, now + delay, row.id],
   };
 }
 

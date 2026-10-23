@@ -101,6 +101,24 @@ describe("webhookDrainJob", () => {
     expect(row!.lastStatus).toBe(200);
   });
 
+  // Fix round 1, MINOR 1: an ordinary non-2xx failure carries no
+  // `attempt.error` (only a thrown/aborted fetch sets that), so without
+  // the hoisted `reason` fallback in `nextState` this retry's `last_error`
+  // was `NULL` — a bare `last_status` and nothing an operator could read.
+  // Deliberately NOT the give-up path (seeded fresh, not aged) so this
+  // proves the ordinary-retry branch specifically, not the already-covered
+  // terminal one.
+  it("leaves a readable reason on an ordinary retry, not a bare status code", async () => {
+    const { workspaceId, deliveryId } = await seedDue();
+
+    await webhookDrainJob.run({ ...deps, http: failingHttp() });
+
+    const row = await getDelivery(workspaceId, deliveryId);
+    expect(row!.lastStatus).toBe(500);
+    expect(row!.lastError).not.toBeNull();
+    expect(row!.lastError).toContain("500");
+  });
+
   it("takes nothing that is not yet due", async () => {
     const future = FIXED_NOW + 3_600_000;
     await seedDue(future);
