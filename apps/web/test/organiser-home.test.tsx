@@ -685,12 +685,14 @@ describe("a load that fails says so once (and stops saying Loading)", () => {
 });
 
 describe("Home reads only what already exists (D6)", () => {
-  // Phase 8e Task 3 (`K31`, #102) widened this to three — see `home.tsx`'s
-  // own header, which amends `D6` to say why.
-  it("calls only tests(), listBanks() and usage()", async () => {
+  // Phase 8e Task 3 tried widening this to three; the whole-branch review
+  // (`C2`, CRITICAL) found the trade wrong and reverted it — `usage()` is
+  // `UsagePanel`'s own gesture-triggered call now, never Home's own. This
+  // assertion is back to its pre-Task-3 shape.
+  it("calls only tests() and listBanks()", async () => {
     await openHome();
 
-    expect(calls).toEqual(["setupStatus", "me", "workspaces", "tests", "listBanks", "usage"]);
+    expect(calls).toEqual(["setupStatus", "me", "workspaces", "tests", "listBanks"]);
   });
 });
 

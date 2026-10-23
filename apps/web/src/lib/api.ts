@@ -262,9 +262,12 @@ export interface Workspace {
  * (`apps/api/src/usage/project.ts`) field for field — a second declaration
  * rather than a cross-app import, the same way `TestSummary` above
  * redeclares its own wire shape instead of reaching into `apps/api`.
+ *
+ * Branch review `C2` (CRITICAL): `spentToday` is gone. It cost every row
+ * the workspace held in three uncomposited tables to answer a number that
+ * was normally zero; `projected` alone is what an organiser can act on.
  */
 export interface UsageProjection {
-  spentToday: number;
   projected: number;
   limit: number;
   warn: boolean;

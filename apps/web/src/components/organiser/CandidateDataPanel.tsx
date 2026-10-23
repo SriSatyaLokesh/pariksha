@@ -18,9 +18,14 @@ import { useDialogKeys } from "../useDialogKeys";
 // `.button-secondary`, all already carrying `contrast-usage.test.ts`
 // `SURFACE` entries on both grounds through `ProctoringPanel`/`AccessPanel`.
 //
-// Reusable rather than wired into a route: there is no per-candidate
-// organiser view in this codebase yet to mount it in (the candidate list,
-// `AccessPanel.tsx`, shows aggregate counts only) — see the task report.
+// Mounted at `ResultsPanel.tsx` (fix round 1), behind the lookup-then-act
+// `CandidateLookup` control there — that panel already owns the policy
+// governing a candidate's data (the retention fields beside it), so acting
+// on one candidate's data sits there rather than inventing a fourth
+// organiser surface. There is still no per-candidate *route* of its own
+// (`AccessPanel.tsx`'s candidate list shows aggregate counts only); this
+// component stays reusable rather than route-bound on purpose, for
+// whichever screen next needs a single candidate's export/erasure controls.
 
 const CONFIRM_PHRASE = "ERASE";
 

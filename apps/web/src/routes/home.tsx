@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Actor, ApiClient, TestSummary, UsageProjection, Workspace } from "../lib/api";
+import type { Actor, ApiClient, TestSummary, Workspace } from "../lib/api";
 // One vocabulary for a test's state across both screens that name it
 // (whole-branch review, Minor 4): this row used to render the raw wire
 // value, so Home said `draft`/`open` where the test list says `Draft`/`Open`.
@@ -14,17 +14,16 @@ import { UsagePanel } from "../components/organiser/UsagePanel";
 // them, and if a future figure needs an aggregate, that is Phase 8's
 // analytics work and the answer is no.
 //
-// Phase 8e Task 3 (`K31`, `K36`, issue 102) is that future arriving: the one
-// amendment to `D6` this plan makes. `client.usage(workspaceId)` is a third
-// call, added deliberately rather than folded into an existing payload —
-// the alternative (riding along on `client.workspaces()`, already called at
-// boot) would compute a projection for every workspace an actor belongs to
-// on every sign-in, not only the one Home is showing, which spends D1 reads
-// to answer a question about D1 spend nobody asked yet. Fetched here
-// instead, it is paid once, only when Home is actually open, only for the
-// workspace on screen — `organiser-home.test.tsx`'s own "calls only
-// tests() and listBanks()" test is updated in the same commit to read
-// "...and usage()", which is this amendment's one visible trace.
+// Phase 8e Task 3 (`K31`, `K36`, issue 102) tried amending this rule with a
+// third automatic call, `client.usage(workspaceId)` — the whole-branch
+// review (`C2`, CRITICAL) found that trade wrong: the alternative it was
+// weighed against (riding the projection along on `client.workspaces()`,
+// already called at boot) is strictly worse, but the comparison never
+// included the option `D6` itself already names, "don't put an aggregate
+// on Home." **The amendment is reverted.** `UsagePanel` (below) owns its
+// own fetch now, behind an explicit organiser gesture — see that
+// component's own header. Home still calls exactly the two endpoints `D6`
+// always allowed.
 //
 // `D6a` refused the four-metric-tile grid: a label, a number and a sentence
 // tells an organiser nothing actionable. What replaces it is an agenda —
@@ -276,7 +275,6 @@ export function Home({
 }) {
   const [tests, setTests] = useState<TestSummary[] | null>(null);
   const [questions, setQuestions] = useState(0);
-  const [usage, setUsage] = useState<UsageProjection | undefined>(undefined);
   // The clock is read ONCE, when the two reads land, and not again.
   // `D21` says nothing moves when a pill is pressed — and a `Date.now()`
   // read during render would advance on every re-render, so a row sitting
@@ -289,20 +287,18 @@ export function Home({
   // would be reporting an event that never happened.
   const [status, setStatus] = useState("");
 
-  // `D6`, amended by Phase 8e Task 3 (`K31`, issue 102): three calls now, not
-  // two, this plan's one widening of that rule (see the header comment).
-  // Still in sequence rather than `Promise.all` — the recording guard in
-  // `test/organiser-home.test.tsx` asserts the order, and three reads on a
-  // page already waiting for its boot are not a latency problem worth
-  // `Promise.all`'s error handling.
+  // `D6`: two calls, and the screen never grows a third. They run in
+  // sequence rather than in parallel because the recording guard in
+  // `test/organiser-home.test.tsx` asserts the order, and because two reads
+  // on a page that is already waiting for its boot are not a latency
+  // problem worth a `Promise.all`'s error handling.
   useEffect(() => {
     // Cleared first, because this effect re-runs on a workspace SWITCH and
     // `OrganiserApp` renders Home without a key: without this the previous
     // workspace's agenda, figures and marking stay on screen under the new
-    // workspace's name until the reads land.
+    // workspace's name until the two reads land.
     setTests(null);
     setQuestions(0);
-    setUsage(undefined);
     setSelected(null);
     setStatus("");
     setError(null);
@@ -312,12 +308,10 @@ export function Home({
       try {
         const rows = await client.tests(workspace.id);
         const banks = await client.listBanks(workspace.id);
-        const projection = await client.usage(workspace.id);
         if (!live) return;
         setNow(Date.now());
         setTests(rows);
         setQuestions(banks.reduce((total, bank) => total + bank.questionCount, 0));
-        setUsage(projection);
       } catch {
         if (!live) return;
         setError("Pariksha could not load this workspace. Reload to try again.");
@@ -393,9 +387,10 @@ export function Home({
         <span className="home__figure">{questions}</span> questions
       </p>
 
-      {/* Phase 8e Task 3 (`K31`, `K36`, issue 102): renders nothing on its own —
-          `undefined` on `node` and before the third read lands alike. */}
-      <UsagePanel usage={usage} />
+      {/* Phase 8e Task 3 (`K31`, `K36`, issue 102), reverted `D6` amendment
+          (branch review `C2`): owns its own fetch, behind its own button —
+          Home makes no `usage()` call of any kind. */}
+      <UsagePanel client={client} workspaceId={workspace.id} />
 
       {error !== null && (
         <p className="home__empty" role="alert">

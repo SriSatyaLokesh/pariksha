@@ -157,7 +157,8 @@
 .home__usage {
   display: flex;
   align-items: center;
-  gap: var(--space-xs);
+  flex-wrap: wrap;
+  gap: var(--space-xs) var(--space-base);
   margin: var(--space-xs) 0 0;
 }
 
@@ -175,6 +176,26 @@
    scored. Only the weight sets this apart from the sentence around it. */
 .home__usage-figure {
   font-weight: 600;
+}
+
+/* The gesture button (`C2`'s fix): `.home__usage-text` alone sets its
+   colour (reused, not duplicated — see this file's own note above); every
+   property here is layout/reset, never `color`, so there is nothing new
+   for `contrast-usage.test.ts`'s exhaustive sweep to account for. */
+.home__usage-check {
+  appearance: none;
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.home__usage-check:disabled {
+  cursor: default;
+  text-decoration: none;
 }
 
 /* ---- The two panes ----------------------------------------------------- */
