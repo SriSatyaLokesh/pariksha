@@ -304,16 +304,28 @@ export interface TestAnalytics {
   averageSeconds: number | null;
   integrity: { clean: number; review: number; high_risk: number };
   perSet: { setNo: number; n: number; mean: number | null }[];
+  /** Fix round 1, Important 1: true when the attempt fetch hit the
+   *  repository's hard page cap with more still unread — every figure
+   *  above then covers the first attempts read, not the whole cohort. */
+  truncated: boolean;
 }
 
 /**
  * Phase 8c Task 2 (`R-07`, #95). Mirrors `ItemStat`
- * (`@pariksha/core/src/item-analysis.ts`) field for field. `DISCRIMINATION_MIN_N`
- * is not redeclared here — it is a shared constant, not a wire shape, so
- * the screen imports it from `@pariksha/core` directly.
+ * (`@pariksha/core/src/item-analysis.ts`) field for field, plus `stem` —
+ * **not** part of the core type (a pure function never reads a question
+ * document), but part of this *route's own* response shape
+ * (`apps/api/src/routes/analytics.ts`'s `ItemStatWithStem`, fix round 1,
+ * Important 2) the same way `GradingQueueRow` widens `PendingAward` with
+ * the question itself. `DISCRIMINATION_MIN_N` is not redeclared here — it
+ * is a shared constant, not a wire shape, so the screen imports it from
+ * `@pariksha/core` directly.
  */
 export interface ItemStat {
   questionId: string;
+  /** One line, truncated by the screen — `"(question removed from the
+   *  bank)"` when the id no longer names one. */
+  stem: string;
   /** 0-1. */
   shareCorrect: number;
   /** null below `DISCRIMINATION_MIN_N`, and null for a question with no
@@ -622,7 +634,10 @@ export interface ApiClient {
    * Not `TestSummary` — that name already means something else at
    * `api.ts:114` and is imported by nine files.
    */
-  analytics(workspaceId: string, testId: string): Promise<{ analytics: TestAnalytics; items: ItemStat[] }>;
+  analytics(
+    workspaceId: string,
+    testId: string,
+  ): Promise<{ analytics: TestAnalytics; items: ItemStat[]; itemsTruncated: boolean }>;
 
   /**
    * Phase 8b Task 1 (`K14`): records a rubric award and rescores the
@@ -1272,7 +1287,7 @@ export function createApiClient(): ApiClient {
       ),
 
     analytics: (workspaceId, testId) =>
-      json<{ analytics: TestAnalytics; items: ItemStat[] }>(
+      json<{ analytics: TestAnalytics; items: ItemStat[]; itemsTruncated: boolean }>(
         `/workspaces/${workspaceId}/tests/${testId}/analytics`,
       ),
 

@@ -7,9 +7,11 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import type { ItemStat, TestAnalytics } from "../../src/lib/api";
+import type { ApiClient, ItemStat, TestAnalytics } from "../../src/lib/api";
 import { AnalyticsRoute } from "../../src/routes/analytics";
 import { fakeClient } from "../fixtures/api-client";
+
+type AnalyticsFn = ApiClient["analytics"];
 
 const WORKSPACE_ID = "wsp_1";
 const TEST_ID = "tst_1";
@@ -24,11 +26,13 @@ const BASE_ANALYTICS: TestAnalytics = {
   averageSeconds: 1800,
   integrity: { clean: 8, review: 1, high_risk: 0 },
   perSet: [{ setNo: 1, n: 9, mean: 64.2 }],
+  truncated: false,
 };
 
 const ITEMS: ItemStat[] = [
   {
     questionId: "qst_1",
+    stem: "A train 180 m long crosses a platform in 24 s. Find the platform length.",
     shareCorrect: 0.3,
     discrimination: 0.42,
     discriminationWithheld: null,
@@ -37,6 +41,7 @@ const ITEMS: ItemStat[] = [
   },
   {
     questionId: "qst_2",
+    stem: "Which figure completes the series shown above?",
     shareCorrect: 0.9,
     discrimination: null,
     discriminationWithheld: "too_few_attempts",
@@ -45,6 +50,7 @@ const ITEMS: ItemStat[] = [
   },
   {
     questionId: "qst_3",
+    stem: "Select the odd one out from the five words given.",
     shareCorrect: 1,
     discrimination: null,
     discriminationWithheld: "no_variance",
@@ -53,14 +59,27 @@ const ITEMS: ItemStat[] = [
   },
 ];
 
-function renderReady(overrides: { analytics?: Partial<TestAnalytics>; items?: ItemStat[] } = {}) {
+function renderReady(
+  overrides: {
+    analytics?: Partial<TestAnalytics>;
+    items?: ItemStat[];
+    itemsTruncated?: boolean;
+    analyticsSpy?: ReturnType<typeof vi.fn<AnalyticsFn>>;
+  } = {},
+) {
   const analytics: TestAnalytics = { ...BASE_ANALYTICS, ...overrides.analytics };
   const items = overrides.items ?? ITEMS;
+  const itemsTruncated = overrides.itemsTruncated ?? false;
+  const fetchAnalytics: AnalyticsFn =
+    overrides.analyticsSpy ?? (async () => ({ analytics, items, itemsTruncated }));
+  if (overrides.analyticsSpy) {
+    overrides.analyticsSpy.mockResolvedValue({ analytics, items, itemsTruncated });
+  }
   return render(
     <AnalyticsRoute
       workspaceId={WORKSPACE_ID}
       testId={TEST_ID}
-      client={fakeClient({ analytics: async () => ({ analytics, items }) })}
+      client={fakeClient({ analytics: fetchAnalytics })}
     />,
   );
 }
@@ -81,7 +100,14 @@ describe("AnalyticsRoute — R-06 figures", () => {
   it("buckets the distribution into ten rows", async () => {
     renderReady();
     await screen.findByText("Score distribution");
-    expect(screen.getAllByRole("progressbar")).toHaveLength(10 + 1 /* share-correct */ * ITEMS.length + 1 /* set */ + 3 /* integrity */);
+    // 10 histogram buckets + one share-correct bar per item + one
+    // discrimination gauge per PRESENT item (qst_1 only — the two absent
+    // rows render a hatch/flat mark instead, Important 3's own fix) + one
+    // per-set bar + the integrity band's three.
+    const presentDiscriminationCount = ITEMS.filter((i) => i.discriminationWithheld === null).length;
+    expect(screen.getAllByRole("progressbar")).toHaveLength(
+      10 + ITEMS.length + presentDiscriminationCount + 1 + 3,
+    );
   });
 
   it("renders the absent pass rate in words, with both misreadings negated", async () => {
@@ -167,13 +193,23 @@ describe("AnalyticsRoute — R-07 item table", () => {
   });
 
   it("sorts by share correct on request, and keeps the sort client-side (no new fetch)", async () => {
-    renderReady();
+    // Fix round 1, Minor 2: the original version of this test asserted
+    // only the resulting order, which would pass even if sorting issued a
+    // fresh request per click — a test that does not test its own name.
+    // The spy is what actually proves "client-side".
+    const analyticsSpy = vi.fn<AnalyticsFn>();
+    renderReady({ analyticsSpy });
     await screen.findByText("Every question");
+    expect(analyticsSpy).toHaveBeenCalledTimes(1);
+
     fireEvent.click(screen.getByRole("button", { name: /Share correct/ }));
     expect(questionOrder()).toEqual(["qst_3", "qst_2", "qst_1"]);
+    expect(analyticsSpy).toHaveBeenCalledTimes(1);
+
     // Clicking again reverses it.
     fireEvent.click(screen.getByRole("button", { name: /Share correct/ }));
     expect(questionOrder()).toEqual(["qst_1", "qst_2", "qst_3"]);
+    expect(analyticsSpy).toHaveBeenCalledTimes(1);
   });
 
   it("returns to question order from the accessible Sort by control", async () => {
@@ -190,6 +226,68 @@ describe("AnalyticsRoute — R-07 item table", () => {
     await screen.findByText("Every question");
     expect(screen.getByText("b 70%")).toBeInTheDocument();
     expect(screen.getAllByText("no option data").length).toBeGreaterThan(0);
+  });
+
+  // Fix round 1, Important 2.
+  it("renders the question's own stem, joined by the route, not a bare id", async () => {
+    renderReady();
+    await screen.findByText("Every question");
+    expect(screen.getByText(ITEMS[0]!.stem)).toBeInTheDocument();
+    expect(screen.getByText(ITEMS[1]!.stem)).toBeInTheDocument();
+  });
+
+  // Fix round 1, Important 3: a present discrimination value gets the same
+  // `.analytics-disc` gauge the two absent states use, not bare text.
+  it("renders a gauge bar for a present discrimination value, aligned with the absent states", async () => {
+    renderReady();
+    await screen.findByText("Every question");
+    // qst_1's 0.42 is the only present value among the three fixture rows.
+    expect(screen.getByLabelText("Discrimination index")).toBeInTheDocument();
+  });
+
+  // Fix round 1, Minor 1: the approved prototype's own glyph for a
+  // negative index is △ (outlined), not ▲ (filled).
+  it("marks a negative discrimination with the prototype's own outlined triangle", async () => {
+    renderReady({
+      items: [
+        {
+          questionId: "qst_14",
+          stem: "A bad question.",
+          shareCorrect: 0.31,
+          discrimination: -0.14,
+          discriminationWithheld: null,
+          optionPickRates: {},
+          n: 290,
+        },
+      ],
+    });
+    await screen.findByText("Every question");
+    expect(screen.getByText("-0.14")).toBeInTheDocument();
+    const row = screen.getByText("-0.14").closest("tr")!;
+    expect(within(row).getByText("△")).toBeInTheDocument();
+    expect(within(row).queryByText("▲")).not.toBeInTheDocument();
+  });
+});
+
+describe("AnalyticsRoute — truncation (Fix round 1, Important 1)", () => {
+  it("states when the R-06 figures cover fewer attempts than the full cohort", async () => {
+    renderReady({ analytics: { truncated: true } });
+    // "cohort" is R-06's own banner wording; R-07's reads "roster" at the
+    // same spot — distinct so this assertion cannot pass off the wrong one.
+    expect(await screen.findByText(/not the whole cohort/)).toBeInTheDocument();
+    expect(screen.queryByText(/not the whole roster/)).not.toBeInTheDocument();
+  });
+
+  it("says nothing about truncation when neither fetch was truncated", async () => {
+    renderReady();
+    await screen.findByText("Test analytics");
+    expect(screen.queryByText(/larger than one pass could read/)).not.toBeInTheDocument();
+  });
+
+  it("states when the R-07 item figures cover fewer attempts than the full cohort", async () => {
+    renderReady({ itemsTruncated: true });
+    expect(await screen.findByText(/not the whole roster/)).toBeInTheDocument();
+    expect(screen.queryByText(/not the whole cohort/)).not.toBeInTheDocument();
   });
 });
 

@@ -341,6 +341,21 @@
   cursor: pointer;
 }
 
+/* Fix round 1, Important 2: the question stem, one line with no overflow
+   affordance (the approved prototype's own named-unfinished item). Applied
+   to the inner span, not the `<td>`: a block box with its own hard
+   `max-width` truncates reliably under `table-layout: auto` (the table's
+   default — every other column still sizes itself to its own content),
+   where a `max-width` on the cell itself would need `table-layout: fixed`
+   and an explicit width on every other column besides. */
+.analytics-items__stem {
+  display: block;
+  max-width: 320px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* The discrimination cell: one three-track grid so the column stays
    aligned whichever of the three renderings a row needs. */
 .analytics-disc {
@@ -352,6 +367,28 @@
 .analytics-disc__gauge {
   height: 16px;
   position: relative;
+}
+/* Centers the gauge's 8px bar within the 16px box — static, not per-row. */
+.analytics-disc__gauge .analytics-progress {
+  position: relative;
+  top: 4px;
+}
+/* The zero baseline every present value is measured from — a static tick
+   at the gauge's own centre, `--edge-strong` for the same 3:1 non-text
+   reason the hatch and flat marks below use it. */
+.analytics-disc__zero {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  left: 50%;
+  width: 1px;
+  background: var(--edge-strong);
+}
+/* A negative index is the thing this table exists to surface: the bar's
+   own fill shortens below the centre tick (shape), a triangle precedes the
+   figure (glyph), and only then does the risk tint arrive (hue). */
+.analytics-disc__progress--neg {
+  accent-color: var(--risk);
 }
 /* Nothing was gathered (`too_few_attempts`) — a diagonal hatch. */
 .analytics-disc__hatch {

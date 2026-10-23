@@ -10,13 +10,15 @@ import { ApiError, type ApiClient, type ItemStat, type TestAnalytics } from "../
 //
 // `ItemStat` (`@pariksha/core`) carries no question stem, type, section or
 // correct-option id — only `questionId`, `shareCorrect`, `discrimination`,
-// `discriminationWithheld`, `optionPickRates` and `n`. The prototype's
-// stem/type columns and its "✓ key" / "▲ over-polling" pick-rate markers
-// were drawn from a mocked row shape richer than the real interface; this
-// screen renders what the real one carries and nothing it has to invent.
-// Widening `ItemStat` to add a bank lookup is a different task's scope
-// (Task 2's own interface is already merged and is not this task's to
-// rewrite).
+// `discriminationWithheld`, `optionPickRates` and `n`. That stays true: it
+// is a pure-function type and is not this task's to widen. The *route's*
+// own response shape is not that type, though — `apps/api/src/routes/
+// analytics.ts` joins each row's `stem` from `workspaceQuestions` (fix
+// round 1, Important 2), the way `GradingQueueRow` joins a question's
+// `prompt` one file over — and `web/lib/api.ts`'s own `ItemStat` wire type
+// carries that extra field. The prototype's "✓ key" / "▲ over-polling"
+// pick-rate markers are still not rendered: the data has no correct-option
+// id to mark either against, stem or no stem.
 //
 // `K2`, stated on the surface: no time figure anywhere below, and the foot
 // note says so in words rather than being an omission a reader has to
@@ -32,7 +34,7 @@ interface SortState {
 type LoadState =
   | { status: "loading" }
   | { status: "error"; message: string }
-  | { status: "ready"; analytics: TestAnalytics; items: ItemStat[] };
+  | { status: "ready"; analytics: TestAnalytics; items: ItemStat[]; itemsTruncated: boolean };
 
 /**
  * `"order"` is the array order `itemAnalysis` returns — first appearance in
@@ -132,13 +134,35 @@ function DiscriminationCell({ item }: { item: ItemStat }) {
       </div>
     );
   }
+  // Present. Fix round 1, Important 3: this branch used to render bare
+  // text with no `.analytics-disc` wrapper at all, which broke the
+  // column's alignment against the two absent states above and dropped
+  // one of the prototype's three negative-index signals (the bar running
+  // the other way from a centre baseline). `value + 1` over `max={2}`
+  // keeps discrimination's -1..1 domain inside a `<progress>`'s own 0..max
+  // fill model — no inline style, native `role="progressbar"` — with a
+  // static centre tick (`.analytics-disc__zero`, plain CSS, the same
+  // non-text 3:1 rule the two absences' hatch/flat marks already use) as
+  // the reference a shorter-than-half fill reads against.
   const value = item.discrimination ?? 0;
   const negative = value < 0;
+  const gaugeValue = Math.min(2, Math.max(0, value + 1));
   return (
-    <span className={negative ? "analytics-meta analytics-risk" : "analytics-meta"}>
-      {negative && <span aria-hidden="true">{"▲ "}</span>}
-      {value.toFixed(2)}
-    </span>
+    <div className="analytics-disc">
+      <span className="analytics-disc__gauge">
+        <progress
+          className={negative ? "analytics-progress analytics-disc__progress--neg" : "analytics-progress"}
+          value={gaugeValue}
+          max={2}
+          aria-label="Discrimination index"
+        />
+        <span className="analytics-disc__zero" aria-hidden="true" />
+      </span>
+      <span className={negative ? "analytics-meta analytics-risk" : "analytics-meta"}>
+        {negative && <span aria-hidden="true">{"△ "}</span>}
+        {value.toFixed(2)}
+      </span>
+    </div>
   );
 }
 
@@ -177,8 +201,8 @@ export function AnalyticsRoute({
   const load = useCallback(async () => {
     setState({ status: "loading" });
     try {
-      const { analytics, items } = await client.analytics(workspaceId, testId);
-      setState({ status: "ready", analytics, items });
+      const { analytics, items, itemsTruncated } = await client.analytics(workspaceId, testId);
+      setState({ status: "ready", analytics, items, itemsTruncated });
     } catch (cause) {
       setState({
         status: "error",
@@ -211,7 +235,7 @@ export function AnalyticsRoute({
     );
   }
 
-  const { analytics } = state;
+  const { analytics, itemsTruncated } = state;
   const { counts } = analytics;
   const everEnded = counts.submitted + counts.autoSubmitted + counts.locked;
 
@@ -242,6 +266,14 @@ export function AnalyticsRoute({
         <h2 className="analytics-band__title">Test analytics</h2>
         <span className="analytics-meta analytics-band__meta">R-06 · {counts.registered} registered</span>
       </div>
+
+      {analytics.truncated && (
+        <p className="analytics-hint" role="status">
+          This test's attempt cohort is larger than one pass could read. The figures below cover the first{" "}
+          {counts.inProgress + counts.submitted + counts.autoSubmitted + counts.locked} attempts read, not the whole
+          cohort — not wrong, but not complete either.
+        </p>
+      )}
 
       <section className="card-hairline analytics-counts" aria-label="Attempt counts">
         <div className="analytics-count">
@@ -435,6 +467,13 @@ export function AnalyticsRoute({
         <span className="analytics-meta analytics-band__meta">R-07 · {sorted.length} questions</span>
       </div>
 
+      {itemsTruncated && (
+        <p className="analytics-hint" role="status">
+          This test's attempt cohort is larger than one pass could read, so the figures below are computed from the
+          first attempts read, not the whole roster — not wrong, but not complete either.
+        </p>
+      )}
+
       <section className="card-hairline" aria-label="Item analysis">
         <div className="analytics-panel__head">
           <h3 className="analytics-panel__title">Every question</h3>
@@ -458,6 +497,7 @@ export function AnalyticsRoute({
           <table>
             <thead>
               <tr>
+                <th scope="col">Q</th>
                 <th scope="col">Question</th>
                 <th scope="col">n</th>
                 <th scope="col" aria-sort={ariaSortOf(sort, "shareCorrect")}>
@@ -474,6 +514,9 @@ export function AnalyticsRoute({
                 <tr key={item.questionId}>
                   <td>
                     <span className="analytics-meta">{item.questionId}</span>
+                  </td>
+                  <td>
+                    <span className="analytics-label analytics-items__stem">{item.stem}</span>
                   </td>
                   <td>
                     <span className="analytics-meta">{item.n}</span>

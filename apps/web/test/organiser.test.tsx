@@ -1436,8 +1436,10 @@ describe("OrganiserApp routes on state, not on a URL", () => {
         averageSeconds: 600,
         integrity: { clean: 2, review: 0, high_risk: 0 },
         perSet: [],
+        truncated: false,
       },
       items: [],
+      itemsTruncated: false,
     }));
     render(
       <OrganiserApp
