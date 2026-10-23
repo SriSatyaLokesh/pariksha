@@ -539,6 +539,114 @@ export const lockAttempt = scoped(
 );
 
 /**
+ * Phase 7e Task 4 (`Q5a`): the organiser's one read — a locked attempt's
+ * candidate label, lock time, violation count and remaining time, for the
+ * one test this read is scoped to. Joined on `candidate` (not
+ * `test_version`, which `attempt` itself points at) because `candidate.
+ * test_id` is the direct column every attempt's own candidate carries —
+ * one join, not two.
+ *
+ * `violations` is a correlated subquery rather than a second round trip,
+ * the same "flat in row count" shape `invites.ts`'s own batch is: ten
+ * locked attempts cost the same one statement as one.
+ */
+export interface LockedAttemptRecord {
+  attemptId: string;
+  candidateLabel: string;
+  lockedAt: number;
+  deadlineAt: number;
+  violations: number;
+}
+
+export const listLockedAttempts = scoped(
+  "listLockedAttempts",
+  async (db: DbClient, workspaceId: string, testId: string): Promise<LockedAttemptRecord[]> => {
+    const rows = await db.query<{
+      id: string;
+      locked_at: number;
+      deadline_at: number;
+      external_id: string | null;
+      candidate_id: string;
+      violations: number;
+    }>(
+      "SELECT a.id, a.locked_at, a.deadline_at, c.external_id, c.id AS candidate_id, " +
+        `(SELECT COUNT(*) FROM event e WHERE e.workspace_id = a.workspace_id AND e.attempt_id = a.id ` +
+        `AND e.type IN (${VIOLATION_PLACEHOLDERS})) AS violations ` +
+        "FROM attempt a JOIN candidate c ON c.id = a.candidate_id " +
+        "WHERE a.workspace_id = ? AND c.test_id = ? AND a.locked_at IS NOT NULL " +
+        "ORDER BY a.locked_at DESC",
+      [...VIOLATION_TYPES, workspaceId, testId],
+    );
+    return rows.map((row) => ({
+      attemptId: row.id,
+      // The candidate's identity column — the same fallback `emailOf`'s own
+      // header documents (`apps/api/src/import/candidates.ts`): a
+      // self-registered candidate (Task 3's `createCandidate`) carries no
+      // `external_id` at all, so the row id is what is left to show.
+      candidateLabel: row.external_id ?? row.candidate_id,
+      lockedAt: Number(row.locked_at),
+      deadlineAt: Number(row.deadline_at),
+      violations: Number(row.violations),
+    }));
+  },
+);
+
+/**
+ * Phase 7e Task 4: the one existence-and-scope read the unlock route needs
+ * before it writes — whether `attemptId` names a real attempt belonging to
+ * `testId` in this workspace, and whether it is currently locked. Kept
+ * separate from `unlockAttempt`'s own write below (rather than folding the
+ * `testId` scope into that `UPDATE`'s `WHERE`) because the two failures read
+ * differently to a caller: no such attempt on this test is 404, and an
+ * attempt that exists but is not locked is 409 — `invites.ts`'s own
+ * existence-check-then-write shape, not a new one.
+ */
+export const getAttemptLockState = scoped(
+  "getAttemptLockState",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; testId: string },
+  ): Promise<{ lockedAt: number | null } | null> => {
+    const rows = await db.query<{ locked_at: number | null }>(
+      "SELECT a.locked_at FROM attempt a JOIN candidate c ON c.id = a.candidate_id " +
+        "WHERE a.workspace_id = ? AND a.id = ? AND c.test_id = ?",
+      [workspaceId, input.attemptId, input.testId],
+    );
+    const row = rows[0];
+    if (!row) return null;
+    return { lockedAt: row.locked_at === null ? null : Number(row.locked_at) };
+  },
+);
+
+/**
+ * Phase 7e Task 4 (`Q5a`/`Q5c`): the only way out of a lock. The mirror of
+ * `lockAttempt` above — same `UPDATE`, same defence-in-depth `WHERE`, same
+ * `{ unlocked }` shape — and, like that function, not a second idempotency
+ * check of its own: the route calls `getAttemptLockState` first for the 404
+ * and 409 this needs, and this statement only writes once that is settled.
+ *
+ * Touches `locked_at` and nothing else. `deadline_at` is not in this
+ * `UPDATE`'s `SET` list, which is `Q5c`'s "no refund" ruling made structural
+ * rather than merely documented: there is no code path here that could
+ * extend an attempt's clock even by accident.
+ */
+export const unlockAttempt = scoped(
+  "unlockAttempt",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { attemptId: string; now: number },
+  ): Promise<{ unlocked: boolean }> => {
+    const { changes } = await db.run(
+      "UPDATE attempt SET locked_at = NULL " + "WHERE workspace_id = ? AND id = ? AND locked_at IS NOT NULL",
+      [workspaceId, input.attemptId],
+    );
+    return { unlocked: changes > 0 };
+  },
+);
+
+/**
  * `Q4f`: call this only after the object `input.storageKey` names has
  * actually been written — that ordering is the route's job, not this
  * function's, the same way `upsertResponse` trusts its caller on sequencing.

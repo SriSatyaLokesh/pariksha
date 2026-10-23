@@ -24,6 +24,7 @@ import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
+import { attemptsRoutes } from "./routes/attempts.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
@@ -540,6 +541,21 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1), one `batch` however long the list is (1), and the audit row (1).
   // Flat in the list's size, which `test/invites.test.ts` measures at 200.
   "/api/v1/workspaces/:id/tests/:testId/invites": 7,
+
+  // Phase 7e Task 4 (`Q5a`): the minimal pair — a locked-attempts read and
+  // the unlock. Measured (`apps/api/test/attempts/unlock.test.ts`'s own
+  // "measures the real subrequest cost" tests), not estimated.
+  //
+  // The list: auth (2) + `getTest` (1, the existence check) +
+  // `listLockedAttempts` (1, one statement whatever the row count — the
+  // violation count rides a correlated subquery rather than a second
+  // round trip per row). Flat in how many attempts are locked.
+  "/api/v1/workspaces/:id/tests/:testId/attempts": 4,
+  // The unlock: auth (2) + `getAttemptLockState` (1, the existence-and-
+  // scope read that is this route's own 404) + `unlockAttempt` (1, the
+  // write) + `appendEvents` (1, the `attempt_unlocked` marker) +
+  // `appendAudit` (1).
+  "/api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": 6,
 };
 
 /**
@@ -624,6 +640,12 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
+
+  // Phase 7e Task 4 (`Q5a`): the minimal pair. `attempts.monitor` is the
+  // matrix's own permission for this — the `proctor` role holds it and
+  // nothing wider than it needs to.
+  "GET /api/v1/workspaces/:id/tests/:testId/attempts": "attempts.monitor",
+  "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "attempts.monitor",
 };
 
 /**
@@ -827,6 +849,9 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
+  // Phase 7e Task 4 (`Q5a`): the minimal pair.
+  "GET /api/v1/workspaces/:id/tests/:testId/attempts": "workspace",
+  "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -857,6 +882,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", questionRoutes(deps));
   app.route("/api/v1/workspaces", mediaRoutes(deps));
   app.route("/api/v1/workspaces", testRoutes(deps));
+  // Phase 7e Task 4: the minimal pair — locality with `testRoutes` rather
+  // than necessity, the same reason `proctoringRoutes`' own position below
+  // is.
+  app.route("/api/v1/workspaces", attemptsRoutes(deps));
   // The one route outside `/api/v1/workspaces/:id/...` this phase mounts —
   // deliberately public and unguarded (Review Focus 5, ADR 0006's
   // precedent). `apps/api/src/index.ts` has its own matching change so this
