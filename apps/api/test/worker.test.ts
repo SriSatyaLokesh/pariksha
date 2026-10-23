@@ -7,7 +7,7 @@
 
 import { createExecutionContext, env, SELF, waitOnExecutionContext } from "cloudflare:test";
 import { expect, it, vi } from "vitest";
-import { claimViolationLimit, d1Client, migrate, newId } from "@pariksha/db";
+import { claimViolationLimit, d1Client, migrate, newId, sqliteMigrations } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
 import { SCHEDULED_JOBS } from "../src/scheduled.js";
@@ -107,6 +107,75 @@ it("a second run applies nothing", async () => {
   await migrate(binding());
 
   expect((await migrate(binding())).applied).toEqual([]);
+});
+
+// Branch-review `C1`, and the re-review's one non-blocking ask: the dedupe in
+// `0010` was proved once by a disposable probe and then had no standing test.
+// It runs **once, against live candidate data, irreversibly**, and the thing
+// it guards against is real — #227 left `violation_limit_reached`
+// candidate-submittable on `main` from Phase 7a until this branch narrowed the
+// ingest, so production may hold duplicates. Without the `DELETE`, `CREATE
+// UNIQUE INDEX` aborts: the ledger stops at 9, `0011` never runs, and the
+// auto-deploy ships code declaring `locked_at` against a table without it.
+// That is the `0008` scar, which cost this project four days.
+//
+// The statements come from the committed bundle rather than being retyped, so
+// this cannot pass while the migration drifts away from it. Dropping the index
+// puts the database back in its pre-`0010` shape, which is the only way to get
+// duplicate markers past the index that forbids them.
+it("0010's dedupe survives duplicate markers, keeps the earliest, and touches nothing else", async () => {
+  const db = binding();
+  await migrate(db);
+
+  const [zeroTen] = sqliteMigrations.filter((m) => m.name === "0010_violation_limit_claim.sql");
+  expect(zeroTen?.statements).toHaveLength(2);
+
+  await db.exec("DROP INDEX event_violation_limit_uq");
+
+  const workspaceId = newId("wsp");
+  const duplicated = newId("att");
+  const lone = newId("att");
+  const row = async (attemptId: string, type: string, serverTs: number) =>
+    db.exec(
+      `INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) ` +
+        `VALUES ('${newId("evt")}', '${workspaceId}', '${attemptId}', '${type}', 0, ${serverTs})`,
+    );
+
+  // Three markers for one attempt, inserted out of order so "the earliest"
+  // cannot be satisfied by insertion order alone.
+  await row(duplicated, "violation_limit_reached", 300);
+  await row(duplicated, "violation_limit_reached", 100);
+  await row(duplicated, "violation_limit_reached", 200);
+  // The single-marker case: an attempt the dedupe must leave completely alone.
+  await row(lone, "violation_limit_reached", 500);
+  // And a type the partial index does not cover, which an over-broad DELETE
+  // would take with it.
+  await row(duplicated, "window_blur", 50);
+
+  for (const statement of zeroTen!.statements) await db.exec(statement);
+
+  // Scoped to this test's own workspace: the D1 instance is shared across the
+  // file, and an earlier test leaves a marker of its own behind.
+  const markers = await db.query<{ attempt_id: string; server_ts: number }>(
+    "SELECT attempt_id, server_ts FROM event WHERE type = 'violation_limit_reached' " +
+      "AND workspace_id = ? ORDER BY server_ts",
+    [workspaceId],
+  );
+  expect(markers).toEqual([
+    { attempt_id: duplicated, server_ts: 100 },
+    { attempt_id: lone, server_ts: 500 },
+  ]);
+
+  const others = await db.query<{ type: string }>(
+    "SELECT type FROM event WHERE type <> 'violation_limit_reached' AND workspace_id = ?",
+    [workspaceId],
+  );
+  expect(others).toEqual([{ type: "window_blur" }]);
+
+  // The index is back, and still refuses a second marker — the dedupe has to
+  // leave the database in the state the migration promises, not merely survive.
+  expect(await sql("event_violation_limit_uq")).toContain("violation_limit_reached");
+  await expect(row(duplicated, "violation_limit_reached", 400)).rejects.toThrow();
 });
 
 // Task 7 (#51), Review Focus item 3: `d1Client`'s `batch()` is
