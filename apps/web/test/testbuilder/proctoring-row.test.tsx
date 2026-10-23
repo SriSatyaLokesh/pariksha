@@ -122,6 +122,9 @@ function fakeClient(draft: TestVersionRow): ApiClient {
     createWebhook: notUsed,
     setWebhookActive: notUsed,
     deleteWebhook: notUsed,
+    listApiKeys: notUsed,
+    createApiKey: notUsed,
+    revokeApiKey: notUsed,
   };
 }
 

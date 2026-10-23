@@ -40,7 +40,7 @@ import {
 import type { AppBindings, AppDeps } from "../app.js";
 import { identityProviders } from "../auth/identity.js";
 import { ApiError } from "../errors.js";
-import { actorOr401 } from "../middleware/authorize.js";
+import { actorOnly, actorOr401 } from "../middleware/authorize.js";
 
 /**
  * `slug` is optional because the wizard screen asks for a name and nothing
@@ -66,7 +66,13 @@ export function setupRoutes(deps: AppDeps): Hono<AppBindings> {
     }),
   );
 
-  routes.post("/complete", async (c) => {
+  // `actorOnly()` (whole-branch review, CRITICAL): this route is already
+  // safe by construction — a key exists only inside a workspace, so
+  // `anyWorkspaceExists` is true the moment one could call this and it
+  // 409s — but a route this consequential (minting the instance's first
+  // owner) should refuse a key on its own terms, not by accident of a
+  // check meant for something else.
+  routes.post("/complete", actorOnly(), async (c) => {
     const actor = actorOr401(c);
     const input = parse(firstWorkspace, await json(c.req.raw));
     const slug = slugOf(input);

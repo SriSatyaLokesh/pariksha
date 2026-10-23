@@ -20,7 +20,7 @@ import {
   readSessionActor,
   touchSession,
 } from "@pariksha/db";
-import type { Role } from "@pariksha/core";
+import type { Action, Role } from "@pariksha/core";
 import type { AppDeps } from "../app.js";
 import { randomToken, sha256Hex } from "./tokens.js";
 
@@ -35,6 +35,18 @@ export interface Actor {
     role: Role;
     grants: { testId: string; role: Role }[];
   }[];
+  /**
+   * Phase 8d Task 2 (`K25`): present only on an actor `authenticate.ts`
+   * resolved from a `pk_…` API key, never from a session cookie. A key's
+   * scopes are an explicit subset chosen at creation time, not a role's
+   * whole grant — so `requires()` checks these directly and never asks
+   * `can()` what the one synthetic membership's placeholder role would
+   * allow. A key still satisfies the `workspace` authority through that
+   * same membership (`route-authority.test.ts`'s own assertion, unchanged)
+   * — this field narrows what it is admitted to inside it, it does not
+   * add a sixth authority beside it.
+   */
+  apiKeyScopes?: readonly Action[];
 }
 
 export async function issueSession(

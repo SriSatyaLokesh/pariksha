@@ -169,6 +169,9 @@ function fakeClient(): ApiClient {
     createWebhook: unused,
     setWebhookActive: unused,
     deleteWebhook: unused,
+    listApiKeys: unused,
+    createApiKey: unused,
+    revokeApiKey: unused,
   };
 }
 

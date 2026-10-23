@@ -33,7 +33,7 @@ import {
   clearSessionCookie,
   setSessionCookie,
 } from "../middleware/authenticate.js";
-import { actorOr401 } from "../middleware/authorize.js";
+import { actorOnly, actorOr401 } from "../middleware/authorize.js";
 
 /** The provider id `auth/identity.ts` gives the email flow. */
 const MAGIC_LINK = "magic-link";
@@ -108,7 +108,13 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
     return c.body(null, 204);
   });
 
-  routes.post("/signout-everywhere", async (c) => {
+  // `actorOnly()` (whole-branch review, CRITICAL): before this, a key of
+  // any scope could call this and revoke every session its creator holds
+  // — `revokeAllSessions(deps, "key_…")` matched nothing, so the call was
+  // not even functional, but it still wrote an `auth.signout_everywhere`
+  // audit row attributed to the key, over a credential with no action to
+  // check it against.
+  routes.post("/signout-everywhere", actorOnly(), async (c) => {
     const actor = actorOr401(c);
     await audit(deps, actor, "auth.signout_everywhere", {});
     await revokeAllSessions(deps, actor.userId);
@@ -125,6 +131,16 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
  * the wizard has run — writes none: there is no workspace to scope the row
  * to, and an audit table readable across tenants is the thing `scoped()`
  * exists to prevent.
+ *
+ * A key actor (`apiKeyScopes` set) also writes none (whole-branch re-review,
+ * CRITICAL-1): `POST /signout` is `public` so a key can call it, but a key
+ * has no session to end and nothing it did here, so there is no event to
+ * record — not a null actor's "nowhere to scope it", but "this did not
+ * happen". Skipping here, in the one function both `/signout` and
+ * `/signout-everywhere` call through, covers both rather than guarding each
+ * route's own call site; `/signout-everywhere` never reaches a key actor at
+ * all (`actorOnly()`), so this is a no-op there and the fix for the one
+ * route that does.
  */
 async function audit(
   deps: AppDeps,
@@ -132,7 +148,7 @@ async function audit(
   action: string,
   detail: Record<string, unknown>,
 ): Promise<void> {
-  if (!actor) return;
+  if (!actor || actor.apiKeyScopes !== undefined) return;
   for (const membership of actor.memberships) {
     await appendAudit(deps.db, membership.workspaceId, {
       actor: actor.userId,

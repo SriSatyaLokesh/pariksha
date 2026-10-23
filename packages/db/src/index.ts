@@ -33,3 +33,15 @@ export * from "./repo/regrade-scan.js";
 // `repo/webhooks.ts` and `apps/api/src/net/reachable.ts` share one copy —
 // see net.ts's own header.
 export * from "./net.js";
+// Phase 8d Task 2 (K25, K26): deliberately outside repo/index.js too — see
+// the header of keys.ts. `resolveApiKey` takes no workspace ID: which
+// workspace a presented secret belongs to is what it produces, not an
+// argument it can take, the same reason candidate-entry.ts sits outside
+// that barrel.
+export { resolveApiKey } from "./repo/keys.js";
+// Same reason, different shape: `ApiKeyNotFoundError` is a class, which
+// `typeof` reports as `"function"` — exporting it through `repo/index.js`
+// would make `scoping.test.ts`'s "every exported repository function is
+// scoped" enumeration pick it up and fail, since it is an error type, not a
+// repository function `scoped()` could wrap.
+export { ApiKeyNotFoundError } from "./repo/keys.js";

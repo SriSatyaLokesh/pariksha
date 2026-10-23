@@ -9,20 +9,21 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type {
-  Bank as BankDocument,
-  Difficulty,
-  ImportIssue,
-  PassageGroup,
-  Question,
-  QuestionType,
-  Role,
-  RubricAward,
-  Section,
-  Test,
-  TestBranding,
+import {
+  type Bank as BankDocument,
+  type Difficulty,
+  type ImportIssue,
+  type PassageGroup,
+  type Question,
+  type QuestionType,
+  type Role,
+  type Action,
+  type RubricAward,
+  type Section,
+  type Test,
+  type TestBranding,
 } from "@pariksha/core";
-export type { Role };
+export type { Role, Action };
 // Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
 // shape every other bank route already answers with, not the
 // `pariksha/bank@1` document export produces — same name, two different
@@ -614,6 +615,17 @@ export interface ApiClient {
   ): Promise<{ id: string; url: string; events: WebhookEvent[]; signingSecret: string }>;
   setWebhookActive(workspaceId: string, webhookId: string, active: boolean): Promise<void>;
   deleteWebhook(workspaceId: string, webhookId: string): Promise<void>;
+
+  // Phase 8d Task 2 (K25, K26, KG5): scoped API keys, behind `keys.manage`
+  // like webhooks above.
+  listApiKeys(workspaceId: string): Promise<{ keys: ApiKey[] }>;
+  /** The one call that ever sees `secret` (`KG5`) — shown once, by the
+   *  panel, and never fetched again. */
+  createApiKey(
+    workspaceId: string,
+    input: { name: string; scopes: Action[] },
+  ): Promise<{ id: string; name: string; scopes: Action[]; secret: string }>;
+  revokeApiKey(workspaceId: string, keyId: string): Promise<void>;
 }
 
 /** Mirrors `Verdict` in `packages/db/src/repo/review.ts`, duplicated rather
@@ -645,6 +657,17 @@ export interface Webhook {
  */
 export type WebhookEvent = "attempt.submitted" | "test.closed";
 export const WEBHOOK_EVENTS: readonly WebhookEvent[] = ["attempt.submitted", "test.closed"];
+
+/** Mirrors `packages/db/src/repo/keys.ts`'s `ApiKeyRow` — the wire shape,
+ * never the secret (`KG5`). */
+export interface ApiKey {
+  id: string;
+  name: string;
+  scopes: Action[];
+  createdAt: number;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+}
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
  * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */
@@ -1197,6 +1220,14 @@ export function createApiClient(): ApiClient {
 
     async deleteWebhook(workspaceId, webhookId) {
       await request(`/workspaces/${workspaceId}/webhooks/${webhookId}`, { method: "DELETE" });
+    },
+
+    listApiKeys: (workspaceId) => json<{ keys: ApiKey[] }>(`/workspaces/${workspaceId}/keys`),
+
+    createApiKey: (workspaceId, input) => json(`/workspaces/${workspaceId}/keys`, post(input)),
+
+    async revokeApiKey(workspaceId, keyId) {
+      await request(`/workspaces/${workspaceId}/keys/${keyId}`, { method: "DELETE" });
     },
   };
 }

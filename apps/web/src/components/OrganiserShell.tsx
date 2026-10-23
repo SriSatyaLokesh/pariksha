@@ -16,7 +16,7 @@ import { readGround, writeGround, type Ground } from "../lib/ground";
 // a nav with nothing behind it is exactly the lie `admin.css:99-101` refused
 // when it declined to invent one for three screens. `organiser.tsx` decides
 // that, because it is the only place that knows which of the two it is.
-export type NavKey = "home" | "banks" | "tests" | "webhooks";
+export type NavKey = "home" | "banks" | "tests" | "webhooks" | "keys";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
@@ -87,6 +87,15 @@ export const ICONS: Record<string, string[]> = {
      event this screen's webhooks fire out on. Same viewBox, same stroke,
      same `currentColor` as every entry above. */
   webhooks: ["M11.4 3 5.6 11.6h3.4L8 17l6.4-9h-3.6Z"],
+  /* Phase 8d Task 2: scoped API keys — a key, for the credential this
+     screen mints. Same viewBox, same stroke, same `currentColor` as every
+     entry above. */
+  keys: [
+    "M8.2 11.8a3.8 3.8 0 1 0 0-7.6 3.8 3.8 0 0 0 0 7.6Z",
+    "M11 9l6 6",
+    "M14.4 12.4 17 15",
+    "M12.6 14.2 15 16.6",
+  ],
 };
 
 /* The icons whose SHAPE is a fill rather than an outline — `D1`'s "glyph and
@@ -153,6 +162,8 @@ const NAV: { key: NavKey; label: string }[] = [
   // Phase 8d Task 1: the first thing behind this nav slot — present, not
   // dimmed (the comment above this table's own rule).
   { key: "webhooks", label: "Webhooks" },
+  // Phase 8d Task 2: the second credential, present the same way.
+  { key: "keys", label: "API keys" },
 ];
 
 export function OrganiserShell({

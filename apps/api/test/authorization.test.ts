@@ -97,6 +97,29 @@ it("AC-23: every allowed action succeeds and every other returns 403", async () 
   }
 });
 
+// MINOR-8 (whole-branch review): this table is the one file a future
+// permission-matrix change edits, and before this it had no idea a second
+// kind of principal — a scoped API key — exists at all, which is exactly
+// why MAJOR-4's drift (a key's frozen scopes silently falling out of step
+// with a `can()` the matrix moved) would go unnoticed here. A key scoped to
+// exactly one action should answer every route in the same table the way a
+// role granted only that one action would: pass on its own action, 403 on
+// every other.
+it("AC-23, for a key: a key scoped to exactly one action passes only that action's route", async () => {
+  const scopedAction: Action = "results.export";
+  const { secret } = await db.createApiKey(deps.db, wspA, {
+    name: "authorization-table probe key",
+    scopes: [scopedAction],
+    now: FIXED_NOW,
+  });
+  const asKey: RequestInit = { headers: { authorization: `Bearer ${secret}` } };
+
+  for (const action of ACTIONS) {
+    const res = await callRouteFor(action, asKey);
+    expect(res.status, `key/${action}`).toBe(action === scopedAction ? 200 : 403);
+  }
+});
+
 it("S-09: a member of workspace A gets 404, not 403, for a workspace-B resource", async () => {
   expect(
     (await app.request(`/api/v1/workspaces/${wspB}`, asMember("owner"))).status,

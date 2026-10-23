@@ -43,13 +43,74 @@ export function guardOf(
   return typeof handler === "function" ? GUARDS.get(handler) : undefined;
 }
 
+/**
+ * `actorOnly()` registers here the way `guard()` registers in `GUARDS` and
+ * `attemptContext` registers in its own `CONTEXTS` (`attemptContext.ts`) —
+ * so `routeAuthorities()` reads the `actor` authority off the **mounted**
+ * middleware instead of carrying it as a declaration-only allowlist
+ * (whole-branch re-review, finding 2: a sixth `actor` route landing without
+ * `actorOnly()` used to fail nothing, which is the exact shape that
+ * produced CRITICAL-1). Declaring `actor` over a route that mounts no
+ * `actorOnly()` now fails `route-authority.test.ts`, and so does mounting
+ * one without declaring it.
+ */
+const ACTOR_ONLY = new WeakSet<object>();
+
+export const isActorOnly = (handler: unknown): boolean =>
+  typeof handler === "function" && ACTOR_ONLY.has(handler);
+
 /** Membership in the workspace the path names, and nothing more. */
 export function requireMember(): MiddlewareHandler<AppBindings> {
   return guard(null, () => undefined);
 }
 
+/**
+ * Signed in, and nothing else — the mirror of `requireMember()` for the five
+ * routes `ROUTE_AUTH` declares `"actor"`: no `:id`, so no membership for
+ * `guard()` to check and no action for a key's scopes to be checked against
+ * either.
+ *
+ * CRITICAL (whole-branch review): a key is a workspace-scoped credential by
+ * construction (`K25`) — `resolveApiKey` names exactly one workspace. A
+ * route that names none has nothing for `requires()`'s scope check to run
+ * against, and before this function existed nothing ran at all: a key
+ * scoped to one read-only action could `POST /workspaces` (writing an
+ * orphan `membership` row with `user_id` set to the key's own id, since
+ * migration `0000` declares no foreign keys), read `GET /me` under a
+ * fabricated `role: "viewer"`, list `GET /workspaces`, and revoke every
+ * session on `POST /auth/signout-everywhere` — none of it bounded by any
+ * scope, because none of those handlers ever asked.
+ */
+export function actorOnly(): MiddlewareHandler<AppBindings> {
+  const handler: MiddlewareHandler<AppBindings> = async (c, next) => {
+    if (actorOr401(c).apiKeyScopes !== undefined) {
+      throw new ApiError(403, "forbidden", "A key cannot act outside a workspace.");
+    }
+    await next();
+  };
+  ACTOR_ONLY.add(handler);
+  return handler;
+}
+
 export function requires(action: Action): MiddlewareHandler<AppBindings> {
   return guard(action, (c, membership) => {
+    // Phase 8d Task 2 (`K25`): a key-authenticated actor carries its own
+    // scopes instead of a role `can()` would answer for. Checked first and
+    // decided entirely on its own — never combined with the role below —
+    // because a key's scopes are the whole of what it is allowed, not an
+    // addition to it.
+    //
+    // MAJOR-4 (whole-branch review): routed through `can()` itself, not a
+    // second, parallel `.includes()` this function used to carry — one
+    // decision function for both principals, so a rule added to `can()`
+    // later applies to a key the same way it applies to a session, instead
+    // of silently applying to sessions only.
+    const keyScopes = actorOr401(c).apiKeyScopes;
+    if (keyScopes !== undefined) {
+      if (can({ actions: keyScopes, action })) return undefined;
+      throw new ApiError(403, "forbidden", `This key does not hold ${action}.`);
+    }
+
     // A grant raises the role for one test and never lowers the workspace
     // role, so it is passed through rather than substituted. No route takes
     // a `:testId` yet; wiring it here means the first one that does inherits
@@ -103,6 +164,17 @@ function guard(
 ): MiddlewareHandler<AppBindings> {
   const handler = async (c: Context<AppBindings>, next: Next) => {
     const actor = actorOr401(c);
+    // CRITICAL (whole-branch review): `requireMember()` names no action —
+    // "membership, and nothing more" — which for a session actor is exactly
+    // one step above `actorOnly()`. For a key it is not: a key's scopes are
+    // *all* it is allowed, and a route with no action names nothing for
+    // them to be checked against, so a key must never reach one at all.
+    // `requires(action)`'s own scope check (below, in the closure `guard`
+    // wraps) only runs for a non-null action — this is the line that keeps
+    // `requireMember()` from being the one hole that check doesn't cover.
+    if (action === null && actor.apiKeyScopes !== undefined) {
+      throw new ApiError(403, "forbidden", "A key must name the action it holds.");
+    }
     const workspaceId = c.req.param("id");
     if (workspaceId === undefined) {
       // A guard on a route with no `:id` would silently authorize nothing,

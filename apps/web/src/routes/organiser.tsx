@@ -21,6 +21,7 @@ import { TestBuilder } from "./test";
 import { ImportScreen } from "./import";
 import { GradingRoute } from "./grading";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
+import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 
 // Routing, without a router.
 //
@@ -63,6 +64,7 @@ type View =
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
   | { kind: "webhooks"; actor: Actor; workspace: Workspace }
+  | { kind: "keys"; actor: Actor; workspace: Workspace }
   | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
   // Phase 8b Task 2 fix round 1 (`K15`, `AC-26`): the grading queue, reached
   // from the test builder's own "Grading queue" button (`test.tsx`), never
@@ -307,6 +309,14 @@ export function OrganiserApp({
         { title: "Webhooks", crumb: "Webhooks" },
         <WebhookPanel workspaceId={view.workspace.id} client={client} />,
       );
+    case "keys":
+      return shell(
+        "keys",
+        view.actor,
+        view.workspace,
+        { title: "API keys", crumb: "API keys" },
+        <ApiKeyPanel workspaceId={view.workspace.id} client={client} />,
+      );
     case "test":
       // The builder fetches the test and renders `test?.name ?? "Test
       // builder"` as its own <h1> (test.tsx), so it is the one arm that
@@ -487,6 +497,7 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
     case "banks":
     case "tests":
     case "webhooks":
+    case "keys":
       return { kind: params.view, actor, workspace };
     case "test":
       return params.test === undefined
@@ -527,6 +538,7 @@ function paramsOf(view: View): ViewParams | null {
     case "banks":
     case "tests":
     case "webhooks":
+    case "keys":
       return { view: view.kind };
     case "test":
       return { view: "test", test: view.testId };
