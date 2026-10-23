@@ -29,6 +29,8 @@ import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
 import { candidateDataRoutes } from "./retention/candidate.js";
+import { usageRoute } from "./usage/project.js";
+import { requireMember } from "./middleware/authorize.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -534,6 +536,22 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // coincidence, not because they share work — same rule every other
   // budget above follows: the higher of the two, measured.
   "/api/v1/workspaces/:id/candidates/:candidateId/data": 8,
+
+  // Phase 8e Task 3 (`K31`, `K36`, `KG8`, #102): the free-tier meter.
+  // Measured (`apps/api/test/usage/project.test.ts`'s own "measures the
+  // real subrequest cost" test), not estimated. 6 on the `workers` target:
+  // auth (2) + today's counts (1, three correlated subqueries in one
+  // statement) + the workspace's published-test settings (1, flat in test
+  // count — one JOIN pinned to each test's `current_version`) + candidate
+  // counts grouped across every test (1, flat in candidate count) + the
+  // workspace's active webhook count (1, workspace-scoped, not per-test —
+  // `webhook` carries no `test_id` column). On `node` it is **2**: auth
+  // only (`requireMember()` reads the membership already on the session,
+  // no further query) — `usageRoute` returns `{}` before issuing a single
+  // query of its own, because nothing a self-hosted container needs is
+  // projected against a plan it is not on (`K36`). 6 is the ceiling either
+  // way, which is what is declared.
+  "/api/v1/workspaces/:id/usage": 6,
 };
 
 /**
@@ -624,6 +642,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // Admin's 403 here the real boundary, not a looser `candidates.manage`.
   "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
   "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
+
+  // Phase 8e Task 3 (`K31`, #102). `null`, same as `GET /:id`: membership is
+  // the whole check, nothing finer-grained — every role already sees its
+  // own workspace's scale figures on Home, and this is one more.
+  "GET /api/v1/workspaces/:id/usage": null,
 };
 
 /**
@@ -830,6 +853,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // Phase 8e Task 2 (`S-14`, #101).
   "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
   "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
+  // Phase 8e Task 3 (`K31`, #102).
+  "GET /api/v1/workspaces/:id/usage": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -872,6 +897,10 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", inviteRoutes(deps));
   // Phase 8e Task 2 (`S-14`, #101): a candidate's export and erasure.
   app.route("/api/v1/workspaces", candidateDataRoutes(deps));
+  // Phase 8e Task 3 (`K31`, #102): the free-tier meter. Mounted directly,
+  // like `/api/v1/me`, rather than folded into `workspaceRoutes` — one
+  // route, no sub-router of its own to justify.
+  app.get("/api/v1/workspaces/:id/usage", requireMember(), usageRoute(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing
