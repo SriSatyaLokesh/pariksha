@@ -25,6 +25,7 @@ afterAll(() => closeClient(deps.db));
 let workspaceId = "";
 let ownerCookie = "";
 let adminCookie = "";
+let authorCookie = "";
 
 function send(method: string, cookie: string, body?: unknown): RequestInit {
   return {
@@ -34,7 +35,7 @@ function send(method: string, cookie: string, body?: unknown): RequestInit {
   };
 }
 
-async function member(suffix: string, role: "admin"): Promise<string> {
+async function member(suffix: string, role: "admin" | "author"): Promise<string> {
   const id = await createUser(deps.db, {
     email: `${role}-${suffix}@alpha.test`,
     authProvider: "magic_link",
@@ -62,6 +63,10 @@ beforeEach(async () => {
   workspaceId = (await created.json()).id;
 
   adminCookie = await member(suffix, "admin");
+  // `F1`: the role the 403 fixture needs — one that holds neither
+  // `keys.manage` nor `workspace.settings`, so a passing 403 could not be
+  // explained by the old wiring either.
+  authorCookie = await member(suffix, "author");
 });
 
 describe("POST — create", () => {
@@ -102,19 +107,21 @@ describe("POST — create", () => {
     expect(res.status).toBe(400);
   });
 
-  // `KG2`: the 403 beside the 200 that proves the URL is right.
-  it("an Admin cannot create a webhook — it is workspace.settings, which only an Owner holds", async () => {
+  // `KG2`/`F1`: the 403 beside the 200 that proves which matrix is wired.
+  // An Owner 200 would pass under the old `workspace.settings` wiring too —
+  // only an Admin 200 paired with an Author 403 can tell the two apart.
+  it("an Author cannot create a webhook — it is keys.manage, which Admin holds and Author doesn't", async () => {
     const res = await app.request(
       url(),
-      send("POST", adminCookie, { url: "https://example.test/hook", events: ["attempt.submitted"] }),
+      send("POST", authorCookie, { url: "https://example.test/hook", events: ["attempt.submitted"] }),
     );
     expect(res.status).toBe(403);
   });
 
-  it("an Owner can create one — the 200 beside the 403 above", async () => {
+  it("an Admin can create one — the 200 beside the 403 above, proving keys.manage rather than workspace.settings", async () => {
     const res = await app.request(
       url(),
-      send("POST", ownerCookie, { url: "https://example.test/hook", events: ["attempt.submitted"] }),
+      send("POST", adminCookie, { url: "https://example.test/hook", events: ["attempt.submitted"] }),
     );
     expect(res.status).toBe(201);
   });
@@ -155,12 +162,12 @@ describe("GET — list", () => {
     await closeClient(db);
   });
 
-  it("an Admin cannot list webhooks", async () => {
-    expect((await app.request(url(), send("GET", adminCookie))).status).toBe(403);
+  it("an Author cannot list webhooks", async () => {
+    expect((await app.request(url(), send("GET", authorCookie))).status).toBe(403);
   });
 
-  it("an Owner can list them — the 200 beside the 403 above", async () => {
-    expect((await app.request(url(), send("GET", ownerCookie))).status).toBe(200);
+  it("an Admin can list them — the 200 beside the 403 above, proving keys.manage rather than workspace.settings", async () => {
+    expect((await app.request(url(), send("GET", adminCookie))).status).toBe(200);
   });
 });
 
@@ -189,14 +196,14 @@ describe("PATCH — toggle active", () => {
     expect(res.status).toBe(404);
   });
 
-  it("an Admin cannot toggle a webhook", async () => {
+  it("an Author cannot toggle a webhook", async () => {
     const id = await createOne();
-    expect((await app.request(`${url()}/${id}`, send("PATCH", adminCookie, { active: false }))).status).toBe(403);
+    expect((await app.request(`${url()}/${id}`, send("PATCH", authorCookie, { active: false }))).status).toBe(403);
   });
 
-  it("an Owner can — the 200 beside the 403 above", async () => {
+  it("an Admin can — the 200 beside the 403 above, proving keys.manage rather than workspace.settings", async () => {
     const id = await createOne();
-    expect((await app.request(`${url()}/${id}`, send("PATCH", ownerCookie, { active: false }))).status).toBe(200);
+    expect((await app.request(`${url()}/${id}`, send("PATCH", adminCookie, { active: false }))).status).toBe(200);
   });
 });
 
@@ -221,14 +228,14 @@ describe("DELETE — revoke", () => {
     expect(res.status).toBe(404);
   });
 
-  it("an Admin cannot delete a webhook", async () => {
+  it("an Author cannot delete a webhook", async () => {
     const id = await createOne();
-    expect((await app.request(`${url()}/${id}`, send("DELETE", adminCookie))).status).toBe(403);
+    expect((await app.request(`${url()}/${id}`, send("DELETE", authorCookie))).status).toBe(403);
   });
 
-  it("an Owner can — the 200 beside the 403 above", async () => {
+  it("an Admin can — the 200 beside the 403 above, proving keys.manage rather than workspace.settings", async () => {
     const id = await createOne();
-    expect((await app.request(`${url()}/${id}`, send("DELETE", ownerCookie))).status).toBe(204);
+    expect((await app.request(`${url()}/${id}`, send("DELETE", adminCookie))).status).toBe(204);
   });
 });
 

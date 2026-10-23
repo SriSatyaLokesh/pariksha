@@ -1,13 +1,13 @@
 // Webhook endpoints: the organiser's CRUD surface (Phase 8d Task 1, `K35`,
 // `K36`, `KG5`).
 //
-// Guarded by `workspace.settings` throughout — a webhook is workspace
-// configuration, the same bucket branding and the workspace name already
-// sit in, not a new row in the permission matrix (`docs/PRD.md` is
-// transcribed cell for cell, and widening it is a PRD change). `can()`
-// (`@pariksha/core`) gives `workspace.settings` to Owner alone, so every
-// route here is 403 to an Admin and everyone below — see the ruling in this
-// task's report for the cost if that turns out to be the wrong cell.
+// Guarded by `keys.manage` throughout (fix round 1, `F1`) — `docs/PRD.md:106`'s
+// "Create API keys and webhooks" row is Owner+Admin, the same row
+// `keys.manage` exists for; `workspace.settings` gives Owner alone, which
+// contradicted the PRD. The Phase 8 spec names `keys.manage` as one of the
+// five permissions this phase wires for the first time. `can()`
+// (`@pariksha/core`) gives `keys.manage` to Owner and Admin both, so every
+// route here is 403 only to Author and below.
 //
 // `K35`/`K36`: the list response carries `costPerCandidate` — `estimateCost`'s
 // "webhooks" line, read with exactly one active hook so the figure answers
@@ -64,7 +64,7 @@ function notFound(): never {
 export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
-  routes.get("/:id/webhooks", requires("workspace.settings"), async (c) => {
+  routes.get("/:id/webhooks", requires("keys.manage"), async (c) => {
     const webhooks = await listWebhooks(deps.db, c.req.param("id"));
     return c.json({
       webhooks,
@@ -73,7 +73,7 @@ export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
     });
   });
 
-  routes.post("/:id/webhooks", requires("workspace.settings"), async (c) => {
+  routes.post("/:id/webhooks", requires("keys.manage"), async (c) => {
     const actor = actorOr401(c);
     const workspaceId = c.req.param("id");
     const input = parse(newWebhook, await json(c.req.raw));
@@ -111,7 +111,7 @@ export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
     );
   });
 
-  routes.patch("/:id/webhooks/:webhookId", requires("workspace.settings"), async (c) => {
+  routes.patch("/:id/webhooks/:webhookId", requires("keys.manage"), async (c) => {
     const actor = actorOr401(c);
     const workspaceId = c.req.param("id");
     const webhookId = c.req.param("webhookId");
@@ -142,7 +142,7 @@ export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
     return c.json({ id: webhookId, active: patch.active });
   });
 
-  routes.delete("/:id/webhooks/:webhookId", requires("workspace.settings"), async (c) => {
+  routes.delete("/:id/webhooks/:webhookId", requires("keys.manage"), async (c) => {
     const actor = actorOr401(c);
     const workspaceId = c.req.param("id");
     const webhookId = c.req.param("webhookId");

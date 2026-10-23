@@ -611,13 +611,16 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // list — an Author who built the test holds `tests.edit` and not this.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
 
-  // Phase 8d Task 1: webhooks are workspace configuration, guarded by the
-  // same `workspace.settings` branding and the workspace name already
-  // sit behind — not a new row in the matrix.
-  "GET /api/v1/workspaces/:id/webhooks": "workspace.settings",
-  "POST /api/v1/workspaces/:id/webhooks": "workspace.settings",
-  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "workspace.settings",
-  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "workspace.settings",
+  // Phase 8d Task 1, fix round 1 (`F1`): `docs/PRD.md:106`'s "Create API
+  // keys and webhooks" row is Owner+Admin — the same row `keys.manage`
+  // exists for — not `workspace.settings`, which the matrix gives to Owner
+  // alone. The Phase 8 spec names `keys.manage` as one of the five
+  // permissions this phase wires for the first time; `workspace.settings`
+  // is not in that list.
+  "GET /api/v1/workspaces/:id/webhooks": "keys.manage",
+  "POST /api/v1/workspaces/:id/webhooks": "keys.manage",
+  "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
+  "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 };
