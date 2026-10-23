@@ -1,0 +1,491 @@
+// `S-14`: a candidate's right to get their data out, and their right to
+// have it erased. `candidates.delete` — Owner-only, nowhere else in the
+// permission matrix — gets its first production caller here.
+//
+// **Blanks `candidate` rather than removing it.** A hard delete would
+// orphan every `attempt` row `S-14` allows to survive (`keepAnonymisedScore`),
+// and it would miss `candidate_unique`, which holds a SHA-256 of the
+// candidate's email (`columns.ts:337`) that a bare `DELETE FROM candidate`
+// never touches — the exact leak this file is written against.
+//
+// **An in-progress attempt refuses the whole call (`AttemptInProgressError`),
+// rather than deleting around it.** `S-14` says nothing about timing, and an
+// attempt in flight has a live cookie resolving to a row this would be
+// blanking out from under it. The alternative — delete anyway, and let the
+// candidate's next write 500 — is the worst outcome this phase can ship: an
+// administrator pressing a button mid-exam must never be what breaks a
+// candidate's screen. Refusing is conservative and reversible (wait for the
+// deadline, or force-submit first); deleting around a live session is not.
+// "In progress" is `submitted_at IS NULL AND deadline_at > now` — not bare
+// `submitted_at IS NULL` — so a candidate who simply abandoned a test months
+// ago (deadline long past, nobody ever revisited it to trigger the lazy
+// `finishAttempt` materialisation) is not erasure-locked forever by a row
+// nothing will ever resolve.
+//
+// **`deleteCandidates` is the real implementation; `deleteCandidate` is a
+// one-element caller on top of it.** An advisor ruling on `AC-24`/`AC-25`
+// (mid-task note, Phase 8e) found that the nightly sweep will shortly need
+// to apply this exact erasure bundle to a bounded batch of candidates whose
+// own `personal_data_days` has passed — a second acceptance criterion this
+// task does not implement, but whose caller this task must not make into a
+// rewrite later. So the batch shape is the real function; this task's own
+// route still calls through the one-candidate wrapper, unchanged from the
+// brief. **D1 caps bound parameters at 100 per statement** — confirmed
+// against Cloudflare's current docs — so every `IN (...)` built from an id
+// list here is chunked at `MAX_IDS_PER_CHUNK`, never built unbounded the way
+// a sibling fix round found `sweep.ts` once did (passes on better-sqlite3,
+// fails on live D1).
+//
+// **`holdsCandidateData` (`KG4`) is derived from `TABLE_MANIFEST`'s own
+// foreign-key naming convention, not a hand list**: a column named `x_id` is
+// read as a reference to table `x`, and a table holds candidate data if it
+// *is* `candidate`, names `candidate` directly, or names a table that
+// (transitively) does. `attempt.candidate_id` is direct; `response`,
+// `event`, `snapshot` and `review` each carry `attempt_id` and so qualify
+// through it — which is also why this file deletes `review` rows when an
+// attempt is removed: `attempt` is the thing `review.attempt_id` points at,
+// and leaving the review behind once its attempt is gone would orphan it,
+// the same failure a hard candidate delete was refused for in the first
+// place. (K29's own prose names response/event/snapshot and not review; this
+// implementation widens that by the one case the FK graph itself proves is
+// still owed — see the task report.) This one manifest-driven guard is
+// meant to cover both the manual path here and the future nightly one the
+// same way, per the advisor ruling above — there is no second definition of
+// "what erasure empties" to keep in step.
+
+import type { DbClient, TableSpec } from "@pariksha/db";
+import { appendAudit, TABLE_MANIFEST } from "@pariksha/db";
+import type { StorageAdapter } from "@pariksha/storage";
+import { Hono } from "hono";
+import { z } from "zod";
+import type { AppBindings, AppDeps } from "../app.js";
+import { ApiError } from "../errors.js";
+import { actorOr401, requires } from "../middleware/authorize.js";
+
+/**
+ * Mirrors `@pariksha/db`'s `ScopedFn` convention — `(db, workspaceId,
+ * ...rest)` — for this module's exports, without registering through
+ * `packages/db`'s `scoped()`: this file lives in `apps/api`, outside the
+ * repository layer `scoping.test.ts` enumerates, and nothing here needs the
+ * workspace-ID-shape guard that wrapper exists for (both routes already
+ * resolve `workspaceId` from the caller's own membership).
+ */
+export type Scoped<F extends (...args: never[]) => unknown> =
+  F extends (...args: infer A) => infer R ? (db: DbClient, workspaceId: string, ...args: A) => R : never;
+
+/** K29/KG4: `S-13` requires the deletion itself be logged, so the one row
+ *  that records an erasure is allowed to name the candidate it erased —
+ *  `KG9` (`auditCallSitesPassingPersonalData`) is what keeps that exemption
+ *  safe, by proving the row never carries more than an id. */
+export const CANDIDATE_DATA_EXEMPT = ["audit_log"];
+
+/** `KG4`. See the file header. */
+export function holdsCandidateData(table: TableSpec, seen: Set<string> = new Set()): boolean {
+  if (table.name === "candidate") return true;
+  if (seen.has(table.name)) return false;
+  seen.add(table.name);
+  for (const column of table.columns) {
+    if (!column.name.endsWith("_id")) continue;
+    const refName = column.name.slice(0, -3);
+    if (refName === "candidate") return true;
+    const ref = TABLE_MANIFEST.find((t) => t.name === refName);
+    if (ref && holdsCandidateData(ref, seen)) return true;
+  }
+  return false;
+}
+
+/** Raised by `deleteCandidates` when one or more of the given candidates has
+ *  a live attempt. The route layer turns this into a 409; a direct caller
+ *  (a test, the future nightly sweep) sees a distinguishable type rather
+ *  than a bare `Error`, and `candidateIds` names exactly who blocked it. */
+export class AttemptInProgressError extends Error {
+  readonly candidateIds: readonly string[];
+  constructor(candidateIds: readonly string[]) {
+    super(
+      `Cannot erase ${String(candidateIds.length)} candidate(s): an attempt is still in progress for ` +
+        `${candidateIds.join(", ")}. Force-submit it, or wait for the deadline to pass.`,
+    );
+    this.candidateIds = candidateIds;
+  }
+}
+
+/** The one existence check both routes need before doing real work, so a
+ *  404 and an irreversible delete never run against a row that was never
+ *  there. */
+export const candidateExists: Scoped<(candidateId: string) => Promise<boolean>> = async (
+  db,
+  workspaceId,
+  candidateId,
+) => {
+  const rows = await db.query<{ id: string }>("SELECT id FROM candidate WHERE workspace_id = ? AND id = ?", [
+    workspaceId,
+    candidateId,
+  ]);
+  return rows.length > 0;
+};
+
+/** D1's own ceiling (confirmed against Cloudflare's current docs,
+ *  mid-task advisor note). */
+export const D1_MAX_BOUND_PARAMS = 100;
+
+/** A chunk of ids plus the statement's own fixed parameters must stay at or
+ *  under `D1_MAX_BOUND_PARAMS`. The worst statement built from one of these
+ *  chunks is the `candidate` blanking UPDATE — `form_values_json = ?` *and*
+ *  `workspace_id = ?` ahead of the id list, two fixed params, not the one
+ *  every delete-by-id statement below it carries — so this reserves two
+ *  slots for every chunk, not one, even though most statements only need
+ *  one. Reserving the shared worst case means one constant is correct for
+ *  every statement in this file, rather than a second, smaller one that a
+ *  future statement with its own extra parameter would have to remember to
+ *  use instead. */
+export const MAX_IDS_PER_CHUNK = D1_MAX_BOUND_PARAMS - 2;
+
+/** Splits `items` into groups of at most `size`, in order. Exported so its
+ *  own boundary (a group of exactly `size`, never `size + 1`) is testable
+ *  directly rather than only through a fixture of 100+ real rows. */
+export function chunk<T>(items: readonly T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+const inList = (n: number): string => Array.from({ length: n }, () => "?").join(", ");
+
+interface CandidateRecord {
+  id: string;
+  test_id: string;
+  external_id: string | null;
+  set_label: string | null;
+  source: string;
+  form_values_json: unknown;
+  consent_version: string | null;
+  consent_at: number | null;
+  created_at: number;
+}
+
+/** Everything the product holds about one candidate, as a download
+ *  (`AC-25`). Flat top-level arrays rather than nested under each attempt —
+ *  the candidate's own answers (`responses`) are included even though K29's
+ *  deletion list does not name them in this export, because "everything the
+ *  product holds" is the actual promise and a candidate's submitted answers
+ *  are exactly that. */
+export const exportCandidate: Scoped<(candidateId: string) => Promise<{ json: string; filename: string }>> = async (
+  db,
+  workspaceId,
+  candidateId,
+) => {
+  const candidateRows = await db.query<CandidateRecord>(
+    "SELECT id, test_id, external_id, set_label, source, form_values_json, consent_version, consent_at, created_at " +
+      "FROM candidate WHERE workspace_id = ? AND id = ?",
+    [workspaceId, candidateId],
+  );
+  const row = candidateRows[0];
+  const candidate =
+    row === undefined
+      ? null
+      : {
+          id: row.id,
+          testId: row.test_id,
+          externalId: row.external_id,
+          setLabel: row.set_label,
+          source: row.source,
+          formValues: row.form_values_json == null ? {} : db.jsonValue(row.form_values_json),
+          consentVersion: row.consent_version,
+          registeredAt: row.consent_at === null ? null : Number(row.consent_at),
+          createdAt: Number(row.created_at),
+        };
+
+  const attempts = await db.query<{
+    id: string;
+    test_version_id: string;
+    set_no: number;
+    started_at: number;
+    deadline_at: number;
+    submitted_at: number | null;
+    submit_reason: string | null;
+    score_json: unknown;
+    flag: string;
+  }>(
+    "SELECT id, test_version_id, set_no, started_at, deadline_at, submitted_at, submit_reason, score_json, flag " +
+      "FROM attempt WHERE workspace_id = ? AND candidate_id = ? ORDER BY started_at",
+    [workspaceId, candidateId],
+  );
+  const attemptIds = attempts.map((a) => a.id);
+
+  const responses =
+    attemptIds.length === 0
+      ? []
+      : await db.query(
+          `SELECT attempt_id, question_id, value_json, saved_at, points FROM response ` +
+            `WHERE workspace_id = ? AND attempt_id IN (${inList(attemptIds.length)}) ORDER BY attempt_id, question_id`,
+          [workspaceId, ...attemptIds],
+        );
+  const events =
+    attemptIds.length === 0
+      ? []
+      : await db.query(
+          `SELECT attempt_id, type, detail_json, client_ts, server_ts FROM event ` +
+            `WHERE workspace_id = ? AND attempt_id IN (${inList(attemptIds.length)}) ORDER BY server_ts`,
+          [workspaceId, ...attemptIds],
+        );
+  const snapshots =
+    attemptIds.length === 0
+      ? []
+      : await db.query(
+          `SELECT attempt_id, storage_key, taken_at, reason FROM snapshot ` +
+            `WHERE workspace_id = ? AND attempt_id IN (${inList(attemptIds.length)}) ORDER BY taken_at`,
+          [workspaceId, ...attemptIds],
+        );
+
+  const json = JSON.stringify(
+    {
+      candidate,
+      attempts: attempts.map((a) => ({
+        id: a.id,
+        testVersionId: a.test_version_id,
+        setNo: Number(a.set_no),
+        startedAt: Number(a.started_at),
+        deadlineAt: Number(a.deadline_at),
+        submittedAt: a.submitted_at === null ? null : Number(a.submitted_at),
+        submitReason: a.submit_reason,
+        score: a.score_json == null ? null : db.jsonValue(a.score_json),
+        flag: a.flag,
+      })),
+      responses,
+      events,
+      snapshots,
+    },
+    null,
+    2,
+  );
+  const filename = `candidate_${candidateId}_export_${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  return { json, filename };
+};
+
+interface AttemptRow {
+  id: string;
+  candidate_id: string;
+  submitted_at: number | null;
+  deadline_at: number;
+}
+
+/**
+ * `K29`, batched (mid-task advisor note: the real implementation, so the
+ * nightly sweep this phase's `AC-24` gap still needs can call it without a
+ * rewrite). Blanks `candidate` rather than removing it; `keepAnonymisedScore`
+ * keeps the `attempt` rows and their `score_json` for every candidate in the
+ * batch, `false` removes those too (and the `review` rows that would
+ * otherwise be left pointing at a deleted attempt — see the file header).
+ *
+ * Refuses the **whole** batch if any one candidate in it has an attempt in
+ * progress (`AttemptInProgressError`, naming which) — conservative in the
+ * same direction as the single-candidate case: never partially erase a
+ * batch while deciding, candidate by candidate, which half is safe. A
+ * future caller that wants to proceed with the rest can re-call with that
+ * candidate removed from `candidateIds`; this function does not guess at
+ * that policy for it.
+ */
+export const deleteCandidates: Scoped<
+  (input: {
+    candidateIds: string[];
+    keepAnonymisedScore: boolean;
+    actor: string;
+    now: number;
+    storage: StorageAdapter;
+  }) => Promise<{ tablesTouched: string[] }>
+> = async (db, workspaceId, input) => {
+  const { candidateIds, keepAnonymisedScore, actor, now, storage } = input;
+  if (candidateIds.length === 0) return { tablesTouched: [] };
+
+  const attempts: AttemptRow[] = [];
+  for (const idsChunk of chunk(candidateIds, MAX_IDS_PER_CHUNK)) {
+    attempts.push(
+      ...(await db.query<AttemptRow>(
+        `SELECT id, candidate_id, submitted_at, deadline_at FROM attempt ` +
+          `WHERE workspace_id = ? AND candidate_id IN (${inList(idsChunk.length)})`,
+        [workspaceId, ...idsChunk],
+      )),
+    );
+  }
+
+  const inProgress = [
+    ...new Set(
+      attempts.filter((a) => a.submitted_at === null && Number(a.deadline_at) > now).map((a) => a.candidate_id),
+    ),
+  ];
+  if (inProgress.length > 0) throw new AttemptInProgressError(inProgress);
+
+  const attemptsByCandidate = new Map<string, string[]>();
+  for (const a of attempts) {
+    const list = attemptsByCandidate.get(a.candidate_id) ?? [];
+    list.push(a.id);
+    attemptsByCandidate.set(a.candidate_id, list);
+  }
+  const attemptIds = attempts.map((a) => a.id);
+
+  const snapshotKeys: string[] = [];
+  for (const idsChunk of chunk(attemptIds, MAX_IDS_PER_CHUNK)) {
+    snapshotKeys.push(
+      ...(
+        await db.query<{ storage_key: string }>(
+          `SELECT storage_key FROM snapshot WHERE workspace_id = ? AND attempt_id IN (${inList(idsChunk.length)})`,
+          [workspaceId, ...idsChunk],
+        )
+      ).map((r) => r.storage_key),
+    );
+  }
+
+  // Object first, row second — the same ordering `retention/sweep.ts` uses
+  // and for the same reason: a run interrupted between the two leaves a row
+  // with no object, which is safe to re-run (the next attempt deletes a row
+  // whose object is already gone, which `storage.delete` no-ops on); the
+  // reverse would leave an object nothing can ever find again.
+  if (snapshotKeys.length > 0) await storage.delete(snapshotKeys);
+
+  const statements: { sql: string; params: unknown[] }[] = [];
+  const tablesTouched = new Set<string>(["candidate", "candidate_unique"]);
+
+  for (const idsChunk of chunk(candidateIds, MAX_IDS_PER_CHUNK)) {
+    const inClause = inList(idsChunk.length);
+    statements.push(
+      {
+        sql: `UPDATE candidate SET form_values_json = ?, external_id = NULL WHERE workspace_id = ? AND id IN (${inClause})`,
+        params: [db.jsonParam({}), workspaceId, ...idsChunk],
+      },
+      {
+        sql: `DELETE FROM candidate_unique WHERE workspace_id = ? AND candidate_id IN (${inClause})`,
+        params: [workspaceId, ...idsChunk],
+      },
+    );
+  }
+
+  if (attemptIds.length > 0) {
+    for (const idsChunk of chunk(attemptIds, MAX_IDS_PER_CHUNK)) {
+      const inClause = inList(idsChunk.length);
+      statements.push(
+        { sql: `DELETE FROM response WHERE workspace_id = ? AND attempt_id IN (${inClause})`, params: [workspaceId, ...idsChunk] },
+        { sql: `DELETE FROM event WHERE workspace_id = ? AND attempt_id IN (${inClause})`, params: [workspaceId, ...idsChunk] },
+        { sql: `DELETE FROM snapshot WHERE workspace_id = ? AND attempt_id IN (${inClause})`, params: [workspaceId, ...idsChunk] },
+      );
+    }
+    tablesTouched.add("response").add("event").add("snapshot");
+
+    if (!keepAnonymisedScore) {
+      for (const idsChunk of chunk(attemptIds, MAX_IDS_PER_CHUNK)) {
+        statements.push({
+          sql: `DELETE FROM review WHERE workspace_id = ? AND attempt_id IN (${inList(idsChunk.length)})`,
+          params: [workspaceId, ...idsChunk],
+        });
+      }
+      for (const idsChunk of chunk(candidateIds, MAX_IDS_PER_CHUNK)) {
+        statements.push({
+          sql: `DELETE FROM attempt WHERE workspace_id = ? AND candidate_id IN (${inList(idsChunk.length)})`,
+          params: [workspaceId, ...idsChunk],
+        });
+      }
+      tablesTouched.add("review").add("attempt");
+    }
+  }
+
+  await db.batch(statements);
+
+  // KG9: ids and counts only. Never the blanked form values, never the
+  // email `candidate_unique` held a hash of — see
+  // `auditCallSitesPassingPersonalData` in this task's test file. One row
+  // per candidate, same as every other per-entity audit write in this
+  // repository (never one row for a whole batch, which would make "which
+  // of these ten was erased" unanswerable from the log alone).
+  for (const candidateId of candidateIds) {
+    await appendAudit(db, workspaceId, {
+      actor,
+      action: "candidate.delete",
+      target: candidateId,
+      detail: {
+        keepAnonymisedScore,
+        attemptsRemoved: keepAnonymisedScore ? 0 : (attemptsByCandidate.get(candidateId)?.length ?? 0),
+      },
+      now,
+    });
+  }
+
+  return { tablesTouched: [...tablesTouched] };
+};
+
+/** The brief's one-candidate shape, on top of `deleteCandidates` — see the
+ *  file header. This is what the route below calls. */
+export const deleteCandidate: Scoped<
+  (input: {
+    candidateId: string;
+    keepAnonymisedScore: boolean;
+    actor: string;
+    now: number;
+    storage: StorageAdapter;
+  }) => Promise<{ tablesTouched: string[] }>
+> = (db, workspaceId, input) =>
+  deleteCandidates(db, workspaceId, {
+    candidateIds: [input.candidateId],
+    keepAnonymisedScore: input.keepAnonymisedScore,
+    actor: input.actor,
+    now: input.now,
+    storage: input.storage,
+  });
+
+const deleteRequest = z.object({ keepAnonymisedScore: z.boolean() });
+
+/**
+ * `GET`/`DELETE /api/v1/workspaces/:id/candidates/:candidateId/data` —
+ * `workspace`, `candidates.delete` (Owner-only; `app.ts`'s `ROUTE_ACTIONS`
+ * and `ROUTE_AUTH` carry the declaration, this only mounts the handlers).
+ */
+export function candidateDataRoutes(deps: AppDeps): Hono<AppBindings> {
+  const routes = new Hono<AppBindings>();
+
+  routes.get("/:id/candidates/:candidateId/data", requires("candidates.delete"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const candidateId = c.req.param("candidateId");
+    if (!(await candidateExists(deps.db, workspaceId, candidateId))) {
+      throw new ApiError(404, "not_found", "No such resource.");
+    }
+    const { json, filename } = await exportCandidate(deps.db, workspaceId, candidateId);
+    return c.body(json, 200, {
+      "content-type": "application/json; charset=utf-8",
+      "content-disposition": `attachment; filename="${filename}"`,
+    });
+  });
+
+  routes.delete("/:id/candidates/:candidateId/data", requires("candidates.delete"), async (c) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id");
+    const candidateId = c.req.param("candidateId");
+    if (!(await candidateExists(deps.db, workspaceId, candidateId))) {
+      throw new ApiError(404, "not_found", "No such resource.");
+    }
+
+    const parsed = deleteRequest.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "Say whether the anonymised score should be kept (keepAnonymisedScore: true or false).",
+      );
+    }
+
+    try {
+      const result = await deleteCandidate(deps.db, workspaceId, {
+        candidateId,
+        keepAnonymisedScore: parsed.data.keepAnonymisedScore,
+        actor: actor.userId,
+        now: deps.now(),
+        storage: deps.storage,
+      });
+      return c.json(result);
+    } catch (err) {
+      if (err instanceof AttemptInProgressError) {
+        throw new ApiError(409, "attempt_in_progress", err.message);
+      }
+      throw err;
+    }
+  });
+
+  return routes;
+}

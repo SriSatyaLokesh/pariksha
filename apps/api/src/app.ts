@@ -28,6 +28,7 @@ import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
+import { candidateDataRoutes } from "./retention/candidate.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -515,6 +516,24 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1), one `batch` however long the list is (1), and the audit row (1).
   // Flat in the list's size, which `test/invites.test.ts` measures at 200.
   "/api/v1/workspaces/:id/tests/:testId/invites": 7,
+
+  // Phase 8e Task 2 (`S-14`, #101): the candidate's own data, and its
+  // erasure. `candidates.delete` gets its first production caller here.
+  // Measured (`apps/api/test/retention/candidate.test.ts`'s own "measures
+  // the real subrequest cost" test), not estimated. GET costs 8: auth (2) +
+  // `candidateExists` (1) + `exportCandidate`'s five reads — the candidate
+  // row, `attempt`, `response`, `event` and `snapshot`, one query each (1
+  // apiece) — on a candidate with at least one attempt, which is the worst
+  // case; a never-attempted candidate costs 4 less (no attempt-scoped reads
+  // at all). DELETE costs 8 too, on its own worst path: auth (2) +
+  // `candidateExists` (1) + the in-progress check, one `attempt` read (1) +
+  // the snapshot key read (1) + `storage.delete`'s one batched call when
+  // there is a snapshot to remove (1) + the one batched `db.batch` (1, flat
+  // in row count up to `MAX_IDS_PER_CHUNK`) + the audit row (1, per
+  // candidate — flat here at one). Both methods land on the same number by
+  // coincidence, not because they share work — same rule every other
+  // budget above follows: the higher of the two, measured.
+  "/api/v1/workspaces/:id/candidates/:candidateId/data": 8,
 };
 
 /**
@@ -599,6 +618,12 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "candidates.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
+
+  // Phase 8e Task 2 (`S-14`, #101): `candidates.delete` is Owner-only in the
+  // matrix — `owner: ACTIONS` and nobody else — which is what makes an
+  // Admin's 403 here the real boundary, not a looser `candidates.manage`.
+  "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
+  "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
 };
 
 /**
@@ -802,6 +827,9 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
+  // Phase 8e Task 2 (`S-14`, #101).
+  "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
+  "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -842,6 +870,8 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 8e Task 2 (`S-14`, #101): a candidate's export and erasure.
+  app.route("/api/v1/workspaces", candidateDataRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing
