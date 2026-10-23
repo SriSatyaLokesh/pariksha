@@ -20,7 +20,13 @@ import type { TestRetention } from "@pariksha/core";
 import { testDeps, FIXED_NOW } from "../deps.js";
 import { seedWorkspace, seedTest } from "../run/fixtures.js";
 import { countingDeps, SUBREQUEST_LIMIT } from "../../src/instrument.js";
-import { DELETE_CHUNK, rateLimitJob, retentionJob, RETENTION_BATCH } from "../../src/retention/sweep.js";
+import {
+  CANDIDATE_BATCH,
+  DELETE_CHUNK,
+  rateLimitJob,
+  retentionJob,
+  RETENTION_BATCH,
+} from "../../src/retention/sweep.js";
 import type { AppDeps } from "../../src/app.js";
 
 const DAY = 86_400_000;
@@ -120,21 +126,133 @@ async function countRateLimitRows(deps: AppDeps): Promise<number> {
   return Number(rows[0]?.n ?? 0);
 }
 
+// --- AC-24: candidate fixtures -------------------------------------------
+
+/** A workspace and a test, with no candidate yet — the sibling of
+ *  `seedAttempt` for the candidate tests below, which (unlike every other
+ *  test here) each need to control a candidate's own clock (`created_at`,
+ *  and whether it has an attempt at all) independently of when the test
+ *  itself was seeded. `publish: false` is what the "never-published test"
+ *  case (test 4) needs; every other candidate test leaves it published. */
+async function seedCandidateTest(
+  deps: AppDeps,
+  opts: { retention?: TestRetention; slug?: string; publish?: boolean } = {},
+): Promise<{ wsp: string; testId: string; versionId: string | null }> {
+  const slug = opts.slug ?? "retention-candidate";
+  const wsp = await seedWorkspace(deps, slug);
+  const testId = await seedTest(deps, wsp, {
+    name: "Retention Candidate",
+    slug,
+    body: {
+      settings: opts.retention ? { retention: opts.retention } : {},
+      sections: [{ id: "only", title: "Only", source: { kind: "pool", count: 1 } }],
+    },
+    publish: opts.publish,
+  });
+  const version = await getPublishedVersion(deps.db, wsp, testId);
+  return { wsp, testId, versionId: version?.id ?? null };
+}
+
+/** A candidate row only — no attempt. `source` is always `"registration"`
+ *  through `createCandidate` (`packages/db/src/repo/attempts.ts`), and
+ *  `external_id` is always NULL on it, same as every self-registered
+ *  candidate in production — exactly the ambiguity `dueCandidates`'s
+ *  "already erased" check has to survive (see sweep.ts). */
+async function addCandidateOnly(
+  deps: AppDeps,
+  wsp: string,
+  testId: string,
+  createdAt: number,
+  formValues: Record<string, unknown> = { full_name: "Jamie Rivera", email: "jamie@example.test" },
+): Promise<string> {
+  return createCandidate(deps.db, wsp, { testId, formValues, consentVersion: "v1", now: createdAt });
+}
+
+/** A candidate plus one finished, scored attempt — `deadlineAt` is the
+ *  anchor's own input, and `submittedAt` defaults to just before it so the
+ *  attempt is never "in progress" by `deleteCandidates`'s own guard
+ *  (`submitted_at IS NULL AND deadline_at > now`) unless a test passes
+ *  `submittedAt: null` deliberately. Kept apart on purpose: the one test
+ *  that needs a future deadline on an attempt that is *not* in progress
+ *  (test 2, the anchor probe) must not be rescued by that separate guard
+ *  instead of by `COALESCE` — see the comment on that test. */
+async function addCandidateWithAttempt(
+  deps: AppDeps,
+  wsp: string,
+  versionId: string,
+  testId: string,
+  opts: { createdAt: number; deadlineAt: number; submittedAt?: number | null },
+): Promise<{ candidateId: string; attemptId: string }> {
+  const candidateId = await addCandidateOnly(deps, wsp, testId, opts.createdAt);
+  const attemptId = newId("att");
+  await createAttempt(deps.db, wsp, {
+    id: attemptId,
+    candidateId,
+    testVersionId: versionId,
+    setNo: 1,
+    layout: {},
+    startedAt: opts.createdAt,
+    deadlineAt: opts.deadlineAt,
+    tokenHash: `hash-${attemptId}`,
+  });
+  const submittedAt = opts.submittedAt === undefined ? opts.deadlineAt - 1 : opts.submittedAt;
+  if (submittedAt !== null) {
+    await deps.db.run("UPDATE attempt SET submitted_at = ?, score_json = ? WHERE workspace_id = ? AND id = ?", [
+      submittedAt,
+      deps.db.jsonParam({ total: 1 }),
+      wsp,
+      attemptId,
+    ]);
+  }
+  return { candidateId, attemptId };
+}
+
+interface CandidateRow {
+  form_values_json: unknown;
+  external_id: string | null;
+}
+
+async function getCandidate(deps: AppDeps, wsp: string, candidateId: string): Promise<CandidateRow | undefined> {
+  const rows = await deps.db.query<CandidateRow>(
+    "SELECT form_values_json, external_id FROM candidate WHERE workspace_id = ? AND id = ?",
+    [wsp, candidateId],
+  );
+  return rows[0];
+}
+
+function isBlanked(deps: AppDeps, row: CandidateRow | undefined): boolean {
+  if (!row) return false;
+  return row.external_id === null && JSON.stringify(deps.db.jsonValue(row.form_values_json)) === "{}";
+}
+
+async function countAttempts(deps: AppDeps, wsp: string): Promise<number> {
+  const rows = await deps.db.query<{ n: number }>("SELECT COUNT(*) AS n FROM attempt WHERE workspace_id = ?", [wsp]);
+  return Number(rows[0]?.n ?? 0);
+}
+
+/** Candidates not (yet) blanked — the resumable-batch test's progress
+ *  counter, mirroring `countSnapshots` for the K30 "bounded batch,
+ *  resumes" shape but for rows a sweep edits in place rather than
+ *  deletes. */
+async function countUnblankedCandidates(deps: AppDeps, wsp: string): Promise<number> {
+  const rows = await deps.db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM candidate WHERE workspace_id = ? AND NOT (form_values_json = '{}' AND external_id IS NULL)",
+    [wsp],
+  );
+  return Number(rows[0]?.n ?? 0);
+}
+
 // --- retentionJob: the two K28 defaults --------------------------------
 
 it("applies S-13's defaults to a test with no retention block", async () => {
   const { deps } = await testDeps();
   const { wsp, attemptId } = await seedAttempt(deps);
   await addSnapshot(deps, wsp, attemptId, FIXED_NOW - 100 * DAY);
-  await addResponse(deps, wsp, attemptId, FIXED_NOW - 100 * DAY);
 
   await retentionJob.run(deps);
 
   // 90-day default: 100 days old is past it.
   expect(await countSnapshots(deps, wsp)).toBe(0);
-  // 365-day default: 100 days old is nowhere near it — the defect this
-  // phase keeps shipping is `resolveRetention` read as "0 days" instead.
-  expect(await countResponses(deps, wsp)).toBeGreaterThan(0);
 });
 
 it("deletes nothing before the window", async () => {
@@ -157,16 +275,6 @@ it("respects a test's own snapshots_days when it is shorter than the default", a
   await retentionJob.run(deps);
 
   expect(await countSnapshots(deps, wsp)).toBe(0);
-});
-
-it("also expires responses once a test's own personal_data_days has passed", async () => {
-  const { deps } = await testDeps();
-  const { wsp, attemptId } = await seedAttempt(deps, { personal_data_days: 10 });
-  await addResponse(deps, wsp, attemptId, FIXED_NOW - 20 * DAY);
-
-  await retentionJob.run(deps);
-
-  expect(await countResponses(deps, wsp)).toBe(0);
 });
 
 // --- storage: batched, never per key ------------------------------------
@@ -281,6 +389,186 @@ it("writes one audit row per run naming what it deleted", async () => {
   const rows = (await listAudit(deps.db, wsp)).filter((r) => r.action === "retention.sweep");
   expect(rows).toHaveLength(1);
   expect(rows[0]?.detail).toMatchObject({ snapshotsDeleted: 1 });
+});
+
+// --- AC-24: the nightly candidate expiry ----------------------------------
+
+it("blanks a candidate past personal_data_days; attempt and score_json survive", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId, versionId } = await seedCandidateTest(deps);
+  if (!versionId) throw new Error("fixture: expected a published version");
+  const { candidateId, attemptId } = await addCandidateWithAttempt(deps, wsp, versionId, testId, {
+    createdAt: FIXED_NOW - 400 * DAY,
+    deadlineAt: FIXED_NOW - 400 * DAY,
+  });
+  await addResponse(deps, wsp, attemptId, FIXED_NOW - 400 * DAY);
+
+  await retentionJob.run(deps);
+
+  expect(isBlanked(deps, await getCandidate(deps, wsp, candidateId))).toBe(true);
+  // `keepAnonymisedScore: true` (K29): the attempt and its score survive.
+  expect(await countAttempts(deps, wsp)).toBe(1);
+  // The response pass is retired — `deleteCandidates` deletes `response`
+  // unconditionally for an erased candidate's attempts, so the candidate
+  // pass already subsumes it (sweep.ts's header comment on this).
+  expect(await countResponses(deps, wsp)).toBe(0);
+});
+
+// THE MOST IMPORTANT TEST IN THIS TASK. A live attempt's deadline sits in
+// the future; without `COALESCE(MAX(attempt.deadline_at),
+// candidate.created_at)` in `dueCandidates`'s `WHERE`, a candidate whose
+// `created_at` is 400 days old reads as overdue on its creation date alone
+// and gets blanked mid-exam — the worst outcome this phase can ship.
+//
+// `submittedAt` is set (just before the future `deadlineAt`) so this
+// attempt is NOT "in progress" by `deleteCandidates`'s own separate guard
+// (`submitted_at IS NULL AND deadline_at > now`) — otherwise that guard
+// would refuse the erasure anyway and this test would pass for the wrong
+// reason, masking a broken anchor instead of proving a correct one. Probed
+// (see task-4-report.md): replacing the `COALESCE(...)` in sweep.ts's
+// `dueCandidates` with bare `c.created_at` makes this test fail with the
+// row blanked, confirming it cannot pass vacuously.
+it("does not touch a candidate with a live attempt, even if created long ago", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId, versionId } = await seedCandidateTest(deps);
+  if (!versionId) throw new Error("fixture: expected a published version");
+  const { candidateId } = await addCandidateWithAttempt(deps, wsp, versionId, testId, {
+    createdAt: FIXED_NOW - 400 * DAY,
+    deadlineAt: FIXED_NOW + 10 * DAY,
+    submittedAt: FIXED_NOW - DAY,
+  });
+
+  await retentionJob.run(deps);
+
+  expect(isBlanked(deps, await getCandidate(deps, wsp, candidateId))).toBe(false);
+});
+
+it("expires a candidate with no attempt at all on its own created_at", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId } = await seedCandidateTest(deps);
+  const candidateId = await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY);
+
+  await retentionJob.run(deps);
+
+  expect(isBlanked(deps, await getCandidate(deps, wsp, candidateId))).toBe(true);
+});
+
+it("falls through to RETENTION_DEFAULTS for a never-published test's candidates", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId, versionId } = await seedCandidateTest(deps, { publish: false });
+  expect(versionId).toBeNull(); // the fixture itself: no published version to join against
+  const candidateId = await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY);
+
+  await retentionJob.run(deps);
+
+  // Not skipped by the LEFT JOIN finding no `test_version` row — 400 days
+  // past the 365-day default still blanks it.
+  expect(isBlanked(deps, await getCandidate(deps, wsp, candidateId))).toBe(true);
+});
+
+it("is idempotent: a second run over an already-blanked candidate deletes nothing", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId } = await seedCandidateTest(deps);
+  await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY);
+
+  const first = await retentionJob.run(deps);
+  expect(first.summary).toMatch(/deleted 0 snapshot\(s\) and 1 candidate\(s\)/);
+
+  const second = await retentionJob.run(deps);
+  expect(second.summary).toMatch(/deleted 0 snapshot\(s\) and 0 candidate\(s\)/);
+});
+
+it("processes a bounded CANDIDATE_BATCH and resumes on the next tick", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId } = await seedCandidateTest(deps);
+  const total = CANDIDATE_BATCH + 7;
+  for (let i = 0; i < total; i++) {
+    await addCandidateOnly(deps, wsp, testId, FIXED_NOW - 400 * DAY, { slot: i });
+  }
+
+  const first = await retentionJob.run(deps);
+  expect(first.summary).toMatch(new RegExp(`${String(CANDIDATE_BATCH)} candidate`));
+  expect(await countUnblankedCandidates(deps, wsp)).toBe(total - CANDIDATE_BATCH);
+
+  const second = await retentionJob.run(deps);
+  expect(second.summary).toMatch(/deleted 0 snapshot\(s\) and 7 candidate\(s\)/);
+  expect(await countUnblankedCandidates(deps, wsp)).toBe(0);
+});
+
+/** The worst case `CANDIDATE_BATCH` has to survive: unlike snapshots, a
+ *  `deleteCandidates` call's cost (attempt select, snapshot select,
+ *  `storage.delete`, one `db.batch`) and the per-workspace `retention.sweep`
+ *  audit row are both paid **per workspace**, not per row — so one due
+ *  candidate per workspace, each with a surviving attempt and snapshot, is
+ *  strictly more expensive than the same count in one workspace. Both
+ *  subrequest-ceiling tests below seed that shape. */
+async function addDueCandidateWithSnapshot(
+  deps: AppDeps,
+  wsp: string,
+  testId: string,
+  versionId: string,
+): Promise<void> {
+  const { attemptId } = await addCandidateWithAttempt(deps, wsp, versionId, testId, {
+    createdAt: FIXED_NOW - 400 * DAY,
+    deadlineAt: FIXED_NOW - 400 * DAY,
+  });
+  await addSnapshot(deps, wsp, attemptId, FIXED_NOW - 400 * DAY);
+}
+
+// `snapshots_days` is deliberately overridden far longer than
+// `personal_data_days`: with both left at the defaults, `sweepSnapshots`
+// (90 days) deletes the same snapshot before `sweepCandidates` (365 days)
+// ever runs, so `deleteCandidates` finds nothing left to delete and the
+// measurement understates its real cost. A test is free to set the two
+// clocks either direction (K28), so the override is the honest worst case,
+// not a contrived one.
+const SURVIVING_SNAPSHOT: TestRetention = { snapshots_days: 10_000 };
+
+it("stays inside the subrequest ceiling on one tick (candidates, one workspace)", async () => {
+  const { deps } = await testDeps();
+  const { wsp, testId, versionId } = await seedCandidateTest(deps, { retention: SURVIVING_SNAPSHOT });
+  if (!versionId) throw new Error("fixture: expected a published version");
+  for (let i = 0; i < CANDIDATE_BATCH; i++) {
+    await addDueCandidateWithSnapshot(deps, wsp, testId, versionId);
+  }
+
+  const counting = countingDeps(deps);
+  await retentionJob.run(counting.deps);
+
+  // 1 `dueCandidates` select + 1 attempt select + 1 snapshot select +
+  // 1 `storage.delete` + 1 `db.batch` (candidate/candidate_unique/
+  // response/event/snapshot/audit, one round trip) + 1 `sweepSnapshots`
+  // select (0 due here, its own clock overridden past the fixture) +
+  // 1 `retention.sweep` audit row for the one workspace touched.
+  expect(counting.counts().total).toBe(7);
+  expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
+});
+
+it("stays inside the subrequest ceiling when due candidates are spread one-per-workspace", async () => {
+  // The adversarial shape: `CANDIDATE_BATCH` due candidates, no two in the
+  // same workspace, is the worst case `dueCandidates`'s own `LIMIT` can
+  // hand `sweepCandidates` — every workspace pays its own `deleteCandidates`
+  // overhead AND its own `retention.sweep` audit row.
+  const { deps } = await testDeps();
+  for (let i = 0; i < CANDIDATE_BATCH; i++) {
+    const { wsp, testId, versionId } = await seedCandidateTest(deps, {
+      slug: `rc-${String(i)}`,
+      retention: SURVIVING_SNAPSHOT,
+    });
+    if (!versionId) throw new Error("fixture: expected a published version");
+    await addDueCandidateWithSnapshot(deps, wsp, testId, versionId);
+  }
+
+  const counting = countingDeps(deps);
+  await retentionJob.run(counting.deps);
+
+  // 1 `dueCandidates` select + 1 `sweepSnapshots` select (0 due) +
+  // `CANDIDATE_BATCH` workspaces, each paying its own `deleteCandidates`
+  // (attempt select + snapshot select + `storage.delete` + `db.batch` = 4)
+  // plus its own `retention.sweep` audit row (5 per workspace) — the
+  // measured worst case this constant is sized against.
+  expect(counting.counts().total).toBe(2 + 5 * CANDIDATE_BATCH);
+  expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 });
 
 // --- rateLimitJob: Phase 6's sweepRateLimits, finally scheduled -----------

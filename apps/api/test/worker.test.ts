@@ -11,7 +11,7 @@ import { d1Client, migrate } from "@pariksha/db";
 import type { D1Database } from "@cloudflare/workers-types";
 import worker from "../src/index";
 import { SCHEDULED_JOBS } from "../src/scheduled.js";
-import { RETENTION_BATCH } from "../src/retention/sweep.js";
+import { CANDIDATE_BATCH, RETENTION_BATCH } from "../src/retention/sweep.js";
 
 const binding = () => d1Client((env as { DB: D1Database }).DB);
 
@@ -429,4 +429,148 @@ it("the nightly sweep clears a full RETENTION_BATCH of expired snapshots against
     [workspaceId],
   );
   expect(Number(remaining[0]?.n ?? -1)).toBe(0);
+}, 30_000);
+
+// AC-24, Task 4: `dueCandidates`'s cutoff and "already erased" checks are
+// built from `json_extract` (sqlite/d1) — a real function call, not
+// something `better-sqlite3`'s own JSON1 build is guaranteed to agree with
+// D1's on, the same gap the test above exists to close for `DELETE_CHUNK`.
+// Real D1, through the real `scheduled` export: a full `CANDIDATE_BATCH`
+// of due candidates (each with a past-deadline, scored attempt — AC-24's
+// anchor), one live candidate whose only attempt's deadline is in the
+// future (the COALESCE probe, repeated here because the thing that could
+// silently diverge between better-sqlite3 and D1 is the SQL itself, not
+// the TypeScript around it), and one already-blanked row seeded by hand to
+// prove the exclusion really keeps a tick from reprocessing it.
+it("the nightly sweep expires a full CANDIDATE_BATCH of due candidates against real D1, sparing a live one", async () => {
+  const db = d1Client(env.DB as unknown as D1Database);
+  await migrate(db);
+
+  // `workspaceId` must satisfy `isId` (`packages/db/src/ids.ts`): `wsp_` plus
+  // exactly 12 characters from its Crockford alphabet (no `i`, `l`, `o`,
+  // `u`) — `appendAudit`'s `scoped()` guard rejects anything shorter, which
+  // a hand-picked id can silently violate (this one did, on the first run).
+  const workspaceId = "wsp_d1cand000001";
+  const versionId = "ver_d1cand00001";
+  const testId = "tst_d1cand00001";
+  const now = Date.now();
+  const DAY = 86_400_000;
+
+  await db.run("INSERT INTO workspace (id, slug, name, created_at) VALUES (?, ?, ?, ?)", [
+    workspaceId,
+    "d1cand",
+    "D1 Candidates",
+    now,
+  ]);
+  await db.run(
+    "INSERT INTO test (id, workspace_id, slug, name, description, short_code, status, review_requested, " +
+      "current_version, tags_json, created_at, updated_at) VALUES (?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, NULL)",
+    [testId, workspaceId, "d1cand", "D1 Candidates", "d1cand1", "published", 0, 1, "[]", now],
+  );
+  // No `retention` key: S-13's 365-day default applies.
+  await db.run(
+    "INSERT INTO test_version (id, workspace_id, test_id, version, settings_json, sections_json, published_at, created_at) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+    [versionId, workspaceId, testId, 1, "{}", "[]", now, now],
+  );
+
+  const longAgo = now - 400 * DAY; // past the 365-day default
+  const dueCandidateId = (i: number): string => `cnd_d1due${String(i).padStart(7, "0")}`;
+  const insertCandidateAndAttempt = async (
+    candidateId: string,
+    attemptId: string,
+    deadlineAt: number,
+    submittedAt: number | null,
+  ): Promise<void> => {
+    await db.run(
+      "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, form_values_json, " +
+        "consent_version, consent_at, created_at) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, NULL, ?)",
+      [candidateId, workspaceId, testId, "registration", JSON.stringify({ full_name: candidateId }), "v1", longAgo],
+    );
+    await db.run(
+      "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, " +
+        "deadline_at, submitted_at, submit_reason, score_json, flag, token_hash, max_index, section_started_at, " +
+        "integrity_flag, observed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      [
+        attemptId,
+        workspaceId,
+        candidateId,
+        versionId,
+        1,
+        "{}",
+        longAgo,
+        deadlineAt,
+        submittedAt,
+        submittedAt === null ? null : "clean",
+        submittedAt === null ? null : JSON.stringify({ total: 1 }),
+        "clean",
+        `hash-${attemptId}`,
+        0,
+        null, // section_started_at
+        "clean",
+        0,
+      ],
+    );
+  };
+
+  for (let i = 0; i < CANDIDATE_BATCH; i++) {
+    await insertCandidateAndAttempt(dueCandidateId(i), `att_d1due${String(i).padStart(7, "0")}`, longAgo, longAgo - 1);
+  }
+  // The COALESCE probe, against real D1: created long ago, but its one
+  // attempt's deadline is in the future and already submitted (so
+  // `deleteCandidates`'s own separate "in progress" guard cannot be the
+  // reason it survives — only the anchor can be).
+  const liveCandidateId = "cnd_d1live0001";
+  await insertCandidateAndAttempt(liveCandidateId, "att_d1live0001", now + 10 * DAY, now - DAY);
+  // An already-blanked row, strictly older than every genuinely-due one
+  // (`longAgo - DAY`, not tied with them) — on purpose: `dueCandidates`'s
+  // `ORDER BY at ASC LIMIT CANDIDATE_BATCH` means a tie with the real 8
+  // would let this get silently dropped by whichever order SQLite happens
+  // to break ties in, proving nothing either way. Strictly oldest, it is
+  // guaranteed a seat in the batch if the "already erased" exclusion ever
+  // fails to filter it — so its *absence* from `audit_log` below is a real
+  // proof the exclusion held on real D1, not a coincidence of row order.
+  const blankedCandidateId = "cnd_d1blank001";
+  await db.run(
+    "INSERT INTO candidate (id, workspace_id, test_id, external_id, set_label, source, form_values_json, " +
+      "consent_version, consent_at, created_at) VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, NULL, ?)",
+    [blankedCandidateId, workspaceId, testId, "registration", "{}", "v1", longAgo - DAY],
+  );
+
+  const ctx = createExecutionContext();
+  const noRetry = vi.fn();
+  worker.scheduled(
+    { cron: "17 3 * * *", scheduledTime: now, noRetry },
+    env as unknown as Parameters<typeof worker.scheduled>[1],
+    ctx,
+  );
+  await waitOnExecutionContext(ctx);
+  expect(noRetry).not.toHaveBeenCalled();
+
+  const rows = await db.query<{ id: string; form_values_json: string; external_id: string | null }>(
+    "SELECT id, form_values_json, external_id FROM candidate WHERE workspace_id = ? ORDER BY id",
+    [workspaceId],
+  );
+  const byId = new Map(rows.map((r) => [r.id, r]));
+
+  for (let i = 0; i < CANDIDATE_BATCH; i++) {
+    const row = byId.get(dueCandidateId(i));
+    expect(row?.form_values_json).toBe("{}");
+    expect(row?.external_id).toBeNull();
+  }
+  const live = byId.get(liveCandidateId);
+  expect(live?.form_values_json).not.toBe("{}");
+  expect(byId.get(blankedCandidateId)?.form_values_json).toBe("{}");
+
+  // The blanked-row check above cannot fail on its own — blanking an
+  // already-blanked row is invisible (`{}` stays `{}`). What actually
+  // proves the exclusion held: `deleteCandidates` never wrote a
+  // `candidate.delete` audit row naming the already-blanked id — and
+  // (strictly oldest, see above) it would have been guaranteed a seat in
+  // `CANDIDATE_BATCH` if the exclusion let it through.
+  const blankedAudit = await db.query<{ n: number }>(
+    "SELECT COUNT(*) AS n FROM audit_log WHERE workspace_id = ? AND action = 'candidate.delete' AND target = ?",
+    [workspaceId, blankedCandidateId],
+  );
+  expect(Number(blankedAudit[0]?.n ?? -1)).toBe(0);
 }, 30_000);

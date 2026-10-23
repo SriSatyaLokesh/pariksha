@@ -12,11 +12,12 @@
 // sweeps when that one bucket is used; this is the guarantee that runs
 // regardless of traffic.
 
-import { resolveRetention, type TestRetention } from "@pariksha/core";
+import { resolveRetention, RETENTION_DEFAULTS, type TestRetention } from "@pariksha/core";
 import { appendAudit, sweepRateLimits, type DbClient } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import type { ScheduledJob } from "../scheduled.js";
 import { MAX_WINDOW_MS } from "../run/limit.js";
+import { deleteCandidates } from "./candidate.js";
 
 const DAY_MS = 86_400_000;
 const CRON = "17 3 * * *";
@@ -47,6 +48,23 @@ export const RETENTION_BATCH = 500;
  */
 export const DELETE_CHUNK = 100;
 
+/**
+ * AC-24: how many due candidates one tick erases. Far smaller than
+ * `RETENTION_BATCH`, and deliberately so — `sweepSnapshots`'s (and the
+ * retired `sweepResponses`'s) audit cost is one row per *workspace*
+ * touched, so a 500-row batch spread over any number of workspaces still
+ * costs a handful of subrequests. `deleteCandidates` (Task 2, K29/KG9)
+ * writes one `candidate.delete` audit row per *candidate* — "which of
+ * these was erased" has to be answerable from the log alone — so that
+ * cost is **per row**, and the adversarial case (one due candidate per
+ * workspace, each with an attempt and a surviving snapshot) is also one
+ * full `deleteCandidates` call — attempt select, snapshot select,
+ * `storage.delete`, one `db.batch`, one audit row — per candidate. See
+ * "stays inside the subrequest ceiling" below for the measured number
+ * this constant is sized against.
+ */
+export const CANDIDATE_BATCH = 8;
+
 function chunk<T>(items: readonly T[], size: number): T[][] {
   const groups: T[][] = [];
   for (let i = 0; i < items.length; i += size) groups.push(items.slice(i, i + size));
@@ -55,10 +73,13 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
 
 /** Deletes `ids` from `table` in groups of `DELETE_CHUNK`, each its own
  *  statement — one `db.run` per chunk, so a 500-row batch costs up to 5
- *  subrequests here, not 1 and not 500. `table` is always one of this
- *  module's own two literals, never request input, so the interpolation
- *  below binds no value a candidate or an organiser ever supplied. */
-async function deleteChunked(db: DbClient, table: "snapshot" | "response", ids: string[]): Promise<void> {
+ *  subrequests here, not 1 and not 500. `table` is always this module's
+ *  own literal, never request input, so the interpolation below binds no
+ *  value a candidate or an organiser ever supplied. The retired
+ *  `sweepResponses` was this function's other caller, with `"response"`;
+ *  AC-24's candidate pass subsumes it (see `sweepCandidates`), so
+ *  `"snapshot"` is the only table left to delete this way. */
+async function deleteChunked(db: DbClient, table: "snapshot", ids: string[]): Promise<void> {
   for (const group of chunk(ids, DELETE_CHUNK)) {
     const placeholders = group.map(() => "?").join(", ");
     await db.run(`DELETE FROM ${table} WHERE id IN (${placeholders})`, group);
@@ -137,19 +158,90 @@ async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorks
   return { deleted: due.length, byWorkspace: tally(due) };
 }
 
-async function sweepResponses(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
-  const rows = await deps.db.query<Candidate>(
-    "SELECT r.id AS id, r.workspace_id AS workspace_id, r.saved_at AS at, tv.settings_json AS settings_json " +
-      "FROM response r " +
-      "JOIN attempt a ON a.id = r.attempt_id " +
-      "JOIN test_version tv ON tv.id = a.test_version_id " +
-      "ORDER BY r.saved_at ASC LIMIT ?",
-    [RETENTION_BATCH],
+/**
+ * AC-24's clock anchor, in SQL: `COALESCE(MAX(attempt.deadline_at),
+ * candidate.created_at)` — a live attempt's deadline is in the future, so
+ * a candidate mid-exam is never due (the one thing this task must not get
+ * wrong); a candidate uploaded but never registered has no attempt at all,
+ * so upload time is the only clock it has; several attempts in one test
+ * fold through `MAX`.
+ *
+ * Both the cutoff and the "already erased" check live in this query's
+ * `WHERE`, not a JS filter applied after the fetch — #226 is exactly a
+ * global `ORDER BY ... LIMIT` with no `WHERE`, which lets one workspace's
+ * long-override, not-yet-due rows occupy every batch and starve every
+ * other workspace. Pushing the cutoff into SQL means `LIMIT` only ever
+ * spends `CANDIDATE_BATCH` on rows that are actually due, from any
+ * workspace. "Already erased" is read off `deleteCandidates`'s own
+ * blanked shape (`form_values_json = '{}'` and `external_id IS NULL`
+ * together — neither alone is safe, since a self-registered candidate's
+ * `external_id` is NULL from creation, never set — see
+ * `packages/db/src/repo/attempts.ts`), or every tick reprocesses the same
+ * rows forever.
+ *
+ * Settings resolve through `test.current_version`, `LEFT JOIN`ed so a
+ * never-published test's uploaded list still falls through to
+ * `RETENTION_DEFAULTS` instead of vanishing from the sweep.
+ *
+ * sqlite/d1 store JSON as text (`json_extract`); Postgres as `jsonb`
+ * (`#>>`, cast to `numeric`) — `db.dialect` (client.ts:78-80) is the one
+ * branch point, the same split `jsonParam`/`jsonValue` already draw.
+ */
+async function dueCandidates(deps: AppDeps): Promise<Candidate[]> {
+  const pg = deps.db.dialect === "pg";
+  const alreadyBlanked = pg
+    ? "c.form_values_json = '{}'::jsonb AND c.external_id IS NULL"
+    : "c.form_values_json = '{}' AND c.external_id IS NULL";
+  const daysExtract = pg
+    ? "(sub.settings_json #>> '{retention,personal_data_days}')::numeric"
+    : "json_extract(sub.settings_json, '$.retention.personal_data_days')";
+
+  return deps.db.query<Candidate>(
+    `SELECT sub.* FROM (
+       SELECT c.id AS id, c.workspace_id AS workspace_id,
+         COALESCE((SELECT MAX(att.deadline_at) FROM attempt att WHERE att.candidate_id = c.id), c.created_at) AS at,
+         tv.settings_json AS settings_json
+       FROM candidate c
+       JOIN test t ON t.id = c.test_id
+       LEFT JOIN test_version tv ON tv.test_id = t.id AND tv.version = t.current_version
+       WHERE NOT (${alreadyBlanked})
+     ) sub
+     WHERE sub.at <= ? - COALESCE(${daysExtract}, ?) * ${DAY_MS}
+     ORDER BY sub.at ASC
+     LIMIT ?`,
+    [deps.now(), RETENTION_DEFAULTS.personalDataDays, CANDIDATE_BATCH],
   );
-  const due = expired(deps.db, rows, deps.now(), (r) => r.personalDataDays);
+}
+
+/**
+ * AC-24's missing half of S-13/S-14: applies Task 2's `deleteCandidates`
+ * (never a second erasure path — `TABLE_MANIFEST`/`KG4` guard this and the
+ * manual route with one test) to a bounded batch of due candidates,
+ * `keepAnonymisedScore: true` per K29's blanked-row shape so results
+ * analytics keep reading an anonymised `score_json`. `deleteCandidates` is
+ * workspace-scoped, so a batch spanning several workspaces calls it once
+ * per workspace, grouped from the one SQL fetch above.
+ */
+async function sweepCandidates(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
+  const due = await dueCandidates(deps);
   if (due.length === 0) return { deleted: 0, byWorkspace: new Map() };
 
-  await deleteChunked(deps.db, "response", due.map((row) => row.id));
+  const byWorkspace = new Map<string, string[]>();
+  for (const row of due) {
+    const list = byWorkspace.get(row.workspace_id) ?? [];
+    list.push(row.id);
+    byWorkspace.set(row.workspace_id, list);
+  }
+
+  for (const [workspaceId, candidateIds] of byWorkspace) {
+    await deleteCandidates(deps.db, workspaceId, {
+      candidateIds,
+      keepAnonymisedScore: true,
+      actor: "system",
+      now: deps.now(),
+      storage: deps.storage,
+    });
+  }
 
   return { deleted: due.length, byWorkspace: tally(due) };
 }
@@ -159,13 +251,18 @@ export const retentionJob: ScheduledJob = {
   cron: CRON,
   run: async (deps) => {
     const snapshots = await sweepSnapshots(deps);
-    const responses = await sweepResponses(deps);
+    const candidates = await sweepCandidates(deps);
 
     // One audit row per workspace this run actually touched (K30: "logs
     // what it did"), not one per deletion and not one unconditionally —
     // a run that found nothing expired has nothing to attribute a row to,
-    // since `audit_log.workspace_id` is never null.
-    const workspaces = new Set([...snapshots.byWorkspace.keys(), ...responses.byWorkspace.keys()]);
+    // since `audit_log.workspace_id` is never null. `candidatesDeleted`
+    // replaces `responsesDeleted`: AC-24's response pass is retired, not
+    // kept beside the candidate one — `response.saved_at` is always at or
+    // before the deadline anchor `dueCandidates` uses, so the candidate
+    // pass already subsumes it; running both would delete the same rows
+    // on two different clocks.
+    const workspaces = new Set([...snapshots.byWorkspace.keys(), ...candidates.byWorkspace.keys()]);
     for (const workspaceId of workspaces) {
       await appendAudit(deps.db, workspaceId, {
         actor: "system",
@@ -173,7 +270,7 @@ export const retentionJob: ScheduledJob = {
         target: "retention",
         detail: {
           snapshotsDeleted: snapshots.byWorkspace.get(workspaceId) ?? 0,
-          responsesDeleted: responses.byWorkspace.get(workspaceId) ?? 0,
+          candidatesDeleted: candidates.byWorkspace.get(workspaceId) ?? 0,
         },
         now: deps.now(),
       });
@@ -181,8 +278,8 @@ export const retentionJob: ScheduledJob = {
 
     return {
       summary:
-        `retention.sweep: deleted ${snapshots.deleted} snapshot(s) and ${responses.deleted} response(s) ` +
-        `across ${workspaces.size} workspace(s), batch ${RETENTION_BATCH}`,
+        `retention.sweep: deleted ${snapshots.deleted} snapshot(s) and ${candidates.deleted} candidate(s) ` +
+        `across ${workspaces.size} workspace(s), batch ${RETENTION_BATCH}/${CANDIDATE_BATCH}`,
     };
   },
 };
