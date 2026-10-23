@@ -236,7 +236,16 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // only ever lose its own claim from here on — so it no longer spends a
     // D1 write finding that out on every subsequent violation.
     if (attempt.submittedAt === null && attempt.lockedAt === null) {
-      atLimit = violations >= resolved.violationLimit;
+      // m4: `warn_only` has no consequence to claim — `violationOutcome`'s
+      // own doc comment promises "a candidate at violation 9 of a 5-limit
+      // `warn_only` test still reads 'Warning 9 of 5' forever", but without
+      // this, `claimViolationLimit` still wins the marker once, and every
+      // later at-limit batch reads `alreadyActioned: true` and gets
+      // `{kind:"none"}` instead of the warning — a contract `warn_only`'s
+      // only caller never actually gets. Excluding it here also saves the
+      // wasted `INSERT … ON CONFLICT DO NOTHING` a `warn_only` test would
+      // otherwise pay on every at-limit batch forever, to learn nothing.
+      atLimit = violations >= resolved.violationLimit && resolved.violationAction !== "warn_only";
       alreadyActioned = atLimit
         ? !(
             await claimViolationLimit(deps.db, attempt.workspaceId, {

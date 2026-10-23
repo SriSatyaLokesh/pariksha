@@ -24,7 +24,7 @@ import { DAY, iso, seedTest, seedWorkspace } from "./fixtures.js";
 import { PAPER_FORM, seedBank } from "./paper-fixtures.js";
 
 const T = FIXED_NOW;
-const SLUG = { workspace: "epsilon", test: "proctored" } as const;
+const SLUG = { workspace: "epsilon", test: "proctored", warnOnly: "warn-only" } as const;
 
 const { deps } = await testDeps();
 const app = createApp(deps);
@@ -49,15 +49,33 @@ await seedTest(deps, workspaceId, {
   },
 });
 
+// m4: `warn_only`, the one action `violationOutcome` promises keeps warning
+// forever rather than ever claiming the marker.
+await seedTest(deps, workspaceId, {
+  name: "Warn only",
+  slug: SLUG.warnOnly,
+  body: {
+    settings: {
+      timing: { duration_minutes: 45, opens_at: iso(T - DAY), closes_at: iso(T + DAY) },
+      access: { mode: "link_code", access_code: "OPENSESAME" },
+      registration_form: PAPER_FORM,
+      proctoring: { profile: "standard", overrides: { violation_action: "warn_only" } },
+    },
+    sections: [
+      { id: "only", title: "Only", source: { kind: "fixed", questions: [q["LOG-001"] as string] } },
+    ],
+  },
+});
+
 afterAll(() => closeClient(deps.db));
 
 // --- helpers (mirrors events.test.ts) -------------------------------------
 
 let serial = 1;
 
-async function start(): Promise<{ cookie: string; attemptId: string }> {
-  const test = await resolvePublishedTest(deps.db, SLUG.workspace, SLUG.test, T);
-  if (!test) throw new Error(`no published test at ${SLUG.workspace}/${SLUG.test}`);
+async function start(slug: string = SLUG.test): Promise<{ cookie: string; attemptId: string }> {
+  const test = await resolvePublishedTest(deps.db, SLUG.workspace, slug, T);
+  if (!test) throw new Error(`no published test at ${SLUG.workspace}/${slug}`);
   const candidateId = await createCandidate(deps.db, test.workspaceId, {
     testId: test.testId,
     formValues: { roll: `R${String(serial++)}` },
@@ -72,7 +90,7 @@ async function start(): Promise<{ cookie: string; attemptId: string }> {
     now: T,
     expiresAt: T + REGISTRATION_TTL_MS,
   });
-  const res = await app.request(`/api/v1/run/${SLUG.workspace}/${SLUG.test}/start`, {
+  const res = await app.request(`/api/v1/run/${SLUG.workspace}/${slug}/start`, {
     method: "POST",
     headers: { authorization: `Bearer ${token}` },
   });
@@ -249,4 +267,25 @@ it("the batch that first reaches the limit under warn_then_flag costs 8, measure
   );
   await res.json();
   expect(counting.counts().total).toBe(8);
+});
+
+// --- m4: `warn_only` never claims, so it never stops warning ---------------
+
+it("m4: a warn_only test keeps warning past the limit instead of going silent after the first batch", async () => {
+  const { cookie } = await start(SLUG.warnOnly);
+
+  const first = await post(
+    EVENTS_PATH,
+    { events: Array.from({ length: 5 }, (_, i) => ({ type: "window_blur" as const, clientTs: i })) },
+    cookie,
+  );
+  expect(await first.json()).toMatchObject({ violations: 5, limit: 5, action: "warn_only" });
+  // Never claimed — `claimViolationLimit` is never even attempted for
+  // `warn_only` — so the finish page's own warning stays live rather than
+  // reading `{kind:"none"}` on every batch after the first.
+  expect(await limitReachedCount()).toBe(0);
+
+  const second = await post(EVENTS_PATH, { events: [{ type: "window_blur", clientTs: 9 }] }, cookie);
+  expect(await second.json()).toMatchObject({ violations: 6, limit: 5, action: "warn_only" });
+  expect(await limitReachedCount()).toBe(0);
 });
