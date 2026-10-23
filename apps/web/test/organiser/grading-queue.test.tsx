@@ -213,6 +213,76 @@ describe("GradingQueue verdict control (K16)", () => {
     expect(onVerdict).toHaveBeenCalledWith("att_1", "clear", undefined);
   });
 
+  // Fix round 1, MAJOR: re-clicking an already-checked radio fires no
+  // `onChange`, so a note typed *after* the verdict pick used to vanish —
+  // the control looked like it had saved context that was never sent.
+  it("sends a note typed after the verdict pick, on blur — fix round 1 MAJOR", () => {
+    const onVerdict = vi.fn();
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+        onVerdict={onVerdict}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Suspicious" }));
+    expect(onVerdict).toHaveBeenCalledWith("att_1", "suspicious", undefined);
+
+    const noteField = screen.getByLabelText("Note");
+    fireEvent.change(noteField, { target: { value: "Added after the click" } });
+    fireEvent.blur(noteField);
+
+    // The second call is the payload that actually reached the caller —
+    // not merely that the field re-rendered with the typed text.
+    expect(onVerdict).toHaveBeenCalledTimes(2);
+    expect(onVerdict).toHaveBeenNthCalledWith(
+      2,
+      "att_1",
+      "suspicious",
+      "Added after the click",
+    );
+  });
+
+  it("never re-sends on blur when the note has not changed since the last send", () => {
+    const onVerdict = vi.fn();
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+        onVerdict={onVerdict}
+      />,
+    );
+
+    const noteField = screen.getByLabelText("Note");
+    fireEvent.change(noteField, { target: { value: "Same note" } });
+    fireEvent.click(screen.getByRole("radio", { name: "Clear" }));
+    expect(onVerdict).toHaveBeenCalledTimes(1);
+
+    // Focus the field and blur it again with nothing edited — this must
+    // not append a second, identical `review` row (the table is
+    // append-only, so a duplicate here is a duplicate forever).
+    fireEvent.blur(noteField);
+    fireEvent.blur(noteField);
+    expect(onVerdict).toHaveBeenCalledTimes(1);
+  });
+
+  it("does nothing on blur before any verdict has been picked", () => {
+    const onVerdict = vi.fn();
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+        onVerdict={onVerdict}
+      />,
+    );
+
+    const noteField = screen.getByLabelText("Note");
+    fireEvent.change(noteField, { target: { value: "Typed before any pick" } });
+    fireEvent.blur(noteField);
+
+    // Nothing to attach the note to yet — `recordVerdict` takes a verdict
+    // and an optional note together, never a note alone.
+    expect(onVerdict).not.toHaveBeenCalled();
+  });
+
   it("has no axe violations with the verdict control present", async () => {
     const { container } = render(
       <GradingQueue rows={THREE_ANSWERS} onVerdict={vi.fn()} />,

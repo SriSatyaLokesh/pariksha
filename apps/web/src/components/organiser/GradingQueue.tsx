@@ -140,12 +140,35 @@ function QueueCard({
   const rubric = row.question.rubric ?? [];
   const selected = row.award?.levels[0] ?? null;
   const text = answerText(row.value);
-  // The note is free text typed ahead of a verdict pick, so it needs its
-  // own state — unlike the rubric above, which has nothing to hold before
-  // the reviewer clicks. Sent along with whichever verdict is picked next,
-  // never on its own: `recordVerdict` (`apps/api/src/grade/verdict.ts`)
-  // takes a verdict and an optional note together, not a note alone.
+  // The note is free text, and a reviewer may keep typing after already
+  // picking a verdict — re-clicking an already-checked radio fires no
+  // `onChange`, so without the blur handler below, a note typed *after*
+  // the click is silently dropped (fix round 1, MAJOR). `verdictSent`
+  // holds what was last actually sent — `{ verdict, note }` — so a note
+  // field blurred with nothing changed since that send never fires a
+  // second, duplicate `review` row (the table is append-only; a stray
+  // blur with no edit must not append anything).
   const [note, setNote] = useState("");
+  const [verdictSent, setVerdictSent] = useState<{
+    verdict: Verdict;
+    note: string | undefined;
+  } | null>(null);
+
+  function sendVerdict(verdict: Verdict): void {
+    const normalized = note.trim() === "" ? undefined : note;
+    void onVerdict?.(row.attemptId, verdict, normalized);
+    setVerdictSent({ verdict, note: normalized });
+  }
+
+  function onNoteBlur(): void {
+    // Nothing to attach a freshly-typed note to until a verdict has been
+    // picked at least once — `recordVerdict` takes a verdict and an
+    // optional note together, never a note alone.
+    if (verdictSent === null) return;
+    const normalized = note.trim() === "" ? undefined : note;
+    if (normalized === verdictSent.note) return;
+    sendVerdict(verdictSent.verdict);
+  }
 
   return (
     <article
@@ -200,6 +223,7 @@ function QueueCard({
               id={`${ids}-verdict-note`}
               value={note}
               onChange={(event) => setNote(event.target.value)}
+              onBlur={onNoteBlur}
               placeholder="Optional — what a later reviewer should know"
             />
           </div>
@@ -213,13 +237,7 @@ function QueueCard({
                     id={optionId}
                     name={`${ids}-verdict`}
                     value={verdict}
-                    onChange={() =>
-                      void onVerdict(
-                        row.attemptId,
-                        verdict,
-                        note.trim() === "" ? undefined : note,
-                      )
-                    }
+                    onChange={() => sendVerdict(verdict)}
                   />
                   <label className="field-label" htmlFor={optionId}>
                     {VERDICT_LABEL[verdict]}

@@ -78,6 +78,15 @@ export const recordVerdict = scoped(
  * promise this function exists to keep. `review` is scoped to verdicts a
  * reviewer actually recorded, not to every attempt a workspace has ever
  * run, so reading it whole costs the same one query at 3 attempts or 3,000.
+ *
+ * ponytail: this is a full scan of the workspace's `review` table, not of
+ * just `attemptIds` — bounded by how many verdicts a human has ever
+ * clicked, not by cohort size, so it stays small for years at realistic
+ * review volume. If a workspace's verdict history ever grows large enough
+ * for that to matter, the upgrade path is `WHERE at > ?` (a time floor,
+ * set from the caller's own cutoff) or a `test_id` column to scope the
+ * scan — not a chunked `IN`, which would break the one-query contract this
+ * function exists to keep.
  */
 export const latestVerdicts = scoped(
   "latestVerdicts",
