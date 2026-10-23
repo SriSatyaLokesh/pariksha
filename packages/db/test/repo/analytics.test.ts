@@ -407,7 +407,7 @@ it("feeds itemAnalysis a scored attempt's responses, correctness read from its o
   });
   await seedResponse(ws.workspaceId, attemptId, "qst_1", { kind: "option", option: "a" });
 
-  const stats = await testItemAnalysis(db, ws.workspaceId, ws.testId);
+  const { items: stats } = await testItemAnalysis(db, ws.workspaceId, ws.testId);
   const q1 = stats.find((s) => s.questionId === "qst_1");
   expect(q1).toMatchObject({ shareCorrect: 1, optionPickRates: { a: 1 } });
 });
@@ -423,7 +423,7 @@ it("excludes a response belonging to an attempt still in progress", async () => 
   });
   await seedResponse(ws.workspaceId, attemptId, "qst_1", { kind: "option", option: "a" });
 
-  const stats = await testItemAnalysis(db, ws.workspaceId, ws.testId);
+  const { items: stats } = await testItemAnalysis(db, ws.workspaceId, ws.testId);
   expect(stats.find((s) => s.questionId === "qst_1")).toBeUndefined();
 });
 
@@ -447,8 +447,8 @@ it("returns the same discrimination index on repeated calls — ordering is dete
     await seedResponse(ws.workspaceId, attemptId, "qst_1", { kind: "option", option: "a" });
   }
 
-  const first = await testItemAnalysis(db, ws.workspaceId, ws.testId);
-  const second = await testItemAnalysis(db, ws.workspaceId, ws.testId);
+  const { items: first } = await testItemAnalysis(db, ws.workspaceId, ws.testId);
+  const { items: second } = await testItemAnalysis(db, ws.workspaceId, ws.testId);
   expect(second.find((s) => s.questionId === "qst_1")!.discrimination).toBe(
     first.find((s) => s.questionId === "qst_1")!.discrimination,
   );
@@ -475,7 +475,117 @@ it("stays inside the subrequest ceiling for 300 candidates x 60 questions", asyn
   }
 
   const counting = countingClient(db);
-  const stats = await testItemAnalysis(counting.db, ws.workspaceId, ws.testId);
+  const { items: stats, truncated } = await testItemAnalysis(counting.db, ws.workspaceId, ws.testId);
   expect(stats).toHaveLength(60);
+  expect(truncated).toBe(false);
   expect(counting.count()).toBeLessThanOrEqual(2);
+});
+
+// --- Fix round 1, Important 1: a cohort past 500 rows, paged to exhaustion -
+
+it("counts every attempt of a cohort past the 500-row page size, not just the first page", async () => {
+  // 650: past one page (500) and short of two (1000), so a reader that
+  // silently stopped at the first page's worth would under-report both the
+  // registered-vs-counted arithmetic and the mean by a measurable amount —
+  // not merely "some rows missing", a specific, checkable wrong number.
+  const ws = await publish("past-one-page");
+  const ATTEMPTS = 650;
+  for (let i = 0; i < ATTEMPTS; i += 1) {
+    const candidateId = await candidateIn(ws);
+    await seedAttempt({
+      workspaceId: ws.workspaceId,
+      candidateId,
+      testVersionId: ws.versionId,
+      startedAt: NOW + i,
+      submittedAt: NOW + i + MINUTE,
+      percent: 50,
+    });
+  }
+
+  const s = await testAnalytics(db, ws.workspaceId, ws.testId);
+  expect(s.counts.submitted).toBe(ATTEMPTS);
+  expect(s.counts.registered).toBe(ATTEMPTS);
+  expect(s.truncated).toBe(false);
+  // The histogram bucket for 50-60 holds every one of them — a reader
+  // stuck on page one would report 500, not 650.
+  expect(s.distribution[5]).toBe(ATTEMPTS);
+}, 20_000);
+
+it("feeds itemAnalysis every response of a cohort past the 500-row page size", async () => {
+  const ws = await publish("past-one-page-items");
+  const ATTEMPTS = 520;
+  for (let i = 0; i < ATTEMPTS; i += 1) {
+    const candidateId = await candidateIn(ws);
+    const attemptId = await seedAttempt({
+      workspaceId: ws.workspaceId,
+      candidateId,
+      testVersionId: ws.versionId,
+      startedAt: NOW + i,
+      submittedAt: NOW + i + MINUTE,
+      percent: 50,
+      perQuestion: { qst_1: { points: 1, max: 1, correct: true } },
+    });
+    await seedResponse(ws.workspaceId, attemptId, "qst_1", { kind: "option", option: "a" });
+  }
+
+  const { items, truncated } = await testItemAnalysis(db, ws.workspaceId, ws.testId);
+  expect(truncated).toBe(false);
+  // `n` is the whole attempts cohort `itemAnalysis` was handed (its own
+  // contract) — 520 if every page was read, 500 if the fetch silently
+  // stopped at page one.
+  expect(items.find((s) => s.questionId === "qst_1")!.n).toBe(ATTEMPTS);
+}, 20_000);
+
+it("states truncation rather than silently dropping rows once the hard page cap is reached", async () => {
+  // `maxAttemptPages: 1, attemptPageSize: 10` are the test-only overrides —
+  // two pages of 10 rows (20 attempts) against a cap of one 10-row page
+  // reaches the cap with the second page still unread, the same shape a
+  // real cohort past `MAX_ATTEMPT_PAGES * 500` attempts would hit, at a
+  // fixture size this test can seed in milliseconds rather than minutes.
+  const ws = await publish("hits-the-page-cap");
+  for (let i = 0; i < 20; i += 1) {
+    const candidateId = await candidateIn(ws);
+    await seedAttempt({
+      workspaceId: ws.workspaceId,
+      candidateId,
+      testVersionId: ws.versionId,
+      startedAt: NOW + i,
+      submittedAt: NOW + i + MINUTE,
+      percent: 50,
+    });
+  }
+
+  const s = await testAnalytics(db, ws.workspaceId, ws.testId, 1, 10);
+  expect(s.truncated).toBe(true);
+  // The figures still describe exactly what was read — the first page's 10
+  // rows, not a fabricated 20 — "bounded and said", never "bounded and
+  // silent".
+  expect(s.counts.submitted).toBe(10);
+
+  const { truncated: itemsTruncated, items } = await testItemAnalysis(db, ws.workspaceId, ws.testId, 1, 10);
+  expect(itemsTruncated).toBe(true);
+  expect(items).toEqual([]);
+});
+
+it("does not report truncation for a cohort that exactly fills the page cap with nothing left over", async () => {
+  // The boundary the loop's own `nextCursor === null` check has to get
+  // right: a cohort that fits in exactly `maxAttemptPages` pages must not
+  // be reported as truncated merely because the loop ran out of
+  // iterations at the same moment the data ran out.
+  const ws = await publish("exactly-fills-the-cap");
+  for (let i = 0; i < 10; i += 1) {
+    const candidateId = await candidateIn(ws);
+    await seedAttempt({
+      workspaceId: ws.workspaceId,
+      candidateId,
+      testVersionId: ws.versionId,
+      startedAt: NOW + i,
+      submittedAt: NOW + i + MINUTE,
+      percent: 50,
+    });
+  }
+
+  const s = await testAnalytics(db, ws.workspaceId, ws.testId, 1, 10);
+  expect(s.truncated).toBe(false);
+  expect(s.counts.submitted).toBe(10);
 });
