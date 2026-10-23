@@ -20,3 +20,9 @@ export * from "./run.js";
 export * from "./results.js";
 // Phase 8d Task 1: webhook CRUD, and Task 3's own delivery read.
 export * from "./webhooks.js";
+// Phase 8d Task 2 (K25, K26): scoped API keys. `resolveApiKey` is
+// deliberately NOT re-exported here — see `repo/keys.ts`'s own header and
+// `src/index.ts`'s — it takes no workspace ID, so `scoped()` cannot wrap
+// it and this barrel's own "every export is scoped" guard
+// (`test/repo/scoping.test.ts`) would fail the moment it appeared here.
+export { createApiKey, listApiKeys, revokeApiKey, KEY_FORBIDDEN_ACTIONS, type ApiKeyRow } from "./keys.js";

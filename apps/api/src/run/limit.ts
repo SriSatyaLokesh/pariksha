@@ -176,8 +176,12 @@ export async function limitOrThrow(deps: AppDeps, kind: LimitKind, key?: string)
   if (count > limit) throw refuse("too_many_attempts");
 }
 
-/** The longest window any bucket counts over — see `limitOrThrow`. */
-const MAX_WINDOW_MS = Math.max(...Object.values(LIMITS).map((one) => one.windowMs));
+/** The longest window any bucket counts over — see `limitOrThrow`. Exported
+ *  for `retention/sweep.ts`'s `rateLimitJob`, the other caller of
+ *  `sweepRateLimits` that needs the same "older than every kind's window"
+ *  cutoff (Fix round 1, F2) — read off `LIMITS` here rather than re-derived
+ *  there, so there is one definition instead of two that merely agree. */
+export const MAX_WINDOW_MS = Math.max(...Object.values(LIMITS).map((one) => one.windowMs));
 
 /**
  * The miss-counting form: run `work`, and charge the bucket only when it

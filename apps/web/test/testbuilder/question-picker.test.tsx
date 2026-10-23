@@ -188,6 +188,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     lockedAttempts: async () => [],
     unlockAttempt: notUsed,
     importCandidates: notUsed,
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
+    usage: async () => undefined,
     listWebhooks: async () => {
       throw new Error("not used by this test file");
     },
@@ -198,6 +201,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used by this test file");
     },
     deleteWebhook: async () => {
+      throw new Error("not used by this test file");
+    },
+    listApiKeys: async () => ({ keys: [] }),
+    createApiKey: async () => {
+      throw new Error("not used by this test file");
+    },
+    revokeApiKey: async () => {
       throw new Error("not used by this test file");
     },
     ...overrides,

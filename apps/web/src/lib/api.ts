@@ -9,19 +9,20 @@
 
 // The matrix these roles index lives in @pariksha/core (#25); the type is
 // re-exported here so the screens have one import for the whole API surface.
-import type {
-  Bank as BankDocument,
-  Difficulty,
-  ImportIssue,
-  PassageGroup,
-  Question,
-  QuestionType,
-  Role,
-  Section,
-  Test,
-  TestBranding,
+import {
+  type Bank as BankDocument,
+  type Difficulty,
+  type ImportIssue,
+  type PassageGroup,
+  type Question,
+  type QuestionType,
+  type Role,
+  type Action,
+  type Section,
+  type Test,
+  type TestBranding,
 } from "@pariksha/core";
-export type { Role };
+export type { Role, Action };
 // Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
 // shape every other bank route already answers with, not the
 // `pariksha/bank@1` document export produces — same name, two different
@@ -258,6 +259,23 @@ export interface Workspace {
 }
 
 /**
+ * Phase 8e Task 3 (`K31`, `K36`, issue 102). Mirrors `UsageProjection`
+ * (`apps/api/src/usage/project.ts`) field for field — a second declaration
+ * rather than a cross-app import, the same way `TestSummary` above
+ * redeclares its own wire shape instead of reaching into `apps/api`.
+ *
+ * Branch review `C2` (CRITICAL): `spentToday` is gone. It cost every row
+ * the workspace held in three uncomposited tables to answer a number that
+ * was normally zero; `projected` alone is what an organiser can act on.
+ */
+export interface UsageProjection {
+  projected: number;
+  limit: number;
+  warn: boolean;
+  estimated: true;
+}
+
+/**
  * Every failure response is `{ error: { code, message, details? } }`. This
  * carries all three so a screen can render `message` — the human half —
  * and never a bare status code.
@@ -455,6 +473,25 @@ export interface ApiClient {
   lockedAttempts(workspaceId: string, testId: string): Promise<LockedAttemptRow[]>;
   unlockAttempt(workspaceId: string, testId: string, attemptId: string): Promise<void>;
 
+  // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete`, Owner-only —
+  // both methods share the one permission. `exportCandidateData` hands
+  // back the parsed document and the filename the server named it, rather
+  // than the raw `Response`, so a caller can go straight to
+  // `downloadJson` (`lib/download.ts`) the same way `exportBank` already
+  // does.
+  exportCandidateData(workspaceId: string, candidateId: string): Promise<{ data: unknown; filename: string }>;
+  deleteCandidateData(
+    workspaceId: string,
+    candidateId: string,
+    keepAnonymisedScore: boolean,
+  ): Promise<{ tablesTouched: string[] }>;
+
+  // Phase 8e Task 3 (`K31`, `K36`, issue 102): the free-tier meter. `undefined`,
+  // not `null` — `GET .../usage` omits the field entirely on the `node`
+  // target (`K36`), and `undefined` is what reading an absent key off a
+  // parsed body already gives for free, with no `?? null` to invent a
+  // second "nothing" the type does not need.
+  usage(workspaceId: string): Promise<UsageProjection | undefined>;
   // Phase 8d Task 1: webhooks, behind `workspace.settings` like branding
   // above. `costPerCandidate` is absent on the `node` target (`K36`) — the
   // route omits the field rather than sending `null`.
@@ -467,6 +504,17 @@ export interface ApiClient {
   ): Promise<{ id: string; url: string; events: WebhookEvent[]; signingSecret: string }>;
   setWebhookActive(workspaceId: string, webhookId: string, active: boolean): Promise<void>;
   deleteWebhook(workspaceId: string, webhookId: string): Promise<void>;
+
+  // Phase 8d Task 2 (K25, K26, KG5): scoped API keys, behind `keys.manage`
+  // like webhooks above.
+  listApiKeys(workspaceId: string): Promise<{ keys: ApiKey[] }>;
+  /** The one call that ever sees `secret` (`KG5`) — shown once, by the
+   *  panel, and never fetched again. */
+  createApiKey(
+    workspaceId: string,
+    input: { name: string; scopes: Action[] },
+  ): Promise<{ id: string; name: string; scopes: Action[]; secret: string }>;
+  revokeApiKey(workspaceId: string, keyId: string): Promise<void>;
 }
 
 /** Mirrors `packages/db/src/repo/webhooks.ts`'s `WebhookRow` — the wire
@@ -492,6 +540,17 @@ export interface Webhook {
  */
 export type WebhookEvent = "attempt.submitted" | "test.closed";
 export const WEBHOOK_EVENTS: readonly WebhookEvent[] = ["attempt.submitted", "test.closed"];
+
+/** Mirrors `packages/db/src/repo/keys.ts`'s `ApiKeyRow` — the wire shape,
+ * never the secret (`KG5`). */
+export interface ApiKey {
+  id: string;
+  name: string;
+  scopes: Action[];
+  createdAt: number;
+  lastUsedAt: number | null;
+  revokedAt: number | null;
+}
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
  * `packages/db/src/repo/candidates.ts` — the wire shape, not the row. */
@@ -872,6 +931,26 @@ export function createApiClient(): ApiClient {
       await json(`/workspaces/${workspaceId}/tests/${testId}/attempts/${attemptId}/unlock`, post({}));
     },
 
+    async exportCandidateData(workspaceId, candidateId) {
+      const response = await request(`/workspaces/${workspaceId}/candidates/${candidateId}/data`);
+      // The route names the file in `content-disposition` (`errors.ts`'s
+      // own envelope carries no filename, so this is the one place it
+      // lives); a filename here is only a fallback for a proxy that drops
+      // the header, never the expected path.
+      const match = /filename="([^"]+)"/.exec(response.headers.get("content-disposition") ?? "");
+      const filename = match?.[1] ?? `candidate_${candidateId}_export.json`;
+      return { data: (await response.json()) as unknown, filename };
+    },
+
+    deleteCandidateData: (workspaceId, candidateId, keepAnonymisedScore) =>
+      json<{ tablesTouched: string[] }>(`/workspaces/${workspaceId}/candidates/${candidateId}/data`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keepAnonymisedScore }),
+      }),
+
+    usage: async (workspaceId) =>
+      (await json<{ usage?: UsageProjection }>(`/workspaces/${workspaceId}/usage`)).usage,
     listWebhooks: (workspaceId) =>
       json<{ webhooks: Webhook[]; costPerCandidate?: number }>(`/workspaces/${workspaceId}/webhooks`),
 
@@ -884,6 +963,14 @@ export function createApiClient(): ApiClient {
 
     async deleteWebhook(workspaceId, webhookId) {
       await request(`/workspaces/${workspaceId}/webhooks/${webhookId}`, { method: "DELETE" });
+    },
+
+    listApiKeys: (workspaceId) => json<{ keys: ApiKey[] }>(`/workspaces/${workspaceId}/keys`),
+
+    createApiKey: (workspaceId, input) => json(`/workspaces/${workspaceId}/keys`, post(input)),
+
+    async revokeApiKey(workspaceId, keyId) {
+      await request(`/workspaces/${workspaceId}/keys/${keyId}`, { method: "DELETE" });
     },
   };
 }

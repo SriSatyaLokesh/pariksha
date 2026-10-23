@@ -70,6 +70,16 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createWebhook: notUsed,
     setWebhookActive: notUsed,
     deleteWebhook: notUsed,
+    // 8e's additions to `ApiClient`, then this branch's. Neither set overlaps
+    // a line the other touched, so only the type ever catches a missing one.
+    // See #228: every test file hand-rolls this fixture, which is why one
+    // interface change conflicts in twenty-odd places.
+    exportCandidateData: notUsed,
+    deleteCandidateData: notUsed,
+    usage: async () => undefined,
+    listApiKeys: notUsed,
+    createApiKey: notUsed,
+    revokeApiKey: notUsed,
     ...overrides,
   };
 }

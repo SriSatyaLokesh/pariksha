@@ -15,6 +15,7 @@ import { securityHeaders } from "./middleware/security.js";
 import { logging } from "./middleware/logging.js";
 import { errorEnvelope, notFoundEnvelope } from "./middleware/errorEnvelope.js";
 import { authenticate } from "./middleware/authenticate.js";
+import { actorOnly } from "./middleware/authorize.js";
 import { health } from "./routes/health.js";
 import { authRoutes } from "./routes/auth.js";
 import { me } from "./routes/me.js";
@@ -29,7 +30,11 @@ import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
+import { candidateDataRoutes } from "./retention/candidate.js";
+import { usageRoute } from "./usage/project.js";
+import { requireMember } from "./middleware/authorize.js";
 import { webhookRoutes } from "./routes/webhooks.js";
+import { keyRoutes } from "./routes/keys.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -671,6 +676,41 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `appendAudit` (1).
   "/api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": 6,
 
+  // Phase 8e Task 2 (`S-14`, #101): the candidate's own data, and its
+  // erasure. `candidates.delete` gets its first production caller here.
+  // Measured (`apps/api/test/retention/candidate.test.ts`'s own "measures
+  // the real subrequest cost" test), not estimated. GET costs 8: auth (2) +
+  // `candidateExists` (1) + `exportCandidate`'s five reads — the candidate
+  // row, `attempt`, `response`, `event` and `snapshot`, one query each (1
+  // apiece) — on a candidate with at least one attempt, which is the worst
+  // case; a never-attempted candidate costs 4 less (no attempt-scoped reads
+  // at all). DELETE costs 8 too, on its own worst path: auth (2) +
+  // `candidateExists` (1) + the in-progress check, one `attempt` read (1) +
+  // the snapshot key read (1) + `storage.delete`'s one batched call when
+  // there is a snapshot to remove (1) + the one batched `db.batch` (1, flat
+  // in row count up to `MAX_IDS_PER_CHUNK`) + the audit row (1, per
+  // candidate — flat here at one). Both methods land on the same number by
+  // coincidence, not because they share work — same rule every other
+  // budget above follows: the higher of the two, measured.
+  "/api/v1/workspaces/:id/candidates/:candidateId/data": 8,
+
+  // Phase 8e Task 3 (`K31`, `K36`, `KG8`, #102): the free-tier meter.
+  // Measured (`apps/api/test/usage/project.test.ts`'s own "measures the
+  // real subrequest cost" test), not estimated. Branch review `C2`
+  // (CRITICAL) deleted the backward-looking `countsToday` half (see
+  // `usage/project.ts`'s own header), which drops this from 6 to **5** on
+  // the `workers` target: auth (2) + the workspace's published-test
+  // settings (1, flat in test count — one JOIN pinned to each test's
+  // `current_version`) + candidate counts grouped across every test (1,
+  // flat in candidate count) + the workspace's active webhook count (1,
+  // workspace-scoped, not per-test — `webhook` carries no `test_id`
+  // column). On `node` it is **2**: auth only (`requireMember()` reads the
+  // membership already on the session, no further query) — `usageRoute`
+  // returns `{}` before issuing a single query of its own, because
+  // nothing a self-hosted container needs is projected against a plan it
+  // is not on (`K36`). 5 is the ceiling either way, which is what is
+  // declared.
+  "/api/v1/workspaces/:id/usage": 5,
   // Phase 8d Task 1: webhook CRUD. Measured
   // (`test/webhooks.test.ts`'s own "measures the real subrequest cost"
   // test), not estimated. GET costs 3: auth (2) + `listWebhooks` (1) —
@@ -682,6 +722,17 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // the methods sharing each path, same rule every budget above follows.
   "/api/v1/workspaces/:id/webhooks": 4,
   "/api/v1/workspaces/:id/webhooks/:webhookId": 4,
+
+  // Phase 8d Task 2 (K25, K26): scoped API keys. Measured
+  // (`test/keys.test.ts`'s own "measures the real subrequest cost" test),
+  // not estimated, the same way every number above is. GET costs 3: auth
+  // (2) + `listApiKeys` (1). POST costs 4: auth (2) + `createApiKey`'s one
+  // insert (1) + `appendAudit` (1) — the creator's-own-scope check runs in
+  // memory over the membership authentication already loaded, no
+  // subrequest of its own. DELETE costs 4: auth (2) + `revokeApiKey`'s one
+  // write (1) + `appendAudit` (1).
+  "/api/v1/workspaces/:id/keys": 4,
+  "/api/v1/workspaces/:id/keys/:keyId": 4,
 };
 
 /**
@@ -775,6 +826,13 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/webhooks": "keys.manage",
   "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
   "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "keys.manage",
+
+  // Phase 8d Task 2 (K25, K26): scoped API keys. `keys.manage`, the same
+  // action webhooks are guarded by — one organiser permission for both
+  // halves of `docs/PRD.md:106`'s "Create API keys and webhooks" row.
+  "GET /api/v1/workspaces/:id/keys": "keys.manage",
+  "POST /api/v1/workspaces/:id/keys": "keys.manage",
+  "DELETE /api/v1/workspaces/:id/keys/:keyId": "keys.manage",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 
@@ -783,6 +841,16 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // nothing wider than it needs to.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "attempts.monitor",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "attempts.monitor",
+  // Phase 8e Task 2 (`S-14`, #101): `candidates.delete` is Owner-only in the
+  // matrix — `owner: ACTIONS` and nobody else — which is what makes an
+  // Admin's 403 here the real boundary, not a looser `candidates.manage`.
+  "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
+  "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "candidates.delete",
+
+  // Phase 8e Task 3 (`K31`, #102). `null`, same as `GET /:id`: membership is
+  // the whole check, nothing finer-grained — every role already sees its
+  // own workspace's scale figures on Home, and this is one more.
+  "GET /api/v1/workspaces/:id/usage": null,
 };
 
 /**
@@ -989,11 +1057,23 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // Phase 7e Task 4 (`Q5a`): the minimal pair.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "workspace",
+  // Phase 8e Task 2 (`S-14`, #101).
+  "GET /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
+  "DELETE /api/v1/workspaces/:id/candidates/:candidateId/data": "workspace",
+  // Phase 8e Task 3 (`K31`, #102).
+  "GET /api/v1/workspaces/:id/usage": "workspace",
   // Phase 8d Task 1: webhooks.
   "GET /api/v1/workspaces/:id/webhooks": "workspace",
   "POST /api/v1/workspaces/:id/webhooks": "workspace",
   "PATCH /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
   "DELETE /api/v1/workspaces/:id/webhooks/:webhookId": "workspace",
+  // Phase 8d Task 2 (K25, K26): scoped API keys. `workspace`, exactly like
+  // every other `requires()`-guarded route — a key satisfies this same
+  // authority rather than introducing a sixth (`route-authority.test.ts`'s
+  // own "adds no sixth authority" assertion).
+  "GET /api/v1/workspaces/:id/keys": "workspace",
+  "POST /api/v1/workspaces/:id/keys": "workspace",
+  "DELETE /api/v1/workspaces/:id/keys/:keyId": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -1014,7 +1094,12 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
 
   app.get("/api/v1/health", health(deps));
   app.route("/api/v1/auth", authRoutes(deps));
-  app.get("/api/v1/me", me());
+  // `actorOnly()` (whole-branch review, CRITICAL): `/me` names no
+  // workspace, so a key had no action for `requires()`'s scope check to run
+  // against and nothing else stood in front of it — a key of any scope
+  // could read this and get back a fabricated `role: "viewer"` membership
+  // for a role it was never granted.
+  app.get("/api/v1/me", actorOnly(), me());
   // Not in ROUTE_ACTIONS: neither route names a workspace, so there is no
   // membership to guard on. `complete` takes the actor from the session
   // through `actorOr401`, the way `/me` and `/workspaces` do.
@@ -1038,10 +1123,19 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // cannot collide with theirs — and deliberately carrying no guard. What
   // says so out loud is `ROUTE_AUTH` above, not this comment (ADR 0008).
   app.route("/api/v1/workspaces", inviteRoutes(deps));
+  // Phase 8e Task 2 (`S-14`, #101): a candidate's export and erasure.
+  app.route("/api/v1/workspaces", candidateDataRoutes(deps));
+  // Phase 8e Task 3 (`K31`, #102): the free-tier meter. Mounted directly,
+  // like `/api/v1/me`, rather than folded into `workspaceRoutes` — one
+  // route, no sub-router of its own to justify.
+  app.get("/api/v1/workspaces/:id/usage", requireMember(), usageRoute(deps));
   // Phase 8d Task 1: webhooks, mounted after the candidate-runtime invite
   // route for locality with the rest of `/api/v1/workspaces/:id/...`
   // rather than out of necessity — no prefix below collides.
   app.route("/api/v1/workspaces", webhookRoutes(deps));
+  // Phase 8d Task 2: scoped API keys, mounted beside webhooks for the same
+  // locality reason — no prefix below collides.
+  app.route("/api/v1/workspaces", keyRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing

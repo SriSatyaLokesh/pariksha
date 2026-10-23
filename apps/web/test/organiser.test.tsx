@@ -134,6 +134,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     importCandidates: async () => {
       throw new Error("not used by this test file");
     },
+    exportCandidateData: async () => {
+      throw new Error("not used by this test file");
+    },
+    deleteCandidateData: async () => {
+      throw new Error("not used by this test file");
+    },
+    usage: async () => undefined,
     listWebhooks: async () => {
       throw new Error("not used by this test file");
     },
@@ -144,6 +151,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used by this test file");
     },
     deleteWebhook: async () => {
+      throw new Error("not used by this test file");
+    },
+    listApiKeys: async () => ({ keys: [] }),
+    createApiKey: async () => {
+      throw new Error("not used by this test file");
+    },
+    revokeApiKey: async () => {
       throw new Error("not used by this test file");
     },
     ...overrides,
@@ -621,6 +635,32 @@ describe("OrganiserApp routes on state, not on a URL", () => {
 
     expect(await screen.findByRole("heading", { level: 1, name: "Webhooks" })).toBeInTheDocument();
     expect(await screen.findByText(/No webhooks yet/)).toBeInTheDocument();
+  });
+
+  // Phase 8d Task 2, same lesson a third time: `ApiKeyPanel`
+  // (apps/web/test/organiser/api-key-panel.test.tsx) has its own tests,
+  // but none of them can see that nothing in the running app ever mounts
+  // it — the nav item, the `NavKey`, the `View` arm and
+  // `readView`/`paramsOf` all have to agree for one click on "API keys" to
+  // land here.
+  it("reaches the API key panel from the app's own entry point", async () => {
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          listApiKeys: async () => ({ keys: [] }),
+        })}
+      />,
+    );
+
+    expect(
+      await screen.findByRole("heading", { level: 1, name: "Placement cell" }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByRole("button", { name: "API keys" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "API keys" })).toBeInTheDocument();
+    expect(await screen.findByText(/No API keys yet/)).toBeInTheDocument();
   });
 
   // Task 3 (#55, P5.2), same lesson applied a third time: a test that
