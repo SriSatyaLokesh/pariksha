@@ -312,6 +312,7 @@ function viewClient(): ApiClient {
     importCandidates: notUsed,
     gradingQueue: notUsed,
     grade: notUsed,
+    recordVerdict: notUsed,
   };
 }
 

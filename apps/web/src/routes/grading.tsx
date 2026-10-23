@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
-import { ApiError, type ApiClient, type GradingQueueRow } from "../lib/api";
+import {
+  ApiError,
+  type ApiClient,
+  type GradingQueueRow,
+  type Verdict,
+} from "../lib/api";
 import { GradingQueue } from "../components/organiser/GradingQueue";
 
 // Phase 8b Task 2 (`K15`): the grading screen. A content component, the
@@ -34,7 +39,9 @@ export function GradingRoute({
   client: ApiClient;
 }) {
   const [rows, setRows] = useState<GradingQueueRow[]>([]);
-  const [mode, setMode] = useState<"by-candidate" | "by-question">("by-candidate");
+  const [mode, setMode] = useState<"by-candidate" | "by-question">(
+    "by-candidate",
+  );
   const [blind, setBlind] = useState(true);
   const [error, setError] = useState<string | undefined>(undefined);
 
@@ -44,7 +51,11 @@ export function GradingRoute({
       setRows(page.rows);
       setError(undefined);
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "The grading queue could not be loaded.");
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "The grading queue could not be loaded.",
+      );
     }
   }, [client, workspaceId, testId, blind]);
 
@@ -52,12 +63,46 @@ export function GradingRoute({
     void load();
   }, [load]);
 
-  async function onGrade(row: GradingQueueRow, levels: string[]): Promise<void> {
+  async function onGrade(
+    row: GradingQueueRow,
+    levels: string[],
+  ): Promise<void> {
     try {
-      await client.grade(workspaceId, testId, { attemptId: row.attemptId, questionId: row.questionId, award: { levels } });
+      await client.grade(workspaceId, testId, {
+        attemptId: row.attemptId,
+        questionId: row.questionId,
+        award: { levels },
+      });
       await load();
     } catch (cause) {
-      setError(cause instanceof ApiError ? cause.message : "That grade could not be saved. Try again.");
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "That grade could not be saved. Try again.",
+      );
+    }
+  }
+
+  // `K16`: a verdict never changes the score, so there is no `load()`
+  // after it — unlike `onGrade` above, nothing about the queue's own rows
+  // (the manual answers still needing a grade) changes when a verdict is
+  // recorded.
+  async function onVerdict(
+    attemptId: string,
+    verdict: Verdict,
+    note?: string,
+  ): Promise<void> {
+    try {
+      await client.recordVerdict(workspaceId, attemptId, {
+        verdict,
+        ...(note !== undefined && { note }),
+      });
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "That verdict could not be saved. Try again.",
+      );
     }
   }
 
@@ -86,7 +131,9 @@ export function GradingRoute({
             className="text-input"
             id="grading-mode"
             value={mode}
-            onChange={(event) => setMode(event.target.value as "by-candidate" | "by-question")}
+            onChange={(event) =>
+              setMode(event.target.value as "by-candidate" | "by-question")
+            }
           >
             <option value="by-candidate">Answer</option>
             <option value="by-question">Question</option>
@@ -103,10 +150,17 @@ export function GradingRoute({
       {rows.length === 0 ? (
         <div className="organiser-empty">
           <h2 className="organiser-empty__title">Nothing to grade</h2>
-          <p className="organiser-empty__body">Every manually-scored answer for this test has already been graded.</p>
+          <p className="organiser-empty__body">
+            Every manually-scored answer for this test has already been graded.
+          </p>
         </div>
       ) : (
-        <GradingQueue rows={rows} mode={mode} onGrade={onGrade} />
+        <GradingQueue
+          rows={rows}
+          mode={mode}
+          onGrade={onGrade}
+          onVerdict={onVerdict}
+        />
       )}
     </>
   );

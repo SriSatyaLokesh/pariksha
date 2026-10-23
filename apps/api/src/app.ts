@@ -29,6 +29,7 @@ import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
 import { inviteRoutes } from "./routes/invites.js";
 import { gradeRoutes } from "./grade/award.js";
+import { verdictRoutes } from "./grade/verdict.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -542,6 +543,14 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // entirely and spends less, never more. Flat in how many candidates the
   // workspace holds.
   "/api/v1/workspaces/:id/tests/:testId/grading-queue": 5,
+
+  // Phase 8b Task 3 (`K16`): the reviewer's verdict. Measured
+  // (`apps/api/test/review.test.ts`'s own "measures the real subrequest
+  // cost" test, against a 300-candidate workspace), not estimated: auth
+  // (2) + `getAttempt` (1, the 404 check) + `recordVerdict`'s one insert
+  // (1) = 4. Flat in cohort size — this route touches exactly one attempt,
+  // same as `.../grade` above.
+  "/api/v1/workspaces/:id/attempts/:attemptId/verdict": 4,
 };
 
 /**
@@ -587,7 +596,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
 
   // Task 9.
   "GET /api/v1/workspaces/:id/banks/:bankId/export": "banks.edit",
-  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export":
+    "banks.edit",
 
   // Phase 5 Task 2. There is no `tests.view` either — reads are guarded the
   // same way banks' reads are, by the one action there is.
@@ -618,7 +628,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/tests/:testId/export": "tests.edit",
   "POST /api/v1/workspaces/:id/tests/import": "tests.edit",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "candidates.manage",
-  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "candidates.manage",
+  "POST /api/v1/workspaces/:id/tests/:testId/candidates/import":
+    "candidates.manage",
 
   // Phase 6 Task 2 (#66, P6.2). The invite is a credential for a row on
   // the candidate list, so it is the same permission that uploaded the
@@ -636,6 +647,10 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // action the POST above requires — a Reviewer or Admin holds it, an
   // Author (`tests.edit`) does not.
   "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "attempts.grade",
+  // Phase 8b Task 3 (`K16`): the verdict. Same action as grading itself —
+  // a verdict is part of the review a Reviewer or Admin performs, and an
+  // Author (`tests.edit`) holds neither.
+  "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "attempts.grade",
 };
 
 /**
@@ -678,7 +693,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
  *
  * Every task that mounts a route adds its line here in the same commit.
  */
-export type RouteAuthority = "workspace" | "attempt" | "entry" | "actor" | "public";
+export type RouteAuthority =
+  "workspace" | "attempt" | "entry" | "actor" | "public";
 
 export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // --- public: no credential at all ------------------------------------
@@ -843,6 +859,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/grade": "workspace",
   // Phase 8b Task 2 (`K15`): the grading queue.
   "GET /api/v1/workspaces/:id/tests/:testId/grading-queue": "workspace",
+  // Phase 8b Task 3 (`K16`): the verdict.
+  "POST /api/v1/workspaces/:id/attempts/:attemptId/verdict": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -887,6 +905,9 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // prefix as every other organiser route, mounted here for locality with
   // `inviteRoutes` rather than out of necessity.
   app.route("/api/v1/workspaces", gradeRoutes(deps));
+  // Phase 8b Task 3 (`K16`): the verdict. Same prefix, mounted next to
+  // `gradeRoutes` for the same locality reason.
+  app.route("/api/v1/workspaces", verdictRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing

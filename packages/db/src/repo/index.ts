@@ -21,3 +21,5 @@ export * from "./results.js";
 // Phase 8b Task 1 (K14): manual grading's writes and the grading queue's
 // one read.
 export * from "./grading.js";
+// Phase 8b Task 3 (K16): the reviewer's verdict, append-only.
+export * from "./review.js";

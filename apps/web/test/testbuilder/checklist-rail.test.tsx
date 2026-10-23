@@ -182,6 +182,9 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     grade: async () => {
       throw new Error("not used by this test file");
     },
+    recordVerdict: async () => {
+      throw new Error("not used by this test file");
+    },
     ...overrides,
   };
 }

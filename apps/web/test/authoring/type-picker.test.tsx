@@ -161,6 +161,7 @@ function fakeClient(): ApiClient {
     importCandidates: unused,
     gradingQueue: unused,
     grade: unused,
+    recordVerdict: unused,
   };
 }
 

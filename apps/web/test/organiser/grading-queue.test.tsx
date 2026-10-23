@@ -8,8 +8,8 @@
 // grouping by question, and offering exactly one question's own rubric
 // levels — never an empty picker for a question that has none.
 
-import { describe, expect, it } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { GradingQueue } from "../../src/components/organiser/GradingQueue";
 import type { GradingQueueRow } from "../../src/lib/api";
@@ -21,7 +21,10 @@ const RUBRIC = [
 ];
 
 function row(
-  overrides: Partial<GradingQueueRow> & { attemptId: string; questionId: string },
+  overrides: Partial<GradingQueueRow> & {
+    attemptId: string;
+    questionId: string;
+  },
 ): GradingQueueRow {
   return {
     value: { kind: "text", text: "A candidate's answer." },
@@ -52,16 +55,20 @@ describe("GradingQueue (K15)", () => {
     // question in `THREE_ANSWERS` is `qst_3`'s, so its group heading is
     // "Question 3" — this component is never given the test's own section
     // order, only the rows it was handed.
-    expect(screen.getByRole("heading", { name: /Question 3/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Question 3/ }),
+    ).toBeInTheDocument();
   });
 
   it("offers the question's own rubric levels and nothing else", () => {
-    render(<GradingQueue rows={[row({ attemptId: "att_1", questionId: "qst_1" })]} />);
-    expect(screen.getAllByRole("radio").map((r) => r.getAttribute("value"))).toEqual([
-      "thin",
-      "adequate",
-      "thorough",
-    ]);
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+      />,
+    );
+    expect(
+      screen.getAllByRole("radio").map((r) => r.getAttribute("value")),
+    ).toEqual(["thin", "adequate", "thorough"]);
   });
 
   const rowWithNoRubric = row({
@@ -87,7 +94,11 @@ describe("GradingQueue (K15)", () => {
   // no `formValues` at all renders no identity, rather than the component
   // reaching for a key that was never sent.
   it("renders no candidate identity for a row the server sent none for", () => {
-    render(<GradingQueue rows={[row({ attemptId: "att_1", questionId: "qst_1" })]} />);
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+      />,
+    );
     expect(screen.queryByText(/@/)).toBeNull();
   });
 
@@ -119,7 +130,93 @@ describe("GradingQueue (K15)", () => {
   });
 
   it("has no axe violations grouped by question, with a no-rubric row present", async () => {
-    const { container } = render(<GradingQueue rows={[...THREE_ANSWERS, rowWithNoRubric]} mode="by-question" />);
+    const { container } = render(
+      <GradingQueue
+        rows={[...THREE_ANSWERS, rowWithNoRubric]}
+        mode="by-question"
+      />,
+    );
+    await screen.findAllByRole("article");
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
+// Phase 8b Task 3 (`K16`): the verdict control. `apps/api/test/review.test.ts`
+// proves the server payload (append-only, latest-wins); this is the
+// component's own contract — rendered once per attempt, never once per
+// question, and calling back with exactly what the reviewer picked.
+describe("GradingQueue verdict control (K16)", () => {
+  it("renders no verdict control when the caller wires no callback", () => {
+    render(<GradingQueue rows={THREE_ANSWERS} />);
+    expect(screen.queryByText("Verdict")).toBeNull();
+  });
+
+  it("renders exactly one verdict control per attempt, not one per answer", () => {
+    // Two rows share att_1 (two gradeable questions on the same attempt);
+    // the third is a different attempt entirely.
+    const rows: GradingQueueRow[] = [
+      row({ attemptId: "att_1", questionId: "qst_1" }),
+      row({ attemptId: "att_1", questionId: "qst_2" }),
+      row({ attemptId: "att_2", questionId: "qst_3" }),
+    ];
+    render(<GradingQueue rows={rows} onVerdict={vi.fn()} />);
+    // Three "Verdict" legends would mean one per answer; two is one per
+    // attempt, the component's actual contract.
+    expect(screen.getAllByText("Verdict")).toHaveLength(2);
+  });
+
+  it("still renders exactly one verdict control per attempt when grouped by question", () => {
+    const rows: GradingQueueRow[] = [
+      row({ attemptId: "att_1", questionId: "qst_1" }),
+      row({ attemptId: "att_1", questionId: "qst_2" }),
+      row({ attemptId: "att_2", questionId: "qst_3" }),
+    ];
+    render(<GradingQueue rows={rows} mode="by-question" onVerdict={vi.fn()} />);
+    expect(screen.getAllByText("Verdict")).toHaveLength(2);
+  });
+
+  it("calls back with the attempt id, the verdict picked, and the typed note", () => {
+    const onVerdict = vi.fn();
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+        onVerdict={onVerdict}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Note"), {
+      target: { value: "Two tab switches" },
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "Suspicious" }));
+
+    // The payload the callback actually received, not merely that a click
+    // landed somewhere — `onGrade`'s own sibling control is proven the
+    // same way elsewhere in this file, via the value the radio carries.
+    expect(onVerdict).toHaveBeenCalledWith(
+      "att_1",
+      "suspicious",
+      "Two tab switches",
+    );
+  });
+
+  it("sends no note when the field was left blank", () => {
+    const onVerdict = vi.fn();
+    render(
+      <GradingQueue
+        rows={[row({ attemptId: "att_1", questionId: "qst_1" })]}
+        onVerdict={onVerdict}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("radio", { name: "Clear" }));
+
+    expect(onVerdict).toHaveBeenCalledWith("att_1", "clear", undefined);
+  });
+
+  it("has no axe violations with the verdict control present", async () => {
+    const { container } = render(
+      <GradingQueue rows={THREE_ANSWERS} onVerdict={vi.fn()} />,
+    );
     await screen.findAllByRole("article");
     expect(await axe(container)).toHaveNoViolations();
   });

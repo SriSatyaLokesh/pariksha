@@ -129,6 +129,7 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     importCandidates: notUsed,
     gradingQueue: notUsed,
     grade: notUsed,
+    recordVerdict: notUsed,
     ...overrides,
   };
 }
