@@ -605,18 +605,82 @@ export function TestBuilder({
 
   return (
     <>
-      {/* No wrapper element here. `admin.css`'s `.organiser__panel` is
-          `display:flex; flex-direction:column; gap: var(--space-lg)` —
-          byte-identical to what `.organiser` already applies to
-          `.shell__page`, so a <div> carrying it inside the page was a
-          layout no-op (measured in Chrome at 1440 and 400: every child's
-          rect unchanged). Removing it also removes the trap of 6.5e
-          styling the builder's root as a panel by accident, and it gives
-          each panel below its own `overflow-x: auto` under 719px —
-          `overflow-x` on these children went `visible` -> `auto` in the
-          same measurement — which is one scroll container per panel, as
-          `D3a` intends, rather than one around the whole screen
-          (whole-branch review, Minor 3). */}
+      {/* `D7`: the rail, before the spine rather than after it — now the
+          very first thing in document order, Phase 8h Task 1 (`F1`). A
+          direct child of `.shell__page`, deliberately: testbuilder.css
+          lays the builder's page out as a two-cell grid and puts this one
+          in the second cell, and nesting it inside `.testbuilder-main`
+          would put it in the wrong column entirely. A keyboard reader
+          reaches it before tabbing through the whole builder — the reason
+          this used to sit after the title and the lifecycle toolbar is
+          gone now that those live inside the one other grid cell, not
+          beside this one. */}
+      {draft !== null && (
+        <PublishChecklist
+          railRef={railRef}
+          rows={checklist}
+          // `D7b` fix round 1: the rows and the sections answer questions
+          // asked at different moments — the rows were read before the
+          // author's last keystroke — so the rail is handed both and decides
+          // which rows still lead anywhere.
+          //
+          // Id AND title, because the rail has two questions to answer about
+          // a destination and they need different halves: `onGoTo` opens by
+          // id, and the journey label names the section the way the spine
+          // does (`D7a`: "Go to Section B", not "Go to quant").
+          sections={draft.body.sections.map(({ id, title }) => ({ id, title }))}
+          version={draft.version}
+          rerunning={rerunning}
+          busy={publishing}
+          state={rail.checklist}
+          onState={setChecklistRail}
+          // `D7b`, the other half: a row can outlive the section it names —
+          // a delete is a save, and the read that clears the row is a
+          // debounce and two round trips behind it. Fix round 1 moved that
+          // judgement into `destinationOf`, which is the one predicate the
+          // strip and the panel both read, so a stale row stops ANNOUNCING
+          // the journey rather than offering one this then declines — the
+          // same defect task 3's review ruled on for field rows.
+          //
+          // **The premise, because it is what a later edit would break:**
+          // `sections` above and this closure are sibling attributes of one
+          // JSX element, built in ONE render from the SAME `draft`. That — not
+          // the predicate on its own — is what makes a membership check here
+          // redundant rather than defensive: the ids that gated the control
+          // and the ids this would test are the same value, so there is no
+          // window between them, not even a torn one.
+          //
+          // Break that and the hole re-opens with no test watching it. It
+          // breaks if the two are ever sourced from different renders: a
+          // `useCallback` around this handler with stale deps, a memoised or
+          // hoisted `sections`, ids derived from `pending` rather than
+          // `draft`, or a `React.memo` comparator on `PublishChecklist` that
+          // lets one prop through while holding the other back. Any of those
+          // and this guard has to come back.
+          onGoTo={(row) => {
+            if (row.sectionId !== undefined) openSection(row.sectionId);
+          }}
+          onRerun={() => void runChecklist()}
+          onConfirm={() => void onPublish()}
+        />
+      )}
+
+      {/* Phase 8h Task 1 (`F1`): every other construct on this screen used to
+          be its own direct child of `.shell__page`, auto-placed into the
+          grid's first column one implicit row at a time — which is what let
+          the rail's old `grid-row: 1 / span 40` reserve 34 empty rows that
+          still paid `.organiser`'s inherited row-gap (~544px of the 568px
+          measured dead scroll). One wrapper means the grid has exactly two
+          cells — this one and the rail above — so there are no implicit
+          rows left for a span to create or a gap to tax. The flex column
+          this div now carries is the stack `.organiser`'s own
+          `display:flex; flex-direction:column; gap: var(--space-lg)` used
+          to give these children directly; `testbuilder.css`'s media query
+          below 719px re-gives each of ITS children the per-panel
+          `overflow-x: auto` scroll container `shell.css`'s own
+          `.shell__page > *` rule would otherwise give to this wrapper as a
+          whole (`D3a`). */}
+      <div className="testbuilder-main">
       <h1 className="organiser__title">{test?.name ?? "Test builder"}</h1>
 
       {test !== null && (
@@ -667,6 +731,30 @@ export function TestBuilder({
               Archive
             </button>
           )}
+
+          {/* Phase 8h Task 5 (`F4`, register `G3-08`): moved out of the
+              settings list, where "Grading queue" and "Analytics" used to
+              sit between Results and Branding and read as belonging to
+              Results. Both are destinations for *this* test, not settings
+              on its draft, so they join the rest of this test's own
+              navigation — Publish, Close, Archive — rather than collapsing
+              into a `SettingRow` whose contract is "every summary is a
+              pure function of the draft". `testbuilder-lifecycle__divider`
+              marks the seam: everything before it changes the test's
+              lifecycle state, everything after it only navigates. */}
+          {(canGrade || canViewAnalytics) && (
+            <span className="testbuilder-lifecycle__divider" aria-hidden="true" />
+          )}
+          {canGrade && (
+            <button type="button" className="button-secondary" onClick={() => onOpenGrading(testId)}>
+              Grading queue
+            </button>
+          )}
+          {canViewAnalytics && (
+            <button type="button" className="button-secondary" onClick={() => onOpenAnalytics(testId)}>
+              Analytics
+            </button>
+          )}
         </div>
       )}
 
@@ -684,64 +772,6 @@ export function TestBuilder({
         <p className="review-note">
           Comments and approvals arrive with ADR 0007&apos;s second half.
         </p>
-      )}
-
-      {/* `D7`: the rail, before the spine rather than after it. A direct
-          child of `.shell__page`, deliberately — testbuilder.css lays the
-          builder's page out as two columns and puts this one in the second,
-          and a wrapper around the spine would take shell.css's phone-width
-          `overflow-x: auto` off each panel and give it to the wrapper
-          instead, which is the per-panel scroll container `D3a` wants.
-          Early in the document order, because a rail a keyboard reader
-          reaches only after the whole builder is a rail they never reach. */}
-      {draft !== null && (
-        <PublishChecklist
-          railRef={railRef}
-          rows={checklist}
-          // `D7b` fix round 1: the rows and the sections answer questions
-          // asked at different moments — the rows were read before the
-          // author's last keystroke — so the rail is handed both and decides
-          // which rows still lead anywhere.
-          //
-          // Id AND title, because the rail has two questions to answer about
-          // a destination and they need different halves: `onGoTo` opens by
-          // id, and the journey label names the section the way the spine
-          // does (`D7a`: "Go to Section B", not "Go to quant").
-          sections={draft.body.sections.map(({ id, title }) => ({ id, title }))}
-          version={draft.version}
-          rerunning={rerunning}
-          busy={publishing}
-          state={rail.checklist}
-          onState={setChecklistRail}
-          // `D7b`, the other half: a row can outlive the section it names —
-          // a delete is a save, and the read that clears the row is a
-          // debounce and two round trips behind it. Fix round 1 moved that
-          // judgement into `destinationOf`, which is the one predicate the
-          // strip and the panel both read, so a stale row stops ANNOUNCING
-          // the journey rather than offering one this then declines — the
-          // same defect task 3's review ruled on for field rows.
-          //
-          // **The premise, because it is what a later edit would break:**
-          // `sections` above and this closure are sibling attributes of one
-          // JSX element, built in ONE render from the SAME `draft`. That — not
-          // the predicate on its own — is what makes a membership check here
-          // redundant rather than defensive: the ids that gated the control
-          // and the ids this would test are the same value, so there is no
-          // window between them, not even a torn one.
-          //
-          // Break that and the hole re-opens with no test watching it. It
-          // breaks if the two are ever sourced from different renders: a
-          // `useCallback` around this handler with stale deps, a memoised or
-          // hoisted `sections`, ids derived from `pending` rather than
-          // `draft`, or a `React.memo` comparator on `PublishChecklist` that
-          // lets one prop through while holding the other back. Any of those
-          // and this guard has to come back.
-          onGoTo={(row) => {
-            if (row.sectionId !== undefined) openSection(row.sectionId);
-          }}
-          onRerun={() => void runChecklist()}
-          onConfirm={() => void onPublish()}
-        />
       )}
 
       {/* Phase 7e Task 4 (`Q5a`): the only way out of a lock, placed beside
@@ -917,28 +947,6 @@ export function TestBuilder({
             />
           </SettingRow>
 
-          {/* Phase 8b Task 2 fix round 1 (`K15`, `AC-26`): the grading
-              queue's entry point, beside Results rather than a row inside
-              it — grading is a destination, not one more draft setting to
-              collapse in place, so it is not a `SettingRow` (whose own
-              contract is "every summary is a pure function of the draft";
-              a queue is live attempt data, not a setting). Gated on
-              `attempts.grade`, the action the route itself requires, the
-              same way `canPublish`/`canManageCandidates` gate theirs. */}
-          {canGrade && (
-            <button type="button" className="button-secondary" onClick={() => onOpenGrading(testId)}>
-              Grading queue
-            </button>
-          )}
-          {/* Phase 8c Task 1 (`R-06`, #94): analytics, beside Results and
-              Grading queue for the same reason both already sit here — a
-              destination, not a draft setting to collapse in place. */}
-          {canViewAnalytics && (
-            <button type="button" className="button-secondary" onClick={() => onOpenAnalytics(testId)}>
-              Analytics
-            </button>
-          )}
-
           <SettingRow
             id="branding"
             icon={<Icon name="branding" />}
@@ -989,6 +997,7 @@ export function TestBuilder({
           </SettingRow>
         </section>
       )}
+      </div>
     </>
   );
 }

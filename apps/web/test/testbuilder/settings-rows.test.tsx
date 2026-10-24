@@ -353,6 +353,24 @@ describe("the five settings are rows that state their own setting (D7)", () => {
     await waitFor(() => expect(patchDraft).toHaveBeenCalled(), { timeout: 2000 });
   });
 
+  // Phase 8h Task 5 (`F4`, register `G3-08`): "Grading queue" and
+  // "Analytics" used to render as two more `button-secondary`s inside this
+  // same section, between Results and Branding — two destinations that read
+  // as belonging to Results because nothing set them apart from a setting
+  // row. They are not settings (`SettingRow`'s own contract is "every
+  // summary is a pure function of the draft"; a queue is live attempt
+  // data), so they move to the lifecycle toolbar beside Publish and Close.
+  it("F4/G3-08: keeps Grading queue and Analytics out of the Settings region", async () => {
+    await openBuilder();
+    const settings = screen.getByRole("region", { name: "Settings" });
+    expect(within(settings).queryByRole("button", { name: "Grading queue" })).toBeNull();
+    expect(within(settings).queryByRole("button", { name: "Analytics" })).toBeNull();
+
+    // Still reachable — just not filed under Results.
+    expect(screen.getByRole("button", { name: "Grading queue" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "Analytics" })).toBeVisible();
+  });
+
   it("has no axe violations collapsed or open", async () => {
     const { container } = await openBuilder();
     const rows = within(container).getByRole("region", { name: "Settings" });
