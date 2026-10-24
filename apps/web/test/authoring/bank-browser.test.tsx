@@ -237,6 +237,27 @@ describe("BankBrowser", () => {
       expect(deleteQuestion).not.toHaveBeenCalled();
     });
 
+    // M2, item 2: `useDialogKeys`'s cleanup returns focus to the control
+    // that opened the dialog — the hook already does this (five other
+    // dialogs depend on it), but this call site had no assertion of its
+    // own pinning it, so the behaviour was covered only by inheritance.
+    it("Cancel returns focus to the row's own Delete trigger, not to <body>", async () => {
+      const deleteQuestion = vi.fn(async () => undefined);
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      const trigger = await screen.findByRole("button", { name: /^delete question:/i });
+      // No @testing-library/user-event in this workspace: a real click
+      // focuses the element it activates, which `fireEvent.click` alone
+      // does not simulate — `sections.test.tsx`'s own precedent for this.
+      trigger.focus();
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(trigger).toHaveFocus();
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
     it("Escape backs out the same way Cancel does", async () => {
       const deleteQuestion = vi.fn(async () => undefined);
       const client = fakeClient({ deleteQuestion });
