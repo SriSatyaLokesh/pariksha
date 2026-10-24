@@ -227,6 +227,7 @@ function DiscriminationCell({ item }: { item: ItemStat }) {
           value={gaugeValue}
           max={2}
           aria-label="Discrimination index"
+          aria-valuetext={value.toFixed(2)}
         />
         <span className="analytics-disc__zero" aria-hidden="true" />
       </span>

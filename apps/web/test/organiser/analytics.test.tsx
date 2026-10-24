@@ -246,6 +246,17 @@ describe("AnalyticsRoute — R-07 item table", () => {
     expect(screen.getByLabelText("Discrimination index")).toBeInTheDocument();
   });
 
+  // m5 (Phase 8h Lane C review): the -1..1 domain is mapped onto the
+  // <progress>'s 0..2 fill so the visual half (a centre tick read against)
+  // works, but with no aria-valuetext a screen reader announces the raw
+  // value/max percentage instead — "50%" for qst_1's real 0.42. The visible
+  // text and the announced text must agree.
+  it("announces the real discrimination value, not the 0..2 fill's own percentage", async () => {
+    renderReady();
+    await screen.findByText("Every question");
+    expect(screen.getByLabelText("Discrimination index")).toHaveAttribute("aria-valuetext", "0.42");
+  });
+
   // Fix round 1, Minor 1: the approved prototype's own glyph for a
   // negative index is △ (outlined), not ▲ (filled).
   it("marks a negative discrimination with the prototype's own outlined triangle", async () => {
