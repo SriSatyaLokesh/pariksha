@@ -177,10 +177,21 @@ function rowFor(label: string): HTMLElement {
  * the caret to the end, and the harness quietly put it where the test
  * expected.
  *
- * So the assertion is here, on every call: **the DOM value after the
- * keystroke is exactly what the author typed.** That is the observable
- * that survives jsdom — a value React has rewritten is a caret that has
- * moved, and the two cannot come apart.
+ * So the assertions are here, on every call, and both are read back from
+ * the DOM rather than written to it:
+ *
+ *   * **the value after the keystroke is exactly what the author typed** —
+ *     catches a handler that rewrites the string (upper-casing, trimming,
+ *     re-formatting);
+ *   * **the caret sits at the end of that value** — assigning `.value`
+ *     (what `fireEvent.input` does, and what a browser does on a real
+ *     keystroke) always collapses the selection to the end of the new
+ *     value; that happens before any `onChange` runs, with zero component
+ *     code involved, and confirmed in jsdom by probe. A component that then
+ *     moves the caret anywhere else — the fault the removed
+ *     `selectionStart` assertion was deleted without replacing, M3's
+ *     coverage-gap finding — is the one thing that can make it land
+ *     anywhere else, value unchanged or not.
  */
 function typeChar(el: HTMLInputElement | HTMLTextAreaElement, ch: string, at?: number): void {
   el.focus();
@@ -192,6 +203,10 @@ function typeChar(el: HTMLInputElement | HTMLTextAreaElement, ch: string, at?: n
   const typed = el.value.slice(0, caret) + ch + el.value.slice(caret);
   fireEvent.input(el, { target: { value: typed } });
   expect(el.value).toBe(typed);
+  if (selectable) {
+    expect(el.selectionStart).toBe(typed.length);
+    expect(el.selectionEnd).toBe(typed.length);
+  }
 }
 
 describe("O-17: focus stays in the field being typed into", () => {
@@ -223,10 +238,11 @@ describe("O-17: focus stays in the field being typed into", () => {
     const field = (await screen.findByLabelText(/start message/i)) as HTMLTextAreaElement;
     // Caret in the middle: "Read |this." — a field that normalises under
     // the caret rewrites the value and throws the caret to the end, which
-    // an append-only test could never see. `typeChar` asserts the value is
-    // still exactly what was typed; `selectionStart` is deliberately NOT
-    // asserted, because this harness would only be reading back its own
-    // write.
+    // an append-only test could never see. `typeChar` asserts both that the
+    // value is still exactly what was typed AND that the caret sits where
+    // this synthetic keystroke naturally leaves it (the end) — catching a
+    // handler that relocates the caret elsewhere without touching the
+    // value at all, which a value-only check cannot see.
     typeChar(field, "X", 5);
     expect(field.value).toBe("Read Xthis.");
     expect(document.activeElement).toBe(field);
