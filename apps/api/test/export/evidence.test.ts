@@ -418,9 +418,14 @@ const sixtyAttemptIds: string[] = [];
   await deps.db.batch(statements);
   // The objects themselves — not batchable (`StorageAdapter` has no batch
   // op), and cheap on the in-memory adapter this suite runs against.
-  for (const attemptId of sixtyAttemptIds) {
+  for (let i = 0; i < sixtyAttemptIds.length; i += 1) {
+    const attemptId = sixtyAttemptIds[i] as string;
     for (let s = 0; s < MANY_SNAPSHOTS_PER_ATTEMPT; s += 1) {
-      const takenAt = FIXED_NOW + sixtyAttemptIds.indexOf(attemptId) * 1000 + s;
+      // Must match the batch loop's own `takenAt` above exactly — it is
+      // what the `storage_key` column was built from — so this is a plain
+      // index-aligned loop rather than an `.indexOf()` lookup that would
+      // only coincidentally agree with it.
+      const takenAt = FIXED_NOW + i * 1000 + s;
       await deps.storage.put(snapshotKey(attemptId, takenAt, "interval"), new Uint8Array([1]), { contentType: "image/jpeg" });
     }
   }
@@ -436,6 +441,11 @@ it("mints a presigned URL per snapshot without ever reading the object itself", 
   const rows = await snapshotManifest({ ...counting.deps, storage: spiedStorage }, workspaceId, { attemptIds: sixtyAttemptIds });
   expect(rows).toHaveLength(SIXTY * MANY_SNAPSHOTS_PER_ATTEMPT);
   expect(getCalls).toBe(0);
+  // Every one of these objects was actually written (unlike a3's, below) —
+  // so every row must resolve live. A `storage_key`/object-key mismatch in
+  // the fixture would otherwise hide behind a row count that looks right
+  // while every URL is silently null.
+  expect(rows.every((row) => row.url !== null)).toBe(true);
 });
 
 it("the list cost is flat in snapshots per attempt, not just in attempt count", async () => {
