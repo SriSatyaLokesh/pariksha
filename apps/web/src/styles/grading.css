@@ -15,6 +15,24 @@
   gap: var(--space-xl);
 }
 
+/* G5-19 (Phase 8h): `grading.tsx` renders `.grading-queue__controls` around
+   the blind-grading checkbox and the Group-by select with no rule for the
+   class anywhere in this file — the two `.field`s had no shared row to sit
+   in and stacked with whatever spacing their own margins happened to leave.
+   `align-items: flex-end` aligns the two fields' BOTTOM edges — nothing
+   here baselines — so the select (no help text under it) ends level with
+   the bottom of the checkbox field's taller help paragraph, which is what
+   the register prescribed. m1 (Phase 8h Lane C review): this comment used
+   to claim it lines up with "the label baseline", which `flex-end` does not
+   do; corrected rather than changing the value, since the value itself is
+   the register's own prescription. */
+.grading-queue__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: var(--space-xl);
+}
+
 .grading-queue__group {
   display: flex;
   flex-direction: column;

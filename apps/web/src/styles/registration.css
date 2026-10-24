@@ -25,6 +25,22 @@
   gap: var(--space-sm);
 }
 
+/* G2-05 / F3 (Phase 8h): a checkbox or radio's own `.field-label` used to
+   sit above a bare, separate `<input>` 17px square — two siblings, the
+   label text its only affordance, and the control itself a 17x17 target
+   well under WCAG 2.5.8's 24px floor. Composed onto `.field-label` on a
+   `<label>` that WRAPS the input instead (the markup `ApiKeyPanel.tsx`,
+   `WebhookPanel.tsx` and `grading.tsx` now use), this makes the entire
+   label row the clickable target: `field-label`'s own line-height is
+   already 24px, so the row clears the floor with no extra min-height
+   needed, and the 17px glyph D17 specifies stays exactly as drawn. */
+.field-choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  cursor: pointer;
+}
+
 .field-label {
   color: var(--color-ink);
   font-family: var(--type-heading-sm-family);
@@ -63,8 +79,15 @@
    floor) and a padding for `text-input`. With the global border-box those
    two agree, so both are declared and T30 checks both — and no
    `line-height` is declared on top of them, which is what would push the
-   content box past the stated 44px. */
-.text-input {
+   content box past the stated 44px.
+
+   `G3-01` (fix round, Phase 8h): this used to be `.text-input { height: 44px }`
+   with no element qualifier, which lands on every `<textarea class="text-input">`
+   too — section instructions, branding text, options, answer keys — and
+   collapses each one to a single 44px-tall line. Scoped to `input`/`select`
+   below; `textarea.text-input` gets its own height rule right after. */
+input.text-input,
+select.text-input {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--type-body-md-family);
@@ -76,6 +99,37 @@
   padding: 10px var(--space-md);
   height: 44px;
   width: 100%;
+}
+
+/* `textarea.text-input` shares every declaration above except the one that
+   broke it: no fixed `height`, a multi-line floor instead, and
+   `resize: vertical` so a long answer key or a set of instructions can grow
+   past that floor without a scrollbar.
+
+   m2 (Phase 8h Lane C review): the floor below borrows `--type-body-md-
+   line-height` (25px) as a round unit for "about three lines", but this
+   rule declares no `line-height` of its own — the text actually renders at
+   the browser's default `normal` (~19px for this font-size), not 25px. So
+   under the global `border-box`, 95px total minus the 2px border minus the
+   20px vertical padding leaves ~73px of content, which is closer to 3.8
+   rendered lines than three. That errs generous, which is harmless for an
+   answer key or instructions field, but the calc is a comfortable
+   approximation, not a literal three-line measurement — corrected here
+   rather than in the calc, since the generous floor is fine as shipped. */
+textarea.text-input {
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  letter-spacing: var(--type-body-md-letter-spacing);
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  padding: 10px var(--space-md);
+  height: auto;
+  min-height: calc(3 * var(--type-body-md-line-height) + 20px);
+  width: 100%;
+  resize: vertical;
 }
 
 /* DESIGN.md's `text-input-focus` is "border swaps to voltage at 2px plus a

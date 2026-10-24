@@ -56,9 +56,17 @@ export function UsagePanel({ client, workspaceId }: { client: ApiClient; workspa
 
   return (
     <p className="home__usage">
+      {/* G2-07 / O-09 (Phase 8h): this used to be `.home__usage-text
+          .home__usage-check` (home.css — another lane's file), which is
+          `padding: 0` plus `text-decoration: underline` — a hyperlink
+          where a button belongs, and an 18px line box under WCAG 2.5.8's
+          24px floor. `.button-secondary` (primitives.css, this lane's own)
+          is already the product's one secondary-action button and already
+          clears 44px, so this swaps the borrowed look for the one the rest
+          of the app already uses, with no new rule and no edit to home.css. */}
       <button
         type="button"
-        className="home__usage-text home__usage-check"
+        className="button-secondary"
         onClick={() => void check()}
         disabled={status === "loading"}
       >

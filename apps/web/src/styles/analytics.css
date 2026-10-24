@@ -325,7 +325,10 @@
   background: var(--surface-2);
   color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
-  font-size: 10px;
+  /* G5-15 (Phase 8h): was a literal `10px`, overriding mono-sm's own 12px
+     token for no stated reason — the smallest size anything in this product
+     renders at. */
+  font-size: var(--type-mono-sm-size);
   font-weight: var(--type-mono-sm-weight);
   letter-spacing: var(--type-mono-sm-letter-spacing);
   white-space: nowrap;
@@ -407,7 +410,8 @@
   position: absolute;
   inset: 2px 0;
   border: 1px solid var(--edge-strong);
-  border-radius: 3px;
+  /* F6 (Phase 8h): was a literal `3px`, duplicating `--rounded-xs`. */
+  border-radius: var(--rounded-xs);
   background: repeating-linear-gradient(135deg, var(--edge-strong) 0 1px, transparent 1px 5px);
 }
 /* There was nothing to spread (`no_variance`) — one flat rule, no height. */

@@ -222,11 +222,21 @@ function DiscriminationCell({ item }: { item: ItemStat }) {
   return (
     <div className="analytics-disc">
       <span className="analytics-disc__gauge">
+        {/* m5 fixed aria-valuetext so the ANNOUNCED number is real (0.42,
+            not a 0..2-fill percentage). Recorded, not fixed (round 3
+            review): the native valuemin/valuemax/valuenow beneath it still
+            read 0/2/<value+1>, so an AT that reads the range alongside the
+            text presents a scale that contradicts aria-valuetext. Properly
+            closing this means either a non-native gauge or faking
+            aria-valuemin/-max/-now too (role="progressbar" is native here,
+            so those aren't freely overridable the way they are on a div) —
+            out of scope for this round. */}
         <progress
           className={negative ? "analytics-progress analytics-disc__progress--neg" : "analytics-progress"}
           value={gaugeValue}
           max={2}
           aria-label="Discrimination index"
+          aria-valuetext={value.toFixed(2)}
         />
         <span className="analytics-disc__zero" aria-hidden="true" />
       </span>

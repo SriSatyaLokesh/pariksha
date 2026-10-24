@@ -58,7 +58,10 @@
 }
 
 .signal h3 {
-  font-size: 18px;
+  /* G1-07 / F6 (Phase 8h): was a literal `18px`, duplicating
+     `--type-heading-sm-size`. The rest of this rule's scale (weight,
+     letter-spacing) is this heading's own and stays literal. */
+  font-size: var(--type-heading-sm-size);
   font-weight: 600;
   letter-spacing: -0.012em;
 }
@@ -233,7 +236,9 @@
 
 .signal-nav .signal-btn {
   padding: 9px 18px;
-  font-size: 14px;
+  /* G1-07 / F6 (Phase 8h): was a literal `14px`, duplicating
+     `--type-body-sm-size`. */
+  font-size: var(--type-body-sm-size);
 }
 
 /* ---- the field: glow and grid behind the hero ----------------------- */
@@ -339,9 +344,13 @@
 
 /* ---- the frame: what stands in for a screenshot --------------------- */
 
+/* G1-05 / F6 (Phase 8h): `.signal-frame`, `.signal-panel` and two others
+   below hand-wrote `border-radius: 14px` — a value no rounding token
+   names, against the radius census three screens were already drifting on.
+   `--rounded-lg` (8px) is the nearest step. */
 .signal-frame {
   border: 1px solid var(--color-signal-line-2);
-  border-radius: 14px;
+  border-radius: var(--rounded-lg);
   background: var(--color-signal-surface);
   overflow: hidden;
 }
@@ -438,7 +447,9 @@
 }
 
 .signal-row b {
-  font-size: 15px;
+  /* G1-07 / F6 (Phase 8h): was a literal `15px`, duplicating
+     `--type-mono-md-size` (the only token at this exact size). */
+  font-size: var(--type-mono-md-size);
   font-weight: 600;
   color: var(--color-signal-text);
 }
@@ -587,7 +598,7 @@
 .signal-panel {
   background: var(--color-signal-surface);
   border: 1px solid var(--color-signal-line-2);
-  border-radius: 14px;
+  border-radius: var(--rounded-lg);
   overflow: hidden;
 }
 
@@ -624,7 +635,9 @@
 .signal-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 14px;
+  /* G1-07 / F6 (Phase 8h): was a literal `14px`, duplicating
+     `--type-body-sm-size`. */
+  font-size: var(--type-body-sm-size);
   min-width: 430px;
 }
 
@@ -700,7 +713,7 @@
   grid-template-columns: repeat(auto-fit, minmax(215px, 1fr));
   background: var(--color-signal-line);
   border: 1px solid var(--color-signal-line);
-  border-radius: 14px;
+  border-radius: var(--rounded-lg);
   overflow: hidden;
   margin-top: var(--space-2xl);
 }
@@ -789,7 +802,9 @@
 .signal-list li {
   padding: var(--space-md) 0;
   border-bottom: 1px solid var(--color-signal-line);
-  font-size: 15px;
+  /* G1-07 / F6 (Phase 8h): was a literal `15px`, duplicating
+     `--type-mono-md-size` (the only token at this exact size). */
+  font-size: var(--type-mono-md-size);
   color: var(--color-signal-text-2);
 }
 
@@ -802,7 +817,7 @@
   background: var(--color-signal-surface);
   border: 1px solid var(--color-signal-line-2);
   border-top: 3px solid var(--color-signal-accent);
-  border-radius: 14px;
+  border-radius: var(--rounded-lg);
   padding: var(--space-2xl);
 }
 
@@ -980,7 +995,9 @@
 
 .signal-faq__q h3 {
   margin: 0;
-  font-size: 17px;
+  /* G1-07 / F6 (Phase 8h): was a literal `17px`, duplicating
+     `--type-signal-body-size` — this page's own running-text size. */
+  font-size: var(--type-signal-body-size);
   font-weight: 600;
   color: var(--color-signal-text-2);
   transition: color 180ms ease-out;

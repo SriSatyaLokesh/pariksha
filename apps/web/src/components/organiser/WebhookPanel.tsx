@@ -163,15 +163,15 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
             <legend>Events</legend>
             {WEBHOOK_EVENTS.map((event) => (
               <div className="field" key={event}>
-                <label className="field-label" htmlFor={`webhook-event-${event}`}>
+                <label className="field-label field-choice" htmlFor={`webhook-event-${event}`}>
+                  <input
+                    type="checkbox"
+                    id={`webhook-event-${event}`}
+                    checked={events.includes(event)}
+                    onChange={() => toggleEvent(event)}
+                  />
                   {EVENT_LABEL[event]}
                 </label>
-                <input
-                  type="checkbox"
-                  id={`webhook-event-${event}`}
-                  checked={events.includes(event)}
-                  onChange={() => toggleEvent(event)}
-                />
               </div>
             ))}
             {/* MINOR-6: was `error` — the shared field error — rendered

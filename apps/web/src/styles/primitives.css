@@ -307,6 +307,21 @@
    colour name written here would be undefined on the landing page. The two
    requirements have the same answer and test/tables.test.tsx holds them to it.
 
+   `G2-04` (Phase 8h register) measures the OTHER direction of the same
+   trade-off: horizontally scrolled cell content sliding UNDER this
+   transparent gutter and colliding with the action buttons painted on it.
+   That is real, and the register's own suggested fix — `background-color:
+   var(--surface)` — was tried here and reverted: `test/tables.test.tsx`'s
+   "needs no colour, which is what makes one rule safe in two stylesheet
+   chains" asserts, by name, that no `.acts` rule declares `background`,
+   `background-color`, or any `theme.css` semantic name, and failed red the
+   moment `--surface` and `--edge` landed above. That test is `D21a`'s own
+   decision encoded, not an oversight this lane can unilaterally spend past —
+   fixing G2-04 as recommended means either relaxing `D21a` (an owner call)
+   or solving the collision a different way (capping the scrollable column
+   count, or fading the edge) that does not put paint on `.acts` at all.
+   Left transparent; see this lane's report.
+
    `inset-inline-end` rather than `right`: this file's neighbours are logical
    throughout (`padding-inline`, `border-block-end`, `text-align: start`), and
    the gutter belongs at the inline end of the row in any writing mode.
