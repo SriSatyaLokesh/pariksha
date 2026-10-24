@@ -469,8 +469,7 @@
   gap: var(--space-md);
 }
 
-.sets-panel__assignment,
-.shuffle-group {
+.sets-panel__assignment {
   border: 0;
   margin: 0;
   padding: 0;
@@ -479,8 +478,7 @@
   gap: var(--space-sm);
 }
 
-.sets-panel__assignment > legend,
-.shuffle-group > legend {
+.sets-panel__assignment > legend {
   padding: 0;
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
@@ -488,8 +486,7 @@
   text-transform: uppercase;
 }
 
-.sets-panel__choice-control,
-.shuffle-group__row {
+.sets-panel__choice-control {
   display: flex;
   align-items: baseline;
   gap: var(--space-xs);
@@ -497,8 +494,7 @@
 
 /* The consequence sits under its own radio, indented to the label — a
    statement about that strategy, not about the group. */
-.sets-panel__consequence,
-.shuffle-group__fact {
+.sets-panel__consequence {
   margin: 0;
   padding-inline-start: var(--space-md);
   color: var(--ink-3);
