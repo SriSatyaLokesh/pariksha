@@ -122,6 +122,7 @@ export function TestBuilder({
   client,
   actor,
   onOpenGrading,
+  onOpenAnalytics,
 }: {
   workspaceId: string;
   testId: string;
@@ -131,6 +132,10 @@ export function TestBuilder({
    *  test and goes to its queue — there is no cross-test grading inbox and
    *  no top-nav entry (`OrganiserShell.tsx:141-144`'s own `D3` ruling). */
   onOpenGrading: (testId: string) => void;
+  /** Phase 8c Task 1 (`R-06`, #94): same shape as `onOpenGrading` above, and
+   *  for the same reason — an organiser is working on *this* test and goes
+   *  to its own figures, not a cross-test analytics inbox. */
+  onOpenAnalytics: (testId: string) => void;
 }) {
   // T-23: only an owner holds `workspace.settings`, and the workspace half
   // of the branding panel is read-only without it. The server refuses
@@ -185,6 +190,11 @@ export function TestBuilder({
   // surface they would be refused at, the same discipline `canPublish` and
   // `canManageCandidates` already apply to theirs.
   const canGrade = role !== undefined && can({ role, action: "attempts.grade" });
+  // Phase 8c Task 1 (`R-06`, #94): the analytics screen's own entry point,
+  // gated the same way `canGrade` is — on the action the route itself
+  // requires (`results.export`), not on a wider one that happens to
+  // include it.
+  const canViewAnalytics = role !== undefined && can({ role, action: "results.export" });
   // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete` is Owner-only and
   // in no other role — the real gate the ResultsPanel lookup-then-act
   // control below is told about, the same way every other role-gated
@@ -918,6 +928,14 @@ export function TestBuilder({
           {canGrade && (
             <button type="button" className="button-secondary" onClick={() => onOpenGrading(testId)}>
               Grading queue
+            </button>
+          )}
+          {/* Phase 8c Task 1 (`R-06`, #94): analytics, beside Results and
+              Grading queue for the same reason both already sit here — a
+              destination, not a draft setting to collapse in place. */}
+          {canViewAnalytics && (
+            <button type="button" className="button-secondary" onClick={() => onOpenAnalytics(testId)}>
+              Analytics
             </button>
           )}
 

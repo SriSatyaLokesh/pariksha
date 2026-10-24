@@ -749,6 +749,24 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".exam-blanks": both("cream"),
   ".exam-blank-input": both("canvas"),
   ".exam-blank-input:disabled": both("canvas"),
+
+  // ---- analytics.css: test and item analytics (Phase 8c Task 1/2) -------
+  // `.analytics-meta` and `.analytics-hint` each appear twice over: a band
+  // header's own meta line sits directly on the page (`--ground`), and
+  // every other use is inside a `.card-hairline` panel this screen draws
+  // (`--surface`). Both are real and both are scored, the same two-surface
+  // pattern `.organiser__notice` above already keeps.
+  ".analytics-meta": { dark: ["signal-bg", "signal-surface"], light: ["signal-l-bg", "signal-l-surface"] },
+  ".analytics-hint": { dark: ["signal-bg", "signal-surface"], light: ["signal-l-bg", "signal-l-surface"] },
+  // `.analytics-label` (an absent discrimination's own word, an integrity
+  // row's name, a negative index when `.analytics-risk` does not instead
+  // apply) and `.analytics-risk` itself only ever render inside a panel.
+  ".analytics-label": { dark: "signal-surface", light: "signal-l-surface" },
+  ".analytics-risk": { dark: "signal-surface", light: "signal-l-surface" },
+  // The item table's sticky header fills itself with `--surface-2`, the
+  // same "a card inside a card" pattern `.webhook-secret` above already
+  // proves.
+  ".analytics-items th": { dark: "signal-surface-2", light: "signal-l-surface-2" },
 };
 
 // Selectors whose rendered size and/or weight landing.css's bundle does not

@@ -23,6 +23,7 @@ import type {
   TestVersionRow,
   Workspace,
 } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 import { OrganiserApp } from "../../src/routes/organiser";
 
 const CHECKED_AT = 1_760_000_000_000;
@@ -267,10 +268,7 @@ const VIEW_DRAFT: TestVersionRow = {
 };
 
 function viewClient(): ApiClient {
-  const notUsed = () => {
-    throw new Error("not used by this test file");
-  };
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => VIEW_ACTOR,
     workspaces: async () => [VIEW_WORKSPACE],
@@ -278,55 +276,26 @@ function viewClient(): ApiClient {
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [],
-    createBank: notUsed,
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: notUsed,
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: notUsed,
-    updateGroup: notUsed,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: notUsed,
     tests: async () => [VIEW_TEST],
-    createTest: notUsed,
     test: async () => VIEW_TEST,
-    updateTest: notUsed,
     draft: async () => VIEW_DRAFT,
     patchDraft: async () => VIEW_DRAFT,
-    publishTest: notUsed,
-    closeTest: notUsed,
-    archiveTest: notUsed,
     versions: async () => [],
     checklist: async () => [],
     readiness: async () => ({}),
-    cloneTest: notUsed,
-    exportTest: notUsed,
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: notUsed,
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: notUsed,
-    uploadMedia: notUsed,
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: notUsed,
-    importCandidates: notUsed,
-    gradingQueue: notUsed,
-    grade: notUsed,
-    recordVerdict: notUsed,
-    exportCandidateData: notUsed,
-    deleteCandidateData: notUsed,
     usage: async () => undefined,
-    listWebhooks: notUsed,
-    createWebhook: notUsed,
-    setWebhookActive: notUsed,
-    deleteWebhook: notUsed,
-    listApiKeys: notUsed,
-    createApiKey: notUsed,
-    revokeApiKey: notUsed,
-  };
+  });
 }
 
 /** A reload at `search`: the URL is set before the app's first paint, which
