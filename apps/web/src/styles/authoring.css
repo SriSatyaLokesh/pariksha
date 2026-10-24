@@ -714,10 +714,25 @@
   font-size: var(--type-body-sm-size);
 }
 
+/* O-26: this `<select>` carried a border already, but no fill or ink of
+   its own — on the Signal dark ground it rendered as an OS-default white
+   box with black text, exactly the "unstyled HTML" the owner named. Given
+   the project's own tokens rather than left to the browser's default
+   widget colours. */
 .bank-browser__filter-select select {
-  padding: var(--space-xs) var(--space-sm);
+  min-height: 36px;
+  padding-inline: var(--space-sm);
+  background: var(--surface);
   border: 1px solid var(--edge-strong);
-  border-radius: var(--rounded-xs);
+  border-radius: var(--rounded-sm);
+  color: var(--ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.bank-browser__filter-select select:hover,
+.bank-browser__filter-select select:focus-visible {
+  border-color: var(--accent);
 }
 
 .bank-browser__filter-check {
@@ -726,6 +741,15 @@
   gap: var(--space-xs);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
+}
+
+/* F3's class of defect, found here too: a native checkbox with no sizing
+   of its own renders around 13x13 CSS px in every browser tested, well
+   under WCAG 2.5.8's 24x24 floor — every checkbox this screen renders
+   (the "not used in any test" filter and each row's own select box). */
+.bank-browser input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
 }
 
 .bank-browser__main {
