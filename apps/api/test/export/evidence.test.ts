@@ -23,12 +23,7 @@ import type { Question } from "@pariksha/core";
 import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../../src/app.js";
 import { countingDeps, SUBREQUEST_LIMIT } from "../../src/instrument.js";
 import { issueSession } from "../../src/auth/session.js";
-import {
-  exportEventsPage,
-  exportSnapshotsPage,
-  snapshotManifest,
-  type SnapshotManifestRow,
-} from "../../src/export/evidence.js";
+import { exportEventsPage, exportSnapshotsPage, snapshotManifest } from "../../src/export/evidence.js";
 import type { ExportPage, ExportPageOptions } from "../../src/export/results.js";
 import { readDelimited } from "../../src/import/rows.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "../deps.js";
@@ -49,7 +44,7 @@ async function member(role: "viewer" | "reviewer", tag: string): Promise<string>
   return sessionCookie(deps, (await issueSession(deps, userId)).token);
 }
 
-const readCsv = (csv: string): string[][] => readDelimited(csv.replace(/^﻿/, ""));
+const readCsv = (csv: string): string[][] => readDelimited(csv.replace(/^(\uFEFF)/, ""));
 
 function headerAndRows(csv: string): { header: string[]; rows: string[][] } {
   const [header, ...rows] = readCsv(csv);
@@ -62,7 +57,7 @@ function headerAndRows(csv: string): { header: string[]; rows: string[][] } {
  *  Strip it (after the BOM) before `readDelimited` sees the real header, the
  *  same skip `docs/exports.md` documents for a real downloader. */
 function manifestHeaderAndRows(csv: string): { header: string[]; rows: string[][] } {
-  const withoutBom = csv.replace(/^﻿/, "");
+  const withoutBom = csv.replace(/^(\uFEFF)/, "");
   const withoutComment = withoutBom.startsWith("#") ? withoutBom.slice(withoutBom.indexOf("\r\n") + 2) : withoutBom;
   return headerAndRows(withoutComment);
 }

@@ -273,7 +273,11 @@ export async function exportSnapshotsPage(
   const firstPage = opts.cursor === undefined;
   const csv = toCsv(manifestRows, MANIFEST_COLUMNS, { bom: firstPage, header: firstPage });
   return {
-    csv: firstPage ? csv.replace(/^(﻿)?/, `$1${MANIFEST_HEADER_COMMENT()}`) : csv,
+    // The escape sequence rather than a literal BOM character in the regex
+    // below: ESLint's no-irregular-whitespace rule flags a literal BOM
+    // inside a regex (unlike inside a string, which it skips by default)
+    // (audit fix — the draft's own literal-BOM regex here never passed lint).
+    csv: firstPage ? csv.replace(/^(\uFEFF)?/, `$1${MANIFEST_HEADER_COMMENT()}`) : csv,
     nextCursor,
     filename: csvFilename(test.slug, "snapshots", deps.now()),
   };
