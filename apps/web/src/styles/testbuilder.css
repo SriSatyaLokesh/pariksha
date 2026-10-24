@@ -143,6 +143,45 @@
   min-block-size: 24px;
 }
 
+.section-list .reorderable-list__item {
+  align-items: baseline;
+}
+
+/* Phase 8h Task 4 (`F3`'s alignment half): the up/down buttons, the
+   position field and the section summary used to sit on three separate
+   baselines — `ReorderableList.tsx` renders the first two outside
+   `.section-row` entirely, in its own `.reorderable-list__controls`, so
+   this lane cannot change their markup, only override their shared
+   layout for the one usage `.section-list` makes of it.
+
+   The visible "Position of <section title>" text is a literal text node
+   `ReorderableList.tsx` renders directly — there is no span this lane can
+   wrap in `.visually-hidden` without editing that shared component, which
+   is the cross-lane change this wave does not make. Collapsing the
+   label's own `font-size` (and `line-height`, which `question.css` sets
+   to a fixed 25px that does not shrink with it) instead keeps the label,
+   and its accessible name, exactly where they are: neither removes a node
+   from the accessibility tree the way `display: none` would, so a screen
+   reader still hears "Position of Section one" — the label simply stops
+   claiming a line of its own. `flex-direction: row` replaces `question.css`'s
+   `column` (label line, then the input below it): with the label's own
+   line collapsed to nothing, stacking it above the input bought nothing
+   but 51px of height for what is now a 24px control, which is what let
+   the section summary's own column compress to a ~75px sliver next to it
+   (`O-18`/`O-19`, the same defect `F3` names). */
+.section-list .reorderable-list__position {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: baseline;
+  font-size: 0;
+  line-height: 0;
+}
+
+.section-list .reorderable-list__position input {
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+}
+
 /* Task 3 (#55, P5.2): sections (UX-12 – UX-16) and the question picker
    drawer (UX-14). */
 
