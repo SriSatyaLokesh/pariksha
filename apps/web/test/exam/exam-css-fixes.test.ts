@@ -49,17 +49,49 @@ function declared(body: string, property: string): string | undefined {
 }
 
 describe("G5-01: the font-scale control reaches the stem, the options, the blanks and the fields", () => {
-  it("`.exam-answer` rescales the three tokens those elements actually read, scoped below the two selectors that already scale their OWN font-size", () => {
+  // `var()` resolves against the computed value ON THE ELEMENT BEING
+  // COMPUTED — a custom property can never be redeclared as a calc() of
+  // itself on the same selector without becoming a cycle (guaranteed-
+  // invalid at computed-value time, which then falls back every
+  // `font-size: var(--type-…)` reader to the INHERITED font-size, not the
+  // token). So each scaled token must be derived from a DIFFERENT custom
+  // property than the one being declared, and that other property must
+  // itself resolve to the real base token — verified in real Chrome
+  // (`--exam-stem-size-base` etc. reading the literal at `:root`, where
+  // nothing else redeclares the base name) at 1x/1.25x/1.5x: stem
+  // 18/22.5/27px, option label and every answer field 16/20/24px.
+  const TOKEN_BASE: Record<string, string> = {
+    "--type-question-stem-size": "--exam-stem-size-base",
+    "--type-option-label-size": "--exam-option-label-size-base",
+    "--type-body-md-size": "--exam-body-md-size-base",
+  };
+
+  it("`.exam-answer` rescales the three tokens those elements actually read, each from a base alias rather than from itself", () => {
     const body = ruleBody(".exam-answer");
-    for (const token of [
-      "--type-question-stem-size",
-      "--type-option-label-size",
-      "--type-body-md-size",
-    ]) {
+    for (const [token, base] of Object.entries(TOKEN_BASE)) {
       const value = declared(body, token);
       expect(value, `${token} not redeclared on .exam-answer`).toBe(
-        `calc(var(${token}) * var(--exam-font-scale, 1))`,
+        `calc(var(${base}) * var(--exam-font-scale, 1))`,
       );
+      // The cycle this guards against: a token must never appear on both
+      // sides of its own redeclaration.
+      expect(value, `${token} still references itself — this is the cycle`).not.toContain(
+        `var(${token})`,
+      );
+    }
+  });
+
+  it("each base alias reads the real token, so the token stays the single source for the base number", () => {
+    // Several files declare a bare `:root { }` block (tokens.css,
+    // theme.css, exam.css itself), so this reads every one of them rather
+    // than `ruleBody`'s exact-one-rule lookup. The alias must live
+    // somewhere `.exam-answer` itself doesn't also redeclare — :root is
+    // the one place the real tokens are literals (tokens.css) rather than
+    // another calc(), so reading it there cannot form a cycle.
+    const rootBodies = RULES.filter((rule) => rule.selector === ":root").map((rule) => rule.body);
+    for (const [token, base] of Object.entries(TOKEN_BASE)) {
+      const value = rootBodies.map((body) => declared(body, base)).find((v) => v !== undefined);
+      expect(value, `${base} not declared on any :root block`).toBe(`var(${token})`);
     }
   });
 
@@ -72,9 +104,16 @@ describe("G5-01: the font-scale control reaches the stem, the options, the blank
     }
   });
 
-  // Still needs a browser: that `.rendered--stem` (question.css, Lane C's)
-  // actually renders at the scaled size at 1.25x/1.5x, and that nothing
-  // downstream clips or wraps badly at the larger size.
+  // Confirmed in real Chrome (chrome --headless=new --dump-dom over this
+  // file's own stylesheets at file://): before this fix, `.exam-option-row`,
+  // `.exam-text-input`, `.exam-text-area` and `.exam-blank-input` render the
+  // SAME font-size at 1x/1.25x/1.5x (the scale control has zero effect, and
+  // even the stem itself does not scale, both because the cycle's
+  // guaranteed-invalid value makes every reader fall back to one frozen
+  // inherited size). After this fix: stem 18/22.5/27px, option label and
+  // every answer field 16/20/24px, `.exam-unit` (an untouched sibling
+  // token) unchanged at every scale — each element on its own token, never
+  // collapsed onto an ancestor's font-size.
 });
 
 describe("G5-02: a selected option survives high contrast by more than its border colour", () => {

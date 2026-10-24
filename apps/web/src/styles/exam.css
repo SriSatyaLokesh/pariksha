@@ -989,15 +989,28 @@
    Redeclaring the three tokens those elements actually read — scoped to
    this wrapper, which never uses any of them for its OWN font-size —
    scales every one of them at once without editing a single one of
-   those declarations. Each line's `var()` on the right reads the value
-   inherited from :root (18/16/16px), so it multiplies by the scale
-   exactly once; scoping it any higher (on `.exam-runner` or
-   `.exam-question`, which DO use these same tokens for their own
-   font-size) would double it. */
+   those declarations.
+
+   `var()` resolves against the computed value ON THE ELEMENT BEING
+   COMPUTED, so `--type-question-stem-size: calc(var(--type-question-stem-size)
+   * ...)` is a cycle with itself — guaranteed-invalid, and every
+   `font-size: var(--type-question-stem-size)` below it then falls back
+   to the INHERITED font-size instead of the token. The alias below
+   reads the real token at `:root`, where it is a literal and nothing
+   else redeclares it, so it carries the base number down unchanged; the
+   scaled property is then computed from the alias (a different custom
+   property) rather than from itself, so no declaration here depends on
+   its own value. */
+:root {
+  --exam-stem-size-base: var(--type-question-stem-size);
+  --exam-option-label-size-base: var(--type-option-label-size);
+  --exam-body-md-size-base: var(--type-body-md-size);
+}
+
 .exam-answer {
-  --type-question-stem-size: calc(var(--type-question-stem-size) * var(--exam-font-scale, 1));
-  --type-option-label-size: calc(var(--type-option-label-size) * var(--exam-font-scale, 1));
-  --type-body-md-size: calc(var(--type-body-md-size) * var(--exam-font-scale, 1));
+  --type-question-stem-size: calc(var(--exam-stem-size-base) * var(--exam-font-scale, 1));
+  --type-option-label-size: calc(var(--exam-option-label-size-base) * var(--exam-font-scale, 1));
+  --type-body-md-size: calc(var(--exam-body-md-size-base) * var(--exam-font-scale, 1));
   display: flex;
   flex-direction: column;
   gap: 24px;
