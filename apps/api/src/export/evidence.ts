@@ -9,18 +9,30 @@
 // `results.export` instead of `tests.edit`, because a Viewer who may export
 // results still needs the definition that explains their CSV's columns.
 //
-// **Audit correction (not in the original draft): this route needs no `KG1`
-// exemption, because it never carries a key or an explanation at all.**
-// The draft's own comment here claimed the opposite — that the document was
-// "deliberately not scrubbed" of them, as if it were an organiser-only
-// answer key. `toTestDocument` (`packages/db/src/repo/test-document.ts`)
-// says otherwise: a section's `source` names question *ids* (translated to
-// the bank file's own ref ids), never a question's `key_json`/
-// `explanation_json`/`rubric_json` — that content lives only in the bank
-// format, reachable through `export/bank.ts` under `banks.edit`, a
-// permission a Viewer does not hold. `scrub-scan.test.ts`'s `KG1` scan
-// covers `test.json` in its ordinary loop, with no exemption, and proves
-// the point by finding nothing to redact.
+// **Audit correction, round 1: this route needs no `KG1` exemption for a
+// question's key/explanation/rubric, because it never carries one at all.**
+// The original draft's comment here claimed the opposite — that the
+// document was "deliberately not scrubbed" of them, as if it were an
+// organiser-only answer key. `toTestDocument`
+// (`packages/db/src/repo/test-document.ts`) says otherwise: a section's
+// `source` names question *ids* (translated to the bank file's own ref
+// ids), never a question's `key_json`/`explanation_json`/`rubric_json` —
+// that content lives only in the bank format, reachable through
+// `export/bank.ts` under `banks.edit`, a permission a Viewer does not hold.
+// `scrub-scan.test.ts`'s `KG1` scan covers `test.json` in its ordinary
+// loop, with no exemption, and proves the point by finding nothing to
+// redact there.
+//
+// **Audit correction, round 2 (fix round 1, C1 — a Critical found in
+// review, after the first correction above still shipped the bug): the
+// document is not otherwise harmless.** `pariksha/test@1` also carries
+// `settings.access`, including `access_code` — the `link_code` credential
+// itself, an `ABSOLUTE_SECRET` in both scrub-scan fixtures
+// (`apps/api/test/run/scrub-scan.test.ts`,
+// `apps/api/test/export/scrub-scan.test.ts`) — and `allow_email_domains`/
+// `allow_ip_ranges`, the perimeter a Viewer has no need to read. The route
+// below drops the whole `access` block before responding, at this door
+// only; the `tests.edit` route an Author uses still returns it whole.
 //
 // **`K3`: the snapshot export is a manifest, never a ZIP.** One R2 `get` is
 // one subrequest, a single Strict attempt at the 60s default holds ~60
@@ -137,9 +149,10 @@ export async function exportEventsPage(
 /**
  * Clamped the same way `export/results.ts`'s `ANSWERS_PAGE_LIMIT_MAX` is,
  * for the same reason stated there and a second one of this file's own: the
- * existence check below spends one `StorageAdapter.list` per attempt in the
- * page, and that cost — not the D1 bound-parameter cap — is what the
- * 50-subrequest ceiling actually limits here.
+ * existence check below spends up to `MAX_LIST_PAGES_PER_ATTEMPT` `list`
+ * calls per attempt in the page, not a flat one — and that cost, not the D1
+ * bound-parameter cap, is what the 50-subrequest ceiling actually limits
+ * here.
  *
  * Budget decision (resume-plan review): the draft set this to 40, which
  * worked out to auth (2) + `getTest` (1) + `listAttemptsForTest` (1) +
@@ -147,13 +160,19 @@ export async function exportEventsPage(
  * ceiling of 50 — five subrequests of headroom, so one more fixed call
  * added anywhere in the request path later (a webhook check, an audit
  * write) breaks this route in production with no test ever turning red.
- * Lowered to 20 (worst case 25, half the ceiling): the manifest already
- * pages, and `signedUrl` costs nothing (`K4`), so a smaller page is nearly
- * free here in a way the heavier CSV exports' page sizes are not. Still
- * flat in how many snapshots any one attempt holds — a Strict attempt's
- * ~60 images cost the same single `list` as a Flexible attempt's one.
+ * Lowered to 20 (worst case 25, half the ceiling).
+ *
+ * Fix round 1, `I2`: lowered again, to 10, when the existence check itself
+ * grew a second `list` call per attempt (below) — following `list`'s own
+ * pagination cursor, since dropping it silently misreported live snapshots
+ * as deleted past R2's 1000-key page. Worst case stays exactly 25: auth (2)
+ * + `getTest` (1) + `listAttemptsForTest` (1) + `listSnapshotsForAttempts`
+ * (1) + (10 attempts × up to 2 `list` pages each) = 25. `signedUrl` still
+ * costs nothing (`K4`), so halving the attempt count rather than the page
+ * count keeps the manifest's own per-request row budget roughly where it
+ * was before this fix.
  */
-const SNAPSHOTS_PAGE_LIMIT_MAX = 20;
+const SNAPSHOTS_PAGE_LIMIT_MAX = 10;
 
 export interface SnapshotManifestRow {
   attemptId: string;
@@ -161,8 +180,16 @@ export interface SnapshotManifestRow {
   takenAt: number;
   reason: string;
   faceCount: number | null;
-  /** `null` when the object's prefix listing came back without this row's
-   *  key — the retention sweep already took it. */
+  /** `"ok"`: the listing (complete or not) found this key. `"deleted"`: a
+   *  *complete* listing did not — the retention sweep took it. `"unknown"`
+   *  (`I2`): the listing was capped before finishing and did not find the
+   *  key, so whether the object still exists is genuinely unknown, not
+   *  confidently no — rendering `"deleted"` here would be a confident lie
+   *  about proctoring evidence, which fix round 1 ruled strictly worse than
+   *  a URL that might 404. */
+  status: "ok" | "deleted" | "unknown";
+  /** `null` only for a `"deleted"` row. A `"unknown"` row still gets a URL
+   *  — minted on the chance the object is there, same as an `"ok"` row. */
   url: string | null;
 }
 
@@ -173,19 +200,61 @@ export interface SnapshotManifestRow {
 const snapshotPrefix = (attemptId: string): string => `snapshot/${attemptId}/`;
 
 /**
+ * Fix round 1, `I2`: the draft's existence check read exactly one `list`
+ * page per attempt and treated anything past it as deleted. R2 pages at up
+ * to 1000 keys and sets `StorageAdapter.list`'s own `cursor` whenever it
+ * truncates (`packages/storage/src/r2.ts`) — a 60-minute test at the
+ * proctoring config's minimum 2-second snapshot interval
+ * (`snapshot_interval_seconds`, floor 0) produces ~1800 objects under one
+ * attempt's prefix, past the first page. Dropping the cursor there meant
+ * live snapshots 1001 onward quietly rendered `deleted`, a confident lie
+ * about evidence that still exists — worse than the 404 the existence
+ * check exists to prevent, because a 404 is visible and a wrong `deleted`
+ * is not.
+ *
+ * Follows the cursor, but bounded at `MAX_LIST_PAGES_PER_ATTEMPT` (2) pages
+ * — an unbounded follow would make this function's own cost unbounded,
+ * which breaks the ceiling `SNAPSHOTS_PAGE_LIMIT_MAX`'s own fix-round-1
+ * lowering exists to hold. Two pages covers up to ~2000 objects per
+ * attempt, comfortably over the ~1800 a 60-minute test can produce even at
+ * the floor interval. `truncated` tells the caller whether the listing it
+ * got back is known-complete (so "not found" really does mean deleted) or
+ * capped (so "not found" means genuinely unknown).
+ */
+const MAX_LIST_PAGES_PER_ATTEMPT = 2;
+
+async function listLiveKeys(deps: AppDeps, attemptId: string): Promise<{ keys: Set<string>; truncated: boolean }> {
+  const keys = new Set<string>();
+  let cursor: string | undefined;
+  let pagesRead = 0;
+  // No initial value: the loop below always runs at least once and
+  // assigns this before anything reads it (ESLint's own
+  // `no-useless-assignment` flags a `= false` here as dead).
+  let hasMore: boolean;
+  do {
+    const page = await deps.storage.list(snapshotPrefix(attemptId), cursor);
+    for (const key of page.keys) keys.add(key);
+    pagesRead += 1;
+    cursor = page.cursor;
+    hasMore = cursor !== undefined;
+  } while (hasMore && pagesRead < MAX_LIST_PAGES_PER_ATTEMPT);
+  return { keys, truncated: hasMore };
+}
+
+/**
  * Mints a manifest row per snapshot behind `opts.attemptIds`, checking each
  * one's object against a prefix listing taken once per **attempt** (`K3`)
- * rather than once per key, and minting `signedUrl` only for a key the
- * listing actually returned — never handing out a URL to an object the
- * retention sweep already took.
+ * rather than once per key, and minting `signedUrl` for a key the listing
+ * found or could not rule out (`I2`) — never for one a *complete* listing
+ * confirmed gone.
  *
  * `signedUrl` itself spends no storage subrequest at all (`instrument.ts`'s
  * own ruling, `K4`), so this function's whole storage cost is the `list`
- * calls — one per **distinct** attempt that has at least one snapshot, flat
- * in how many snapshots that attempt actually has (a Strict attempt's ~60
- * images cost the same single `list` as a Flexible attempt's one). Exported
- * on its own, apart from the paged route below, so that cost shape is
- * provable independent of `SNAPSHOTS_PAGE_LIMIT_MAX`.
+ * calls — up to `MAX_LIST_PAGES_PER_ATTEMPT` per **distinct** attempt that
+ * has at least one snapshot, not flat the way a single-page read was,
+ * because a page beyond the cap costs a second `list` fix round 1 added.
+ * Exported on its own, apart from the paged route below, so that cost shape
+ * is provable independent of `SNAPSHOTS_PAGE_LIMIT_MAX`.
  */
 export async function snapshotManifest(
   deps: AppDeps,
@@ -194,25 +263,27 @@ export async function snapshotManifest(
 ): Promise<SnapshotManifestRow[]> {
   const rows = await listSnapshotsForAttempts(deps.db, workspaceId, opts.attemptIds);
   const attemptIds = [...new Set(rows.map((row) => row.attemptId))];
-  const liveKeys = new Map<string, Set<string>>();
+  const liveKeys = new Map<string, { keys: Set<string>; truncated: boolean }>();
   for (const attemptId of attemptIds) {
-    const { keys } = await deps.storage.list(snapshotPrefix(attemptId));
-    liveKeys.set(attemptId, new Set(keys));
+    liveKeys.set(attemptId, await listLiveKeys(deps, attemptId));
   }
 
   const now = deps.now();
   const out: SnapshotManifestRow[] = [];
   for (const row of rows) {
-    const exists = liveKeys.get(row.attemptId)?.has(row.storageKey) ?? false;
-    const url = exists
-      ? await deps.storage.signedUrl(row.storageKey, { expiresInSeconds: SIGNED_URL_TTL_SECONDS, now })
-      : null;
+    const listing = liveKeys.get(row.attemptId);
+    const found = listing?.keys.has(row.storageKey) ?? false;
+    const truncated = listing?.truncated ?? false;
+    const status: SnapshotManifestRow["status"] = found ? "ok" : truncated ? "unknown" : "deleted";
+    const url =
+      status === "deleted" ? null : await deps.storage.signedUrl(row.storageKey, { expiresInSeconds: SIGNED_URL_TTL_SECONDS, now });
     out.push({
       attemptId: row.attemptId,
       candidateId: row.candidateId,
       takenAt: row.takenAt,
       reason: row.reason,
       faceCount: row.faceCount,
+      status,
       url,
     });
   }
@@ -227,16 +298,21 @@ const MANIFEST_COLUMNS: CsvColumn<SnapshotManifestRow>[] = [
   // `K1`: never a bare `0` — `null` means the product has not counted faces
   // on this snapshot, not that it counted zero.
   { header: "Face count", value: (row) => (row.faceCount === null ? "not counted" : row.faceCount) },
-  { header: "Status", value: (row) => (row.url === null ? "deleted" : "ok") },
+  { header: "Status", value: (row) => row.status },
   { header: "URL", value: (row) => row.url ?? "" },
 ];
 
 /** `K4`: states its own expiry rather than leaving an organiser to guess why
  *  a URL from an hour ago stopped working, and points at `K3`'s documented
- *  one-liner instead of this file inventing a second explanation of it. No
- *  commas — this line rides above `toCsv`'s own quoting, not through it. */
+ *  one-liner instead of this file inventing a second explanation of it.
+ *  Fix round 1, `I2`: also states the existence check's own page cap —
+ *  bounded-and-said, never bounded-and-silent, the same ruling this phase
+ *  already made for the 500-attempt export truncation. No commas — this
+ *  line rides above `toCsv`'s own quoting, not through it. */
 const MANIFEST_HEADER_COMMENT = (): string =>
   `# Pariksha snapshot manifest - each URL expires ${SIGNED_URL_TTL_SECONDS} seconds after this file was generated; ` +
+  `existence is checked against the first ${String(MAX_LIST_PAGES_PER_ATTEMPT)} page(s) of each attempt's own objects; ` +
+  `a row past that reads "unknown" rather than "deleted" and still carries a URL; ` +
   `see docs/exports.md for a curl/wget one-liner to pull them down before then.\r\n`;
 
 /**
@@ -302,8 +378,9 @@ function versionQueryParam(c: Context<AppBindings>): number | undefined {
  * `attempts.read_evidence`, held by Proctor, Reviewer, Admin and Owner but
  * not Viewer (`permissions.ts`) — and `GET …/export/test.json` —
  * `results.export`, held by Viewer too. The same `exportTest` the original
- * `tests.edit` route (`routes/tests.ts`) calls; this is a second door onto
- * it, not a second serialiser.
+ * `tests.edit` route (`routes/tests.ts`) calls, minus `settings.access`
+ * (fix round 1, `C1` — see the file header); a second door onto the same
+ * function, not a second serialiser.
  */
 export function evidenceExportRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
@@ -323,7 +400,18 @@ export function evidenceExportRoutes(deps: AppDeps): Hono<AppBindings> {
   routes.get("/:id/tests/:testId/export/test.json", requires("results.export"), async (c) => {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
-    return c.json(await exportTest(deps, workspaceId, testId, versionQueryParam(c)));
+    // Fix round 1, C1: `exportTest`'s document carries `settings.access` in
+    // full — `access_code` is the credential `routes/run.ts`'s `sameSecret`
+    // compares to admit a `link_code` candidate (an `ABSOLUTE_SECRET` in
+    // both scrub-scan fixtures), and `allow_email_domains`/`allow_ip_ranges`
+    // are perimeter configuration a reader has no need for either. Dropped
+    // here, at the more permissive door only — the `tests.edit` route above
+    // still returns it whole, because an author editing the test needs its
+    // own access policy. The result is deliberately evidence, not a
+    // re-importable document: round-tripping it through `/tests/import`
+    // would need `access` back.
+    const { access: _access, ...doc } = await exportTest(deps, workspaceId, testId, versionQueryParam(c));
+    return c.json(doc);
   });
 
   return routes;

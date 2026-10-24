@@ -142,7 +142,11 @@ sentinelDocs.forEach((doc, i) => {
 const body: TestDocumentBody = {
   settings: {
     timing: { duration_minutes: 45, navigation: "free", opens_at: iso(T - DAY), closes_at: iso(T + DAY) },
-    access: { mode: "link_code", access_code: "OPEN" },
+    // Fix round 1, C1: a real sentinel, not a plain string — `access_code`
+    // is itself an `ABSOLUTE_SECRET` (both scrub-scan fixtures agree), and
+    // a non-sentinel value here is a scan that cannot fail on exactly the
+    // leak it exists to catch (test.json's access-block exposure).
+    access: { mode: "link_code", access_code: "__ACCESS_CODE__" },
     registration_form: { fields: [{ id: "roll", type: "short_text", label: "Roll", required: true }] },
   },
   sections: [

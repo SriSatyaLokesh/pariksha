@@ -366,12 +366,14 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (1, one page) = 4, flat in how many events a page holds.
   "/api/v1/workspaces/:id/tests/:testId/export/events.csv": 4,
   // The snapshot manifest. Measured, not flat — `K3`'s own existence check
-  // spends one `StorageAdapter.list` per **attempt** in the page (never per
-  // snapshot: a Strict attempt's ~60 images still cost one `list`), so the
-  // worst case is auth (2) + `getTest` (1) + `listAttemptsForTest` (1) +
-  // `listSnapshotsForAttempts` (1) + one `list` per attempt in the page, up
-  // to `SNAPSHOTS_PAGE_LIMIT_MAX` (20, lowered from the draft's 40 — see
-  // that constant's own comment) = 25, half the ceiling rather than five
+  // spends up to `MAX_LIST_PAGES_PER_ATTEMPT` (2, fix round 1 `I2`)
+  // `StorageAdapter.list` calls per **attempt** in the page, never per
+  // snapshot (a Strict attempt's ~60 images still cost at most two `list`
+  // calls, not one per image), so the worst case is auth (2) + `getTest`
+  // (1) + `listAttemptsForTest` (1) + `listSnapshotsForAttempts` (1) + (up
+  // to 2 `list` calls × `SNAPSHOTS_PAGE_LIMIT_MAX` attempts in the page,
+  // lowered to 10 by `I2` when the per-attempt cost doubled — see that
+  // constant's own comment) = 25, half the ceiling rather than five
   // subrequests under it. `signedUrl` costs nothing (`instrument.ts`'s own
   // ruling, `K4`).
   "/api/v1/workspaces/:id/tests/:testId/export/snapshots.csv": 25,
@@ -1029,8 +1031,10 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/usage": null,
 
   // Phase 8c Task 1 (`R-06`, #94): `results.export`'s first production
-  // caller. A Viewer holds it and nothing wider; an Author (`tests.edit`)
-  // does not hold it at all.
+  // caller (fix round 1, Minor 4: Task 4 later added `test.json` beside
+  // it — this route is no longer the only one, just the first). A Viewer
+  // holds it and nothing wider; an Author (`tests.edit`) does not hold it
+  // at all.
   "GET /api/v1/workspaces/:id/tests/:testId/analytics": "results.export",
 };
 

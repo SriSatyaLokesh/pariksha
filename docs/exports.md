@@ -10,7 +10,7 @@ until `nextCursor` is `null` never silently drops a row.
 | --- | --- | --- |
 | `results.csv` | `results.export` | one row per candidate |
 | `answers.csv` | `results.export` | one row per answer |
-| `test.json` | `results.export` | the whole test document, including keys and explanations |
+| `test.json` | `results.export` | the test definition — settings and question-id references, never a question's key, explanation or rubric, and never the access block (the `link_code` code itself and the email/IP allowlists) |
 | `events.csv` | `attempts.read_evidence` | one row per proctoring event |
 | `snapshots.csv` | `attempts.read_evidence` | one row per webcam snapshot, as a manifest (below) |
 
@@ -35,14 +35,17 @@ Columns: `Attempt`, `Candidate`, `Taken at`, `Reason`, `Face count`, `Status`,
   never counted faces on that snapshot (true for every snapshot today —
   on-device face counting has not shipped). `not counted` and "zero faces
   seen" are different facts; the column never conflates them.
-- **`Status`** reads `deleted` when the object a row points at has already
-  been removed by the retention schedule. A `deleted` row's `URL` cell is
-  empty — never a link that would 404 if you followed it.
+- **`Status`** reads `deleted` when a *complete* listing of the attempt's
+  objects did not find the one this row points at — removed by the
+  retention schedule. A `deleted` row's `URL` cell is empty — never a link
+  that would 404 if you followed it. An attempt with more objects than the
+  existence check reads (two pages of up to 1000 each) instead reads
+  `unknown` for anything past that — genuinely not known to exist or not,
+  rather than a confident `deleted` that might be wrong — and still carries
+  a URL, on the chance the object is there.
 - The file's first line, above the column header, is a comment stating the
-  URL expiry: `# Pariksha snapshot manifest - each URL expires 600 seconds
-  after this file was generated; see docs/exports.md for a curl/wget
-  one-liner to pull them down before then.` Skip it (or any line starting
-  with `#`) before parsing the file as CSV.
+  URL expiry and the existence-check's own page cap. Skip it (or any line
+  starting with `#`) before parsing the file as CSV.
 
 ### Downloading every snapshot in a manifest
 
@@ -50,6 +53,13 @@ URLs expire 600 seconds (10 minutes) after the file was generated — the same
 `SIGNED_URL_TTL_SECONDS` every presigned URL in the product uses, not
 lengthened for this export. Re-fetch the manifest if you did not finish in
 time.
+
+**`tail -n +3` below is correct only for a single page.** Only the first
+page carries the comment line and the header — a later page is bare data
+rows (`K38`'s own contract on every page but the first). Concatenate every
+page's `csv` into one file before running these commands against it; running
+`tail -n +3` against each page separately drops that page's own first two
+real rows.
 
 ```bash
 # Skip the comment line and the header, then fetch whichever URL column is

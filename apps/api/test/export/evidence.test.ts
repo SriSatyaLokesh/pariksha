@@ -20,7 +20,7 @@ import {
   type TestDocumentBody,
 } from "@pariksha/db";
 import type { Question } from "@pariksha/core";
-import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS } from "../../src/app.js";
+import { createApp, ROUTE_ACTIONS, ROUTE_BUDGETS, type AppDeps } from "../../src/app.js";
 import { countingDeps, SUBREQUEST_LIMIT } from "../../src/instrument.js";
 import { issueSession } from "../../src/auth/session.js";
 import { exportEventsPage, exportSnapshotsPage, snapshotManifest } from "../../src/export/evidence.js";
@@ -355,10 +355,12 @@ it("checks existence with one list per attempt's prefix, never one get per key",
   expect(a3Key).toContain(`snapshot/${a3}/`);
   const counting = countingDeps(deps);
   await snapshotManifest(counting.deps, workspaceId, { attemptIds: [a1, a2, a3] });
-  // `list` is the only storage call this flow makes (no snapshots on a1 at
-  // all — zero rows, zero cost); one per attempt that has at least one
-  // snapshot, not per snapshot.
-  expect(counting.counts().storage).toBeLessThanOrEqual(3);
+  // Fix round 1, Minor 2: exact, not a loose upper bound — a1 has zero
+  // snapshots (zero `list` calls), a2 and a3 each have one snapshot within
+  // a single page (one `list` call each) = 2. A loose `<= 3` bound is
+  // exactly what let the sibling `smallTestId`/`manyTestId` fixture bug
+  // through earlier in this task — see the report.
+  expect(counting.counts().storage).toBe(2);
 });
 
 // --- the storage budget correction (resume plan's own ruling) --------------
@@ -457,16 +459,89 @@ it("the list cost is flat in snapshots per attempt, not just in attempt count", 
   expect(counting.counts().storage).toBe(SIXTY);
 });
 
-it("stays inside the ceiling on one page of the snapshot route's worst case", async () => {
+it("stays inside the ceiling on one page, under ordinary (non-truncating) storage", async () => {
+  // Fix round 1, I1: no `?limit=` — the whole point of the `45 -> 25`
+  // budget decision was that `SNAPSHOTS_PAGE_LIMIT_MAX` must not creep back
+  // up without this test turning red (`evidence.ts`'s own comment on the
+  // constant). A hard-coded `limit=20` measures 20 no matter what the
+  // constant holds; letting the route default to it is what actually pins
+  // the decision. `manyTestId` has 60 attempts, all with snapshots, so the
+  // route's own default still fills a whole page.
+  //
+  // This is the floor, not the declared worst case: the in-memory adapter
+  // never truncates `list` on its own, so every attempt here costs exactly
+  // one `list` call, not `MAX_LIST_PAGES_PER_ATTEMPT` — the test below
+  // forces real pagination to pin the worst case `ROUTE_BUDGETS` declares.
   const counting = countingDeps(deps);
   const res = await createApp(counting.deps).request(
-    `/api/v1/workspaces/${workspaceId}/tests/${manyTestId}/export/snapshots.csv?limit=20`,
+    `/api/v1/workspaces/${workspaceId}/tests/${manyTestId}/export/snapshots.csv`,
     get(ownerCookie),
   );
   expect(res.status, await res.clone().text()).toBe(200);
+  const path = "/api/v1/workspaces/:id/tests/:testId/export/snapshots.csv";
+  expect(counting.counts().total).toBeLessThanOrEqual(ROUTE_BUDGETS[path]);
+  expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
+});
+
+/** Fix round 1, I2: the in-memory adapter never truncates `list` on its
+ *  own, so nothing in the suite could otherwise exercise
+ *  `listLiveKeys`'s cursor-following at all — this fakes R2's own
+ *  pagination (`packages/storage/src/r2.ts`) on top of it. `cursor` is
+ *  this fake's own opaque offset into the real adapter's full key list,
+ *  not R2's — the real adapter ignores any cursor it is given and always
+ *  returns every matching key, so slicing that result is enough to model
+ *  a page boundary without a second storage backend. */
+function paginatedStorage(real: AppDeps["storage"], keysPerPage: number): AppDeps["storage"] {
+  return {
+    ...real,
+    list: async (prefix: string, cursor?: string) => {
+      const { keys } = await real.list(prefix);
+      const start = cursor === undefined ? 0 : Number(cursor);
+      const page = keys.slice(start, start + keysPerPage);
+      const nextStart = start + keysPerPage;
+      return nextStart < keys.length ? { keys: page, cursor: String(nextStart) } : { keys: page };
+    },
+  };
+}
+
+it("pins the declared worst case under forced pagination — every attempt needs exactly MAX_LIST_PAGES_PER_ATTEMPT calls", async () => {
+  // `manyTestId`'s attempts carry 5 snapshots each; 3 keys per fake page
+  // means page one returns 3 (with a cursor, since 3 < 5) and page two
+  // returns the remaining 2 (no cursor, since 5 is not > 3 + 3) — exactly
+  // two `list` calls per attempt, all keys found, nothing left "unknown".
+  // 10 attempts × 2 + auth(2) + getTest(1) + listAttemptsForTest(1) +
+  // listSnapshotsForAttempts(1) = 25, `ROUTE_BUDGETS`'s own worst case.
+  const counting = countingDeps(deps);
+  const paginated = { ...counting.deps, storage: paginatedStorage(counting.deps.storage, 3) };
+  const res = await createApp(paginated).request(
+    `/api/v1/workspaces/${workspaceId}/tests/${manyTestId}/export/snapshots.csv`,
+    get(ownerCookie),
+  );
+  expect(res.status, await res.clone().text()).toBe(200);
+  const body = (await res.json()) as { csv: string };
+  const { header, rows } = manifestHeaderAndRows(body.csv);
+  expect(rows.every((r) => cell(header, r, "Status") === "ok")).toBe(true);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
   const path = "/api/v1/workspaces/:id/tests/:testId/export/snapshots.csv";
   expect(counting.counts().total, path).toBe(ROUTE_BUDGETS[path]);
+});
+
+it("a listing still truncated past the page cap renders 'unknown', not 'deleted', and still mints a URL", async () => {
+  // 2 keys per fake page, 5 snapshots on the attempt: page one returns 2
+  // (cursor set), page two returns 2 more (cursor still set, since 4 < 5)
+  // — `MAX_LIST_PAGES_PER_ATTEMPT` (2) stops there, one key unseen. I2's
+  // own ruling: that one key must read "unknown", never "deleted" — a
+  // live object misreported as gone is worse than a URL that might 404 —
+  // and it still gets a URL.
+  const counting = countingDeps(deps);
+  const paginated = { ...counting.deps, storage: paginatedStorage(counting.deps.storage, 2) };
+  const rows = await snapshotManifest(paginated, workspaceId, { attemptIds: [sixtyAttemptIds[0] as string] });
+  expect(rows).toHaveLength(MANY_SNAPSHOTS_PER_ATTEMPT);
+  const byStatus = (status: "ok" | "unknown" | "deleted") => rows.filter((r) => r.status === status);
+  expect(byStatus("ok")).toHaveLength(4);
+  expect(byStatus("deleted")).toHaveLength(0);
+  expect(byStatus("unknown")).toHaveLength(1);
+  expect(byStatus("unknown")[0]?.url).not.toBeNull();
 });
 
 it("pages over attempts without truncating a cohort larger than one page", async () => {
@@ -510,8 +585,39 @@ it("serves the test definition to a Viewer, who cannot reach the tests.edit rout
   expect(editRes.status).toBe(403);
 });
 
+// Fix round 1, C1: a direct regression test, not just the secret-scan proxy
+// in scrub-scan.test.ts — `access` (carrying `access_code`, the `link_code`
+// credential itself) must be entirely absent from the Viewer-reachable
+// door, while the `tests.edit` route beside it still returns the whole
+// document, access block included, for an Author who needs their own
+// policy back.
+it("strips the whole access block from test.json, but not from the tests.edit route beside it", async () => {
+  const viewerDoc = (await (
+    await app.request(`/api/v1/workspaces/${workspaceId}/tests/${smallTestId}/export/test.json`, get(viewerCookie))
+  ).json()) as Record<string, unknown>;
+  expect(viewerDoc.access).toBeUndefined();
+  expect(JSON.stringify(viewerDoc)).not.toContain("OPEN");
+
+  const ownerDoc = (await (
+    await app.request(`/api/v1/workspaces/${workspaceId}/tests/${smallTestId}/export`, get(ownerCookie))
+  ).json()) as { access?: { access_code?: string } };
+  expect(ownerDoc.access?.access_code).toBe("OPEN");
+});
+
 it("is declared with the workspace authority and the results.export action", () => {
   expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/tests/:testId/export/test.json"]).toBe("results.export");
+});
+
+// Fix round 1, Minor 1: structural, not just a comment. `app.ts`'s own
+// comment on `test.json`'s budget line says it shares `/export`'s cost
+// because it calls the same `exportTest` — a claim a re-measurement of
+// `/export` alone could silently desynchronise from. Pinning the equality
+// here means that re-measurement fails this test too, not just drifts the
+// prose.
+it("test.json's declared budget equals /export's — the same function, one field dropped", () => {
+  expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/export/test.json"]).toBe(
+    ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/export"],
+  );
 });
 
 // --- a quiet sanity check that `drainRoute` is exercised somewhere ----------
