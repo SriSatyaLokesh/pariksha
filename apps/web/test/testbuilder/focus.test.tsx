@@ -254,7 +254,7 @@ describe("O-17: focus stays in the field being typed into", () => {
     expect(field.value).toBe("Read Xthis.");
   });
 
-  it("keeps focus in the Access code field", async () => {
+  it("keeps focus and the caret in the Access code field", async () => {
     const draft = store();
     const patchDraft = vi.fn(async (_w: string, _t: string, patch: never) => draft.patch(patch));
     const read = vi.fn(async () => draft.get());
@@ -262,13 +262,21 @@ describe("O-17: focus stays in the field being typed into", () => {
 
     fireEvent.click(rowFor("Access"));
     const code = (await screen.findByLabelText("Access code")) as HTMLInputElement;
-    typeChar(code, "X");
+    expect(code.value).toBe("APTI-2026");
+    // Mid-string, lower-case, the way "Default country" (M4) is typed into:
+    // an append-only, already-upper-case keystroke lands the same whether
+    // or not the field normalises under the caret, so it cannot tell the
+    // two apart. `typeChar` asserts both that the value is exactly what was
+    // typed and that the caret has not been relocated.
+    typeChar(code, "x", 4);
+    expect(code.value).toBe("APTIx-2026");
     expect(document.activeElement).toBe(code);
 
     await waitFor(() => expect(patchDraft).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
 
     expect(document.activeElement).toBe(code);
+    expect(code.value).toBe("APTIx-2026");
   });
 
   // Cause 1. `ReorderableList` keys each field row by `field.id`
