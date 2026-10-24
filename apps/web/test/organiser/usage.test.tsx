@@ -18,6 +18,7 @@ import { axe } from "jest-axe";
 
 import { UsagePanel } from "../../src/components/organiser/UsagePanel";
 import type { ApiClient, UsageProjection } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 
 const projection: UsageProjection = {
   projected: 52_000,
@@ -30,7 +31,7 @@ const projection: UsageProjection = {
  *  fixture needs — the same minimal-fake shape `CandidateDataPanel.test.tsx`'s
  *  neighbours use for a component with one real dependency. */
 function fakeClient(usage: (workspaceId: string) => Promise<UsageProjection | undefined>): ApiClient {
-  return { usage } as unknown as ApiClient;
+  return sharedClient({ usage });
 }
 
 const checkButton = () => screen.getByRole("button", { name: /check free-plan usage/i });

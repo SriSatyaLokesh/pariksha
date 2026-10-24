@@ -15,6 +15,7 @@ import {
   type IdentityProvider,
   type Workspace,
 } from "../src/lib/api";
+import { fakeClient as sharedClient } from "./fixtures/api-client";
 import { OrganiserApp } from "../src/routes/organiser";
 import { tokens, type TypographyName } from "../src/styles/tokens";
 import {
@@ -50,7 +51,7 @@ const ACTOR: Actor = {
 // no mock server, no network — the screens take their data access as a prop,
 // which is the only reason that is enough.
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [GOOGLE] }),
     me: async () => null,
     workspaces: async () => [WORKSPACE],
@@ -61,53 +62,14 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     // questions, so these never get called — only present to satisfy
     // `ApiClient`'s shape.
     listBanks: async () => [],
-    createBank: async () => {
-      throw new Error("not used by this test file");
-    },
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: async () => {
-      throw new Error("not used by this test file");
-    },
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: async () => {
-      throw new Error("not used by this test file");
-    },
-    updateGroup: async () => {
-      throw new Error("not used by this test file");
-    },
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
     exportBank: async () => ({ format: "pariksha/bank@1", name: "Exported", questions: [] }),
-    exportQuestion: async () => {
-      throw new Error("not used");
-    },
     tests: async () => [],
-    createTest: async () => {
-      throw new Error("not used");
-    },
-    test: async () => {
-      throw new Error("not used");
-    },
-    updateTest: async () => {
-      throw new Error("not used");
-    },
-    draft: async () => {
-      throw new Error("not used");
-    },
-    patchDraft: async () => {
-      throw new Error("not used");
-    },
-    publishTest: async () => {
-      throw new Error("not used by this test file");
-    },
-    closeTest: async () => {
-      throw new Error("not used by this test file");
-    },
-    archiveTest: async () => {
-      throw new Error("not used by this test file");
-    },
     versions: async () => [],
     checklist: async () => [],
     readiness: async () => ({}),
@@ -118,61 +80,13 @@ function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       throw new Error("not used by this test file");
     },
     importTest: async () => ({ testId: null, imported: false, issues: [], rebound: [] }),
-    checkUrl: async () => {
-      throw new Error("not used");
-    },
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: async () => {
-      throw new Error("not used by this test file");
-    },
-    uploadMedia: async () => {
-      throw new Error("not used by this test file");
-    },
     candidates: async () => [],
     lockedAttempts: async () => [],
-    unlockAttempt: async () => {
-      throw new Error("not used by this test file");
-    },
-    importCandidates: async () => {
-      throw new Error("not used by this test file");
-    },
-    gradingQueue: async () => {
-      throw new Error("not used by this test file");
-    },
-    grade: async () => {
-      throw new Error("not used by this test file");
-    },
-    recordVerdict: async () => {
-      throw new Error("not used by this test file");
-    },
-    exportCandidateData: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteCandidateData: async () => {
-      throw new Error("not used by this test file");
-    },
     usage: async () => undefined,
-    listWebhooks: async () => {
-      throw new Error("not used by this test file");
-    },
-    createWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
-    setWebhookActive: async () => {
-      throw new Error("not used by this test file");
-    },
-    deleteWebhook: async () => {
-      throw new Error("not used by this test file");
-    },
     listApiKeys: async () => ({ keys: [] }),
-    createApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
-    revokeApiKey: async () => {
-      throw new Error("not used by this test file");
-    },
     ...overrides,
-  };
+  });
 }
 
 /** Phase 6.5d Task 1 (`D7`): the five settings are collapsed rows now, so a
@@ -1497,6 +1411,122 @@ describe("OrganiserApp routes on state, not on a URL", () => {
     // of `GradingQueue` could never prove.
     expect(gradingQueue).toHaveBeenCalledWith("wsp_1", "tst_1", { blind: true });
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // Phase 8c Task 1 (`R-06`, #94): same shape as the grading reachability
+  // test above — `AnalyticsRoute` had no caller in the running app until
+  // `organiser.tsx`'s `"analytics"` view and the builder's "Analytics"
+  // button wired it in.
+  it("reaches the analytics screen from the app's own entry point", async () => {
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      closesAt: null,
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    const analytics = vi.fn(async () => ({
+      analytics: {
+        counts: { registered: 3, inProgress: 0, submitted: 2, autoSubmitted: 0, locked: 0 },
+        distribution: [0, 0, 0, 0, 0, 1, 1, 0, 0, 0],
+        mean: 58,
+        median: 58,
+        passRate: null,
+        completionRate: 1,
+        averageSeconds: 600,
+        integrity: { clean: 2, review: 0, high_risk: 0 },
+        perSet: [],
+        truncated: false,
+      },
+      items: [],
+      itemsTruncated: false,
+    }));
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => ACTOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+          analytics,
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Analytics" }));
+
+    expect(await screen.findByText("Score distribution")).toBeInTheDocument();
+    expect(analytics).toHaveBeenCalledWith("wsp_1", "tst_1");
+  });
+
+  // The same `KG2` pairing the grading button's own absence test proves:
+  // a Viewer holds `results.export` (the matrix's own grant) and must see
+  // the entry; an Author (`tests.edit`) does not hold it and must not see
+  // a control that would 403 them.
+  it("an Author sees no entry to the analytics screen, which would refuse them", async () => {
+    const AUTHOR = {
+      userId: "usr_2",
+      email: "author@example.edu",
+      memberships: [{ workspaceId: "wsp_1", role: "author" as const, grants: [] }],
+    };
+    const TEST_ROW = {
+      id: "tst_1",
+      name: "Midterm",
+      slug: "midterm",
+      description: null,
+      shortCode: "ab12cd",
+      closesAt: null,
+      state: "draft" as const,
+      currentVersion: null,
+      draftVersion: 1,
+      reviewRequested: false,
+      tags: [],
+      updatedAt: 0,
+    };
+    render(
+      <OrganiserApp
+        client={fakeClient({
+          me: async () => AUTHOR,
+          tests: async () => [TEST_ROW],
+          test: async () => TEST_ROW,
+          draft: async () => ({
+            id: "ver_1",
+            testId: "tst_1",
+            version: 1,
+            body: { settings: {}, sections: [] },
+            publishedAt: null,
+            createdAt: 0,
+            draw: {},
+            setPoints: {},
+            points: {},
+          }),
+        })}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Tests" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Midterm" }));
+    await openSetting("Results");
+    expect(screen.queryByRole("button", { name: "Analytics" })).toBeNull();
   });
 
   // An Author holds `tests.edit`, not `attempts.grade` — the same route the

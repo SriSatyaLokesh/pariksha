@@ -84,12 +84,13 @@ it("KG1: exactly the export routes this task mounts are covered", () => {
   // Bumped deliberately, the same discipline `run/scrub-scan.test.ts` uses
   // for its own count — a future `results.export` route changes this
   // number, which is the point: silent coverage growth is invisible,
-  // a changed literal is not.
-  expect(EXPORT_ENDPOINTS.length).toBe(2);
+  // a changed literal is not. 8c Task 1 (`R-06`, #94) added `/analytics`.
+  expect(EXPORT_ENDPOINTS.length).toBe(3);
   expect(new Set(EXPORT_ENDPOINTS.map(([e]) => e))).toEqual(
     new Set([
       "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv",
       "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv",
+      "GET /api/v1/workspaces/:id/tests/:testId/analytics",
     ]),
   );
 });
@@ -178,7 +179,17 @@ function urlFor(endpoint: string): { method: string; path: string } {
 /** Every page's raw JSON text, concatenated — `csv` and `filename` and
  *  `nextCursor` alike, so a leak in a field this file does not otherwise
  *  name (there is none today, but a scan over the *response text* rather
- *  than a parsed field is the same choice `AC-22`'s scan makes). */
+ *  than a parsed field is the same choice `AC-22`'s scan makes).
+ *
+ *  Not every `results.export` endpoint is a paged CSV: `/analytics`
+ *  (8c Task 1) answers once, as plain JSON, with no `nextCursor` field at
+ *  all. `CsvPage` (`@pariksha/core`) always carries that field as a
+ *  `string | null` — never absent — so "is `nextCursor` a string" is the
+ *  structural signal this drains on, not the endpoint's name: the route
+ *  table says nothing about which shape a given export returns, so the
+ *  only thing to key off is what the response itself carries. A string
+ *  means more pages; `null` (CSV, done) or missing entirely (not paged at
+ *  all) both mean fetch once and stop. */
 async function replayAllPages(path: string): Promise<string> {
   let cursor: string | undefined;
   let all = "";
@@ -188,8 +199,8 @@ async function replayAllPages(path: string): Promise<string> {
     expect(res.status, `${path} -> ${res.status}`).toBe(200);
     const text = await res.clone().text();
     all += text;
-    const page = JSON.parse(text) as ExportPage;
-    if (page.nextCursor === null) return all;
+    const page = JSON.parse(text) as Partial<ExportPage>;
+    if (typeof page.nextCursor !== "string") return all;
     cursor = page.nextCursor;
   }
 }

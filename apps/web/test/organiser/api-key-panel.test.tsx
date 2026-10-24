@@ -9,6 +9,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { ACTIONS, type Action } from "@pariksha/core";
 import { ApiError, type ApiClient, type ApiKey } from "../../src/lib/api";
+import { fakeClient as sharedClient } from "../fixtures/api-client";
 import { ApiKeyPanel, SCOPE_GROUPS_FLAT } from "../../src/components/organiser/ApiKeyPanel";
 
 const WORKSPACE_ID = "wsp_1";
@@ -35,75 +36,29 @@ const KEY: ApiKey = {
 // One typed object literal implementing ApiClient, same convention every
 // other panel's own test file already follows — no MSW, no fetch mock.
 function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
-  const notUsed = async (): Promise<never> => {
-    throw new Error("not used by this test file");
-  };
-  return {
+  return sharedClient({
     setupStatus: async () => ({ needed: false, providers: [] }),
     me: async () => null,
     workspaces: async () => [],
-    completeSetup: notUsed,
     requestMagicLink: async () => undefined,
     signOut: async () => undefined,
     listBanks: async () => [],
-    createBank: notUsed,
     listQuestions: async () => ({ questions: [] }),
     deleteQuestion: async () => undefined,
-    saveQuestion: notUsed,
     listTags: async () => [],
     listGroups: async () => [],
-    createGroup: notUsed,
-    updateGroup: notUsed,
     deleteGroup: async () => undefined,
     importBank: async () => ({ imported: 0, issues: [] }),
-    exportBank: notUsed,
-    exportQuestion: notUsed,
     tests: async () => [],
-    createTest: notUsed,
-    test: notUsed,
-    updateTest: notUsed,
-    draft: notUsed,
-    patchDraft: notUsed,
-    publishTest: notUsed,
-    closeTest: notUsed,
-    archiveTest: notUsed,
     versions: async () => [],
     checklist: async () => [],
     readiness: async () => ({}),
-    cloneTest: notUsed,
-    exportTest: notUsed,
-    importTest: notUsed,
-    checkUrl: notUsed,
     workspaceBranding: async () => ({}),
-    saveWorkspaceBranding: notUsed,
-    uploadMedia: notUsed,
     candidates: async () => [],
-    importCandidates: notUsed,
     listWebhooks: async () => ({ webhooks: [] }),
-    createWebhook: notUsed,
-    setWebhookActive: notUsed,
-    deleteWebhook: notUsed,
-    listApiKeys: notUsed,
-    createApiKey: notUsed,
-    revokeApiKey: notUsed,
-    // 8e's additions to `ApiClient`. This file was created on this branch, so
-    // git merged it without a conflict and only the type caught the gap. See
-    // #228: every test file hand-rolls this fixture, so one interface change
-    // breaks twenty-odd of them in places no merge can point at.
-    exportCandidateData: notUsed,
-    deleteCandidateData: notUsed,
     usage: async () => undefined,
-    // 8b's additions to `ApiClient` (#228 again — fourth time today that one
-    // interface change broke a hand-rolled copy of this fixture).
-    gradingQueue: notUsed,
-    grade: notUsed,
-    recordVerdict: notUsed,
-    // 7e's additions to `ApiClient` — fifth time today one interface change
-    // has broken a hand-rolled copy of this fixture (#228).
-    lockedAttempts: notUsed,
-    unlockAttempt: notUsed,
     ...overrides,
-  };
+  });
 }
 
 // The grouping is presentation only; the set of scopes it offers must

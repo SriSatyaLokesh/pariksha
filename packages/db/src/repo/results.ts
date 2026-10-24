@@ -30,10 +30,16 @@ export interface AttemptSummary {
   observed: boolean;
   violations: number;
   answered: number;
-  /** Phase 8c Task 3: the results CSV's "Locked at" column — 7e's
-   *  `attempt.locked_at`, added to this projection rather than read with a
-   *  second scoped call, because it is the same row `listAttemptsForTest`
-   *  already reads (the task brief's own ruling). */
+  /** 7e's `0011`. Null means "never locked" — the same shape `submittedAt`
+   *  already has.
+   *
+   *  Two Phase 8c tasks arrived at this projection independently, which is
+   *  the argument for it being here rather than in either caller: Task 1's
+   *  analytics needs it because a locked attempt has no `submittedAt`, so a
+   *  reader that only sees that column files it under "in progress"
+   *  forever; Task 3's results CSV needs it for the "Locked at" column. It
+   *  is the same row `listAttemptsForTest` already reads, so neither pays a
+   *  second scoped call for it. */
   lockedAt: number | null;
 }
 

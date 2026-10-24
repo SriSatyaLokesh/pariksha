@@ -29,6 +29,9 @@ export * from "./review.js";
 export * from "./regrade.js";
 // Phase 8d Task 1: webhook CRUD, and Task 3's own delivery read.
 export * from "./webhooks.js";
+// Phase 8c Task 1 (`K19`, #94): test analytics, one fetch over
+// `listAttemptsForTest` plus one `COUNT`.
+export * from "./analytics.js";
 // Phase 8d Task 2 (K25, K26): scoped API keys. `resolveApiKey` is
 // deliberately NOT re-exported here — see `repo/keys.ts`'s own header and
 // `src/index.ts`'s — it takes no workspace ID, so `scoped()` cannot wrap
