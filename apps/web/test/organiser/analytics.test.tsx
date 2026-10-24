@@ -4,14 +4,15 @@
 // is only what the screen itself does once mounted, the same split
 // `webhook-panel.test.tsx` keeps for `WebhookPanel`.
 
-import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, it, expect, vi, afterEach } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
-import type { ApiClient, ItemStat, TestAnalytics } from "../../src/lib/api";
+import { ApiError, type ApiClient, type ItemStat, type TestAnalytics } from "../../src/lib/api";
 import { AnalyticsRoute } from "../../src/routes/analytics";
 import { fakeClient } from "../fixtures/api-client";
 
 type AnalyticsFn = ApiClient["analytics"];
+type ExportPageFn = ApiClient["exportPage"];
 
 const WORKSPACE_ID = "wsp_1";
 const TEST_ID = "tst_1";

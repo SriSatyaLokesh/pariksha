@@ -2,6 +2,71 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DISCRIMINATION_MIN_N } from "@pariksha/core";
 import { ApiError, type ApiClient, type ItemStat, type TestAnalytics } from "../lib/api";
 
+// Phase 8c Task 3 (`R-08`/`R-09`, `K38`, #97) — the download buttons. Both
+// CSVs page over the same cursor contract: a page that reached its bound
+// always carries a `nextCursor`, so there is no shape where a full-looking
+// page is secretly a partial file (`K38`). The browser's half of that
+// promise is this loop never stopping early, never assembling out of
+// order, and never handing over what it has so far when a page fails.
+type ExportKind = "results" | "answers";
+
+const EXPORT_LABEL: Record<ExportKind, string> = {
+  results: "results CSV",
+  answers: "answers CSV",
+};
+
+/**
+ * Requests pages in order and concatenates them in the order they arrive —
+ * never out of order, never skipping ahead. The loop condition is the
+ * structural one `K38` names: `typeof nextCursor === "string"`, not `!=
+ * null`, which is the exact distinction a sibling fix turned an infinite
+ * loop into a terminating one over today. A page request that throws
+ * propagates straight out of this function with whatever was assembled so
+ * far discarded by the caller — there is no code path that returns a
+ * partial `csv` as though it were the whole file.
+ */
+async function drainExport(
+  client: ApiClient,
+  workspaceId: string,
+  testId: string,
+  kind: ExportKind,
+  onPage: (pages: number) => void,
+): Promise<{ csv: string; filename: string }> {
+  let cursor: string | undefined;
+  let csv = "";
+  let filename = "";
+  let pages = 0;
+  for (;;) {
+    const page = await client.exportPage(workspaceId, testId, kind, cursor);
+    csv += page.csv;
+    filename = page.filename;
+    pages += 1;
+    onPage(pages);
+    if (typeof page.nextCursor !== "string") break;
+    cursor = page.nextCursor;
+  }
+  return { csv, filename };
+}
+
+/** Hands the assembled file to the browser. Not `lib/download.ts`'s
+ *  `downloadJson` — that always `JSON.stringify`s its argument and labels
+ *  the blob `application/json`; the pages here are already-serialised CSV
+ *  text (BOM included on the first one), so this is the same object-URL
+ *  create/click/revoke shape with a different blob type, not a second copy
+ *  of the JSON one. */
+function downloadCsv(csv: string, filename: string): void {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Test and item analytics (Phase 8c Task 1/2, `R-06`/`R-07`, #94/#95). One
 // screen, two fetches already joined by `client.analytics()`, rendered in
 // the language `.prototypes/analytics.html` (D11) established: the Signal
@@ -197,6 +262,33 @@ export function AnalyticsRoute({
 }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [sort, setSort] = useState<SortState>({ key: "order", dir: "asc" });
+  const [exporting, setExporting] = useState<{ kind: ExportKind; pages: number } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const onExport = useCallback(
+    async (kind: ExportKind) => {
+      setExportError(null);
+      setExporting({ kind, pages: 0 });
+      try {
+        const { csv, filename } = await drainExport(client, workspaceId, testId, kind, (pages) =>
+          setExporting({ kind, pages }),
+        );
+        downloadCsv(csv, filename);
+      } catch (cause) {
+        // Never a partial file: `drainExport` already discarded whatever it
+        // had assembled by the time control reaches here, so the only
+        // thing left to do is say so, visibly, rather than hand over
+        // nothing and let the organiser believe the download simply never
+        // started.
+        setExportError(
+          `The ${EXPORT_LABEL[kind]} export failed${cause instanceof ApiError ? `: ${cause.message}` : ""} — nothing was downloaded.`,
+        );
+      } finally {
+        setExporting(null);
+      }
+    },
+    [client, workspaceId, testId],
+  );
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -265,7 +357,40 @@ export function AnalyticsRoute({
       <div className="analytics-band">
         <h2 className="analytics-band__title">Test analytics</h2>
         <span className="analytics-meta analytics-band__meta">R-06 · {counts.registered} registered</span>
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={exporting !== null}
+          onClick={() => void onExport("results")}
+        >
+          {exporting?.kind === "results" ? "Exporting…" : "Export results CSV"}
+        </button>
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={exporting !== null}
+          onClick={() => void onExport("answers")}
+        >
+          {exporting?.kind === "answers" ? "Exporting…" : "Export answers CSV"}
+        </button>
       </div>
+
+      {/* Always present, text swapped in place (`routes/tests.tsx`'s own
+          live-region comment) — a region inserted already carrying its
+          text does not reliably announce. Updates once per page, which is
+          the whole point on the 18,000-row answers export: several
+          requests happen before the file is ready, and this is what keeps
+          that from looking hung (ui-ux-pro-max CRITICAL: loading-buttons). */}
+      <p className="organiser__status" role="status">
+        {exporting === null
+          ? ""
+          : `Downloading ${EXPORT_LABEL[exporting.kind]} — page ${exporting.pages}…`}
+      </p>
+      {exportError !== null && (
+        <p role="alert" className="field-error">
+          {exportError}
+        </p>
+      )}
 
       {analytics.truncated && (
         <p className="analytics-hint" role="status">
