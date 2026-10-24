@@ -1001,6 +1001,26 @@
   min-width: 0;
 }
 
+/* Phase 8h Task 2 (`F2`): `.organiser--wide`'s 1080px clamp (admin.css)
+   caps the WHOLE two-column page, so the editor and the rail have always
+   had to share 1080px however wide the screen is — 672px of editor beside
+   a 320px rail on a 1440px screen, with ~990px of viewport doing nothing.
+   `.organiser--full` is `D18`'s existing precedent for a screen opting out
+   of the same clamp (the bank browser); this is the same opt-out, scoped
+   to the builder alone so every other `.organiser--wide` screen keeps the
+   1080px clamp exactly as it is.
+
+   Gated above 1200px, matching the breakpoint `.section-list:has(>
+   .picker-drawer)` already uses a few hundred lines down — below it the
+   clamp was never binding anyway (any viewport narrower than ~1100px
+   already sits under 1080px plus its own padding), so there is nothing to
+   opt out of yet. */
+@media (min-width: 1200px) {
+  .organiser--wide:has(> .checklist-rail) {
+    max-width: none;
+  }
+}
+
 .shell__page > .checklist-rail {
   grid-column: 2;
   align-self: start;

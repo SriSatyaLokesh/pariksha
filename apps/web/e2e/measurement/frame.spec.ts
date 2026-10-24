@@ -31,7 +31,7 @@
 
 import { expect, test } from "@playwright/test";
 import { seedWorkspace, signIn } from "../seed";
-import { deadScrollPx, openBuilder, ORGANISER_VIEWS } from "../frame";
+import { collapseRail, deadScrollPx, editorWidthRatio, openBuilder, ORGANISER_VIEWS } from "../frame";
 
 let testId: string;
 
@@ -111,5 +111,30 @@ test.describe("F1 — the builder does not scroll past its own content", () => {
       const display = await page.locator(".shell__page").evaluate((el) => getComputedStyle(el).display);
       expect(display, view).toBe("flex");
     }
+  });
+});
+
+test.describe("F2 — the editing column takes the width it is given", () => {
+  test("the builder's editing column grows with the viewport", async ({ page }) => {
+    await signIn(page);
+    await openBuilder(page, testId);
+    for (const width of [1280, 1366, 1440, 1920]) {
+      // 1366 is Review Focus 4: the clamp and the grid change behaviour
+      // continuously between the tested breakpoints, and 1366 is the most
+      // common laptop width — the gap an off-by-one breakpoint hides in.
+      await page.setViewportSize({ width, height: 900 });
+      const ratio = await editorWidthRatio(page);
+      expect(ratio, `at ${width}`).toBeGreaterThanOrEqual(0.6);
+    }
+  });
+
+  test("a collapsed rail gives its width back to the editor", async ({ page }) => {
+    // Review Focus 2: the 52px `data-state="lights"` rail, not the 20rem
+    // docked one — the other half of F2's width calculation.
+    await signIn(page);
+    await openBuilder(page, testId);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await collapseRail(page);
+    expect(await editorWidthRatio(page)).toBeGreaterThanOrEqual(0.75);
   });
 });

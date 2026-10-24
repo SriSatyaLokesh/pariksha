@@ -52,3 +52,36 @@ export async function deadScrollPx(page: Page): Promise<number> {
     return Math.round(Math.max(0, document.documentElement.scrollHeight - lowest));
   });
 }
+
+/**
+ * `.testbuilder-main`'s width divided by the shell's own SECOND grid
+ * TRACK — `.shell`'s `grid-template-columns: var(--shell-rail)
+ * minmax(0, 1fr)`, read off `.shell` itself rather than off
+ * `.shell__page`. That distinction is the whole of F2: `.shell__page` is
+ * `.organiser--wide`'s own 1080px clamp, centred WITHIN that track, so a
+ * ratio taken against `.shell__page`'s own (already-clamped) width would
+ * read high no matter how much of the viewport the clamp wastes — the
+ * editor always fills most of its own, already-too-narrow, parent. The
+ * track is what the page actually has to work with before any clamp
+ * narrows it.
+ */
+export async function editorWidthRatio(page: Page): Promise<number> {
+  const main = await page.locator(".testbuilder-main").evaluate((el) => el.getBoundingClientRect().width);
+  const track = await page.locator(".shell").evaluate((el) => {
+    const columns = getComputedStyle(el).gridTemplateColumns.split(" ").map(parseFloat);
+    return columns[1]!;
+  });
+  return main / track;
+}
+
+/**
+ * Collapses the checklist rail to its 52px `data-state="lights"` strip
+ * through the pin button itself — Review Focus 2, "the collapsed state is
+ * the other half of" F2's width calculation, and going through the real
+ * control (rather than setting the attribute) is what makes this exercise
+ * the actual path a reader uses.
+ */
+export async function collapseRail(page: Page): Promise<void> {
+  await page.getByRole("button", { name: /collapse the checklist to lights/i }).click();
+  await expect(page.locator('.checklist-rail[data-state="lights"]')).toBeVisible();
+}
