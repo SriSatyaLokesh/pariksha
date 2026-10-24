@@ -163,3 +163,24 @@
   min-width: 0;
 }
 
+/* G4-02 (Phase 8h): this selector used to exist only in exam.css, so
+   dragging an option, a matching pair or an ordering item in the ORGANISER
+   (authoring.css -> admin.css's chain, which also loads this file) gave
+   zero drop feedback — the candidate runtime was the only ground that ever
+   painted it.
+   `--accent` rather than this file's own `--color-*` literals: that is a
+   `theme.css` semantic, defined on admin.css's chain and undefined on
+   exam.css's (exam.css never imports theme.css — the candidate runtime's
+   own ground is painted in `--color-voltage` instead). That is safe rather
+   than a seam, because exam.css `@import`s this file and then declares its
+   OWN `.reorderable-list__item.is-drop-target` rule later in its own
+   cascade (same specificity, later source order), so the candidate ground
+   keeps its existing `--color-voltage` treatment unchanged and this rule
+   only ever resolves on the organiser ground, where `--accent` is defined.
+   Mirrors exam.css's own treatment (a single 4px accent rule on the
+   leading edge, nothing else redeclared) rather than inventing a second
+   visual language for the same state. */
+.reorderable-list__item.is-drop-target {
+  border-inline-start: 4px solid var(--accent);
+}
+
