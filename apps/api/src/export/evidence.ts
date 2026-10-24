@@ -8,11 +8,19 @@
 // thing new here is a second route that reaches the same function under
 // `results.export` instead of `tests.edit`, because a Viewer who may export
 // results still needs the definition that explains their CSV's columns.
-// Deliberately **not** scrubbed of keys/explanations: that is what the
-// document *is* — the organiser-only answer key a Viewer's export-level
-// access is trusted with, same as `results.csv`'s own `Correct` column is
-// trusted with a boolean. `KG1` governs the *candidate-data* exports below,
-// not this one.
+//
+// **Audit correction (not in the original draft): this route needs no `KG1`
+// exemption, because it never carries a key or an explanation at all.**
+// The draft's own comment here claimed the opposite — that the document was
+// "deliberately not scrubbed" of them, as if it were an organiser-only
+// answer key. `toTestDocument` (`packages/db/src/repo/test-document.ts`)
+// says otherwise: a section's `source` names question *ids* (translated to
+// the bank file's own ref ids), never a question's `key_json`/
+// `explanation_json`/`rubric_json` — that content lives only in the bank
+// format, reachable through `export/bank.ts` under `banks.edit`, a
+// permission a Viewer does not hold. `scrub-scan.test.ts`'s `KG1` scan
+// covers `test.json` in its ordinary loop, with no exemption, and proves
+// the point by finding nothing to redact.
 //
 // **`K3`: the snapshot export is a manifest, never a ZIP.** One R2 `get` is
 // one subrequest, a single Strict attempt at the 60s default holds ~60
