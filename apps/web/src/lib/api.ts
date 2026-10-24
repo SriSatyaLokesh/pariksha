@@ -668,9 +668,11 @@ export interface ApiClient {
    * `apps/api/src/export/results.ts`). Mirrors `ExportPage` there — a
    * third redeclared wire shape, same convention as `TestAnalytics` above.
    *
-   * `nextCursor` is `string | null` and **never absent**: a page that
-   * reached its bound always carries one, so the caller's loop is `while
-   * (typeof nextCursor === "string")`, never a `!= null` check (`K38`) — the
+   * `nextCursor` is `string | null` and never absent on these two routes —
+   * a page that reached its bound always carries one (`K38`). The caller's
+   * loop still tests `typeof nextCursor === "string"` rather than `!=
+   * null`: defensive, since `typeof` also covers an absent field, which
+   * these two routes cannot send but a sibling export route could. The
    * drain loop itself lives in `routes/analytics.tsx`, not here, so this
    * method stays a plain one-page fetch with no retry or assembly logic to
    * duplicate per caller.

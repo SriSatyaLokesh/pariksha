@@ -200,3 +200,30 @@ describe("createApiClient: exportBank", () => {
     ]);
   });
 });
+
+// Fix round 1, Minor 4 (Phase 8c Task 3). Every `analytics.test.tsx` test
+// talks to `fakeClient`, so a typo in this URL (`.cvs`, the wrong `kind`
+// segment, a dropped `?cursor=`) would have shipped green — this is the one
+// place the real path is pinned, the same way `updateGroup`/`deleteGroup`/
+// `importBank`/`importTest`/`exportBank` already are above.
+describe("createApiClient: exportPage", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("builds the right URL for both export kinds, with and without a cursor", async () => {
+    const fetchSpy = vi.fn().mockImplementation(() => jsonResponse({ csv: "", nextCursor: null, filename: "f.csv" }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    await createApiClient().exportPage("wsp_1", "tst_1", "results", undefined);
+    await createApiClient().exportPage("wsp_1", "tst_1", "answers", undefined);
+    await createApiClient().exportPage("wsp_1", "tst_1", "results", "cur_2");
+
+    const urls = fetchSpy.mock.calls.map((call) => call[0] as string);
+    expect(urls).toEqual([
+      "/api/v1/workspaces/wsp_1/tests/tst_1/export/results.csv",
+      "/api/v1/workspaces/wsp_1/tests/tst_1/export/answers.csv",
+      "/api/v1/workspaces/wsp_1/tests/tst_1/export/results.csv?cursor=cur_2",
+    ]);
+  });
+});

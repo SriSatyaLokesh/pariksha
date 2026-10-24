@@ -17,13 +17,14 @@ const EXPORT_LABEL: Record<ExportKind, string> = {
 
 /**
  * Requests pages in order and concatenates them in the order they arrive —
- * never out of order, never skipping ahead. The loop condition is the
- * structural one `K38` names: `typeof nextCursor === "string"`, not `!=
- * null`, which is the exact distinction a sibling fix turned an infinite
- * loop into a terminating one over today. A page request that throws
- * propagates straight out of this function with whatever was assembled so
- * far discarded by the caller — there is no code path that returns a
- * partial `csv` as though it were the whole file.
+ * never out of order, never skipping ahead. `typeof nextCursor === "string"`
+ * is the loop condition rather than `!= null`: defensive, since `typeof`
+ * also covers an absent field, which these two routes cannot send
+ * (`ExportPage`'s own contract makes `nextCursor` `string | null`, never
+ * absent — `K38`) but a sibling export route could. A page request that
+ * throws propagates straight out of this function with whatever was
+ * assembled so far discarded by the caller — there is no code path that
+ * returns a partial `csv` as though it were the whole file.
  */
 async function drainExport(
   client: ApiClient,
@@ -73,7 +74,8 @@ function downloadCsv(csv: string, filename: string): void {
 }
 
 // Test and item analytics (Phase 8c Task 1/2, `R-06`/`R-07`, #94/#95). One
-// screen, two fetches already joined by `client.analytics()`, rendered in
+// screen, now two fetch shapes — `client.analytics()` for the figures below
+// and `client.exportPage()` for the download buttons (Task 3) — rendered in
 // the language `.prototypes/analytics.html` (D11) established: the Signal
 // ground, `.card-hairline` panels, and the two-absences-without-hue
 // discrimination cell.
@@ -336,32 +338,15 @@ export function AnalyticsRoute({
   const { counts } = analytics;
   const everEnded = counts.submitted + counts.autoSubmitted + counts.locked;
 
-  // The state every test is in on the day it is published (CLAUDE.md's
-  // own ruling for this screen) — a mean of `null`, an empty histogram and
-  // sixty `no_variance` rows is worse than a line saying nothing has
-  // happened yet, so it ships with the screen rather than being left for
-  // the first candidate to uncover.
-  if (everEnded === 0) {
-    return (
-      <div className="organiser-empty">
-        <h2 className="organiser-empty__title">Nothing has been attempted yet</h2>
-        <p className="organiser-empty__body">
-          {counts.registered} candidate{counts.registered === 1 ? "" : "s"} registered, and none has finished an
-          attempt. Analytics appear once the first candidate submits.
-        </p>
-      </div>
-    );
-  }
-
-  const maxBucket = Math.max(1, ...analytics.distribution);
-  const scoredCount = analytics.distribution.reduce((sum, n) => sum + n, 0);
-  const totalIntegrity = analytics.integrity.clean + analytics.integrity.review + analytics.integrity.high_risk;
-
-  return (
-    <div className="analytics">
+  // Fix round 1, Important 1: `everEnded === 0` does not mean "nothing to
+  // export" — `R-10`'s own requirement is that both exports are available
+  // *during* the test, and "live, nobody has submitted yet" (candidates
+  // still mid-attempt) is exactly the state that sentence exists for. The
+  // buttons and their status/alert pair are hoisted above the empty-state
+  // branch below so both render whether or not a single attempt has ended.
+  const exportBar = (
+    <>
       <div className="analytics-band">
-        <h2 className="analytics-band__title">Test analytics</h2>
-        <span className="analytics-meta analytics-band__meta">R-06 · {counts.registered} registered</span>
         <button
           type="button"
           className="button-secondary"
@@ -380,22 +365,60 @@ export function AnalyticsRoute({
         </button>
       </div>
 
-      {/* Always present, text swapped in place (`routes/tests.tsx`'s own
-          live-region comment) — a region inserted already carrying its
-          text does not reliably announce. Updates once per page, which is
-          the whole point on the 18,000-row answers export: several
-          requests happen before the file is ready, and this is what keeps
-          that from looking hung (ui-ux-pro-max CRITICAL: loading-buttons). */}
-      <p className="organiser__status" role="status">
-        {exporting === null
-          ? ""
-          : `Downloading ${EXPORT_LABEL[exporting.kind]} — page ${exporting.pages}…`}
-      </p>
-      {exportError !== null && (
-        <p role="alert" className="field-error">
-          {exportError}
+      {/* Fix round 1, Minor 1: the status and the (conditional) alert line
+          share one flex item, not two — an always-present but empty `<p>`
+          left on its own is still a `.analytics` flex child, so idle it
+          doubled the band's own `gap` (one above the empty `<p>`, one
+          below it) on every load. */}
+      <div>
+        {/* Always present, text swapped in place (`routes/tests.tsx`'s own
+            live-region comment) — a region inserted already carrying its
+            text does not reliably announce. Updates once per page, which
+            is the whole point on the 18,000-row answers export: several
+            requests happen before the file is ready, and this is what
+            keeps that from looking hung (ui-ux-pro-max CRITICAL:
+            loading-buttons). */}
+        <p className="organiser__status" role="status">
+          {exporting === null ? "" : `Downloading ${EXPORT_LABEL[exporting.kind]} — page ${exporting.pages}…`}
         </p>
-      )}
+        {exportError !== null && (
+          <p role="alert" className="field-error">
+            {exportError}
+          </p>
+        )}
+      </div>
+    </>
+  );
+
+  // The state every test is in on the day it is published (CLAUDE.md's
+  // own ruling for this screen) — a mean of `null`, an empty histogram and
+  // sixty `no_variance` rows is worse than a line saying nothing has
+  // happened yet, so it ships with the screen rather than being left for
+  // the first candidate to uncover.
+  if (everEnded === 0) {
+    return (
+      <div className="organiser-empty">
+        <h2 className="organiser-empty__title">Nothing has been attempted yet</h2>
+        <p className="organiser-empty__body">
+          {counts.registered} candidate{counts.registered === 1 ? "" : "s"} registered, and none has finished an
+          attempt. Analytics appear once the first candidate submits.
+        </p>
+        {exportBar}
+      </div>
+    );
+  }
+
+  const maxBucket = Math.max(1, ...analytics.distribution);
+  const scoredCount = analytics.distribution.reduce((sum, n) => sum + n, 0);
+  const totalIntegrity = analytics.integrity.clean + analytics.integrity.review + analytics.integrity.high_risk;
+
+  return (
+    <div className="analytics">
+      <div className="analytics-band">
+        <h2 className="analytics-band__title">Test analytics</h2>
+        <span className="analytics-meta analytics-band__meta">R-06 · {counts.registered} registered</span>
+      </div>
+      {exportBar}
 
       {analytics.truncated && (
         <p className="analytics-hint" role="status">

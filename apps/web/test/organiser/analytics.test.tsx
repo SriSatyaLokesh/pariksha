@@ -417,6 +417,42 @@ describe("AnalyticsRoute — the download buttons drain every page (Phase 8c Tas
     expect(saved[0]!.name).toBe("t_answers_20261024-0000.csv");
   });
 
+  // Fix round 1, Important 1. `everEnded === 0` (nothing submitted,
+  // auto-submitted or locked yet) does not mean "nothing to export" — a
+  // live test with every candidate still mid-attempt is exactly the state
+  // `R-10` names ("available during the test, for partial results"), and
+  // the empty-state branch used to render with no buttons at all.
+  it("shows both export buttons, and lets a drain succeed, before any attempt has ended", async () => {
+    const saved = captureDownloads();
+    const liveAnalytics: TestAnalytics = {
+      ...BASE_ANALYTICS,
+      counts: { registered: 200, inProgress: 200, submitted: 0, autoSubmitted: 0, locked: 0 },
+    };
+    const exportPage: ExportPageFn = vi.fn(async () => ({
+      csv: "header\r\nrow1\r\n",
+      nextCursor: null,
+      filename: "t_answers_20261024-0000.csv",
+    }));
+    render(
+      <AnalyticsRoute
+        workspaceId={WORKSPACE_ID}
+        testId={TEST_ID}
+        client={fakeClient({
+          analytics: async () => ({ analytics: liveAnalytics, items: [], itemsTruncated: false }),
+          exportPage,
+        })}
+      />,
+    );
+
+    await screen.findByText("Nothing has been attempted yet");
+    expect(screen.getByRole("button", { name: "Export results CSV" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Export answers CSV" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Export answers CSV" }));
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0]!.name).toBe("t_answers_20261024-0000.csv");
+  });
+
   it("the in-progress export state has no axe violations", async () => {
     const exportPage: ExportPageFn = vi.fn(async (_workspaceId, _testId, _kind, cursor) => {
       if (cursor === undefined) return { csv: "a\r\n", nextCursor: "cur2", filename: "f.csv" };
