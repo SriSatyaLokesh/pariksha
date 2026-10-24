@@ -370,9 +370,11 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // snapshot: a Strict attempt's ~60 images still cost one `list`), so the
   // worst case is auth (2) + `getTest` (1) + `listAttemptsForTest` (1) +
   // `listSnapshotsForAttempts` (1) + one `list` per attempt in the page, up
-  // to `SNAPSHOTS_PAGE_LIMIT_MAX` (40) = 45. `signedUrl` costs nothing
-  // (`instrument.ts`'s own ruling, `K4`).
-  "/api/v1/workspaces/:id/tests/:testId/export/snapshots.csv": 45,
+  // to `SNAPSHOTS_PAGE_LIMIT_MAX` (20, lowered from the draft's 40 — see
+  // that constant's own comment) = 25, half the ceiling rather than five
+  // subrequests under it. `signedUrl` costs nothing (`instrument.ts`'s own
+  // ruling, `K4`).
+  "/api/v1/workspaces/:id/tests/:testId/export/snapshots.csv": 25,
   // `test.json`: the same cost as `/export` above, because it calls the same
   // `exportTest` — a second door onto one function, not a second budget
   // line that could drift from the original's.

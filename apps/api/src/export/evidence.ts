@@ -45,7 +45,6 @@ import {
   listEventsForTest,
   listSnapshotsForAttempts,
   type EventRow,
-  type SnapshotRow,
   type TestRow,
 } from "@pariksha/db";
 import { SIGNED_URL_TTL_SECONDS } from "@pariksha/storage";
@@ -132,13 +131,21 @@ export async function exportEventsPage(
  * for the same reason stated there and a second one of this file's own: the
  * existence check below spends one `StorageAdapter.list` per attempt in the
  * page, and that cost — not the D1 bound-parameter cap — is what the
- * 50-subrequest ceiling actually limits here. 40 leaves headroom for auth,
- * `requireTest`, `listAttemptsForTest` and `listSnapshotsForAttempts`
- * (measured in `evidence.test.ts`'s own budget test) while staying flat in
- * how many snapshots any one attempt holds — a Strict attempt's ~60 images
- * cost the same single `list` as a Flexible attempt's one.
+ * 50-subrequest ceiling actually limits here.
+ *
+ * Budget decision (resume-plan review): the draft set this to 40, which
+ * worked out to auth (2) + `getTest` (1) + `listAttemptsForTest` (1) +
+ * `listSnapshotsForAttempts` (1) + up to 40 `list` calls = 45 against a
+ * ceiling of 50 — five subrequests of headroom, so one more fixed call
+ * added anywhere in the request path later (a webhook check, an audit
+ * write) breaks this route in production with no test ever turning red.
+ * Lowered to 20 (worst case 25, half the ceiling): the manifest already
+ * pages, and `signedUrl` costs nothing (`K4`), so a smaller page is nearly
+ * free here in a way the heavier CSV exports' page sizes are not. Still
+ * flat in how many snapshots any one attempt holds — a Strict attempt's
+ * ~60 images cost the same single `list` as a Flexible attempt's one.
  */
-const SNAPSHOTS_PAGE_LIMIT_MAX = 40;
+const SNAPSHOTS_PAGE_LIMIT_MAX = 20;
 
 export interface SnapshotManifestRow {
   attemptId: string;
@@ -245,9 +252,15 @@ export async function exportSnapshotsPage(
     ...(opts.cursor !== undefined && { cursor: opts.cursor }),
   });
 
-  const attemptIds = attempts.map((row) => row.attemptId);
-  const snapshots = await listSnapshotsForAttempts(deps.db, workspaceId, attemptIds);
-  const manifestRows = await snapshotManifestRows(deps, snapshots, deps.now());
+  // Audit fix (not in the original draft): this called a `snapshotManifestRows`
+  // helper that was never defined (TS2552 — the file never compiled).
+  // `snapshotManifest` above already does exactly this work — fetch,
+  // check existence per attempt, mint URLs — given a set of attempt ids;
+  // call it instead of duplicating `listSnapshotsForAttempts` and inventing
+  // a second, half-written path to the same rows.
+  const manifestRows = await snapshotManifest(deps, workspaceId, {
+    attemptIds: attempts.map((row) => row.attemptId),
+  });
 
   const firstPage = opts.cursor === undefined;
   const csv = toCsv(manifestRows, MANIFEST_COLUMNS, { bom: firstPage, header: firstPage });
