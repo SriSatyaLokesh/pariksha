@@ -283,7 +283,15 @@ describe("component dimensions match tokens.components (T30)", () => {
     expect(declaration(body, "height")).toBe("auto");
   });
 
-  it("textarea.text-input's multi-line floor is 3 lines of body-md's line-height plus its own vertical padding", () => {
+  // Round 3 review: this test's own name used to claim "3 lines of body-md's
+  // line-height" — the exact claim the registration.css comment above this
+  // rule was corrected away from (m2, same review round), since no
+  // line-height is declared here and the rule renders at the browser
+  // default, landing closer to 3.8 lines. The name now says what is
+  // actually pinned: the calc string itself, not a literal three-line
+  // measurement — so a reader who gets here from a failure sees the same
+  // story the CSS comment tells, not a contradicting one.
+  it("textarea.text-input's min-height calc is unchanged: a comfortable floor borrowing body-md's line-height, not a literal 3 lines", () => {
     const body = ruleBody(registrationCss, "textarea.text-input ");
     expect(declaration(body, "min-height")).toBe(
       "calc(3 * var(--type-body-md-line-height) + 20px)",
