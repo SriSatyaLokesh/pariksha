@@ -3,7 +3,7 @@ import { useState } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { ReorderableList } from "../../src/components/authoring/ReorderableList";
-import { declarations, organiserStylesheets, parseRuleBodies, readResolvedCss } from "../css-chain";
+import { declarations, organiserStylesheets, parseRuleBodies, readResolvedCss, specificity } from "../css-chain";
 
 // A thin harness: ReorderableList is generic over T, and the production
 // callers (Choice.tsx's options list) aren't needed to prove the control
@@ -373,5 +373,42 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
     expect(height, "no declared height").not.toBeNull();
     expect(Number(width![1])).toBeGreaterThanOrEqual(24);
     expect(Number(height![1])).toBeGreaterThanOrEqual(24);
+  });
+
+  // Minor, fix round 4: moving the grip to `question.css` for C2 gave it
+  // `--color-muted` there, which is not theme-aware. On the organiser's
+  // dark ground that measures 3.70:1 where `authoring.css`'s own header
+  // promises this tone 5.28:1 ("ink / ink-soft / muted to --ink / --ink-2 /
+  // --ink-3 … 5.28:1 on the dark ground") — still clears the 3:1 non-text
+  // floor, so not a failure, but a silent drift from what the file says it
+  // paints. `admin.css` repaints it in Signal's own name
+  // (`:root[data-theme] .reorderable-list__grip::before`), the same pattern
+  // `.reorderable-list__item`'s border gets just above it. `contrast-usage
+  // .test.ts` has no grip entry (a `::before` background sits outside its
+  // SURFACE machinery, which reads real elements `getComputedStyle` can see
+  // through jsdom's DOM, not pseudo-elements) so this reads the organiser's
+  // resolved CSS TEXT instead: the higher-specificity override must exist,
+  // and it has to be the rule that wins.
+  it("the grip's bars are repainted in Signal's own name on the organiser ground, not left at question.css's cream-safe default", () => {
+    const seen = new Set<string>();
+    const css = organiserStylesheets()
+      .map((path) => readResolvedCss(path, seen))
+      .join("\n");
+    const candidates = parseRuleBodies(css).filter((entry) =>
+      entry.selector.split(",").some((part) => part.trim().endsWith(".reorderable-list__grip::before")),
+    );
+    expect(candidates.length, "no .reorderable-list__grip::before rule in the organiser's chain").toBeGreaterThan(0);
+
+    // The winner, by the same last-one-after-a-specificity-sort the shared
+    // reader (`declaredFor`) uses for a real element — `specificity()` is
+    // reused directly rather than through that reader because jsdom's
+    // `Element.matches()` rejects a pseudo-element selector outright, which
+    // is exactly why this test cannot ask a rendered node.
+    const winner = [...candidates].sort((a, b) => specificity(a.selector) - specificity(b.selector)).at(-1)!;
+    const background = declarations(winner.body).find((decl) => decl.trim().startsWith("background:"));
+    expect(
+      background,
+      `the winning .reorderable-list__grip::before rule ("${winner.selector}") reads ${String(background)} on the organiser ground — expected --ink-3, theme.css's own muted tone, not question.css's cream-safe --color-muted`,
+    ).toBe("background: var(--ink-3)");
   });
 });
