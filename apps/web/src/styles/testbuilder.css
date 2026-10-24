@@ -270,6 +270,61 @@
   gap: var(--space-sm);
 }
 
+/* Phase 8h (`O-22`, register `G3-02`): both of `SectionList`'s dialogs
+   (the source-switch warning and the delete confirmation) used to render
+   inline at the end of the document — reachable only by scrolling to it,
+   on anything longer than a short test — with no scrim marking the rest
+   of the screen as unavailable. `position: fixed` plus `--color-scrim`
+   (declared in `tokens.css`, unused until now) is the exam runtime's own
+   pattern for the same construct (`exam.css`'s `.exam-proctoring-overlay`,
+   "the scrim and the dialog are the only two new boxes on the page").
+   `onClick` on the scrim closes the dialog the same way Escape already
+   does (`useDialogKeys`); `stopPropagation` on the dialog itself is what
+   keeps a click inside it from falling through and closing it instantly. */
+.section-list__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-xl);
+  background: var(--color-scrim);
+}
+
+.section-list__confirm {
+  width: min(28rem, 100%);
+  padding: var(--space-lg);
+  border-radius: var(--rounded-md);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.section-list__confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  margin-block-start: var(--space-lg);
+}
+
+/* The delete confirm's own colour (`O-22`, register `G3-03`): `--risk` is
+   this file's one reserved warning colour (`.section-row__flag-risk`
+   already proves it readable on this surface), used here as a `color`
+   and `border-color` pair over `.button-secondary`'s own background —
+   never a literal, and never the `.button-primary` accent an affirmative
+   action owns. */
+.button-danger {
+  color: var(--risk);
+  border-color: var(--risk);
+}
+
+.button-danger:hover,
+.button-danger:focus-visible {
+  background: var(--risk-wash);
+  border-color: var(--risk);
+}
+
 .section-editor {
   display: flex;
   flex-direction: column;

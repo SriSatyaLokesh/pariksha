@@ -409,41 +409,63 @@ export function SectionList({
       )}
 
       {pendingSwitch && (
-        <div
-          role="dialog"
-          aria-label="Replace this section's source"
-          ref={switchDialog.dialogRef}
-          tabIndex={-1}
-          onKeyDown={switchDialog.onKeyDown}
-        >
-          <p>
-            Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
-            kept across a source change.
-          </p>
-          <button type="button" className="button-secondary" onClick={() => setPendingSwitch(null)}>
-            Cancel
-          </button>
-          <button type="button" className="button-primary" onClick={confirmSourceSwitch}>
-            Replace it
-          </button>
+        <div className="section-list__scrim" onClick={() => setPendingSwitch(null)}>
+          <div
+            role="dialog"
+            aria-label="Replace this section's source"
+            ref={switchDialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={switchDialog.onKeyDown}
+            className="section-list__confirm"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p>
+              Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
+              kept across a source change.
+            </p>
+            <div className="section-list__confirm-actions">
+              <button type="button" className="button-secondary" onClick={() => setPendingSwitch(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button-primary" onClick={confirmSourceSwitch}>
+                Replace it
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Phase 8h (`O-22`, register `G3-02`/`G3-03`): this used to render
+          inline at document end — below the fold on anything but a short
+          test — with its confirm styled identically to every other
+          button on the screen. An irreversible action now interrupts the
+          screen it was asked from (a fixed, centred overlay, same
+          `.section-list__scrim` the source-switch dialog above uses) and
+          its confirm carries `--risk`, the one colour this file reserves
+          for a warning, rather than `.button-primary`'s accent green —
+          an affirmative colour on a destructive action was `G3-03`'s own
+          complaint. */}
       {confirmDeleteId && (
-        <div
-          role="dialog"
-          aria-label="Delete this section"
-          ref={deleteDialog.dialogRef}
-          tabIndex={-1}
-          onKeyDown={deleteDialog.onKeyDown}
-        >
-          <p>Delete this section? This cannot be undone once you leave this screen.</p>
-          <button type="button" className="button-secondary" onClick={() => setConfirmDeleteId(null)}>
-            Cancel
-          </button>
-          <button type="button" className="button-primary" onClick={confirmDelete}>
-            Delete
-          </button>
+        <div className="section-list__scrim" onClick={() => setConfirmDeleteId(null)}>
+          <div
+            role="dialog"
+            aria-label="Delete this section"
+            ref={deleteDialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={deleteDialog.onKeyDown}
+            className="section-list__confirm"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p>Delete this section? This cannot be undone once you leave this screen.</p>
+            <div className="section-list__confirm-actions">
+              <button type="button" className="button-secondary" onClick={() => setConfirmDeleteId(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button-secondary button-danger" onClick={confirmDelete}>
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

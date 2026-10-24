@@ -591,6 +591,15 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".setting-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
   ".checklist-rail__count": { dark: "signal-bg", light: "signal-l-bg" },
   ".checklist-rail__pin": { dark: "signal-bg", light: "signal-l-bg" },
+  // Phase 8h (`O-22`): the section-delete and source-switch dialogs' own
+  // card, filled with `--surface` the same way `.bank-list__item` is — a
+  // card on the page, not the unfilled page ground its siblings above
+  // read on.
+  ".section-list__confirm": { dark: "signal-surface", light: "signal-l-surface" },
+  // The delete confirm's own colour, `--risk` over `.button-secondary`'s
+  // inherited `--surface` background — the same surface `.section-list__confirm`
+  // above sits on, since this button is inside it.
+  ".button-danger": { dark: "signal-surface", light: "signal-l-surface" },
 
   // The branding preview is a MINIATURE OF THE CANDIDATE'S START PAGE, so
   // its WHOLE SUBTREE is the cream world, not only its fill — which is the
@@ -855,6 +864,8 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".setting-row__button": { px: 16, weight: 400 },
   ".setting-row__icon": { px: 16, weight: 400 },
   ".setting-row__summary": { px: 16, weight: 400 },
+  ".section-list__confirm": { px: 16, weight: 400 },
+  ".button-danger": { px: 16, weight: 500 },
   ".checklist-rail__count": { px: 16, weight: 400 },
   ".checklist-rail__pin": { px: 16, weight: 400 },
   // An <h4> with no type of its own: the UA's own 1em bold.
