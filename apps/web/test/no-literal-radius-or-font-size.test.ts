@@ -45,6 +45,16 @@ import { dirname, resolve } from "node:path";
 // offence like any other value, and the rot-check fires the moment the
 // present count stops matching the declared one in EITHER direction —
 // fixing one of four sites, not only all four.
+//
+// Round 3 residual of the same finding: counting in file order and allowing
+// only the first N occurrences means the one that trips the limit is always
+// whichever comes LAST in the file — which for an insertion ABOVE the
+// existing sites is one of the pre-existing, legitimately grandfathered
+// ones, not the new offender. Reporting that single line sends the reader
+// to an innocent, already-known declaration. The per-file test below now
+// reports every occurrence of an over-count key together, so the reader
+// sees the whole group and can spot the unfamiliar one, rather than being
+// pointed at one arbitrary (and usually wrong) line.
 const STYLES_DIR = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../src/styles",
@@ -98,6 +108,16 @@ function stripComments(css: string): string {
 // exists in the seven scanned files as of 2026-10-24, but F6's whole premise
 // is that drift finds the next shape the guard doesn't cover — close these
 // properly (a small CSS value tokenizer) the day either one does.
+//
+// A third gap, recorded rather than fixed (round 3 review): counting by
+// value rather than by site means an allowlisted literal can MOVE for free.
+// Delete one of signal.css's four grandfathered `11px` sites and add a new
+// `11px` somewhere else in the file, and the count stays at 4 — nothing
+// reddens, because this guard cannot tell "the same four sites" from "four
+// sites, one of them new" without naming each site's location. That is
+// inherent to counting instead of siting, and still strictly better than
+// the old Set (which let a FIFTH site through for free, not just a moved
+// one) — but it is a real gap, not a closed one.
 const LITERAL_RE =
   /(border-radius|border-start-start-radius|border-start-end-radius|border-end-start-radius|border-end-end-radius|font-size)\s*:\s*([\d.]+)px\b/g;
 
@@ -117,14 +137,28 @@ describe("no literal border-radius or font-size (F6) outside KNOWN_DEBT", () => 
   for (const file of SCANNED_FILES) {
     it(`${file} writes no un-grandfathered literal px border-radius/font-size`, () => {
       const css = stripComments(readFileSync(resolve(STYLES_DIR, file), "utf8"));
-      const seen: Record<string, number> = {};
-      const reported: string[] = [];
+      // Group by key first — never report a single line in isolation. The
+      // occurrence that pushes a key over its allowance is whichever one
+      // falls last in file order, which is frequently one of the
+      // pre-existing grandfathered sites rather than the new offender (round
+      // 3 review). Naming the whole group lets the reader compare it against
+      // KNOWN_DEBT's count and spot the unfamiliar line themselves.
+      const byKey = new Map<string, { property: string; value: string; lines: number[] }>();
       for (const { line, property, value } of findOffenders(css)) {
         const key = `${file}:${property}:${value}`;
+        const entry = byKey.get(key) ?? { property, value, lines: [] };
+        entry.lines.push(line);
+        byKey.set(key, entry);
+      }
+      const reported: string[] = [];
+      for (const { property, value, lines } of byKey.values()) {
+        const key = `${file}:${property}:${value}`;
         const allowed = KNOWN_DEBT[key] ?? 0;
-        seen[key] = (seen[key] ?? 0) + 1;
-        if (seen[key] <= allowed) continue;
-        reported.push(`${file}:${line}: ${property}: ${value}px`);
+        if (lines.length <= allowed) continue;
+        reported.push(
+          `${file}: ${property}: ${value}px — ${lines.length} occurrences at lines ${lines.join(", ")}, ` +
+            `only ${allowed} grandfathered in KNOWN_DEBT (one of these lines is the new one)`,
+        );
       }
       expect(reported).toEqual([]);
     });
