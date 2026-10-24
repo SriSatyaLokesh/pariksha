@@ -942,12 +942,16 @@ td.acts .button-row {
    scroll to reach. Lane A is building the same shape for the builder's own
    panels in testbuilder.css this wave; named `.bank-confirm` rather than a
    shared class so the two cannot collide, with a note to de-duplicate once
-   both exist. The scrim reuses exam.css's own precedent for dimming a
-   screen behind a dialog (`--color-ink` at 60%, the one legal literal-ish
-   alpha form) rather than inventing a second one; the dialog itself is
-   `.card-hairline` plus a width cap, so it carries no colour of its own —
-   its heading and message below inherit `.card-hairline`'s own `--ink`
-   rather than restating it. */
+   both exist. M1 fix: the scrim first copied exam.css's own precedent for
+   dimming a screen behind a dialog verbatim — `--color-ink` at 60% — which
+   is legal on the candidate's cream-only ground and is one of the cream
+   literals `test/theme.test.ts`'s organiser-only sweep forbids here;
+   `--color-ink` also maps to Signal TEXT in theme.css (near-white on the
+   dark ground), so even ignoring the sweep it would have washed the page
+   out rather than dimmed it. `--scrim` is theme.css's own per-ground
+   answer, added for this; the dialog itself is `.card-hairline` plus a
+   width cap, so it carries no colour of its own — its heading and message
+   below inherit `.card-hairline`'s own `--ink` rather than restating it. */
 .bank-confirm {
   position: fixed;
   inset: 0;
@@ -955,7 +959,7 @@ td.acts .button-row {
   display: grid;
   place-items: center;
   padding: var(--space-xl);
-  background: rgb(from var(--color-ink) r g b / 0.6);
+  background: var(--scrim);
 }
 
 .bank-confirm__dialog {

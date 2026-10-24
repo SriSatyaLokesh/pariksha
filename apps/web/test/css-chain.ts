@@ -117,6 +117,10 @@ export const SEMANTIC_NAMES = [
   "--wash-2",
   "--glow",
   "--glow-strong",
+  // M1, fix round: a modal scrim, added once a second organiser dialog
+  // reached for authoring.css's cream `--color-ink` literal and theme.test.ts
+  // caught it — the same seam D1 already guards everywhere else.
+  "--scrim",
   // Added in fix round 4. base.css paints `:focus-visible` with the cream
   // world's voltage, which is correct for the candidate runtime and wrong on
   // a Signal surface the moment 6.5c re-grounds one — and 6.5c's own top-bar

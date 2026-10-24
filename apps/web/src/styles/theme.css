@@ -118,6 +118,17 @@
 
   --glow: rgb(from var(--color-signal-accent) r g b / 0.18);
   --glow-strong: rgb(from var(--color-signal-accent) r g b / 0.34);
+
+  /* M1: a modal scrim, which has to DARKEN whatever is behind it on both
+     grounds rather than follow `--wash`'s direction (alpha over the
+     ground's own TEXT colour, light on dark and dark on light — right for
+     a subtle highlight, wrong for a scrim, which would come out as a pale
+     wash brightening the dark ground instead of dimming it). The dark
+     ground is already near-black, so its own --ground darkens anything
+     lighter sitting in front of it; the light ground reaches for its own
+     text colour instead, the same literal exam.css already uses for its
+     own scrim on the candidate's cream ground. */
+  --scrim: rgb(from var(--color-signal-bg) r g b / 0.6);
 }
 
 :root[data-theme="light"] {
@@ -156,4 +167,9 @@
      disappear" means in a number. */
   --glow: rgb(from var(--color-signal-l-accent) r g b / 0.03);
   --glow-strong: rgb(from var(--color-signal-l-accent) r g b / 0.05);
+
+  /* See the dark block's comment. Dark text over the light ground, not the
+     ground colour itself — the light ground is bright, so darkening it
+     needs its own ink rather than more of itself. */
+  --scrim: rgb(from var(--color-signal-l-text) r g b / 0.6);
 }

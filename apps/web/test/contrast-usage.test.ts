@@ -1457,6 +1457,7 @@ const UNSCORED_BY_DESIGN: Record<string, string> = {
   "--wash-2": "translucent; resolves only once composited",
   "--glow": "translucent, and D20a lets it vanish on light",
   "--glow-strong": "translucent, and D20a lets it vanish on light",
+  "--scrim": "translucent; resolves only once composited",
   // --accent-deep was here, with light --accent-ink on it at 4.13:1 and a
   // note that the fix was a palette change rather than anything this file
   // could do. That change landed (DESIGN.md, #0a8f57 -> #065f3c), so the

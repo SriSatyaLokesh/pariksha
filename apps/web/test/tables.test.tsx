@@ -355,34 +355,32 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
       expect((header as HTMLElement).textContent?.trim()).toBe("Actions");
     });
 
-    it(`${name} keeps its action buttons focusable before they are revealed`, async () => {
+    // M3 ruling: `primitives.css`'s `@media (hover: hover) { td.acts {
+    // opacity: 0 } }` — `G1-01`/`O-10`/`O-25`/`O-33`/`F9`'s shared root
+    // cause, a reveal gated behind `:hover` that is unreachable as a row at
+    // all until a pointer lands on it and permanently unreachable on touch
+    // — is deleted outright rather than overridden per table. This replaces
+    // the two tests that pinned the old opacity-0-at-rest/opacity-1-on-focus
+    // pair as a requirement, the same call `organiser-home.test.tsx` already
+    // made for `.home__row-action` ("this replaces the test that pinned the
+    // old `opacity: 0` default as a requirement").
+    it(`${name} shows its action buttons without needing hover or focus, and always did stay tabbable`, async () => {
       await open();
       const cell = actionCell(action);
       const button = within(cell).getAllByRole("button")[0]!;
 
-      // Resting: not revealed.
-      expect(paintsIn(cell, "opacity", ORGANISER)).toBe("0");
+      // No opacity gate of any kind left on the action cell.
+      expect(paintsIn(cell, "opacity", ORGANISER)).toBeUndefined();
 
-      // ...and still in the tab order, which is the whole reason `D21a`
-      // overrides `D18`'s "visibility plus opacity": `visibility: hidden`
-      // takes an element OUT of the tab order, which would defeat the
-      // `tr:focus-within` reveal specified in the same sentence.
+      // ...and in the tab order regardless, which `D21a` always required —
+      // only the gate around it is gone.
       expect(button).not.toHaveAttribute("tabindex", "-1");
       expect(button).not.toBeDisabled();
       button.focus();
       expect(button).toHaveFocus();
-    });
-
-    it(`${name} reveals the actions when one of them takes focus`, async () => {
-      await open();
-      const cell = actionCell(action);
-      const button = within(cell).getAllByRole("button")[0]!;
-
-      expect(paintsIn(cell, "opacity", ORGANISER)).toBe("0");
-      button.focus();
-      // The SAME cell, re-read: `declaredFor` asks the live DOM which rules
-      // match, and `tr:focus-within > td.acts` now does.
-      expect(paintsIn(cell, "opacity", ORGANISER)).toBe("1");
+      // Focusing it changes nothing about the cell: there is no reveal left
+      // to trigger.
+      expect(paintsIn(cell, "opacity", ORGANISER)).toBeUndefined();
     });
 
     it(`${name} never lets the gutter's nowrap reach a cell holding prose`, async () => {
@@ -405,17 +403,17 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
     });
   }
 
-  it("changes nothing but opacity when a row reveals its actions", async () => {
-    // The invariant behind "revealing an action must never widen a row", and
-    // the one claim here that is about the RULE SET rather than about one
-    // rendered element — deliberately, because it is an ABSENCE: no state
-    // rule may declare a layout property. `:hover` cannot be matched in
-    // jsdom at all, so there is no element to ask.
+  // M3 ruling supersedes this test's original shape. It used to assert the
+  // invariant behind a STATEFUL reveal ("no :hover/:focus-within rule may
+  // touch a layout property, only opacity") — sound while the reveal
+  // existed, and vacuously true now that it does not: there is no stateful
+  // rule left to check, which is the fix, not a gap in this guard. What is
+  // still worth pinning is the absence staying an absence, so a later patch
+  // cannot quietly reintroduce the hover gate on `.acts` without this
+  // reddening.
+  it("never gates a row's actions behind :hover or :focus-within again", () => {
     const stateful = ACTS_RULES.filter((rule) => /:(hover|focus|focus-within|focus-visible)\b/.test(rule.selector));
-    expect(stateful.length, "no rule reveals the gutter at all, so nothing was checked").toBeGreaterThan(0);
-    for (const rule of stateful) {
-      expect(propertiesOf(rule.body), `${rule.selector} changes more than opacity`).toEqual(["opacity"]);
-    }
+    expect(stateful, "a stateful rule on .acts reintroduced the hover-only reveal M3 deleted").toEqual([]);
   });
 
   it("reveals with opacity alone, never visibility (D21a over D18)", () => {

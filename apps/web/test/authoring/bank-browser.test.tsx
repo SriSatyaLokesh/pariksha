@@ -467,17 +467,27 @@ describe("BankBrowser", () => {
       }
     });
 
-    it("the table's action column never sets the shared hover-only opacity gate", () => {
+    // M3 ruling supersedes this test's original shape, the same call
+    // `organiser-home.test.tsx` already made for `.home__row-action`: a
+    // per-table override that un-hides `td.acts` is itself evidence the
+    // shared gate still exists for every OTHER table to fall into. Root
+    // cause fixed instead — `primitives.css`'s `@media (hover: hover) {
+    // td.acts { opacity: 0 } }` is deleted outright — so this now asserts
+    // the gate is gone rather than pinning a second, table-scoped copy of
+    // the fix that bypassed it.
+    it("the shared hover-only opacity gate is gone, not overridden per table", () => {
       // Read from disk rather than jsdom: jsdom applies no stylesheet, and
-      // the defect this guards (`primitives.css`'s `td.acts { opacity: 0 }`
-      // under `@media (hover: hover)`) is a cascade fact, not a DOM one.
-      // A higher-specificity override, scoped to this table rather than
-      // changing the shared rule a sibling lane owns this wave.
-      const css = readFileSync(
+      // this is a cascade fact, not a DOM one.
+      const primitives = readFileSync(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/primitives.css"),
+        "utf8",
+      );
+      expect(primitives).not.toMatch(/td\.acts\s*\{\s*opacity:\s*0/);
+      const authoring = readFileSync(
         resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/authoring.css"),
         "utf8",
       );
-      expect(css).toMatch(/\.bank-browser__table\s+td\.acts\s*\{\s*opacity:\s*1;?\s*\}/);
+      expect(authoring).not.toMatch(/\.bank-browser__table\s+td\.acts\s*\{\s*opacity:\s*1/);
     });
   });
 });
