@@ -25,6 +25,7 @@ import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
+import { resultsExportRoutes } from "./export/results.js";
 import { readinessRoutes } from "./publish/readiness.js";
 import { attemptsRoutes } from "./routes/attempts.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
@@ -343,6 +344,21 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // batch. A dry run costs 4 (no write, no audit) and so does a refused
   // import. The plan estimated 8.
   "/api/v1/workspaces/:id/tests/import": 7,
+  // Phase 8c Task 3 (`R-08`, `K38`): the results CSV. Measured
+  // (`apps/api/test/export/results.test.ts`'s "measures the real
+  // subrequest cost" test), not estimated. Auth (2) + `getTest` (1) +
+  // `getPublishedVersion` (1) + `listAttemptsForTest` (1, one page) +
+  // `latestVerdicts` (1, once per page, not once per row) +
+  // `listCandidates` (1, the whole test's registration rows) +
+  // `countedFiguresForTest` (1) + `rankedScoresForTest` (1) = 9, flat in
+  // how many attempts the page holds — 300 costs the same 9 as one.
+  "/api/v1/workspaces/:id/tests/:testId/export/results.csv": 9,
+  // The per-answer CSV. Auth (2) + `getTest` (1) + `listAttemptsForTest`
+  // (1, one page — clamped to `ANSWERS_PAGE_LIMIT_MAX` so the next read's
+  // `IN (...)` stays under D1's 100-bound-parameter cap) +
+  // `responsesForAttempts` (1, once per page) = 5, flat in how many
+  // responses a page's attempts actually carry.
+  "/api/v1/workspaces/:id/tests/:testId/export/answers.csv": 5,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -916,6 +932,12 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import":
     "candidates.manage",
 
+  // Phase 8c Task 3 (`R-08`, `R-09`): the results and per-answer CSVs.
+  // `results.export` — held by Reviewer, Admin, Viewer and Owner
+  // (`permissions.ts`), and by a key scoped to it (`K25`).
+  "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv": "results.export",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv": "results.export",
+
   // Phase 6 Task 2 (#66, P6.2). The invite is a credential for a row on
   // the candidate list, so it is the same permission that uploaded the
   // list — an Author who built the test holds `tests.edit` and not this.
@@ -1183,6 +1205,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/import": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
   // Phase 7e Task 4 (`Q5a`): the minimal pair.
@@ -1258,6 +1282,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // with a 404 instead.
   app.route("/api/v1/workspaces", readinessRoutes(deps));
   app.route("/api/v1/workspaces", testRoutes(deps));
+  app.route("/api/v1/workspaces", resultsExportRoutes(deps));
   // Phase 7e Task 4: the minimal pair — locality with `testRoutes` rather
   // than necessity, the same reason `proctoringRoutes`' own position below
   // is.

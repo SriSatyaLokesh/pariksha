@@ -14,6 +14,8 @@ import {
   newId,
   publishDraftVersion,
   putDraftVersion,
+  rankedScoresForTest,
+  responsesForAttempts,
   sqliteClient,
   type DbClient,
   type TestDocumentBody,
@@ -335,4 +337,128 @@ it("refuses a workspace it was not scoped to, and sees its own figures through t
   // Negative: alpha's workspace ID against beta's test ID sees nothing.
   const crossTenant = await countedFiguresForTest(db, alpha.workspaceId, beta.testId);
   expect(crossTenant.size).toBe(0);
+});
+
+// --- Phase 8c Task 3 additions --------------------------------------------
+
+it("projects locked_at through listAttemptsForTest, null until 7e's lock writes it", async () => {
+  const candidateId = await candidateIn(alpha);
+  const attemptId = await seedAttempt({ workspaceId: alpha.workspaceId, candidateId, testVersionId: alpha.versionId });
+  const { rows } = await listAttemptsForTest(db, alpha.workspaceId, alpha.testId);
+  expect(rows.find((r) => r.attemptId === attemptId)?.lockedAt).toBeNull();
+
+  await db.run("UPDATE attempt SET locked_at = ? WHERE id = ?", [NOW, attemptId]);
+  const { rows: after } = await listAttemptsForTest(db, alpha.workspaceId, alpha.testId);
+  expect(after.find((r) => r.attemptId === attemptId)?.lockedAt).toBe(NOW);
+});
+
+// --- rankedScoresForTest ---------------------------------------------------
+
+it("ranks by percent descending, ties sharing a rank with a gap after (RANK() semantics)", async () => {
+  const ws = await publish("rank-results");
+  const high = await seedAttempt({
+    workspaceId: ws.workspaceId,
+    candidateId: await candidateIn(ws),
+    testVersionId: ws.versionId,
+    submittedAt: NOW,
+  });
+  await score(high, 90);
+  const tieA = await seedAttempt({
+    workspaceId: ws.workspaceId,
+    candidateId: await candidateIn(ws),
+    testVersionId: ws.versionId,
+    submittedAt: NOW,
+  });
+  await score(tieA, 70);
+  const tieB = await seedAttempt({
+    workspaceId: ws.workspaceId,
+    candidateId: await candidateIn(ws),
+    testVersionId: ws.versionId,
+    submittedAt: NOW,
+  });
+  await score(tieB, 70);
+  // Unsubmitted — carries no rank at all, the same way it carries no
+  // percent: R-10's "available during the test" is served by this row's
+  // absence from the map, not by a fabricated rank.
+  const inProgress = await seedAttempt({
+    workspaceId: ws.workspaceId,
+    candidateId: await candidateIn(ws),
+    testVersionId: ws.versionId,
+  });
+
+  const ranks = await rankedScoresForTest(db, ws.workspaceId, ws.testId);
+  expect(ranks.get(high)).toBe(1);
+  expect(ranks.get(tieA)).toBe(2);
+  expect(ranks.get(tieB)).toBe(2);
+  expect(ranks.has(inProgress)).toBe(false);
+});
+
+it("rankedScoresForTest refuses a workspace it was not scoped to", async () => {
+  const candidateId = await candidateIn(beta);
+  const betaAttempt = await seedAttempt({
+    workspaceId: beta.workspaceId,
+    candidateId,
+    testVersionId: beta.versionId,
+    submittedAt: NOW,
+  });
+  await score(betaAttempt, 55);
+
+  expect((await rankedScoresForTest(db, beta.workspaceId, beta.testId)).get(betaAttempt)).toBe(1);
+  expect((await rankedScoresForTest(db, alpha.workspaceId, beta.testId)).size).toBe(0);
+});
+
+// --- responsesForAttempts --------------------------------------------------
+
+async function respond(attemptId: string, questionId: string, value: unknown): Promise<void> {
+  await db.run(
+    "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
+      "VALUES (?, ?, ?, ?, ?, ?, ?, NULL, NULL)",
+    [newId("rsp"), alpha.workspaceId, attemptId, questionId, JSON.stringify(value), NOW, 1],
+  );
+}
+
+it("groups every response by attempt, in one statement for the whole page", async () => {
+  const c1 = await candidateIn(alpha);
+  const a1 = await seedAttempt({ workspaceId: alpha.workspaceId, candidateId: c1, testVersionId: alpha.versionId });
+  await respond(a1, "qst_1", { kind: "option", option: "a" });
+  await respond(a1, "qst_2", { kind: "text", text: "hi" });
+  const c2 = await candidateIn(alpha);
+  const a2 = await seedAttempt({ workspaceId: alpha.workspaceId, candidateId: c2, testVersionId: alpha.versionId });
+  await respond(a2, "qst_1", { kind: "option", option: "b" });
+  // Never asked for — proves this is `IN (...)`, not every response alpha
+  // has ever stored.
+  const a3 = await seedAttempt({ workspaceId: alpha.workspaceId, candidateId: await candidateIn(alpha), testVersionId: alpha.versionId });
+  await respond(a3, "qst_1", { kind: "option", option: "z" });
+
+  const counting = countingClient(db);
+  const byAttempt = await responsesForAttempts(counting.db, alpha.workspaceId, [a1, a2]);
+  expect(counting.count()).toBe(1);
+
+  expect(byAttempt.get(a1)).toEqual([
+    { questionId: "qst_1", value: { kind: "option", option: "a" } },
+    { questionId: "qst_2", value: { kind: "text", text: "hi" } },
+  ]);
+  expect(byAttempt.get(a2)).toEqual([{ questionId: "qst_1", value: { kind: "option", option: "b" } }]);
+  expect(byAttempt.has(a3)).toBe(false);
+});
+
+it("responsesForAttempts answers an empty map for an empty page, with no query at all", async () => {
+  const counting = countingClient(db);
+  expect((await responsesForAttempts(counting.db, alpha.workspaceId, [])).size).toBe(0);
+  expect(counting.count()).toBe(0);
+});
+
+it("responsesForAttempts refuses a workspace it was not scoped to", async () => {
+  const candidateId = await candidateIn(beta);
+  const betaAttempt = await seedAttempt({ workspaceId: beta.workspaceId, candidateId, testVersionId: beta.versionId });
+  await db.run(
+    "INSERT INTO response (id, workspace_id, attempt_id, question_id, value_json, saved_at, client_seq, points, graded_by) " +
+      "VALUES (?, ?, ?, 'qst_1', '1', ?, 1, NULL, NULL)",
+    [newId("rsp"), beta.workspaceId, betaAttempt, NOW],
+  );
+
+  expect((await responsesForAttempts(db, beta.workspaceId, [betaAttempt])).has(betaAttempt)).toBe(true);
+  // alpha's workspace ID cannot read beta's response row even by naming its
+  // exact attempt id.
+  expect((await responsesForAttempts(db, alpha.workspaceId, [betaAttempt])).has(betaAttempt)).toBe(false);
 });

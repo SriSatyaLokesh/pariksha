@@ -31,9 +31,15 @@ export interface AttemptSummary {
   violations: number;
   answered: number;
   /** 7e's `0011`. Null means "never locked" — the same shape `submittedAt`
-   *  already has. Phase 8c Task 1 added this projection: a locked attempt
-   *  has no `submittedAt`, so a reader that only sees that column files it
-   *  under "in progress" forever. */
+   *  already has.
+   *
+   *  Two Phase 8c tasks arrived at this projection independently, which is
+   *  the argument for it being here rather than in either caller: Task 1's
+   *  analytics needs it because a locked attempt has no `submittedAt`, so a
+   *  reader that only sees that column files it under "in progress"
+   *  forever; Task 3's results CSV needs it for the "Locked at" column. It
+   *  is the same row `listAttemptsForTest` already reads, so neither pays a
+   *  second scoped call for it. */
   lockedAt: number | null;
 }
 
@@ -195,5 +201,99 @@ export const countedFiguresForTest = scoped(
       else byCandidate.set(row.candidate_id, [figure]);
     }
     return byCandidate;
+  },
+);
+
+/**
+ * Phase 8c Task 3 (`R-08`, Review Focus 2): the results CSV's `Rank`
+ * column, from **one** page-independent ordering rather than a page's own
+ * row position — a `RANK()` window function over the whole test's scored
+ * attempts, so a candidate's rank cannot "restart at 1" on page two the way
+ * it would if each page ranked only the rows it happened to fetch.
+ *
+ * One statement, flat in cohort size (`K9`), the same `json_extract`/`->>`
+ * split `listIntegrityCounts` (`attempts.ts`) already draws for a numeric
+ * value inside a JSON column: `pg`'s `->>` returns text and is cast to
+ * `numeric` so `ORDER BY` compares it as a number, not lexically;
+ * `sqlite`/`d1`'s `json_extract` already returns a real JSON number.
+ *
+ * Scoped to `submitted_at IS NOT NULL AND score_json IS NOT NULL` —
+ * ranking an in-progress attempt against a percent it does not have yet
+ * would be meaningless, and `R-10`'s "available during the test" is served
+ * by that attempt's row simply carrying no rank, not by a fabricated one.
+ * Ties share a rank and leave a gap after them (`RANK()`'s own semantics,
+ * e.g. `1, 1, 3`) — standard leaderboard behaviour, and nothing in `R-08`
+ * asks for a different tiebreak.
+ */
+export const rankedScoresForTest = scoped(
+  "rankedScoresForTest",
+  async (db: DbClient, workspaceId: string, testId: string): Promise<Map<string, number>> => {
+    const percentExtract =
+      db.dialect === "pg" ? "(a.score_json ->> 'percent')::numeric" : "json_extract(a.score_json, '$.percent')";
+    const rows = await db.query<{ id: string; rnk: number }>(
+      `SELECT a.id AS id, RANK() OVER (ORDER BY ${percentExtract} DESC) AS rnk ` +
+        "FROM attempt a " +
+        "JOIN test_version tv ON tv.workspace_id = a.workspace_id AND tv.id = a.test_version_id " +
+        "WHERE a.workspace_id = ? AND tv.test_id = ? " +
+        "AND a.submitted_at IS NOT NULL AND a.score_json IS NOT NULL",
+      [workspaceId, testId],
+    );
+    const ranks = new Map<string, number>();
+    for (const row of rows) ranks.set(row.id, Number(row.rnk));
+    return ranks;
+  },
+);
+
+interface ResponseRecord {
+  attempt_id: string;
+  question_id: string;
+  value_json: unknown;
+}
+
+/**
+ * Phase 8c Task 3 (`R-09`'s per-answer CSV): every response for a **page**
+ * of attempts, in one statement — the `IN (...)` sibling of `latestVerdicts`
+ * (`review.ts`)'s whole-table scan, chosen instead of it because `response`
+ * is not small the way `review` is (it is one row per candidate per
+ * question, not one per human click), so reading it whole per export would
+ * cost more than the page it is answering for, not less.
+ *
+ * **Callers must keep `attemptIds.length` well under D1's 100-bound-
+ * parameter cap** (one placeholder per id, plus `workspaceId`) — this
+ * function does not chunk, the same restraint `latestVerdicts`'s own doc
+ * comment explains chunking would break. `export/results.ts`'s answers
+ * route is the only caller, and it pages attempts in small enough batches
+ * that this is always true; a second caller must keep that invariant
+ * itself rather than assume this one enforces it.
+ *
+ * `correct` and `points` are deliberately not read here: they live in the
+ * attempt's own `score_json.perQuestion`, which the caller already has from
+ * `listAttemptsForTest`, and re-deriving them from the question bank would
+ * be the second reader `K6`'s own precedent warns against — and would put
+ * this function one `SELECT *` away from the answer key `KG1` forbids.
+ */
+export const responsesForAttempts = scoped(
+  "responsesForAttempts",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    attemptIds: readonly string[],
+  ): Promise<Map<string, { questionId: string; value: unknown }[]>> => {
+    if (attemptIds.length === 0) return new Map();
+    const placeholders = attemptIds.map(() => "?").join(", ");
+    const rows = await db.query<ResponseRecord>(
+      `SELECT attempt_id, question_id, value_json FROM response ` +
+        `WHERE workspace_id = ? AND attempt_id IN (${placeholders}) ` +
+        "ORDER BY attempt_id, question_id",
+      [workspaceId, ...attemptIds],
+    );
+    const byAttempt = new Map<string, { questionId: string; value: unknown }[]>();
+    for (const row of rows) {
+      const value = row.value_json === null ? null : db.jsonValue(row.value_json);
+      const list = byAttempt.get(row.attempt_id);
+      if (list) list.push({ questionId: row.question_id, value });
+      else byAttempt.set(row.attempt_id, [{ questionId: row.question_id, value }]);
+    }
+    return byAttempt;
   },
 );
