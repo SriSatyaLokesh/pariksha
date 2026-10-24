@@ -347,6 +347,16 @@ export interface ItemStat {
   n: number;
 }
 
+/** `apps/api/src/export/results.ts`'s `ExportPage` — `CsvPage`
+ *  (`packages/core/src/csv.ts`) plus `R-10`'s filename, which is the same
+ *  on every page of one export (built once per page from `csvFilename`,
+ *  never left for a caller to reconstruct). */
+export interface ExportPage {
+  csv: string;
+  nextCursor: string | null;
+  filename: string;
+}
+
 /**
  * Every failure response is `{ error: { code, message, details? } }`. This
  * carries all three so a screen can render `message` — the human half —
@@ -651,6 +661,28 @@ export interface ApiClient {
     workspaceId: string,
     testId: string,
   ): Promise<{ analytics: TestAnalytics; items: ItemStat[]; itemsTruncated: boolean }>;
+
+  /**
+   * Phase 8c Task 3 (`R-08`/`R-09`, `K38`, #97): one page of the results CSV
+   * or the per-answer CSV (`GET …/export/results.csv` and `…/answers.csv`,
+   * `apps/api/src/export/results.ts`). Mirrors `ExportPage` there — a
+   * third redeclared wire shape, same convention as `TestAnalytics` above.
+   *
+   * `nextCursor` is `string | null` and never absent on these two routes —
+   * a page that reached its bound always carries one (`K38`). The caller's
+   * loop still tests `typeof nextCursor === "string"` rather than `!=
+   * null`: defensive, since `typeof` also covers an absent field, which
+   * these two routes cannot send but a sibling export route could. The
+   * drain loop itself lives in `routes/analytics.tsx`, not here, so this
+   * method stays a plain one-page fetch with no retry or assembly logic to
+   * duplicate per caller.
+   */
+  exportPage(
+    workspaceId: string,
+    testId: string,
+    kind: "results" | "answers",
+    cursor?: string,
+  ): Promise<ExportPage>;
 
   /**
    * Phase 8b Task 1 (`K14`): records a rubric award and rescores the
@@ -1306,6 +1338,11 @@ export function createApiClient(): ApiClient {
     analytics: (workspaceId, testId) =>
       json<{ analytics: TestAnalytics; items: ItemStat[]; itemsTruncated: boolean }>(
         `/workspaces/${workspaceId}/tests/${testId}/analytics`,
+      ),
+
+    exportPage: (workspaceId, testId, kind, cursor) =>
+      json<ExportPage>(
+        `/workspaces/${workspaceId}/tests/${testId}/export/${kind}.csv${query({ cursor })}`,
       ),
 
     async exportCandidateData(workspaceId, candidateId) {

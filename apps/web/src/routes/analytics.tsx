@@ -2,8 +2,80 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { DISCRIMINATION_MIN_N } from "@pariksha/core";
 import { ApiError, type ApiClient, type ItemStat, type TestAnalytics } from "../lib/api";
 
+// Phase 8c Task 3 (`R-08`/`R-09`, `K38`, #97) — the download buttons. Both
+// CSVs page over the same cursor contract: a page that reached its bound
+// always carries a `nextCursor`, so there is no shape where a full-looking
+// page is secretly a partial file (`K38`). The browser's half of that
+// promise is this loop never stopping early, never assembling out of
+// order, and never handing over what it has so far when a page fails.
+type ExportKind = "results" | "answers";
+
+const EXPORT_LABEL: Record<ExportKind, string> = {
+  results: "results CSV",
+  answers: "answers CSV",
+};
+
+/**
+ * Requests pages in order and concatenates them in the order they arrive —
+ * never out of order, never skipping ahead. `typeof nextCursor === "string"`
+ * is the loop condition rather than `!= null`: defensive, since `typeof`
+ * also covers an absent field, which these two routes cannot send
+ * (`ExportPage`'s own contract makes `nextCursor` `string | null`, never
+ * absent — `K38`) but a sibling export route could. A page request that
+ * throws propagates straight out of this function with whatever was
+ * assembled so far discarded by the caller — there is no code path that
+ * returns a partial `csv` as though it were the whole file.
+ */
+async function drainExport(
+  client: ApiClient,
+  workspaceId: string,
+  testId: string,
+  kind: ExportKind,
+  onPage: (pages: number) => void,
+): Promise<{ csv: string; filename: string }> {
+  let csv = "";
+  let pages = 0;
+  // Every page of one export answers the same filename (`ExportPage`'s own
+  // doc comment, `apps/api/src/export/results.ts`) — the first page's is
+  // as good as the last's, so it is read once rather than reassigned once
+  // per page for a value that never changes.
+  const first = await client.exportPage(workspaceId, testId, kind, undefined);
+  csv += first.csv;
+  pages += 1;
+  onPage(pages);
+  let cursor: string | undefined = typeof first.nextCursor === "string" ? first.nextCursor : undefined;
+  while (cursor !== undefined) {
+    const page = await client.exportPage(workspaceId, testId, kind, cursor);
+    csv += page.csv;
+    pages += 1;
+    onPage(pages);
+    cursor = typeof page.nextCursor === "string" ? page.nextCursor : undefined;
+  }
+  return { csv, filename: first.filename };
+}
+
+/** Hands the assembled file to the browser. Not `lib/download.ts`'s
+ *  `downloadJson` — that always `JSON.stringify`s its argument and labels
+ *  the blob `application/json`; the pages here are already-serialised CSV
+ *  text (BOM included on the first one), so this is the same object-URL
+ *  create/click/revoke shape with a different blob type, not a second copy
+ *  of the JSON one. */
+function downloadCsv(csv: string, filename: string): void {
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
 // Test and item analytics (Phase 8c Task 1/2, `R-06`/`R-07`, #94/#95). One
-// screen, two fetches already joined by `client.analytics()`, rendered in
+// screen, now two fetch shapes — `client.analytics()` for the figures below
+// and `client.exportPage()` for the download buttons (Task 3) — rendered in
 // the language `.prototypes/analytics.html` (D11) established: the Signal
 // ground, `.card-hairline` panels, and the two-absences-without-hue
 // discrimination cell.
@@ -197,6 +269,33 @@ export function AnalyticsRoute({
 }) {
   const [state, setState] = useState<LoadState>({ status: "loading" });
   const [sort, setSort] = useState<SortState>({ key: "order", dir: "asc" });
+  const [exporting, setExporting] = useState<{ kind: ExportKind; pages: number } | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  const onExport = useCallback(
+    async (kind: ExportKind) => {
+      setExportError(null);
+      setExporting({ kind, pages: 0 });
+      try {
+        const { csv, filename } = await drainExport(client, workspaceId, testId, kind, (pages) =>
+          setExporting({ kind, pages }),
+        );
+        downloadCsv(csv, filename);
+      } catch (cause) {
+        // Never a partial file: `drainExport` already discarded whatever it
+        // had assembled by the time control reaches here, so the only
+        // thing left to do is say so, visibly, rather than hand over
+        // nothing and let the organiser believe the download simply never
+        // started.
+        setExportError(
+          `The ${EXPORT_LABEL[kind]} export failed${cause instanceof ApiError ? `: ${cause.message}` : ""} — nothing was downloaded.`,
+        );
+      } finally {
+        setExporting(null);
+      }
+    },
+    [client, workspaceId, testId],
+  );
 
   const load = useCallback(async () => {
     setState({ status: "loading" });
@@ -239,6 +338,51 @@ export function AnalyticsRoute({
   const { counts } = analytics;
   const everEnded = counts.submitted + counts.autoSubmitted + counts.locked;
 
+  // Fix round 1, Important 1: `everEnded === 0` does not mean "nothing to
+  // export" — `R-10`'s own requirement is that both exports are available
+  // *during* the test, and "live, nobody has submitted yet" (candidates
+  // still mid-attempt) is exactly the state that sentence exists for. The
+  // buttons and their status/alert pair are hoisted above the empty-state
+  // branch below so both render whether or not a single attempt has ended.
+  const exportBar = (
+    <>
+      {/* The live region moved into the button row, so it no longer draws
+          the outer column's gap — the wrapper it replaced was still a flex
+          child of `.analytics`, and so still cost 32px above and below while
+          empty. `.analytics-actions` has no border and takes its height from
+          the buttons, so an empty status costs nothing in either branch. */}
+      <div className="analytics-actions">
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={exporting !== null}
+          onClick={() => void onExport("results")}
+        >
+          {exporting?.kind === "results" ? "Exporting…" : "Export results CSV"}
+        </button>
+        <button
+          type="button"
+          className="button-secondary"
+          disabled={exporting !== null}
+          onClick={() => void onExport("answers")}
+        >
+          {exporting?.kind === "answers" ? "Exporting…" : "Export answers CSV"}
+        </button>
+        {/* Always present, text swapped in place (`routes/tests.tsx`'s own
+            live-region comment) — a region inserted already carrying its
+            text does not reliably announce. */}
+        <p className="organiser__status" role="status">
+          {exporting === null ? "" : `Downloading ${EXPORT_LABEL[exporting.kind]} — page ${exporting.pages}…`}
+        </p>
+      </div>
+      {exportError !== null && (
+        <p role="alert" className="field-error">
+          {exportError}
+        </p>
+      )}
+    </>
+  );
+
   // The state every test is in on the day it is published (CLAUDE.md's
   // own ruling for this screen) — a mean of `null`, an empty histogram and
   // sixty `no_variance` rows is worse than a line saying nothing has
@@ -252,6 +396,7 @@ export function AnalyticsRoute({
           {counts.registered} candidate{counts.registered === 1 ? "" : "s"} registered, and none has finished an
           attempt. Analytics appear once the first candidate submits.
         </p>
+        {exportBar}
       </div>
     );
   }
@@ -266,6 +411,7 @@ export function AnalyticsRoute({
         <h2 className="analytics-band__title">Test analytics</h2>
         <span className="analytics-meta analytics-band__meta">R-06 · {counts.registered} registered</span>
       </div>
+      {exportBar}
 
       {analytics.truncated && (
         <p className="analytics-hint" role="status">
