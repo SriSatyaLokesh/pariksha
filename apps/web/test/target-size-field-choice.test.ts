@@ -15,11 +15,19 @@ import { tokens } from "../src/styles/tokens";
 //
 // This is a markup-shape gate, not a measured one: jsdom does not lay out
 // boxes, and Playwright is held this wave (see the lane's own report). It
-// proves two things statically instead of by rendering:
-//   1. the CSS actually guarantees a >=24px row (via `.field-label`'s own
-//      line-height token, the mechanism the fix's own comment in
-//      registration.css names — not a magic number re-typed here), and
-//   2. the three sites this lane actually touched still wrap their input in
+// proves three things statically instead of by rendering:
+//   1. the CSS actually guarantees a >=24px TALL row (via `.field-label`'s
+//      own line-height token, the mechanism the fix's own comment in
+//      registration.css names — not a magic number re-typed here),
+//   2. the CSS actually guarantees a >=24px WIDE row too: `.field-choice`'s
+//      `display: flex` is what turns the label from an inline element
+//      (target box = the text run's own width, well under 24px for a short
+//      label like "ID" or "Logs") into a block-level row filling `.field`.
+//      Round 3 review: the first version of this gate asserted only the
+//      ABSENCE of height/min-height/line-height and never asserted the
+//      PRESENCE of the layout the fix's rationale actually depends on —
+//      deleting `display: flex` passed with 6 green, and
+//   3. the three sites this lane actually touched still wrap their input in
 //      a `.field-choice` label rather than leaving it a bare sibling.
 //
 // This covers only the three sites Lane C fixed. The other ~20 bare
@@ -63,6 +71,17 @@ describe("F3 / G2-05: checkbox and radio targets clear 24x24 (markup-shape gate)
   it(".field-choice sets no height/min-height/line-height that would shrink the row below .field-label's", () => {
     const body = ruleBody(registrationCss, ".field-choice ");
     expect(body).not.toMatch(/\b(height|min-height|line-height)\s*:/);
+  });
+
+  // Round 3 review: without `display: flex`, `.field-label.field-choice` is
+  // an inline element and its target box collapses to the width of its own
+  // text run — well under 24px for a short label ("ID", "Logs") — on the
+  // one axis the two tests above never look at (they only check height is
+  // not shrunk). `display: flex` is what makes the label a block-level row
+  // that fills `.field`'s width, which is the actual click target.
+  it(".field-choice is a flex row — the width axis the height checks above don't cover", () => {
+    const body = ruleBody(registrationCss, ".field-choice ");
+    expect(body).toMatch(/display:\s*flex\b/);
   });
 
   // Markup shape: a label carrying `field-choice` must WRAP its input (the
