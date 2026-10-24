@@ -301,7 +301,10 @@ describe("SectionList", () => {
   it("deleting a section confirms and offers undo", () => {
     render(<Harness initial={[QUANT]} />);
     fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // `role="alertdialog"`, not `"dialog"` (fix round `M6`): the delete
+    // confirm is destructive, the same distinction `bank.tsx`'s own
+    // identical dialog draws.
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
     // `ReorderableList`'s own live region is also `role="status"` (empty,
@@ -323,12 +326,16 @@ describe("SectionList", () => {
     render(<Harness initial={[QUANT]} />);
     fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
 
-    const dialog = screen.getByRole("dialog", { name: /delete this section/i });
-    expect(dialog.parentElement).toHaveClass("section-list__scrim");
+    // Fix round (`C1`/`M6`/`M7`): converged onto `bank.tsx`'s own
+    // `.bank-confirm` scrim and `role="alertdialog"` for the same
+    // construct, rather than this file's own second recipe.
+    const dialog = screen.getByRole("alertdialog", { name: /delete this section/i });
+    expect(dialog.parentElement).toHaveClass("bank-confirm");
 
     const confirm = within(dialog).getByRole("button", { name: /^delete$/i });
     expect(confirm).toHaveClass("button-danger");
     expect(confirm).not.toHaveClass("button-primary");
+    expect(confirm).not.toHaveClass("button-secondary");
   });
 
   it("fix round (task 3 review, I9): Escape cancels the delete dialog, focus moves in and back", () => {
@@ -341,12 +348,35 @@ describe("SectionList", () => {
     trigger.focus();
     fireEvent.click(trigger);
 
-    const dialog = screen.getByRole("dialog", { name: /delete this section/i });
+    const dialog = screen.getByRole("alertdialog", { name: /delete this section/i });
     expect(dialog).toHaveFocus();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("fix round (`M6`): Tab is trapped inside the delete confirm dialog", () => {
+    // `trapTab: true` (fix round, alongside the `alertdialog`/`aria-modal`
+    // convergence above) is the other half of M6 — a destructive dialog a
+    // reader can Tab straight out of, onto whatever the page underneath
+    // happens to render next, is not actually modal no matter what its
+    // `role` claims. Forward Tab off the last control wraps to the first;
+    // Shift+Tab off the first wraps to the last — `useDialogKeys`'s own
+    // edge-detection, exercised here rather than merely read.
+    render(<Harness initial={[QUANT]} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
+    const dialog = screen.getByRole("alertdialog", { name: /delete this section/i });
+    const cancel = within(dialog).getByRole("button", { name: /^cancel$/i });
+    const del = within(dialog).getByRole("button", { name: /^delete$/i });
+
+    del.focus();
+    fireEvent.keyDown(del, { key: "Tab" });
+    expect(cancel).toHaveFocus();
+
+    cancel.focus();
+    fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true });
+    expect(del).toHaveFocus();
   });
 
   it("fix round (task 3 review, I9): Escape cancels the source-switch dialog, focus moves in and back", () => {

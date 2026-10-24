@@ -45,6 +45,14 @@ export async function openBuilder(page: Page, testId: string): Promise<void> {
  * otherwise fail a `<= 24` assertion by a fraction nobody could see, on a
  * page whose only "dead" space is `.shell__page`'s own intentional
  * bottom inset.
+ *
+ * Minor, recorded rather than fixed this round: this only ever sees dead
+ * space BELOW the lowest painted pixel. A gap trapped BETWEEN two painted
+ * elements (an empty grid row mid-page, say) moves `lowest` past it and
+ * this function reports it as clean — the same blind spot every
+ * bottom-anchored "how much is left" measurement has. F1's own defects so
+ * far have all been trailing, which is why this has not needed to change;
+ * a caller chasing an interior gap needs its own, more specific probe.
  */
 export async function deadScrollPx(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -94,13 +102,40 @@ export async function collapseRail(page: Page): Promise<void> {
 }
 
 /**
+ * Collapses the organiser's own left NAV rail (`--shell-rail`, 236px ->
+ * 56px) through the "Navigation" toggle in the top bar — a DIFFERENT rail
+ * from `collapseRail` above, which is the builder's right-hand checklist.
+ * Fix round `M1`: the viewport at which `.organiser--wide`'s clamp starts
+ * to matter moves with whichever of the two rails is docked, since the
+ * clamp binds against `.shell`'s second grid TRACK and that track is
+ * `viewport - navRailWidth`.
+ */
+export async function collapseNavRail(page: Page): Promise<void> {
+  await page.getByRole("button", { name: "Navigation" }).click();
+  await expect(page.locator(".shell[data-rail=\"collapsed\"]")).toBeVisible();
+}
+
+/**
  * The spread, in px, between the greatest and least text baseline among
- * the elements `selector` matches — F3's alignment half (the section row's
- * reorder buttons, position field and summary, each on its own line
- * today). A baseline rather than a bounding-box edge, because the controls
- * being compared are different heights (a 26px button, a 44px summary, a
- * stacked label-and-input) and their boxes have no shared edge even when
- * the text inside them reads on one line.
+ * the elements `selector` matches, measured ONE `groupSelector` AT A TIME
+ * and reported as the WORST (largest) spread across every group — F3's
+ * alignment half (the section row's reorder buttons, position field and
+ * summary, each on its own line until Task 4). A baseline rather than a
+ * bounding-box edge, because the controls being compared are different
+ * heights (a 26px button, a 44px summary, a stacked label-and-input) and
+ * their boxes have no shared edge even when the text inside them reads on
+ * one line.
+ *
+ * Fix round (`M4`): this used to take `max - min` over every `selector`
+ * match on the WHOLE page, which is only a per-row claim by accident on a
+ * one-row fixture — with more than one `.reorderable-list__item`, the
+ * first row's up button and the last row's summary are nowhere near each
+ * other's line and the spread answers a page-height-sized number that
+ * means nothing. `groupSelector` names the row boundary explicitly, so
+ * the comparison never crosses it; omitting it keeps the old whole-page
+ * behaviour for a caller that genuinely has one group (`sharedBaseline`
+ * had no second caller when this was found, so the one-row default is
+ * conservative rather than load-bearing).
  *
  * Measured with the DOM Range API: the first non-whitespace text node
  * inside each matched element gets a one-character range, and that
@@ -108,35 +143,47 @@ export async function collapseRail(page: Page): Promise<void> {
  * layout-inspection tool uses, because `getBoundingClientRect()` on an
  * ELEMENT answers its box, not where its glyphs actually sit.
  */
-export async function sharedBaseline(page: Page, selector: string): Promise<number> {
-  return page.evaluate((sel) => {
-    function firstTextNode(root: Node): Text | null {
-      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
-        if ((node.textContent ?? "").trim().length > 0) return node as Text;
+export async function sharedBaseline(
+  page: Page,
+  selector: string,
+  groupSelector?: string,
+): Promise<number> {
+  return page.evaluate(
+    ({ sel, groupSel }) => {
+      function firstTextNode(root: Node): Text | null {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+          if ((node.textContent ?? "").trim().length > 0) return node as Text;
+        }
+        return null;
       }
-      return null;
-    }
-    const baselines: number[] = [];
-    for (const el of document.querySelectorAll(sel)) {
-      const text = firstTextNode(el);
-      if (text === null) continue;
-      const range = document.createRange();
-      range.setStart(text, 0);
-      range.setEnd(text, 1);
-      const rect = range.getBoundingClientRect();
-      if (rect.width === 0 && rect.height === 0) continue;
-      baselines.push(rect.bottom);
-    }
-    if (baselines.length === 0) return 0;
-    return Math.max(...baselines) - Math.min(...baselines);
-  }, selector);
+      function spreadWithin(root: ParentNode): number {
+        const baselines: number[] = [];
+        for (const el of root.querySelectorAll(sel)) {
+          const text = firstTextNode(el);
+          if (text === null) continue;
+          const range = document.createRange();
+          range.setStart(text, 0);
+          range.setEnd(text, 1);
+          const rect = range.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) continue;
+          baselines.push(rect.bottom);
+        }
+        if (baselines.length === 0) return 0;
+        return Math.max(...baselines) - Math.min(...baselines);
+      }
+      const groups = groupSel ? [...document.querySelectorAll(groupSel)] : [document];
+      return Math.max(0, ...groups.map((group) => spreadWithin(group)));
+    },
+    { sel: selector, groupSel: groupSelector },
+  );
 }
 
 /**
  * Every rendered, visible, interactive element on the page whose border
  * box is under `min` CSS pixels in either axis (WCAG 2.5.8's 24x24 floor,
- * F3). Each result is a selector built from the element's own tag, id and
+ * F3) and does NOT clear the success criterion's own Spacing exception.
+ * Each result is a selector built from the element's own tag, id and
  * class list — not a guess at a stylesheet rule — so a reader can paste it
  * into devtools and land on the exact element this found.
  *
@@ -144,6 +191,21 @@ export async function sharedBaseline(page: Page, selector: string): Promise<numb
  * — the same set WCAG 2.5.8 applies to. `visible` excludes `display:none`
  * and zero-area elements, which would otherwise report a target nobody
  * can see as one that is merely too small.
+ *
+ * Fix round (`M2`): this used to report every undersized element with no
+ * exceptions, which is NOT what 2.5.8 actually requires — "Spacing:
+ * Undersized targets... are positioned so that a 24px-diameter circle
+ * centered on each does not intersect another target" is one of the
+ * criterion's own named exceptions, and a row of settings checkboxes each
+ * alone on its own 44px+ row (measured 205.7px apart) clears it easily.
+ * Reporting those as violations made the whole scan un-trustable the
+ * first time a real settings panel was open — the gate would have to
+ * report a screen as "clean" it had never actually been able to see
+ * green on. The circle-to-bounding-box distance below is the same
+ * geometry the criterion itself describes; only Spacing is implemented
+ * (not Equivalent, Inline or User Agent Control), so a target that fails
+ * here might still legitimately pass 2.5.8 by one of those — `min=24`'s
+ * floor stays the conservative side of that gap.
  */
 export async function undersizedTargets(
   page: Page,
@@ -161,14 +223,38 @@ export async function undersizedTargets(
           : "";
       return `${tag}${id}${classes}`;
     };
-    const out: { sel: string; w: number; h: number }[] = [];
+    const visible: { el: Element; rect: DOMRect }[] = [];
     for (const el of document.querySelectorAll(selector)) {
       const style = getComputedStyle(el);
       if (style.display === "none" || style.visibility === "hidden") continue;
       if ((el as HTMLButtonElement | HTMLInputElement).disabled) continue;
       const rect = el.getBoundingClientRect();
       if (rect.width === 0 && rect.height === 0) continue;
+      visible.push({ el, rect });
+    }
+    // The shortest distance from a point to a rectangle's own edge — 0
+    // when the point is inside it. This is exactly the geometry the
+    // Spacing exception asks for: a circle (point + radius) "intersects"
+    // a rect when this distance is less than the radius.
+    function distanceToRect(x: number, y: number, rect: DOMRect): number {
+      const dx = Math.max(rect.left - x, 0, x - rect.right);
+      const dy = Math.max(rect.top - y, 0, y - rect.bottom);
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+    function clearsSpacingException(rect: DOMRect): boolean {
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      const radius = floor / 2;
+      for (const other of visible) {
+        if (other.rect === rect) continue;
+        if (distanceToRect(cx, cy, other.rect) < radius) return false;
+      }
+      return true;
+    }
+    const out: { sel: string; w: number; h: number }[] = [];
+    for (const { el, rect } of visible) {
       if (rect.width < floor || rect.height < floor) {
+        if (clearsSpacingException(rect)) continue;
         out.push({ sel: describe(el), w: Math.round(rect.width * 100) / 100, h: Math.round(rect.height * 100) / 100 });
       }
     }
