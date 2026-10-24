@@ -370,8 +370,19 @@
   background: var(--accent);
 }
 
+/* m4 fix: O-10 made `.home__row-action` an always-in-flow, non-shrinking
+   ~68px of every row (`flex: none`) where it used to cost nothing until
+   revealed. The deleted comment this replaces recorded a browser probe
+   that caught the same squeeze this `min-width: 0` invites: with nothing
+   bounding it below, flexbox gives most of the shrink to whichever
+   sibling has the larger basis — this one, a test name, against
+   `.home__row-reason`'s short fixed vocabulary — and at 400px that was
+   the difference between a readable subject and "Place…". That probe
+   predates the action's permanent cost and was not re-run here; a floor
+   matching the two siblings that already carry one (`min-width: 6ch`) is
+   restored as the conservative stand-in until it is. */
 .home__row-subject {
-  min-width: 0;
+  min-width: 6ch;
   color: var(--ink);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
