@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { seedWorkspace } from "../seed";
 import { ORGANISER, signIn } from "../seed";
 
@@ -100,7 +100,7 @@ const DETECT_SCRIPT = `
 `;
 
 test.describe.serial("UI/UX Full Screen Audit Walkthrough", () => {
-  const auditResults: Record<string, any> = {};
+  const auditResults: Record<string, Record<string, unknown>> = {};
 
   test.beforeAll(() => {
     if (!fs.existsSync(SCREENSHOT_DIR)) {
@@ -116,7 +116,7 @@ test.describe.serial("UI/UX Full Screen Audit Walkthrough", () => {
     );
   });
 
-  async function auditScreen(page: any, name: string) {
+  async function auditScreen(page: Page, name: string) {
     const viewports = [
       { width: 1280, height: 800, label: "desktop" },
       { width: 768, height: 1024, label: "tablet" },
@@ -131,7 +131,7 @@ test.describe.serial("UI/UX Full Screen Audit Walkthrough", () => {
       const screenshotPath = path.join(SCREENSHOT_DIR, `${name}-${vp.label}.png`);
       await page.screenshot({ path: screenshotPath, fullPage: false });
 
-      const rawJson = await page.evaluate(DETECT_SCRIPT);
+      const rawJson = (await page.evaluate(DETECT_SCRIPT)) as string;
       const findings = JSON.parse(rawJson);
       auditResults[name][vp.label] = {
         viewport: `${vp.width}x${vp.height}`,
@@ -160,7 +160,7 @@ test.describe.serial("UI/UX Full Screen Audit Walkthrough", () => {
 
   test("3. Authenticated Organiser Dashboard, Tests & Banks", async ({ page, request }) => {
     // Seed workspace
-    const seeded = await seedWorkspace(request, {
+    await seedWorkspace(request, {
       banks: 2,
       questionsPerBank: 5,
       tests: 2,
