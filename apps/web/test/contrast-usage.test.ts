@@ -239,6 +239,14 @@ const SURFACE: Record<string, SurfaceEntry> = {
     light: "signal-l-accent",
   },
   ".button-secondary": { dark: "signal-surface", light: "signal-l-surface" },
+  // G4-01/G3-03: `.button-danger` — `authoring.css`'s own (no such class
+  // existed anywhere before this wave), the same `--surface` fill
+  // `.button-secondary` paints on.
+  ".button-danger": { dark: "signal-surface", light: "signal-l-surface" },
+  // O-25: the bank browser's row icon buttons — same fill as every other
+  // panel surface they sit on.
+  ".icon-button": { dark: "signal-surface", light: "signal-l-surface" },
+  '.icon-button[data-tone="danger"]': { dark: "signal-surface", light: "signal-l-surface" },
   // Phase 6.5d Task 5 (`D16`, content): a unit affix sits INSIDE its control,
   // absolutely positioned over `.text-input`'s own fill — so the background
   // it really renders on is the input's fill, not the panel or the page.
@@ -515,6 +523,10 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".webhook-secret": { dark: "signal-surface-2", light: "signal-l-surface-2" },
   ".bank-browser__group-label": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__tag-chip": { dark: "signal-surface", light: "signal-l-surface" },
+  // O-26: the type/difficulty filters — previously no fill or ink of their
+  // own, which left them in the browser's default (light) widget colours
+  // on the dark ground.
+  ".bank-browser__filter-select select": { dark: "signal-surface", light: "signal-l-surface" },
   ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
 
@@ -1452,6 +1464,7 @@ const UNSCORED_BY_DESIGN: Record<string, string> = {
   "--wash-2": "translucent; resolves only once composited",
   "--glow": "translucent, and D20a lets it vanish on light",
   "--glow-strong": "translucent, and D20a lets it vanish on light",
+  "--scrim": "translucent; resolves only once composited",
   // --accent-deep was here, with light --accent-ink on it at 4.13:1 and a
   // note that the fix was a palette change rather than anything this file
   // could do. That change landed (DESIGN.md, #0a8f57 -> #065f3c), so the

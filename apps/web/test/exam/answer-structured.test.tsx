@@ -6,6 +6,9 @@ import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
 import type { CandidateQuestion } from "../../src/lib/paper";
 import { jumpTo, startFromRoot } from "./answer-fixtures";
+import { paintsIn, resolvedChain } from "../css-chain";
+
+const EXAM = resolvedChain("exam.html");
 
 // Task 7 (#71, P6.7), the structured family: matching, multi_matching and
 // ordering. The third closes AC-07's drag half, deferred by Phase 4 — see
@@ -83,6 +86,18 @@ function rowFor(item: string): HTMLElement {
   const row = content?.closest<HTMLElement>(".reorderable-list__item");
   if (!row) throw new Error(`no ordering row for ${item}`);
   return row;
+}
+
+/* G4-03/C2: `draggable` and `dragstart` live on the grip alone now, not the
+ * row — this is the candidate ground `ReorderableList` also renders onto,
+ * and `test/authoring/reorder.test.tsx`'s own `gripFor` does the same
+ * lookup for the organiser side of the same component. `dragover`/`drop`
+ * stay on the row, which is still the drop target, so only dragStart below
+ * needs this. */
+function gripFor(item: string): HTMLElement {
+  const grip = rowFor(item).querySelector<HTMLElement>(".reorderable-list__grip");
+  if (!grip) throw new Error(`no grip for ${item}`);
+  return grip;
 }
 
 describe("matching", () => {
@@ -182,7 +197,7 @@ describe("ordering (UX-08, AC-07)", () => {
     expect(document.activeElement).toHaveAccessibleName(/move item A/i);
     expect(document.activeElement).not.toBe(document.body);
 
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("C"));
     fireEvent.drop(rowFor("C"));
     expect(itemTexts()[0]).toBe("A");
@@ -198,7 +213,7 @@ describe("ordering (UX-08, AC-07)", () => {
 
   it("dragOver must be prevented, or the browser never fires a drop at all", () => {
     render(<Harness question={ordering} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     // fireEvent returns false when a handler called preventDefault.
     expect(fireEvent.dragOver(rowFor("B"))).toBe(false);
   });
@@ -206,7 +221,7 @@ describe("ordering (UX-08, AC-07)", () => {
   it("dropping an item on itself is not a move, and does not announce one", () => {
     const spy = vi.fn();
     render(<Harness question={ordering} onChange={spy} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     fireEvent.dragOver(rowFor("C"));
     fireEvent.drop(rowFor("C"));
     expect(itemTexts()).toEqual(pinnedShuffledOrder);
@@ -215,7 +230,7 @@ describe("ordering (UX-08, AC-07)", () => {
 
   it("a drag announces its move in the same live region the buttons use", () => {
     render(<Harness question={ordering} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     fireEvent.dragOver(rowFor("B"));
     fireEvent.drop(rowFor("B"));
     expect(screen.getByRole("status")).toHaveTextContent("item C moved to position 3 of 3");
@@ -226,6 +241,26 @@ describe("ordering (UX-08, AC-07)", () => {
     expect(screen.getAllByRole("button", { name: /move .*(up|down)/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("spinbutton", { name: /position of/i }).length).toBe(3);
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // C2: the grip's CSS used to live in authoring.css, which only admin.css
+  // imports — unreachable from exam.html's own chain, so on the candidate
+  // ground this rendered as an unstyled, zero-size <span>. It moved to
+  // question.css, which both chains import. This reads the EXAM chain
+  // specifically (not the organiser's, which test/authoring/reorder.test.tsx
+  // already covers) against the grip this harness actually rendered, so a
+  // rule that exists on disk but never reaches this ground still reddens it.
+  it("C2: the grip is styled on the exam ground, not just the organiser's", () => {
+    render(<Harness question={ordering} />);
+    const grip = gripFor("A");
+    expect(paintsIn(grip, "width", EXAM)).toBe("44px");
+    expect(paintsIn(grip, "height", EXAM)).toBe("44px");
+    // The bars are what make a 44px hit area visible at all (a 44px
+    // invisible grip is the hover-gate this phase exists to remove, in a
+    // different shape) — painted via a pseudo-element `paintsIn` cannot
+    // address directly, so this confirms the base rule reaches the real
+    // element and leaves the ::before body itself to the probe below.
+    expect(paintsIn(grip, "display", EXAM)).toBe("inline-flex");
   });
 });
 

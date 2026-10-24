@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { Question } from "@pariksha/core";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import {
   ApiError,
@@ -175,8 +178,141 @@ describe("BankBrowser", () => {
       },
     });
     await openBrowser(client);
-    fireEvent.click(await screen.findByRole("button", { name: /delete/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+    // G4-01: Delete now opens a confirmation rather than deleting at once.
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
     expect(await screen.findByText(/Midterm/)).toBeVisible();
+  });
+
+  // G4-01: deleting a question or a passage group used to run the instant
+  // the row's Delete button was clicked, with no confirmation and no undo —
+  // one accidental click permanently erasing authoring work.
+  describe("G4-01: a destructive delete needs confirming first", () => {
+    it("does not delete the question until the dialog is confirmed", async () => {
+      const deleteQuestion = vi.fn(async () => undefined);
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      expect(deleteQuestion).not.toHaveBeenCalled();
+      expect(screen.getByRole("alertdialog")).toBeVisible();
+      expect(screen.getByRole("heading", { name: "Delete this question?" })).toBeVisible();
+
+      fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
+      await waitFor(() => expect(deleteQuestion).toHaveBeenCalledWith("wsp_1", "bnk_1", QUESTION.id));
+    });
+
+    // M4: a double-click on Delete used to fire two DELETEs for the same id
+    // — both reads of the same `confirmDelete` closure, with no `disabled`
+    // on the button to stop the second. `CandidateDataPanel.tsx`'s own
+    // `busy` guard is the in-repo precedent.
+    it("a double-click on Delete fires at most one DELETE", async () => {
+      let resolveDelete!: () => void;
+      const deleteQuestion = vi.fn(() => new Promise<void>((resolve) => (resolveDelete = resolve)));
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      const confirm = screen.getByRole("button", { name: /^delete$/i });
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+
+      expect(deleteQuestion).toHaveBeenCalledTimes(1);
+      expect(confirm).toBeDisabled();
+
+      resolveDelete();
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(deleteQuestion).toHaveBeenCalledTimes(1);
+    });
+
+    it("Cancel closes the dialog without deleting anything", async () => {
+      const deleteQuestion = vi.fn(async () => undefined);
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(deleteQuestion).not.toHaveBeenCalled();
+    });
+
+    // M2, item 2: `useDialogKeys`'s cleanup returns focus to the control
+    // that opened the dialog — the hook already does this (five other
+    // dialogs depend on it), but this call site had no assertion of its
+    // own pinning it, so the behaviour was covered only by inheritance.
+    it("Cancel returns focus to the row's own Delete trigger, not to <body>", async () => {
+      const deleteQuestion = vi.fn(async () => undefined);
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      const trigger = await screen.findByRole("button", { name: /^delete question:/i });
+      // No @testing-library/user-event in this workspace: a real click
+      // focuses the element it activates, which `fireEvent.click` alone
+      // does not simulate — `sections.test.tsx`'s own precedent for this.
+      trigger.focus();
+      fireEvent.click(trigger);
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+      expect(trigger).toHaveFocus();
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
+    it("Escape backs out the same way Cancel does", async () => {
+      const deleteQuestion = vi.fn(async () => undefined);
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      // M2 fix: Escape handling moved off a `window` listener (which fired
+      // wherever focus was, m2) onto `useDialogKeys`'s `onKeyDown`, scoped to
+      // the dialog element. A real Escape keystroke bubbles up from whatever
+      // is focused inside the dialog to that handler, so it is fired here on
+      // the element that really has focus rather than on `window`.
+      expect(document.activeElement).toHaveClass("button-secondary");
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+      expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+      expect(deleteQuestion).not.toHaveBeenCalled();
+    });
+
+    it("defaults focus to Cancel, never to the destructive action", async () => {
+      await openBrowser(fakeClient());
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    });
+
+    // M2: `aria-modal="true"` with no Tab trap tells a screen reader nothing
+    // outside the dialog exists while a sighted keyboard user walks straight
+    // out of it — `useDialogKeys`'s own doc comment says a caller has to
+    // earn `aria-modal` by actually trapping Tab, which this now does.
+    // Pattern matches `test/exam/submit.test.tsx`'s own Tab-trap assertion.
+    it("traps Tab inside the dialog, which is what earns aria-modal", async () => {
+      await openBrowser(fakeClient());
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      const dialog = screen.getByRole("alertdialog");
+      expect(dialog).toHaveAttribute("aria-modal", "true");
+
+      const stops = within(dialog).getAllByRole("button");
+      const first = stops[0] as HTMLElement;
+      const last = stops[stops.length - 1] as HTMLElement;
+      last.focus();
+      fireEvent.keyDown(last, { key: "Tab" });
+      expect(document.activeElement).toBe(first);
+      fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(last);
+    });
+
+    it("the confirm button carries the danger class, never button-primary", async () => {
+      await openBrowser(fakeClient());
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      const confirm = screen.getByRole("button", { name: /^delete$/i });
+      expect(confirm).toHaveClass("button-danger");
+      expect(confirm.className).not.toMatch(/button-primary/);
+    });
   });
 
   // Fix round (whole-branch review, M3): `exportBank`'s single-question
@@ -348,6 +484,82 @@ describe("BankBrowser", () => {
     await openBrowser(client);
 
     fireEvent.click(await screen.findByRole("button", { name: "Delete passage group: Orders" }));
+    // G4-01: a group delete is confirmed the same way a question's is.
+    fireEvent.click(await screen.findByRole("button", { name: /^delete$/i }));
     expect(await screen.findByText(/DIN-001, DIN-002/)).toBeVisible();
+  });
+
+  // G4-04: a tag with no `/` used to be dropped from the filter rail
+  // entirely — reaching `listTags`, but invisible on this screen — which
+  // reads to an author as the tag silently failing to save.
+  it("G4-04: a tag with no slash gets its own Ungrouped cluster rather than vanishing", async () => {
+    const client = fakeClient({ listTags: async () => ["sdlc/agile", "physics"] });
+    await openBrowser(client);
+
+    const rail = screen.getByRole("navigation", { name: /filters/i });
+    expect(await within(rail).findByText("Ungrouped")).toBeVisible();
+    expect(within(rail).getByRole("button", { name: "physics" })).toBeVisible();
+  });
+
+  // G4-10: raw snake_case enum values (`select_k`, `true_false`, …) used to
+  // be shown to authors verbatim, in both the filter dropdown and the type
+  // column.
+  describe("G4-10: question types read as words, not wire values", () => {
+    it("labels the type filter's options", async () => {
+      await openBrowser(fakeClient());
+
+      const typeSelect = screen.getByRole("combobox", { name: "Type" });
+      expect(within(typeSelect).getByRole("option", { name: "Select K" })).toBeInTheDocument();
+      expect(within(typeSelect).queryByText("select_k")).not.toBeInTheDocument();
+    });
+
+    it("labels the type column in the table", async () => {
+      const client = fakeClient({ listQuestions: async () => ({ questions: [QUESTION_2] }) });
+      await openBrowser(client);
+
+      expect(await screen.findByText("True / false")).toBeVisible();
+      expect(screen.queryByText("true_false")).not.toBeInTheDocument();
+    });
+  });
+
+  // O-24/O-25: a row's Edit/Export/Delete used to be `.button-secondary`
+  // text hidden at `opacity: 0` until the row was hovered, unreachable on
+  // touch. Icon buttons now, present without any hover state and each
+  // still carrying the per-row accessible name it always had.
+  describe("O-25: row actions are visible without hover", () => {
+    it("renders Edit/Export/Delete as persistent icon buttons with real names", async () => {
+      await openBrowser(fakeClient());
+
+      const edit = await screen.findByRole("button", { name: /^edit question:/i });
+      const exportBtn = screen.getByRole("button", { name: /^export question:/i });
+      const del = screen.getByRole("button", { name: /^delete question:/i });
+      for (const button of [edit, exportBtn, del]) {
+        expect(button).toHaveClass("icon-button");
+        expect(button).toBeVisible();
+      }
+    });
+
+    // M3 ruling supersedes this test's original shape, the same call
+    // `organiser-home.test.tsx` already made for `.home__row-action`: a
+    // per-table override that un-hides `td.acts` is itself evidence the
+    // shared gate still exists for every OTHER table to fall into. Root
+    // cause fixed instead — `primitives.css`'s `@media (hover: hover) {
+    // td.acts { opacity: 0 } }` is deleted outright — so this now asserts
+    // the gate is gone rather than pinning a second, table-scoped copy of
+    // the fix that bypassed it.
+    it("the shared hover-only opacity gate is gone, not overridden per table", () => {
+      // Read from disk rather than jsdom: jsdom applies no stylesheet, and
+      // this is a cascade fact, not a DOM one.
+      const primitives = readFileSync(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/primitives.css"),
+        "utf8",
+      );
+      expect(primitives).not.toMatch(/td\.acts\s*\{\s*opacity:\s*0/);
+      const authoring = readFileSync(
+        resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/authoring.css"),
+        "utf8",
+      );
+      expect(authoring).not.toMatch(/\.bank-browser__table\s+td\.acts\s*\{\s*opacity:\s*1/);
+    });
   });
 });

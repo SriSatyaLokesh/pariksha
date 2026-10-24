@@ -142,6 +142,41 @@
   gap: var(--space-xs);
 }
 
+/* C2 fix: `ReorderableList` is shared — `authoring.css` (admin.css's own
+   chain) renders the organiser's ordering-question editor, and this same
+   component is what `Structured.tsx` mounts for the CANDIDATE's ordering
+   question on the exam ground. Every other `.reorderable-list__*` rule
+   already lived here for exactly that reason; the grip shipped into
+   `authoring.css` instead, which only `admin.css` imports — so on the exam
+   ground it painted an unstyled, zero-size `<span>`, the only `draggable`
+   element in the row, and pointer drag silently stopped working for
+   candidates. `--color-muted` rather than `--ink-3`: the latter is one of
+   theme.css's Signal semantic names, defined only in admin.css's chain, so
+   it would resolve to nothing on the exam ground exactly as `--ink` would
+   for `M1`'s scrim. `--color-muted` is the literal token `registration.css`
+   and `exam.css` already reach for, which both admin.css (via base.css,
+   loaded before it) and exam.css (ditto) always define. */
+.reorderable-list__grip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--rounded-sm);
+  cursor: grab;
+}
+
+.reorderable-list__grip::before {
+  content: "";
+  width: 16px;
+  height: 2px;
+  background: var(--color-muted);
+  box-shadow:
+    0 -5px 0 var(--color-muted),
+    0 5px 0 var(--color-muted);
+}
+
 .reorderable-list__move {
   min-width: 2.25rem;
 }

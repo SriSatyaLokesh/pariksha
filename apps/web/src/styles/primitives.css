@@ -385,21 +385,17 @@ td.acts {
 
    `@media (hover: hover)` rather than bare: a pointer that cannot hover never
    fires `tr:hover`, so a touch device would be left with a gutter it can
-   reach and cannot see. There the actions simply stand. */
-@media (hover: hover) {
-  td.acts {
-    opacity: 0;
-    transition: none;
-  }
+   reach and cannot see. There the actions simply stand.
 
-  tr:hover > td.acts,
-  tr:focus-within > td.acts {
-    opacity: 1;
-  }
-}
-
-@media (hover: hover) and (prefers-reduced-motion: no-preference) {
-  td.acts {
-    transition: opacity 120ms ease-out;
-  }
-}
+   M3 ruling, superseding the above: the `opacity: 0`-at-rest gate this
+   comment defended is itself `G1-01`/`O-10`/`O-25`/`O-33`/`F9` — a reveal
+   gated behind `:hover` is unreachable as a row at all until a pointer
+   lands on it, and permanently unreachable on a touch device, for EVERY
+   table that inherits `td.acts`. `organiser-home.test.tsx` already made
+   this call for `.home__row-action` ("O-10 / register G1-01 … this
+   replaces the test that pinned the old `opacity: 0` default as a
+   requirement"); this is the same call for the shared primitive the two
+   remaining tables route through. Deleted rather than overridden per
+   table — `bank.tsx`'s table no longer needs `authoring.css`'s
+   `.bank-browser__table td.acts { opacity: 1 }` override once the gate
+   itself is gone, and `tests.tsx`'s identical cell is fixed for free. */

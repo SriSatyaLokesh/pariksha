@@ -1,9 +1,15 @@
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { QUESTION_TYPES, type ImportIssue, type Question } from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { downloadJson } from "../lib/download";
 import { MonoCaption } from "../components/MonoCaption";
 import { GroupEditor } from "../components/authoring/GroupEditor";
+import { useDialogKeys } from "../components/useDialogKeys";
+// G4-10: `TYPE_LABELS` already exists for the type picker's own cards —
+// reused here rather than duplicated, so the filter dropdown and the type
+// column never learn to spell `select_k` one way and `assertion_reason`
+// another.
+import { TYPE_LABELS } from "../components/authoring/TypePicker";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -15,16 +21,20 @@ const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 // render the whole tag as a breadcrumb chip. UX-05 refuses a delete a
 // published test holds, naming the tests.
 
+/** `UNGROUPED` key for a tag with no `/` (G4-04). It used to be dropped on
+ * the floor here — `continue`d past, never rendered anywhere on this
+ * screen — which is worse than an awkward cluster: a tag an author typed
+ * that silently cannot be filtered on looks like the tag was never saved. */
+const UNGROUPED = "";
+
 /** Tags with a `/` group the rail by their text before the first one
- * (UX-03); a tag with no `/` has no group and is not shown there — it still
- * reaches `listWorkspaceTags`' autocomplete, which this screen does not
- * build (no free-text tag editor exists yet; that is Tasks 3-6's). */
+ * (UX-03); every other tag lands in one `UNGROUPED` cluster rather than
+ * being left out of the rail entirely. */
 function groupedTags(tags: string[]): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const tag of tags) {
     const slash = tag.indexOf("/");
-    if (slash === -1) continue;
-    const group = tag.slice(0, slash);
+    const group = slash === -1 ? UNGROUPED : tag.slice(0, slash);
     groups.set(group, [...(groups.get(group) ?? []), tag]);
   }
   return groups;
@@ -100,10 +110,26 @@ export function BankBrowser({
   // `undefined`: no passage-group form open. `"new"`: the "New group" form.
   // A `PassageGroupSummary`: editing that existing group.
   const [editingGroup, setEditingGroup] = useState<PassageGroupSummary | "new" | undefined>(undefined);
+  // G4-01: a question or a group used to delete the instant its row's
+  // Delete button was clicked — no confirmation, no undo, one stray click
+  // away from losing authoring work for good. `undefined` is "no dialog
+  // open"; otherwise this names exactly what a confirmed click would do.
+  const [confirmDelete, setConfirmDelete] = useState<
+    { kind: "question"; question: QuestionSummary } | { kind: "group"; group: PassageGroupSummary } | undefined
+  >(undefined);
+  // M4: a double-click on Delete used to fire two DELETEs for the same id —
+  // the button carried no disabled state of its own and both clicks read the
+  // same `confirmDelete` closure, so the second request's 404 surfaced as
+  // "could not be deleted" over a delete that had, in fact, already
+  // succeeded. `CandidateDataPanel.tsx`'s own confirm dialog guards the same
+  // way (`disabled={… || busy}`).
+  const [confirmBusy, setConfirmBusy] = useState(false);
   // Fix round 1, finding 9: a static id collides if `BankBrowser` is ever
   // rendered twice on one page — `PreviewPane` and `QuestionEditor` both use
   // `useId()` for exactly this reason.
   const groupsHeadingId = useId();
+  const confirmTitleId = useId();
+  const confirmMessageId = useId();
 
   const load = useCallback(async () => {
     try {
@@ -132,6 +158,32 @@ export function BankBrowser({
   useEffect(() => {
     setSelected(new Set());
   }, [filter]);
+
+  // M2 fix: this used to be a bespoke window-level Escape listener plus a
+  // manual focus-on-open ref — re-implementing `useDialogKeys`, which
+  // already does initial focus, Escape and (via its cleanup) returning
+  // focus to the control that opened the dialog, the same shape
+  // `CandidateDataPanel.tsx`'s own delete confirmation uses. `trapTab: true`
+  // because this dialog claims `aria-modal="true"`, which `useDialogKeys`'s
+  // own doc comment says a caller has to earn by actually trapping Tab — a
+  // window listener fired regardless of focus, which is also why Escape
+  // used to fire while `GroupEditor` was open on the same screen (m2); the
+  // hook's `onKeyDown` is scoped to the dialog element instead.
+  const confirmDialog = useDialogKeys<HTMLDivElement>(
+    confirmDelete !== undefined,
+    () => setConfirmDelete(undefined),
+    { trapTab: true },
+  );
+  // `useDialogKeys` focuses the DIALOG itself (it has to: `trapTab`'s own Tab
+  // stops are read off `dialogRef`, so that ref has to be the container, not
+  // one button inside it). G4-01 specifically wants Cancel focused rather
+  // than the container — "opening the dialog must never leave the
+  // destructive action one Enter key away" — so this runs right after the
+  // hook's own focus effect and wins.
+  const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (confirmDelete !== undefined) confirmCancelRef.current?.focus();
+  }, [confirmDelete]);
 
   const groups = useMemo(() => groupedTags(tags), [tags]);
 
@@ -229,6 +281,32 @@ export function BankBrowser({
     }
   }
 
+  /** G4-01: the one place either delete actually runs, once the dialog has
+   * confirmed it. M4: `confirmBusy` makes this fire at most once per open
+   * dialog — a second call while the first is still in flight (a
+   * double-click, or Enter repeated) is a no-op rather than a second
+   * DELETE.
+   *
+   * Reviewer note (fix round 4): the `|| confirmBusy` guard here is belt,
+   * not braces. Two clicks dispatched in the same tick both read
+   * `confirmBusy` from the SAME pre-flush render — this check alone would
+   * not stop them. What actually stops the second DELETE is the Delete
+   * button's `disabled={confirmBusy}` below: React flushes the state
+   * update from the first click before the second can be dispatched, and a
+   * disabled native button fires no click at all. Keep both — do not strip
+   * `disabled` believing this closure check is the defence; it is not. */
+  async function confirmDeletion() {
+    if (confirmDelete === undefined || confirmBusy) return;
+    setConfirmBusy(true);
+    try {
+      if (confirmDelete.kind === "question") await onDelete(confirmDelete.question);
+      else await onDeleteGroup(confirmDelete.group);
+      setConfirmDelete(undefined);
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
   return (
     <>
       <div className="bank-browser">
@@ -236,9 +314,30 @@ export function BankBrowser({
         <MonoCaption>Filters</MonoCaption>
 
         <ul className="bank-browser__groups">
-          {[...groups.entries()].map(([group, groupTags]) => (
-            <li key={group} className="bank-browser__group">
-              <p className="bank-browser__group-label">{group}</p>
+          {/* m1 fix: the no-group bucket used to key off `group || "ungrouped"`
+              and sit wherever the `Map` happened to insert it. A tag spelled
+              `ungrouped/x` produces a REAL group literally named "ungrouped",
+              which collided on that key with this bucket (React rendering
+              one `<li>` for what should have been two), and the bucket's
+              position moved with insertion order rather than staying put.
+              A prefix no real group's key can share, and a stable sort that
+              always pins it last, fix both at once.
+
+              Reviewer note (fix round 4): this comparator is not a strict
+              weak ordering — compare(UNGROUPED, UNGROUPED) returns 1, not
+              0, which a general-purpose sort is not supposed to see from
+              a consistent comparator. It is safe only because `groups` is
+              a `Map`, so there is at most one UNGROUPED entry to compare
+              against itself, and because it leans on `Array.prototype.sort`
+              having been stable since ES2019 to keep every REAL group in
+              the Map's own insertion order. Both hold today; neither is
+              enforced by a type, so do not copy this comparator somewhere
+              a key can repeat. */}
+          {[...groups.entries()]
+            .sort(([a], [b]) => (a === UNGROUPED ? 1 : b === UNGROUPED ? -1 : 0))
+            .map(([group, groupTags]) => (
+            <li key={group === UNGROUPED ? "\0ungrouped" : `tag:${group}`} className="bank-browser__group">
+              <p className="bank-browser__group-label">{group === UNGROUPED ? "Ungrouped" : group}</p>
               <ul className="bank-browser__chips">
                 {groupTags.map((tag) => (
                   <li key={tag}>
@@ -268,7 +367,7 @@ export function BankBrowser({
             <option value="">Any</option>
             {QUESTION_TYPES.map((type) => (
               <option key={type} value={type}>
-                {type}
+                {TYPE_LABELS[type]}
               </option>
             ))}
           </select>
@@ -364,18 +463,23 @@ export function BankBrowser({
           </table>
         )}
 
-        {/* Fix round (whole-branch review, C1): the only way into
-            `QuestionScreen`/`QuestionEditor` — previously nothing in this
-            screen, or any screen above it, ever mounted one. */}
-        <button type="button" className="button-primary button-primary--surface" onClick={onNewQuestion}>
-          New question
-        </button>
+        {/* O-24: these two used to be bare siblings with no gap, reading as
+            one run of text — `.button-row` is the shared primitive that
+            fixes this once rather than per screen. */}
+        <div className="button-row">
+          {/* Fix round (whole-branch review, C1): the only way into
+              `QuestionScreen`/`QuestionEditor` — previously nothing in this
+              screen, or any screen above it, ever mounted one. */}
+          <button type="button" className="button-primary button-primary--surface" onClick={onNewQuestion}>
+            New question
+          </button>
 
-        {/* `D18`: a link to a page, not a toggle that unfolds a dialog.
-            `aria-expanded` went with the dialog — nothing here expands. */}
-        <button type="button" className="button-secondary" onClick={onImport}>
-          Import
-        </button>
+          {/* `D18`: a link to a page, not a toggle that unfolds a dialog.
+              `aria-expanded` went with the dialog — nothing here expands. */}
+          <button type="button" className="button-secondary" onClick={onImport}>
+            Import
+          </button>
+        </div>
 
         <section aria-labelledby={groupsHeadingId}>
           <div className="question-editor__answer-bar">
@@ -402,22 +506,24 @@ export function BankBrowser({
                 <li key={group.id}>
                   {group.title ?? group.id} ({group.questionCount} question
                   {group.questionCount === 1 ? "" : "s"})
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    aria-label={`Edit passage group: ${group.title ?? group.id}`}
-                    onClick={() => setEditingGroup((prev) => (prev === group ? undefined : group))}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="button-secondary"
-                    aria-label={`Delete passage group: ${group.title ?? group.id}`}
-                    onClick={() => void onDeleteGroup(group)}
-                  >
-                    Delete
-                  </button>
+                  <div className="button-row">
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      aria-label={`Edit passage group: ${group.title ?? group.id}`}
+                      onClick={() => setEditingGroup((prev) => (prev === group ? undefined : group))}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="button-secondary"
+                      aria-label={`Delete passage group: ${group.title ?? group.id}`}
+                      onClick={() => setConfirmDelete({ kind: "group", group })}
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </li>
               ))}
             </ul>
@@ -472,7 +578,7 @@ export function BankBrowser({
                     />
                   </td>
                   <td>{excerpt(question.document.prompt)}</td>
-                  <td>{question.document.type}</td>
+                  <td>{TYPE_LABELS[question.document.type]}</td>
                   <td>{question.document.difficulty ?? "—"}</td>
                   <td>{(question.document.tags ?? []).join(", ") || "—"}</td>
                   <td>{question.points}</td>
@@ -483,35 +589,47 @@ export function BankBrowser({
                       cell deliberately — a cell pinned to the inline end with a
                       column after it slides over that column's content. */}
                   <td className="acts">
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      aria-label={`Edit question: ${excerpt(question.document.prompt, 60)}`}
-                      onClick={() => onEditQuestion(question)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      aria-label={`Export question: ${excerpt(question.document.prompt, 60)}`}
-                      onClick={() => void onExportQuestion(question)}
-                    >
-                      Export
-                    </button>
-                    <button
-                      type="button"
-                      className="button-secondary"
-                      // Fixture-review finding 10: "Delete" alone repeats once
-                      // per row, which a screen reader listing buttons on the
-                      // page hears as N identical entries — the per-row prompt
-                      // excerpt (same idea as the checkbox's own aria-label
-                      // above) makes each one distinct.
-                      aria-label={`Delete question: ${excerpt(question.document.prompt, 60)}`}
-                      onClick={() => void onDelete(question)}
-                    >
-                      Delete
-                    </button>
+                    {/* O-25: these three used to be `.button-secondary` text
+                        hidden at `opacity: 0` until the row was hovered —
+                        unreachable on touch. Persistent icon buttons now
+                        (owner's own shape: "show the icons, and on hover we
+                        can make them clear"); the glyph is decorative, the
+                        `aria-label` is the real name (unchanged from the
+                        text-button version, fixture-review finding 10's
+                        per-row excerpt still what keeps three Deletes on
+                        the page from reading as one to a screen reader),
+                        and `title` repeats it as the hover label. O-24:
+                        `.button-row` for the gap between them. */}
+                    <div className="button-row">
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Edit question: ${excerpt(question.document.prompt, 60)}`}
+                        title={`Edit question: ${excerpt(question.document.prompt, 60)}`}
+                        onClick={() => onEditQuestion(question)}
+                      >
+                        <span aria-hidden="true">✎</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Export question: ${excerpt(question.document.prompt, 60)}`}
+                        title={`Export question: ${excerpt(question.document.prompt, 60)}`}
+                        onClick={() => void onExportQuestion(question)}
+                      >
+                        <span aria-hidden="true">⇩</span>
+                      </button>
+                      <button
+                        type="button"
+                        className="icon-button"
+                        data-tone="danger"
+                        aria-label={`Delete question: ${excerpt(question.document.prompt, 60)}`}
+                        title={`Delete question: ${excerpt(question.document.prompt, 60)}`}
+                        onClick={() => setConfirmDelete({ kind: "question", question })}
+                      >
+                        <span aria-hidden="true">✕</span>
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -522,6 +640,47 @@ export function BankBrowser({
         {questions.length === 0 && <p className="bank-browser__empty">No questions match these filters yet.</p>}
       </div>
       </div>
+
+      {/* G4-01: deleting a question or a passage group used to run the
+          instant the row's Delete button was clicked, with no confirmation
+          and no undo. Reachable without scrolling (`place-items: center`
+          over the whole viewport) — the owner reported the opposite on the
+          builder's own delete and this must not repeat it. */}
+      {confirmDelete !== undefined && (
+        <div
+          className="bank-confirm"
+          onClick={() => setConfirmDelete(undefined)}
+        >
+          <div
+            className="card-hairline bank-confirm__dialog"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby={confirmTitleId}
+            aria-describedby={confirmMessageId}
+            ref={confirmDialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={confirmDialog.onKeyDown}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <h2 className="bank-confirm__title" id={confirmTitleId}>
+              {confirmDelete.kind === "question" ? "Delete this question?" : "Delete this passage group?"}
+            </h2>
+            <p className="bank-confirm__message" id={confirmMessageId}>
+              {confirmDelete.kind === "question"
+                ? `"${excerpt(confirmDelete.question.document.prompt, 80)}" will be deleted for good.`
+                : `"${confirmDelete.group.title ?? confirmDelete.group.id}" will be deleted for good.`}
+            </p>
+            <div className="button-row">
+              <button type="button" className="button-secondary" ref={confirmCancelRef} onClick={() => setConfirmDelete(undefined)}>
+                Cancel
+              </button>
+              <button type="button" className="button-danger" disabled={confirmBusy} onClick={() => void confirmDeletion()}>
+                {confirmBusy ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

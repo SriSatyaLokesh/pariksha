@@ -219,6 +219,24 @@
   border-color: var(--edge);
 }
 
+/* Minor, fix round 4: C2 moved the grip to `question.css` so the candidate
+   ground could style it too, and gave it `--color-muted` there because
+   `--ink-3` (theme.css, admin-only) is undefined on that ground — but
+   `--color-muted` is not theme-aware, so left alone it also reaches the
+   organiser's dark ground and paints the grip at 3.70:1 where this file's
+   own header promises its muted tone 5.28:1 ("ink / ink-soft / muted to
+   `--ink` / `--ink-2` / `--ink-3` … the quietest tone … is 5.28:1 on the
+   dark ground"). Same remedy as `.reorderable-list__item` just above:
+   repaint it here in Signal's own name, scoped to the organiser root the
+   way `:root[data-theme] :focus-visible` already is, so the candidate
+   ground — no `data-theme` attribute, no theme.css — is untouched. */
+:root[data-theme] .reorderable-list__grip::before {
+  background: var(--ink-3);
+  box-shadow:
+    0 -5px 0 var(--ink-3),
+    0 5px 0 var(--ink-3);
+}
+
 /* ---- Page ------------------------------------------------------------- */
 
 /* NOT A PLACEHOLDER ANY MORE, and 6.5e Task 2 checked rather than assumed.
