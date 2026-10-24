@@ -342,6 +342,21 @@ function FieldEditor({
   const ids = useId();
   const unsatisfiable = unsatisfiableValidation(field);
   const v = field.validation;
+  /**
+   * `O-17` — the Column name box edits `field.id`, and `field.id` is this
+   * row's React key (`ReorderableList`'s `keyOf` above). Writing it on
+   * every keystroke therefore unmounted and remounted the row the
+   * organiser was typing in: focus gone, caret gone, once per character,
+   * so the box could never hold more than one letter.
+   *
+   * A list key has to be identity, and an id the author types is content.
+   * Held here and written when the box is left — the same draft-plus-blur
+   * this file's `NumberField` sibling (`TimingPanel`) and
+   * `ReorderableList`'s position box already use, and the smallest change
+   * that keeps the key stable for the whole of an edit. `null` is "not
+   * being edited", so a rename from elsewhere still shows through.
+   */
+  const [idDraft, setIdDraft] = useState<string | null>(null);
 
   // `D16`, content: a field carries at most one `help` — a constraint or a
   // consequence, in the help track — and at most one `unit`, which goes
@@ -438,11 +453,13 @@ function FieldEditor({
           <input
             className="text-input"
             id={`${ids}-id`}
-            value={field.id}
+            value={idDraft ?? field.id}
             aria-describedby={`${ids}-id-help`}
-            onChange={(event) => {
-              const id = sanitiseId(event.target.value);
-              if (id !== "") onChange((f) => ({ ...f, id }));
+            onChange={(event) => setIdDraft(sanitiseId(event.target.value))}
+            onBlur={() => {
+              const next = idDraft;
+              setIdDraft(null);
+              if (next !== null && next !== "" && next !== field.id) onChange((f) => ({ ...f, id: next }));
             }}
           />
           {/* `sanitiseId` rewrites as the organiser types — lower-cases,

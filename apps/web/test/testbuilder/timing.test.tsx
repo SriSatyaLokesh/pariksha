@@ -301,7 +301,12 @@ describe("TimingPanel", () => {
       const onChange = vi.fn();
       render(<Harness published onChange={onChange} />);
 
+      // `O-17`: the confirmation is raised when the box is LEFT, not from
+      // each keystroke — a dialog that opens mid-number takes the caret
+      // with it (`useDialogKeys` focuses on open) and asks about "9".
       fireEvent.change(duration(), { target: { value: "90" } });
+      expect(screen.queryByRole("dialog")).toBeNull();
+      fireEvent.blur(duration());
 
       expect(screen.getByRole("dialog")).toHaveTextContent(/attempts in progress stay on version 1/i);
       expect(onChange).not.toHaveBeenCalled();
@@ -312,6 +317,7 @@ describe("TimingPanel", () => {
       render(<Harness published onChange={onChange} />);
 
       fireEvent.change(duration(), { target: { value: "90" } });
+      fireEvent.blur(duration());
       fireEvent.click(screen.getByRole("button", { name: /apply the change/i }));
 
       expect(onChange).toHaveBeenCalledWith({ ...BASE, duration_minutes: 90 });
@@ -323,6 +329,7 @@ describe("TimingPanel", () => {
       render(<Harness published onChange={onChange} />);
 
       fireEvent.change(duration(), { target: { value: "90" } });
+      fireEvent.blur(duration());
       fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
 
       expect(onChange).not.toHaveBeenCalled();
@@ -334,6 +341,7 @@ describe("TimingPanel", () => {
       const control = duration();
       control.focus();
       fireEvent.change(control, { target: { value: "90" } });
+      fireEvent.blur(control);
 
       const dialog = screen.getByRole("dialog");
       expect(dialog).toHaveFocus();

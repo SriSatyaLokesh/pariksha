@@ -113,12 +113,18 @@ describe("FormBuilder (T-16 - T-18)", () => {
     const names = (): string[] =>
       screen.getAllByLabelText(/column name/i).map((input) => (input as HTMLInputElement).value);
 
+    // `O-17`: the rename lands when the box is left, not per keystroke —
+    // the row's React key is its id, so writing it mid-word remounted the
+    // row being typed in. The collision guard is unchanged; it just runs
+    // at the commit, and the refused name is put back with it.
     typeInto(screen.getAllByLabelText(/column name/i)[1] as HTMLElement, "email");
+    fireEvent.blur(screen.getAllByLabelText(/column name/i)[1] as HTMLElement);
     expect(names()).toEqual(["email", "short_text"]);
 
     // A free name is still accepted — the guard is a collision check, not
     // a frozen id.
     typeInto(screen.getAllByLabelText(/column name/i)[1] as HTMLElement, "college");
+    fireEvent.blur(screen.getAllByLabelText(/column name/i)[1] as HTMLElement);
     expect(names()).toEqual(["email", "college"]);
   });
 
