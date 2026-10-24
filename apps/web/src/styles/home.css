@@ -380,7 +380,21 @@
    the difference between a readable subject and "Place…". That probe
    predates the action's permanent cost and was not re-run here; a floor
    matching the two siblings that already carry one (`min-width: 6ch`) is
-   restored as the conservative stand-in until it is. */
+   restored as the conservative stand-in until it is.
+
+   Reviewer note (fix round 4): this floor changes the failure MODE, not
+   just its severity. With `min-width: 0` the subject ellipsised at any
+   width, however far; with a floor, once `.home__row-time`, this and
+   `.home__row-reason` all hit their 6ch minimums the ROW overflows, and
+   `.home__scroll { overflow-x: hidden }` clips whatever cannot fit —
+   which is `.home__row-action`, being last and `flex: none`, exactly the
+   "a row action can never be clipped" property `D21a` names elsewhere.
+   Worked by hand rather than measured: at 400px roughly 200px is needed
+   against ~304px available, and at 320px roughly 200px against ~224px —
+   so this does not bite on any real phone width; somewhere below about
+   300px of available row width it would. That number, not just "re-run
+   the 400px probe", is what the eventual browser measurement should
+   check. */
 .home__row-subject {
   min-width: 6ch;
   color: var(--ink);

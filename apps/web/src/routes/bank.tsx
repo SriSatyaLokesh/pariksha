@@ -285,7 +285,16 @@ export function BankBrowser({
    * confirmed it. M4: `confirmBusy` makes this fire at most once per open
    * dialog — a second call while the first is still in flight (a
    * double-click, or Enter repeated) is a no-op rather than a second
-   * DELETE. */
+   * DELETE.
+   *
+   * Reviewer note (fix round 4): the `|| confirmBusy` guard here is belt,
+   * not braces. Two clicks dispatched in the same tick both read
+   * `confirmBusy` from the SAME pre-flush render — this check alone would
+   * not stop them. What actually stops the second DELETE is the Delete
+   * button's `disabled={confirmBusy}` below: React flushes the state
+   * update from the first click before the second can be dispatched, and a
+   * disabled native button fires no click at all. Keep both — do not strip
+   * `disabled` believing this closure check is the defence; it is not. */
   async function confirmDeletion() {
     if (confirmDelete === undefined || confirmBusy) return;
     setConfirmBusy(true);
@@ -312,7 +321,18 @@ export function BankBrowser({
               one `<li>` for what should have been two), and the bucket's
               position moved with insertion order rather than staying put.
               A prefix no real group's key can share, and a stable sort that
-              always pins it last, fix both at once. */}
+              always pins it last, fix both at once.
+
+              Reviewer note (fix round 4): this comparator is not a strict
+              weak ordering — compare(UNGROUPED, UNGROUPED) returns 1, not
+              0, which a general-purpose sort is not supposed to see from
+              a consistent comparator. It is safe only because `groups` is
+              a `Map`, so there is at most one UNGROUPED entry to compare
+              against itself, and because it leans on `Array.prototype.sort`
+              having been stable since ES2019 to keep every REAL group in
+              the Map's own insertion order. Both hold today; neither is
+              enforced by a type, so do not copy this comparator somewhere
+              a key can repeat. */}
           {[...groups.entries()]
             .sort(([a], [b]) => (a === UNGROUPED ? 1 : b === UNGROUPED ? -1 : 0))
             .map(([group, groupTags]) => (
