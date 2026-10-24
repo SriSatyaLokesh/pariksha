@@ -1129,14 +1129,19 @@
    `--exam-edge` becomes 2px, so the edge WIDTH matches the literal 2px
    above too — a candidate in high-contrast mode was left with only a
    border COLOUR (ink vs voltage-deep) to tell a selected option from an
-   unselected one. A higher-specificity override for that mode alone
-   (component-dimensions.test.ts pins the base rule's own `2px` as
-   DESIGN.md's literal value, so the base rule stays untouched) doubles
-   the selected row's edge against the unselected row's own 2px — a
-   carrier that survives the mode instead of one the mode happens to
-   erase. */
+   unselected one.
+
+   A `border-width` override here is D5's own failure mode: these rows
+   are auto-height, so `box-sizing: border-box` only re-divides an
+   EXPLICIT box between content and border — it does nothing for one
+   that grows to fit its content, and a wider border is 4px of extra
+   outer height the unselected row never gets (measured: 61px selected
+   vs 57px unselected, 0px apart on main). An inset box-shadow is never
+   part of the box model, in either box-sizing mode, so a ring the same
+   width as the edge reads as a second, thicker border INSIDE the
+   existing one without moving a single pixel of layout. */
 :root[data-contrast="high"] .exam-option-row.is-selected {
-  border-width: calc(var(--exam-edge, 1px) * 2);
+  box-shadow: inset 0 0 0 var(--exam-edge, 1px) var(--color-voltage-deep);
 }
 
 /* A locked option (select_k at its limit) and a read-only attempt. The

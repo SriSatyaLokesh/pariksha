@@ -121,13 +121,25 @@ describe("G5-02: a selected option survives high contrast by more than its borde
     expect(declared(ruleBody(".exam-option-row.is-selected"), "border-width")).toBe("2px");
   });
 
-  it("the high-contrast override doubles the unselected row's own edge instead", () => {
+  // M1 (code review of this plan). A `border-width` override here grows the
+  // row's own auto-sized outer box — measured in real Chrome at 61px
+  // (selected) vs 57px (unselected), a 4px shift in the one accessibility
+  // mode D5 had none in (0px apart on main). `box-sizing: border-box`
+  // cannot absorb it: these rows have no explicit height for the border to
+  // be subtracted from. A `box-shadow` never participates in the box model
+  // in either box-sizing mode, so an inset ring the same width as the edge
+  // reads as a thicker border without moving a layout pixel. Confirmed in
+  // Chrome: both rows render 57px tall under high contrast, same as on
+  // main, while the selected row alone paints the extra inset ring.
+  it("the high-contrast override is a non-box carrier, not a wider border", () => {
     const body = ruleBody(':root[data-contrast="high"] .exam-option-row.is-selected');
-    expect(declared(body, "border-width")).toBe("calc(var(--exam-edge, 1px) * 2)");
+    expect(declared(body, "border-width"), "redeclares border-width — this is M1's own box-growing bug").toBeUndefined();
+    expect(declared(body, "box-shadow")).toBe("inset 0 0 0 var(--exam-edge, 1px) var(--color-voltage-deep)");
   });
 
-  // Still needs a browser: that 4px against 2px actually reads as
-  // different at a glance, not just in the CSS text.
+  // Still needs a browser: that the ring actually reads as different at a
+  // glance, not just in the CSS text — confirmed above by hand for this
+  // review; component-dimensions.test.ts does not cover this selector.
 });
 
 describe("G5-06 and G5-07: the palette rail fits its own grid and scrolls on its own", () => {
