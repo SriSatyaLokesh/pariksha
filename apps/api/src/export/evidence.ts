@@ -26,7 +26,7 @@
 // **Audit correction, round 2 (fix round 1, C1 — a Critical found in
 // review, after the first correction above still shipped the bug): the
 // document is not otherwise harmless.** `pariksha/test@1` also carries
-// `settings.access`, including `access_code` — the `link_code` credential
+// `access`, including `access_code` — the `link_code` credential
 // itself, an `ABSOLUTE_SECRET` in both scrub-scan fixtures
 // (`apps/api/test/run/scrub-scan.test.ts`,
 // `apps/api/test/export/scrub-scan.test.ts`) — and `allow_email_domains`/
@@ -43,12 +43,15 @@
 // one-liner in `docs/exports.md`, referenced from the manifest's own header
 // comment row.
 //
-// **Dead objects get a word, never a dead link.** A snapshot row can outlive
-// its object — Phase 8e's retention sweep deletes objects on a schedule, and
-// a URL to a missing one 404s silently inside a download loop. Existence is
-// checked with one `StorageAdapter.list` per attempt's own key prefix
-// (`snapshot/<attemptId>/`) — one subrequest for however many snapshots that
-// attempt has, never one `get` per key, which is the ceiling problem again.
+// **A dead object gets a word, not a silent dead link.** A snapshot row can
+// outlive its object — Phase 8e's retention sweep deletes objects on a
+// schedule, and a URL to a missing one 404s silently inside a download loop.
+// Existence is checked with up to `MAX_LIST_PAGES_PER_ATTEMPT` (2)
+// `StorageAdapter.list` calls against the attempt's own key prefix
+// (`snapshot/<attemptId>/`), never one `get` per key, which is the ceiling
+// problem again. A row the capped listing cannot rule out reads `unknown`
+// and **keeps its URL** — that link may well 404, and a visible 404 beats a
+// confident `deleted` about evidence that still exists.
 //
 // **`K1`: `null` is "not counted", never "zero".** `snapshot.face_count` is
 // written `null` for every row the product has ever produced (on-device face
@@ -168,8 +171,8 @@ export async function exportEventsPage(
  * as deleted past R2's 1000-key page. Worst case stays exactly 25: auth (2)
  * + `getTest` (1) + `listAttemptsForTest` (1) + `listSnapshotsForAttempts`
  * (1) + (10 attempts × up to 2 `list` pages each) = 25. `signedUrl` still
- * costs nothing (`K4`), so halving the attempt count rather than the page
- * count keeps the manifest's own per-request row budget roughly where it
+ * costs nothing (`K4`). This halves the rows a caller gets per request, which
+ * the manifest's own paging absorbs; what it buys is that the worst case
  * was before this fix.
  */
 const SNAPSHOTS_PAGE_LIMIT_MAX = 10;
@@ -194,19 +197,21 @@ export interface SnapshotManifestRow {
 }
 
 /** The key prefix a snapshot's own key (`proctoring.ts`'s
- *  `snapshot/<attemptId>/<takenAt>-<reason>.jpg`) always falls under — one
+ *  `snapshot/<attemptId>/<takenAt>-<reason>.jpg`) always falls under — a
  *  `list()` against it answers "does this attempt's object still exist" for
- *  every snapshot that attempt has, in the one subrequest `K3` budgets for. */
+ *  every snapshot that attempt has, in the one-to-two subrequests `K3`
+ *  budgets for (`MAX_LIST_PAGES_PER_ATTEMPT`). */
 const snapshotPrefix = (attemptId: string): string => `snapshot/${attemptId}/`;
 
 /**
  * Fix round 1, `I2`: the draft's existence check read exactly one `list`
  * page per attempt and treated anything past it as deleted. R2 pages at up
  * to 1000 keys and sets `StorageAdapter.list`'s own `cursor` whenever it
- * truncates (`packages/storage/src/r2.ts`) — a 60-minute test at the
- * proctoring config's minimum 2-second snapshot interval
- * (`snapshot_interval_seconds`, floor 0) produces ~1800 objects under one
- * attempt's prefix, past the first page. Dropping the cursor there meant
+ * truncates (`packages/storage/src/r2.ts`) — and `snapshot_interval_seconds`
+ * has `"minimum": 0` with no maximum (`schemas/test-1.json`), where 0 means
+ * snapshots off, so the smallest capture-producing interval is **1 second**
+ * and a 60-minute test can produce ~3600 objects under one attempt's prefix,
+ * well past the first page. Dropping the cursor there meant
  * live snapshots 1001 onward quietly rendered `deleted`, a confident lie
  * about evidence that still exists — worse than the 404 the existence
  * check exists to prevent, because a 404 is visible and a wrong `deleted`
@@ -251,8 +256,9 @@ async function listLiveKeys(deps: AppDeps, attemptId: string): Promise<{ keys: S
  * `signedUrl` itself spends no storage subrequest at all (`instrument.ts`'s
  * own ruling, `K4`), so this function's whole storage cost is the `list`
  * calls — up to `MAX_LIST_PAGES_PER_ATTEMPT` per **distinct** attempt that
- * has at least one snapshot, not flat the way a single-page read was,
- * because a page beyond the cap costs a second `list` fix round 1 added.
+ * has at least one snapshot, not flat the way a single-page read was:
+ * a key past the first 1000 costs the second `list`. A page beyond the cap
+ * costs nothing, because it is never read.
  * Exported on its own, apart from the paged route below, so that cost shape
  * is provable independent of `SNAPSHOTS_PAGE_LIMIT_MAX`.
  */
@@ -311,7 +317,7 @@ const MANIFEST_COLUMNS: CsvColumn<SnapshotManifestRow>[] = [
  *  line rides above `toCsv`'s own quoting, not through it. */
 const MANIFEST_HEADER_COMMENT = (): string =>
   `# Pariksha snapshot manifest - each URL expires ${SIGNED_URL_TTL_SECONDS} seconds after this file was generated; ` +
-  `existence is checked against the first ${String(MAX_LIST_PAGES_PER_ATTEMPT)} page(s) of each attempt's own objects; ` +
+  `existence is checked against the first ${String(MAX_LIST_PAGES_PER_ATTEMPT)} page(s) of up to 1000 objects each, per attempt; ` +
   `a row past that reads "unknown" rather than "deleted" and still carries a URL; ` +
   `see docs/exports.md for a curl/wget one-liner to pull them down before then.\r\n`;
 
@@ -378,7 +384,7 @@ function versionQueryParam(c: Context<AppBindings>): number | undefined {
  * `attempts.read_evidence`, held by Proctor, Reviewer, Admin and Owner but
  * not Viewer (`permissions.ts`) — and `GET …/export/test.json` —
  * `results.export`, held by Viewer too. The same `exportTest` the original
- * `tests.edit` route (`routes/tests.ts`) calls, minus `settings.access`
+ * `tests.edit` route (`routes/tests.ts`) calls, minus `access`
  * (fix round 1, `C1` — see the file header); a second door onto the same
  * function, not a second serialiser.
  */
@@ -400,16 +406,17 @@ export function evidenceExportRoutes(deps: AppDeps): Hono<AppBindings> {
   routes.get("/:id/tests/:testId/export/test.json", requires("results.export"), async (c) => {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
-    // Fix round 1, C1: `exportTest`'s document carries `settings.access` in
+    // Fix round 1, C1: `exportTest`'s document carries `access` in
     // full — `access_code` is the credential `routes/run.ts`'s `sameSecret`
     // compares to admit a `link_code` candidate (an `ABSOLUTE_SECRET` in
     // both scrub-scan fixtures), and `allow_email_domains`/`allow_ip_ranges`
     // are perimeter configuration a reader has no need for either. Dropped
-    // here, at the more permissive door only — the `tests.edit` route above
+    // here, at the more permissive door only — `routes/tests.ts`'s own `/export`
     // still returns it whole, because an author editing the test needs its
-    // own access policy. The result is deliberately evidence, not a
-    // re-importable document: round-tripping it through `/tests/import`
-    // would need `access` back.
+    // own access policy. The result is evidence rather than a
+    // policy document: `access` is not in `schemas/test-1.json`'s root
+    // `required`, so this still imports — it simply yields a test carrying
+    // no access policy of its own.
     const { access: _access, ...doc } = await exportTest(deps, workspaceId, testId, versionQueryParam(c));
     return c.json(doc);
   });
