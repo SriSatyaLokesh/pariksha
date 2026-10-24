@@ -312,6 +312,25 @@ describe("SectionList", () => {
     expect(within(status).getByRole("button", { name: /undo/i })).toBeInTheDocument();
   });
 
+  // Phase 8h (`O-22`, register `G3-02`/`G3-03`): this used to render inline
+  // at the end of the document, reachable only by scrolling, with its
+  // confirm styled identically to every other button on the screen.
+  // `jsdom` cannot see that it is now centred (a `uicheck`/browser concern,
+  // `measurement/` is where that is actually proven) — what it CAN see is
+  // the structure: a scrim wrapping the dialog, and the destructive button
+  // carrying a colour class distinct from `.button-primary`'s accent.
+  it("O-22: the delete confirm has a scrim and a distinct destructive colour", () => {
+    render(<Harness initial={[QUANT]} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
+
+    const dialog = screen.getByRole("dialog", { name: /delete this section/i });
+    expect(dialog.parentElement).toHaveClass("section-list__scrim");
+
+    const confirm = within(dialog).getByRole("button", { name: /^delete$/i });
+    expect(confirm).toHaveClass("button-danger");
+    expect(confirm).not.toHaveClass("button-primary");
+  });
+
   it("fix round (task 3 review, I9): Escape cancels the delete dialog, focus moves in and back", () => {
     render(<Harness initial={[QUANT]} />);
     const trigger = screen.getByRole("button", { name: /delete section/i });

@@ -215,3 +215,29 @@ test.describe("F3 (alignment half) — the section row's controls share one base
     expect(await sharedBaseline(page, ".reorderable-list__item > *")).toBeLessThanOrEqual(2);
   });
 });
+
+test.describe("O-22 — deleting a section is a centred, scrimmed confirm", () => {
+  test("the scrim covers the viewport and the dialog sits in the middle of it", async ({ page }) => {
+    await signIn(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await openBuilder(page, testId);
+    await page.locator(".section-row__summary").first().click();
+    await page.getByRole("button", { name: "Delete section" }).click();
+    const info = await page.evaluate(() => {
+      const scrim = document.querySelector(".section-list__scrim")!;
+      const dialog = document.querySelector('[role="dialog"][aria-label="Delete this section"]')!;
+      const s = scrim.getBoundingClientRect();
+      const d = dialog.getBoundingClientRect();
+      return {
+        scrimCoversViewport: s.width >= window.innerWidth && s.height >= window.innerHeight,
+        dialogCenterX: d.left + d.width / 2,
+        dialogCenterY: d.top + d.height / 2,
+      };
+    });
+    expect(info.scrimCoversViewport).toBe(true);
+    // Within a few px of true centre — the dialog's own padding and the
+    // viewport's own odd/even pixel count are the only slack this needs.
+    expect(Math.abs(info.dialogCenterX - 720)).toBeLessThanOrEqual(4);
+    expect(Math.abs(info.dialogCenterY - 450)).toBeLessThanOrEqual(4);
+  });
+});
