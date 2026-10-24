@@ -222,16 +222,19 @@ describe("the agenda groups by time horizon (D6a)", () => {
     expect(counts).toEqual(["1", "1", "2"]);
   });
 
-  it("reveals a row's action on focus, not only on hover", async () => {
+  // O-10 / register G1-01: a reveal gated behind `:hover` left a row
+  // unreadable as a test at all until a pointer happened to land on it, and
+  // permanently unreachable on a touch device. The action is an ordinary,
+  // always-painted row member now — this replaces the test that pinned the
+  // old `opacity: 0` default as a requirement.
+  it("shows a row's action without needing hover, on every row", async () => {
     await openHome({ tests: async () => spread });
 
-    // The reveal is `opacity`, never `visibility` (`D21a`), so the button is
-    // tabbable before it is visible and focusing it is what shows it.
     expect(within(agenda()).getAllByRole("button", { name: /^Open / })).toHaveLength(4);
-    expect(declarationsOf(".home__row-action")).toContain("opacity: 0");
-    expect(
-      declarationsOf(".home__row:hover .home__row-action, .home__row-action:focus-visible"),
-    ).toContain("opacity: 1");
+    // No opacity gate of any kind left on the action — it is visible by
+    // default, not only once focused or hovered.
+    expect(declarationsOf(".home__row-action")).not.toContain("opacity: 0");
+    expect(declarationsOf(".home__row-action").join(";")).not.toMatch(/opacity/);
   });
 
   // The builder itself is `test/testbuilder/`'s subject and needs four more
@@ -355,10 +358,16 @@ describe("Home never scrolls, and its panes do (D21)", () => {
 
   // The three fixes a browser probe found. jsdom cannot see any of them, so
   // without these a later edit restores the regression with the suite green.
-  it("keeps the row action out of the flow, so it costs a row no width", async () => {
+  //
+  // O-10 superseded the first of the three: the action used to sit out of
+  // flow specifically so an invisible-by-default control cost a row no
+  // width. Now that it is always visible, it has to occupy real space in
+  // the row rather than float over the text next to it — `position:
+  // absolute` here would be the overlap regression, not the fix.
+  it("lays the row action out in the flow rather than floating it over the text", async () => {
     await openHome();
 
-    expect(declarationsOf(".home__row-action")).toContain("position: absolute");
+    expect(declarationsOf(".home__row-action")).not.toContain("position: absolute");
   });
 
   it("makes the reason give way before the subject does", async () => {
@@ -441,6 +450,43 @@ describe("Home never scrolls, and its panes do (D21)", () => {
     const strip = container.querySelector(".home__strip");
     expect(strip).not.toBeNull();
     expect(strip?.closest(".home__scroll")).toBeNull();
+  });
+});
+
+// F8: `span.home__row-time` measured 22px off a shared line across the two
+// panes, because the agenda pane's first row sits below a group header the
+// Recently edited pane has none of. `jsdom` has no layout engine, so the
+// 22px itself needs a browser to confirm; what IS observable here is the
+// DOM half of the fix — the ghost header exists, reserves the real one's
+// classes (so its height cannot drift from them), and is hidden from
+// anyone, sighted or not.
+describe("the two panes' first rows share a line (F8)", () => {
+  const mixed = [
+    aTest({ id: "a", name: "Midterm", state: "open", closesAt: NOW + 2 * HOUR }),
+    aTest({ id: "b", name: "Mock 2", reviewRequested: true }),
+  ];
+
+  it("gives Recently edited a hidden header the same height as the agenda's own", async () => {
+    const { container } = await openHome({ tests: async () => mixed });
+
+    const ghost = recent().querySelector(".home__group-head--ghost");
+    expect(ghost).not.toBeNull();
+    expect(ghost).toHaveAttribute("aria-hidden", "true");
+    // Same classes the agenda's own group head renders, not a restated
+    // number — so the reserved height tracks the real one automatically.
+    expect(ghost!.querySelector(".home__group-name")).not.toBeNull();
+    expect(ghost!.querySelector(".home__group-count")).not.toBeNull();
+    expect(declarationsOf(".home__group-head--ghost")).toContain("visibility: hidden");
+
+    // Never read aloud: an aria-hidden node with no text a screen reader
+    // would announce twice.
+    expect(container.querySelectorAll(".home__group-head--ghost")).toHaveLength(1);
+  });
+
+  it("renders no ghost header when the pane has nothing to align", async () => {
+    await openHome({ tests: async () => [] });
+
+    expect(recent().querySelector(".home__group-head--ghost")).toBeNull();
   });
 });
 

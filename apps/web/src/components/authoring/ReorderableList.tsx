@@ -215,18 +215,6 @@ export function ReorderableList<T>({
                   : "reorderable-list__item"
               }
               key={key}
-              draggable={!pinned}
-              onDragStart={(event) => {
-                dragFrom.current = index;
-                // Firefox refuses to start a drag unless dragstart sets
-                // data. jsdom's synthetic event carries no dataTransfer
-                // at all, hence the guard rather than a bare call.
-                const transfer: DataTransfer | undefined = event.dataTransfer;
-                if (transfer) {
-                  transfer.effectAllowed = "move";
-                  transfer.setData("text/plain", key);
-                }
-              }}
               onDragOver={(event) => {
                 if (dragFrom.current === null || pinned) return;
                 // Without this the browser never fires a drop at all.
@@ -237,12 +225,38 @@ export function ReorderableList<T>({
                 event.preventDefault();
                 dropOn(index);
               }}
-              onDragEnd={() => {
-                dragFrom.current = null;
-                setDropAt(null);
-              }}
             >
               <div className="reorderable-list__controls">
+                {/* G4-03: `draggable` used to live on the whole `<li>`, so
+                    dragging to select text inside an option's own input or
+                    textarea started a row drag instead. Drag initiation is
+                    constrained to this grip alone now; `dragover`/`drop`
+                    stay on the row above, which is still the drop target.
+                    `role="img"` + `aria-label` names it for assistive tech
+                    the same way `QrCode.tsx`'s inline svg does — it is not
+                    a second keyboard path (the up/down buttons already are
+                    one), so it carries no tabindex. */}
+                <span
+                  className="reorderable-list__grip"
+                  role="img"
+                  aria-label={`Drag ${label} to reorder`}
+                  draggable={!pinned}
+                  onDragStart={(event) => {
+                    dragFrom.current = index;
+                    // Firefox refuses to start a drag unless dragstart sets
+                    // data. jsdom's synthetic event carries no dataTransfer
+                    // at all, hence the guard rather than a bare call.
+                    const transfer: DataTransfer | undefined = event.dataTransfer;
+                    if (transfer) {
+                      transfer.effectAllowed = "move";
+                      transfer.setData("text/plain", key);
+                    }
+                  }}
+                  onDragEnd={() => {
+                    dragFrom.current = null;
+                    setDropAt(null);
+                  }}
+                />
                 <button
                   type="button"
                   className="prompt-editor__tool reorderable-list__move"

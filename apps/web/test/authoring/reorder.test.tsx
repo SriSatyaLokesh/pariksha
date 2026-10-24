@@ -2,6 +2,9 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { axe } from "jest-axe";
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 import { ReorderableList } from "../../src/components/authoring/ReorderableList";
 
@@ -207,10 +210,31 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
     return row;
   }
 
-  it("every row is draggable, and dragging one onto another reorders the list", () => {
+  // G4-03: `draggable` and `dragstart`/`dragend` moved off the row itself
+  // onto this dedicated grip, so selecting text inside an option's own
+  // input or textarea no longer starts a row drag. `dragover`/`drop` stay
+  // on the row — it is still the drop target.
+  function gripFor(item: string): HTMLElement {
+    const grip = rowFor(item).querySelector<HTMLElement>(".reorderable-list__grip");
+    if (!grip) throw new Error(`no grip for ${item}`);
+    return grip;
+  }
+
+  it("the row itself is no longer draggable — only its grip is", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    expect(rowFor("A")).toHaveAttribute("draggable", "true");
-    fireEvent.dragStart(rowFor("A"));
+    expect(rowFor("A")).not.toHaveAttribute("draggable");
+    expect(gripFor("A")).toHaveAttribute("draggable", "true");
+  });
+
+  it("the grip carries an accessible name naming the row it belongs to", () => {
+    render(<Options initial={["A", "B"]} />);
+    expect(gripFor("A")).toHaveAccessibleName(/drag.*option a/i);
+    expect(gripFor("B")).toHaveAccessibleName(/drag.*option b/i);
+  });
+
+  it("every row's grip is draggable, and dragging one onto another reorders the list", () => {
+    render(<Options initial={["A", "B", "C"]} />);
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("C"));
     fireEvent.drop(rowFor("C"));
     expect(visibleOrder()).toEqual(["B", "C", "A"]);
@@ -218,7 +242,7 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
 
   it("dragging upwards works too, not only downwards", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     fireEvent.dragOver(rowFor("A"));
     fireEvent.drop(rowFor("A"));
     expect(visibleOrder()).toEqual(["C", "A", "B"]);
@@ -226,7 +250,7 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
 
   it("dragover is prevented, which is what makes the browser fire a drop at all", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     // fireEvent returns false exactly when a handler called preventDefault.
     expect(fireEvent.dragOver(rowFor("B"))).toBe(false);
     expect(fireEvent.drop(rowFor("B"))).toBe(false);
@@ -234,7 +258,7 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
 
   it("the row being dragged over is marked, and the mark is cleared on drop", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("C"));
     expect(rowFor("C")).toHaveClass("is-drop-target");
     fireEvent.drop(rowFor("C"));
@@ -243,9 +267,9 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
 
   it("dragend clears the mark even when the drag is abandoned off the list", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("C"));
-    fireEvent.dragEnd(rowFor("A"));
+    fireEvent.dragEnd(gripFor("A"));
     expect(document.querySelectorAll(".is-drop-target")).toHaveLength(0);
     expect(visibleOrder()).toEqual(["A", "B", "C"]);
   });
@@ -258,7 +282,7 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
 
   it("dropping a row on itself is not a move, and announces nothing", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.dragStart(rowFor("B"));
+    fireEvent.dragStart(gripFor("B"));
     fireEvent.dragOver(rowFor("B"));
     fireEvent.drop(rowFor("B"));
     expect(visibleOrder()).toEqual(["A", "B", "C"]);
@@ -267,13 +291,13 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
 
   it("a drag announces into the same live region the buttons use", () => {
     render(<Options initial={["A", "B", "C"]} />);
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("B"));
     fireEvent.drop(rowFor("B"));
     expect(screen.getByRole("status")).toHaveTextContent("Option A moved to position 2 of 3");
   });
 
-  it("a pinned row is neither draggable nor a drop target", () => {
+  it("a pinned row's grip is neither draggable nor a drop target", () => {
     function PinnedOptions() {
       const [items, setItems] = useState([
         { id: "A", pinned: true },
@@ -299,14 +323,14 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
       );
     }
     render(<PinnedOptions />);
-    expect(rowFor("A")).toHaveAttribute("draggable", "false");
+    expect(gripFor("A")).toHaveAttribute("draggable", "false");
     // A pinned row cannot be dragged away…
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("C"));
     fireEvent.drop(rowFor("C"));
     expect(visibleOrder()).toEqual(["A", "B", "C"]);
     // …nor displaced by another row landing on it.
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     fireEvent.dragOver(rowFor("A"));
     fireEvent.drop(rowFor("A"));
     expect(visibleOrder()).toEqual(["A", "B", "C"]);
@@ -318,12 +342,30 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
     // to cope with both; this asserts the real-browser half directly.
     render(<Options initial={["A", "B", "C"]} />);
     const setData = vi.fn();
-    fireEvent.dragStart(rowFor("A"), { dataTransfer: { setData, effectAllowed: "none" } });
+    fireEvent.dragStart(gripFor("A"), { dataTransfer: { setData, effectAllowed: "none" } });
     expect(setData).toHaveBeenCalledWith("text/plain", "A");
   });
 
   it("drag never replaces the keyboard path: axe stays clean with it in place", async () => {
     const { container } = render(<Options initial={["A", "B", "C"]} />);
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // WCAG 2.5.8: the grip is the handle's whole hit area, and jsdom cannot
+  // measure a rendered box — read the declared size off disk instead, the
+  // same approach `organiser-home.test.tsx` takes for CSS jsdom can't see.
+  it("the grip clears the 24x24 WCAG 2.5.8 floor", () => {
+    const css = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/authoring.css"),
+      "utf8",
+    );
+    const rule = /\.reorderable-list__grip\s*\{([^}]*)\}/.exec(css);
+    expect(rule, "no .reorderable-list__grip rule in authoring.css").not.toBeNull();
+    const width = /width:\s*(\d+)px/.exec(rule![1]!);
+    const height = /height:\s*(\d+)px/.exec(rule![1]!);
+    expect(width, "no declared width").not.toBeNull();
+    expect(height, "no declared height").not.toBeNull();
+    expect(Number(width![1])).toBeGreaterThanOrEqual(24);
+    expect(Number(height![1])).toBeGreaterThanOrEqual(24);
   });
 });

@@ -4,6 +4,15 @@ import { APPLICABLE_MODES, type QuestionType, type ScoringConfig, type ScoringMo
 // Reads APPLICABLE_MODES from @pariksha/core rather than keeping its own
 // list, so the UI and validateBank can never disagree about which scoring
 // modes a type accepts.
+
+// G4-10: the wire value, spelled for an author rather than for validateBank.
+const MODE_LABELS: Record<ScoringMode, string> = {
+  all_or_nothing: "All or nothing",
+  partial: "Partial credit",
+  negative: "Negative marking",
+  position: "Position",
+  rubric: "Rubric",
+};
 export function ScoringRow({
   type,
   value,
@@ -58,7 +67,7 @@ export function ScoringRow({
         <option value="">Default</option>
         {modes.map((mode) => (
           <option key={mode} value={mode}>
-            {mode}
+            {MODE_LABELS[mode]}
           </option>
         ))}
       </select>

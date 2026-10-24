@@ -132,6 +132,34 @@
 
 /* ---- Reorderable list (P4.2 Review Focus 5) ---------------------------- */
 
+/* G4-03: the drag handle `ReorderableList` now confines `draggable` to,
+   rather than the whole row (which stole text selection away from an
+   option's own input/textarea). 44px, not the 24px floor — WCAG 2.5.8's
+   minimum, not its target: this is the only way a pointer user starts a
+   drag, so it gets the same hit area `.button-secondary` reaches. Three
+   bars drawn in CSS, the same technique as `.mini__grip`, so there is no
+   icon asset to ship for one glyph. */
+.reorderable-list__grip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--rounded-sm);
+  cursor: grab;
+}
+
+.reorderable-list__grip::before {
+  content: "";
+  width: 16px;
+  height: 2px;
+  background: var(--ink-3);
+  box-shadow:
+    0 -5px 0 var(--ink-3),
+    0 5px 0 var(--ink-3);
+}
+
 /* ---- Question editor skeleton (UX-07) ----------------------------------- */
 
 .question-editor {
@@ -790,6 +818,153 @@
     align-self: stretch;
     width: 100%;
   }
+}
+
+/* O-24: a missing shared row primitive, not four separate patches — every
+   place this screen puts two or more buttons side by side (New question /
+   Import, a passage group's Edit / Delete, a row's own actions, the delete
+   confirmation below) wraps them in this rather than relying on them being
+   adjacent elements with no gap between them. Other screens can adopt it
+   unchanged; it carries no colour of its own. */
+.button-row {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+
+/* O-25: a question's Edit / Export / Delete used to exist only as
+   `.button-secondary` text inside `td.acts`, which `primitives.css` hides
+   at `opacity: 0` until `tr:hover`/`tr:focus-within` — unreachable on a
+   touch device, exactly the defect class `F9`/`O-10`/`O-33` name elsewhere.
+   `primitives.css` is a sibling lane's file this wave, so the opacity gate
+   itself is overridden here, scoped to this one table rather than changed
+   for every screen that reaches for `td.acts` — a shared fix across all of
+   them is a follow-up once both halves exist. */
+.bank-browser__table td.acts {
+  opacity: 1;
+}
+
+/* Persistent icon buttons (owner's own words: "show the icons, and on
+   hover we can make them clear that this button is this"). The glyph is
+   `aria-hidden`; the accessible name is the same per-row `aria-label`
+   these buttons already carried as `.button-secondary` text buttons, and
+   `title` repeats it as the hover label a sighted mouse user gets — no new
+   state to keep in sync with it. 36px clears WCAG 2.5.8's 24px floor with
+   room over it, not the 44px target, because these are secondary actions
+   on a dense table on a pointer-first screen (`WCAG 2.5.8`'s own spacing
+   exception), not a primary control. */
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--surface);
+  border: 1px solid var(--edge-strong);
+  border-radius: var(--rounded-sm);
+  color: var(--ink);
+  font-size: var(--type-body-sm-size);
+  cursor: pointer;
+}
+
+.icon-button:hover,
+.icon-button:focus-visible {
+  border-color: var(--accent);
+}
+
+.icon-button[data-tone="danger"] {
+  color: var(--risk);
+  font-size: var(--type-body-sm-size);
+}
+
+.icon-button[data-tone="danger"]:hover,
+.icon-button[data-tone="danger"]:focus-visible {
+  border-color: var(--risk);
+}
+
+/* ---- ButtonDanger (DESIGN.md's token, no CSS class anywhere until now) --
+
+   `.button-primary`/`.button-secondary` live in primitives.css, a sibling
+   lane's file this wave — defined locally here rather than there, matching
+   DESIGN.md's own spec (canvas fill, flag-risk ink and border) in the same
+   40px/14px box `.button-secondary` reaches, so the two can fold into one
+   shared rule later with no visual change. G3-03: this is what replaces
+   `.button-primary` on a destructive action. */
+.button-danger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+  color: var(--risk);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  line-height: var(--type-button-md-line-height);
+  letter-spacing: var(--type-button-md-letter-spacing);
+  border: 1px solid var(--risk);
+  border-radius: var(--rounded-md);
+  padding-block: 9px;
+  padding-inline: 14px;
+  cursor: pointer;
+}
+
+.button-danger:hover,
+.button-danger:focus-visible {
+  background: var(--risk-wash);
+}
+
+.button-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- G4-01: the delete confirmation --------------------------------------
+
+   Register `G2-01`'s shape exactly (`position: fixed; inset: 0; …; display:
+   grid; place-items: center`), so centring the dialog costs no viewport
+   arithmetic and "reachable without scrolling" is true at every viewport
+   size rather than only the ones a fixed height was tested at — the
+   opposite of the builder's own delete, which the owner reported having to
+   scroll to reach. Lane A is building the same shape for the builder's own
+   panels in testbuilder.css this wave; named `.bank-confirm` rather than a
+   shared class so the two cannot collide, with a note to de-duplicate once
+   both exist. The scrim reuses exam.css's own precedent for dimming a
+   screen behind a dialog (`--color-ink` at 60%, the one legal literal-ish
+   alpha form) rather than inventing a second one; the dialog itself is
+   `.card-hairline` plus a width cap, so it carries no colour of its own —
+   its heading and message below inherit `.card-hairline`'s own `--ink`
+   rather than restating it. */
+.bank-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-xl);
+  background: rgb(from var(--color-ink) r g b / 0.6);
+}
+
+.bank-confirm__dialog {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-base);
+  width: min(420px, 100%);
+}
+
+.bank-confirm__title {
+  margin: 0;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+}
+
+.bank-confirm__message {
+  margin: 0;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
 }
 
 /* Fix round 1, finding 11: ImportDialog's own issues table — same rules as

@@ -459,29 +459,39 @@ export function Home({
                 </button>
               </p>
             ) : (
-              <ul className="home__rows">
-                {recent.map((test) => {
-                  const sets = setsFor(test, now);
-                  const first = sets[0];
-                  return (
-                    <RowLine
-                      key={test.id}
-                      time={timeLabel(test.updatedAt, now)}
-                      tone={first?.tone ?? "muted"}
-                      subject={test.name}
-                      reason={STATE_LABEL[test.state]}
-                      marked={
-                        selected === null
-                          ? undefined
-                          : sets.some((set) => set.key === selected)
-                            ? "on"
-                            : "off"
-                      }
-                      onOpen={() => onOpenTest(test.id)}
-                    />
-                  );
-                })}
-              </ul>
+              <>
+                {/* F8: reserves the same height the agenda pane's first
+                    group header costs it, so the two panes' first rows
+                    share a line instead of sitting 22px apart — see
+                    home.css for the measured cause. */}
+                <h3 className="home__group-head home__group-head--ghost" aria-hidden="true">
+                  <span className="home__group-name">.</span>
+                  <span className="home__group-count">0</span>
+                </h3>
+                <ul className="home__rows">
+                  {recent.map((test) => {
+                    const sets = setsFor(test, now);
+                    const first = sets[0];
+                    return (
+                      <RowLine
+                        key={test.id}
+                        time={timeLabel(test.updatedAt, now)}
+                        tone={first?.tone ?? "muted"}
+                        subject={test.name}
+                        reason={STATE_LABEL[test.state]}
+                        marked={
+                          selected === null
+                            ? undefined
+                            : sets.some((set) => set.key === selected)
+                              ? "on"
+                              : "off"
+                        }
+                        onOpen={() => onOpenTest(test.id)}
+                      />
+                    );
+                  })}
+                </ul>
+              </>
             )}
           </div>
         </section>
