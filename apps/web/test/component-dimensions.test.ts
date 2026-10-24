@@ -254,6 +254,42 @@ describe("component dimensions match tokens.components (T30)", () => {
     expect(tryDeclaration(body, "line-height")).toBeNull();
   });
 
+  // ---- textarea.text-input (G3-01, Phase 8h) -----------------------------
+  //
+  // m3 (Phase 8h Lane C review): `ruleBody(registrationCss, ".text-input ")`
+  // above now resolves to `select.text-input` — the literal substring match
+  // finds the comma-selector rule `input.text-input,\nselect.text-input {`
+  // at its second line — so those four assertions still hold, but the split
+  // left the new `textarea.text-input` rule with no T30 coverage of its own,
+  // in the one file whose purpose is pinning components to
+  // `tokens.components`. Padding and radius are the same text-input
+  // component; height is asserted as NOT fixed, because a fixed height is
+  // exactly G3-01's bug (collapsing a textarea to one line).
+  it('textarea.text-input padding matches tokens.components["text-input"].padding', () => {
+    const body = ruleBody(registrationCss, "textarea.text-input ");
+    expect(resolveSpacing(declaration(body, "padding"))).toBe(
+      tokens.components["text-input"].padding,
+    );
+  });
+
+  it('textarea.text-input border-radius matches tokens.components["text-input"].rounded', () => {
+    const body = ruleBody(registrationCss, "textarea.text-input ");
+    expect(declaration(body, "border-radius")).toBe("var(--rounded-xs)");
+    expect(tokens.rounded.xs).toBe(tokens.components["text-input"].rounded);
+  });
+
+  it("textarea.text-input has no fixed height — G3-01's one-line collapse stays fixed", () => {
+    const body = ruleBody(registrationCss, "textarea.text-input ");
+    expect(declaration(body, "height")).toBe("auto");
+  });
+
+  it("textarea.text-input's multi-line floor is 3 lines of body-md's line-height plus its own vertical padding", () => {
+    const body = ruleBody(registrationCss, "textarea.text-input ");
+    expect(declaration(body, "min-height")).toBe(
+      "calc(3 * var(--type-body-md-line-height) + 20px)",
+    );
+  });
+
   // ---- palette-square (P6.6, #70) ---------------------------------------
 
   it('.palette-square height matches tokens.components["palette-square"].height', () => {
