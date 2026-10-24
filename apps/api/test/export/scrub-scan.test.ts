@@ -1,25 +1,34 @@
-// Phase 8c Task 3 — the `KG1` sentinel scan for the two export routes.
+// Phase 8c Task 3 — the `KG1` sentinel scan for the export routes.
+// Phase 8c Task 4 (`#98`) extends it over `attempts.read_evidence` too, and
+// over `test.json` (`results.export`, added to the same `EXPORT_ENDPOINTS`
+// derivation this file already had — no exemption needed, see below).
 //
 // In the shape of `apps/api/test/run/scrub-scan.test.ts`: a sentinel
 // question bank (the same fixture — same bank, same secrets, so the two
-// scans agree about what counts as a leak), played through the real
-// `results.csv` and `answers.csv` routes, with every page read and scanned
-// — a leak on page two would be invisible to a scan that only read page
-// one, which is its own flavour of the truncation trap this phase is
-// about.
+// scans agree about what counts as a leak), played through the real export
+// routes, with every page read and scanned — a leak on page two would be
+// invisible to a scan that only read page one, which is its own flavour of
+// the truncation trap this phase is about.
 //
-// **The route list is derived, not hand-written.** `EXPORT_ENDPOINTS`
-// reads `ROUTE_ACTIONS` for every endpoint guarded by `results.export`, so
-// a future export this phase or a later one adds under the same action
-// (`R-09`'s events CSV, say) is scanned automatically — the whole point,
-// named in the task brief: "a route added later is covered without anyone
-// remembering."
+// **The route lists are derived, not hand-written.** `EXPORT_ENDPOINTS`
+// reads `ROUTE_ACTIONS` for every endpoint guarded by `results.export`, and
+// `EVIDENCE_ENDPOINTS` does the same for `attempts.read_evidence` — Task 4's
+// events CSV and snapshot manifest carry proctoring evidence, not results,
+// so they sit under the second action and the first filter alone would
+// never see them (the resume plan's own instruction: "derive from the
+// route table, never hand-write"). Either list growing later — a route
+// added under the same action — is scanned automatically without anyone
+// remembering, the whole point named in the task brief.
 //
-// **Unlike `AC-22`'s candidate-facing scan, there is no release carve-out
-// here.** A released `full_review` lets a *candidate* see their own
-// explanation (`T-22`); nothing releases a key into an *organiser's* CSV —
-// `KG1` is unconditional, which is why this file has no `EXEMPT_BODIES`
-// the other one needs.
+// **`test.json` needed no exemption — a correction to the original draft.**
+// `evidence.ts`'s first version claimed this route was "deliberately not
+// scrubbed" of keys and explanations, as if it were a trusted answer key.
+// It is not: `toTestDocument` names a section's questions by id, never by
+// their `key_json`/`explanation_json`/`rubric_json` — that content lives
+// only in the bank format (`export/bank.ts`, `banks.edit`, which a Viewer
+// does not hold). So `test.json` sits in `EXPORT_ENDPOINTS` and is scanned
+// by the same loop as every CSV, with no carve-out, and the scan finds
+// nothing — proving the property rather than asserting it by exemption.
 
 import { afterAll, expect, it } from "vitest";
 import {
@@ -73,24 +82,45 @@ function assertNoSecrets(label: string, body: string): void {
   }
 }
 
-// --- the route set, derived from ROUTE_ACTIONS, never hand-written --------
+// --- the route sets, derived from ROUTE_ACTIONS, never hand-written -------
 
 const EXPORT_ENDPOINTS = Object.entries(ROUTE_ACTIONS).filter(([, action]) => action === "results.export") as [
   string,
   string,
 ][];
 
+const EVIDENCE_ENDPOINTS = Object.entries(ROUTE_ACTIONS).filter(
+  ([, action]) => action === "attempts.read_evidence",
+) as [string, string][];
+
 it("KG1: exactly the export routes this task mounts are covered", () => {
   // Bumped deliberately, the same discipline `run/scrub-scan.test.ts` uses
   // for its own count — a future `results.export` route changes this
   // number, which is the point: silent coverage growth is invisible,
-  // a changed literal is not. 8c Task 1 (`R-06`, #94) added `/analytics`.
-  expect(EXPORT_ENDPOINTS.length).toBe(3);
+  // a changed literal is not. 8c Task 4 (`#98`) added `test.json` (an
+  // alias onto the existing `exportTest`, mounted under this action so a
+  // Viewer can reach it — scanned in the ordinary loop below, no exemption;
+  // see the header comment).
+  expect(EXPORT_ENDPOINTS.length).toBe(4);
   expect(new Set(EXPORT_ENDPOINTS.map(([e]) => e))).toEqual(
     new Set([
       "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv",
       "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv",
       "GET /api/v1/workspaces/:id/tests/:testId/analytics",
+      "GET /api/v1/workspaces/:id/tests/:testId/export/test.json",
+    ]),
+  );
+});
+
+it("KG1: exactly the evidence routes this task mounts are covered", () => {
+  // 8c Task 4 (`#98`): the events CSV and the snapshot manifest, both
+  // `attempts.read_evidence` rather than `results.export` — see the header
+  // comment on why that needs its own derived set.
+  expect(EVIDENCE_ENDPOINTS.length).toBe(2);
+  expect(new Set(EVIDENCE_ENDPOINTS.map(([e]) => e))).toEqual(
+    new Set([
+      "GET /api/v1/workspaces/:id/tests/:testId/export/events.csv",
+      "GET /api/v1/workspaces/:id/tests/:testId/export/snapshots.csv",
     ]),
   );
 });
@@ -112,7 +142,11 @@ sentinelDocs.forEach((doc, i) => {
 const body: TestDocumentBody = {
   settings: {
     timing: { duration_minutes: 45, navigation: "free", opens_at: iso(T - DAY), closes_at: iso(T + DAY) },
-    access: { mode: "link_code", access_code: "OPEN" },
+    // Fix round 1, C1: a real sentinel, not a plain string — `access_code`
+    // is itself an `ABSOLUTE_SECRET` (both scrub-scan fixtures agree), and
+    // a non-sentinel value here is a scan that cannot fail on exactly the
+    // leak it exists to catch (test.json's access-block exposure).
+    access: { mode: "link_code", access_code: "__ACCESS_CODE__" },
     registration_form: { fields: [{ id: "roll", type: "short_text", label: "Roll", required: true }] },
   },
   sections: [
@@ -210,6 +244,26 @@ it.each(EXPORT_ENDPOINTS)("KG1: %s leaks no key, explanation, rubric or accepted
   expect(method).toBe("GET");
   const body = await replayAllPages(path);
   assertNoSecrets(endpoint, body);
+});
+
+it.each(EVIDENCE_ENDPOINTS)("KG1: %s leaks no key, explanation, rubric or accepted pattern", async (endpoint) => {
+  const { method, path } = urlFor(endpoint);
+  expect(method).toBe("GET");
+  const body = await replayAllPages(path);
+  assertNoSecrets(endpoint, body);
+});
+
+it("test.json carries the test's own settings and question-id references, never a question's key or explanation", async () => {
+  // The positive half of the correction in this file's header comment:
+  // proves the route actually returned the test document (not an empty or
+  // error body the scan above would vacuously pass) while still carrying
+  // none of the sentinel markers.
+  const { path } = urlFor("GET /api/v1/workspaces/:id/tests/:testId/export/test.json");
+  const res = await app.request(path, { headers: { cookie: ownerCookie } });
+  expect(res.status, await res.clone().text()).toBe(200);
+  const doc = (await res.json()) as { format: string; sections: { id: string }[] };
+  expect(doc.format).toBe("pariksha/test@1");
+  expect(doc.sections.length).toBeGreaterThan(0);
 });
 
 it("the scan would catch a leak — a deliberately unscrubbed response fails it", () => {

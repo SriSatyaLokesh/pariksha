@@ -297,3 +297,152 @@ export const responsesForAttempts = scoped(
     return byAttempt;
   },
 );
+
+// --- Phase 8c Task 4 (`R-09`, `K38`): the events CSV and the snapshot
+// manifest's own reads --------------------------------------------------
+
+export interface EventRow {
+  id: string;
+  attemptId: string;
+  candidateId: string;
+  type: string;
+  detail: unknown;
+  clientTs: number;
+  serverTs: number;
+}
+
+interface EventRecord {
+  id: string;
+  attempt_id: string;
+  candidate_id: string;
+  type: string;
+  detail_json: unknown;
+  client_ts: number;
+  server_ts: number;
+}
+
+// Same two-column keyset shape `listAttemptsForTest` uses above, over
+// `(server_ts, id)` instead of `(started_at, id)` — events of one attempt
+// arrive in `server_ts` order, but a test's events interleave across
+// attempts, so the whole-test ordering (not an attempt-scoped one) is what a
+// stable page boundary needs.
+function encodeEventCursor(serverTs: number, id: string): string {
+  return `${serverTs}:${id}`;
+}
+
+function decodeEventCursor(cursor: string): [number, string] {
+  const separator = cursor.indexOf(":");
+  return [Number(cursor.slice(0, separator)), cursor.slice(separator + 1)];
+}
+
+/**
+ * Every event behind any attempt of a test, oldest-first — `K38`'s own
+ * contract: one statement per page, a filled page always carries a
+ * `nextCursor`, and the ordering is a stable keyset (`server_ts` then `id`)
+ * so a page boundary cannot shift under an event written mid-export.
+ *
+ * Joins through `test_version` for the same reason `listAttemptsForTest`
+ * does: `attempt` carries `test_version_id`, not `test_id`.
+ */
+export const listEventsForTest = scoped(
+  "listEventsForTest",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    testId: string,
+    opts: { limit?: number; cursor?: string } = {},
+  ): Promise<{ rows: EventRow[]; nextCursor: string | null }> => {
+    const limit = Math.min(Math.max(opts.limit ?? 50, 1), 500);
+    const clauses = ["e.workspace_id = ?", "tv.test_id = ?"];
+    const params: unknown[] = [workspaceId, testId];
+
+    if (opts.cursor) {
+      const [serverTs, id] = decodeEventCursor(opts.cursor);
+      clauses.push("(e.server_ts > ? OR (e.server_ts = ? AND e.id > ?))");
+      params.push(serverTs, serverTs, id);
+    }
+
+    const rows = await db.query<EventRecord>(
+      "SELECT e.id AS id, e.attempt_id AS attempt_id, a.candidate_id AS candidate_id, e.type AS type, " +
+        "e.detail_json AS detail_json, e.client_ts AS client_ts, e.server_ts AS server_ts " +
+        "FROM event e " +
+        "JOIN attempt a ON a.workspace_id = e.workspace_id AND a.id = e.attempt_id " +
+        "JOIN test_version tv ON tv.workspace_id = a.workspace_id AND tv.id = a.test_version_id " +
+        `WHERE ${clauses.join(" AND ")} ` +
+        "ORDER BY e.server_ts ASC, e.id ASC LIMIT ?",
+      [...params, limit + 1],
+    );
+
+    const hasMore = rows.length > limit;
+    const page = hasMore ? rows.slice(0, limit) : rows;
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last ? encodeEventCursor(Number(last.server_ts), last.id) : null;
+
+    return {
+      rows: page.map((row) => ({
+        id: row.id,
+        attemptId: row.attempt_id,
+        candidateId: row.candidate_id,
+        type: row.type,
+        detail: row.detail_json === null ? null : db.jsonValue(row.detail_json),
+        clientTs: Number(row.client_ts),
+        serverTs: Number(row.server_ts),
+      })),
+      nextCursor,
+    };
+  },
+);
+
+export interface SnapshotRow {
+  id: string;
+  attemptId: string;
+  candidateId: string;
+  storageKey: string;
+  takenAt: number;
+  reason: string;
+  faceCount: number | null;
+}
+
+interface SnapshotRecord {
+  id: string;
+  attempt_id: string;
+  candidate_id: string;
+  storage_key: string;
+  taken_at: number;
+  reason: string;
+  face_count: number | null;
+}
+
+/**
+ * Every `snapshot` row behind a **page** of attempts, one statement — the
+ * `responsesForAttempts` sibling for the manifest. Callers must keep
+ * `attemptIds.length` well under D1's 100-bound-parameter cap, the same
+ * restraint that function's own doc comment states.
+ */
+export const listSnapshotsForAttempts = scoped(
+  "listSnapshotsForAttempts",
+  async (db: DbClient, workspaceId: string, attemptIds: readonly string[]): Promise<SnapshotRow[]> => {
+    if (attemptIds.length === 0) return [];
+    const placeholders = attemptIds.map(() => "?").join(", ");
+    const rows = await db.query<SnapshotRecord>(
+      "SELECT s.id AS id, s.attempt_id AS attempt_id, a.candidate_id AS candidate_id, s.storage_key AS storage_key, " +
+        "s.taken_at AS taken_at, s.reason AS reason, s.face_count AS face_count " +
+        "FROM snapshot s " +
+        "JOIN attempt a ON a.workspace_id = s.workspace_id AND a.id = s.attempt_id " +
+        `WHERE s.workspace_id = ? AND s.attempt_id IN (${placeholders}) ` +
+        "ORDER BY s.attempt_id, s.taken_at",
+      [workspaceId, ...attemptIds],
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      attemptId: row.attempt_id,
+      candidateId: row.candidate_id,
+      storageKey: row.storage_key,
+      takenAt: Number(row.taken_at),
+      reason: row.reason,
+      // `K1`: `null` means "not counted", never zero faces — carried through
+      // unconverted, so the caller (never this file) decides how to render it.
+      faceCount: row.face_count === null ? null : Number(row.face_count),
+    }));
+  },
+);
