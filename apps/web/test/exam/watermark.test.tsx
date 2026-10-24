@@ -22,14 +22,14 @@
 // drives a pointer.
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { resolveProctoring, type ResolvedProctoring } from "@pariksha/core";
 import { ExamApp } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
 import { paintsIn, resolvedChain } from "../css-chain";
-import { TICK_MS } from "../../src/components/exam/Watermark";
+import { TICK_MS, Watermark } from "../../src/components/exam/Watermark";
 
 const NOW = 1_760_000_000_000;
 const EVENTS_PATH = "/api/v1/run/attempt/events";
@@ -148,12 +148,37 @@ describe("Watermark (Q9)", () => {
   // G5-12 (UI/UX audit). The tick used to be 1000ms — 40 tiles' text
   // content rewritten every second, behind the question stem, for the
   // whole attempt. Minute resolution gives a photo the same "which minute
-  // was this taken" deterrence for a fraction of the DOM writes. Pinned
-  // directly rather than fast-forwarded through fake timers: `openAttempt`
-  // awaits a `findByRole`, which polls on the real clock, so faking the
-  // clock first hangs the render and faking it after does not touch a
-  // `setInterval` already registered on the real one.
+  // was this taken" deterrence for a fraction of the DOM writes.
+  //
+  // m3 (code review of this plan). `expect(TICK_MS).toBe(60_000)` imports
+  // the constant and asserts its own literal back — it passes identically
+  // if the component's `setInterval` call hardcoded a different number and
+  // left `TICK_MS` unused. This instead renders `Watermark` directly (no
+  // `openAttempt`/`findByRole` needed for this component alone, so fake
+  // timers are safe here even though they are not for the integration
+  // tests above) and pins the actual update cadence: the stamp must not
+  // yet have changed one tick short of `TICK_MS`, and must have changed by
+  // `TICK_MS` exactly — true only if the real `setInterval` fires at that
+  // value.
   it("ticks once a minute, not once a second", () => {
-    expect(TICK_MS).toBe(60_000);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(NOW);
+      render(<Watermark attemptId="att_watermark01" />);
+      const mark = document.querySelector("[data-watermark]")!;
+      const initial = mark.textContent;
+
+      act(() => {
+        vi.advanceTimersByTime(TICK_MS - 1);
+      });
+      expect(mark.textContent, "changed before a full tick elapsed").toBe(initial);
+
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(mark.textContent, "did not change at exactly TICK_MS").not.toBe(initial);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

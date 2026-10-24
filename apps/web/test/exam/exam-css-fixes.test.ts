@@ -164,7 +164,20 @@ describe("G5-08: the skip link does not shove the bar when it gets focus", () =>
   it("floats out of flow on focus instead of re-entering it", () => {
     const body = ruleBody(".exam-skip:focus-visible");
     expect(declared(body, "position")).toBe("fixed");
-    expect(declared(body, "z-index")).toBe("40");
+  });
+
+  // m1 (code review of this plan). `ProctoringLayer.tsx` sets `inert` on
+  // `.exam-runner` — which this link renders inside — whenever the
+  // proctoring overlay is open, so the link cannot be focused then and
+  // this state can never be reached while the overlay is up. A z-index
+  // above the overlay's (30) claimed a reachability `inert` already
+  // denies; this now stays below it, matching `.exam-proctoring-overlay`'s
+  // own comment that the runner underneath is inert while it is shown.
+  it("stays below the proctoring overlay's z-index (30), which `inert` makes this moot against anyway", () => {
+    const body = ruleBody(".exam-skip:focus-visible");
+    const zIndex = Number(declared(body, "z-index"));
+    expect(zIndex, "z-index not a number").not.toBeNaN();
+    expect(zIndex, "at or above the proctoring overlay — reachability `inert` already denies").toBeLessThan(30);
   });
 
   // Still needs a browser: that the clock, the save banner and Submit

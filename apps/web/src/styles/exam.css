@@ -493,14 +493,25 @@
    shifted ~120px sideways to make room for it — the one moment a
    candidate most needs the bar to hold still is right after pressing
    Tab. `fixed`, not `static`: still visible and still in the tab order,
-   but out of flow, so nothing else on the bar moves. `z-index` above the
-   proctoring overlay (30) — the one control that must stay reachable
-   even while that overlay is up. */
+   but out of flow, so nothing else on the bar moves.
+
+   m1 (code review of this plan). This used to put the skip link's
+   z-index above the proctoring overlay (30), on the claim that it is
+   "the one control that must stay reachable even while that overlay is
+   up" — but `ProctoringLayer.tsx` sets `inert` and `aria-hidden` on
+   `.exam-runner` whenever the overlay is open, and this link renders
+   inside that subtree (`Runner.tsx`), so it cannot receive focus then
+   and `:focus-visible` never matches it. `.exam-proctoring-overlay`'s
+   own comment below states the real invariant: the runner underneath is
+   inert while the overlay is up. Below 30, so stacking does not
+   contradict that; level with the bar's own `.exam-submit-confirm` and
+   `.exam-proctoring-count` (both 20), which is all this needs when the
+   overlay is not showing. */
 .exam-skip:focus-visible {
   position: fixed;
   top: 8px;
   left: 8px;
-  z-index: 40;
+  z-index: 20;
   clip-path: none;
 }
 

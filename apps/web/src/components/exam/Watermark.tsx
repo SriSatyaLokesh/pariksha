@@ -62,7 +62,13 @@ export function Watermark({ attemptId }: WatermarkProps) {
     };
   }, []);
 
-  const stamp = `${attemptId} · ${now.toLocaleString()}`;
+  // m2 (code review of this plan). `toLocaleString()` renders seconds in
+  // most locales, which a 60s tick cannot keep current: mounted at
+  // 10:00:59, the stamp reads that exact second until the next tick at
+  // 10:01:59, showing the wrong minute for nearly all of it. `timeStyle:
+  // "short"` drops seconds, so the rendered precision matches what a
+  // once-a-minute tick can actually promise.
+  const stamp = `${attemptId} · ${now.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}`;
 
   return (
     <div className="exam-watermark" data-watermark aria-hidden="true">
