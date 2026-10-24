@@ -516,6 +516,10 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".webhook-secret": { dark: "signal-surface-2", light: "signal-l-surface-2" },
   ".bank-browser__group-label": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__tag-chip": { dark: "signal-surface", light: "signal-l-surface" },
+  // O-26: the type/difficulty filters — previously no fill or ink of their
+  // own, which left them in the browser's default (light) widget colours
+  // on the dark ground.
+  ".bank-browser__filter-select select": { dark: "signal-surface", light: "signal-l-surface" },
   ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
 
