@@ -1011,7 +1011,17 @@
    else redeclares it, so it carries the base number down unchanged; the
    scaled property is then computed from the alias (a different custom
    property) rather than from itself, so no declaration here depends on
-   its own value. */
+   its own value.
+
+   Known fragility: each alias snapshots its token's value AS COMPUTED ON
+   `:root`, once. Nothing below `:root` overrides any of these three
+   tokens today — `:root[data-contrast="high"]` is the same element, so
+   it still resolves — but a future override on an element BELOW `:root`
+   (a density mode, a nested theme scope) would be invisible to this
+   alias and so to `.exam-answer`'s scaling, silently reading the
+   original `:root` number instead. If one of these tokens ever needs a
+   non-`:root` override, that override has to redeclare the matching
+   `-base` alias too, at the same selector. */
 :root {
   --exam-stem-size-base: var(--type-question-stem-size);
   --exam-option-label-size-base: var(--type-option-label-size);
@@ -1149,8 +1159,12 @@
    outer height the unselected row never gets (measured: 61px selected
    vs 57px unselected, 0px apart on main). An inset box-shadow is never
    part of the box model, in either box-sizing mode, so a ring the same
-   width as the edge reads as a second, thicker border INSIDE the
-   existing one without moving a single pixel of layout. */
+   width and colour as the edge sits flush against its inner side —
+   contiguous with it, not a second border a gap would separate it from
+   — and the two together paint as one 4px voltage-deep band, without
+   moving a single pixel of layout. The carrier is still sound: selected
+   reads 4px voltage-deep on white, unselected 2px ink on white — width
+   AND hue both differ, not colour alone. */
 :root[data-contrast="high"] .exam-option-row.is-selected {
   box-shadow: inset 0 0 0 var(--exam-edge, 1px) var(--color-voltage-deep);
 }
