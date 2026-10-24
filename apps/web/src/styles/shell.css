@@ -249,6 +249,19 @@
    grid item stretched to its row's full height has no room to move in, and
    `position: sticky` on it is silently inert. Its own max-height then gives
    a rail longer than the screen somewhere to scroll. */
+/* Phase 8h (`O-04`): "the nav is too tall" — height only, per this wave's
+   own scope; the collapse/hover behaviour `O-02`/`O-03` ask for is a
+   different lane's work. Measured rather than assumed: at 5 items x 44px
+   plus 4 gaps of `--space-xs`, this rail's own content is ~260px, well
+   under any real page's height, so `align-self: start` means it is never
+   the tallest thing in the shell's row and its height does not actually
+   constrain the grid track a builder page gets (`.shell`'s
+   `grid-template-rows` sizes to the TALLER of the two cells, which is
+   always the page). The owner's own framing names a mechanism this wave
+   could not confirm — `--space-sm` in place of `--space-md` is the
+   literal ask ("reduce its height"), applied as a safe, honest partial
+   answer rather than a claim that the builder gains measurable room from
+   it; see the phase report for what remains open. */
 .shell__rail {
   position: sticky;
   inset-block-start: var(--shell-bar);
@@ -257,7 +270,7 @@
   max-height: calc(100dvh - var(--shell-bar));
   background: var(--ground-2);
   border-inline-end: 1px solid var(--edge);
-  padding-block: var(--space-md);
+  padding-block: var(--space-sm);
   overflow-x: hidden;
   overflow-y: auto;
 }

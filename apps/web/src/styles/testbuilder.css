@@ -1037,6 +1037,15 @@
   border-block-end: 1px solid var(--edge);
 }
 
+/* Phase 8h Task 5 (`F4`, `O-15`/`O-16`): the row's own `<button>` was
+   already semantically correct (`role="button"`, `aria-expanded`) —
+   `O-15`'s complaint is visual: no border, no fill, no hover, nothing
+   that reads as "this expands" rather than as a line of text. A chevron
+   built from a CSS border triangle rather than a Unicode glyph or a new
+   entry in `OrganiserShell`'s shared `ICONS` family — both this file's
+   own established rule (`routes/tests.tsx`'s header, on why `state-*`
+   icons replaced Unicode arrows) and outside this lane's files to add to
+   regardless. */
 .setting-row__button {
   display: flex;
   flex-wrap: wrap;
@@ -1046,10 +1055,42 @@
   text-align: start;
   background: none;
   border: none;
-  padding: var(--space-lg) 0;
+  border-radius: var(--rounded-sm);
+  padding: var(--space-lg) var(--space-md);
+  margin-inline: calc(var(--space-md) * -1);
   font: inherit;
   color: var(--ink);
   cursor: pointer;
+}
+
+.setting-row__button:hover,
+.setting-row__button:focus-visible {
+  background: var(--wash);
+}
+
+.setting-row__button::after {
+  content: "";
+  align-self: center;
+  margin-inline-start: auto;
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-inline-end: 2px solid var(--ink-2);
+  border-block-end: 2px solid var(--ink-2);
+  transform: rotate(45deg);
+  transition: none;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .setting-row__button::after {
+    transition: transform 150ms ease-out;
+  }
+}
+
+/* Pointing down, collapsed; up, open — the same rotation direction a
+   native `<details>` marker uses. */
+.setting-row__button[aria-expanded="true"]::after {
+  transform: rotate(225deg);
 }
 
 /* The shell's own icon family (`OrganiserShell`'s `ICONS`/`Icon`), which
