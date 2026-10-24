@@ -131,18 +131,26 @@ function MultiMatching({ question, value, onChange, disabled }: AnswerProps) {
             <th scope="row">{item}</th>
             {right.map((candidate) => (
               <td key={candidate}>
-                <input
-                  type="checkbox"
-                  // Every cell states the pair it represents outright, not
-                  // a row/column index — the defect UX review sent Phase
-                  // 4's grid back for once already.
-                  aria-label={`${item} matches ${candidate}`}
-                  checked={(pairs[item] ?? []).includes(candidate)}
-                  disabled={disabled}
-                  onChange={(event) => {
-                    toggle(item, candidate, event.target.checked);
-                  }}
-                />
+                {/* G5-13 (UI/UX audit). A bare 17x17 checkbox inside a 48px
+                    cell failed WCAG 2.5.8 and was genuinely hard to hit in
+                    a dense grid on a touchscreen. Wrapping it in a label
+                    that fills the cell (`.exam-match-cell`, exam.css) makes
+                    the whole 48x48 area the hit target, not just the
+                    control drawn inside it. */}
+                <label className="exam-match-cell">
+                  <input
+                    type="checkbox"
+                    // Every cell states the pair it represents outright,
+                    // not a row/column index — the defect UX review sent
+                    // Phase 4's grid back for once already.
+                    aria-label={`${item} matches ${candidate}`}
+                    checked={(pairs[item] ?? []).includes(candidate)}
+                    disabled={disabled}
+                    onChange={(event) => {
+                      toggle(item, candidate, event.target.checked);
+                    }}
+                  />
+                </label>
               </td>
             ))}
           </tr>
