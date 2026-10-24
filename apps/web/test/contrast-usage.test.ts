@@ -239,6 +239,14 @@ const SURFACE: Record<string, SurfaceEntry> = {
     light: "signal-l-accent",
   },
   ".button-secondary": { dark: "signal-surface", light: "signal-l-surface" },
+  // G4-01/G3-03: `.button-danger` — `authoring.css`'s own (no such class
+  // existed anywhere before this wave), the same `--surface` fill
+  // `.button-secondary` paints on.
+  ".button-danger": { dark: "signal-surface", light: "signal-l-surface" },
+  // O-25: the bank browser's row icon buttons — same fill as every other
+  // panel surface they sit on.
+  ".icon-button": { dark: "signal-surface", light: "signal-l-surface" },
+  '.icon-button[data-tone="danger"]': { dark: "signal-surface", light: "signal-l-surface" },
   // Phase 6.5d Task 5 (`D16`, content): a unit affix sits INSIDE its control,
   // absolutely positioned over `.text-input`'s own fill — so the background
   // it really renders on is the input's fill, not the panel or the page.

@@ -95,8 +95,22 @@
 
 /* ---- Page lead --------------------------------------------------------- */
 
+/* O-08: this used to be bare text with no visual signal that it names
+   anything — a small chip now, the same wash-on-a-ground treatment
+   `.home__row[data-marked="off"]`'s neighbours and the strip's own pills
+   already use, so it reads as a role badge rather than a stray caption.
+   It stays a `<p>`, not a button: there is nothing behind it yet for a
+   click to open (that is RBAC's hook, same as `O-06`'s profile control),
+   and a control with no handler is worse than an honest label. */
 .home__crumb {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
   margin: 0;
+  padding-block: var(--space-xs);
+  padding-inline: var(--space-sm);
+  border-radius: var(--rounded-full);
+  background: var(--wash);
   color: var(--ink-3);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
@@ -280,6 +294,21 @@
   min-width: 2ch;
 }
 
+/* F8: the agenda pane's first row sits below a group header (18px line
+   height + 4px margin, 22px — the measured drift, not a guess); Recently
+   edited has no groups and so no such header, which put the two panes'
+   first rows 22px off a shared line. Rather than restate that number
+   (which could drift from the real header's the next time either changes),
+   `Home` renders this ghost header — the identical classes, hidden rather
+   than removed — so the reserved height can never fall out of step with
+   the real one. A shared grid track across both cards is the larger fix
+   `F8` asks for; this is the smaller one that needs no cross-card grid
+   restructuring and is what a browser must still confirm (`jsdom` has no
+   layout engine). */
+.home__group-head--ghost {
+  visibility: hidden;
+}
+
 .home__rows {
   list-style: none;
   margin: 0;
@@ -377,20 +406,18 @@
   letter-spacing: var(--type-body-sm-letter-spacing);
 }
 
-/* D21a: the reveal is opacity ALONE, never visibility, so the button stays
-   tabbable and tabbing onto one reveals it.
-
-   Out of the flow, at the row's end. In the flow it reserved ~68px of every
-   row for a control that is invisible until you reach for it, and at 400px
-   that was the difference between a readable subject and "Place…" — a
-   browser probe caught it. It fills with --surface so the revealed button
-   never sits on top of the text it covers, and it is inside the row's own
-   box, so D21a's "a row action can never be clipped" still holds. */
+/* O-10 / register G1-01, superseding D21a's own `opacity: 0` reveal (fix
+   round 1-3's reasoning is left in `git log` rather than here, because the
+   rule it defended is gone): a reveal gated behind `:hover` made a row
+   unreadable as a test at all until a pointer happened to land on it
+   ("it's like always blurred" — the owner's words) and made the action
+   permanently unreachable on a touch device, which has no hover. The
+   action is an ordinary row member now, in the flow with everything else
+   and painted every time — the ~68px it costs every row is the price of a
+   control a touch user can actually reach, which D21a's own "never costs a
+   row width" traded away for a reveal nobody on touch could trigger. */
 .home__row-action {
-  position: absolute;
-  inset-inline-end: var(--space-base);
   flex: none;
-  opacity: 0;
   background: var(--surface);
   border: 1px solid var(--edge-strong);
   border-radius: var(--rounded-xs);
@@ -405,22 +432,9 @@
   letter-spacing: var(--type-body-sm-letter-spacing);
 }
 
-.home__row:hover .home__row-action,
+.home__row-action:hover,
 .home__row-action:focus-visible {
-  opacity: 1;
-}
-
-/* Hover is the state that reveals the button, and the row under it is
-   --surface plus a translucent --wash. An opaque --surface fill therefore
-   read as a hard-edged rectangle one step off its own row. The wash is
-   layered as a background IMAGE rather than as an inset box-shadow so it
-   cannot out-specify the focus ring on a row that is both hovered and
-   focused. (The ring is `admin.css`'s `:root[data-theme] :focus-visible`
-   since 6.5e Task 1b; this file's own `.home :focus-visible` was deleted as
-   redundant against it. A background-image cannot out-specify a box-shadow
-   whichever rule paints it, so the reasoning is unchanged by the move.) */
-.home__row:hover .home__row-action {
-  background-image: linear-gradient(var(--wash), var(--wash));
+  border-color: var(--accent);
 }
 
 /* ---- Marking, not filtering (D21) -------------------------------------- */
