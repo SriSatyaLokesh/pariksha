@@ -1404,21 +1404,28 @@
 /* The dialog itself reuses `.exam-confirm`'s danger frame — one
    confirmation treatment in this runtime, not two. It is positioned over
    the bar rather than inside it so a wrapping header cannot push the
-   paper down while the candidate is reading the counts. */
-/* G5-09 (UI/UX audit). Shared `z-index: 20` with `.exam-proctoring-count`
-   below, and with no `top` of its own this dialog's "auto" position
-   resolved to the runner bar's own static position — the same top-right
-   strip the proctoring count is fixed to. The two landed on top of each
-   other: the live warning was covered, and its clicks (it carries none
-   today, but the overlap is the bug) would have gone to the dialog
-   instead. An explicit `top` below the count's own height (16px top +
-   ~40px tall + a margin) and a higher `z-index` separate them instead of
-   leaving it to coincidence. */
+   paper down while the candidate is reading the counts.
+
+   M2 (code review of this plan) disproves G5-09's premise and reverts
+   its fix. No ancestor of this element is positioned (`.exam-runner`,
+   `.exam-runner-bar`, `.exam-runner-finish` are all static), so with no
+   `top` of its own this `absolute` box's "auto" top resolves via the
+   CSS static-position algorithm — roughly where it would sit if it were
+   `position: static` right after the Submit button, not to the
+   document's top-right corner. Measured in real Chrome at 1440x900:
+   the dialog lands at top ~76px, the proctoring badge (`fixed`, 16-57px)
+   never in reach; narrowed until the bar wraps the Submit button onto
+   its own row, the dialog tracks it down the page and still clears it
+   by its own 8px margin. `top: 64px` (fix round 1) threw that tracking
+   away for a fixed document offset: at 820px, where the bar wraps, the
+   button's bottom measured 109px while the hardcoded dialog top stayed
+   64px — the dialog covered the button it is supposed to confirm,
+   which main never did. Reverted to main's positioning and z-index;
+   the overlap this was meant to fix was never reproduced. */
 .exam-submit-confirm {
   position: absolute;
-  top: 64px;
   right: 32px;
-  z-index: 21;
+  z-index: 20;
   width: min(420px, calc(100vw - 64px));
   margin-top: 8px;
   box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);

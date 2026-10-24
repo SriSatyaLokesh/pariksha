@@ -172,19 +172,30 @@ describe("G5-08: the skip link does not shove the bar when it gets focus", () =>
   // cannot see at all.
 });
 
-describe("G5-09: the submit confirmation and the proctoring warning no longer share a corner", () => {
-  it("the dialog now has an explicit top clearing the warning's own height, and a higher z-index", () => {
+describe("G5-09: disproved — reverted to main's positioning", () => {
+  // M2 (code review of this plan). No ancestor of `.exam-submit-confirm`
+  // is positioned, so its "auto" top resolves via the CSS static-position
+  // algorithm to roughly where the Submit button put it in flow — not to
+  // the document's top-right corner. Measured in real Chrome: on main (and
+  // on this reverted rule) the dialog clears the Submit button by its own
+  // 8px margin at every width, including once the bar wraps the button
+  // onto its own row, and never comes near the proctoring badge (`fixed`,
+  // 16-57px). The `top: 64px` this test used to pin threw that tracking
+  // away for a fixed document offset: at 820px, where the bar wraps, the
+  // button's bottom measured 109px while the hardcoded dialog top stayed
+  // 64px — the dialog covered the very button it confirms, which main
+  // never did. The original finding (dialog over the proctoring badge at
+  // 1440x900) did not reproduce on main; this reverts rather than fixing
+  // a collision that was never real.
+  it("`.exam-submit-confirm` declares no `top` of its own, and shares the proctoring badge's z-index again", () => {
     const confirm = ruleBody(".exam-submit-confirm");
-    expect(declared(confirm, "top")).toBe("64px");
-    expect(declared(confirm, "z-index")).toBe("21");
+    expect(declared(confirm, "top"), "redeclares top — reintroduces M2's document-offset bug").toBeUndefined();
+    expect(declared(confirm, "z-index")).toBe("20");
   });
 
-  it("the proctoring warning keeps its own, lower z-index — the two are ordered, not tied", () => {
+  it("the proctoring warning's own z-index is unchanged", () => {
     expect(declared(ruleBody(".exam-proctoring-count"), "z-index")).toBe("20");
   });
-
-  // Still needs a browser: that 64px really clears the warning badge's
-  // rendered height at every font size the font-scale control allows.
 });
 
 describe("G5-14: scrolling over the numeric field cannot silently change the answer", () => {
