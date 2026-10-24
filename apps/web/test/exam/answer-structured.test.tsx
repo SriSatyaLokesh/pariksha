@@ -6,6 +6,9 @@ import type { ResponseValue } from "@pariksha/core";
 import { AnswerInput } from "../../src/components/exam/answer";
 import type { CandidateQuestion } from "../../src/lib/paper";
 import { jumpTo, startFromRoot } from "./answer-fixtures";
+import { paintsIn, resolvedChain } from "../css-chain";
+
+const EXAM = resolvedChain("exam.html");
 
 // Task 7 (#71, P6.7), the structured family: matching, multi_matching and
 // ordering. The third closes AC-07's drag half, deferred by Phase 4 — see
@@ -222,6 +225,26 @@ describe("ordering (UX-08, AC-07)", () => {
     expect(screen.getAllByRole("button", { name: /move .*(up|down)/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByRole("spinbutton", { name: /position of/i }).length).toBe(3);
     expect(await axe(container)).toHaveNoViolations();
+  });
+
+  // C2: the grip's CSS used to live in authoring.css, which only admin.css
+  // imports — unreachable from exam.html's own chain, so on the candidate
+  // ground this rendered as an unstyled, zero-size <span>. It moved to
+  // question.css, which both chains import. This reads the EXAM chain
+  // specifically (not the organiser's, which test/authoring/reorder.test.tsx
+  // already covers) against the grip this harness actually rendered, so a
+  // rule that exists on disk but never reaches this ground still reddens it.
+  it("C2: the grip is styled on the exam ground, not just the organiser's", () => {
+    render(<Harness question={ordering} />);
+    const grip = gripFor("A");
+    expect(paintsIn(grip, "width", EXAM)).toBe("44px");
+    expect(paintsIn(grip, "height", EXAM)).toBe("44px");
+    // The bars are what make a 44px hit area visible at all (a 44px
+    // invisible grip is the hover-gate this phase exists to remove, in a
+    // different shape) — painted via a pseudo-element `paintsIn` cannot
+    // address directly, so this confirms the base rule reaches the real
+    // element and leaves the ::before body itself to the probe below.
+    expect(paintsIn(grip, "display", EXAM)).toBe("inline-flex");
   });
 });
 
