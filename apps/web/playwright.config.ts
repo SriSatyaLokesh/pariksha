@@ -25,7 +25,7 @@
 import process from "node:process";
 import { defineConfig, devices } from "@playwright/test";
 
-const WEB_PORT = 4273;
+const WEB_PORT = Number(process.env.WEB_PORT || 4373);
 const API_PORT = 8787;
 const IDP_PORT = 9797;
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
