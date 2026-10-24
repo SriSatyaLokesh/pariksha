@@ -4,6 +4,7 @@ import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummar
 import { downloadJson } from "../lib/download";
 import { MonoCaption } from "../components/MonoCaption";
 import { GroupEditor } from "../components/authoring/GroupEditor";
+import { useDialogKeys } from "../components/useDialogKeys";
 // G4-10: `TYPE_LABELS` already exists for the type picker's own cards —
 // reused here rather than duplicated, so the filter dropdown and the type
 // column never learn to spell `select_k` one way and `assertion_reason`
@@ -116,7 +117,13 @@ export function BankBrowser({
   const [confirmDelete, setConfirmDelete] = useState<
     { kind: "question"; question: QuestionSummary } | { kind: "group"; group: PassageGroupSummary } | undefined
   >(undefined);
-  const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
+  // M4: a double-click on Delete used to fire two DELETEs for the same id —
+  // the button carried no disabled state of its own and both clicks read the
+  // same `confirmDelete` closure, so the second request's 404 surfaced as
+  // "could not be deleted" over a delete that had, in fact, already
+  // succeeded. `CandidateDataPanel.tsx`'s own confirm dialog guards the same
+  // way (`disabled={… || busy}`).
+  const [confirmBusy, setConfirmBusy] = useState(false);
   // Fix round 1, finding 9: a static id collides if `BankBrowser` is ever
   // rendered twice on one page — `PreviewPane` and `QuestionEditor` both use
   // `useId()` for exactly this reason.
@@ -152,18 +159,30 @@ export function BankBrowser({
     setSelected(new Set());
   }, [filter]);
 
-  // G4-01: Escape backs out of the confirmation the same way Cancel does,
-  // and the default focus lands on Cancel rather than Delete — opening the
-  // dialog must never leave the destructive action one Enter key away.
+  // M2 fix: this used to be a bespoke window-level Escape listener plus a
+  // manual focus-on-open ref — re-implementing `useDialogKeys`, which
+  // already does initial focus, Escape and (via its cleanup) returning
+  // focus to the control that opened the dialog, the same shape
+  // `CandidateDataPanel.tsx`'s own delete confirmation uses. `trapTab: true`
+  // because this dialog claims `aria-modal="true"`, which `useDialogKeys`'s
+  // own doc comment says a caller has to earn by actually trapping Tab — a
+  // window listener fired regardless of focus, which is also why Escape
+  // used to fire while `GroupEditor` was open on the same screen (m2); the
+  // hook's `onKeyDown` is scoped to the dialog element instead.
+  const confirmDialog = useDialogKeys<HTMLDivElement>(
+    confirmDelete !== undefined,
+    () => setConfirmDelete(undefined),
+    { trapTab: true },
+  );
+  // `useDialogKeys` focuses the DIALOG itself (it has to: `trapTab`'s own Tab
+  // stops are read off `dialogRef`, so that ref has to be the container, not
+  // one button inside it). G4-01 specifically wants Cancel focused rather
+  // than the container — "opening the dialog must never leave the
+  // destructive action one Enter key away" — so this runs right after the
+  // hook's own focus effect and wins.
+  const confirmCancelRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
-    if (confirmDelete === undefined) return undefined;
-    confirmCancelRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setConfirmDelete(undefined);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
+    if (confirmDelete !== undefined) confirmCancelRef.current?.focus();
   }, [confirmDelete]);
 
   const groups = useMemo(() => groupedTags(tags), [tags]);
@@ -263,12 +282,20 @@ export function BankBrowser({
   }
 
   /** G4-01: the one place either delete actually runs, once the dialog has
-   * confirmed it. */
+   * confirmed it. M4: `confirmBusy` makes this fire at most once per open
+   * dialog — a second call while the first is still in flight (a
+   * double-click, or Enter repeated) is a no-op rather than a second
+   * DELETE. */
   async function confirmDeletion() {
-    if (confirmDelete === undefined) return;
-    if (confirmDelete.kind === "question") await onDelete(confirmDelete.question);
-    else await onDeleteGroup(confirmDelete.group);
-    setConfirmDelete(undefined);
+    if (confirmDelete === undefined || confirmBusy) return;
+    setConfirmBusy(true);
+    try {
+      if (confirmDelete.kind === "question") await onDelete(confirmDelete.question);
+      else await onDeleteGroup(confirmDelete.group);
+      setConfirmDelete(undefined);
+    } finally {
+      setConfirmBusy(false);
+    }
   }
 
   return (
@@ -278,8 +305,18 @@ export function BankBrowser({
         <MonoCaption>Filters</MonoCaption>
 
         <ul className="bank-browser__groups">
-          {[...groups.entries()].map(([group, groupTags]) => (
-            <li key={group || "ungrouped"} className="bank-browser__group">
+          {/* m1 fix: the no-group bucket used to key off `group || "ungrouped"`
+              and sit wherever the `Map` happened to insert it. A tag spelled
+              `ungrouped/x` produces a REAL group literally named "ungrouped",
+              which collided on that key with this bucket (React rendering
+              one `<li>` for what should have been two), and the bucket's
+              position moved with insertion order rather than staying put.
+              A prefix no real group's key can share, and a stable sort that
+              always pins it last, fix both at once. */}
+          {[...groups.entries()]
+            .sort(([a], [b]) => (a === UNGROUPED ? 1 : b === UNGROUPED ? -1 : 0))
+            .map(([group, groupTags]) => (
+            <li key={group === UNGROUPED ? "\0ungrouped" : `tag:${group}`} className="bank-browser__group">
               <p className="bank-browser__group-label">{group === UNGROUPED ? "Ungrouped" : group}</p>
               <ul className="bank-browser__chips">
                 {groupTags.map((tag) => (
@@ -600,6 +637,9 @@ export function BankBrowser({
             aria-modal="true"
             aria-labelledby={confirmTitleId}
             aria-describedby={confirmMessageId}
+            ref={confirmDialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={confirmDialog.onKeyDown}
             onClick={(event) => event.stopPropagation()}
           >
             <h2 className="bank-confirm__title" id={confirmTitleId}>
@@ -614,8 +654,8 @@ export function BankBrowser({
               <button type="button" className="button-secondary" ref={confirmCancelRef} onClick={() => setConfirmDelete(undefined)}>
                 Cancel
               </button>
-              <button type="button" className="button-danger" onClick={() => void confirmDeletion()}>
-                Delete
+              <button type="button" className="button-danger" disabled={confirmBusy} onClick={() => void confirmDeletion()}>
+                {confirmBusy ? "Deleting…" : "Delete"}
               </button>
             </div>
           </div>

@@ -202,6 +202,29 @@ describe("BankBrowser", () => {
       await waitFor(() => expect(deleteQuestion).toHaveBeenCalledWith("wsp_1", "bnk_1", QUESTION.id));
     });
 
+    // M4: a double-click on Delete used to fire two DELETEs for the same id
+    // — both reads of the same `confirmDelete` closure, with no `disabled`
+    // on the button to stop the second. `CandidateDataPanel.tsx`'s own
+    // `busy` guard is the in-repo precedent.
+    it("a double-click on Delete fires at most one DELETE", async () => {
+      let resolveDelete!: () => void;
+      const deleteQuestion = vi.fn(() => new Promise<void>((resolve) => (resolveDelete = resolve)));
+      const client = fakeClient({ deleteQuestion });
+      await openBrowser(client);
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      const confirm = screen.getByRole("button", { name: /^delete$/i });
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+
+      expect(deleteQuestion).toHaveBeenCalledTimes(1);
+      expect(confirm).toBeDisabled();
+
+      resolveDelete();
+      await waitFor(() => expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument());
+      expect(deleteQuestion).toHaveBeenCalledTimes(1);
+    });
+
     it("Cancel closes the dialog without deleting anything", async () => {
       const deleteQuestion = vi.fn(async () => undefined);
       const client = fakeClient({ deleteQuestion });
@@ -220,7 +243,13 @@ describe("BankBrowser", () => {
       await openBrowser(client);
 
       fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
-      fireEvent.keyDown(window, { key: "Escape" });
+      // M2 fix: Escape handling moved off a `window` listener (which fired
+      // wherever focus was, m2) onto `useDialogKeys`'s `onKeyDown`, scoped to
+      // the dialog element. A real Escape keystroke bubbles up from whatever
+      // is focused inside the dialog to that handler, so it is fired here on
+      // the element that really has focus rather than on `window`.
+      expect(document.activeElement).toHaveClass("button-secondary");
+      fireEvent.keyDown(document.activeElement!, { key: "Escape" });
 
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
       expect(deleteQuestion).not.toHaveBeenCalled();
@@ -231,6 +260,28 @@ describe("BankBrowser", () => {
 
       fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
       expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
+    });
+
+    // M2: `aria-modal="true"` with no Tab trap tells a screen reader nothing
+    // outside the dialog exists while a sighted keyboard user walks straight
+    // out of it — `useDialogKeys`'s own doc comment says a caller has to
+    // earn `aria-modal` by actually trapping Tab, which this now does.
+    // Pattern matches `test/exam/submit.test.tsx`'s own Tab-trap assertion.
+    it("traps Tab inside the dialog, which is what earns aria-modal", async () => {
+      await openBrowser(fakeClient());
+
+      fireEvent.click(await screen.findByRole("button", { name: /^delete question:/i }));
+      const dialog = screen.getByRole("alertdialog");
+      expect(dialog).toHaveAttribute("aria-modal", "true");
+
+      const stops = within(dialog).getAllByRole("button");
+      const first = stops[0] as HTMLElement;
+      const last = stops[stops.length - 1] as HTMLElement;
+      last.focus();
+      fireEvent.keyDown(last, { key: "Tab" });
+      expect(document.activeElement).toBe(first);
+      fireEvent.keyDown(first, { key: "Tab", shiftKey: true });
+      expect(document.activeElement).toBe(last);
     });
 
     it("the confirm button carries the danger class, never button-primary", async () => {
