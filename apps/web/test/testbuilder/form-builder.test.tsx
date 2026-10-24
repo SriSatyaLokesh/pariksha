@@ -46,11 +46,28 @@ const FIELD_LABEL: Readonly<Record<FormFieldType, string>> = {
  * assert on a component that can never change, which is the "test that
  * cannot fail" this phase keeps finding. This holds the state the real
  * shell (`apps/web/src/routes/test.tsx`) holds. */
-function Harness({ initial }: { initial?: RegistrationFormSpec }) {
+function Harness({
+  initial,
+  onSpec,
+}: {
+  initial?: RegistrationFormSpec;
+  /** Every spec the builder writes. The only way to assert what was
+   *  STORED rather than what a box happens to be showing. */
+  onSpec?: (next: RegistrationFormSpec) => void;
+}) {
   const [form, setForm] = useState<RegistrationFormSpec | undefined>(initial);
   // Task 6's affordance has its own file (url-check.test.tsx); nothing here
   // ticks `check_reachable`, so nothing here calls it.
-  return <FormBuilder form={form} onChange={setForm} checkUrl={neverChecked} />;
+  return (
+    <FormBuilder
+      form={form}
+      onChange={(next) => {
+        onSpec?.(next);
+        setForm(next);
+      }}
+      checkUrl={neverChecked}
+    />
+  );
 }
 
 const neverChecked = (): Promise<never> => Promise.reject(new Error("not used by this test file"));
@@ -107,25 +124,34 @@ describe("FormBuilder (T-16 - T-18)", () => {
   it("a column name cannot be renamed onto one another field already holds", () => {
     // Two fields sharing an id makes every later edit hit both, because
     // `updateField` keys on it (task 5/6 review, M2).
-    render(<Harness />);
+    const specs: RegistrationFormSpec[] = [];
+    render(<Harness onSpec={(next) => specs.push(next)} />);
     addField("email");
     addField("short_text");
     const names = (): string[] =>
       screen.getAllByLabelText(/column name/i).map((input) => (input as HTMLInputElement).value);
+    const box = (): HTMLElement => screen.getAllByLabelText(/column name/i)[1] as HTMLElement;
 
     // `O-17`: the rename lands when the box is left, not per keystroke —
-    // the row's React key is its id, so writing it mid-word remounted the
-    // row being typed in. The collision guard is unchanged; it just runs
-    // at the commit, and the refused name is put back with it.
-    typeInto(screen.getAllByLabelText(/column name/i)[1] as HTMLElement, "email");
-    fireEvent.blur(screen.getAllByLabelText(/column name/i)[1] as HTMLElement);
-    expect(names()).toEqual(["email", "short_text"]);
+    // the row's React key used to be its id, so writing it mid-word
+    // remounted the row being typed in.
+    typeInto(box(), "email");
+    fireEvent.blur(box());
+
+    // The guard is what it always was: a spec with two fields sharing an id
+    // is never written. Asserted on what was STORED, because the box now
+    // keeps the refused name on screen rather than dropping a whole typed
+    // word in silence — and says why (`O-17` fix round, Minor 1).
+    expect(specs.every((spec) => new Set(spec.fields.map((f) => f.id)).size === spec.fields.length)).toBe(true);
+    expect(screen.getByText('Another field already uses the column name "email".')).toBeVisible();
+    expect(box()).toHaveValue("email");
 
     // A free name is still accepted — the guard is a collision check, not
-    // a frozen id.
-    typeInto(screen.getAllByLabelText(/column name/i)[1] as HTMLElement, "college");
-    fireEvent.blur(screen.getAllByLabelText(/column name/i)[1] as HTMLElement);
+    // a frozen id — and the refusal goes with it.
+    typeInto(box(), "college");
+    fireEvent.blur(box());
     expect(names()).toEqual(["email", "college"]);
+    expect(screen.queryByText(/already uses the column name/)).toBeNull();
   });
 
   it("the preview is the candidate renderer, including its validation messages", () => {
@@ -262,6 +288,11 @@ describe("FormBuilder (T-16 - T-18)", () => {
     render(<Harness />);
     addField("phone");
     typeInto(screen.getByLabelText(/default country/i), "in");
+    // `O-17` fix round, M4: the code is upper-cased when the box is LEFT,
+    // never under a live caret — upper-casing per keystroke made the
+    // controlled value differ from what was typed, so React wrote the DOM
+    // value back and threw the caret to the end of the box.
+    fireEvent.blur(screen.getByLabelText(/default country/i));
 
     // The builder says what the code it just uppercased does…
     expect(screen.getByText("A candidate's number starts with +91.")).toBeVisible();
@@ -308,6 +339,7 @@ describe("FormBuilder (T-16 - T-18)", () => {
     render(<Harness />);
     addField("phone");
     typeInto(screen.getByLabelText(/default country/i), "india");
+    fireEvent.blur(screen.getByLabelText(/default country/i));
 
     expect(screen.getByText(/No dialling code is known for "INDIA"/)).toBeVisible();
     expect(within(preview()).queryByText(/^\+/)).toBeNull();

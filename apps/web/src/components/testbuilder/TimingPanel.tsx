@@ -263,15 +263,36 @@ export function TimingPanel({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState<TestTiming | null>(null);
   const [warnRaw, setWarnRaw] = useState<string | null>(null);
+  /**
+   * `O-17` fix round, M2 — the author's own unapplied edit on a published
+   * test, owned here and nowhere else.
+   *
+   * This used to be inferred as `form !== timing`, which the sync effect
+   * below makes a lie: `test.tsx` mints a fresh `timing` object out of
+   * every PATCH response (`body: updated.body`), including a PATCH for
+   * some other panel, so an echo landing mid-edit both reset the box under
+   * the author AND made the following blur ask nothing, because the two
+   * were identical again. "There is an unapplied edit" is a fact about
+   * what the author did; it cannot be read off a prop the parent is free
+   * to replace at any moment.
+   */
+  const [held, setHeld] = useState<TestTiming | null>(null);
 
   useEffect(() => {
-    setForm(timing);
-  }, [timing]);
+    // Never over the author (`M2`). While `held` stands, the box belongs to
+    // whoever is typing in it; the stored value comes back the moment the
+    // confirmation is answered either way, through this same effect.
+    if (held === null) setForm(timing);
+  }, [timing, held]);
 
-  const dialog = useDialogKeys<HTMLDivElement>(pending !== null, () => {
+  /** Put the edit back: `UX-18` was refused, or dismissed. */
+  function cancel(): void {
     setPending(null);
+    setHeld(null);
     setForm(timing);
-  });
+  }
+
+  const dialog = useDialogKeys<HTMLDivElement>(pending !== null, cancel);
 
   const zone = form.timezone ?? "UTC";
   const safeZone = isZone(zone) ? zone : "UTC";
@@ -294,17 +315,22 @@ export function TimingPanel({
   function commit(next: TestTiming, settled = true): void {
     setForm(next);
     setTouched(true);
-    if (!published) onChange(next);
-    else if (settled) setPending(next);
+    if (!published) {
+      onChange(next);
+      return;
+    }
+    // `M2`: the edit is held in state of its own, not inferred from `form`
+    // — which the sync effect above may replace between the keystroke and
+    // the blur.
+    setHeld(next);
+    if (settled) setPending(next);
   }
 
-  /** A typed box has been left. `form !== timing` BY REFERENCE is exactly
-   *  "there is a local edit not yet applied": `useState(timing)` and the
-   *  sync effect above both point `form` at the prop object itself, and
-   *  every `commit` replaces it with a fresh one. */
+  /** A typed box has been left, so the edit the author was making is
+   *  finished. Nothing to ask about unless they actually made one. */
   function settle(): void {
     setTouched(true);
-    if (published && form !== timing) setPending(form);
+    if (held !== null) setPending(held);
   }
 
   const issueFor = (field: string): string | undefined =>
@@ -542,14 +568,7 @@ export function TimingPanel({
             This test is published. Attempts in progress stay on version 1 and keep the timing they started under; the
             change applies to attempts begun after it is saved.
           </p>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => {
-              setPending(null);
-              setForm(timing);
-            }}
-          >
+          <button type="button" className="button-secondary" onClick={cancel}>
             Cancel
           </button>
           <button
@@ -558,6 +577,9 @@ export function TimingPanel({
             onClick={() => {
               onChange(pending);
               setPending(null);
+              // Applied, so there is no held edit left to ask about — and
+              // the sync effect is free to follow the prop again.
+              setHeld(null);
             }}
           >
             Apply the change
