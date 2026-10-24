@@ -139,6 +139,22 @@ describe("multi_matching", () => {
     activate(screen.getByRole("checkbox", { name: "A matches X" }));
     expect(screen.getByRole("checkbox", { name: "B matches X" })).toBeEnabled();
   });
+
+  // G5-13 (UI/UX audit). A bare 17x17 checkbox inside a 48px cell fails
+  // WCAG 2.5.8 and is hard to hit in a dense grid on a touchscreen. The
+  // fix wraps it in a label that fills the cell (`.exam-match-cell`), so
+  // the whole cell is the hit target, not just the control drawn in it —
+  // jsdom can see the wrapping structure even though it cannot see the
+  // rendered hit-target size itself.
+  it("every checkbox is wrapped in a label that fills its cell, not left bare in the td", () => {
+    render(<Harness question={multiMatching} />);
+    for (const checkbox of screen.getAllByRole("checkbox")) {
+      const label = checkbox.closest("label.exam-match-cell");
+      expect(label).not.toBeNull();
+      expect(label?.parentElement?.tagName).toBe("TD");
+      expect(label?.contains(checkbox)).toBe(true);
+    }
+  });
 });
 
 describe("ordering (UX-08, AC-07)", () => {
