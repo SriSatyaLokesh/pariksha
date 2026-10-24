@@ -331,7 +331,14 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".field-label": both("canvas"),
   ".field-help": both("canvas"),
   ".field-error": both("canvas"),
-  ".text-input": both("canvas"),
+  // G3-01 (Phase 8h): `.text-input` split into `input.text-input,
+  // select.text-input` and its own `textarea.text-input` rule (the global
+  // `height: 44px` was collapsing every multi-line textarea in the
+  // product), which splits this selector's SURFACE key in two as well —
+  // both rules still fill with `--color-canvas` and read `--color-ink` on
+  // it, unchanged from the one rule they used to be.
+  "input.text-input, select.text-input": both("canvas"),
+  "textarea.text-input": both("canvas"),
   ".registration-form__help, .registration-form__legend": both("canvas"),
   ".registration-form__error": both("canvas"),
 

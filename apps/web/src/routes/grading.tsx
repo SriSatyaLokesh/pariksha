@@ -110,15 +110,15 @@ export function GradingRoute({
     <>
       <div className="grading-queue__controls">
         <div className="field">
-          <label className="field-label" htmlFor="grading-blind">
+          <label className="field-label field-choice" htmlFor="grading-blind">
+            <input
+              type="checkbox"
+              id="grading-blind"
+              checked={blind}
+              onChange={(event) => setBlind(event.target.checked)}
+            />
             Blind grading
           </label>
-          <input
-            type="checkbox"
-            id="grading-blind"
-            checked={blind}
-            onChange={(event) => setBlind(event.target.checked)}
-          />
           <p className="field-help" id="grading-blind-help">
             Withholds the candidate's registration answers from every row below.
           </p>

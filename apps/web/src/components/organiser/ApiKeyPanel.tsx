@@ -166,15 +166,15 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
               <legend>{group.title}</legend>
               {group.scopes.map((scope) => (
                 <div className="field" key={scope}>
-                  <label className="field-label" htmlFor={`api-key-scope-${scope}`}>
+                  <label className="field-label field-choice" htmlFor={`api-key-scope-${scope}`}>
+                    <input
+                      type="checkbox"
+                      id={`api-key-scope-${scope}`}
+                      checked={scopes.includes(scope)}
+                      onChange={() => toggleScope(scope)}
+                    />
                     {SCOPE_LABEL[scope]}
                   </label>
-                  <input
-                    type="checkbox"
-                    id={`api-key-scope-${scope}`}
-                    checked={scopes.includes(scope)}
-                    onChange={() => toggleScope(scope)}
-                  />
                 </div>
               ))}
             </fieldset>
