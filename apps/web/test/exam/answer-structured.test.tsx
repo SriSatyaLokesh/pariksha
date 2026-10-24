@@ -85,6 +85,18 @@ function rowFor(item: string): HTMLElement {
   return row;
 }
 
+/* G4-03/C2: `draggable` and `dragstart` live on the grip alone now, not the
+ * row — this is the candidate ground `ReorderableList` also renders onto,
+ * and `test/authoring/reorder.test.tsx`'s own `gripFor` does the same
+ * lookup for the organiser side of the same component. `dragover`/`drop`
+ * stay on the row, which is still the drop target, so only dragStart below
+ * needs this. */
+function gripFor(item: string): HTMLElement {
+  const grip = rowFor(item).querySelector<HTMLElement>(".reorderable-list__grip");
+  if (!grip) throw new Error(`no grip for ${item}`);
+  return grip;
+}
+
 describe("matching", () => {
   it("matching: each left item takes one right item, and a used right item cannot be reused", () => {
     render(<Harness question={matching} />);
@@ -166,7 +178,7 @@ describe("ordering (UX-08, AC-07)", () => {
     expect(document.activeElement).toHaveAccessibleName(/move item A/i);
     expect(document.activeElement).not.toBe(document.body);
 
-    fireEvent.dragStart(rowFor("A"));
+    fireEvent.dragStart(gripFor("A"));
     fireEvent.dragOver(rowFor("C"));
     fireEvent.drop(rowFor("C"));
     expect(itemTexts()[0]).toBe("A");
@@ -182,7 +194,7 @@ describe("ordering (UX-08, AC-07)", () => {
 
   it("dragOver must be prevented, or the browser never fires a drop at all", () => {
     render(<Harness question={ordering} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     // fireEvent returns false when a handler called preventDefault.
     expect(fireEvent.dragOver(rowFor("B"))).toBe(false);
   });
@@ -190,7 +202,7 @@ describe("ordering (UX-08, AC-07)", () => {
   it("dropping an item on itself is not a move, and does not announce one", () => {
     const spy = vi.fn();
     render(<Harness question={ordering} onChange={spy} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     fireEvent.dragOver(rowFor("C"));
     fireEvent.drop(rowFor("C"));
     expect(itemTexts()).toEqual(pinnedShuffledOrder);
@@ -199,7 +211,7 @@ describe("ordering (UX-08, AC-07)", () => {
 
   it("a drag announces its move in the same live region the buttons use", () => {
     render(<Harness question={ordering} />);
-    fireEvent.dragStart(rowFor("C"));
+    fireEvent.dragStart(gripFor("C"));
     fireEvent.dragOver(rowFor("B"));
     fireEvent.drop(rowFor("B"));
     expect(screen.getByRole("status")).toHaveTextContent("item C moved to position 3 of 3");
