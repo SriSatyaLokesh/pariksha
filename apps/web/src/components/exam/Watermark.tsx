@@ -38,8 +38,17 @@ export interface WatermarkProps {
 const TILE_COUNT = 40;
 
 /** Live, not precise — a watermark that read the mount time once would
- *  prove nothing about when a photograph was taken. */
-const TICK_MS = 1_000;
+ *  prove nothing about when a photograph was taken.
+ *
+ *  G5-12 (UI/UX audit). A second-resolution tick rewrote all 40 tiles'
+ *  text content every second, behind the question stem, for the whole
+ *  attempt. The deterrent a photo needs to defeat is "which minute was
+ *  this taken in" — minute resolution reads exactly the same in a photo
+ *  and costs the page 1/60th of the DOM writes. Exported so the regression
+ *  test pins the constant directly rather than fast-forwarding a real
+ *  `setInterval` through fake timers across an async render — `openAttempt`
+ *  itself awaits a `findByRole`, which polls on the real clock. */
+export const TICK_MS = 60_000;
 
 export function Watermark({ attemptId }: WatermarkProps) {
   const [now, setNow] = useState(() => new Date());

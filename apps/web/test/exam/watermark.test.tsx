@@ -29,6 +29,7 @@ import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
 import { paintsIn, resolvedChain } from "../css-chain";
+import { TICK_MS } from "../../src/components/exam/Watermark";
 
 const NOW = 1_760_000_000_000;
 const EVENTS_PATH = "/api/v1/run/attempt/events";
@@ -142,5 +143,17 @@ describe("Watermark (Q9)", () => {
     const mark = document.querySelector("[data-watermark]")!;
     expect(paintsIn(mark, "pointer-events", EXAM_CSS)).toBe("none");
     expect(paintsIn(mark, "user-select", EXAM_CSS)).toBe("none");
+  });
+
+  // G5-12 (UI/UX audit). The tick used to be 1000ms — 40 tiles' text
+  // content rewritten every second, behind the question stem, for the
+  // whole attempt. Minute resolution gives a photo the same "which minute
+  // was this taken" deterrence for a fraction of the DOM writes. Pinned
+  // directly rather than fast-forwarded through fake timers: `openAttempt`
+  // awaits a `findByRole`, which polls on the real clock, so faking the
+  // clock first hangs the render and faking it after does not touch a
+  // `setInterval` already registered on the real one.
+  it("ticks once a minute, not once a second", () => {
+    expect(TICK_MS).toBe(60_000);
   });
 });
