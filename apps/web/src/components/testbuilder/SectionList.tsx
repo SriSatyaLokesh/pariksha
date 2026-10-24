@@ -182,7 +182,6 @@ export function SectionList({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ section: StoredSection; index: number } | null>(null);
   const [picker, setPicker] = useState<{ sectionId: string; setIndex?: number } | null>(null);
-  const sectionOrderId = useId();
 
   // Fix round (task 3 review, I9): Escape, initial focus and returning
   // focus to the control that opened each dialog.
@@ -380,50 +379,19 @@ export function SectionList({
         Add section
       </button>
 
-      {/* `D19`'s other half, and the reason it is drawn at all. Shuffling the
-          ORDER OF THE SECTIONS is not supported: `pariksha/test@1` has no
-          `shuffle_sections` field, adding one is a format bump, and it needs
-          a ruling on whether per-section time limits still hold when the
-          order varies. That is a feature and an ADR, not a design control —
-          so the control renders disabled and says so, which gives it a home
-          for the day it lands and stops anyone drawing a toggle that does
-          nothing. It holds no state and reaches no handler, so there is
-          nothing here for a patch to carry.
-
-          The sentence below is persistent text rather than a tooltip or a
-          `title`, for the same reason every other consequence on this screen
-          is: a disabled input takes no focus, so a description hung off it
-          is one a keyboard or touch user may never hear.
-
-          Fix round 1, M1: and it is BOUND to the control with
-          `aria-describedby` rather than merely placed beside it. The
-          precedent is this repo's own — the Publish button carries
-          "2 blocking rows must clear first." the same way (spec §13). A
-          control that is disabled owes the reason to a screen reader, not
-          only to a sighted reader: a sentence sitting next to one is read by
-          a reader sweeping the page in document order and by nobody tabbing
-          the form. */}
-      <fieldset className="shuffle-group">
-        <legend>Section order</legend>
-        <div className="shuffle-group__row">
-          <input
-            type="checkbox"
-            id={sectionOrderId}
-            checked={false}
-            disabled
-            readOnly
-            aria-describedby={`${sectionOrderId}-why`}
-          />
-          <label htmlFor={sectionOrderId}>Order of the sections themselves</label>
-        </div>
-        {/* Fix round 1, M3: "the order above" named a list that can be empty
-            — a test with no sections yet still renders this control, and
-            there was nothing above it for the sentence to point at. */}
-        <p className="shuffle-group__fact" id={`${sectionOrderId}-why`}>
-          Not supported today — every candidate sees the sections in the order this list sets. Varying it needs a
-          new field in the test format and a decision about per-section time limits.
-        </p>
-      </fieldset>
+      {/* Phase 8h Task 6 (`F5`): the disabled "Order of the sections
+          themselves" control used to sit here — a checkbox that could never
+          be checked, above Settings, on every builder page regardless of
+          whether reordering sections is even a question yet. `D19`'s
+          capability is still not built: `pariksha/test@1` has no
+          `shuffle_sections` field, and adding one is a format bump plus a
+          ruling on whether per-section time limits survive a shuffled
+          order — a feature and an ADR, not a design control. A control
+          that can never do anything is not a placeholder for that work;
+          it is dead weight above the fold on the one screen the owner
+          asked this phase to make more room on. Deleted rather than
+          hidden: the day the capability lands, it gets a control that
+          actually does something, not this one re-enabled. */}
 
       {picker && (
         <QuestionPickerDrawer
