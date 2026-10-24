@@ -94,6 +94,46 @@ export async function collapseRail(page: Page): Promise<void> {
 }
 
 /**
+ * The spread, in px, between the greatest and least text baseline among
+ * the elements `selector` matches — F3's alignment half (the section row's
+ * reorder buttons, position field and summary, each on its own line
+ * today). A baseline rather than a bounding-box edge, because the controls
+ * being compared are different heights (a 26px button, a 44px summary, a
+ * stacked label-and-input) and their boxes have no shared edge even when
+ * the text inside them reads on one line.
+ *
+ * Measured with the DOM Range API: the first non-whitespace text node
+ * inside each matched element gets a one-character range, and that
+ * range's own `bottom` is the baseline proxy — the same technique a
+ * layout-inspection tool uses, because `getBoundingClientRect()` on an
+ * ELEMENT answers its box, not where its glyphs actually sit.
+ */
+export async function sharedBaseline(page: Page, selector: string): Promise<number> {
+  return page.evaluate((sel) => {
+    function firstTextNode(root: Node): Text | null {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+        if ((node.textContent ?? "").trim().length > 0) return node as Text;
+      }
+      return null;
+    }
+    const baselines: number[] = [];
+    for (const el of document.querySelectorAll(sel)) {
+      const text = firstTextNode(el);
+      if (text === null) continue;
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 1);
+      const rect = range.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+      baselines.push(rect.bottom);
+    }
+    if (baselines.length === 0) return 0;
+    return Math.max(...baselines) - Math.min(...baselines);
+  }, selector);
+}
+
+/**
  * Every rendered, visible, interactive element on the page whose border
  * box is under `min` CSS pixels in either axis (WCAG 2.5.8's 24x24 floor,
  * F3). Each result is a selector built from the element's own tag, id and

@@ -38,6 +38,7 @@ import {
   editorWidthRatio,
   openBuilder,
   ORGANISER_VIEWS,
+  sharedBaseline,
   undersizedTargets,
 } from "../frame";
 
@@ -199,5 +200,18 @@ test.describe("F3 — every interactive control clears WCAG 2.5.8's 24px floor",
       document.querySelectorAll("button.button-secondary").forEach((b) => (b.textContent = "Go"));
     });
     expect(await undersizedTargets(page)).toEqual([]);
+  });
+});
+
+test.describe("F3 (alignment half) — the section row's controls share one baseline", () => {
+  test("up/down, the position field and the summary read as one row", async ({ page }) => {
+    await signIn(page);
+    await openBuilder(page, testId);
+    await page.locator(".section-row__summary").first().click();
+    // `.reorderable-list__item` is this codebase's actual row wrapper — the
+    // `<li>` `ReorderableList.tsx` renders around the up/down buttons, the
+    // position field (`.reorderable-list__controls`) and the section
+    // summary (`.reorderable-list__content > .section-row`).
+    expect(await sharedBaseline(page, ".reorderable-list__item > *")).toBeLessThanOrEqual(2);
   });
 });
