@@ -346,7 +346,11 @@ export function AnalyticsRoute({
   // branch below so both render whether or not a single attempt has ended.
   const exportBar = (
     <>
-      <div className="analytics-band">
+      {/* Fix round 2, Important 1/2, Minor 1: the live region sits in this
+          row, not its own flex item — `.analytics-actions` has no border
+          and no height to spare, so idle (empty status, no error) adds no
+          dead space in either branch. */}
+      <div className="analytics-actions">
         <button
           type="button"
           className="button-secondary"
@@ -363,30 +367,18 @@ export function AnalyticsRoute({
         >
           {exporting?.kind === "answers" ? "Exporting…" : "Export answers CSV"}
         </button>
-      </div>
-
-      {/* Fix round 1, Minor 1: the status and the (conditional) alert line
-          share one flex item, not two — an always-present but empty `<p>`
-          left on its own is still a `.analytics` flex child, so idle it
-          doubled the band's own `gap` (one above the empty `<p>`, one
-          below it) on every load. */}
-      <div>
         {/* Always present, text swapped in place (`routes/tests.tsx`'s own
             live-region comment) — a region inserted already carrying its
-            text does not reliably announce. Updates once per page, which
-            is the whole point on the 18,000-row answers export: several
-            requests happen before the file is ready, and this is what
-            keeps that from looking hung (ui-ux-pro-max CRITICAL:
-            loading-buttons). */}
+            text does not reliably announce. */}
         <p className="organiser__status" role="status">
           {exporting === null ? "" : `Downloading ${EXPORT_LABEL[exporting.kind]} — page ${exporting.pages}…`}
         </p>
-        {exportError !== null && (
-          <p role="alert" className="field-error">
-            {exportError}
-          </p>
-        )}
       </div>
+      {exportError !== null && (
+        <p role="alert" className="field-error">
+          {exportError}
+        </p>
+      )}
     </>
   );
 

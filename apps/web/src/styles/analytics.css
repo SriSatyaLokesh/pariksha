@@ -27,6 +27,18 @@
   border-bottom: 1px solid var(--edge-2);
 }
 
+/* Fix round 2, Minor 1 (Phase 8c Task 3): the two export buttons and the
+   live status line, *not* `.analytics-band` — that class carries a
+   bottom border meant to underline a title/meta pair, and reusing it here
+   drew a second, stray rule under two buttons the D11 prototype never
+   has. No border, no padding of its own: just the row layout. */
+.analytics-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-md);
+}
+
 .analytics-band__title {
   margin: 0;
   font-size: var(--type-heading-sm-size);
