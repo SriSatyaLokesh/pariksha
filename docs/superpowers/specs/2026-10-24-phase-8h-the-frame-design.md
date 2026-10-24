@@ -133,6 +133,25 @@ Register items of the same class: `G2-05` (17px checkbox in `ApiKeyPanel`),
 pixels on any audited screen, and the rule is enforced by a gate rather than
 by review.
 
+### F3 addendum — fix round (`M5`/`M2`): what the gate actually enforces
+
+The wording above is stricter than what shipped, and the difference is
+deliberate. `D17` fixes one checkbox and one radio for the whole product at
+**17px**, and the fix round's first attempt — forcing `width/height: 24px`
+on two bare inputs — put a second glyph size on the organiser while Lane C
+was shipping the opposite answer for the identical register item. Lane C's
+is correct: `.field-choice` wraps the input in a label so the 24px-line-height
+**row** is the target and the 17px glyph `D17` specifies stays exactly as
+drawn.
+
+So `undersizedTargets` enforces **WCAG 2.5.8 including the Spacing
+exception**, not a flat 24px floor: an undersized control passes when a
+24px-diameter circle centred on it reaches no other target's circle. Ten
+checkboxes in the builder's Proctoring panel are 17px and clear the
+exception at 205.7px centre-to-centre. Read "no control below 24×24" as
+"no control fails 2.5.8"; the glyph is not the hit area.
+
+
 ## F4 — settings read as text, and two destinations are filed under Results
 
 `Timing — 60 minutes · no opening time…` renders as grey text with no
@@ -155,6 +174,31 @@ drift is in which token each screen reaches for, not in missing tokens.
 The builder also renders **7 font sizes and 3 families**. Register items of
 the same class: `G1-05` (hand-written `14px` radius in `signal.css`),
 `G1-07` (subpixel font sizes), `G5-15` (10px analytics headers).
+
+### F1 addendum — fix round: the same pattern survives in the picker drawer
+
+`testbuilder.css`'s `.section-list > .picker-drawer { grid-row: 1 / span 40 }`
+is `F1`'s own defect, two hundred lines away in the same file: `.section-list`
+becomes a grid inheriting `gap: var(--space-md)` with no `row-gap: 0`, so it
+carries **40 tracks at 12px row-gap — a 570px floor** whenever the drawer is
+open above 1200px. Measured cost is ~30px with a tall drawer and several
+hundred with a short one.
+
+Deferred deliberately, not missed: the fix changes the visual rhythm between
+section rows and neither the implementer nor the reviewer had browser
+verification time left in the wave. It is the first thing to take in the next
+one.
+
+### F3 addendum — fix round: the settings row's hover block is 12px off-centre
+
+`.setting-row__button` carries `margin-inline: calc(var(--space-md) * -1)`,
+which shifts its box left without widening it, so the `--wash` hover and
+focus fill overhangs 12px past the row's left edge and stops 12px short on
+the right — at every width. Measured at 1440: button x=76→1320 against
+`.setting-row` (which carries the `border-block-end`) at x=88→1332.
+
+Visible on hover and focus on every settings row, and the fix is a single
+property. The reviewer named it the first of the deferred items to take.
 
 ## F7 — the tests list's action column is ragged
 

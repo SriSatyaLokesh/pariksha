@@ -1,5 +1,12 @@
 // The end-to-end harness: three localhost processes and Chromium.
 //
+// All three ports below are the DEFAULTS, not fixed facts: WEB_PORT,
+// API_PORT and IDP_PORT each override one. This machine reserves TCP
+// 4198-4297 (`netsh interface ipv4 show excludedportrange protocol=tcp`),
+// which is why the knobs exist. API_PORT also drives vite.config.ts's proxy
+// target, so the browser and the health probe cannot disagree about where
+// the API is.
+//
 //   vite preview (4173)  the built dist/ — the landing page only exists
 //                        after the prerender, so `vite dev` would serve an
 //                        empty <div id="root"> and there would be no
