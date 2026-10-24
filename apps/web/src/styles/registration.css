@@ -102,10 +102,20 @@ select.text-input {
 }
 
 /* `textarea.text-input` shares every declaration above except the one that
-   broke it: no fixed `height`, a multi-line floor instead (three lines of
-   `body-md`'s own line-height plus the same vertical padding the 44px
-   inputs take), and `resize: vertical` so a long answer key or a set of
-   instructions can grow past that floor without a scrollbar. */
+   broke it: no fixed `height`, a multi-line floor instead, and
+   `resize: vertical` so a long answer key or a set of instructions can grow
+   past that floor without a scrollbar.
+
+   m2 (Phase 8h Lane C review): the floor below borrows `--type-body-md-
+   line-height` (25px) as a round unit for "about three lines", but this
+   rule declares no `line-height` of its own — the text actually renders at
+   the browser's default `normal` (~19px for this font-size), not 25px. So
+   under the global `border-box`, 95px total minus the 2px border minus the
+   20px vertical padding leaves ~73px of content, which is closer to 3.8
+   rendered lines than three. That errs generous, which is harmless for an
+   answer key or instructions field, but the calc is a comfortable
+   approximation, not a literal three-line measurement — corrected here
+   rather than in the calc, since the generous floor is fine as shipped. */
 textarea.text-input {
   background: var(--color-canvas);
   color: var(--color-ink);
