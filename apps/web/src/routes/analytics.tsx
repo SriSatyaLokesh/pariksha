@@ -346,10 +346,11 @@ export function AnalyticsRoute({
   // branch below so both render whether or not a single attempt has ended.
   const exportBar = (
     <>
-      {/* Fix round 2, Important 1/2, Minor 1: the live region sits in this
-          row, not its own flex item — `.analytics-actions` has no border
-          and no height to spare, so idle (empty status, no error) adds no
-          dead space in either branch. */}
+      {/* The live region moved into the button row, so it no longer draws
+          the outer column's gap — the wrapper it replaced was still a flex
+          child of `.analytics`, and so still cost 32px above and below while
+          empty. `.analytics-actions` has no border and takes its height from
+          the buttons, so an empty status costs nothing in either branch. */}
       <div className="analytics-actions">
         <button
           type="button"
