@@ -32,20 +32,25 @@ async function drainExport(
   kind: ExportKind,
   onPage: (pages: number) => void,
 ): Promise<{ csv: string; filename: string }> {
-  let cursor: string | undefined;
   let csv = "";
-  let filename = "";
   let pages = 0;
-  for (;;) {
+  // Every page of one export answers the same filename (`ExportPage`'s own
+  // doc comment, `apps/api/src/export/results.ts`) — the first page's is
+  // as good as the last's, so it is read once rather than reassigned once
+  // per page for a value that never changes.
+  const first = await client.exportPage(workspaceId, testId, kind, undefined);
+  csv += first.csv;
+  pages += 1;
+  onPage(pages);
+  let cursor: string | undefined = typeof first.nextCursor === "string" ? first.nextCursor : undefined;
+  while (cursor !== undefined) {
     const page = await client.exportPage(workspaceId, testId, kind, cursor);
     csv += page.csv;
-    filename = page.filename;
     pages += 1;
     onPage(pages);
-    if (typeof page.nextCursor !== "string") break;
-    cursor = page.nextCursor;
+    cursor = typeof page.nextCursor === "string" ? page.nextCursor : undefined;
   }
-  return { csv, filename };
+  return { csv, filename: first.filename };
 }
 
 /** Hands the assembled file to the browser. Not `lib/download.ts`'s

@@ -292,6 +292,147 @@ describe("AnalyticsRoute — truncation (Fix round 1, Important 1)", () => {
   });
 });
 
+/** What the browser was handed to save — the same capture technique
+ *  `authoring/import.test.tsx`'s own `captureDownloads()` uses: jsdom
+ *  performs no real download, so the Blob handed to `createObjectURL` and
+ *  the anchor's own `download` attribute are the whole observable effect. */
+function captureDownloads(): { name: string; blob: Blob }[] {
+  const saved: { name: string; blob: Blob }[] = [];
+  let pending: Blob | undefined;
+  vi.spyOn(URL, "createObjectURL").mockImplementation((blob: Blob | MediaSource) => {
+    pending = blob as Blob;
+    return "blob:sample";
+  });
+  vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
+  vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    if (pending !== undefined) saved.push({ name: this.download, blob: pending });
+  });
+  return saved;
+}
+
+function renderWithExport(exportPage: ExportPageFn) {
+  return render(
+    <AnalyticsRoute
+      workspaceId={WORKSPACE_ID}
+      testId={TEST_ID}
+      client={fakeClient({
+        analytics: async () => ({ analytics: BASE_ANALYTICS, items: ITEMS, itemsTruncated: false }),
+        exportPage,
+      })}
+    />,
+  );
+}
+
+describe("AnalyticsRoute — the download buttons drain every page (Phase 8c Task 3, K38)", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("drains every page in cursor order and downloads one assembled file", async () => {
+    const saved = captureDownloads();
+    const pages = [
+      { csv: "header\r\nrow1\r\n", nextCursor: "cur2", filename: "t_results_20261024-0000.csv" },
+      { csv: "row2\r\n", nextCursor: "cur3", filename: "t_results_20261024-0000.csv" },
+      { csv: "row3\r\n", nextCursor: null, filename: "t_results_20261024-0000.csv" },
+    ];
+    const seenCursors: (string | undefined)[] = [];
+    const exportPage: ExportPageFn = vi.fn(async (_workspaceId, _testId, kind, cursor) => {
+      expect(kind).toBe("results");
+      seenCursors.push(cursor);
+      const page = pages[seenCursors.length - 1];
+      if (page === undefined) throw new Error("drained more pages than the fixture has — the loop did not stop");
+      return page;
+    });
+    renderWithExport(exportPage);
+    await screen.findByText("Test analytics");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export results CSV" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    // Every page requested, in cursor order — never out of order, never a
+    // round number capped short of `nextCursor: null`.
+    expect(seenCursors).toEqual([undefined, "cur2", "cur3"]);
+    expect(await saved[0]!.blob.text()).toBe("header\r\nrow1\r\nrow2\r\nrow3\r\n");
+    expect(saved[0]!.name).toBe("t_results_20261024-0000.csv");
+  });
+
+  it("shows real progress while a multi-page drain is in flight, not a frozen button", async () => {
+    let resolveSecondPage: (() => void) | undefined;
+    const exportPage: ExportPageFn = vi.fn(async (_workspaceId, _testId, _kind, cursor) => {
+      if (cursor === undefined) return { csv: "a\r\n", nextCursor: "cur2", filename: "f.csv" };
+      await new Promise<void>((resolve) => {
+        resolveSecondPage = resolve;
+      });
+      return { csv: "b\r\n", nextCursor: null, filename: "f.csv" };
+    });
+    captureDownloads();
+    renderWithExport(exportPage);
+    await screen.findByText("Test analytics");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export results CSV" }));
+
+    // Page 1 announced before page 2 even starts — real per-page feedback,
+    // not a spinner that could as easily be decorative.
+    await screen.findByText("Downloading results CSV — page 1…");
+    expect(screen.getByRole("button", { name: "Exporting…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export answers CSV" })).toBeDisabled();
+
+    resolveSecondPage?.();
+    await waitFor(() => expect(screen.queryByText(/Downloading/)).not.toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Export results CSV" })).not.toBeDisabled();
+  });
+
+  it("fails the whole download when page two fails, and never hands over page one", async () => {
+    const saved = captureDownloads();
+    const exportPage: ExportPageFn = vi.fn(async (_workspaceId, _testId, _kind, cursor) => {
+      if (cursor === undefined) return { csv: "header\r\nrow1\r\n", nextCursor: "cur2", filename: "f.csv" };
+      throw new ApiError(500, "server_error", "Export page 2 failed.");
+    });
+    renderWithExport(exportPage);
+    await screen.findByText("Test analytics");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export results CSV" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "The results CSV export failed: Export page 2 failed. — nothing was downloaded.",
+    );
+    // The user is told, and is not handed page one as though it were the
+    // whole file — nothing reached `createObjectURL`/the anchor at all.
+    expect(saved).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Export results CSV" })).not.toBeDisabled();
+  });
+
+  it("downloads the answers CSV from its own button, independently of the results one", async () => {
+    const saved = captureDownloads();
+    const exportPage: ExportPageFn = vi.fn(async (_workspaceId, _testId, kind) => {
+      expect(kind).toBe("answers");
+      return { csv: "h\r\nr\r\n", nextCursor: null, filename: "t_answers_20261024-0000.csv" };
+    });
+    renderWithExport(exportPage);
+    await screen.findByText("Test analytics");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export answers CSV" }));
+
+    await waitFor(() => expect(saved).toHaveLength(1));
+    expect(saved[0]!.name).toBe("t_answers_20261024-0000.csv");
+  });
+
+  it("the in-progress export state has no axe violations", async () => {
+    const exportPage: ExportPageFn = vi.fn(async (_workspaceId, _testId, _kind, cursor) => {
+      if (cursor === undefined) return { csv: "a\r\n", nextCursor: "cur2", filename: "f.csv" };
+      return new Promise<never>(() => {}); // page two hangs forever
+    });
+    captureDownloads();
+    const { container } = renderWithExport(exportPage);
+    await screen.findByText("Test analytics");
+
+    fireEvent.click(screen.getByRole("button", { name: "Export results CSV" }));
+    await screen.findByText("Downloading results CSV — page 1…");
+
+    expect(await axe(container)).toHaveNoViolations();
+  });
+});
+
 describe("AnalyticsRoute — axe", () => {
   it("the loaded screen has no axe violations", async () => {
     const { container } = renderReady();
