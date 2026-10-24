@@ -274,7 +274,13 @@ test.describe("F3 — every interactive control clears WCAG 2.5.8's 24px floor",
       } else {
         const heading = EXPECTED_HEADING[view];
         if (heading !== undefined) {
-          await page.getByRole("heading", { name: heading }).waitFor();
+          // `exact: true`: a substring match on "Banks" also matches
+          // `BankList`'s own empty-state heading, "No banks yet", during the
+          // brief window before its fetch resolves — the shell's own `<h1>`
+          // title renders synchronously, so a loose match strict-mode-
+          // violates on two headings that coexist for one render pass
+          // rather than (incorrectly) treating the race as "found it".
+          await page.getByRole("heading", { name: heading, exact: true }).waitFor();
         }
       }
       expect(await undersizedTargets(page)).toEqual([]);

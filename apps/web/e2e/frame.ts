@@ -241,13 +241,33 @@ export async function undersizedTargets(
       const dy = Math.max(rect.top - y, 0, y - rect.bottom);
       return Math.sqrt(dx * dx + dy * dy);
     }
+    // Fix round (review of `M2`): a neighbour that is ITSELF undersized also
+    // gets its own 24px circle under the exception's own wording — "a
+    // 24px-diameter circle centred on EACH [undersized target]" — so the
+    // required separation between two undersized targets is the sum of
+    // their two radii (one floor), not one radius measured against the
+    // neighbour's bare rectangle. Using the rectangle distance for that case
+    // let two 17x17 targets with centres as little as `radius + ε` apart
+    // (e.g. 21px, with `floor = 24`) read as clear, when their circles still
+    // overlap and 2.5.8 is still failed. A neighbour that already clears the
+    // floor keeps the original rectangle distance — it has no undersized
+    // circle of its own to intersect.
+    function isUndersized(rect: DOMRect): boolean {
+      return rect.width < floor || rect.height < floor;
+    }
     function clearsSpacingException(rect: DOMRect): boolean {
       const cx = rect.left + rect.width / 2;
       const cy = rect.top + rect.height / 2;
       const radius = floor / 2;
       for (const other of visible) {
         if (other.rect === rect) continue;
-        if (distanceToRect(cx, cy, other.rect) < radius) return false;
+        if (isUndersized(other.rect)) {
+          const ox = other.rect.left + other.rect.width / 2;
+          const oy = other.rect.top + other.rect.height / 2;
+          if (Math.hypot(cx - ox, cy - oy) < radius * 2) return false;
+        } else if (distanceToRect(cx, cy, other.rect) < radius) {
+          return false;
+        }
       }
       return true;
     }
