@@ -2,11 +2,8 @@ import { describe, it, expect, vi } from "vitest";
 import { useState } from "react";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { axe } from "jest-axe";
-import { readFileSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { ReorderableList } from "../../src/components/authoring/ReorderableList";
+import { declarations, organiserStylesheets, parseRuleBodies, readResolvedCss } from "../css-chain";
 
 // A thin harness: ReorderableList is generic over T, and the production
 // callers (Choice.tsx's options list) aren't needed to prove the control
@@ -354,15 +351,24 @@ describe("drag reordering (AC-07, closing the Phase 4 deferral)", () => {
   // WCAG 2.5.8: the grip is the handle's whole hit area, and jsdom cannot
   // measure a rendered box — read the declared size off disk instead, the
   // same approach `organiser-home.test.tsx` takes for CSS jsdom can't see.
+  //
+  // C2 fix round: this used to hardcode `../../src/styles/authoring.css`,
+  // which pinned a FILE PATH rather than the property — the grip's rule
+  // moved to `question.css` (shared with the candidate's exam ground, which
+  // `authoring.css` never reaches) and this test went red on correct
+  // behaviour. Reading the organiser's whole resolved chain, the way every
+  // other CSS guard in this suite does, means the rule can live in whichever
+  // file is right without this test caring which one that is.
   it("the grip clears the 24x24 WCAG 2.5.8 floor", () => {
-    const css = readFileSync(
-      resolve(dirname(fileURLToPath(import.meta.url)), "../../src/styles/authoring.css"),
-      "utf8",
-    );
-    const rule = /\.reorderable-list__grip\s*\{([^}]*)\}/.exec(css);
-    expect(rule, "no .reorderable-list__grip rule in authoring.css").not.toBeNull();
-    const width = /width:\s*(\d+)px/.exec(rule![1]!);
-    const height = /height:\s*(\d+)px/.exec(rule![1]!);
+    const seen = new Set<string>();
+    const css = organiserStylesheets()
+      .map((path) => readResolvedCss(path, seen))
+      .join("\n");
+    const rule = parseRuleBodies(css).find((entry) => entry.selector === ".reorderable-list__grip");
+    expect(rule, "no .reorderable-list__grip rule in the organiser's chain").not.toBeUndefined();
+    const body = declarations(rule!.body).join(";");
+    const width = /width:\s*(\d+)px/.exec(body);
+    const height = /height:\s*(\d+)px/.exec(body);
     expect(width, "no declared width").not.toBeNull();
     expect(height, "no declared height").not.toBeNull();
     expect(Number(width![1])).toBeGreaterThanOrEqual(24);
