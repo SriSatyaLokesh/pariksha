@@ -28,6 +28,19 @@
 //     `datetime-local` widget and then save. `UX-18` holds (nothing
 //     reaches the draft unasked), but correctness now rests on a blur
 //     nothing in the component guarantees.
+//   * `TimingPanel.tsx:279-333` — `held` can go STALE, never stuck, across a
+//     publish-triggered full draft reload. `onPublish`'s `await load()`
+//     wholesale-replaces `draft` via a fresh GET; with an unapplied Timing
+//     edit in flight the sync effect is correctly guarded by
+//     `held !== null`, so `timing` is replaced while `held`/`pending` are
+//     not, and a subsequent Apply writes the pre-publish snapshot layered
+//     with the edited field. `held` cannot survive an unmount (a fresh
+//     mount always starts at `held = null`, and `SettingRow`'s
+//     `{open && …}` fully unmounts on collapse) — this is a live-mount
+//     divergence, distinct from the blur note above. Nothing reaches the
+//     draft unasked and publish never alters `timing` content today, so the
+//     blast radius is nil, but it is a real divergence point if that
+//     invariant ever changes. See `test.tsx:528-537`.
 //   * `RegistrationForm.tsx:200` keys each PREVIEW row by `field.id`, so
 //     renaming a column remounts that column's preview row. Not a sibling
 //     of the first cause: nobody is typing into the preview of the very
