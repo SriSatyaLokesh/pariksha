@@ -72,6 +72,49 @@ precedent.
 column grows with the viewport rather than holding at 672px. The rail keeps
 its width; the column takes the slack.
 
+### F2 addendum — fix round (`M1`): docked nav still falls short of 0.6 below ~1280px
+
+F2's own fix (`.organiser--wide:has(> .checklist-rail) { max-width: none }`,
+made unconditional rather than gated behind a borrowed `@media (min-width:
+1200px)`) is correct on its own terms — nothing is reapplying the clamp.
+Measured anyway, because the review that caught the old fixed breakpoint
+asked for the actual crossover, and the crossover depends on which of the
+organiser's two rails is docked:
+
+`editorWidthRatio` at `?view=test&test=<id>`, nav rail **docked** (236px,
+the default a reader lands on):
+
+| viewport | ratio |
+| --- | --- |
+| 1100 | 0.528 |
+| 1150 | 0.554 |
+| 1199 | 0.576 |
+| 1200 | 0.577 |
+| 1250 | 0.598 |
+| 1280 | 0.609 |
+| 1366 | 0.639 |
+
+Ratio clears 0.6 only somewhere between 1250px and 1280px. Cause: the
+opt-out's own condition is the shell's second grid track (viewport minus
+whichever rail is docked) passing 1080px — with the nav docked that track
+only exceeds 1080px once the viewport passes **1316px**, so below that the
+editor is working with under 1080px of track regardless of the clamp. This
+is fixed structural chrome overhead, not a residual defect in the clamp fix
+itself — a CSS `@media (min-width: …)` breakpoint cannot key off a runtime
+value (which rail is docked), only off viewport width, so no single
+breakpoint is correct for both rail states; the existing regression test
+(`e2e/measurement/frame.spec.ts`, "the opt-out releases as soon as the track
+actually exceeds 1080px…") covers the nav-collapsed crossover instead, where
+the band in question (1136-1200px) is a real laptop width rather than one
+nobody ships the builder at with the nav docked and sub-1080px of track.
+
+**Not fixed in this round** — the fix is either a lower accepted ratio floor
+on common widths with the nav docked, or keying `.organiser--wide`'s own
+clamp off the rail's actual rendered width (a container-query-shaped change
+to `admin.css`, cross-cutting beyond this lane's `testbuilder.css`/
+`SectionList.tsx` scope). Recorded here so the gap is carried forward rather
+than lost in a fix-round report.
+
 ## F3 — the section row has three baselines and a hard WCAG failure
 
 In the section row: `↑`/`↓` at 36×26, the label *"Position of section

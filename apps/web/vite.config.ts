@@ -39,13 +39,20 @@ const maxWorkers = Math.min(availableParallelism(), 4);
  * (apps/api/src/middleware/authenticate.ts). A browser only behaves the way
  * production expects if the app and the API answer on one origin, so the dev
  * and preview servers proxy `/api` to the Node API instead of the app
- * talking cross-origin to port 8787. That is also what the deployed shape
- * is: one hostname, static assets and the Worker behind it.
+ * talking cross-origin to it. That is also what the deployed shape is: one
+ * hostname, static assets and the Worker behind it.
  *
- * 8787 is the API's own default `PORT` (apps/api/src/env.ts), so neither
- * side has to be told about the other.
+ * Fix round (`M8`): reads the same `API_PORT` `playwright.config.ts` starts
+ * the API process on and health-probes, rather than a hardcoded 8787 — a
+ * fixed target here used to defeat that override silently: `API_PORT` moved
+ * where the API listened and which URL the `webServer` health check hit,
+ * while the browser's own `/api/**` requests kept going to 8787 regardless,
+ * so sign-in connection-refused on any machine that actually needs the
+ * override (one with 8787 reserved). 8787 is still the fallback because it
+ * is the API's own default `PORT` (apps/api/src/env.ts) — neither side has
+ * to be told about the other when nothing overrides it.
  */
-const proxy = { "/api": { target: "http://127.0.0.1:8787" } };
+const proxy = { "/api": { target: `http://127.0.0.1:${Number(process.env.API_PORT || 8787)}` } };
 
 /**
  * T-02's candidate URL, `/<workspace-slug>/<test-slug>` — the same narrow
