@@ -132,3 +132,88 @@ announcing every keystroke during an exam).
    8h-1 exists.
 6. **8h-2 the shell** — visible everywhere, but nothing is broken.
 7. **8h-6 verification**, then whatever of the register survives it.
+
+---
+
+# Closeout — 2026-10-24
+
+Six PRs on `main`, four lanes in parallel plus one debugging branch.
+Migrations unchanged at **12**; no schema work in this phase.
+
+| PR | What | `main` |
+| --- | --- | --- |
+| #247 | the spec, this index, the register, the harness port fix | `be7034e` |
+| #250 | Lane C — primitives: the collapsed textarea, WCAG targets, radius/font drift | `79e53d6` |
+| #248 | Lane D — the exam runtime: font scale, high-contrast selection, palette, skip link, watermark | `a0ea736` |
+| #249 | Lane B — home and banks: delete confirmation, persistent row actions, a real drag handle | `3bd39b8` |
+| #251 | Lane A — the frame: dead scroll, the 47% editing column, three baselines | `4ad9ec7` |
+| #252 | `O-17` — focus leaves the field while typing | `1d466af` |
+
+## What the owner reported, and where it landed
+
+`F1` 568px dead scroll → 24px, one page inset. `F2` editor 672px on a
+1440px screen → 976px. `F3` the section row's three baselines → one,
+measured per row. `O-22` the delete confirm below the fold → a centred
+scrimmed modal. `F5` the dead control → gone. `O-17` focus leaving the
+field → two causes found by reproduction and fixed.
+
+## What this phase actually taught us
+
+**Five Criticals were found by review on branches CI had already passed.**
+A green suite was never evidence this phase; measurement was.
+
+**Seven guards were hollow** — they ran, went green, and could not have
+gone red. Each by a different mechanism: a fixture missing the sentinel
+its scan searched for (#245); an allowlist keyed by value, so new
+violations were free (Lane C); sensitivity that depended on an unrelated
+shared constant (Lane D); six of seven scan arms passing on an unrendered
+page (Lane A); a harness that wrote the value it then asserted (`O-17`);
+a CSS regex that scanned past a comment into an unrelated rule's body
+(Lane A fix round); and — the sharpest one — a replacement guard that
+reintroduced the blind spot it was written to close (`O-17` fix round).
+
+**jsdom has no layout engine, and that is the root of all of it.** The
+technique that worked was headless Chrome against the repo's real
+stylesheets over `file://`, with `origin/main` reconstructed as a
+baseline. Cheap enough to be standard. Every geometry claim in this phase
+that survived was measured that way.
+
+**Parallel lanes caused two of their own defects.** Lane B's 44×44 grip
+became the flex baseline source and broke Lane A's row alignment; Lanes A
+and C shipped contradictory answers to one register item hours apart
+(`D17`'s glyph size). Neither lane could have seen it — the collisions
+only exist once both are on `main`. Integration review after merge is
+where a measurable fraction of the bugs live.
+
+**Three register claims were disproved**, and saying so was worth as much
+as a fix: `G5-09`'s submit/proctoring overlap does not reproduce (the
+"fix" broke working behaviour and was reverted); `G5-03`'s half-filled
+gauge is the intended bipolar rendering, only its announcement was wrong;
+`G2-04`'s recommended fix contradicts `D21a` and the route that does not
+is still open. **The register is a list of claims, not of bugs** — roughly
+one in ten was wrong in a way that would have made the app worse if
+implemented as prescribed.
+
+## Carried, with measurements, not lost
+
+In the spec: the **`F1` addendum** (the picker drawer's
+`grid-row: 1 / span 40` carries F1's own 570px floor, ~30px visible with a
+tall drawer), the **`F2` addendum** (with the nav docked the ratio stays
+under 0.6 from 1100px to ~1256px, fixed chrome overhead owned by `O-02`/
+`O-03`/`D7a`), and the **`F3` addendum** (`.setting-row__button`'s hover
+fill sits 12px off its hairline at every width — the reviewer named this
+the first of the deferred items to take).
+
+Still open elsewhere: `O-14` (the candidate exam is not sectioned — a
+feature gap needing its own spec and the per-section-timing decision),
+`O-28` (a v3 draft nobody created), the tests-list group (`O-27`, `O-29`,
+`O-30`, `O-31`, `O-33`, `F7`, `G2-03`) held while Lane A owned
+`testbuilder.css`, `O-26`/`G4-08`'s select primitive (needs its first real
+consumer to satisfy `D10`), the exam submit dialog and proctoring badge
+colliding at scroll offsets ~20–118px (pre-existing on `main`, mis-described
+by `G5-09`, needs its own entry), `<progress>`'s valuemin/max still
+contradicting its `aria-valuetext`, and `structured-editor.test.tsx:243-252`
+carrying the same caret blind spot `O-17`'s harness just closed.
+
+Plans 8h-2 to 8h-6 were never drafted. The four lanes covered their
+content directly; what remains of them is the list above.
