@@ -403,6 +403,23 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
     });
   }
 
+  // C1: a WRAPPING flex container's min-content width is its widest child,
+  // not the sum of its children — fine for `.button-row` in the free-width
+  // contexts it is otherwise used in, wrong inside `td.acts`'s `width: 1%`,
+  // where it shrank the bank browser's action column to one 36px button and
+  // stacked the rest, blowing `e2e/measurement/density.spec.ts`'s row-height
+  // bar. jsdom has no layout engine, so the stack itself needs a browser
+  // (that spec); what IS checkable here is the CASCADE FACT that makes it
+  // impossible: the rule that forces `flex-wrap: nowrap` really wins, by
+  // specificity, over `.button-row`'s own `wrap`.
+  it("the bank browser's row-action button-row never wraps inside the action cell", async () => {
+    await openBankBrowser();
+    const cell = actionCell(/^Edit question:/);
+    const buttonRow = cell.querySelector(".button-row");
+    expect(buttonRow, "no .button-row inside the bank browser's action cell").not.toBeNull();
+    expect(paintsIn(buttonRow as Element, "flex-wrap", ORGANISER)).toBe("nowrap");
+  });
+
   // M3 ruling supersedes this test's original shape. It used to assert the
   // invariant behind a STATEFUL reveal ("no :hover/:focus-within rule may
   // touch a layout property, only opacity") — sound while the reveal
