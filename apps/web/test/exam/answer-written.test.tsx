@@ -188,22 +188,57 @@ describe("numeric", () => {
     render(<Harness question={noUnit} />);
     expect(screen.queryByText("m/s²")).toBeNull();
   });
+
+  // G5-14 (UI/UX audit, P0). A trackpad or mouse-wheel scroll over a
+  // focused number input silently changes its value — a lost mark a
+  // candidate never sees happen. Blurring on `wheel` is what stops the
+  // browser's own default (it runs the default action only while the
+  // field is still focused); jsdom does not implement that default step
+  // itself, so this test is about the one thing it CAN see — the field
+  // giving up focus — not about the value surviving a real scroll, which
+  // needs a real browser.
+  it("scrolling the wheel over the field blurs it rather than changing the value", () => {
+    render(<Harness question={numeric} />);
+    const field = screen.getByRole("spinbutton");
+    field.focus();
+    expect(field).toHaveFocus();
+    fireEvent.wheel(field, { deltaY: 100 });
+    expect(field).not.toHaveFocus();
+  });
 });
 
 describe("short_answer and long_answer", () => {
-  it("short_answer and long_answer enforce max_length and show a live remaining count", () => {
+  it("short_answer and long_answer enforce max_length and show a remaining count", () => {
     for (const question of [shortAnswer, longAnswer]) {
       const view = render(<Harness question={question} />);
       expect(screen.getByRole("textbox")).toHaveAttribute("maxlength", "500");
       type(screen.getByRole("textbox"), "x".repeat(10));
-      expect(screen.getByRole("status")).toHaveTextContent(/490 characters left/i);
+      expect(screen.getByText(/490 characters left/i)).toBeVisible();
       view.unmount();
     }
   });
 
-  it("the remaining count starts at the whole budget and is a live region from first render", () => {
+  it("the remaining count starts at the whole budget and is visible from first render", () => {
     render(<Harness question={shortAnswer} />);
-    expect(screen.getByRole("status")).toHaveTextContent(/500 characters left/i);
+    expect(screen.getByText(/500 characters left/i)).toBeVisible();
+  });
+
+  // G5-05 (UI/UX audit, P0). This counter used to carry `role="status"`
+  // and update on every keystroke, so a screen reader announced "999
+  // characters left", "998…", once per character typed — an interruption
+  // on every single keystroke in a timed exam. It must stay visible and
+  // reachable, but it must not be a live region a screen reader narrates
+  // mid-type: the field describes it instead, read once on focus.
+  it("the remaining count is not a live region, and is wired to the field by aria-describedby", () => {
+    render(<Harness question={shortAnswer} />);
+    expect(screen.queryByRole("status")).toBeNull();
+    const field = screen.getByRole("textbox");
+    const describedBy = field.getAttribute("aria-describedby");
+    expect(describedBy).not.toBeNull();
+    const status = document.getElementById(describedBy ?? "");
+    expect(status).not.toBeNull();
+    expect(status).toHaveTextContent(/500 characters left/i);
+    expect(status).not.toHaveAttribute("role", "status");
   });
 
   it("long_answer is a multi-line field and short_answer is not", () => {
@@ -323,10 +358,11 @@ describe("reachability: the candidate app's own root, clicked to", () => {
   it("the long_answer question is reachable and counts down from the paper's own maximum", async () => {
     await startFromRoot();
     jumpTo(12);
-    // Scoped to the question column: Task 8's save banner is a second
-    // `role="status"` on this screen, in the header. The product copy of
-    // neither is renamed to tell them apart (pre-submit checklist 5).
+    // Scoped to the question column: Task 8's save banner carries its own
+    // `role="status"` in the header, and the counter here (G5-05) is no
+    // longer one — scoping still keeps this from matching anything of
+    // the header's.
     const column = await screen.findByRole("main", { name: /question 12/i });
-    expect(within(column).getByRole("status")).toHaveTextContent(/5000 characters left/i);
+    expect(within(column).getByText(/5000 characters left/i)).toBeVisible();
   });
 });

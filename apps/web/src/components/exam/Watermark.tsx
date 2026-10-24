@@ -38,22 +38,57 @@ export interface WatermarkProps {
 const TILE_COUNT = 40;
 
 /** Live, not precise — a watermark that read the mount time once would
- *  prove nothing about when a photograph was taken. */
-const TICK_MS = 1_000;
+ *  prove nothing about when a photograph was taken.
+ *
+ *  G5-12 (UI/UX audit). A second-resolution tick rewrote all 40 tiles'
+ *  text content every second, behind the question stem, for the whole
+ *  attempt. The deterrent a photo needs to defeat is "which minute was
+ *  this taken in" — minute resolution reads exactly the same in a photo
+ *  and costs the page 1/60th of the DOM writes. Exported so the regression
+ *  test pins the constant directly rather than fast-forwarding a real
+ *  `setInterval` through fake timers across an async render — `openAttempt`
+ *  itself awaits a `findByRole`, which polls on the real clock. */
+export const TICK_MS = 60_000;
 
 export function Watermark({ attemptId }: WatermarkProps) {
   const [now, setNow] = useState(() => new Date());
 
+  // r1 (code review, round 3). Dropping seconds from the stamp (m2, below)
+  // hid the staleness instead of removing it: a plain `setInterval(cb,
+  // TICK_MS)` fires TICK_MS after MOUNT, not after the wall-clock minute
+  // it names — mounted at 10:00:59, it first fires at 10:01:59, so the
+  // stamp reads "10:00" from 10:01:00 through 10:01:58, a wrong minute for
+  // nearly all of it. A minute-resolution display asserts the minute it
+  // names; only a tick that lands ON that minute's boundary can back that
+  // up. This waits out whatever is left of the current minute once (a
+  // `setTimeout`, not a second `setInterval`, since it fires at most
+  // once), updates, and only then starts the steady TICK_MS interval --
+  // which stays aligned forever, because every whole minute added to a
+  // minute boundary is itself a minute boundary.
   useEffect(() => {
-    const id = window.setInterval(() => {
+    const msToBoundary = (TICK_MS - (Date.now() % TICK_MS)) % TICK_MS;
+    let intervalId: number | undefined;
+    const alignId = window.setTimeout(() => {
       setNow(new Date());
-    }, TICK_MS);
+      intervalId = window.setInterval(() => {
+        setNow(new Date());
+      }, TICK_MS);
+    }, msToBoundary);
     return () => {
-      window.clearInterval(id);
+      window.clearTimeout(alignId);
+      if (intervalId !== undefined) {
+        window.clearInterval(intervalId);
+      }
     };
   }, []);
 
-  const stamp = `${attemptId} · ${now.toLocaleString()}`;
+  // m2 (code review of this plan). `toLocaleString()` renders seconds in
+  // most locales, which a 60s tick cannot keep current: mounted at
+  // 10:00:59, the stamp reads that exact second until the next tick at
+  // 10:01:59, showing the wrong minute for nearly all of it. `timeStyle:
+  // "short"` drops seconds, so the rendered precision matches the minute
+  // r1's alignment (above) actually lands the tick on.
+  const stamp = `${attemptId} · ${now.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })}`;
 
   return (
     <div className="exam-watermark" data-watermark aria-hidden="true">

@@ -488,8 +488,30 @@
   clip-path: inset(50%);
 }
 
+/* G5-08 (UI/UX audit). `position: static` re-entered the grid's own
+   source order on focus, so the clock, the save banner and Submit all
+   shifted ~120px sideways to make room for it — the one moment a
+   candidate most needs the bar to hold still is right after pressing
+   Tab. `fixed`, not `static`: still visible and still in the tab order,
+   but out of flow, so nothing else on the bar moves.
+
+   m1 (code review of this plan). This used to put the skip link's
+   z-index above the proctoring overlay (30), on the claim that it is
+   "the one control that must stay reachable even while that overlay is
+   up" — but `ProctoringLayer.tsx` sets `inert` and `aria-hidden` on
+   `.exam-runner` whenever the overlay is open, and this link renders
+   inside that subtree (`Runner.tsx`), so it cannot receive focus then
+   and `:focus-visible` never matches it. `.exam-proctoring-overlay`'s
+   own comment below states the real invariant: the runner underneath is
+   inert while the overlay is up. Below 30, so stacking does not
+   contradict that; level with the bar's own `.exam-submit-confirm` and
+   `.exam-proctoring-count` (both 20), which is all this needs when the
+   overlay is not showing. */
 .exam-skip:focus-visible {
-  position: static;
+  position: fixed;
+  top: 8px;
+  left: 8px;
+  z-index: 20;
   clip-path: none;
 }
 
@@ -770,11 +792,25 @@
 
 /* ---- the palette rail -------------------------------------------------- */
 
+/* G5-07 (UI/UX audit). No `max-height`/`overflow-y`: on a 30+ question
+   paper the grid below runs past the viewport and the squares after it
+   are unreachable without scrolling the WHOLE page (the sticky rail
+   scrolls the document with it, taking its own overflow nowhere). Capping
+   it and giving it its own scrollbar keeps the rest of the paper usable
+   while every square stays reachable.
+
+   G5-06 (UI/UX audit). `padding: 16px` left only 240 - 2*16 - 2*1 = 206px
+   of content width against the grid's own 5*36 + 4*8 = 212px, a 6px
+   overflow that clipped the rail's right edge. `--space-md` (12px) gives
+   240 - 2*12 - 2*1 = 214px — inside the token scale, not a one-off pixel
+   tweak, and still 2px to spare. */
 .exam-palette {
   position: sticky;
   top: 24px;
   width: 240px;
-  padding: 16px;
+  max-height: calc(100vh - 48px);
+  padding: var(--space-md);
+  overflow-y: auto;
   border: 1px solid var(--color-hairline-strong);
   border-radius: var(--rounded-md);
   background: var(--color-cream);
@@ -954,7 +990,48 @@
    dashed edge for a disabled one, a solid leading bar for a drop
    target. */
 
+/* G5-01 (UI/UX audit, P0). `.exam-runner` and `.exam-question` already
+   scale their OWN font-size against `--exam-font-scale`, but nothing
+   below them inherited that: `.rendered--stem` (question.css, Lane C's —
+   this file does not edit it), `.exam-option-row`, `.exam-blanks` and
+   every answer field hardcoded a literal token size, so a low-vision
+   candidate toggling 1.25x/1.5x in ViewControls saw the stem, the
+   options and their own answer stay exactly the size they started at.
+   Redeclaring the three tokens those elements actually read — scoped to
+   this wrapper, which never uses any of them for its OWN font-size —
+   scales every one of them at once without editing a single one of
+   those declarations.
+
+   `var()` resolves against the computed value ON THE ELEMENT BEING
+   COMPUTED, so `--type-question-stem-size: calc(var(--type-question-stem-size)
+   * ...)` is a cycle with itself — guaranteed-invalid, and every
+   `font-size: var(--type-question-stem-size)` below it then falls back
+   to the INHERITED font-size instead of the token. The alias below
+   reads the real token at `:root`, where it is a literal and nothing
+   else redeclares it, so it carries the base number down unchanged; the
+   scaled property is then computed from the alias (a different custom
+   property) rather than from itself, so no declaration here depends on
+   its own value.
+
+   Known fragility: each alias snapshots its token's value AS COMPUTED ON
+   `:root`, once. Nothing below `:root` overrides any of these three
+   tokens today — `:root[data-contrast="high"]` is the same element, so
+   it still resolves — but a future override on an element BELOW `:root`
+   (a density mode, a nested theme scope) would be invisible to this
+   alias and so to `.exam-answer`'s scaling, silently reading the
+   original `:root` number instead. If one of these tokens ever needs a
+   non-`:root` override, that override has to redeclare the matching
+   `-base` alias too, at the same selector. */
+:root {
+  --exam-stem-size-base: var(--type-question-stem-size);
+  --exam-option-label-size-base: var(--type-option-label-size);
+  --exam-body-md-size-base: var(--type-body-md-size);
+}
+
 .exam-answer {
+  --type-question-stem-size: calc(var(--exam-stem-size-base) * var(--exam-font-scale, 1));
+  --type-option-label-size: calc(var(--exam-option-label-size-base) * var(--exam-font-scale, 1));
+  --type-body-md-size: calc(var(--exam-body-md-size-base) * var(--exam-font-scale, 1));
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -1067,6 +1144,31 @@
   font-weight: 500;
 }
 
+/* G5-02 (UI/UX audit, P0). Under `[data-contrast="high"]` both of the two
+   carriers above collapse: `--color-cream` resolves to `--color-canvas`,
+   so the selected row's fill matches every unselected row, and
+   `--exam-edge` becomes 2px, so the edge WIDTH matches the literal 2px
+   above too — a candidate in high-contrast mode was left with only a
+   border COLOUR (ink vs voltage-deep) to tell a selected option from an
+   unselected one.
+
+   A `border-width` override here is D5's own failure mode: these rows
+   are auto-height, so `box-sizing: border-box` only re-divides an
+   EXPLICIT box between content and border — it does nothing for one
+   that grows to fit its content, and a wider border is 4px of extra
+   outer height the unselected row never gets (measured: 61px selected
+   vs 57px unselected, 0px apart on main). An inset box-shadow is never
+   part of the box model, in either box-sizing mode, so a ring the same
+   width and colour as the edge sits flush against its inner side —
+   contiguous with it, not a second border a gap would separate it from
+   — and the two together paint as one 4px voltage-deep band, without
+   moving a single pixel of layout. The carrier is still sound: selected
+   reads 4px voltage-deep on white, unselected 2px ink on white — width
+   AND hue both differ, not colour alone. */
+:root[data-contrast="high"] .exam-option-row.is-selected {
+  box-shadow: inset 0 0 0 var(--exam-edge, 1px) var(--color-voltage-deep);
+}
+
 /* A locked option (select_k at its limit) and a read-only attempt. The
    fill stays the page's own canvas in BOTH themes: the high-contrast
    block swaps hairline to ink, and a lighter fill under an unchanged
@@ -1132,6 +1234,23 @@
   text-align: start;
 }
 
+/* G5-13 (UI/UX audit). A `td` that holds a checkbox gives its padding to
+   the label instead of keeping it for itself, so the label — not the
+   17x17 control alone — is the full 48x48 hit target WCAG 2.5.8 asks for. */
+.exam-match-grid td:has(.exam-match-cell) {
+  padding: 0;
+}
+
+.exam-match-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 48px;
+  cursor: pointer;
+}
+
 /* The drop-position indicator for AC-07's drag half. A bar on the leading
    edge rather than a fill: it has to read against every row state the
    list can be in, and in greyscale. */
@@ -1156,6 +1275,26 @@
 .exam-text-area {
   width: 100%;
   resize: vertical;
+}
+
+/* G5-14 (UI/UX audit). A trackpad scroll over a focused `type="number"`
+   field silently increments or decrements it — a lost mark a candidate
+   never sees happen. The scroll itself is stopped in `Numeric`
+   (`Written.tsx`), by blurring the field on `wheel`; the native spin
+   buttons are hidden here so the control stops advertising an affordance
+   that no longer does the one thing it visually promises (clicking the
+   arrows still works otherwise, which would be a second, smaller version
+   of the same lie). */
+.exam-text-input[type="number"]::-webkit-outer-spin-button,
+.exam-text-input[type="number"]::-webkit-inner-spin-button {
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.exam-text-input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
 }
 
 .exam-select:disabled,
@@ -1290,7 +1429,24 @@
 /* The dialog itself reuses `.exam-confirm`'s danger frame — one
    confirmation treatment in this runtime, not two. It is positioned over
    the bar rather than inside it so a wrapping header cannot push the
-   paper down while the candidate is reading the counts. */
+   paper down while the candidate is reading the counts.
+
+   M2 (code review of this plan) disproves G5-09's premise and reverts
+   its fix. No ancestor of this element is positioned (`.exam-runner`,
+   `.exam-runner-bar`, `.exam-runner-finish` are all static), so with no
+   `top` of its own this `absolute` box's "auto" top resolves via the
+   CSS static-position algorithm — roughly where it would sit if it were
+   `position: static` right after the Submit button, not to the
+   document's top-right corner. Measured in real Chrome at 1440x900:
+   the dialog lands at top ~76px, the proctoring badge (`fixed`, 16-57px)
+   never in reach; narrowed until the bar wraps the Submit button onto
+   its own row, the dialog tracks it down the page and still clears it
+   by its own 8px margin. `top: 64px` (fix round 1) threw that tracking
+   away for a fixed document offset: at 820px, where the bar wraps, the
+   button's bottom measured 109px while the hardcoded dialog top stayed
+   64px — the dialog covered the button it is supposed to confirm,
+   which main never did. Reverted to main's positioning and z-index;
+   the overlap this was meant to fix was never reproduced. */
 .exam-submit-confirm {
   position: absolute;
   right: 32px;

@@ -107,6 +107,16 @@ function Numeric({ question, value, onChange, disabled }: AnswerProps) {
         aria-describedby={question.unit === undefined ? undefined : unitId}
         value={value !== null && value.kind === "number" ? String(value.value) : ""}
         disabled={disabled}
+        // G5-14 (UI/UX audit, P0). A number input reacts to a trackpad or
+        // mouse-wheel scroll while it has focus — a candidate scrolling the
+        // page who passes over the field changes the answer and never sees
+        // it happen. Blurring on the first wheel tick runs before the
+        // browser applies the scroll's default step, so the value never
+        // moves; the field is simply no longer focused, exactly as if the
+        // candidate had scrolled past any other control.
+        onWheel={(event) => {
+          event.currentTarget.blur();
+        }}
         onChange={(event) => {
           const next = numberFieldValue(event.target.value);
           onChange(next === null ? null : { kind: "number", value: next });
@@ -123,6 +133,7 @@ function Numeric({ question, value, onChange, disabled }: AnswerProps) {
 
 function Manual({ question, value, onChange, disabled }: AnswerProps) {
   const uid = useId();
+  const statusId = `${uid}-status`;
   const long = question.type === "long_answer";
   // schemas/question-1.json's own ceilings, imported rather than retyped.
   const max = question.maxLength ?? MAX_LENGTH_CEILING[long ? "long_answer" : "short_answer"];
@@ -143,6 +154,7 @@ function Manual({ question, value, onChange, disabled }: AnswerProps) {
           className="exam-text-area"
           rows={10}
           maxLength={max}
+          aria-describedby={statusId}
           value={text}
           disabled={disabled}
           onChange={(event) => {
@@ -155,6 +167,7 @@ function Manual({ question, value, onChange, disabled }: AnswerProps) {
           type="text"
           className="exam-text-input"
           maxLength={max}
+          aria-describedby={statusId}
           value={text}
           disabled={disabled}
           onChange={(event) => {
@@ -162,9 +175,15 @@ function Manual({ question, value, onChange, disabled }: AnswerProps) {
           }}
         />
       )}
-      {/* Rendered from first render, so a screen reader has seen the
-          region before it ever changes. */}
-      <p className="exam-answer-status" role="status">
+      {/* G5-05 (UI/UX audit, P0). This used to carry `role="status"` and
+          update on every keystroke, so a screen reader announced "995
+          characters left", "994…", once per character, in a timed exam —
+          an interruption on every single keystroke, not a one-off. Still
+          visible from first render for a sighted candidate, and still
+          reachable by a screen reader, but only via `aria-describedby` on
+          the field: read once when the field is focused, not re-announced
+          on every change. */}
+      <p className="exam-answer-status" id={statusId}>
         {`${String(max - text.length)} characters left`}
       </p>
     </div>
