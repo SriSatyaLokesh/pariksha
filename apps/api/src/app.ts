@@ -26,6 +26,7 @@ import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
 import { resultsExportRoutes } from "./export/results.js";
+import { evidenceExportRoutes } from "./export/evidence.js";
 import { readinessRoutes } from "./publish/readiness.js";
 import { attemptsRoutes } from "./routes/attempts.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
@@ -358,6 +359,23 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `responsesForAttempts` (1, once per page) = 5, flat in how many
   // responses a page's attempts actually carry.
   "/api/v1/workspaces/:id/tests/:testId/export/answers.csv": 5,
+  // Phase 8c Task 4 (`#98`): the events CSV. Measured
+  // (`apps/api/test/export/evidence.test.ts`'s own "measures the real
+  // subrequest cost" test). Auth (2) + `getTest` (1) + `listEventsForTest`
+  // (1, one page) = 4, flat in how many events a page holds.
+  "/api/v1/workspaces/:id/tests/:testId/export/events.csv": 4,
+  // The snapshot manifest. Measured, not flat — `K3`'s own existence check
+  // spends one `StorageAdapter.list` per **attempt** in the page (never per
+  // snapshot: a Strict attempt's ~60 images still cost one `list`), so the
+  // worst case is auth (2) + `getTest` (1) + `listAttemptsForTest` (1) +
+  // `listSnapshotsForAttempts` (1) + one `list` per attempt in the page, up
+  // to `SNAPSHOTS_PAGE_LIMIT_MAX` (40) = 45. `signedUrl` costs nothing
+  // (`instrument.ts`'s own ruling, `K4`).
+  "/api/v1/workspaces/:id/tests/:testId/export/snapshots.csv": 45,
+  // `test.json`: the same cost as `/export` above, because it calls the same
+  // `exportTest` — a second door onto one function, not a second budget
+  // line that could drift from the original's.
+  "/api/v1/workspaces/:id/tests/:testId/export/test.json": 7,
   // Public, unguarded (Review Focus 5 / ADR 0006's precedent): one read,
   // `resolveShortCode`, and no authentication cost at all — a request that
   // carries no session cookie never reaches `readSession` in the first
@@ -913,6 +931,16 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv": "results.export",
   "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv": "results.export",
 
+  // Phase 8c Task 4 (`#98`): the events CSV and the snapshot manifest carry
+  // proctoring evidence, not results — gated on `attempts.read_evidence`,
+  // which a Viewer does not hold even though they hold `results.export`.
+  // `test.json` is the opposite case: the same `exportTest` the `tests.edit`
+  // route above already calls, reached from `results.export` instead so a
+  // Viewer can fetch the definition that explains their CSV's columns.
+  "GET /api/v1/workspaces/:id/tests/:testId/export/events.csv": "attempts.read_evidence",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/snapshots.csv": "attempts.read_evidence",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/test.json": "results.export",
+
   // Phase 6 Task 2 (#66, P6.2). The invite is a credential for a row on
   // the candidate list, so it is the same permission that uploaded the
   // list — an Author who built the test holds `tests.edit` and not this.
@@ -1177,6 +1205,9 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/events.csv": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/snapshots.csv": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/export/test.json": "workspace",
   // Phase 6 Task 2 (#66, P6.2): this phase's only guarded route.
   "POST /api/v1/workspaces/:id/tests/:testId/invites": "workspace",
   // Phase 7e Task 4 (`Q5a`): the minimal pair.
@@ -1251,6 +1282,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", readinessRoutes(deps));
   app.route("/api/v1/workspaces", testRoutes(deps));
   app.route("/api/v1/workspaces", resultsExportRoutes(deps));
+  app.route("/api/v1/workspaces", evidenceExportRoutes(deps));
   // Phase 7e Task 4: the minimal pair — locality with `testRoutes` rather
   // than necessity, the same reason `proctoringRoutes`' own position below
   // is.
