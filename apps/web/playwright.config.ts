@@ -26,8 +26,12 @@ import process from "node:process";
 import { defineConfig, devices } from "@playwright/test";
 
 const WEB_PORT = Number(process.env.WEB_PORT || 4373);
-const API_PORT = 8787;
-const IDP_PORT = 9797;
+// Same reason WEB_PORT already is: a developer running clones side by side
+// needs every port overridable, not just the one that happened to collide
+// with Windows's excluded range first (phase 8h spec, "How these numbers
+// were taken").
+const API_PORT = Number(process.env.API_PORT || 8787);
+const IDP_PORT = Number(process.env.IDP_PORT || 9797);
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 
 export default defineConfig({

@@ -785,13 +785,32 @@
   color: var(--brand-primary, var(--color-ink));
 }
 
-/* Task 11 (#62, P5.9): the lifecycle row and UX-18's banner. */
+/* Task 11 (#62, P5.9): the lifecycle row and UX-18's banner.
+   Phase 8h (`O-13`): the owner read this row as one run of text — the
+   state badge carries no border or fill of its own (`D1`: no hue on the
+   state), so at the old `--space-sm` (6px) it sat close enough to Publish
+   to read as one phrase rather than two facts. `--space-md` is the
+   smallest step up the component scale that still reads as "inside one
+   row" rather than "a page-to-edge gap" (`D15`). */
 .testbuilder-lifecycle {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-sm);
+  gap: var(--space-md);
   margin-block: var(--space-md);
+}
+
+/* `O-13`/`F4`/`G3-08`: the seam between lifecycle actions (Publish, Close,
+   Archive — things that change the test's state) and destinations
+   (Grading queue, Analytics — things that only navigate). A thin rule
+   rather than another gap size: a reader scanning past Close straight into
+   "Grading queue" needs a stronger cue than spacing alone that the kind of
+   control just changed. `--edge`, like every other structural line in this
+   file — never a hue, per Signal dark's own rule. */
+.testbuilder-lifecycle__divider {
+  align-self: stretch;
+  width: 1px;
+  background: var(--edge);
 }
 
 /* `D18`'s card shares the version banner's shape rather than inventing a
@@ -906,22 +925,47 @@
 
    THE PAGE BECOMES TWO COLUMNS, and `:has()` is how, rather than a modifier
    prop threaded through `OrganiserShell` — the same move home.css makes for
-   the same reason (`.shell__page:has(> .home)`), and it keeps every builder
-   construct a DIRECT child of `.shell__page`. That last part is load-bearing
-   and is not a style choice: shell.css gives `.shell__page > *` its own
-   `overflow-x: auto` below 719px, which is what delivers `D3a`'s "the page
-   itself never scrolls sideways", and a wrapper around the spine would move
-   that from each panel onto the wrapper.
+   the same reason (`.shell__page:has(> .home)`).
 
-   `grid-row: 1 / span 40` is how the rail spans the page. `1 / -1` does not
-   work here: with no `grid-template-rows` the explicit grid has one line, so
-   `-1` resolves back to line 1 and the span collapses to a single row — the
-   rail would then be as tall as the <h1> beside it and `position: sticky`
-   would have no slack to move in. The tracks past the content are `auto` and
-   therefore zero-height, so the span costs nothing.
-   ponytail: a builder page with more than 40 direct children loses the
-   rail's sticky slack (it would stop sticking, not break); raise the span,
-   or give the page explicit rows, if one ever grows that long.
+   EXACTLY TWO CELLS, BOTH NAMED `grid-row: 1` EXPLICITLY (Phase 8h Task 1,
+   `F1`): `.testbuilder-main` (`routes/test.tsx`) wraps everything that used
+   to be a separate direct child of `.shell__page`, and the rail is the
+   other one. Before this, each of those children was auto-placed into its
+   own implicit row of column 1, and the rail's old `grid-row: 1 / span 40`
+   reserved rows for a builder page that only ever used six of them — 34
+   empty rows that still paid `.organiser`'s inherited `row-gap`, ~544px of
+   the measured 568px of dead scroll.
+
+   Two cells is not enough ON ITS OWN, measured rather than assumed: with
+   both left on `grid-row: auto`, Chromium's placement cursor does not put
+   them in the same implicit row just because there are only two items —
+   `.checklist-rail` claims row 1's column 2, and `.testbuilder-main` is
+   then auto-placed into a NEW row 2, column 1, landing a full rail-height
+   below where the page's content actually starts
+   (`grid-template-rows: "321px 1096px"`, measured). That is the same
+   defect in a new shape: an empty cell for the whole of one row rather
+   than 34 empty rows, but still dead space nothing painted. Naming the row
+   on both cells below is what actually closes it.
+
+   `row-gap: 0` is belt and braces once both cells agree on one row: there
+   is no second row left for a gap to tax, but a later multi-row use of
+   this grid should not resurrect the defect by accident.
+
+   `min-width: 0` still matters on `.testbuilder-main`: a grid column
+   defaults to sizing around its content's min-content width, and a test
+   name or a long URL inside the spine would otherwise push `minmax(0, 1fr)`
+   wider than the track.
+
+   Keeping every builder construct a DIRECT child of `.shell__page` is still
+   not possible with one wrapper, which is a real cost named rather than
+   hidden: shell.css gives `.shell__page > *` its own `overflow-x: auto`
+   below 719px, delivering `D3a`'s "the page itself never scrolls
+   sideways" one panel at a time. Wrapping those panels in
+   `.testbuilder-main` would hand that rule to the WRAPPER instead, making
+   the whole spine one scroll container rather than one per panel — so the
+   phone-width block near this file's `@media (max-width: 719px)` rule
+   re-gives `.testbuilder-main`'s own children exactly what `shell.css`
+   would have given them directly.
 
    `D15`, as shell.css's header maps it: the rail is a construct, so every
    value inside it is from the in-a-component scale. The gap between the two
@@ -934,17 +978,31 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--space-xl);
+  row-gap: 0;
+  align-items: start;
   align-content: start;
 }
 
+/* `grid-row: 1`, EXPLICIT ON BOTH CELLS, measured in rather than assumed
+   (Phase 8h Task 1, `F1`). Two auto-placed items with no `grid-row` of
+   their own do not land in the same implicit row just because there are
+   only two of them: Chromium's placement cursor advances to a NEW row for
+   `.testbuilder-main` once `.checklist-rail` has claimed column 2 of row 1
+   — measured as `grid-template-rows: "321px 1096px"`, two rows, with
+   `.testbuilder-main` pushed 321px down (the rail's own height) rather
+   than sitting beside it. That is the dead-scroll defect returning in a
+   new shape: the rail's column stays empty for the whole of row 2, and the
+   spine renders a full rail-height below where the page's own content
+   starts. Naming the row on both cells is what the two-cell design
+   actually requires; leaving it to auto-placement is what broke it. */
 .shell__page:has(> .checklist-rail) > * {
   grid-column: 1;
+  grid-row: 1;
   min-width: 0;
 }
 
 .shell__page > .checklist-rail {
   grid-column: 2;
-  grid-row: 1 / span 40;
   align-self: start;
   /* Under the shell's own 56px bar plus the page's top inset, so the rail
      and the bar never overlap. The bar's height is shell.css's --shell-bar,
@@ -955,6 +1013,36 @@
   flex-direction: column;
   gap: var(--space-md);
   max-height: calc(100dvh - var(--shell-bar) - (2 * var(--space-xl)));
+}
+
+/* Phase 8h Task 1 (`F1`): the stack `.organiser` (admin.css) used to give
+   these children directly — `display: flex; flex-direction: column; gap:
+   var(--space-lg)` — now carried here instead, since the grid above no
+   longer places them one by one. */
+.testbuilder-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  min-width: 0;
+}
+
+@media (max-width: 719px) {
+  /* See the comment over `.shell__page:has(> .checklist-rail)` above: this
+     restores the per-panel scroll container `shell.css`'s own
+     `.shell__page > *` rule gives every other organiser screen's direct
+     children, which `.testbuilder-main` stands between the builder's
+     panels and that rule now. */
+  .testbuilder-main {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: visible;
+  }
+
+  .testbuilder-main > * {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: auto;
+  }
 }
 
 /* The docked rail is a panel; the collapsed one is a 52px strip (`D7a`). */
