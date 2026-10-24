@@ -603,7 +603,7 @@ describe("the rail refetches as the author works", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Quantitative aptitude/ }));
     fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
-    fireEvent.click(within(screen.getByRole("dialog", { name: /delete this section/i })).getByRole("button", { name: /^delete$/i }));
+    fireEvent.click(within(screen.getByRole("alertdialog", { name: /delete this section/i })).getByRole("button", { name: /^delete$/i }));
     await waitFor(() => expect(screen.queryByRole("button", { name: /^Quantitative aptitude/ })).toBeNull());
 
     // The row is still in the rail, because the rail is still holding what it

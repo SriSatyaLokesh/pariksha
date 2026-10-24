@@ -147,6 +147,23 @@
   align-items: baseline;
 }
 
+/* Fix round (`M4`): Lane C's 44x44 `.reorderable-list__grip` (`question.css`)
+   is now the FIRST child of `.reorderable-list__controls`, and
+   `question.css`'s own `align-items: center` on that container made the
+   grip — a decorative, textless handle — the thing the row above derives
+   ITS baseline from: a flex container's own baseline, when something
+   above is aligning it by baseline, is read off its first in-flow child,
+   and a child with no text synthesises one off its margin box. Measured:
+   4.00px of spread with the grip centred, 1.00px with this rule. The
+   up/down buttons' own glyphs (real text) become the baseline source
+   instead, which is what the section summary's own text was always being
+   compared against. Scoped to `.section-list` for the same reason the
+   rule above it is: this lane owns that one usage, not `FormBuilder`'s or
+   `TimingPanel`'s. */
+.section-list .reorderable-list__controls {
+  align-items: baseline;
+}
+
 /* Phase 8h Task 4 (`F3`'s alignment half): the up/down buttons, the
    position field and the section summary used to sit on three separate
    baselines — `ReorderableList.tsx` renders the first two outside
@@ -268,61 +285,6 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
-}
-
-/* Phase 8h (`O-22`, register `G3-02`): both of `SectionList`'s dialogs
-   (the source-switch warning and the delete confirmation) used to render
-   inline at the end of the document — reachable only by scrolling to it,
-   on anything longer than a short test — with no scrim marking the rest
-   of the screen as unavailable. `position: fixed` plus `--color-scrim`
-   (declared in `tokens.css`, unused until now) is the exam runtime's own
-   pattern for the same construct (`exam.css`'s `.exam-proctoring-overlay`,
-   "the scrim and the dialog are the only two new boxes on the page").
-   `onClick` on the scrim closes the dialog the same way Escape already
-   does (`useDialogKeys`); `stopPropagation` on the dialog itself is what
-   keeps a click inside it from falling through and closing it instantly. */
-.section-list__scrim {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--space-xl);
-  background: var(--color-scrim);
-}
-
-.section-list__confirm {
-  width: min(28rem, 100%);
-  padding: var(--space-lg);
-  border-radius: var(--rounded-md);
-  background: var(--surface);
-  color: var(--ink);
-  box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
-}
-
-.section-list__confirm-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-md);
-  margin-block-start: var(--space-lg);
-}
-
-/* The delete confirm's own colour (`O-22`, register `G3-03`): `--risk` is
-   this file's one reserved warning colour (`.section-row__flag-risk`
-   already proves it readable on this surface), used here as a `color`
-   and `border-color` pair over `.button-secondary`'s own background —
-   never a literal, and never the `.button-primary` accent an affirmative
-   action owns. */
-.button-danger {
-  color: var(--risk);
-  border-color: var(--risk);
-}
-
-.button-danger:hover,
-.button-danger:focus-visible {
-  background: var(--risk-wash);
-  border-color: var(--risk);
 }
 
 .section-editor {
@@ -504,20 +466,13 @@
   overflow-y: auto;
 }
 
+/* Phase 8h fix round (`M5`): the `<label>` is this row's only child now
+   (the checkbox moved inside it, `.field-choice`'s own shape) — `block`
+   is enough, and the flex row `.picker-drawer__row label` below still
+   does the prompt/points layout work this used to split across two
+   elements. */
 .picker-drawer__row {
-  display: flex;
-  align-items: start;
-  gap: var(--space-xs);
-}
-
-/* Phase 8h Task 3 (`F3`): the row's own bare `<input type="checkbox">`
-   (`QuestionPickerDrawer.tsx`) renders at the browser's intrinsic 17x17,
-   under WCAG 2.5.8's 24x24 floor. `flex: none` so the row's `gap` does not
-   quietly shrink it back down on a narrow drawer. */
-.picker-drawer__row > input[type="checkbox"] {
-  flex: none;
-  width: 24px;
-  height: 24px;
+  display: block;
 }
 
 /* The label is a row of its own, because the clamped prompt below is a
@@ -644,19 +599,15 @@
   text-transform: uppercase;
 }
 
+/* Phase 8h fix round (`M5`): `.field-choice` (`registration.css`) now
+   does this row's own layout — `block` is enough for its one child. Was
+   `display: flex; align-items: center` plus a 24x24 forced glyph
+   (register `G2-05`/`G5-13`'s own class); `D17` rules ONE checkbox size
+   for the whole product, and Lane C's `.field-choice` already answers the
+   same register item by growing the clickable ROW instead — reused here
+   rather than a third checkbox-sizing recipe. */
 .shuffle-group__row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-xs);
-}
-
-/* Phase 8h Task 3 (`F3`): a bare `<input type="checkbox">` renders at the
-   browser's own intrinsic size — measured 17x17 in Chromium — under WCAG
-   2.5.8's 24x24 floor. Same class as register `G2-05`/`G5-13`, fixed here
-   for the one instance this lane owns. */
-.shuffle-group__row input[type="checkbox"] {
-  width: 24px;
-  height: 24px;
+  display: block;
 }
 
 .shuffle-group__fact {
@@ -1216,15 +1167,18 @@
    to the builder alone so every other `.organiser--wide` screen keeps the
    1080px clamp exactly as it is.
 
-   Gated above 1200px, matching the breakpoint `.section-list:has(>
-   .picker-drawer)` already uses a few hundred lines down — below it the
-   clamp was never binding anyway (any viewport narrower than ~1100px
-   already sits under 1080px plus its own padding), so there is nothing to
-   opt out of yet. */
-@media (min-width: 1200px) {
-  .organiser--wide:has(> .checklist-rail) {
-    max-width: none;
-  }
+   UNCONDITIONAL, not gated behind a viewport breakpoint (fix round `M1`):
+   a fixed `@media (min-width: 1200px)` assumed the nav rail's width is
+   constant, but it is not — `--shell-rail` is 236px docked and 56px
+   collapsed, so the viewport at which the second grid TRACK (the thing
+   this clamp actually binds against) passes 1080px moves with it, and one
+   fixed breakpoint cannot be right for both. There is no breakpoint to
+   get right: `max-width: none` never makes an element wider than its
+   grid track allows regardless of viewport, so below whatever width the
+   track is already under 1080px this has no effect at all — the clamp
+   was only ever removing slack that did not exist yet. */
+.organiser--wide:has(> .checklist-rail) {
+  max-width: none;
 }
 
 .shell__page > .checklist-rail {

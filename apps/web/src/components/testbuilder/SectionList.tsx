@@ -184,9 +184,18 @@ export function SectionList({
   const [picker, setPicker] = useState<{ sectionId: string; setIndex?: number } | null>(null);
 
   // Fix round (task 3 review, I9): Escape, initial focus and returning
-  // focus to the control that opened each dialog.
-  const switchDialog = useDialogKeys<HTMLDivElement>(pendingSwitch !== null, () => setPendingSwitch(null));
-  const deleteDialog = useDialogKeys<HTMLDivElement>(confirmDeleteId !== null, () => setConfirmDeleteId(null));
+  // focus to the control that opened each dialog. `trapTab: true` since
+  // the fix round after that gave both dialogs a full-viewport scrim
+  // (`M6`): `useDialogKeys`'s own doc comment says a caller that traps Tab
+  // has earned `aria-modal`, which was true the moment a scrim made
+  // "covers the viewport" literal — bank.tsx's own identical dialog
+  // (`M2` there) is the precedent this copies.
+  const switchDialog = useDialogKeys<HTMLDivElement>(pendingSwitch !== null, () => setPendingSwitch(null), {
+    trapTab: true,
+  });
+  const deleteDialog = useDialogKeys<HTMLDivElement>(confirmDeleteId !== null, () => setConfirmDeleteId(null), {
+    trapTab: true,
+  });
 
   useEffect(() => {
     void client.listBanks(workspaceId).then(setBanks);
@@ -408,22 +417,35 @@ export function SectionList({
         />
       )}
 
+      {/* Phase 8h fix round (`C1`/`M6`/`M7`/Minor "two scrim tokens"): this
+          used to be a bespoke `.section-list__scrim`/`.section-list__confirm`
+          pair — a second recipe for the exact construct `bank.tsx` built
+          the same wave (`.bank-confirm` + `.card-hairline
+          bank-confirm__dialog`), reading `--color-scrim`/`--color-shadow`
+          (cream-only literals `test/theme.test.ts` forbids outside the
+          candidate ground, and invisible on Signal dark either way) where
+          `bank.tsx` already reads `--scrim` (ground-aware) and
+          `.card-hairline` (a border that survives the dark ground instead
+          of a shadow the dark ground swallows). Converged onto the bank
+          shape rather than kept as a second one; `trapTab: true` above is
+          the other half of what a full-viewport scrim owes focus. */}
       {pendingSwitch && (
-        <div className="section-list__scrim" onClick={() => setPendingSwitch(null)}>
+        <div className="bank-confirm" onClick={() => setPendingSwitch(null)}>
           <div
             role="dialog"
+            aria-modal="true"
             aria-label="Replace this section's source"
             ref={switchDialog.dialogRef}
             tabIndex={-1}
             onKeyDown={switchDialog.onKeyDown}
-            className="section-list__confirm"
+            className="card-hairline bank-confirm__dialog"
             onClick={(event) => event.stopPropagation()}
           >
-            <p>
+            <p className="bank-confirm__message">
               Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
               kept across a source change.
             </p>
-            <div className="section-list__confirm-actions">
+            <div className="button-row">
               <button type="button" className="button-secondary" onClick={() => setPendingSwitch(null)}>
                 Cancel
               </button>
@@ -439,29 +461,30 @@ export function SectionList({
           inline at document end — below the fold on anything but a short
           test — with its confirm styled identically to every other
           button on the screen. An irreversible action now interrupts the
-          screen it was asked from (a fixed, centred overlay, same
-          `.section-list__scrim` the source-switch dialog above uses) and
-          its confirm carries `--risk`, the one colour this file reserves
-          for a warning, rather than `.button-primary`'s accent green —
-          an affirmative colour on a destructive action was `G3-03`'s own
-          complaint. */}
+          screen it was asked from (the same `.bank-confirm` overlay the
+          source-switch dialog above uses) and its confirm is
+          `.button-danger` alone (`authoring.css`'s own class, built
+          complete the same wave — `C2`: a second, redundant
+          `.button-danger` rule and a `button-secondary button-danger`
+          pairing on the element both deleted, not renamed around). */}
       {confirmDeleteId && (
-        <div className="section-list__scrim" onClick={() => setConfirmDeleteId(null)}>
+        <div className="bank-confirm" onClick={() => setConfirmDeleteId(null)}>
           <div
-            role="dialog"
+            role="alertdialog"
+            aria-modal="true"
             aria-label="Delete this section"
             ref={deleteDialog.dialogRef}
             tabIndex={-1}
             onKeyDown={deleteDialog.onKeyDown}
-            className="section-list__confirm"
+            className="card-hairline bank-confirm__dialog"
             onClick={(event) => event.stopPropagation()}
           >
-            <p>Delete this section? This cannot be undone once you leave this screen.</p>
-            <div className="section-list__confirm-actions">
+            <p className="bank-confirm__message">Delete this section? This cannot be undone once you leave this screen.</p>
+            <div className="button-row">
               <button type="button" className="button-secondary" onClick={() => setConfirmDeleteId(null)}>
                 Cancel
               </button>
-              <button type="button" className="button-secondary button-danger" onClick={confirmDelete}>
+              <button type="button" className="button-danger" onClick={confirmDelete}>
                 Delete
               </button>
             </div>
