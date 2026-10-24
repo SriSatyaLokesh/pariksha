@@ -581,8 +581,11 @@ describe("the rail refetches as the author works", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Timing/ }));
     expect(rail()).toHaveAttribute("data-state", "lights");
     fireEvent.change(screen.getByLabelText(/overall duration \(minutes\)/i), { target: { value: "90" } });
+    // `O-17`: the confirmation is raised when the box is left, not from the
+    // keystroke — a dialog that opens mid-number takes the caret with it.
+    fireEvent.blur(screen.getByLabelText(/overall duration \(minutes\)/i));
     // This fixture's test is published (`currentVersion: 1`), so `UX-18`'s
-    // confirmation stands between the keystroke and the save. Named here
+    // confirmation stands between the edit and the save. Named here
     // rather than reached by a loose button query, so the ledger's claim that
     // the dialog is answered is something the test actually asserts (fix
     // round 2, review Minor 5).

@@ -263,28 +263,74 @@ export function TimingPanel({
   const [touched, setTouched] = useState(false);
   const [pending, setPending] = useState<TestTiming | null>(null);
   const [warnRaw, setWarnRaw] = useState<string | null>(null);
+  /**
+   * `O-17` fix round, M2 — the author's own unapplied edit on a published
+   * test, owned here and nowhere else.
+   *
+   * This used to be inferred as `form !== timing`, which the sync effect
+   * below makes a lie: `test.tsx` mints a fresh `timing` object out of
+   * every PATCH response (`body: updated.body`), including a PATCH for
+   * some other panel, so an echo landing mid-edit both reset the box under
+   * the author AND made the following blur ask nothing, because the two
+   * were identical again. "There is an unapplied edit" is a fact about
+   * what the author did; it cannot be read off a prop the parent is free
+   * to replace at any moment.
+   */
+  const [held, setHeld] = useState<TestTiming | null>(null);
 
   useEffect(() => {
-    setForm(timing);
-  }, [timing]);
+    // Never over the author (`M2`). While `held` stands, the box belongs to
+    // whoever is typing in it; the stored value comes back the moment the
+    // confirmation is answered either way, through this same effect.
+    if (held === null) setForm(timing);
+  }, [timing, held]);
 
-  const dialog = useDialogKeys<HTMLDivElement>(pending !== null, () => {
+  /** Put the edit back: `UX-18` was refused, or dismissed. */
+  function cancel(): void {
     setPending(null);
+    setHeld(null);
     setForm(timing);
-  });
+  }
+
+  const dialog = useDialogKeys<HTMLDivElement>(pending !== null, cancel);
 
   const zone = form.timezone ?? "UTC";
   const safeZone = isZone(zone) ? zone : "UTC";
   const issues = touched ? timingIssues(form, sections) : [];
   const sectionTotal = sections.reduce((sum, section) => sum + (section.time_limit_minutes ?? 0), 0);
 
-  /** Every write goes through here: a draft keeps it locally and sends it,
-   * a published test holds it until the organiser has read what it does. */
-  function commit(next: TestTiming): void {
+  /**
+   * Every write goes through here: a draft keeps it locally and sends it,
+   * a published test holds it until the organiser has read what it does.
+   *
+   * `O-17` — `settled` is false for a box the organiser is **typing in**.
+   * `UX-18`'s confirmation is a dialog and `useDialogKeys` moves focus into
+   * a dialog the moment it opens, so raising one from a keystroke took the
+   * caret out of the field mid-number: typing 90 into "Overall duration" on
+   * a published test asked about 9 and swallowed the 0. A half-typed number
+   * is not an edit to confirm. The typed boxes ask through `settle` below
+   * when they are left; a radio or a select is already a finished choice
+   * and asks straight away.
+   */
+  function commit(next: TestTiming, settled = true): void {
     setForm(next);
     setTouched(true);
-    if (published) setPending(next);
-    else onChange(next);
+    if (!published) {
+      onChange(next);
+      return;
+    }
+    // `M2`: the edit is held in state of its own, not inferred from `form`
+    // — which the sync effect above may replace between the keystroke and
+    // the blur.
+    setHeld(next);
+    if (settled) setPending(next);
+  }
+
+  /** A typed box has been left, so the edit the author was making is
+   *  finished. Nothing to ask about unless they actually made one. */
+  function settle(): void {
+    setTouched(true);
+    if (held !== null) setPending(held);
   }
 
   const issueFor = (field: string): string | undefined =>
@@ -317,9 +363,9 @@ export function TimingPanel({
           value={iso === undefined ? "" : toLocalInput(iso, safeZone)}
           onChange={(event) => {
             const local = event.target.value;
-            commit(withKey(form, key, local === "" ? undefined : toIso(local, safeZone)));
+            commit(withKey(form, key, local === "" ? undefined : toIso(local, safeZone)), false);
           }}
-          onBlur={() => setTouched(true)}
+          onBlur={settle}
         />
         {iso !== undefined && (
           <p className="timing-panel__fact">
@@ -356,8 +402,8 @@ export function TimingPanel({
           id={`${ids}-zone`}
           list={`${ids}-zones`}
           value={form.timezone ?? ""}
-          onChange={(event) => commit(withKey(form, "timezone", event.target.value))}
-          onBlur={() => setTouched(true)}
+          onChange={(event) => commit(withKey(form, "timezone", event.target.value), false)}
+          onBlur={settle}
         />
         <datalist id={`${ids}-zones`}>
           {ZONE_SUGGESTIONS.map((name) => (
@@ -384,8 +430,8 @@ export function TimingPanel({
         label="Overall duration (minutes)"
         min={1}
         value={form.duration_minutes}
-        onCommit={(minutes) => commit({ ...form, duration_minutes: minutes })}
-        onBlur={() => setTouched(true)}
+        onCommit={(minutes) => commit({ ...form, duration_minutes: minutes }, false)}
+        onBlur={settle}
       >
         <p className="timing-panel__fact">
           <span className="timing-panel__figure">
@@ -435,8 +481,8 @@ export function TimingPanel({
         label="Attempts allowed"
         min={1}
         value={form.attempts_allowed ?? DEFAULTS.attempts_allowed}
-        onCommit={(attempts) => commit(withKey(form, "attempts_allowed", attempts))}
-        onBlur={() => setTouched(true)}
+        onCommit={(attempts) => commit(withKey(form, "attempts_allowed", attempts), false)}
+        onBlur={settle}
       />
 
       <NumberField
@@ -444,8 +490,8 @@ export function TimingPanel({
         label="Cooldown between attempts (minutes)"
         min={0}
         value={form.cooldown_minutes ?? DEFAULTS.cooldown_minutes}
-        onCommit={(minutes) => commit(withKey(form, "cooldown_minutes", minutes))}
-        onBlur={() => setTouched(true)}
+        onCommit={(minutes) => commit(withKey(form, "cooldown_minutes", minutes), false)}
+        onBlur={settle}
       >
         <p className="timing-panel__fact">How long a candidate waits before starting the next attempt.</p>
       </NumberField>
@@ -480,10 +526,10 @@ export function TimingPanel({
             const raw = event.target.value;
             setWarnRaw(raw);
             const parsed = parseWarnAt(raw);
-            if (parsed !== null) commit(withKey(form, "warn_at_minutes", parsed));
+            if (parsed !== null) commit(withKey(form, "warn_at_minutes", parsed), false);
           }}
           onBlur={() => {
-            setTouched(true);
+            settle();
             setWarnRaw(null);
           }}
         />
@@ -501,8 +547,8 @@ export function TimingPanel({
         label="Late sync grace (seconds)"
         min={0}
         value={form.late_sync_grace_seconds ?? DEFAULTS.late_sync_grace_seconds}
-        onCommit={(seconds) => commit(withKey(form, "late_sync_grace_seconds", seconds))}
-        onBlur={() => setTouched(true)}
+        onCommit={(seconds) => commit(withKey(form, "late_sync_grace_seconds", seconds), false)}
+        onBlur={settle}
       >
         <p className="timing-panel__fact">
           Answers arriving later than this after the deadline are rejected. The deadline is the server&rsquo;s; changing
@@ -522,14 +568,7 @@ export function TimingPanel({
             This test is published. Attempts in progress stay on version 1 and keep the timing they started under; the
             change applies to attempts begun after it is saved.
           </p>
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => {
-              setPending(null);
-              setForm(timing);
-            }}
-          >
+          <button type="button" className="button-secondary" onClick={cancel}>
             Cancel
           </button>
           <button
@@ -538,6 +577,9 @@ export function TimingPanel({
             onClick={() => {
               onChange(pending);
               setPending(null);
+              // Applied, so there is no held edit left to ask about — and
+              // the sync effect is free to follow the prop again.
+              setHeld(null);
             }}
           >
             Apply the change

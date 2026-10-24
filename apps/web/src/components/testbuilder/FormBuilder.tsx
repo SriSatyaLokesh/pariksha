@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import {
   FORM_FIELD_TYPES,
   unsatisfiableValidation,
@@ -162,8 +162,65 @@ export function FormBuilder({
     return Object.fromEntries(Object.entries(all).filter(([id]) => touched[id] === true));
   }, [spec, values, touched]);
 
+  /**
+   * `O-17` fix round, M1 — **a list key must be identity, and `field.id` is
+   * content the author edits.** `ReorderableList` keys each row by it, so
+   * committing a rename destroyed the whole `<fieldset>` the author was
+   * moving into: Tab focuses the next box, the blur then commits, the row
+   * unmounts and focus falls to `<body>`. The same beat kills the row's
+   * Delete button — mousedown blurs, the commit remounts, and the button
+   * being clicked no longer exists. Writing the id later in time (the first
+   * fix) only made that happen once per rename instead of once per
+   * character; it did not address the mechanism.
+   *
+   * So the row carries a key of its own, minted the first time a field id
+   * is seen and carried across a rename by `renameField` below — the one
+   * place that knows an id changed. A ref, not state: nothing renders from
+   * it, and minting on first sight is the same memo-on-a-ref shape
+   * `QuestionEditor`'s fill-blank graveyard already uses.
+   */
+  const rowKeys = useRef(new Map<string, string>());
+  const minted = useRef(0);
+  function rowKey(id: string): string {
+    const existing = rowKeys.current.get(id);
+    if (existing !== undefined) return existing;
+    minted.current += 1;
+    const fresh = `row${minted.current}`;
+    rowKeys.current.set(id, fresh);
+    return fresh;
+  }
+
   function setFields(fields: FormField[]): void {
+    // A deleted field's key must not be left behind: `freshFieldId` hands a
+    // freed name straight back out, and a new row inheriting a dead row's
+    // key would inherit its state with it.
+    const live = new Set(fields.map((f) => f.id));
+    for (const id of [...rowKeys.current.keys()]) if (!live.has(id)) rowKeys.current.delete(id);
     onChange({ ...spec, fields });
+  }
+
+  /**
+   * The Column name box's one writer, and the one place a field id changes.
+   * Answers with the reason a rename was refused, or `undefined` once it
+   * has landed — so the box can say what happened instead of silently
+   * putting the old name back and dropping a whole typed word.
+   */
+  function renameField(field: FormField, next: string): string | undefined {
+    if (next === field.id) return undefined;
+    // `sanitiseId` only returns "" from "", so this is the emptied box.
+    if (next === "") return "A column name cannot be empty.";
+    // The same collision `updateField` refuses below, and for the same
+    // reasons — stated here because this is where the author can see it.
+    if (spec.fields.some((f) => f.id === next)) {
+      return `Another field already uses the column name "${next}".`;
+    }
+    const key = rowKeys.current.get(field.id);
+    if (key !== undefined) {
+      rowKeys.current.delete(field.id);
+      rowKeys.current.set(next, key);
+    }
+    setFields(spec.fields.map((f) => (f.id === field.id ? { ...f, id: next } : f)));
+    return undefined;
   }
 
   function updateField(id: string, updater: (field: FormField) => FormField): void {
@@ -189,6 +246,7 @@ export function FormBuilder({
       setPendingTemplate(key);
       return;
     }
+    rowKeys.current.clear();
     onChange(FORM_TEMPLATES[key]);
   }
 
@@ -242,7 +300,7 @@ export function FormBuilder({
 
       <ReorderableList
         items={spec.fields}
-        keyOf={(f) => f.id}
+        keyOf={(f) => rowKey(f.id)}
         labelOf={(f) => `field ${f.label || "Untitled"}`}
         onReorder={(from, to) => setFields(moveItem(spec.fields, from, to))}
         legend="Registration form"
@@ -251,6 +309,7 @@ export function FormBuilder({
             field={field}
             index={index}
             onChange={(updater) => updateField(field.id, updater)}
+            onRename={(next) => renameField(field, next)}
             onDelete={() => setFields(spec.fields.filter((f) => f.id !== field.id))}
             checkUrl={checkUrl}
           />
@@ -314,6 +373,7 @@ export function FormBuilder({
             type="button"
             className="button-primary"
             onClick={() => {
+              rowKeys.current.clear();
               onChange(FORM_TEMPLATES[pendingTemplate]);
               setPendingTemplate(null);
             }}
@@ -330,18 +390,36 @@ function FieldEditor({
   field,
   index,
   onChange,
+  onRename,
   onDelete,
   checkUrl,
 }: {
   field: FormField;
   index: number;
   onChange: (updater: (field: FormField) => FormField) => void;
+  /** The Column name box's writer. Answers with the reason a rename was
+   *  refused, or `undefined` once it has landed. */
+  onRename: (next: string) => string | undefined;
   onDelete: () => void;
   checkUrl: (url: string) => Promise<ReachResult>;
 }) {
   const ids = useId();
   const unsatisfiable = unsatisfiableValidation(field);
   const v = field.validation;
+  /**
+   * `O-17` — the Column name box edits `field.id`. Held here and written
+   * when the box is left, so the stored id does not churn on every
+   * keystroke. `null` is "not being edited", so a rename from elsewhere
+   * still shows through.
+   *
+   * The row surviving that write is `rowKey`'s job, not this one's (fix
+   * round, M1): this draft alone only changed how often the row was
+   * destroyed, never whether it was.
+   */
+  const [idDraft, setIdDraft] = useState<string | null>(null);
+  /** Why the last rename was refused, or `undefined`. Shown instead of
+   *  silently putting the old name back and dropping a typed word. */
+  const [idRefusal, setIdRefusal] = useState<string | undefined>(undefined);
 
   // `D16`, content: a field carries at most one `help` — a constraint or a
   // consequence, in the help track — and at most one `unit`, which goes
@@ -355,7 +433,7 @@ function FieldEditor({
     value: string,
     onCommit: (next: string) => void,
     type = "text",
-    secondary: { help?: string; unit?: string } = {},
+    secondary: { help?: string; unit?: string; onSettle?: () => void } = {},
   ) => {
     const describedBy = [
       ...(secondary.unit === undefined ? [] : [`${ids}-${key}-unit`]),
@@ -368,6 +446,7 @@ function FieldEditor({
         type={type}
         value={value}
         onChange={(event) => onCommit(event.target.value)}
+        {...(secondary.onSettle !== undefined && { onBlur: secondary.onSettle })}
         {...(describedBy.length > 0 && { "aria-describedby": describedBy.join(" ") })}
       />
     );
@@ -438,13 +517,29 @@ function FieldEditor({
           <input
             className="text-input"
             id={`${ids}-id`}
-            value={field.id}
-            aria-describedby={`${ids}-id-help`}
+            value={idDraft ?? field.id}
+            aria-describedby={idRefusal === undefined ? `${ids}-id-help` : `${ids}-id-help ${ids}-id-refusal`}
             onChange={(event) => {
-              const id = sanitiseId(event.target.value);
-              if (id !== "") onChange((f) => ({ ...f, id }));
+              setIdDraft(sanitiseId(event.target.value));
+              setIdRefusal(undefined);
+            }}
+            onBlur={() => {
+              if (idDraft === null) return;
+              const refusal = onRename(idDraft);
+              setIdRefusal(refusal);
+              // Accepted: the stored id is now the typed one, so the draft
+              // has nothing left to say. Refused: the typed name STAYS in
+              // the box beside the reason, because the alternative is the
+              // author losing a whole word to a sentence they have to read
+              // after it has already gone.
+              if (refusal === undefined) setIdDraft(null);
             }}
           />
+          {idRefusal !== undefined && (
+            <p className="field-error" role="alert" id={`${ids}-id-refusal`}>
+              {idRefusal}
+            </p>
+          )}
           {/* `sanitiseId` rewrites as the organiser types — lower-cases,
               replaces anything else with `_` and cuts at 40. Said here
               because a field that silently edits what was typed is the
@@ -551,8 +646,29 @@ function FieldEditor({
 
       {field.type === "phone" && (
         <>
-          {text("Default country", "default_country", v?.default_country ?? "", (next) =>
-            onChange((f) => withValidation(f, "default_country", next === "" ? undefined : next.toUpperCase())),
+          {text(
+            "Default country",
+            "default_country",
+            v?.default_country ?? "",
+            (next) => onChange((f) => withValidation(f, "default_country", next === "" ? undefined : next)),
+            "text",
+            {
+              // `O-17` fix round, M4. This used to `toUpperCase()` on every
+              // keystroke, which made the controlled value differ from what
+              // the author typed: React wrote the DOM value back and the
+              // caret went to the end, so typing a lower-case letter
+              // anywhere but the end of "IN" scattered the rest of the code.
+              // `DIAL_CODE` is still keyed upper-case and the document still
+              // stores it that way — normalised when the box is left, never
+              // under a live caret.
+              onSettle: () =>
+                onChange((f) => {
+                  const typed = f.validation?.default_country;
+                  return typed === undefined || typed === typed.toUpperCase()
+                    ? f
+                    : withValidation(f, "default_country", typed.toUpperCase());
+                }),
+            },
           )}
           {/* What the code the organiser typed actually does, said here
               rather than left to be discovered in the preview. The schema
