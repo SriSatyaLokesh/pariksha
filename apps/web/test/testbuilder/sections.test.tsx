@@ -7,6 +7,7 @@ import { describe, it, expect, vi } from "vitest";
 import { render, screen, within, fireEvent, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { Section } from "@pariksha/core";
+import { parseRuleBodies, stripCssComments } from "../css-chain";
 
 import {
   ApiError,
@@ -301,7 +302,10 @@ describe("SectionList", () => {
   it("deleting a section confirms and offers undo", () => {
     render(<Harness initial={[QUANT]} />);
     fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // `role="alertdialog"`, not `"dialog"` (fix round `M6`): the delete
+    // confirm is destructive, the same distinction `bank.tsx`'s own
+    // identical dialog draws.
+    expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /^delete$/i }));
     // `ReorderableList`'s own live region is also `role="status"` (empty,
@@ -310,6 +314,29 @@ describe("SectionList", () => {
     const status = screen.getByRole("status", { name: /section deleted/i });
     expect(status).toHaveTextContent(/undo/i);
     expect(within(status).getByRole("button", { name: /undo/i })).toBeInTheDocument();
+  });
+
+  // Phase 8h (`O-22`, register `G3-02`/`G3-03`): this used to render inline
+  // at the end of the document, reachable only by scrolling, with its
+  // confirm styled identically to every other button on the screen.
+  // `jsdom` cannot see that it is now centred (a `uicheck`/browser concern,
+  // `measurement/` is where that is actually proven) — what it CAN see is
+  // the structure: a scrim wrapping the dialog, and the destructive button
+  // carrying a colour class distinct from `.button-primary`'s accent.
+  it("O-22: the delete confirm has a scrim and a distinct destructive colour", () => {
+    render(<Harness initial={[QUANT]} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
+
+    // Fix round (`C1`/`M6`/`M7`): converged onto `bank.tsx`'s own
+    // `.bank-confirm` scrim and `role="alertdialog"` for the same
+    // construct, rather than this file's own second recipe.
+    const dialog = screen.getByRole("alertdialog", { name: /delete this section/i });
+    expect(dialog.parentElement).toHaveClass("bank-confirm");
+
+    const confirm = within(dialog).getByRole("button", { name: /^delete$/i });
+    expect(confirm).toHaveClass("button-danger");
+    expect(confirm).not.toHaveClass("button-primary");
+    expect(confirm).not.toHaveClass("button-secondary");
   });
 
   it("fix round (task 3 review, I9): Escape cancels the delete dialog, focus moves in and back", () => {
@@ -322,12 +349,35 @@ describe("SectionList", () => {
     trigger.focus();
     fireEvent.click(trigger);
 
-    const dialog = screen.getByRole("dialog", { name: /delete this section/i });
+    const dialog = screen.getByRole("alertdialog", { name: /delete this section/i });
     expect(dialog).toHaveFocus();
 
     fireEvent.keyDown(dialog, { key: "Escape" });
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
+  });
+
+  it("fix round (`M6`): Tab is trapped inside the delete confirm dialog", () => {
+    // `trapTab: true` (fix round, alongside the `alertdialog`/`aria-modal`
+    // convergence above) is the other half of M6 — a destructive dialog a
+    // reader can Tab straight out of, onto whatever the page underneath
+    // happens to render next, is not actually modal no matter what its
+    // `role` claims. Forward Tab off the last control wraps to the first;
+    // Shift+Tab off the first wraps to the last — `useDialogKeys`'s own
+    // edge-detection, exercised here rather than merely read.
+    render(<Harness initial={[QUANT]} />);
+    fireEvent.click(screen.getByRole("button", { name: /delete section/i }));
+    const dialog = screen.getByRole("alertdialog", { name: /delete this section/i });
+    const cancel = within(dialog).getByRole("button", { name: /^cancel$/i });
+    const del = within(dialog).getByRole("button", { name: /^delete$/i });
+
+    del.focus();
+    fireEvent.keyDown(del, { key: "Tab" });
+    expect(cancel).toHaveFocus();
+
+    cancel.focus();
+    fireEvent.keyDown(cancel, { key: "Tab", shiftKey: true });
+    expect(del).toHaveFocus();
   });
 
   it("fix round (task 3 review, I9): Escape cancels the source-switch dialog, focus moves in and back", () => {
@@ -492,6 +542,33 @@ describe("SectionList", () => {
     expect(screen.queryByRole("button", { name: /load more/i })).not.toBeInTheDocument();
   });
 
+  /**
+   * Fix round (review of the fix round, item 1): a selector `ruleFor` looks
+   * up is matched against a rule's own comma-separated list (trimmed, so
+   * `.a,\n.b { … }` finds `.b` too), never scanned forward as raw text.
+   * `stripCssComments` first, so a comment that merely NAMES the class
+   * cannot be mistaken for it, and `parseRuleBodies` brace-matches rather
+   * than regex-ing to "the next `{`" — the fail-open the review caught in
+   * the old `tabular figures` test: a comment mentioning `.section-row__summary`
+   * positioned before an UNRELATED rule that happens to carry
+   * `tabular-nums` let `[^{]*` scan across the comment and match that other
+   * rule's body instead, passing even with the real declaration deleted
+   * outright. Probed: with that construction, the old regex's match spanned
+   * from inside the comment straight through the unrelated rule's own
+   * closing brace and reported a pass; this lookup against the same CSS
+   * correctly returns `.section-row__summary`'s OWN (property-less) body
+   * and fails.
+   */
+  function ruleFor(css: string, selector: string): string {
+    const rule = parseRuleBodies(stripCssComments(css)).find((r) =>
+      r.selector
+        .split(",")
+        .map((s) => s.trim())
+        .includes(selector),
+    );
+    return rule?.body ?? "";
+  }
+
   it("the collapsed row stays readable at 400 px", () => {
     // Fix round (task 3 review, I11): jsdom performs no layout, so
     // `container.style.width = "400px"` changes nothing a query can see —
@@ -504,8 +581,7 @@ describe("SectionList", () => {
       resolve(import.meta.dirname, "../../src/styles/testbuilder.css"),
       "utf8",
     );
-    const rule = /\.section-row__summary\s*\{[^}]*\}/.exec(css)?.[0] ?? "";
-    expect(rule).toMatch(/overflow-wrap:\s*anywhere/);
+    expect(ruleFor(css, ".section-row__summary")).toMatch(/overflow-wrap:\s*anywhere/);
 
     render(<Harness initial={[QUANT]} points={{ quant: { min: 8, max: 8 } }} />);
     const button = screen.getByRole("button", { name: /^Quantitative aptitude ·/i });
@@ -515,9 +591,7 @@ describe("SectionList", () => {
   it("fix round (task 3 review, I12): counts, points and durations use tabular figures", () => {
     const css = readFileSync(resolve(import.meta.dirname, "../../src/styles/testbuilder.css"), "utf8");
     for (const selector of [".section-row__summary", ".section-row__balance th", ".picker-drawer__points"]) {
-      const escaped = selector.replace(/[.]/g, "\\.");
-      const rule = new RegExp(`${escaped}[^{]*\\{[^}]*\\}`).exec(css)?.[0] ?? "";
-      expect(rule, `${selector}'s rule`).toMatch(/font-variant-numeric:\s*tabular-nums/);
+      expect(ruleFor(css, selector), `${selector}'s rule`).toMatch(/font-variant-numeric:\s*tabular-nums/);
     }
   });
 

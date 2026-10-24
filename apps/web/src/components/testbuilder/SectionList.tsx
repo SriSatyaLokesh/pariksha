@@ -182,12 +182,20 @@ export function SectionList({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [undo, setUndo] = useState<{ section: StoredSection; index: number } | null>(null);
   const [picker, setPicker] = useState<{ sectionId: string; setIndex?: number } | null>(null);
-  const sectionOrderId = useId();
 
   // Fix round (task 3 review, I9): Escape, initial focus and returning
-  // focus to the control that opened each dialog.
-  const switchDialog = useDialogKeys<HTMLDivElement>(pendingSwitch !== null, () => setPendingSwitch(null));
-  const deleteDialog = useDialogKeys<HTMLDivElement>(confirmDeleteId !== null, () => setConfirmDeleteId(null));
+  // focus to the control that opened each dialog. `trapTab: true` since
+  // the fix round after that gave both dialogs a full-viewport scrim
+  // (`M6`): `useDialogKeys`'s own doc comment says a caller that traps Tab
+  // has earned `aria-modal`, which was true the moment a scrim made
+  // "covers the viewport" literal — bank.tsx's own identical dialog
+  // (`M2` there) is the precedent this copies.
+  const switchDialog = useDialogKeys<HTMLDivElement>(pendingSwitch !== null, () => setPendingSwitch(null), {
+    trapTab: true,
+  });
+  const deleteDialog = useDialogKeys<HTMLDivElement>(confirmDeleteId !== null, () => setConfirmDeleteId(null), {
+    trapTab: true,
+  });
 
   useEffect(() => {
     void client.listBanks(workspaceId).then(setBanks);
@@ -380,50 +388,19 @@ export function SectionList({
         Add section
       </button>
 
-      {/* `D19`'s other half, and the reason it is drawn at all. Shuffling the
-          ORDER OF THE SECTIONS is not supported: `pariksha/test@1` has no
-          `shuffle_sections` field, adding one is a format bump, and it needs
-          a ruling on whether per-section time limits still hold when the
-          order varies. That is a feature and an ADR, not a design control —
-          so the control renders disabled and says so, which gives it a home
-          for the day it lands and stops anyone drawing a toggle that does
-          nothing. It holds no state and reaches no handler, so there is
-          nothing here for a patch to carry.
-
-          The sentence below is persistent text rather than a tooltip or a
-          `title`, for the same reason every other consequence on this screen
-          is: a disabled input takes no focus, so a description hung off it
-          is one a keyboard or touch user may never hear.
-
-          Fix round 1, M1: and it is BOUND to the control with
-          `aria-describedby` rather than merely placed beside it. The
-          precedent is this repo's own — the Publish button carries
-          "2 blocking rows must clear first." the same way (spec §13). A
-          control that is disabled owes the reason to a screen reader, not
-          only to a sighted reader: a sentence sitting next to one is read by
-          a reader sweeping the page in document order and by nobody tabbing
-          the form. */}
-      <fieldset className="shuffle-group">
-        <legend>Section order</legend>
-        <div className="shuffle-group__row">
-          <input
-            type="checkbox"
-            id={sectionOrderId}
-            checked={false}
-            disabled
-            readOnly
-            aria-describedby={`${sectionOrderId}-why`}
-          />
-          <label htmlFor={sectionOrderId}>Order of the sections themselves</label>
-        </div>
-        {/* Fix round 1, M3: "the order above" named a list that can be empty
-            — a test with no sections yet still renders this control, and
-            there was nothing above it for the sentence to point at. */}
-        <p className="shuffle-group__fact" id={`${sectionOrderId}-why`}>
-          Not supported today — every candidate sees the sections in the order this list sets. Varying it needs a
-          new field in the test format and a decision about per-section time limits.
-        </p>
-      </fieldset>
+      {/* Phase 8h Task 6 (`F5`): the disabled "Order of the sections
+          themselves" control used to sit here — a checkbox that could never
+          be checked, above Settings, on every builder page regardless of
+          whether reordering sections is even a question yet. `D19`'s
+          capability is still not built: `pariksha/test@1` has no
+          `shuffle_sections` field, and adding one is a format bump plus a
+          ruling on whether per-section time limits survive a shuffled
+          order — a feature and an ADR, not a design control. A control
+          that can never do anything is not a placeholder for that work;
+          it is dead weight above the fold on the one screen the owner
+          asked this phase to make more room on. Deleted rather than
+          hidden: the day the capability lands, it gets a control that
+          actually does something, not this one re-enabled. */}
 
       {picker && (
         <QuestionPickerDrawer
@@ -440,42 +417,78 @@ export function SectionList({
         />
       )}
 
+      {/* Phase 8h fix round (`C1`/`M6`/`M7`/Minor "two scrim tokens"): this
+          used to be a bespoke `.section-list__scrim`/`.section-list__confirm`
+          pair — a second recipe for the exact construct `bank.tsx` built
+          the same wave (`.bank-confirm` + `.card-hairline
+          bank-confirm__dialog`), reading `--color-scrim`/`--color-shadow`
+          (cream-only literals `test/theme.test.ts` forbids outside the
+          candidate ground, and invisible on Signal dark either way) where
+          `bank.tsx` already reads `--scrim` (ground-aware) and
+          `.card-hairline` (a border that survives the dark ground instead
+          of a shadow the dark ground swallows). Converged onto the bank
+          shape rather than kept as a second one; `trapTab: true` above is
+          the other half of what a full-viewport scrim owes focus. */}
       {pendingSwitch && (
-        <div
-          role="dialog"
-          aria-label="Replace this section's source"
-          ref={switchDialog.dialogRef}
-          tabIndex={-1}
-          onKeyDown={switchDialog.onKeyDown}
-        >
-          <p>
-            Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
-            kept across a source change.
-          </p>
-          <button type="button" className="button-secondary" onClick={() => setPendingSwitch(null)}>
-            Cancel
-          </button>
-          <button type="button" className="button-primary" onClick={confirmSourceSwitch}>
-            Replace it
-          </button>
+        <div className="bank-confirm" onClick={() => setPendingSwitch(null)}>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Replace this section's source"
+            ref={switchDialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={switchDialog.onKeyDown}
+            className="card-hairline bank-confirm__dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="bank-confirm__message">
+              Switching this section&apos;s source will discard <strong>{pendingSwitch.discard}</strong> — nothing is
+              kept across a source change.
+            </p>
+            <div className="button-row">
+              <button type="button" className="button-secondary" onClick={() => setPendingSwitch(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button-primary" onClick={confirmSourceSwitch}>
+                Replace it
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
+      {/* Phase 8h (`O-22`, register `G3-02`/`G3-03`): this used to render
+          inline at document end — below the fold on anything but a short
+          test — with its confirm styled identically to every other
+          button on the screen. An irreversible action now interrupts the
+          screen it was asked from (the same `.bank-confirm` overlay the
+          source-switch dialog above uses) and its confirm is
+          `.button-danger` alone (`authoring.css`'s own class, built
+          complete the same wave — `C2`: a second, redundant
+          `.button-danger` rule and a `button-secondary button-danger`
+          pairing on the element both deleted, not renamed around). */}
       {confirmDeleteId && (
-        <div
-          role="dialog"
-          aria-label="Delete this section"
-          ref={deleteDialog.dialogRef}
-          tabIndex={-1}
-          onKeyDown={deleteDialog.onKeyDown}
-        >
-          <p>Delete this section? This cannot be undone once you leave this screen.</p>
-          <button type="button" className="button-secondary" onClick={() => setConfirmDeleteId(null)}>
-            Cancel
-          </button>
-          <button type="button" className="button-primary" onClick={confirmDelete}>
-            Delete
-          </button>
+        <div className="bank-confirm" onClick={() => setConfirmDeleteId(null)}>
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-label="Delete this section"
+            ref={deleteDialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={deleteDialog.onKeyDown}
+            className="card-hairline bank-confirm__dialog"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="bank-confirm__message">Delete this section? This cannot be undone once you leave this screen.</p>
+            <div className="button-row">
+              <button type="button" className="button-secondary" onClick={() => setConfirmDeleteId(null)}>
+                Cancel
+              </button>
+              <button type="button" className="button-danger" onClick={confirmDelete}>
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

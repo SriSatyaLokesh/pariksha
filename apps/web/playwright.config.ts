@@ -1,5 +1,12 @@
 // The end-to-end harness: three localhost processes and Chromium.
 //
+// All three ports below are the DEFAULTS, not fixed facts: WEB_PORT,
+// API_PORT and IDP_PORT each override one. This machine reserves TCP
+// 4198-4297 (`netsh interface ipv4 show excludedportrange protocol=tcp`),
+// which is why the knobs exist. API_PORT also drives vite.config.ts's proxy
+// target, so the browser and the health probe cannot disagree about where
+// the API is.
+//
 //   vite preview (4173)  the built dist/ — the landing page only exists
 //                        after the prerender, so `vite dev` would serve an
 //                        empty <div id="root"> and there would be no
@@ -26,8 +33,12 @@ import process from "node:process";
 import { defineConfig, devices } from "@playwright/test";
 
 const WEB_PORT = Number(process.env.WEB_PORT || 4373);
-const API_PORT = 8787;
-const IDP_PORT = 9797;
+// Same reason WEB_PORT already is: a developer running clones side by side
+// needs every port overridable, not just the one that happened to collide
+// with Windows's excluded range first (phase 8h spec, "How these numbers
+// were taken").
+const API_PORT = Number(process.env.API_PORT || 8787);
+const IDP_PORT = Number(process.env.IDP_PORT || 9797);
 const WEB_ORIGIN = `http://localhost:${WEB_PORT}`;
 
 export default defineConfig({

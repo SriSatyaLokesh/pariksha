@@ -55,14 +55,20 @@ export function ShuffleFieldset({
   return (
     <fieldset className="shuffle-group">
       <legend>Shuffling</legend>
+      {/* Phase 8h fix round (`M5`): `.field-choice` (`registration.css`,
+          `D17`'s own pattern) wraps the input so the whole row is the
+          target and the glyph stays the 17px `D17` draws everywhere else —
+          reused rather than a third checkbox-sizing answer in this file. */}
       <div className="shuffle-group__row">
-        <input
-          type="checkbox"
-          id={id}
-          checked={shuffleQuestions}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <label htmlFor={id}>Shuffle questions within this section</label>
+        <label className="field-choice" htmlFor={id}>
+          <input
+            type="checkbox"
+            id={id}
+            checked={shuffleQuestions}
+            onChange={(event) => onChange(event.target.checked)}
+          />
+          Shuffle questions within this section
+        </label>
       </div>
       <p className="shuffle-group__fact">
         Answer-option order is set per question, in the question editor — there is no switch for it here.

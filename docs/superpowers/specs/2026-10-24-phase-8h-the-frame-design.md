@@ -72,6 +72,49 @@ precedent.
 column grows with the viewport rather than holding at 672px. The rail keeps
 its width; the column takes the slack.
 
+### F2 addendum — fix round (`M1`): docked nav still falls short of 0.6 below ~1280px
+
+F2's own fix (`.organiser--wide:has(> .checklist-rail) { max-width: none }`,
+made unconditional rather than gated behind a borrowed `@media (min-width:
+1200px)`) is correct on its own terms — nothing is reapplying the clamp.
+Measured anyway, because the review that caught the old fixed breakpoint
+asked for the actual crossover, and the crossover depends on which of the
+organiser's two rails is docked:
+
+`editorWidthRatio` at `?view=test&test=<id>`, nav rail **docked** (236px,
+the default a reader lands on):
+
+| viewport | ratio |
+| --- | --- |
+| 1100 | 0.528 |
+| 1150 | 0.554 |
+| 1199 | 0.576 |
+| 1200 | 0.577 |
+| 1250 | 0.598 |
+| 1280 | 0.609 |
+| 1366 | 0.639 |
+
+Ratio clears 0.6 only somewhere between 1250px and 1280px. Cause: the
+opt-out's own condition is the shell's second grid track (viewport minus
+whichever rail is docked) passing 1080px — with the nav docked that track
+only exceeds 1080px once the viewport passes **1316px**, so below that the
+editor is working with under 1080px of track regardless of the clamp. This
+is fixed structural chrome overhead, not a residual defect in the clamp fix
+itself — a CSS `@media (min-width: …)` breakpoint cannot key off a runtime
+value (which rail is docked), only off viewport width, so no single
+breakpoint is correct for both rail states; the existing regression test
+(`e2e/measurement/frame.spec.ts`, "the opt-out releases as soon as the track
+actually exceeds 1080px…") covers the nav-collapsed crossover instead, where
+the band in question (1136-1200px) is a real laptop width rather than one
+nobody ships the builder at with the nav docked and sub-1080px of track.
+
+**Not fixed in this round** — the fix is either a lower accepted ratio floor
+on common widths with the nav docked, or keying `.organiser--wide`'s own
+clamp off the rail's actual rendered width (a container-query-shaped change
+to `admin.css`, cross-cutting beyond this lane's `testbuilder.css`/
+`SectionList.tsx` scope). Recorded here so the gap is carried forward rather
+than lost in a fix-round report.
+
 ## F3 — the section row has three baselines and a hard WCAG failure
 
 In the section row: `↑`/`↓` at 36×26, the label *"Position of section
@@ -89,6 +132,25 @@ Register items of the same class: `G2-05` (17px checkbox in `ApiKeyPanel`),
 **Required behaviour:** no interactive control renders below 24×24 CSS
 pixels on any audited screen, and the rule is enforced by a gate rather than
 by review.
+
+### F3 addendum — fix round (`M5`/`M2`): what the gate actually enforces
+
+The wording above is stricter than what shipped, and the difference is
+deliberate. `D17` fixes one checkbox and one radio for the whole product at
+**17px**, and the fix round's first attempt — forcing `width/height: 24px`
+on two bare inputs — put a second glyph size on the organiser while Lane C
+was shipping the opposite answer for the identical register item. Lane C's
+is correct: `.field-choice` wraps the input in a label so the 24px-line-height
+**row** is the target and the 17px glyph `D17` specifies stays exactly as
+drawn.
+
+So `undersizedTargets` enforces **WCAG 2.5.8 including the Spacing
+exception**, not a flat 24px floor: an undersized control passes when a
+24px-diameter circle centred on it reaches no other target's circle. Ten
+checkboxes in the builder's Proctoring panel are 17px and clear the
+exception at 205.7px centre-to-centre. Read "no control below 24×24" as
+"no control fails 2.5.8"; the glyph is not the hit area.
+
 
 ## F4 — settings read as text, and two destinations are filed under Results
 
@@ -112,6 +174,31 @@ drift is in which token each screen reaches for, not in missing tokens.
 The builder also renders **7 font sizes and 3 families**. Register items of
 the same class: `G1-05` (hand-written `14px` radius in `signal.css`),
 `G1-07` (subpixel font sizes), `G5-15` (10px analytics headers).
+
+### F1 addendum — fix round: the same pattern survives in the picker drawer
+
+`testbuilder.css`'s `.section-list > .picker-drawer { grid-row: 1 / span 40 }`
+is `F1`'s own defect, two hundred lines away in the same file: `.section-list`
+becomes a grid inheriting `gap: var(--space-md)` with no `row-gap: 0`, so it
+carries **40 tracks at 12px row-gap — a 570px floor** whenever the drawer is
+open above 1200px. Measured cost is ~30px with a tall drawer and several
+hundred with a short one.
+
+Deferred deliberately, not missed: the fix changes the visual rhythm between
+section rows and neither the implementer nor the reviewer had browser
+verification time left in the wave. It is the first thing to take in the next
+one.
+
+### F3 addendum — fix round: the settings row's hover block is 12px off-centre
+
+`.setting-row__button` carries `margin-inline: calc(var(--space-md) * -1)`,
+which shifts its box left without widening it, so the `--wash` hover and
+focus fill overhangs 12px past the row's left edge and stops 12px short on
+the right — at every width. Measured at 1440: button x=76→1320 against
+`.setting-row` (which carries the `border-block-end`) at x=88→1332.
+
+Visible on hover and focus on every settings row, and the fix is a single
+property. The reviewer named it the first of the deferred items to take.
 
 ## F7 — the tests list's action column is ragged
 

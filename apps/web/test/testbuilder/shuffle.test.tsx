@@ -1,7 +1,7 @@
-// `D19`: shuffling — surface the half that exists, disable the half that
-// does not.
+// `D19`: shuffling — surface the half that exists, build no control for the
+// half that does not.
 //
-// Three facts, verified in the code rather than assumed:
+// Facts, verified in the code rather than assumed:
 //   - questions within a section (`shuffle_questions`, schemas/test-1.json,
 //     default `true`) is supported and built; the redesign surfaces it as a
 //     chip on each section row;
@@ -10,8 +10,11 @@
 //   - the order of the sections themselves is NOT supported. There is no
 //     `shuffle_sections` field in `pariksha/test@1`. It needs one, a format
 //     bump and a ruling on per-section time limits — a feature and an ADR,
-//     not a design control. So the control renders DISABLED, saying exactly
-//     that, and must stay inert.
+//     not a design control. Phase 8h Task 6 (`F5`) deleted the disabled
+//     checkbox that used to sit above Settings for this: a control that can
+//     never be checked is dead weight above the fold, not a placeholder
+//     worth keeping. The capability arrives with its own control the day it
+//     is built.
 //
 // `D14`: every assertion starts at `OrganiserApp` and clicks its way to the
 // builder, so the chip is asserted where an organiser actually meets it.
@@ -195,22 +198,13 @@ describe("D19: shuffling is surfaced where it exists and disabled where it does 
     expect(patchDraft.mock.calls[0]![2].sections![0]!.shuffle_questions).toBe(false);
   });
 
-  it("renders the section-order control disabled and says why", async () => {
+  it("Phase 8h F5: renders no dead section-order control", async () => {
     await openBuilder(fakeClient());
 
-    // Role AND accessible name AND disabled: a control that is missing
-    // throws here rather than reading as a pass, and a paragraph dressed up
-    // as a label has no checkbox role to find.
-    const control = screen.getByRole("checkbox", { name: /Order of the sections themselves/ });
-    expect(control).toBeDisabled();
-    expect(control).not.toBeChecked();
-    expect(screen.getByText(/Not supported today/)).toBeVisible();
-    // Fix round 1, M1: visible AND announced. A disabled control owes its
-    // reason to a screen reader too, and a sentence merely placed beside one
-    // is read by a reader sweeping the page in document order and by nobody
-    // tabbing the form. `toBeVisible` above cannot tell those two cases
-    // apart; the accessible description can.
-    expect(control).toHaveAccessibleDescription(/Not supported today/);
+    // Deletion, not disabling (plan Task 6): a control that can never be
+    // checked is not a placeholder worth the room it took above Settings.
+    expect(screen.queryByRole("checkbox", { name: /order of the sections themselves/i })).toBeNull();
+    expect(screen.queryByText(/not supported today/i)).toBeNull();
   });
 
   it("sends no shuffle_sections field", async () => {
@@ -230,24 +224,9 @@ describe("D19: shuffling is surfaced where it exists and disabled where it does 
     // the negative beside it is not passing on an empty string.
     expect(body).toContain("shuffle_questions");
     expect(body).not.toContain("shuffle_sections");
-
-    // And the disabled control is inert: clicking it writes nothing.
-    //
-    // Fix round 1, M2: this arm was challenged as possibly unfalsifiable,
-    // since React dispatches no handler from a disabled input. It is not.
-    // `fireEvent.click` still BUBBLES out of a disabled input, so a handler
-    // on any ancestor — the row, the fieldset, a wrapper added by a later
-    // task — fires on this click while the control itself stays disabled.
-    // That is a defect the `toBeDisabled()` test above cannot see, and the
-    // probe for it reddens this line and only this line. The duplicate
-    // string assertion that used to follow was deleted in the same round:
-    // it re-stringified the very object already asserted four lines up.
-    fireEvent.click(screen.getByRole("checkbox", { name: /Order of the sections themselves/ }));
-    await settled();
-    expect(patchDraft).toHaveBeenCalledTimes(1);
   });
 
-  it("the chip and the disabled control have no axe violations", async () => {
+  it("the shuffle chip has no axe violations", async () => {
     const { container } = await openBuilder(fakeClient());
     const list = container.querySelector(".section-list");
     expect(list).not.toBeNull();

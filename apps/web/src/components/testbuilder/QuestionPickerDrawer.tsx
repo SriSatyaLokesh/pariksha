@@ -235,13 +235,14 @@ export function QuestionPickerDrawer({
               const checkboxId = `${headingId}-q-${q.id}`;
               return (
                 <li key={q.id} className="picker-drawer__row">
-                  <input
-                    type="checkbox"
-                    id={checkboxId}
-                    checked={picked.has(q.id)}
-                    onChange={() => toggle(q.id)}
-                  />
-                  {/* `D18`: the prompt wraps and CLAMPS TO TWO LINES, and
+                  {/* Phase 8h fix round (`M5`): the checkbox and its label
+                      used to be siblings, the label alone clickable —
+                      `.field-choice` (`registration.css`, `D17`'s own
+                      pattern for a checkbox row) wraps the input instead,
+                      so the WHOLE row is the target and the glyph stays
+                      the 17px `D17` draws everywhere else; reused rather
+                      than a third checkbox-sizing answer in this file.
+                      `D18`: the prompt wraps and CLAMPS TO TWO LINES, and
                       the points are outside the clamped box on purpose. A
                       clamp over the whole label cuts whatever sits at the
                       end of line two — which is the points — on exactly
@@ -249,7 +250,13 @@ export function QuestionPickerDrawer({
                       that most needs its score loses it. Both spans stay
                       inside the <label>, so the checkbox's accessible name
                       is still "<prompt> (N pts)" either way. */}
-                  <label htmlFor={checkboxId}>
+                  <label className="field-choice" htmlFor={checkboxId}>
+                    <input
+                      type="checkbox"
+                      id={checkboxId}
+                      checked={picked.has(q.id)}
+                      onChange={() => toggle(q.id)}
+                    />
                     <span className="picker-drawer__prompt">{q.document.prompt}</span>{" "}
                     <span className="picker-drawer__points">({q.points} pts)</span>
                   </label>
