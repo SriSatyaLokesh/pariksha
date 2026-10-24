@@ -500,6 +500,52 @@
   color: var(--ink-3);
 }
 
+/* `ShuffleFieldset` (`SetsPanel.tsx`) — rendered for every section, `sets`
+   or not. Restored after Phase 8h Task 6 wrongly deleted it along with the
+   DIFFERENT, dead "Order of the sections" control (`SectionList.tsx`),
+   which shared these same three class names: removing the rule removed
+   both controls' styling, and only the live one was ever meant to lose
+   it. Left as its own rule rather than re-joined with `.sets-panel__*`
+   above, so the two controls' classes do not collide in one reader's mind
+   again. */
+.shuffle-group {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.shuffle-group > legend {
+  padding: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.shuffle-group__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+/* Phase 8h Task 3 (`F3`): a bare `<input type="checkbox">` renders at the
+   browser's own intrinsic size — measured 17x17 in Chromium — under WCAG
+   2.5.8's 24x24 floor. Same class as register `G2-05`/`G5-13`, fixed here
+   for the one instance this lane owns. */
+.shuffle-group__row input[type="checkbox"] {
+  width: 24px;
+  height: 24px;
+}
+
+.shuffle-group__fact {
+  margin: 0;
+  padding-inline-start: var(--space-md);
+  color: var(--ink-3);
+}
+
 /* Task 5 (#57, P5.4): the registration form builder and the one renderer
    its preview and Phase 6's candidate registration share. */
 
