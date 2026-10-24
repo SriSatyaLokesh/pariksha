@@ -95,7 +95,17 @@
   min-width: 0;
 }
 
+/* Phase 8h Task 3 (`F3`): measured at 64x24 beside `.shell__icon-button`'s
+   44px square on every screen — clears WCAG 2.5.8's 24px floor on its own
+   but reads as a mistake next to the control it shares a bar with.
+   `min-block-size` rather than a fixed `height`, per the same plan step
+   that rules out a fixed height on anything holding text: the wordmark
+   never wraps, but a reader's own font substitution or zoom should still
+   be free to grow the row rather than clip against a hard box. */
 .shell__mark {
+  display: inline-flex;
+  align-items: center;
+  min-block-size: 44px;
   background: none;
   border: 0;
   padding: 0;

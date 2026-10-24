@@ -13,6 +13,13 @@ import { ORGANISER } from "./seed";
  * (Review Focus 5) and as the base of Task 3's wider `AUDITED_VIEWS`. */
 export const ORGANISER_VIEWS = ["view=tests", "view=banks", "view=analytics", "view=grading"] as const;
 
+/** `ORGANISER_VIEWS` plus the builder, the question editor and import —
+ * Task 3's full target-size sweep. `view=question` and `view=import` both
+ * need `&bank=<id>` the same way `view=grading`/`view=analytics` need
+ * `&test=<id>`; building the full URL with whichever id applies is the
+ * caller's job, the same contract `ORGANISER_VIEWS` already has. */
+export const AUDITED_VIEWS = [...ORGANISER_VIEWS, "view=test", "view=question", "view=import"] as const;
+
 /** Opens the builder for `testId`, waiting for the sections heading so
  * callers never measure a page still on "Loading…". Signing in and picking
  * a workspace are the CALLER's job — this file's own fixtures live outside
@@ -84,4 +91,47 @@ export async function editorWidthRatio(page: Page): Promise<number> {
 export async function collapseRail(page: Page): Promise<void> {
   await page.getByRole("button", { name: /collapse the checklist to lights/i }).click();
   await expect(page.locator('.checklist-rail[data-state="lights"]')).toBeVisible();
+}
+
+/**
+ * Every rendered, visible, interactive element on the page whose border
+ * box is under `min` CSS pixels in either axis (WCAG 2.5.8's 24x24 floor,
+ * F3). Each result is a selector built from the element's own tag, id and
+ * class list — not a guess at a stylesheet rule — so a reader can paste it
+ * into devtools and land on the exact element this found.
+ *
+ * "Interactive" is buttons, links, and form controls a reader can operate
+ * — the same set WCAG 2.5.8 applies to. `visible` excludes `display:none`
+ * and zero-area elements, which would otherwise report a target nobody
+ * can see as one that is merely too small.
+ */
+export async function undersizedTargets(
+  page: Page,
+  min = 24,
+): Promise<{ sel: string; w: number; h: number }[]> {
+  return page.evaluate((floor) => {
+    const selector = "button, a[href], input, select, textarea, [role='button'], [role='link']";
+    const describe = (el: Element): string => {
+      const tag = el.tagName.toLowerCase();
+      const id = (el as HTMLElement).id ? `#${(el as HTMLElement).id}` : "";
+      const cls = (el as HTMLElement).className;
+      const classes =
+        typeof cls === "string" && cls.trim().length > 0
+          ? `.${cls.trim().split(/\s+/).join(".")}`
+          : "";
+      return `${tag}${id}${classes}`;
+    };
+    const out: { sel: string; w: number; h: number }[] = [];
+    for (const el of document.querySelectorAll(selector)) {
+      const style = getComputedStyle(el);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      if ((el as HTMLButtonElement | HTMLInputElement).disabled) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 && rect.height === 0) continue;
+      if (rect.width < floor || rect.height < floor) {
+        out.push({ sel: describe(el), w: Math.round(rect.width * 100) / 100, h: Math.round(rect.height * 100) / 100 });
+      }
+    }
+    return out;
+  }, min);
 }
