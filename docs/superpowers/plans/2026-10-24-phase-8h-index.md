@@ -1,6 +1,6 @@
-# Phase 8g — the frame and the controls: plan index
+# Phase 8h — the frame and the controls: plan index
 
-**Spec:** `docs/superpowers/specs/2026-10-24-phase-8g-the-frame-design.md`
+**Spec:** `docs/superpowers/specs/2026-10-24-phase-8h-the-frame-design.md`
 (measured findings `F1`–`F9`, owner walkthrough `O-01`–`O-34`)
 **Companion register:** `docs/UI_UX_AUDIT_REPORT.md` (`G1-01`–`G5-19`, code-read, unverified)
 
@@ -25,7 +25,7 @@ Owner's stated priority: **the test builder, home, banks**.
 
 ## The plans
 
-### 8g-1 — the frame *(written: `2026-10-24-phase-8g-the-frame.md`)*
+### 8h-1 — the frame *(written: `2026-10-24-phase-8h-the-frame.md`)*
 
 Page geometry and token consistency. Nine tasks, each leaving a
 browser-measured gate.
@@ -42,7 +42,7 @@ Also: `G1-05`, `G1-07`, `G2-05`, `G2-07`/`O-09`, `G3-08`, `G5-13`, `G5-15`.
 builder vertical room) and `O-13` (test name, status, Publish and Close
 jammed with no spacing).
 
-### 8g-2 — the shell
+### 8h-2 — the shell
 
 The chrome every screen wears. Small, self-contained, and it changes the
 first impression of all 14 screens.
@@ -57,7 +57,7 @@ Note against `O-02`: hover-expand is a pointer-only affordance. It needs a
 keyboard and touch path, or it repeats the mistake `O-10` and `O-25` are
 complaints about.
 
-### 8g-3 — controls that look like controls
+### 8h-3 — controls that look like controls
 
 The widest theme in the walkthrough: links where buttons belong, text where
 expanders belong, native elements left unstyled, and adjacent controls with
@@ -79,7 +79,7 @@ The fix is probably **one shared row primitive plus a styled native-control
 set**, not thirty separate patches. Write the plan that way or it will be
 thirty patches.
 
-### 8g-4 — stop hiding primary actions behind hover
+### 8h-4 — stop hiding primary actions behind hover
 
 Owns: `O-10` (a Needs-you row does not read as a test, and its Open button
 is invisible, until hovered), `O-25` (a bank question's Edit / Export /
@@ -91,7 +91,7 @@ touch device never resolves.
 Smallest honest plan here, and it fixes a genuine accessibility failure, not
 only a preference.
 
-### 8g-5 — the section editor
+### 8h-5 — the section editor
 
 The owner's loudest complaint, and the screenshot backs it.
 
@@ -107,7 +107,7 @@ Also: `G3-02` (no modal scrim), `G3-03` (destructive action styled
 `O-22` is the one with a real cost: an irreversible action whose confirm you
 have to scroll to find, wearing the same colour as everything else.
 
-### 8g-6 — verify the companion register
+### 8h-6 — verify the companion register
 
 Before any of its remaining 47 findings are planned against. It scored one
 group 7/100 from a code read, and this session's own instrument produced a
@@ -123,12 +123,12 @@ announcing every keystroke during an exam).
 
 1. **`O-17`**, the focus bug — debugging, not this phase. Everything else is
    cosmetic next to a field you cannot type in.
-2. **8g-1 the frame** — the gate infrastructure lands here, and every later
+2. **8h-1 the frame** — the gate infrastructure lands here, and every later
    plan uses it.
-3. **8g-5 the section editor** — the owner's loudest complaint, and `O-22`
+3. **8h-5 the section editor** — the owner's loudest complaint, and `O-22`
    is a safety issue.
-4. **8g-4 hover** — small, and an accessibility failure.
-5. **8g-3 controls** — the widest, best done once the shared primitive from
-   8g-1 exists.
-6. **8g-2 the shell** — visible everywhere, but nothing is broken.
-7. **8g-6 verification**, then whatever of the register survives it.
+4. **8h-4 hover** — small, and an accessibility failure.
+5. **8h-3 controls** — the widest, best done once the shared primitive from
+   8h-1 exists.
+6. **8h-2 the shell** — visible everywhere, but nothing is broken.
+7. **8h-6 verification**, then whatever of the register survives it.

@@ -1,4 +1,4 @@
-# Phase 8g — the frame Implementation Plan
+# Phase 8h — the frame Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Playwright (Chromium, the existing `apps/web` e2e harness), CSS custom properties from `apps/web/src/styles/tokens.css`, Preact/React route components.
 
-**Spec:** `docs/superpowers/specs/2026-10-24-phase-8g-the-frame-design.md`
+**Spec:** `docs/superpowers/specs/2026-10-24-phase-8h-the-frame-design.md`
 
 ## Global Constraints
 
