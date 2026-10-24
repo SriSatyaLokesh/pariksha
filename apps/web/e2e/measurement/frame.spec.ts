@@ -31,14 +31,24 @@
 
 import { expect, test } from "@playwright/test";
 import { seedWorkspace, signIn } from "../seed";
-import { collapseRail, deadScrollPx, editorWidthRatio, openBuilder, ORGANISER_VIEWS } from "../frame";
+import {
+  AUDITED_VIEWS,
+  collapseRail,
+  deadScrollPx,
+  editorWidthRatio,
+  openBuilder,
+  ORGANISER_VIEWS,
+  undersizedTargets,
+} from "../frame";
 
 let testId: string;
+let bankId: string;
 
 test.beforeAll(async ({ request }) => {
   try {
     const seed = await seedWorkspace(request, { banks: 1, questionsPerBank: 5, tests: 1 });
     testId = seed.testIds[0]!;
+    bankId = seed.bankIds[0]!;
   } catch {
     // Playwright restarts the worker — a fresh Node process, `seed.ts`'s
     // module-level slug counter included — after a test in this file
@@ -57,8 +67,25 @@ test.beforeAll(async ({ request }) => {
       tests: { id: string }[];
     };
     testId = tests.tests[0]!.id;
+    const banks = (await (await request.get(`/api/v1/workspaces/${workspaceId}/banks`)).json()) as {
+      banks: { id: string }[];
+    };
+    bankId = banks.banks[0]!.id;
   }
 });
+
+/** Builds the full URL for one of `AUDITED_VIEWS`, attaching whichever
+ * dynamic id that view needs (`ORGANISER_VIEWS`' own contract, extended to
+ * `view=question`/`view=import`'s `&bank=`). */
+function urlFor(view: (typeof AUDITED_VIEWS)[number]): string {
+  if (view === "view=grading" || view === "view=analytics" || view === "view=test") {
+    return `/admin.html?${view}&test=${testId}`;
+  }
+  if (view === "view=question" || view === "view=import") {
+    return `/admin.html?${view}&bank=${bankId}`;
+  }
+  return `/admin.html?${view}`;
+}
 
 const MAX_DEAD_SCROLL = 24; // one page inset, --space-xl
 
@@ -136,5 +163,41 @@ test.describe("F2 — the editing column takes the width it is given", () => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await collapseRail(page);
     expect(await editorWidthRatio(page)).toBeGreaterThanOrEqual(0.75);
+  });
+});
+
+test.describe("F3 — every interactive control clears WCAG 2.5.8's 24px floor", () => {
+  for (const view of AUDITED_VIEWS) {
+    test(`no control under 24px on ${view}`, async ({ page }) => {
+      await signIn(page);
+      await page.goto(urlFor(view));
+      // `view=test` opens the builder, opens one section so the
+      // reorder/position controls Task 3 fixed are on the page rather than
+      // hidden behind a closed row, and opens the question picker drawer
+      // too (O-18/O-21's own flow) so its row checkboxes are included.
+      if (view === "view=test") {
+        await page.getByRole("heading", { name: "Sections" }).waitFor();
+        await page.locator(".section-row__summary").first().click();
+        await page.getByRole("button", { name: "Add questions" }).first().click();
+        const bank = page.getByLabel("Bank");
+        await bank.waitFor();
+        await bank.selectOption({ index: 1 });
+        await page.locator("ul.picker-drawer__list > li").first().waitFor();
+      }
+      expect(await undersizedTargets(page)).toEqual([]);
+    });
+  }
+
+  test("a one-word label on an audited control class still clears 24px", async ({ page }) => {
+    // Review Focus 3: "Copy short link" is 97x68 only because it wraps —
+    // measured on the tests list (F7, out of this lane's scope), using the
+    // shortest realistic label on the same `button-secondary` class this
+    // lane's own screens render it with.
+    await signIn(page);
+    await page.goto(urlFor("view=tests"));
+    await page.evaluate(() => {
+      document.querySelectorAll("button.button-secondary").forEach((b) => (b.textContent = "Go"));
+    });
+    expect(await undersizedTargets(page)).toEqual([]);
   });
 });
