@@ -45,6 +45,7 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { analyticsRoutes } from "./routes/analytics.js";
 import { keyRoutes } from "./routes/keys.js";
 import { attemptReviewRoutes } from "./routes/attempt-review.js";
+import { demoRoutes } from "./routes/demo.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -116,6 +117,10 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // read, the claiming insert and the owner membership.
   "/api/v1/setup/status": 1,
   "/api/v1/setup/complete": 6,
+  // Phase 9 Task 4: Ephemeral demo workspace provisioning. Rate token (1) +
+  // seedDemoWorkspace batch (1) + session insert (1) = 3 subrequests.
+  // Declared budget is 6 (well under the 12 subrequests ceiling).
+  "/api/v1/demo/provision": 6,
   // Authentication, then one statement: the list, or the create plus the
   // owner membership.
   "/api/v1/workspaces": 6,
@@ -1116,6 +1121,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // `signout-everywhere` *does* need an actor, which is why they differ
   // here despite sharing a prefix — read the guard, not the path.
   "POST /api/v1/auth/signout": "public",
+  // Phase 9 Task 4: public demo provisioning endpoint.
+  "POST /api/v1/demo/provision": "public",
   // The first-run wizard asks this before any workspace or account exists.
   "GET /api/v1/setup/status": "public",
   // Phase 5 Task 2 (#54): T-02's short link. Refuses a draft, so the
@@ -1330,6 +1337,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // membership to guard on. `complete` takes the actor from the session
   // through `actorOr401`, the way `/me` and `/workspaces` do.
   app.route("/api/v1/setup", setupRoutes(deps));
+  app.route("/api/v1/demo", demoRoutes(deps));
   app.route("/api/v1/workspaces", workspaceRoutes(deps));
   app.route("/api/v1/workspaces", bankRoutes(deps));
   app.route("/api/v1/workspaces", questionRoutes(deps));

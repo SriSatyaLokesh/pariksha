@@ -84,6 +84,7 @@ it("the public set is a literal allowlist, so widening it is a visible diff", ()
     "GET /t/:code",
     "POST /api/v1/auth/magic-link",
     "POST /api/v1/auth/signout",
+    "POST /api/v1/demo/provision",
     "POST /api/v1/run/:workspaceSlug/:testSlug/access",
     "POST /api/v1/run/:workspaceSlug/:testSlug/email-code",
     // Task 11 (#75, P6.11): `C-09`'s return visit. The attempt cookie is

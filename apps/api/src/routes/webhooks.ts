@@ -91,11 +91,19 @@ export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
       throw new ApiError(422, "url_refused", `${refused}.`);
     }
 
-    const created: { webhookId: string; signingSecret: string } = await createWebhook(deps.db, workspaceId, {
-      url: input.url,
-      events: input.events,
-      now,
-    });
+    let created: { webhookId: string; signingSecret: string };
+    try {
+      created = await createWebhook(deps.db, workspaceId, {
+        url: input.url,
+        events: input.events,
+        now,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message.includes("Demo workspaces")) {
+        throw new ApiError(403, "forbidden", err.message);
+      }
+      throw err;
+    }
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,

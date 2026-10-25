@@ -7,6 +7,7 @@ import { regradeJob } from "../src/grade/regrade.js";
 import { SUBREQUEST_LIMIT } from "../src/instrument.js";
 import { webhookDrainJob } from "../src/webhooks/drain.js";
 import { rateLimitJob, retentionJob } from "../src/retention/sweep.js";
+import { demoCleanupJob } from "../src/retention/demo-sweep.js";
 import { testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
@@ -41,7 +42,7 @@ function throwing(name: string, cron: string): ScheduledJob {
 // (`apps/api/src/scheduled.ts`'s own header on declaration order); 8b adds
 // `regradeJob` last, staggered onto its own cron (`REGRADE_CRON`).
 it("ships with exactly the jobs this branch registers", async () => {
-  expect(shippedWith).toEqual([webhookDrainJob, retentionJob, rateLimitJob, regradeJob]);
+  expect(shippedWith).toEqual([webhookDrainJob, retentionJob, rateLimitJob, regradeJob, demoCleanupJob]);
 });
 
 beforeEach(() => {

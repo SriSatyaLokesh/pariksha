@@ -32,6 +32,8 @@ export * from "./webhooks.js";
 // Phase 8c Task 1 (`K19`, #94): test analytics, one fetch over
 // `listAttemptsForTest` plus one `COUNT`.
 export * from "./analytics.js";
+// Phase 9 Task 4: ephemeral demo workspace provisioning and showcase seeding.
+export * from "./demo.js";
 // Phase 8d Task 2 (K25, K26): scoped API keys. `resolveApiKey` is
 // deliberately NOT re-exported here — see `repo/keys.ts`'s own header and
 // `src/index.ts`'s — it takes no workspace ID, so `scoped()` cannot wrap
