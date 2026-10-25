@@ -155,6 +155,14 @@ export const sqliteMigrations: Migration[] = [
   { name: "0013_user_password.sql", statements: [
     "-- Phase 10: Docker self-host password and optional TOTP (S-01, S-02).\nALTER TABLE `user` ADD COLUMN `password_hash` text;\nALTER TABLE `user` ADD COLUMN `totp_secret` text;\nALTER TABLE `user` ADD COLUMN `totp_enabled` integer DEFAULT 0 NOT NULL;",
   ] },
+  { name: "0014_byok_credentials.sql", statements: [
+    "-- Phase 12: BYOK encrypted provider credentials and usage telemetry (S-15).\nCREATE TABLE `byok_credential` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`provider` text NOT NULL,\n\t`encrypted_key` text NOT NULL,\n\t`key_hint` text NOT NULL,\n\t`spend_limit_cents` integer,\n\t`status` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\t`updated_at` integer NOT NULL,\n\t`last_used_at` integer\n);",
+    "CREATE INDEX `byok_credential_workspace_idx` ON `byok_credential` (`workspace_id`);",
+    "CREATE UNIQUE INDEX `byok_credential_workspace_provider_uq` ON `byok_credential` (`workspace_id`, `provider`);",
+    "CREATE TABLE `byok_usage` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`provider` text NOT NULL,\n\t`model` text NOT NULL,\n\t`prompt_tokens` integer NOT NULL,\n\t`completion_tokens` integer NOT NULL,\n\t`estimated_cost_cents` integer NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+    "CREATE INDEX `byok_usage_workspace_idx` ON `byok_usage` (`workspace_id`);",
+    "CREATE INDEX `byok_usage_workspace_created_idx` ON `byok_usage` (`workspace_id`, `created_at`);",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -291,5 +299,13 @@ export const pgMigrations: Migration[] = [
   ] },
   { name: "0013_user_password.sql", statements: [
     "-- Phase 10: Docker self-host password and optional TOTP (S-01, S-02).\nALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS \"password_hash\" text;\nALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS \"totp_secret\" text;\nALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS \"totp_enabled\" boolean DEFAULT false NOT NULL;",
+  ] },
+  { name: "0014_byok_credentials.sql", statements: [
+    "-- Phase 12: BYOK encrypted provider credentials and usage telemetry (S-15).\nCREATE TABLE IF NOT EXISTS \"byok_credential\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"workspace_id\" text NOT NULL,\n\t\"provider\" text NOT NULL,\n\t\"encrypted_key\" text NOT NULL,\n\t\"key_hint\" text NOT NULL,\n\t\"spend_limit_cents\" integer,\n\t\"status\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\t\"updated_at\" bigint NOT NULL,\n\t\"last_used_at\" bigint\n);",
+    "CREATE INDEX IF NOT EXISTS \"byok_credential_workspace_idx\" ON \"byok_credential\" USING btree (\"workspace_id\");",
+    "CREATE UNIQUE INDEX IF NOT EXISTS \"byok_credential_workspace_provider_uq\" ON \"byok_credential\" USING btree (\"workspace_id\", \"provider\");",
+    "CREATE TABLE IF NOT EXISTS \"byok_usage\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"workspace_id\" text NOT NULL,\n\t\"provider\" text NOT NULL,\n\t\"model\" text NOT NULL,\n\t\"prompt_tokens\" integer NOT NULL,\n\t\"completion_tokens\" integer NOT NULL,\n\t\"estimated_cost_cents\" integer NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
+    "CREATE INDEX IF NOT EXISTS \"byok_usage_workspace_idx\" ON \"byok_usage\" USING btree (\"workspace_id\");",
+    "CREATE INDEX IF NOT EXISTS \"byok_usage_workspace_created_idx\" ON \"byok_usage\" USING btree (\"workspace_id\", \"created_at\");",
   ] },
 ];

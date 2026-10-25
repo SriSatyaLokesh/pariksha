@@ -432,3 +432,43 @@ export const webhookDelivery = sqliteTable(
     index("webhook_delivery_next_attempt_idx").on(t.nextAttemptAt),
   ],
 );
+
+// Phase 12: BYOK encrypted provider credentials (S-15).
+export const byokCredential = sqliteTable(
+  "byok_credential",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    provider: text("provider").notNull(),
+    encryptedKey: text("encrypted_key").notNull(),
+    keyHint: text("key_hint").notNull(),
+    spendLimitCents: integer("spend_limit_cents"),
+    status: text("status").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    lastUsedAt: integer("last_used_at"),
+  },
+  (t) => [
+    index("byok_credential_workspace_idx").on(t.workspaceId),
+    uniqueIndex("byok_credential_workspace_provider_uq").on(t.workspaceId, t.provider),
+  ],
+);
+
+// Phase 12: BYOK usage and spend telemetry.
+export const byokUsage = sqliteTable(
+  "byok_usage",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    provider: text("provider").notNull(),
+    model: text("model").notNull(),
+    promptTokens: integer("prompt_tokens").notNull(),
+    completionTokens: integer("completion_tokens").notNull(),
+    estimatedCostCents: integer("estimated_cost_cents").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    index("byok_usage_workspace_idx").on(t.workspaceId),
+    index("byok_usage_workspace_created_idx").on(t.workspaceId, t.createdAt),
+  ],
+);

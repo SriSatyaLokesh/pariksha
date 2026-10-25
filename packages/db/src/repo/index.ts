@@ -40,3 +40,5 @@ export * from "./demo.js";
 // it and this barrel's own "every export is scoped" guard
 // (`test/repo/scoping.test.ts`) would fail the moment it appeared here.
 export { createApiKey, listApiKeys, revokeApiKey, KEY_FORBIDDEN_ACTIONS, type ApiKeyRow } from "./keys.js";
+// Phase 12: BYOK credentials and usage telemetry (S-15).
+export * from "./byok.js";
