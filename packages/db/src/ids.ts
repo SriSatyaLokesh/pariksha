@@ -34,6 +34,8 @@ export const ID_PREFIXES = [
   "aud", // audit_log
   "cuq", // candidate_unique
   "whd", // webhook_delivery (Phase 8d Task 3)
+  "byk", // byok_credential (Phase 12)
+  "byu", // byok_usage (Phase 12)
 ] as const;
 
 export type IdPrefix = (typeof ID_PREFIXES)[number];
