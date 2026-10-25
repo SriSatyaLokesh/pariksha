@@ -30,15 +30,6 @@
 //   ffmpeg -i e2e/screenshots/10-exam-runner-desktop.png -vf scale=840:-1
 //     -quality 82 ../../docs/screens/exam-runner.webp
 //
-// The README's banner is the same three shots composited onto the Signal
-// ground, also one command, run from the repository root:
-//
-//   ffmpeg -f lavfi -i color=c=0x070b09:s=1600x700 //     -i 13-test-builder-desktop.png -i 10-exam-runner-desktop.png //     -i 11-analytics-desktop.png -filter_complex //     "[1:v]crop=1280:700:0:0,scale=820:-1,pad=iw+2:ih+2:1:1:color=0x2a3b32[a];
-//      [2:v]crop=1280:620:0:0,scale=680:-1,pad=iw+2:ih+2:1:1:color=0x3a4a42[b];
-//      [3:v]crop=1280:700:0:0,scale=560:-1,pad=iw+2:ih+2:1:1:color=0x2a3b32[c];
-//      [0:v][c]overlay=1000:40[s0];[s0][a]overlay=40:60[s1];
-//      [s1][b]overlay=640:320" -frames:v 1 -quality 84 docs/screens/banner.webp
-//
 // Deliberately not a script: ffmpeg is not in this repository's toolchain,
 // and a build step that assumes a binary nobody declared is worse than a
 // documented line. Re-capture is rare.

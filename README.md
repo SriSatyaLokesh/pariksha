@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="docs/screens/banner.webp" width="100%" alt="Three Pariksha screens on a dark ground: the test builder with its publish checklist, the analytics screen with attempt counts and a score distribution, and in front of both a candidate's paper on cream with a timer and a question palette.">
-
 <h1>Pariksha</h1>
 
 <h3>పరీక్ష&nbsp;·&nbsp;परीक्षा</h3>
@@ -127,10 +125,8 @@ and its own accent while the organiser moved to Signal. That ruling is
 <sub>Re-take: <code>pnpm --filter @pariksha/web e2e</code> writes PNGs to
 <code>apps/web/e2e/screenshots/</code> (git-ignored). Convert with
 <code>ffmpeg -i in.png -vf scale=840:-1 -quality 82 docs/screens/out.webp</code>
-— 840&nbsp;px WebP is 196&nbsp;KB for all six plus the banner, against
-692&nbsp;KB of full-size PNG, and this page loads every one of them. The
-banner's three-panel composite is one <code>ffmpeg filter_complex</code>,
-spelled out in the capture spec's header.</sub>
+— 840&nbsp;px WebP is 152&nbsp;KB for all six against 692&nbsp;KB of
+full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
