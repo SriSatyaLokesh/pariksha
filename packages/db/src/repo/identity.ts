@@ -257,3 +257,100 @@ export async function deleteUserSessions(
 ): Promise<void> {
   await db.run("DELETE FROM session WHERE user_id = ?", [userId]);
 }
+
+/** Phase 10: Docker self-host password and TOTP credentials (S-01, S-02). */
+export interface UserCredentials {
+  id: string;
+  email: string;
+  authProvider: string;
+  passwordHash: string | null;
+  totpSecret: string | null;
+  totpEnabled: boolean;
+}
+
+export async function getUserCredentialsByEmail(
+  db: DbClient,
+  email: string,
+): Promise<UserCredentials | null> {
+  const rows = await db.query<{
+    id: string;
+    email: string;
+    auth_provider: string;
+    password_hash: string | null;
+    totp_secret: string | null;
+    totp_enabled: number | boolean;
+  }>(
+    'SELECT id, email, auth_provider, password_hash, totp_secret, totp_enabled FROM "user" WHERE email = ?',
+    [email],
+  );
+  if (!rows[0]) return null;
+  return {
+    id: rows[0].id,
+    email: rows[0].email,
+    authProvider: rows[0].auth_provider,
+    passwordHash: rows[0].password_hash ?? null,
+    totpSecret: rows[0].totp_secret ?? null,
+    totpEnabled: Boolean(rows[0].totp_enabled),
+  };
+}
+
+export async function getUserCredentialsById(
+  db: DbClient,
+  userId: string,
+): Promise<UserCredentials | null> {
+  const rows = await db.query<{
+    id: string;
+    email: string;
+    auth_provider: string;
+    password_hash: string | null;
+    totp_secret: string | null;
+    totp_enabled: number | boolean;
+  }>(
+    'SELECT id, email, auth_provider, password_hash, totp_secret, totp_enabled FROM "user" WHERE id = ?',
+    [userId],
+  );
+  if (!rows[0]) return null;
+  return {
+    id: rows[0].id,
+    email: rows[0].email,
+    authProvider: rows[0].auth_provider,
+    passwordHash: rows[0].password_hash ?? null,
+    totpSecret: rows[0].totp_secret ?? null,
+    totpEnabled: Boolean(rows[0].totp_enabled),
+  };
+}
+
+export async function setUserPassword(
+  db: DbClient,
+  userId: string,
+  passwordHash: string,
+): Promise<void> {
+  await db.run(
+    'UPDATE "user" SET password_hash = ? WHERE id = ?',
+    [passwordHash, userId],
+  );
+}
+
+export async function setUserTotp(
+  db: DbClient,
+  userId: string,
+  secret: string | null,
+  enabled: boolean,
+): Promise<void> {
+  await db.run(
+    'UPDATE "user" SET totp_secret = ?, totp_enabled = ? WHERE id = ?',
+    [secret, enabled ? 1 : 0, userId],
+  );
+}
+
+export async function createPasswordUser(
+  db: DbClient,
+  input: { email: string; passwordHash: string; now: number },
+): Promise<string> {
+  const id = newId("usr");
+  await db.run(
+    'INSERT INTO "user" (id, email, auth_provider, password_hash, totp_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+    [id, input.email, "password", input.passwordHash, 0, input.now],
+  );
+  return id;
+}
