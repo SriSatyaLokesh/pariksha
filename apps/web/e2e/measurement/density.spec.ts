@@ -104,6 +104,7 @@ const BEFORE: Record<Surface, number> = {
   // its unchanged figure suggests, which is the second half of why the count
   // must keep its floor rather than be tightened to a lucky run.
   questionPicker: 8,
+  monitor: 10,
 };
 
 /**
@@ -125,6 +126,7 @@ const BEFORE_HEIGHT: Record<Surface, number> = {
   bankList: 44,
   bankBrowser: 101,
   questionPicker: 25,
+  monitor: 44,
 };
 
 /**
@@ -228,6 +230,7 @@ const BEFORE_TOP: Record<Surface, number> = {
   // Zero slack, like every figure in this block: `toBeLessThanOrEqual`, so
   // +0.01px is red.
   questionPicker: 384.81,
+  monitor: 300,
 };
 
 // Comfortably more rows than any plausible redesign fits in 900px, so the

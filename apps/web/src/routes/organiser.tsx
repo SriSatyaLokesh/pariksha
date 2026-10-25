@@ -21,6 +21,7 @@ import { TestBuilder } from "./test";
 import { ImportScreen } from "./import";
 import { GradingRoute } from "./grading";
 import { AnalyticsRoute } from "./analytics";
+import { MonitorRoute } from "./monitor";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 
@@ -76,6 +77,8 @@ type View =
   // `grading` above and for the same reason — reached from the test
   // builder, not the top nav.
   | { kind: "analytics"; actor: Actor; workspace: Workspace; testId: string }
+  // Phase 8g Task 1: live cohort monitor, reached from the test builder.
+  | { kind: "monitor"; actor: Actor; workspace: Workspace; testId: string }
   // `bankName` is absent exactly when the browser was deep-linked rather
   // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
   // not in `ViewParams` and no call in this component fetches one.
@@ -347,7 +350,18 @@ export function OrganiserApp({
           onOpenAnalytics={(testId) =>
             go({ kind: "analytics", actor: view.actor, workspace: view.workspace, testId })
           }
+          onOpenMonitor={(testId) =>
+            go({ kind: "monitor", actor: view.actor, workspace: view.workspace, testId })
+          }
         />,
+      );
+    case "monitor":
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        { title: "Live monitor", crumb: "Monitor", wide: true },
+        <MonitorRoute client={client} workspaceId={view.workspace.id} testId={view.testId} />,
       );
     case "grading":
       // `current="tests"`, not a nav entry of its own (`D3`): this is a
@@ -528,6 +542,10 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
       return params.test === undefined
         ? home
         : { kind: "analytics", actor, workspace, testId: params.test };
+    case "monitor":
+      return params.test === undefined
+        ? home
+        : { kind: "monitor", actor, workspace, testId: params.test };
     case "bank":
       return params.bank === undefined
         ? home
@@ -567,6 +585,8 @@ function paramsOf(view: View): ViewParams | null {
       return { view: "grading", test: view.testId };
     case "analytics":
       return { view: "analytics", test: view.testId };
+    case "monitor":
+      return { view: "monitor", test: view.testId };
     case "bank":
       return { view: "bank", bank: view.bankId };
     case "question":

@@ -810,3 +810,119 @@ const toResponseRow = (db: DbClient, row: ResponseRecord): ResponseRow => ({
   points: row.points === null ? null : Number(row.points),
   gradedBy: row.graded_by,
 });
+
+export interface MonitorAttemptRecord {
+  attemptId: string;
+  candidateId: string;
+  candidateExternalId: string | null;
+  candidateFormValues: Record<string, unknown>;
+  setNo: number;
+  layoutJson: unknown;
+  startedAt: number;
+  deadlineAt: number;
+  submittedAt: number | null;
+  submitReason: string | null;
+  flag: string;
+  integrityFlag: string;
+  observed: boolean;
+  lockedAt: number | null;
+  violations: number;
+  answeredCount: number;
+  lastContactAt: number | null;
+  latestCameraEvent: string | null;
+}
+
+function toMonitorAttemptRecord(
+  db: DbClient,
+  row: {
+    id: string;
+    candidate_id: string;
+    candidate_external_id: string | null;
+    candidate_form_values_json: unknown;
+    set_no: number;
+    layout_json: unknown;
+    started_at: number;
+    deadline_at: number;
+    submitted_at: number | null;
+    submit_reason: string | null;
+    flag: string;
+    integrity_flag: string;
+    observed: unknown;
+    locked_at: number | null;
+    violations: number;
+    answered_count: number;
+    last_contact_at: number | null;
+    latest_camera_event: string | null;
+  },
+): MonitorAttemptRecord {
+  return {
+    attemptId: row.id,
+    candidateId: row.candidate_id,
+    candidateExternalId: row.candidate_external_id,
+    candidateFormValues:
+      row.candidate_form_values_json == null
+        ? {}
+        : db.jsonValue<Record<string, unknown>>(row.candidate_form_values_json),
+    setNo: Number(row.set_no),
+    layoutJson: row.layout_json == null ? null : db.jsonValue(row.layout_json),
+    startedAt: Number(row.started_at),
+    deadlineAt: Number(row.deadline_at),
+    submittedAt: row.submitted_at === null ? null : Number(row.submitted_at),
+    submitReason: row.submit_reason,
+    flag: row.flag,
+    integrityFlag: row.integrity_flag,
+    observed: Boolean(row.observed),
+    lockedAt: row.locked_at === null ? null : Number(row.locked_at),
+    violations: Number(row.violations),
+    answeredCount: Number(row.answered_count),
+    lastContactAt: row.last_contact_at === null ? null : Number(row.last_contact_at),
+    latestCameraEvent: row.latest_camera_event,
+  };
+}
+
+export const listMonitorAttempts = scoped(
+  "listMonitorAttempts",
+  async (db: DbClient, workspaceId: string, testId: string): Promise<MonitorAttemptRecord[]> => {
+    const rows = await db.query<{
+      id: string;
+      candidate_id: string;
+      candidate_external_id: string | null;
+      candidate_form_values_json: unknown;
+      set_no: number;
+      layout_json: unknown;
+      started_at: number;
+      deadline_at: number;
+      submitted_at: number | null;
+      submit_reason: string | null;
+      flag: string;
+      integrity_flag: string;
+      observed: unknown;
+      locked_at: number | null;
+      violations: number;
+      answered_count: number;
+      last_contact_at: number | null;
+      latest_camera_event: string | null;
+    }>(
+      "SELECT a.id, a.candidate_id, c.external_id AS candidate_external_id, c.form_values_json AS candidate_form_values_json, " +
+        "a.set_no, a.layout_json, a.started_at, a.deadline_at, a.submitted_at, a.submit_reason, a.flag, a.integrity_flag, a.observed, a.locked_at, " +
+        `(SELECT COUNT(*) FROM event e WHERE e.workspace_id = a.workspace_id AND e.attempt_id = a.id AND e.type IN (${VIOLATION_PLACEHOLDERS})) AS violations, ` +
+        "(SELECT COUNT(*) FROM response r WHERE r.workspace_id = a.workspace_id AND r.attempt_id = a.id) AS answered_count, " +
+        "(SELECT MAX(ts) FROM (" +
+        "  SELECT MAX(saved_at) AS ts FROM response r WHERE r.workspace_id = a.workspace_id AND r.attempt_id = a.id " +
+        "  UNION ALL " +
+        "  SELECT MAX(server_ts) AS ts FROM event e WHERE e.workspace_id = a.workspace_id AND e.attempt_id = a.id " +
+        "  UNION ALL " +
+        "  SELECT MAX(taken_at) AS ts FROM snapshot s WHERE s.workspace_id = a.workspace_id AND s.attempt_id = a.id" +
+        ")) AS last_contact_at, " +
+        "(SELECT type FROM event e WHERE e.workspace_id = a.workspace_id AND e.attempt_id = a.id AND e.type IN ('camera_lost', 'camera_restored') ORDER BY e.server_ts DESC, e.id DESC LIMIT 1) AS latest_camera_event " +
+        "FROM attempt a " +
+        "JOIN candidate c ON c.workspace_id = a.workspace_id AND c.id = a.candidate_id " +
+        "JOIN test_version tv ON tv.workspace_id = a.workspace_id AND tv.id = a.test_version_id " +
+        "WHERE a.workspace_id = ? AND tv.test_id = ? " +
+        "ORDER BY a.started_at ASC, a.id ASC",
+      [...VIOLATION_TYPES, workspaceId, testId],
+    );
+    return rows.map((row) => toMonitorAttemptRecord(db, row));
+  },
+);
+

@@ -123,6 +123,7 @@ export function TestBuilder({
   actor,
   onOpenGrading,
   onOpenAnalytics,
+  onOpenMonitor,
 }: {
   workspaceId: string;
   testId: string;
@@ -136,6 +137,8 @@ export function TestBuilder({
    *  for the same reason — an organiser is working on *this* test and goes
    *  to its own figures, not a cross-test analytics inbox. */
   onOpenAnalytics: (testId: string) => void;
+  /** Phase 8g Task 1: live cohort monitor. */
+  onOpenMonitor?: (testId: string) => void;
 }) {
   // T-23: only an owner holds `workspace.settings`, and the workspace half
   // of the branding panel is read-only without it. The server refuses
@@ -742,7 +745,7 @@ export function TestBuilder({
               pure function of the draft". `testbuilder-lifecycle__divider`
               marks the seam: everything before it changes the test's
               lifecycle state, everything after it only navigates. */}
-          {(canGrade || canViewAnalytics) && (
+          {(canGrade || canViewAnalytics || canMonitorAttempts) && (
             <span className="testbuilder-lifecycle__divider" aria-hidden="true" />
           )}
           {canGrade && (
@@ -753,6 +756,11 @@ export function TestBuilder({
           {canViewAnalytics && (
             <button type="button" className="button-secondary" onClick={() => onOpenAnalytics(testId)}>
               Analytics
+            </button>
+          )}
+          {canMonitorAttempts && (
+            <button type="button" className="button-secondary" onClick={() => onOpenMonitor?.(testId)}>
+              Live monitor
             </button>
           )}
         </div>

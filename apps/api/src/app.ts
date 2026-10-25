@@ -29,6 +29,7 @@ import { resultsExportRoutes } from "./export/results.js";
 import { evidenceExportRoutes } from "./export/evidence.js";
 import { readinessRoutes } from "./publish/readiness.js";
 import { attemptsRoutes } from "./routes/attempts.js";
+import { monitorRoutes } from "./routes/monitor.js";
 import { shortlinkRoute } from "./routes/shortlink.js";
 import { runRoutes } from "./routes/run.js";
 import { proctoringRoutes } from "./routes/proctoring.js";
@@ -734,6 +735,10 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // (`worker.test.ts`'s `migrations: 12`) should not grow for. Add it in
   // whichever later phase already carries one.
   "/api/v1/workspaces/:id/tests/:testId/attempts": 4,
+  // Phase 8g Task 1: the live monitor. Measured (apps/api/test/monitor.test.ts):
+  // auth (2) + getTest (1) + getPublishedVersion (1) + candidate count (1) + listMonitorAttempts (1) = 6.
+  // Flat in cohort size (KG3).
+  "/api/v1/workspaces/:id/tests/:testId/monitor": 6,
   // The unlock: auth (2) + `getAttemptLockState` (1, the existence-and-
   // scope read that is this route's own 404) + `unlockAttempt` (1, the
   // write) + `appendEvents` (1, the `attempt_unlocked` marker) +
@@ -1000,6 +1005,7 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // nothing wider than it needs to.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "attempts.monitor",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "attempts.monitor",
+  "GET /api/v1/workspaces/:id/tests/:testId/monitor": "attempts.monitor",
   // Phase 8b Task 1 (`K14`): `attempts.grade`'s first production caller —
   // zero routes named this action before this line (only
   // `permissions.test.ts` did). A Reviewer or Admin holds it; an Author
@@ -1249,6 +1255,7 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // Phase 7e Task 4 (`Q5a`): the minimal pair.
   "GET /api/v1/workspaces/:id/tests/:testId/attempts": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/attempts/:attemptId/unlock": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/monitor": "workspace",
   // Phase 8b Task 1 (`K14`): recording a rubric award.
   "POST /api/v1/workspaces/:id/tests/:testId/grade": "workspace",
   // Phase 8b Task 2 (`K15`): the grading queue.
@@ -1325,6 +1332,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // than necessity, the same reason `proctoringRoutes`' own position below
   // is.
   app.route("/api/v1/workspaces", attemptsRoutes(deps));
+  app.route("/api/v1/workspaces", monitorRoutes(deps));
   // The one route outside `/api/v1/workspaces/:id/...` this phase mounts —
   // deliberately public and unguarded (Review Focus 5, ADR 0006's
   // precedent). `apps/api/src/index.ts` has its own matching change so this

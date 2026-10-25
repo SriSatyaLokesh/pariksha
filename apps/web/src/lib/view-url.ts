@@ -51,7 +51,15 @@ export interface ViewParams {
    * "Analytics" button, carrying the same `test` id parameter, not a
    * second one.
    */
-  view: NavKey | "test" | "bank" | "question" | "import" | "grading" | "analytics";
+  view:
+    | NavKey
+    | "test"
+    | "bank"
+    | "question"
+    | "import"
+    | "grading"
+    | "analytics"
+    | "monitor";
   test?: string;
   bank?: string;
   section?: string;
@@ -75,6 +83,7 @@ const VIEWS: readonly ViewParams["view"][] = [
   "import",
   "grading",
   "analytics",
+  "monitor",
 ];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */

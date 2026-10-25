@@ -631,6 +631,11 @@ export interface ApiClient {
   // monitor replaces both.
   lockedAttempts(workspaceId: string, testId: string): Promise<LockedAttemptRow[]>;
   unlockAttempt(workspaceId: string, testId: string, attemptId: string): Promise<void>;
+  getMonitor(
+    workspaceId: string,
+    testId: string,
+    query?: { flagged?: boolean; inactive?: boolean },
+  ): Promise<MonitorResponse>;
   /**
    * Phase 8b Task 2 (`K15`): the grading queue. `blind: true` is what makes
    * a request blind — the server never puts a candidate-identifying field
@@ -812,6 +817,35 @@ export interface LockedAttemptRow {
   lockedAt: number;
   violations: number;
   remainingSeconds: number;
+}
+
+export interface MonitorAttemptRow {
+  attemptId: string;
+  candidateId: string;
+  candidateName?: string;
+  candidateEmail?: string;
+  status: "started" | "in_progress" | "submitted" | "auto_submitted" | "locked";
+  startedAt: number | null;
+  submittedAt: number | null;
+  deadlineAt: number | null;
+  answeredCount: number;
+  totalQuestions: number;
+  violations: number;
+  integrityFlag: "clean" | "review" | "scoring_blocked";
+  lastContactAt: number | null;
+  camera: "active" | "lost" | "not_required";
+  lockedAt: number | null;
+  faceCount?: number | null;
+}
+
+export interface MonitorResponse {
+  counts: {
+    registered: number;
+    inProgress: number;
+    submitted: number;
+    autoSubmitted: number;
+  };
+  rows: MonitorAttemptRow[];
 }
 
 export interface CandidateIssue {
@@ -1309,6 +1343,16 @@ export function createApiClient(): ApiClient {
 
     async unlockAttempt(workspaceId, testId, attemptId) {
       await json(`/workspaces/${workspaceId}/tests/${testId}/attempts/${attemptId}/unlock`, post({}));
+    },
+
+    getMonitor: (workspaceId, testId, opts) => {
+      const search = new URLSearchParams();
+      if (opts?.flagged) search.set("flagged", "1");
+      if (opts?.inactive) search.set("inactive", "1");
+      const qs = search.toString();
+      return json<MonitorResponse>(
+        `/workspaces/${workspaceId}/tests/${testId}/monitor${qs ? `?${qs}` : ""}`,
+      );
     },
 
     async gradingQueue(workspaceId, testId, opts = {}) {
