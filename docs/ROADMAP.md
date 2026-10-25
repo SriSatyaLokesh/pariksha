@@ -135,7 +135,7 @@ against figures captured on `main`.
 organiser screens from Phases 4 and 5, and the candidate runtime from Phase 6. That is the first
 moment a redesign can be done **once**, against the real thing, and the last cheap moment: Phase 7
 adds proctoring UI, Phase 8 adds the monitor, the grading queue and analytics, and every screen added
-before the redesign is a screen redesigned twice. It must also land **before** Phase 12's WCAG 2.1 AA
+before the redesign is a screen redesigned twice. It must also land **before** Phase 11's WCAG 2.1 AA
 audit, or that audit is invalidated by the work that follows it.
 
 **Carried out as new work, not silently dropped.** Section-order shuffling (needs a
@@ -189,15 +189,7 @@ keeps their **endpoint**.
 
 **PRD.** `R-01` through `R-11`, `S-13`, `S-14`, `D-03`.
 
-### Phase 9 — BYOK AI question drafting
-
-**Delivers.** Per-workspace storage of an organiser-supplied Anthropic or OpenAI API key, encrypted at rest with the deployment's field-encryption key and never sent to the browser. A drafting flow that turns a topic, syllabus or pasted source text into questions in `pariksha/question@1` form, validated against the JSON Schema and the cross-field import rules before anything is stored. Drafts land in a bank as unpublished items an Author must review; nothing is ever auto-published. Per-workspace usage and spend display, and a hard cap the owner sets.
-
-**Gate.** A generated batch that fails schema validation is rejected whole with its errors, exactly like a bad import. No request to a provider is made without a key belonging to the calling workspace. No key value is readable through any API response.
-
-**Extends the PRD** — see [Decisions that extend the PRD](#decisions-that-extend-the-prd).
-
-### Phase 10 — Public demo instance
+### Phase 9 — Public demo instance
 
 **Delivers.** A demo workspace provisioned per visitor, seeded with a sample bank, a published sample test and fake attempts with scores and integrity flags, so an evaluator sees a populated product rather than an empty one. A Cron Trigger wipes demo workspaces on a fixed schedule, reusing the Phase 8 retention job. Demo workspaces are rate-limited, cannot send email, cannot hold a BYOK key and cannot be published to a custom domain.
 
@@ -205,7 +197,7 @@ keeps their **endpoint**.
 
 **Extends the PRD** — see [Decisions that extend the PRD](#decisions-that-extend-the-prd).
 
-### Phase 11 — Docker self-host
+### Phase 10 — Docker self-host
 
 **Delivers.** The API container (also serving the web app), Postgres 16 and SQLite paths, MinIO and local-disk storage, Caddy for automatic HTTPS, `docker compose up` with an `.env` file, email and password sign-in with Argon2id plus optional TOTP (Docker only, per `S-01`), the built-in scheduler in place of Cron Triggers, and documented backup and restore.
 
@@ -213,13 +205,21 @@ keeps their **endpoint**.
 
 **PRD.** `O-03`, architecture table.
 
-### Phase 12 — v1.0 release readiness
+### Phase 11 — v1.0 release readiness
 
 **Delivers.** The WCAG 2.1 AA audit and its fixes, translation files and right-to-left layout, the OpenAPI 3.1 description, the plugin interface for question types, proctoring signals and export targets, the k6 load-test script, the full documentation set (quick start, organiser guide, candidate FAQ, security guide, API reference, privacy template), semantic-versioned signed releases and dependency scanning.
 
 **Gate.** `AC-29`: a k6 run of 500 candidates on the Cloudflare free plan ends with under 0.5% errors, p95 at or under 300 ms, and usage inside the daily limits. Every acceptance criterion passes on both deployment targets.
 
 **PRD.** `O-04` through `O-07`, non-functional requirements.
+
+### Phase 12 — BYOK AI question drafting
+
+**Delivers.** Per-workspace storage of an organiser-supplied Anthropic or OpenAI API key, encrypted at rest with the deployment's field-encryption key and never sent to the browser. A drafting flow that turns a topic, syllabus or pasted source text into questions in `pariksha/question@1` form, validated against the JSON Schema and the cross-field import rules before anything is stored. Drafts land in a bank as unpublished items an Author must review; nothing is ever auto-published. Per-workspace usage and spend display, and a hard cap the owner sets.
+
+**Gate.** A generated batch that fails schema validation is rejected whole with its errors, exactly like a bad import. No request to a provider is made without a key belonging to the calling workspace. No key value is readable through any API response.
+
+**Extends the PRD** — see [Decisions that extend the PRD](#decisions-that-extend-the-prd).
 
 ## Gates
 
@@ -229,7 +229,7 @@ keeps their **endpoint**.
 | Phase 3 | Platform | Permission matrix and tenant isolation suites pass; fresh deploy reaches a dashboard |
 | Phase 6 | First live test | A real unproctored test runs end to end with zero lost answers |
 | Phase 8 | Pilot (PRD G1) | 300+ candidates, zero lost answers, results CSV matches hand-scoring |
-| Phase 12 | v1.0 | Every acceptance criterion on both targets; k6 at 500 candidates inside free limits |
+| Phase 11 | v1.0 | Every acceptance criterion on both targets; k6 at 500 candidates inside free limits |
 
 ## Dependency order
 
@@ -238,18 +238,18 @@ flowchart LR
     P1["1 · Core"] --> P2["2 · Data + API"] --> P3["3 · Auth + landing"]
     P3 --> P4["4 · Banks"] --> P5["5 · Test builder"] --> P6["6 · Candidate runtime"]
     P6 --> P7["7 · Proctoring"] --> P8["8 · Results + lifecycle"]
-    P4 --> P9["9 · BYOK drafting"]
-    P8 --> P10["10 · Public demo"]
-    P5 --> P10
-    P8 --> P11["11 · Docker"] --> P12["12 · v1.0"]
-    P9 --> P12
-    P10 --> P12
+    P8 --> P9["9 · Public demo"]
+    P5 --> P9
+    P8 --> P10["10 · Docker"] --> P11["11 · v1.0"]
+    P9 --> P11
+    P4 --> P12["12 · BYOK drafting"]
+    P11 --> P12
 
     classDef now fill:#e3edf9,stroke:#2f6fd0,stroke-width:2px;
     class P1,P2,P3 now;
 ```
 
-Phases 9 and 10 are off the critical path. Phase 9 needs only banks (Phase 4) and encrypted workspace settings (Phase 3); Phase 10 needs a publishable test (Phase 5) and the retention job (Phase 8). Either can slip without delaying v1.0's critical chain.
+Phase 9 (Public demo) and Phase 12 (BYOK) are off the critical path. Phase 9 needs a publishable test (Phase 5) and the retention job (Phase 8); Phase 12 needs banks (Phase 4) and encrypted workspace settings (Phase 3). Either can slip without delaying v1.0's critical chain.
 
 ## Decisions that extend the PRD
 
@@ -281,11 +281,11 @@ Recorded as **ADR 0010**, written before implementation starts. The design itsel
 [`docs/superpowers/specs/2026-10-20-phase-6-5-design-pass-design.md`](superpowers/specs/2026-10-20-phase-6-5-design-pass-design.md),
 with 21 addressed rulings so a reviewer can reject one line rather than argue with a redesign.
 
-### Public demo instance (Phase 10)
+### Public demo instance (Phase 9)
 
 The PRD lists "a hosted SaaS run by the project" as a non-goal. A public demo is adjacent to that line, and the distinction has to be held deliberately: the demo exists so an evaluator can see Pariksha without deploying it, and it is not a place anyone runs a real test. Demo workspaces are provisioned per visitor, wiped on a schedule, rate-limited, unable to send email, unable to hold a BYOK key, and unable to take a custom domain. Someone — not the project generically — must own the Cloudflare account it runs on and the abuse surface it opens.
 
-### BYOK AI question drafting (Phase 9)
+### BYOK AI question drafting (Phase 12)
 
 Anthropic and OpenAI, keys supplied by the organiser and stored encrypted per workspace with the existing field-encryption key (`S-15`), never returned by any API and never present in the browser. The model drafts *questions into a bank*, not whole tests: a generated question is an unpublished draft in `pariksha/question@1` form, validated against the JSON Schema and the cross-field import rules, which an Author reviews before it can be used. This keeps the blast radius at one bank item and reuses the import path's validation wholesale. Generating entire `pariksha/test@1` documents — sections, timing, registration form — is explicitly out of scope and would need its own decision.
 
@@ -320,8 +320,9 @@ These are the planner's calls, not the PRD's. They are listed so they can be ove
 | --- | --- | --- |
 | v0.1 Pilot-ready | 1 – 6 | Auth arrives here rather than in v0.2; all 12 types rather than 6 |
 | v0.2 Teams and security | 7 – 8 | Roles and audit log already shipped in Phase 3; this adds proctoring, retention and deletion |
-| v0.3 All types and grading | 8 – 10 | Grading, analytics and regrade, plus the two additions |
-| v1.0 Public release | 11 – 12 | Docker, API surface, accessibility, translations, plugins, docs |
+| v0.3 All types and grading | 8 – 9 | Grading, analytics and regrade, plus the public demo |
+| v1.0 Public release | 10 – 11 | Docker, API surface, accessibility, translations, plugins, docs |
+| Post-v1.0 Enhancements | 12 | BYOK AI question drafting with encrypted keys |
 
 ## Plan documents
 
