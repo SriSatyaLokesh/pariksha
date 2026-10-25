@@ -149,6 +149,9 @@ export const sqliteMigrations: Migration[] = [
   { name: "0011_attempt_locked_at.sql", statements: [
     "-- Phase 7e Task 3 (`E-R1`, a correction over the plan's own \"Migrations:\n-- none\"): the lock needs somewhere to live. There is no `status` column on\n-- `attempt` — `submitted_at` is the only lifecycle stamp that exists — so\n-- a locked attempt has nowhere to record it without this.\n--\n-- A nullable `locked_at`, the same shape `submitted_at` already has: null\n-- means \"never locked\", a timestamp is the moment `violationOutcome`'s\n-- `lock` branch first fired for this attempt (`lockAttempt`, packages/db/\n-- src/repo/attempts.ts). No DEFAULT needed — unlike 0008's NOT NULL\n-- columns, a nullable `ADD COLUMN` needs none on either dialect, and every\n-- attempt written before this migration correctly reads back \"not locked\".\nALTER TABLE `attempt` ADD `locked_at` integer;",
   ] },
+  { name: "0012_proctor_broadcast.sql", statements: [
+    "-- Phase 8g Task 3: The Proctor Broadcast (`C-10`, `K12`, `K13`).\n-- A nullable `proctor_message` and epoch ms timestamp `proctor_message_at`.\n-- Null means no broadcast pending; populated means pending delivery on candidate responses.\nALTER TABLE `attempt` ADD COLUMN `proctor_message` text;\nALTER TABLE `attempt` ADD COLUMN `proctor_message_at` integer;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -279,5 +282,8 @@ export const pgMigrations: Migration[] = [
   ] },
   { name: "0011_attempt_locked_at.sql", statements: [
     "-- Phase 7e Task 3 (`E-R1`): the sqlite/0011_attempt_locked_at.sql sibling.\n-- Nullable, so Postgres needs no DEFAULT either — every attempt written\n-- before this migration reads back \"not locked\" on both dialects.\nALTER TABLE \"attempt\" ADD COLUMN \"locked_at\" bigint;",
+  ] },
+  { name: "0012_proctor_broadcast.sql", statements: [
+    "-- Phase 8g Task 3: The Proctor Broadcast (`C-10`, `K12`, `K13`).\n-- A nullable `proctor_message` and epoch ms timestamp `proctor_message_at`.\n-- Null means no broadcast pending; populated means pending delivery on candidate responses.\nALTER TABLE \"attempt\" ADD COLUMN \"proctor_message\" text;\nALTER TABLE \"attempt\" ADD COLUMN \"proctor_message_at\" bigint;",
   ] },
 ];

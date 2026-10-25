@@ -50,6 +50,9 @@ export interface EventsResponse {
    *  Optional for the identical reason `submitted` is: every pre-existing
    *  fixture predates it, and an absent key reads as "not this response". */
   locked?: boolean;
+  /** Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast message. */
+  message?: string;
+  messageAt?: number;
 }
 
 /** The brief's own ruling: a dead network for twenty minutes must not grow
@@ -85,6 +88,8 @@ export function createProctoringQueue(opts: {
     submitted: boolean,
     locked: boolean,
   ) => void;
+  /** Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast callback. */
+  onMessage?: (message: string, messageAt: number) => void;
   flushMs: number;
 }): ProctoringQueue {
   let buffer: QueuedEvent[] = [];
@@ -140,6 +145,13 @@ export function createProctoringQueue(opts: {
           );
         } catch {
           // A consumer's own callback must not break the queue either.
+        }
+        if (answer.message && typeof answer.messageAt === "number") {
+          try {
+            opts.onMessage?.(answer.message, answer.messageAt);
+          } catch {
+            // A consumer's own callback must not break the queue either.
+          }
         }
       }
     }

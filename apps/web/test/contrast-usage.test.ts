@@ -739,6 +739,10 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // ink), so neither needs an entry.
   ".exam-proctoring-dialog": both("cream"),
   ".exam-proctoring-overlay-action": both("voltage-deep"),
+  // Phase 8g Task 3 (`C-10`, `D8`): candidate proctor broadcast banner.
+  ".exam-proctor-banner": both("cream"),
+  ".exam-proctor-banner-tag": both("cream"),
+  ".exam-proctor-banner-dismiss": both("voltage-deep"),
   // Phase 7c Task 5 (`Q9`/`D1`): the watermark. `fixed`, over whatever the
   // runner has painted underneath — which is always the page's own cream,
   // the same ground every other ambient mark in this file reads on.

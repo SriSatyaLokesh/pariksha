@@ -251,6 +251,8 @@ export const upsertResponse = scoped(
        * with its own `now` and extend the section's clock.
        */
       advance?: { maxIndex: number; sectionStartsAt: number; sectionStartedAt: number };
+      /** Phase 8g Task 3 (`K12`, `K13`): clear proctor message on delivery. */
+      clearProctorMessage?: boolean;
     },
   ): Promise<{ stored: boolean; advanced?: boolean }> => {
     const upsert = {
@@ -274,17 +276,19 @@ export const upsertResponse = scoped(
     };
 
     const advance = input.advance;
-    if (!advance) {
+    const clear = input.clearProctorMessage === true;
+
+    if (!advance && !clear) {
       const { changes } = await db.run(upsert.sql, upsert.params);
       return { stored: changes > 0 };
     }
 
-    // `AND max_index < ?` is what makes "max_index never falls" a property
-    // of the statement rather than of the caller reading first: two saves
-    // racing from two tabs cannot reopen a question the lock has passed.
-    const [response, progress] = await db.batch([
-      upsert,
-      {
+    const statements: { sql: string; params?: unknown[] }[] = [upsert];
+    if (advance) {
+      // `AND max_index < ?` is what makes "max_index never falls" a property
+      // of the statement rather than of the caller reading first: two saves
+      // racing from two tabs cannot reopen a question the lock has passed.
+      statements.push({
         sql:
           "UPDATE attempt SET max_index = ?, " +
           "section_started_at = CASE WHEN max_index < ? THEN ? ELSE section_started_at END " +
@@ -297,9 +301,19 @@ export const upsertResponse = scoped(
           input.attemptId,
           advance.maxIndex,
         ],
-      },
-    ]);
-    if (response === undefined || progress === undefined) {
+      });
+    }
+    if (clear) {
+      statements.push({
+        sql: "UPDATE attempt SET proctor_message = NULL, proctor_message_at = NULL WHERE workspace_id = ? AND id = ?",
+        params: [workspaceId, input.attemptId],
+      });
+    }
+
+    const results = await db.batch(statements);
+    const response = results[0];
+    const progress = advance ? results[1] : undefined;
+    if (response === undefined || (advance && progress === undefined)) {
       throw new Error("batch() answered no result for the response upsert");
     }
     /**
@@ -312,7 +326,7 @@ export const upsertResponse = scoped(
      * off its own pre-read row reports a number the row may not hold —
      * see `attempt.ts`.
      */
-    return { stored: response.changes > 0, advanced: progress.changes > 0 };
+    return { stored: response.changes > 0, ...(advance ? { advanced: progress!.changes > 0 } : {}) };
   },
 );
 
@@ -780,12 +794,64 @@ export const recordSnapshot = scoped(
   async (
     db: DbClient,
     workspaceId: string,
-    input: { attemptId: string; storageKey: string; takenAt: number; reason: string },
+    input: {
+      attemptId: string;
+      storageKey: string;
+      takenAt: number;
+      reason: string;
+      clearProctorMessage?: boolean;
+    },
+  ): Promise<void> => {
+    const insert = {
+      sql:
+        "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason, face_count) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+      params: [newId("snp"), workspaceId, input.attemptId, input.storageKey, input.takenAt, input.reason, null],
+    };
+    if (input.clearProctorMessage) {
+      await db.batch([
+        insert,
+        {
+          sql: "UPDATE attempt SET proctor_message = NULL, proctor_message_at = NULL WHERE workspace_id = ? AND id = ?",
+          params: [workspaceId, input.attemptId],
+        },
+      ]);
+      return;
+    }
+    await db.run(insert.sql, insert.params);
+  },
+);
+
+/**
+ * Phase 8g Task 3 (`C-10`, `K12`, `K13`): Set a proctor broadcast message
+ * on an attempt. Overwrites any previous pending message.
+ */
+export const setProctorMessage = scoped(
+  "setProctorMessage",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    attemptId: string,
+    message: string,
+    messageAt: number,
   ): Promise<void> => {
     await db.run(
-      "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason, face_count) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [newId("snp"), workspaceId, input.attemptId, input.storageKey, input.takenAt, input.reason, null],
+      "UPDATE attempt SET proctor_message = ?, proctor_message_at = ? WHERE workspace_id = ? AND id = ?",
+      [message, messageAt, workspaceId, attemptId],
+    );
+  },
+);
+
+/**
+ * Phase 8g Task 3 (`K12`, `K13`): Clear the proctor broadcast message
+ * once delivered to the candidate runtime.
+ */
+export const clearProctorMessage = scoped(
+  "clearProctorMessage",
+  async (db: DbClient, workspaceId: string, attemptId: string): Promise<void> => {
+    await db.run(
+      "UPDATE attempt SET proctor_message = NULL, proctor_message_at = NULL WHERE workspace_id = ? AND id = ?",
+      [workspaceId, attemptId],
     );
   },
 );

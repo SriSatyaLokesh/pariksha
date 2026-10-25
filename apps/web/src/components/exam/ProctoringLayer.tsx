@@ -113,7 +113,11 @@ const EVENTS_PATH = "/api/v1/run/attempt/events";
  *  upload, against Task 1's `POST /api/v1/run/attempt/snapshot`) rather
  *  than importing it — a component importing from a route runs the
  *  dependency the wrong way round, and the function is three lines. */
-async function uploadSnapshot(blob: Blob, reason: "interval" | "violation"): Promise<void> {
+async function uploadSnapshot(
+  blob: Blob,
+  reason: "interval" | "violation",
+  onProctorMessage?: (message: string, messageAt: number) => void,
+): Promise<void> {
   const res = await fetch(`/api/v1/run/attempt/snapshot?reason=${reason}`, {
     method: "POST",
     credentials: "same-origin",
@@ -121,6 +125,12 @@ async function uploadSnapshot(blob: Blob, reason: "interval" | "violation"): Pro
     body: blob,
   });
   if (!res.ok) throw new Error(`snapshot upload failed: ${String(res.status)}`);
+  try {
+    const data = (await res.json()) as { message?: string; messageAt?: number };
+    if (data?.message && typeof data?.messageAt === "number") {
+      onProctorMessage?.(data.message, data.messageAt);
+    }
+  } catch {}
 }
 
 /**
@@ -140,11 +150,12 @@ async function captureAndUpload(
   stream: MediaStream,
   reason: "interval" | "violation",
   queue: ReturnType<typeof createProctoringQueue> | null,
+  onProctorMessage?: (message: string, messageAt: number) => void,
 ): Promise<void> {
   const blob = await captureJpeg(stream).catch(() => null);
   if (!blob) return;
   try {
-    await uploadSnapshot(blob, reason);
+    await uploadSnapshot(blob, reason, onProctorMessage);
   } catch {
     queue?.push("snapshot_failed");
   }
@@ -235,7 +246,9 @@ export interface ProctoringLayerProps {
    * `/start`, and every fixture in this package's own test suite — is
    * unaffected.
    */
-  initialLocked?: boolean;
+   initialLocked?: boolean;
+  /** Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast callback. */
+  onProctorMessage?: (message: string, messageAt: number) => void;
 }
 
 export function ProctoringLayer({
@@ -245,6 +258,7 @@ export function ProctoringLayer({
   cameraStream = null,
   cameraUnavailable = false,
   initialLocked = false,
+  onProctorMessage,
 }: ProctoringLayerProps) {
   /**
    * The paper's fullscreen state **at the moment this layer first
@@ -364,6 +378,14 @@ export function ProctoringLayer({
    * `pushImmediate` into from their own effects in this same file.
    */
   const queueRef = useRef<ReturnType<typeof createProctoringQueue> | null>(null);
+  const onProctorMessageRef = useRef(onProctorMessage);
+  useEffect(() => {
+    onProctorMessageRef.current = onProctorMessage;
+  }, [onProctorMessage]);
+
+  function doCaptureAndUpload(stream: MediaStream, reason: "interval" | "violation") {
+    void captureAndUpload(stream, reason, queueRef.current, (msg, at) => onProctorMessageRef.current?.(msg, at));
+  }
 
   /**
    * Phase 7d Task 2 review finding 1 (MEDIUM, closed here): `cameraStream`
@@ -440,6 +462,10 @@ export function ProctoringLayer({
         // Phase 7e Task 3: never unset — see `locked`'s own doc comment
         // above.
         if (lockedNow) setLocked(true);
+      },
+      onMessage: (message, messageAt) => {
+        if (queueRef.current !== queue) return;
+        onProctorMessageRef.current?.(message, messageAt);
       },
       flushMs: FLUSH_MS,
     });
@@ -526,7 +552,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) doCaptureAndUpload(liveStreamRef.current, "violation");
       }
       setInFullscreen(next);
     }
@@ -579,7 +605,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) doCaptureAndUpload(liveStreamRef.current, "violation");
       }
     }
     function endAway(type: "window_blur" | "visibility_hidden"): void {
@@ -713,7 +739,7 @@ export function ProctoringLayer({
     // capture here is both obtainable and the single most useful
     // evidence a `camera_lost` event can ever produce.
     if (reason === "covered" && liveStreamRef.current && !lockedRef.current) {
-      void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+      doCaptureAndUpload(liveStreamRef.current, "violation");
     }
   }
 
@@ -927,7 +953,7 @@ export function ProctoringLayer({
       // Fix pass 1, finding 2: resets from NOW, not from `due` — see the
       // doc comment above. One capture per return, never a drained backlog.
       nextSnapshotAtRef.current = Date.now() + intervalMs;
-      void captureAndUpload(liveStream, "interval", queueRef.current);
+      doCaptureAndUpload(liveStream, "interval");
     }, SNAPSHOT_CHECK_MS);
     return () => {
       clearInterval(timer);
@@ -963,7 +989,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) doCaptureAndUpload(liveStreamRef.current, "violation");
       };
     }
     const onCopy = blocked("copy_blocked");
@@ -1006,7 +1032,7 @@ export function ProctoringLayer({
         // Fix pass 1, finding 1: the CURRENT stream, via the ref — a
         // reconnect may have swapped it since this effect last ran, and
         // this effect does not depend on `liveStream` to re-close over it.
-        if (liveStreamRef.current && !lockedRef.current) void captureAndUpload(liveStreamRef.current, "violation", queueRef.current);
+        if (liveStreamRef.current && !lockedRef.current) doCaptureAndUpload(liveStreamRef.current, "violation");
       }
     } catch {
       /* Q2: degrade — an unreadable screen is not a violation */

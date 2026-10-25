@@ -173,6 +173,9 @@ export interface AttemptRecord {
    *  refuse a locked attempt (`run/attempt.ts`'s `assertNotLocked`) read
    *  it off the row this middleware already resolved, no second read. */
   lockedAt: number | null;
+  /** Phase 8g Task 3 (`K12`, `K13`): proctor message pending delivery. */
+  proctorMessage: string | null;
+  proctorMessageAt: number | null;
   /** `AttemptScore`, as `finishAttempt` stored it, and `null` until an
    *  attempt has been scored. On the record because the receipt and the
    *  result are read through the same cookie *after* submission (Task 11):
@@ -202,6 +205,8 @@ interface AttemptRecordRow {
   max_index: number;
   flag: string;
   locked_at: number | null;
+  proctor_message: string | null;
+  proctor_message_at: number | null;
   score_json: unknown;
   settings_json: unknown;
   sections_json: unknown;
@@ -214,7 +219,7 @@ export async function readAttemptByTokenHash(
   const rows = await db.query<AttemptRecordRow>(
     "SELECT a.id, a.workspace_id, a.candidate_id, a.test_version_id, a.set_no, a.layout_json, " +
       "a.started_at, a.deadline_at, a.submitted_at, a.submit_reason, a.section_started_at, " +
-      "a.max_index, a.flag, a.locked_at, a.score_json, " +
+      "a.max_index, a.flag, a.locked_at, a.score_json, a.proctor_message, a.proctor_message_at, " +
       "v.test_id AS test_id, v.version AS version, v.settings_json AS settings_json, " +
       "v.sections_json AS sections_json " +
       "FROM attempt a JOIN test_version v ON v.id = a.test_version_id " +
@@ -240,6 +245,8 @@ export async function readAttemptByTokenHash(
     maxIndex: Number(row.max_index),
     flag: row.flag,
     lockedAt: row.locked_at === null ? null : Number(row.locked_at),
+    proctorMessage: row.proctor_message ?? null,
+    proctorMessageAt: row.proctor_message_at == null ? null : Number(row.proctor_message_at),
     score: row.score_json == null ? null : db.jsonValue(row.score_json),
     settings: db.jsonValue(row.settings_json),
     sections: db.jsonValue(row.sections_json),

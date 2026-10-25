@@ -367,12 +367,13 @@ describe("the constraints the PRD names", () => {
     expect(response?.indexes).toContainEqual(["workspace_id", "question_id"]);
   });
 
-  it("does NOT add the broadcast columns — K43 deferred them with 8g", () => {
+  it("Phase 8g Task 3: adds the broadcast columns (C-10, K12, K13)", () => {
     const cols = TABLE_MANIFEST.find((t) => t.name === "attempt")!.columns.map(
       (c) => c.name,
     );
-    expect(cols).not.toContain("proctor_message");
-    // Control: the negative above is only meaningful if this lookup resolves.
+    expect(cols).toContain("proctor_message");
+    expect(cols).toContain("proctor_message_at");
+    // Control: the assertion above is only meaningful if this lookup resolves.
     expect(cols).toContain("integrity_flag");
   });
 
