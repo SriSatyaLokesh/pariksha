@@ -4,10 +4,10 @@ import { useDialogKeys } from "../useDialogKeys";
 
 export interface MonitorTableProps {
   rows: readonly MonitorAttemptRow[];
-  now?: number;
-  client?: ApiClient;
-  workspaceId?: string;
-  onActionComplete?: () => void;
+  now?: number | undefined;
+  client?: ApiClient | undefined;
+  workspaceId?: string | undefined;
+  onActionComplete?: (() => void) | undefined;
 }
 
 type ModalType = "extend_time" | "reset" | "force_submit" | "message";
@@ -92,6 +92,7 @@ export function MonitorTable({
     if (!client || !workspaceId) return;
     try {
       setPending(true);
+      setActionError(null);
       await client.performProctorAction(workspaceId, attemptId, { kind: "unlock" });
       onActionComplete?.();
     } catch (err) {
@@ -112,11 +113,6 @@ export function MonitorTable({
           await client.performProctorAction(workspaceId, activeModal.attemptId, {
             kind: "extend_time",
             minutes: Number(minutes),
-          });
-          break;
-        case "unlock":
-          await client.performProctorAction(workspaceId, activeModal.attemptId, {
-            kind: "unlock",
           });
           break;
         case "reset":
@@ -157,6 +153,11 @@ export function MonitorTable({
 
   return (
     <div className="table-scroll">
+      {actionError && !activeModal && (
+        <p role="alert" className="organiser__notice error">
+          {actionError}
+        </p>
+      )}
       <table className="monitor-table">
         <thead>
           <tr>

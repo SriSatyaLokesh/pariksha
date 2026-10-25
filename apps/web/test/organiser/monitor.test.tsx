@@ -224,6 +224,26 @@ describe("Monitor Screen", () => {
       });
     });
 
+    it("displays error message when unlock fails", async () => {
+      const client = fakeClient({
+        getMonitor: vi.fn().mockResolvedValue(mockResponse),
+        performProctorAction: vi.fn().mockRejectedValue(new Error("Unlock server rejected")),
+      });
+
+      render(
+        <Monitor
+          client={client}
+          workspaceId={WORKSPACE_ID}
+          testId={TEST_ID}
+          rows={[lockedRow]}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /unlock/i }));
+
+      expect(await screen.findByRole("alert")).toHaveTextContent("Unlock server rejected");
+    });
+
     it("resets attempt with confirmation naming non-destructive preservation", async () => {
       const performActionSpy = vi.fn().mockResolvedValue({ ok: true, newAttemptId: "att_new" });
       const client = fakeClient({
