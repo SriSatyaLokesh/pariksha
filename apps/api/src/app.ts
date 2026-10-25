@@ -111,6 +111,12 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/auth/:provider/callback": 12,
   "/api/v1/auth/signout": 12,
   "/api/v1/auth/signout-everywhere": 12,
+  // Phase 10: Docker self-host password authentication & TOTP (S-01, S-02).
+  "/api/v1/auth/password/signin": 12,
+  "/api/v1/auth/password/register": 12,
+  "/api/v1/auth/password/totp/setup": 6,
+  "/api/v1/auth/password/totp/verify": 6,
+  "/api/v1/auth/password/totp/disable": 6,
   "/api/v1/me": 2,
   // `status` is one statement and costs no authentication: it answers an
   // unauthenticated sign-in screen. `complete` is authentication, the claim
@@ -1121,6 +1127,9 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // `signout-everywhere` *does* need an actor, which is why they differ
   // here despite sharing a prefix — read the guard, not the path.
   "POST /api/v1/auth/signout": "public",
+  // Phase 10: Docker self-host password auth (S-01, S-02).
+  "POST /api/v1/auth/password/signin": "public",
+  "POST /api/v1/auth/password/register": "public",
   // Phase 9 Task 4: public demo provisioning endpoint.
   "POST /api/v1/demo/provision": "public",
   // The first-run wizard asks this before any workspace or account exists.
@@ -1207,6 +1216,10 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",
+  // Phase 10: Docker self-host TOTP settings (S-02).
+  "POST /api/v1/auth/password/totp/setup": "actor",
+  "POST /api/v1/auth/password/totp/verify": "actor",
+  "POST /api/v1/auth/password/totp/disable": "actor",
   "GET /api/v1/me": "actor",
   "POST /api/v1/setup/complete": "actor",
   // The actor's own workspaces: a list scoped to the caller cannot name

@@ -44,6 +44,7 @@ it("every migration applies against the Miniflare D1 binding", async () => {
     "0010_violation_limit_claim.sql",
     "0011_attempt_locked_at.sql",
     "0012_proctor_broadcast.sql",
+    "0013_user_password.sql",
   ]);
 
   // The four table rebuilds are the statements D1 could reject, so the test
@@ -243,7 +244,7 @@ it("the worker entry serves health over the D1 and R2 bindings", async () => {
   expect(await res.json()).toMatchObject({
     status: "ok",
     dialect: "d1",
-    migrations: 13,
+    migrations: 14,
   });
 });
 
