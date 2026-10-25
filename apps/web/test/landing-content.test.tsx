@@ -20,11 +20,6 @@ const SECTIONS: { id: string; level: 2 | 3; heading: string }[] = [
     level: 2,
     heading: "Twelve question types. Five ways to score them.",
   },
-  {
-    id: "screens",
-    level: 2,
-    heading: "Five screens, captured from the running app.",
-  },
   { id: "integrity", level: 2, heading: "No video. No audio. No verdicts." },
   {
     id: "cost",
@@ -48,7 +43,6 @@ const SECTIONS: { id: string; level: 2 | 3; heading: string }[] = [
 
 const NAV_LINKS: { text: string; href: string }[] = [
   { text: "How it works", href: "#how-it-works" },
-  { text: "Screens", href: "#screens" },
   { text: "Integrity", href: "#integrity" },
   { text: "Compare", href: "#compare" },
   { text: "Status", href: "#status" },
@@ -115,7 +109,7 @@ describe("landing content — Signal", () => {
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("the primary nav has exactly these six links, in order, to the right targets", () => {
+  it("the primary nav has exactly these five links, in order, to the right targets", () => {
     render(<Landing />);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");

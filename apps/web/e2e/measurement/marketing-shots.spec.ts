@@ -1,6 +1,18 @@
-// The two screenshots the README and the landing page need and the audit
-// walkthrough does not produce: the candidate's paper, and the analytics
-// screen once an attempt has been scored.
+// The two screenshots the README needs and the audit walkthrough does not
+// produce: the candidate's paper, and the analytics screen once an attempt
+// has been scored.
+//
+// The files land in `e2e/screenshots/` (git-ignored) as 1280x800 PNGs.
+// What the README actually carries is `docs/screens/*.webp` at 840px —
+// 152 KB for all six against 692 KB of full-size PNG, on a page that loads
+// every one of them. One command, run by hand after a re-capture:
+//
+//   ffmpeg -i e2e/screenshots/10-exam-runner-desktop.png -vf scale=840:-1
+//     -quality 82 ../../docs/screens/exam-runner.webp
+//
+// Deliberately not a script: ffmpeg is not in this repository's toolchain,
+// and a build step that assumes a binary nobody declared is worse than a
+// documented line. Re-capture is rare.
 //
 // `ui-audit-walkthrough.spec.ts` already shoots every organiser screen, and
 // those files are reused verbatim — this file exists only because its own

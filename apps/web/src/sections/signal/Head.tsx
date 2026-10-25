@@ -4,20 +4,19 @@
 //
 // The hero's frame was written when a product screenshot was one "the
 // project cannot honestly take" — the application did not exist. It does
-// now (issue 253: real screens live in the band below, from
-// `public/screens/`), and the frame STAYS anyway: it is the one thing a
-// screenshot cannot show, a pool drawing a different paper for every
-// candidate, redrawn in front of the reader. The markup below is the
-// complete, readable state with JavaScript off; the island at
-// src/island/exam-demo.ts upgrades it in place by its data- attributes
-// and must never rewrite it from scratch.
+// now (issue 253), and the frame STAYS anyway, for a reason that outlives
+// that: it is the one thing a screenshot cannot show, a pool drawing a
+// different paper for every candidate, redrawn in front of the reader.
+// The captured screens live in the README; this page argues rather than
+// catalogues. The markup below is the complete, readable state with
+// JavaScript off; the island at src/island/exam-demo.ts upgrades it in
+// place by its data- attributes and must never rewrite it from scratch.
 
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
 const WORKED_EXAMPLE = `${REPO}/tree/main/examples/reasoning-aptitude`;
 
 const NAV_LINKS = [
   { label: "How it works", href: "#how-it-works" },
-  { label: "Screens", href: "#screens" },
   { label: "Integrity", href: "#integrity" },
   { label: "Compare", href: "#compare" },
   { label: "Status", href: "#status" },

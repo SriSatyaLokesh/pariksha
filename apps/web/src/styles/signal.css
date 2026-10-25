@@ -894,6 +894,69 @@
   }
 }
 
+/* The nav had no responsive rule at all: `.signal-nav__inner` is a wrapping
+   flex row, so below the width at which wordmark + links + CTA fit on one
+   line, the links wrapped onto lines of their own and pushed the CTA down.
+   Measured on this commit, in Chromium, with the links at their natural
+   381px:
+
+     | viewport | sticky bar | what it looks like            |
+     | -------- | ---------- | ----------------------------- |
+     | 1060     | 67px       | one row                       |
+     | 860      | 67px       | one row — the knee            |
+     | 800      | 109px      | CTA pushed to a second row    |
+     | 390      | 67px*      | *only after the rule below    |
+     | 360      | 89px       | CTA label wraps as well       |
+
+   So 860px is measured, not guessed. (Issue 253's sixth link made the bug
+   visible; it was already there at five.)
+
+   Below it the links are dropped rather than rehoused. A hamburger is a
+   script, a focus trap and a close affordance for a page whose every target
+   is a scroll away on the SAME page; a horizontal scroll rail hides items
+   behind a gesture with no affordance. What the links are for — finding the
+   sections — scrolling already does. The two things a phone reader cannot
+   get by scrolling, the wordmark and the one CTA, stay on one row, and the
+   footer still carries every document link.
+
+   `e2e/measurement/landing-nav.spec.ts` is the guard, and it asserts the
+   reader's experience (one row, CTA on it) rather than `display: none`, so
+   a future fix of a different shape is free to replace this one. */
+@media (max-width: 860px) {
+  .signal-nav__inner {
+    flex-wrap: nowrap;
+    gap: var(--space-md);
+  }
+
+  .signal-nav__links {
+    display: none;
+  }
+
+  /* The label is four words; at 360px it wrapped inside the pill and took
+     the bar to 89px on its own, after the links were already gone. */
+  .signal-nav .signal-btn {
+    white-space: nowrap;
+  }
+}
+
+/* At the narrowest widths still worth serving, the wordmark's two scripts
+   stop sharing a line with the Latin name — 149px of lockup plus a 167px
+   pill does not fit in 360px minus its gutters. Stacked rather than
+   dropped: the Telugu and Devanagari are the product's name, and this is
+   the only place on the page that carries them. */
+@media (max-width: 420px) {
+  .signal-nav__inner {
+    padding-inline: var(--space-lg);
+  }
+
+  .signal-wordmark {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    line-height: 1.15;
+  }
+}
+
 @media (max-width: 1000px) {
   .signal-split,
   .signal-status-grid {
@@ -1019,51 +1082,4 @@
   padding: 0 var(--space-2xl) var(--space-xl) 0;
   color: var(--color-signal-text-2);
   max-width: 68ch;
-}
-
-/* ---- the screens band (issue 253) ----------------------------------- */
-
-/* Captured screens of the running app, replacing the "software that does
-   not exist yet" the head of this file was written against.
-
-   No font-size and no radius literal: `no-literal-radius-or-font-size`
-   allowlists this file's existing ones BY COUNT, so a new 13.5px here is
-   a failure rather than a nit. The caption therefore wears `.signal-fine`
-   and these rules set only space. Its lead-in is a <strong>, which
-   `:where(.signal) strong` already lifts to --color-signal-text and
-   `contrast-usage.test.ts` already covers — a `.signal-shot figcaption b`
-   of our own would have been a third selector to register for no gain. */
-
-.signal-screens {
-  display: grid;
-  gap: var(--space-2xl);
-  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-  margin-top: var(--space-2xl);
-}
-
-.signal-shot {
-  margin: 0;
-}
-
-/* The shots are light-ground organiser screens on a dark page. A hairline
-   and a surface pad keep them from reading as holes punched in the
-   ground, which is what a bare 1280x800 PNG looks like here. */
-.signal-shot img {
-  display: block;
-  width: 100%;
-  height: auto;
-  border: 1px solid var(--color-signal-line);
-  border-radius: var(--rounded-lg);
-  background: var(--color-signal-surface);
-}
-
-.signal-shot figcaption {
-  margin-top: var(--space-md);
-  max-width: 54ch;
-}
-
-@media (max-width: 560px) {
-  .signal-screens {
-    grid-template-columns: 1fr;
-  }
 }

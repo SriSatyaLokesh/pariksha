@@ -63,53 +63,51 @@ A college placement cell, a training institute or a 40-person company that needs
 
 ## Screens
 
-Captured from the running application — headless Chromium against the built
+Six captures of the running application — headless Chromium against the built
 app on a seeded instance, by
-[`apps/web/e2e/measurement/marketing-shots.spec.ts`](apps/web/e2e/measurement/marketing-shots.spec.ts)
+[`marketing-shots.spec.ts`](apps/web/e2e/measurement/marketing-shots.spec.ts)
 and
 [`ui-audit-walkthrough.spec.ts`](apps/web/e2e/measurement/ui-audit-walkthrough.spec.ts).
-Nothing below is a mockup, and nothing below is retouched. Re-take them with
-`pnpm --filter @pariksha/web e2e`.
+No mockups, no retouching. **Click any one for full size.**
 
-### The candidate's paper
+<table>
+<tr>
+<td width="50%">
+<a href="docs/screens/exam-runner.webp"><img src="docs/screens/exam-runner.webp" width="100%" alt="The candidate exam runtime: a multi-matching grid, a question palette, a countdown and text-size controls"></a>
+<b>The candidate's paper.</b> Server clock, offline save queue, a palette that survives a reload. The question shown is multi-matching.
+</td>
+<td width="50%">
+<a href="docs/screens/test-builder.webp"><img src="docs/screens/test-builder.webp" width="100%" alt="The test builder: version history, three sections with question and point counts, and a publish checklist reading All clear"></a>
+<b>The test builder.</b> Fixed lists, pools or sets; numbered frozen versions; one publish checklist the server and the screen compute alike.
+</td>
+</tr>
+<tr>
+<td width="50%">
+<a href="docs/screens/bank-browser.webp"><img src="docs/screens/bank-browser.webp" width="100%" alt="A question bank: a passage group and rows of questions with their type, difficulty, tags, points and usage"></a>
+<b>Question banks.</b> Twelve types with live preview, passage groups, tag and difficulty filters. Shown: <a href="examples/reasoning-aptitude/">the worked example</a>, imported as itself.
+</td>
+<td width="50%">
+<a href="docs/screens/analytics.webp"><img src="docs/screens/analytics.webp" width="100%" alt="The analytics screen: attempt counts, a score distribution and a summary with mean and median"></a>
+<b>Results and analytics.</b> Attempt counts by state, score distribution, item analysis, and the results and per-answer CSVs beside them.
+</td>
+</tr>
+<tr>
+<td width="50%">
+<a href="docs/screens/organiser-home.webp"><img src="docs/screens/organiser-home.webp" width="100%" alt="The organiser home screen: a workspace switcher, a What needs you queue and recently edited tests"></a>
+<b>Home.</b> What needs you, what you touched last, the free-plan usage meter — per workspace, roles enforced on the server.
+</td>
+<td width="50%">
+<a href="docs/screens/landing.webp"><img src="docs/screens/landing.webp" width="100%" alt="The public landing page: a dark hero reading Run real exams on infrastructure you own, beside a live pool draw"></a>
+<b>The public page.</b> Static output, no backend call, prerendered at build time.
+</td>
+</tr>
+</table>
 
-Server-authoritative clock, an offline save queue, a palette that survives a
-reload or a crash, and text size and high contrast the candidate chooses. The
-question shown is multi-matching, one of the twelve types.
-
-![The candidate exam runtime: a multi-matching grid, a question palette, a countdown and text-size controls](apps/web/public/screens/exam-runner.png)
-
-### The test builder
-
-Sections drawing from fixed lists, random pools or round-robin sets; numbered
-frozen versions, so publishing never moves the paper under an attempt already
-running; and one publish checklist that the server and the screen compute from
-the same function.
-
-![The test builder: version history, three sections with question and point counts, and a publish checklist reading All clear](apps/web/public/screens/test-builder.png)
-
-### Question banks
-
-All twelve types with live preview, passage groups, tag and difficulty
-filters, and import from Pariksha JSON, CSV or Moodle GIFT — all-or-nothing,
-with a line-by-line error report. The bank shown is
-[the worked example](examples/reasoning-aptitude/), imported as itself.
-
-![A question bank: a passage group and rows of questions with their type, difficulty, tags, points and usage](apps/web/public/screens/bank-browser.png)
-
-### Results and analytics
-
-Attempt counts by state, a score distribution, mean, median, pass and
-completion rates, item analysis below the fold, and the results and per-answer
-CSVs beside them.
-
-![The analytics screen: attempt counts, a score distribution and a summary with mean and median](apps/web/public/screens/analytics.png)
-
-### Home, and the landing page
-
-![The organiser home screen: a workspace switcher, a What needs you queue and recently edited tests](apps/web/public/screens/organiser-home.png)
-
-![The public landing page: a dark hero reading Run real exams on infrastructure you own, beside a live pool draw](apps/web/public/screens/landing.png)
+<sub>Re-take: <code>pnpm --filter @pariksha/web e2e</code> writes PNGs to
+<code>apps/web/e2e/screenshots/</code> (git-ignored). Convert with
+<code>ffmpeg -i in.png -vf scale=840:-1 -quality 82 docs/screens/out.webp</code>
+— 840&nbsp;px WebP is 152&nbsp;KB for all six against 692&nbsp;KB of
+full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
@@ -145,7 +143,7 @@ A 45-minute campus screening round in reasoning and aptitude. The folder walks t
 That folder's own README draws the candidate's screen as the design intends
 it, with a per-section timer and a palette grouped by section. **The shipped
 runtime does not group the palette by section yet** — see
-[the screenshot above](#the-candidates-paper) for what it actually looks like
+[the first screenshot above](#screens) for what it actually looks like
 today. The gap is known and tracked; the drawing is kept because it is what
 the test format already expresses.
 
