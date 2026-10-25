@@ -14,6 +14,7 @@
 import type { AppDeps } from "./app.js";
 import { regradeJob } from "./grade/regrade.js";
 import { rateLimitJob, retentionJob } from "./retention/sweep.js";
+import { demoCleanupJob } from "./retention/demo-sweep.js";
 import { webhookDrainJob } from "./webhooks/drain.js";
 
 export interface ScheduledJob {
@@ -63,6 +64,7 @@ export const SCHEDULED_JOBS: ScheduledJob[] = [
   retentionJob,
   rateLimitJob,
   regradeJob,
+  demoCleanupJob,
 ];
 
 /**

@@ -105,11 +105,21 @@ export const createWebhook = scoped(
 
     const id = newId("whk");
     const signingSecret = generateSigningSecret();
-    await db.run(
+    const { changes } = await db.run(
       "INSERT INTO webhook (id, workspace_id, url, events_json, signing_secret, active, created_at) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-      [id, workspaceId, input.url, db.jsonParam(input.events), signingSecret, 1, input.now],
+        "SELECT ?, ?, ?, ?, ?, 1, ? WHERE NOT EXISTS (" +
+        "SELECT 1 FROM workspace WHERE id = ? AND (" +
+        "slug LIKE 'demo-%' OR " +
+        "settings_json LIKE '%\"is_demo\":true%' OR " +
+        "settings_json LIKE '%\"is_demo\": true%'" +
+        ")" +
+        ")",
+      [id, workspaceId, input.url, db.jsonParam(input.events), signingSecret, input.now, workspaceId],
     );
+
+    if (changes === 0) {
+      throw new Error("Demo workspaces cannot register webhooks.");
+    }
 
     return { webhookId: id, signingSecret };
   },
