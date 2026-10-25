@@ -95,10 +95,18 @@ const node = auth.extend({
   /** A better-sqlite3 path, or a `postgres://` URL. */
   DATABASE_URL: z.string().min(1),
   /** Directory the disk storage adapter writes to. */
-  STORAGE_DIR: z.string().min(1),
+  STORAGE_DIR: z.string().min(1).default("./data/storage"),
   /** Where signed disk URLs point, so a browser can fetch what was signed. */
   PUBLIC_URL: z.url(),
   PORT: z.coerce.number().int().positive().default(8787),
+  /** Optional directory serving the built web app. */
+  STATIC_DIR: z.string().min(1).optional(),
+  /** Optional S3 / MinIO storage configuration (S-02). */
+  S3_ENDPOINT: z.string().min(1).optional(),
+  S3_BUCKET: z.string().min(1).optional(),
+  S3_ACCESS_KEY: z.string().min(1).optional(),
+  S3_SECRET_KEY: z.string().min(1).optional(),
+  S3_REGION: z.string().min(1).optional(),
 });
 
 /**
@@ -118,6 +126,14 @@ interface AuthEnv {
   captcha?: CaptchaConfig | undefined;
 }
 
+export interface S3Config {
+  endpoint: string;
+  bucket: string;
+  accessKeyId: string;
+  secretAccessKey: string;
+  region?: string | undefined;
+}
+
 export type AppEnv =
   | ({ target: "workers"; sessionSecret: string } & AuthEnv)
   | ({
@@ -127,6 +143,8 @@ export type AppEnv =
       storageDir: string;
       publicUrl: string;
       port: number;
+      staticDir?: string | undefined;
+      s3?: S3Config | undefined;
     } & AuthEnv);
 
 export function parseEnv(
@@ -143,6 +161,20 @@ export function parseEnv(
   }
 
   const parsed = take(node, raw);
+  const s3 =
+    parsed.S3_ENDPOINT &&
+    parsed.S3_BUCKET &&
+    parsed.S3_ACCESS_KEY &&
+    parsed.S3_SECRET_KEY
+      ? {
+          endpoint: parsed.S3_ENDPOINT,
+          bucket: parsed.S3_BUCKET,
+          accessKeyId: parsed.S3_ACCESS_KEY,
+          secretAccessKey: parsed.S3_SECRET_KEY,
+          region: parsed.S3_REGION,
+        }
+      : undefined;
+
   return {
     target,
     sessionSecret: parsed.SESSION_SECRET,
@@ -150,6 +182,8 @@ export function parseEnv(
     storageDir: parsed.STORAGE_DIR,
     publicUrl: parsed.PUBLIC_URL,
     port: parsed.PORT,
+    staticDir: parsed.STATIC_DIR,
+    s3,
     ...authEnv(parsed),
   };
 }

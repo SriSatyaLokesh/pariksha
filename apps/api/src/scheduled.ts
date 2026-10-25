@@ -104,3 +104,80 @@ export async function runScheduled(
   }
   return { ran, failed };
 }
+
+/**
+ * Evaluates whether a numeric value satisfies a single cron field expression
+ * (supports '*', exact numbers, comma lists, ranges 'x-y', and step values 'range/step').
+ */
+export function matchCronField(field: string, val: number, isDow = false): boolean {
+  if (field === "*") return true;
+  for (const part of field.split(",")) {
+    if (part.includes("/")) {
+      const [range, stepStr] = part.split("/");
+      const step = parseInt(stepStr ?? "1", 10);
+      if (isNaN(step) || step <= 0) continue;
+      let start = isDow ? 0 : 0;
+      let end = 59;
+      if (range && range !== "*") {
+        if (range.includes("-")) {
+          const [s, e] = range.split("-").map(Number);
+          start = s ?? start;
+          end = e ?? end;
+        } else {
+          start = parseInt(range, 10);
+        }
+      }
+      if (val >= start && val <= end && (val - start) % step === 0) return true;
+    } else if (part.includes("-")) {
+      const [s, e] = part.split("-").map(Number);
+      if (s !== undefined && e !== undefined && val >= s && val <= e) return true;
+    } else {
+      const num = parseInt(part, 10);
+      if (num === val) return true;
+      if (isDow && ((num === 7 && val === 0) || (num === 0 && val === 7))) return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks if a 5-part standard cron string matches the given date (UTC).
+ */
+export function matchesCron(cron: string, date: Date = new Date()): boolean {
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return false;
+  const [minField, hourField, domField, monthField, dowField] = parts;
+  return (
+    minField !== undefined &&
+    hourField !== undefined &&
+    domField !== undefined &&
+    monthField !== undefined &&
+    dowField !== undefined &&
+    matchCronField(minField, date.getUTCMinutes()) &&
+    matchCronField(hourField, date.getUTCHours()) &&
+    matchCronField(domField, date.getUTCDate()) &&
+    matchCronField(monthField, date.getUTCMonth() + 1) &&
+    matchCronField(dowField, date.getUTCDay(), true)
+  );
+}
+
+/**
+ * Evaluates all registered jobs whose cron matches the current minute and runs them.
+ * Used by the Node.js in-process scheduler.
+ */
+export async function runScheduledDue(
+  deps: AppDeps,
+  date: Date = new Date(),
+): Promise<{ ran: string[]; failed: string[] }> {
+  const crons = Array.from(new Set(SCHEDULED_JOBS.map((j) => j.cron)));
+  const ran: string[] = [];
+  const failed: string[] = [];
+  for (const cron of crons) {
+    if (matchesCron(cron, date)) {
+      const res = await runScheduled(cron, deps);
+      ran.push(...res.ran);
+      failed.push(...res.failed);
+    }
+  }
+  return { ran, failed };
+}
