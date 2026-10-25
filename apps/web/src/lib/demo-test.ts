@@ -1,6 +1,6 @@
 import type { AttemptPaper, CandidateQuestion, PaperSection } from "./paper.js";
 import type { LandingPayload } from "./run.js";
-import type { Question } from "@pariksha/core";
+import { PROCTORING_DEFAULTS, type Question } from "@pariksha/core";
 
 export const DEMO_SECTION_1_QUESTIONS: CandidateQuestion[] = [
   {
@@ -162,13 +162,8 @@ export const DEMO_PAPER_FIXTURE: AttemptPaper = {
   submittedAt: null,
   lockedAt: null,
   proctoring: {
-    profile: "off",
-    requirements: [],
-    camera: "none",
-    fullscreen: "none",
-    tabSwitch: "none",
-    copyPaste: "none",
-    noise: "none",
+    ...PROCTORING_DEFAULTS.off,
+    allowCalculator: true,
   },
   violations: 0,
 };
@@ -188,7 +183,7 @@ export const DEMO_LANDING_FIXTURE: LandingPayload = {
     profile: "off",
     requirements: ["No proctoring active — public demonstration mode."],
   },
-  accessMode: "open",
+  accessMode: "link_code",
   state: "open",
   opensAt: null,
   closesAt: null,
@@ -211,9 +206,8 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q1",
     type: "single",
     prompt: "Which data structure operates on a First-In-First-Out (FIFO) principle?",
-    points: 2,
+    scoring: { points: 2 },
     tags: ["cs"],
-    version: 1,
     options: [
       { id: "opt_a", text: "Stack" },
       { id: "opt_b", text: "Queue" },
@@ -226,9 +220,8 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q2",
     type: "multiple",
     prompt: "Select all protocols that operate at the Transport Layer of the OSI model:",
-    points: 3,
+    scoring: { points: 3 },
     tags: ["networking"],
-    version: 1,
     options: [
       { id: "opt_tcp", text: "TCP (Transmission Control Protocol)" },
       { id: "opt_udp", text: "UDP (User Datagram Protocol)" },
@@ -241,15 +234,15 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q3",
     type: "true_false",
     prompt: "In TypeScript, the `unknown` type is safer than `any` because operations on `unknown` require type narrowing.",
-    points: 1,
+    scoring: { points: 1 },
     tags: ["typescript"],
-    version: 1,
     key: true,
   },
   {
     id: "demo_q4",
     type: "fill_blank",
     prompt: "The standard port used for secure HTTPS connections is [[b1]].",
+    scoring: { points: 1 },
     tags: ["web"],
     blanks: [{ id: "b1", accepted: ["443"], match: "exact" }],
   },
@@ -257,6 +250,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q5",
     type: "numeric",
     prompt: "If a binary search algorithm runs on an array of 1,024 elements, what is the maximum number of comparisons required in the worst case?",
+    scoring: { points: 2 },
     tags: ["algorithms"],
     key: { value: 10, tolerance: 0 },
   },
@@ -264,6 +258,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q6",
     type: "assertion_reason",
     prompt: "Evaluate the relationship between the assertion and the reason.",
+    scoring: { points: 2 },
     tags: ["databases"],
     assertion: "Relational databases use B-tree indices to accelerate point lookups and range queries.",
     reason: "B-trees maintain sorted order and guarantee logarithmic search, insertion, and deletion times.",
@@ -273,9 +268,8 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q7",
     type: "matching",
     prompt: "Match each time complexity to its representative sorting algorithm (average case):",
-    points: 3,
+    scoring: { points: 3 },
     tags: ["algorithms"],
-    version: 1,
     left: ["Merge Sort", "Quick Sort", "Bubble Sort"],
     right: ["O(n log n)", "O(n log n)", "O(n^2)"],
     key: {
@@ -288,6 +282,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q8",
     type: "ordering",
     prompt: "Arrange the following software deployment stages in standard chronological order:",
+    scoring: { points: 2 },
     tags: ["devops"],
     items: ["Code Review", "Automated Testing", "Staging Verification", "Production Release"],
   },
@@ -295,18 +290,16 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q9",
     type: "short_answer",
     prompt: "What is the term for the principle where an edge-computed function executes in response to events without running a persistent host server?",
-    points: 3,
+    scoring: { points: 3 },
     tags: ["architecture"],
-    version: 1,
-    accepted: ["serverless", "function as a service", "faas"],
+    model_answer: "serverless",
   },
   {
     id: "demo_q10",
     type: "select_k",
     prompt: "Select exactly 2 cloud services offered by Cloudflare:",
-    points: 2,
+    scoring: { points: 2 },
     tags: ["cloud"],
-    version: 1,
     k: 2,
     options: [
       { id: "cf_workers", text: "Workers (Serverless Execution)" },
@@ -320,9 +313,8 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q11",
     type: "multi_matching",
     prompt: "Associate database types with their primary persistence paradigm:",
-    points: 3,
+    scoring: { points: 3 },
     tags: ["databases"],
-    version: 1,
     left: ["PostgreSQL", "Redis", "Neo4j"],
     right: ["Relational (SQL)", "In-Memory Key-Value", "Graph Database"],
     key: {
@@ -335,14 +327,11 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     id: "demo_q12",
     type: "long_answer",
     prompt: "Briefly explain why subrequest budgeting is critical in serverless edge worker environments.",
-    points: 4,
+    scoring: { points: 4 },
     tags: ["edge"],
-    version: 1,
-    rubric: {
-      criteria: [
-        { description: "Mentions platform subrequest limits (e.g. 50 subrequests per invocation)", points: 2 },
-        { description: "Explains prevention of cascade latency or denial of service", points: 2 },
-      ],
-    },
+    rubric: [
+      { level: "full", points: 2, description: "Mentions platform subrequest limits (e.g. 50 subrequests per invocation)" },
+      { level: "partial", points: 2, description: "Explains prevention of cascade latency or denial of service" },
+    ],
   },
 ];

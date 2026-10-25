@@ -8,8 +8,8 @@ describe("Demo Exam Client (Zero Cloudflare Subrequests)", () => {
     const paper = await client.start("demo-token");
     expect(paper.sections.length).toBe(3);
     expect(paper.proctoring.profile).toBe("off");
-    expect(paper.proctoring.camera).toBe("none");
-    expect(paper.proctoring.fullscreen).toBe("none");
+    expect(paper.proctoring.requireCamera).toBe(false);
+    expect(paper.proctoring.requireFullscreen).toBe(false);
   });
 
   it("saves answers locally in memory without making network fetch", async () => {
@@ -19,6 +19,7 @@ describe("Demo Exam Client (Zero Cloudflare Subrequests)", () => {
       questionId: "demo_q1",
       value: { kind: "option", option: "opt_b" },
       clientSeq: 1,
+      queuedAt: 1000,
     });
     expect(saveResult.outcome).toBe("accepted");
 
@@ -35,12 +36,14 @@ describe("Demo Exam Client (Zero Cloudflare Subrequests)", () => {
       questionId: "demo_q1",
       value: { kind: "option", option: "opt_b" },
       clientSeq: 1,
+      queuedAt: 1000,
     });
     // Answer demo_q3 correctly (true)
     await client.putAnswer({
       questionId: "demo_q3",
       value: { kind: "boolean", value: true },
       clientSeq: 2,
+      queuedAt: 2000,
     });
 
     const result = await client.submit();

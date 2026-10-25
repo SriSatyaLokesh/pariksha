@@ -23,7 +23,7 @@ const DEMO_STORAGE_KEY = "pariksha_demo_attempt";
 
 const DEFAULT_SCORING: ScoringDefaults = {
   mode: "all_or_nothing",
-  negativeMarking: false,
+  negativeFraction: 0,
 };
 
 export function createDemoClient(): RunClient {

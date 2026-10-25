@@ -23,7 +23,7 @@ const NAV_LINKS = [
   { label: "Docs", href: `${REPO}/tree/main/docs` },
 ] as const;
 
-export function SignalNav() {
+export function SignalNav({ onOpenDemo }: { onOpenDemo?: () => void } = {}) {
   return (
     <header className="signal-nav">
       <div className="signal-nav__inner">
@@ -40,6 +40,15 @@ export function SignalNav() {
             </a>
           ))}
         </nav>
+        {onOpenDemo && (
+          <button
+            type="button"
+            className="signal-btn signal-btn--ghost signal-btn--demo"
+            onClick={onOpenDemo}
+          >
+            Try Live Demo
+          </button>
+        )}
         <a className="signal-btn" href="#start">
           Run your first exam
         </a>
@@ -57,7 +66,7 @@ const FIRST_DRAW = [
 
 const TAGS = ["reasoning", "quantitative", "verbal", "all tags"] as const;
 
-export function SignalHero() {
+export function SignalHero({ onOpenDemo }: { onOpenDemo?: () => void } = {}) {
   return (
     <section className="signal-field">
       <div className="signal-wrap signal-hero">
@@ -77,6 +86,15 @@ export function SignalHero() {
               no per-candidate fee.
             </p>
             <div className="signal-actions signal-actions--hero">
+              {onOpenDemo && (
+                <button
+                  type="button"
+                  className="signal-btn signal-btn--demo"
+                  onClick={onOpenDemo}
+                >
+                  Try Live Demo
+                </button>
+              )}
               <a className="signal-btn" href="#start">
                 Run your first exam
               </a>
