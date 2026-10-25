@@ -1,0 +1,269 @@
+openapi: 3.1.0
+info:
+  title: Pariksha API
+  version: 1.0.0
+  description: High-scale, open-source assessment platform API supporting
+    multi-tenant workspaces, online question authoring, proctored exam runs, and
+    automated grading.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+servers:
+  - url: /api/v1
+    description: Default API v1 endpoint
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Session token bearer authentication
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: session
+      description: HttpOnly encrypted session cookie
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: x-api-key
+      description: Workspace-scoped API key
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              description: Machine-readable error code
+            message:
+              type: string
+              description: Human-readable English description
+            details:
+              type: object
+              description: Additional error context or validation errors
+    HealthResponse:
+      type: object
+      required:
+        - ok
+        - version
+      properties:
+        ok:
+          type: boolean
+        version:
+          type: string
+        db:
+          type: string
+          enum:
+            - connected
+            - healthy
+    Workspace:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+      properties:
+        id:
+          type: string
+          pattern: ^wsp_[a-zA-Z0-9]+$
+        name:
+          type: string
+        slug:
+          type: string
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - author
+            - proctor
+            - evaluator
+    TestDocument:
+      type: object
+      required:
+        - id
+        - title
+        - slug
+        - state
+      properties:
+        id:
+          type: string
+          pattern: ^tst_[a-zA-Z0-9]+$
+        title:
+          type: string
+        slug:
+          type: string
+        state:
+          type: string
+          enum:
+            - draft
+            - scheduled
+            - open
+            - closed
+            - archived
+        version:
+          type: integer
+paths:
+  /health:
+    get:
+      summary: API Health & Status
+      description: Returns health status of the API instance and database connection.
+      responses:
+        "200":
+          description: Instance is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+  /setup/status:
+    get:
+      summary: Check instance setup status
+      description: Reports whether the instance requires initial owner onboarding.
+      responses:
+        "200":
+          description: Setup status object
+  /workspaces:
+    get:
+      summary: List user workspaces
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Array of accessible workspaces
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - workspaces
+                properties:
+                  workspaces:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Workspace"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+    post:
+      summary: Create a workspace
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+      responses:
+        "201":
+          description: Workspace created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+  /run/{workspaceSlug}/{testSlug}:
+    get:
+      summary: Get candidate test landing details
+      description: Returns test metadata, timing, device gating, and proctoring rules
+        for candidates.
+      parameters:
+        - name: workspaceSlug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: testSlug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Candidate test landing payload
+        "404":
+          description: Test not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /run/{workspaceSlug}/{testSlug}/register:
+    post:
+      summary: Candidate registration
+      parameters:
+        - name: workspaceSlug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: testSlug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Candidate registered with token
+  /run/{workspaceSlug}/{testSlug}/start:
+    post:
+      summary: Start candidate exam attempt
+      parameters:
+        - name: workspaceSlug
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: testSlug
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Attempt started; returns AttemptPaper
+  /run/attempt:
+    get:
+      summary: Get or resume current active attempt
+      responses:
+        "200":
+          description: AttemptPaper payload with progress
+        "401":
+          description: No active candidate attempt session
+  /run/attempt/answer:
+    post:
+      summary: Save candidate answer
+      responses:
+        "200":
+          description: Answer saved successfully
+        "409":
+          description: Attempt closed or expired
+  /run/attempt/events:
+    post:
+      summary: Log proctoring telemetry events
+      responses:
+        "200":
+          description: Events ingested
+  /run/attempt/submit:
+    post:
+      summary: Submit attempt for grading
+      responses:
+        "200":
+          description: Submission receipt and score result

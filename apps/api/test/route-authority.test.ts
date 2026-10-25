@@ -77,6 +77,7 @@ it("the public set is a literal allowlist, so widening it is a visible diff", ()
     "GET /api/v1/auth/:provider/callback",
     "GET /api/v1/auth/:provider/start",
     "GET /api/v1/health",
+    "GET /api/v1/openapi.json",
     "GET /api/v1/run/:workspaceSlug/:testSlug",
     "GET /api/v1/run/:workspaceSlug/:testSlug/sso/callback",
     "GET /api/v1/run/:workspaceSlug/:testSlug/sso/start",

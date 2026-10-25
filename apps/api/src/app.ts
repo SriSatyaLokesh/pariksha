@@ -17,6 +17,7 @@ import { errorEnvelope, notFoundEnvelope } from "./middleware/errorEnvelope.js";
 import { authenticate } from "./middleware/authenticate.js";
 import { actorOnly } from "./middleware/authorize.js";
 import { health } from "./routes/health.js";
+import { generateOpenApiSpec } from "./openapi.js";
 import { authRoutes } from "./routes/auth.js";
 import { me } from "./routes/me.js";
 import { setupRoutes } from "./routes/setup.js";
@@ -95,6 +96,7 @@ export type AppBindings = {
  */
 export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/health": 1,
+  "/api/v1/openapi.json": 0,
   // Two for authentication on every authenticated route — the session join
   // and the idle-window write — and then what the route itself spends.
   "/api/v1/auth/magic-link": 4,
@@ -1115,6 +1117,7 @@ export type RouteAuthority =
 export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // --- public: no credential at all ------------------------------------
   "GET /api/v1/health": "public",
+  "GET /api/v1/openapi.json": "public",
   // Sign-in's own front door. `magic-link` answers identically for a known
   // and an unknown address by design (`authorization.test.ts`), and the two
   // OIDC legs are redirects a provider drives.
@@ -1339,6 +1342,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.onError(errorEnvelope);
 
   app.get("/api/v1/health", health(deps));
+  app.get("/api/v1/openapi.json", (c) => c.json(generateOpenApiSpec()));
   app.route("/api/v1/auth", authRoutes(deps));
   // `actorOnly()` (whole-branch review, CRITICAL): `/me` names no
   // workspace, so a key had no action for `requires()`'s scope check to run
