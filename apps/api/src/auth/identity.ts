@@ -19,7 +19,7 @@ export function identityProviders(env: AppEnv): IdentityProvider[] {
   if (env.email || env.allowConsoleEmail) {
     providers.push({ id: "magic-link", kind: "magic_link", label: "Email a link" });
   }
-  if (env.target === "node") {
+  if (env.target === "node" && env.passwordAuth !== false) {
     providers.push({ id: "password", kind: "password", label: "Email and password" });
   }
   return providers;

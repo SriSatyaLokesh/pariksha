@@ -86,6 +86,8 @@ const auth = z.object({
    */
   CAPTCHA_SECRET: secret.optional(),
   CAPTCHA_VERIFY_URL: z.url().optional(),
+  /** Controls email-and-password authentication on Node/Docker (S-01). */
+  PASSWORD_AUTH: z.enum(["true", "false"]).optional(),
 });
 
 const workers = auth.extend({ SESSION_SECRET: secret });
@@ -119,6 +121,7 @@ interface AuthEnv {
   oidcProviders?: OidcProvider[] | undefined;
   email?: EmailConfig | undefined;
   allowConsoleEmail?: true | undefined;
+  passwordAuth?: boolean | undefined;
   nodeEnv?: string | undefined;
   appUrl?: string | undefined;
   /** Absent on every default deployment, which is the shipped answer to
@@ -210,6 +213,7 @@ function authEnv(parsed: z.infer<typeof auth>): AuthEnv {
     email,
     captcha,
     allowConsoleEmail: parsed.EMAIL_CONSOLE === "true" ? true : undefined,
+    passwordAuth: parsed.PASSWORD_AUTH === "false" ? false : undefined,
     nodeEnv: parsed.NODE_ENV,
     appUrl: parsed.APP_URL,
   };

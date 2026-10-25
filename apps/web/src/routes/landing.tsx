@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { SignalHero, SignalNav, SignalTypeRail } from "../sections/signal/Head";
 import {
   SignalCompare,
@@ -12,19 +11,15 @@ import {
   SignalFooter,
   SignalStatus,
 } from "../sections/signal/Tail";
-import { DemoModal } from "../components/demo/DemoModal";
-
 export function Landing() {
-  const [demoOpen, setDemoOpen] = useState(false);
-
   return (
     <div className="signal">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
-      <SignalNav onOpenDemo={() => setDemoOpen(true)} />
+      <SignalNav />
       <main id="main-content">
-        <SignalHero onOpenDemo={() => setDemoOpen(true)} />
+        <SignalHero />
         <SignalTypeRail />
         <SignalNotAForm />
         <SignalIntegrity />
@@ -35,7 +30,6 @@ export function Landing() {
         <SignalClose />
       </main>
       <SignalFooter />
-      <DemoModal isOpen={demoOpen} onClose={() => setDemoOpen(false)} />
     </div>
   );
 }

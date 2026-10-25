@@ -57,7 +57,7 @@ describe("Landing", () => {
       if (href.startsWith("http")) {
         expect(href.startsWith(REPO)).toBe(true);
       } else {
-        expect(href).toBe("#start");
+        expect(["#start", "/exam?demo=true"]).toContain(href);
       }
     }
   });

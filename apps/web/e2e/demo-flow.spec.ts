@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 test.describe("Public Demo Instance Flows (Phase 9)", () => {
-  test("candidate test drive: landing -> demo modal -> take sample exam -> section navigation -> submit", async ({
+  test("candidate test drive: landing -> hero demo link -> take sample exam -> section navigation -> submit", async ({
     page,
   }) => {
     await page.goto("/");
@@ -10,16 +10,13 @@ test.describe("Public Demo Instance Flows (Phase 9)", () => {
     ).toBeVisible();
 
     // Click "Try Live Demo" in hero
-    const tryDemoBtn = page.getByRole("button", { name: /try live demo/i }).first();
-    await tryDemoBtn.click();
+    const tryDemoLink = page.getByRole("link", { name: /try live demo/i });
+    await expect(tryDemoLink).toBeVisible();
+    await expect(tryDemoLink).toHaveAttribute("href", "/exam?demo=true");
 
-    // Modal opens
-    const dialog = page.getByRole("dialog", { name: /choose demo experience/i });
-    await expect(dialog).toBeVisible();
-
-    // Select candidate sample exam
-    const sampleExamLink = page.getByRole("link", { name: /take sample exam/i });
-    await expect(sampleExamLink).toHaveAttribute("href", "/exam?demo=true");
+    await tryDemoLink.click();
+    await expect(page.getByRole("region", { name: /demo mode/i })).toBeVisible();
+    await expect(page.getByText(/Pariksha Interactive Demo Exam/i)).toBeVisible();
   });
 
   test("candidate exam runner: sits demo exam directly via /exam.html?demo=true", async ({
@@ -29,7 +26,7 @@ test.describe("Public Demo Instance Flows (Phase 9)", () => {
 
     // Demo banner is mounted
     await expect(page.getByRole("region", { name: /demo mode/i })).toBeVisible();
-    await expect(page.getByText(/public demo/i)).toBeVisible();
+    await expect(page.getByText("Public Demo", { exact: true })).toBeVisible();
 
     // Exam landing screen renders sample test
     await expect(page.getByText(/Pariksha Interactive Demo Exam/i)).toBeVisible();

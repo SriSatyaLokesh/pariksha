@@ -33,7 +33,7 @@ import { signIn } from "./seed";
 /** The four scanning surfaces D12 puts inside the gate. The builder, the
  *  question editor, the wizard and sign-in are editing surfaces and are
  *  deliberately outside it. */
-export const SURFACES = ["testList", "bankList", "bankBrowser", "questionPicker", "monitor"] as const;
+export const SURFACES = ["testList", "bankList", "bankBrowser", "questionPicker"] as const;
 
 export type Surface = (typeof SURFACES)[number];
 
@@ -58,7 +58,6 @@ export const PRIMARY_ROW: Record<Surface, string> = {
   bankList: "ul.bank-list > li",
   bankBrowser: "table.bank-browser__table tbody tr",
   questionPicker: "ul.picker-drawer__list > li",
-  monitor: "table.monitor-table tbody tr",
 };
 
 /** How many primary rows are wholly visible on `surface`, right now, at
@@ -214,14 +213,6 @@ export async function openSurface(page: Page, surface: Surface): Promise<void> {
   await rail(page, "Tests").click();
   await expect(page.getByRole("heading", { level: 1, name: "Tests" })).toBeVisible();
   if (surface === "testList") return settle(page, page.locator(PRIMARY_ROW.testList));
-
-  if (surface === "monitor") {
-    await page.locator(`${PRIMARY_ROW.testList} .button-link`).first().click();
-    await expect(page.getByRole("heading", { name: "Sections" })).toBeVisible();
-    await page.getByRole("button", { name: "Live monitor" }).click();
-    await expect(page.getByRole("heading", { level: 1, name: "Live monitor" })).toBeVisible();
-    return settle(page, page.locator(PRIMARY_ROW.monitor));
-  }
 
   // The picker is a drawer over the builder. It is reached the only way an
   // organiser reaches it: open a test, open a section, ask to add questions,

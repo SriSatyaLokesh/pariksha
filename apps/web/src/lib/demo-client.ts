@@ -85,21 +85,34 @@ export function createDemoClient(): RunClient {
     register: (): Promise<{ registrationToken: string }> =>
       Promise.resolve({ registrationToken: "demo_reg_token" }),
 
-    start: (): Promise<AttemptPaper> =>
-      Promise.resolve({
+    start: (): Promise<AttemptPaper> => {
+      persist();
+      return Promise.resolve({
         ...DEMO_PAPER_FIXTURE,
         responses: { ...responses },
         maxIndex: currentMaxIndex,
         submittedAt,
-      }),
+      });
+    },
 
-    resume: (): Promise<AttemptPaper | null> =>
-      Promise.resolve({
+    resume: (): Promise<AttemptPaper | null> => {
+      if (
+        typeof window !== "undefined" &&
+        window.sessionStorage &&
+        !window.sessionStorage.getItem(DEMO_STORAGE_KEY)
+      ) {
+        return Promise.resolve(null);
+      }
+      if (Object.keys(responses).length === 0 && currentMaxIndex === 0 && submittedAt === null) {
+        return Promise.resolve(null);
+      }
+      return Promise.resolve({
         ...DEMO_PAPER_FIXTURE,
         responses: { ...responses },
         maxIndex: currentMaxIndex,
         submittedAt,
-      }),
+      });
+    },
 
     putAnswer: (save: QueuedSave) => {
       responses[save.questionId] = save.value;

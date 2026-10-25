@@ -94,9 +94,10 @@ export default defineConfig({
             redirectUri: `${WEB_ORIGIN}/api/v1/auth/stub/callback`,
           },
         ]),
-        // No EMAIL_* and no EMAIL_CONSOLE, so `identityProviders` offers the
-        // one OIDC button and no magic link — which is what the fourth test
-        // asserts.
+        // No EMAIL_* and no EMAIL_CONSOLE, and PASSWORD_AUTH disabled, so
+        // `identityProviders` offers the one OIDC button and no magic link
+        // or password form — which is what the fourth test asserts.
+        PASSWORD_AUTH: "false",
       },
     },
     {
