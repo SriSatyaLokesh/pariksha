@@ -1,6 +1,26 @@
-// The two screenshots the README needs and the audit walkthrough does not
-// produce: the candidate's paper, and the analytics screen once an attempt
-// has been scored.
+// Every screenshot the README carries, in one place.
+//
+// It started as the two the audit walkthrough cannot produce — the
+// candidate's paper, and the analytics screen once attempts have been
+// scored — and took the rest when they had to be re-shot on the Signal
+// ground. Home and the landing page are captured here too rather than
+// lifted from `ui-audit-walkthrough.spec.ts`: that file audits, under
+// whatever colour scheme the harness defaults to, and its job must not
+// bend to how the README wants to look.
+//
+// **DARK, and that is the product, not a preference.** `lib/ground.ts`:
+// an explicit stored choice wins, otherwise the OS preference seeds it,
+// otherwise dark — and the Signal prototype opens dark. Playwright's
+// Chromium reports `prefers-color-scheme: light` by default, so the first
+// round of these shots came out on the light ground beside a dark landing
+// page, which is what the owner saw and rejected. `test.use({ colorScheme
+// "dark" })` below makes the capture agree with the default a visitor
+// gets.
+//
+// The candidate's paper is the one screen that stays warm, and it is not
+// an oversight: `theme.css` D1 — "an accent cannot cross grounds,
+// signal-accent is 1.60:1 on cream" — so the exam keeps the cream ground
+// and the voltage accent while the organiser moves to Signal. ADR 0010.
 //
 // The files land in `e2e/screenshots/` (git-ignored) as 1280x800 PNGs.
 // What the README actually carries is `docs/screens/*.webp` at 840px —
@@ -10,15 +30,18 @@
 //   ffmpeg -i e2e/screenshots/10-exam-runner-desktop.png -vf scale=840:-1
 //     -quality 82 ../../docs/screens/exam-runner.webp
 //
+// The README's banner is the same three shots composited onto the Signal
+// ground, also one command, run from the repository root:
+//
+//   ffmpeg -f lavfi -i color=c=0x070b09:s=1600x700 //     -i 13-test-builder-desktop.png -i 10-exam-runner-desktop.png //     -i 11-analytics-desktop.png -filter_complex //     "[1:v]crop=1280:700:0:0,scale=820:-1,pad=iw+2:ih+2:1:1:color=0x2a3b32[a];
+//      [2:v]crop=1280:620:0:0,scale=680:-1,pad=iw+2:ih+2:1:1:color=0x3a4a42[b];
+//      [3:v]crop=1280:700:0:0,scale=560:-1,pad=iw+2:ih+2:1:1:color=0x2a3b32[c];
+//      [0:v][c]overlay=1000:40[s0];[s0][a]overlay=40:60[s1];
+//      [s1][b]overlay=640:320" -frames:v 1 -quality 84 docs/screens/banner.webp
+//
 // Deliberately not a script: ffmpeg is not in this repository's toolchain,
 // and a build step that assumes a binary nobody declared is worse than a
 // documented line. Re-capture is rare.
-//
-// `ui-audit-walkthrough.spec.ts` already shoots every organiser screen, and
-// those files are reused verbatim — this file exists only because its own
-// candidate step resolves to "This test is not available" and because
-// nothing in the harness scores an attempt, so `?view=analytics` would be
-// shot empty.
 //
 // Written against the recipe `proctoring.spec.ts` proves: a `link_code`
 // test is the only access mode a bare API-created test can satisfy with no
@@ -29,7 +52,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type APIRequestContext, type Page } from "@playwright/test";
-import { createWorkspace, signIn } from "../seed";
+import { createWorkspace, seedWorkspace, signIn } from "../seed";
+
+// The ground a visitor gets by default, and therefore the one the README
+// should show. See the note at the top of this file.
+test.use({ colorScheme: "dark" });
 
 const SCREENSHOT_DIR = path.resolve(process.cwd(), "e2e/screenshots");
 const DESKTOP = { width: 1280, height: 800 };
@@ -279,6 +306,15 @@ test("marketing shots: the candidate's paper, and the analytics screen behind it
     await context.close();
   }
 
+  // A workspace with more than one thing in it. Home is a queue and a
+  // recently-edited list: against a single test both panels are mostly
+  // empty space, which is a true picture of a brand-new instance and a
+  // useless one of the product. Seeded AFTER the attempts, so nothing
+  // above competes for the candidate's test, and `into` the campus
+  // screening workspace rather than `workspaces[0]`, which `density.ts`
+  // measures.
+  await seedWorkspace(request, { banks: 5, questionsPerBank: 12, tests: 7 }, seeded.workspaceId);
+
   // The organiser, on the attempts those eight left behind.
   //
   // Clicked rather than deep-linked. `OrganiserApp` boots on
@@ -295,9 +331,13 @@ test("marketing shots: the candidate's paper, and the analytics screen behind it
     await switcher.selectOption({ label: "Campus screening" });
   }
   await page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: "Tests" }).click();
-  await page.getByRole("link", { name: /campus screening/i }).or(
-    page.locator("table.testbuilder-list tbody tr .button-link"),
-  ).first().click();
+  // By name, not by position: the seed above put seven more tests in this
+  // list, and `.first()` would open whichever one sorted highest.
+  await page
+    .locator("table.testbuilder-list tbody tr .button-link")
+    .filter({ hasText: "Campus screening" })
+    .first()
+    .click();
   await expect(page.getByRole("heading", { name: "Sections" })).toBeVisible();
   await page.waitForTimeout(400);
   await shoot(page, "13-test-builder");
@@ -310,8 +350,26 @@ test("marketing shots: the candidate's paper, and the analytics screen behind it
   // The bank the paper was drawn from: all twelve types, in the rows the
   // worked example documents.
   await page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: "Banks" }).click();
-  await page.locator(".bank-list__item").first().click();
+  await page
+    .locator(".bank-list__item")
+    .filter({ hasText: "Reasoning and aptitude" })
+    .first()
+    .click();
   await expect(page.locator("table.bank-browser__table")).toBeAttached();
   await page.waitForTimeout(400);
   await shoot(page, "12-bank-browser");
+
+  // Home, on the same ground and the same workspace. The audit walkthrough
+  // shoots this screen too, but under its own colour scheme and against a
+  // 44-test density fixture — neither of which is what the README wants.
+  await page.getByRole("navigation", { name: "Organiser" }).getByRole("button", { name: "Home" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Campus screening" })).toBeVisible();
+  await page.waitForTimeout(400);
+  await shoot(page, "14-organiser-home");
+
+  // And the public page, so all six README shots come out of one run.
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await page.waitForTimeout(700);
+  await shoot(page, "15-landing");
 });

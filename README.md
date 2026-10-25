@@ -1,36 +1,53 @@
 <div align="center">
 
-# Pariksha
+<img src="docs/screens/banner.webp" width="100%" alt="Three Pariksha screens on a dark ground: the test builder with its publish checklist, the analytics screen with attempt counts and a score distribution, and in front of both a candidate's paper on cream with a timer and a question palette.">
 
-### పరీక్ష · परीक्षा
+<h1>Pariksha</h1>
 
-**Run real exams on the internet, for free, on infrastructure you own.**
+<h3>పరీక్ష&nbsp;·&nbsp;परीक्षा</h3>
 
-Question pools, 12 question types, browser proctoring, a registration form builder and CSV results — self-hosted in under 30 minutes, at zero hosting cost.
+<p><b>Run real exams on the internet, for free, on infrastructure you own.</b></p>
 
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
-[![Content: CC BY 4.0](https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
-[![Status: alpha](https://img.shields.io/badge/Status-alpha-yellow.svg)](#roadmap)
-[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+<p>
+Twelve question types&nbsp;· a different paper for every candidate&nbsp;· proctoring that records no video&nbsp;· a results CSV<br>
+Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate fee, ever.
+</p>
 
-[What it does](#what-it-does) · [Screens](#screens) · [See a real test](#see-a-real-test) · [Docs](#documentation) · [Roadmap](#roadmap) · [Contributing](#contributing)
+<p>
+<a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
+<a href="https://creativecommons.org/licenses/by/4.0/"><img src="https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg" alt="Content: CC BY 4.0"></a>
+<a href="#roadmap"><img src="https://img.shields.io/badge/Status-alpha-E8A33D.svg" alt="Status: alpha"></a>
+<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--8-merged-19E68C.svg" alt="Phases 1 to 8 merged"></a>
+<a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
+</p>
+
+<p>
+<a href="#screens"><b>Screens</b></a>&nbsp;·
+<a href="#what-it-does">What it does</a>&nbsp;·
+<a href="#deploying-to-cloudflare">Deploy</a>&nbsp;·
+<a href="#see-a-real-test">A real test</a>&nbsp;·
+<a href="#documentation">Docs</a>&nbsp;·
+<a href="#roadmap">Roadmap</a>&nbsp;·
+<a href="#contributing">Contributing</a>
+</p>
 
 </div>
 
 ---
 
-> **Status: alpha.** The whole exam path runs. You can deploy Pariksha to your
-> own Cloudflare account, import a question bank, build a test with pools and
-> sets and a registration form, publish it, have candidates sit it under
-> proctoring, score it, grade the written answers and download the results CSV
-> — all of that is on `main` today. See [Screens](#screens) for what it looks
-> like and [Running Pariksha locally](#running-pariksha-locally) to try it.
+> ### Alpha — and here is exactly what that means
 >
-> **Alpha, not beta, and the difference is one specific thing:** Pariksha has
-> never carried a real exam with 300 candidates at once. That is the v0.1 exit
-> gate — one real test, 300+ candidates, zero lost answers — and until it is
-> met, run Pariksha beside what you use now rather than instead of it.
-> Issues and pull requests are open — see [Contributing](#contributing).
+> **Built and on `main`:** deploy to your own Cloudflare account, import a bank,
+> build a test with pools and sets and a registration form, publish it, have
+> candidates sit it under proctoring, grade the written answers, export the
+> results CSV. Phases 1&ndash;8, all merged.
+>
+> **Never done:** carried one real exam with 300 candidates at once. That is the
+> v0.1 exit gate — one real test, 300+ candidates, zero lost answers — and it is
+> the only thing between alpha and beta.
+>
+> **So:** run Pariksha beside what you use today rather than instead of it, and
+> [tell us what bent](https://github.com/SriSatyaLokesh/pariksha/issues).
 
 *Pariksha* — **పరీక్ష**, **परीक्षा** — means "examination".
 
@@ -64,17 +81,21 @@ A college placement cell, a training institute or a 40-person company that needs
 ## Screens
 
 Six captures of the running application — headless Chromium against the built
-app on a seeded instance, by
-[`marketing-shots.spec.ts`](apps/web/e2e/measurement/marketing-shots.spec.ts)
-and
-[`ui-audit-walkthrough.spec.ts`](apps/web/e2e/measurement/ui-audit-walkthrough.spec.ts).
+app on a seeded instance, all from
+[`marketing-shots.spec.ts`](apps/web/e2e/measurement/marketing-shots.spec.ts).
 No mockups, no retouching. **Click any one for full size.**
+
+The organiser is on the Signal dark ground, which is what a visitor gets by
+default. **The candidate's paper is warm on purpose** — an accent cannot cross
+grounds (`signal-accent` is 1.60:1 on cream), so the exam keeps its own ground
+and its own accent while the organiser moved to Signal. That ruling is
+[ADR 0010](docs/adr/0010-the-organiser-moves-to-the-signal-ground.md).
 
 <table>
 <tr>
 <td width="50%">
 <a href="docs/screens/exam-runner.webp"><img src="docs/screens/exam-runner.webp" width="100%" alt="The candidate exam runtime: a multi-matching grid, a question palette, a countdown and text-size controls"></a>
-<b>The candidate's paper.</b> Server clock, offline save queue, a palette that survives a reload. The question shown is multi-matching.
+<b>The candidate's paper.</b> Server clock, offline save queue, a palette that survives a reload. Its own cream ground, by the rule above. The question shown is multi-matching.
 </td>
 <td width="50%">
 <a href="docs/screens/test-builder.webp"><img src="docs/screens/test-builder.webp" width="100%" alt="The test builder: version history, three sections with question and point counts, and a publish checklist reading All clear"></a>
@@ -98,7 +119,7 @@ No mockups, no retouching. **Click any one for full size.**
 </td>
 <td width="50%">
 <a href="docs/screens/landing.webp"><img src="docs/screens/landing.webp" width="100%" alt="The public landing page: a dark hero reading Run real exams on infrastructure you own, beside a live pool draw"></a>
-<b>The public page.</b> Static output, no backend call, prerendered at build time.
+<b>The public page.</b> Static output, no backend call, prerendered at build time — the ground the organiser now shares.
 </td>
 </tr>
 </table>
@@ -106,8 +127,10 @@ No mockups, no retouching. **Click any one for full size.**
 <sub>Re-take: <code>pnpm --filter @pariksha/web e2e</code> writes PNGs to
 <code>apps/web/e2e/screenshots/</code> (git-ignored). Convert with
 <code>ffmpeg -i in.png -vf scale=840:-1 -quality 82 docs/screens/out.webp</code>
-— 840&nbsp;px WebP is 152&nbsp;KB for all six against 692&nbsp;KB of
-full-size PNG, and this page loads every one of them.</sub>
+— 840&nbsp;px WebP is 196&nbsp;KB for all six plus the banner, against
+692&nbsp;KB of full-size PNG, and this page loads every one of them. The
+banner's three-panel composite is one <code>ffmpeg filter_complex</code>,
+spelled out in the capture spec's header.</sub>
 
 ## What is still to come
 
