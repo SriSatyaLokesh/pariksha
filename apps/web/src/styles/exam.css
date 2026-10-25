@@ -744,6 +744,107 @@
   font-size: var(--type-button-md-size);
 }
 
+/* ---- Section navigation tabs and instructions (Phase 9 Task 1) ---------- */
+
+.exam-section-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--color-hairline-strong);
+}
+
+.exam-section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exam-section-tab {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.exam-section-tab.is-active {
+  border-color: var(--color-voltage);
+  border-width: 2px;
+  font-weight: 700;
+  background: var(--color-cream);
+}
+
+.exam-section-tab.is-locked {
+  border-style: dashed;
+}
+
+.exam-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.exam-section-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.exam-section-title {
+  margin: 0;
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-heading-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+.exam-section-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.exam-section-instructions-toggle {
+  min-height: 36px;
+  padding: 0 12px;
+}
+
+.exam-section-drawer {
+  padding: 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-section-drawer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.exam-section-drawer-title {
+  margin: 0;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-section-drawer-close {
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.exam-section-drawer-body p {
+  margin: 0;
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+}
+
 .exam-question {
   max-width: 680px;
   font-size: calc(var(--type-question-stem-size) * var(--exam-font-scale, 1));

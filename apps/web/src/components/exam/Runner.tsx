@@ -4,6 +4,7 @@ import type { AttemptPaper, CandidateQuestion } from "../../lib/paper";
 import { Palette, type PaletteQuestion, type PaletteState } from "./Palette";
 import { ViewControls, useViewPreferences } from "./ViewControls";
 import { Calculator } from "./Calculator";
+import { SectionNav } from "./SectionNav";
 import { useDialogKeys } from "../useDialogKeys";
 
 /**
@@ -48,6 +49,15 @@ export function firstOfNextSection(paper: AttemptPaper, index: number): number |
   const here = sections[index] ?? 0;
   const next = sections.findIndex((at) => at > here);
   return next === -1 ? null : next;
+}
+
+/**
+ * The first flat question index of a given section index, or 0 if not found.
+ */
+export function firstIndexOfSection(paper: AttemptPaper, sectionIndex: number): number {
+  const sections = sectionOfIndex(paper);
+  const first = sections.indexOf(sectionIndex);
+  return first === -1 ? 0 : first;
 }
 
 function stateOf(
@@ -175,6 +185,8 @@ export function Runner({
   submitSlot: ReactElement;
 }) {
   const questions = useMemo(() => flatQuestions(paper), [paper]);
+  const sectionIndices = useMemo(() => sectionOfIndex(paper), [paper]);
+  const currentSectionIndex = sectionIndices[index] ?? 0;
   const view = useViewPreferences();
   const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [confirmingClear, setConfirmingClear] = useState(false);
@@ -231,6 +243,16 @@ export function Runner({
       </header>
 
       <main className="exam-question" aria-label={`Question ${String(number)}`}>
+        <SectionNav
+          sections={paper.sections}
+          activeSectionIndex={currentSectionIndex}
+          navigation={paper.navigation}
+          onSelectSection={(targetSection) => {
+            const first = firstIndexOfSection(paper, targetSection);
+            onIndex(first);
+          }}
+          sectionRemainingMs={paper.sectionRemainingMs}
+        />
         {questionSlot(current)}
 
         <div className="exam-question-controls">

@@ -8,7 +8,7 @@ import { dirname, resolve } from "node:path";
 import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { declarations, parseRuleBodies, readResolvedCss } from "../css-chain";
 import { ExamApp, REGISTRATION_TOKEN_KEY } from "../../src/routes/exam";
-import { Runner, firstOfNextSection } from "../../src/components/exam/Runner";
+import { Runner, firstOfNextSection, firstIndexOfSection } from "../../src/components/exam/Runner";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -214,6 +214,17 @@ describe("firstOfNextSection", () => {
   });
 });
 
+describe("firstIndexOfSection", () => {
+  it("answers the first question index of the chosen section", () => {
+    expect(firstIndexOfSection(paper, 0)).toBe(0);
+    expect(firstIndexOfSection(paper, 1)).toBe(4);
+  });
+
+  it("falls back to 0 if section index is invalid or has no questions", () => {
+    expect(firstIndexOfSection(paper, 99)).toBe(0);
+  });
+});
+
 describe("the runner shell (C-04)", () => {
   it("C-04: the runner shows the question panel, the numbered palette and the four controls", () => {
     render(<Runner {...props()} />);
@@ -237,6 +248,22 @@ describe("the runner shell (C-04)", () => {
     render(<Runner {...props()} />);
     expect(screen.getByText("44:59 left")).toBeVisible();
     expect(screen.getByText("Saved")).toBeVisible();
+  });
+
+  it("renders section navigation tabs and switches sections in free mode", () => {
+    const onIndex = vi.fn();
+    render(
+      <Runner
+        {...props({
+          paper: { ...paper, navigation: "free" },
+          onIndex,
+        })}
+      />,
+    );
+    expect(screen.getByRole("tablist", { name: /exam sections/i })).toBeVisible();
+    const numeracyTab = screen.getByRole("tab", { name: /numeracy/i });
+    activate(numeracyTab);
+    expect(onIndex).toHaveBeenCalledWith(4);
   });
 
   it("DESIGN.md: every palette state carries a non-colour carrier a greyscale reader can see", () => {
