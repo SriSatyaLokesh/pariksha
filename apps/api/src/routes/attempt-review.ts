@@ -304,7 +304,7 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
           const scoredQ = scoreJson?.perQuestion?.[qId];
 
           const answerVal = resp ? resp.value : null;
-          const keyVal = qDoc?.key ?? null;
+          const keyVal = (qDoc as any)?.key ?? null;
           const pointsAwarded = scoredQ ? scoredQ.points : (resp?.points ?? null);
           const maxPoints = scoredQ ? scoredQ.max : (qDoc?.scoring?.points ?? 1);
           const correct = scoredQ ? scoredQ.correct : null;

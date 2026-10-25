@@ -343,14 +343,6 @@ export async function recomputeIntegrity(
       : 0;
   const { flag, observed } = integrityFor({ events, snapshots, resolved, expectedSnapshots });
 
-  if ((flag === "review" || flag === "high_risk") && previousFlag === undefined) {
-    const existing = await deps.db.query<{ integrity_flag: string | null }>(
-      "SELECT integrity_flag FROM attempt WHERE workspace_id = ? AND id = ?",
-      [target.workspaceId, target.attemptId],
-    );
-    previousFlag = existing[0]?.integrity_flag ?? "clean";
-  }
-
   await setIntegrity(deps.db, target.workspaceId, {
     attemptId: target.attemptId,
     integrityFlag: flag,
@@ -358,10 +350,9 @@ export async function recomputeIntegrity(
   });
 
   if (
-    previousFlag !== undefined &&
-    previousFlag !== "review" &&
-    previousFlag !== "high_risk" &&
-    (flag === "review" || flag === "high_risk")
+    typeof attempt === "string" &&
+    (flag === "review" || flag === "high_risk") &&
+    previousFlag !== flag
   ) {
     await fireWebhooks(deps, {
       workspaceId: target.workspaceId,
