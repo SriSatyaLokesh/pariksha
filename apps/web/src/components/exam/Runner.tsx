@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ReactElement } from "react";
-import { NAVIGATION_LOCKED_MESSAGE } from "@pariksha/core";
+import { NAVIGATION_LOCKED_MESSAGE, createTranslator, isRtlLocale } from "@pariksha/core";
 import type { AttemptPaper, CandidateQuestion } from "../../lib/paper";
 import { Palette, type PaletteQuestion, type PaletteSectionGroup, type PaletteState } from "./Palette";
 import { ViewControls, useViewPreferences } from "./ViewControls";
@@ -169,6 +169,7 @@ export function Runner({
   clockSlot,
   bannerSlot,
   submitSlot,
+  language,
 }: {
   paper: AttemptPaper;
   index: number;
@@ -183,7 +184,13 @@ export function Runner({
    *  the clock and the banner beside it, because what pressing it does
    *  belongs to whoever owns the attempt and not to the layout. */
   submitSlot: ReactElement;
+  /** Phase 11 Task 2 (T-24): candidate interface language */
+  language?: string;
 }) {
+  const lang = language ?? paper.language ?? "en";
+  const t = createTranslator(lang);
+  const isRtl = isRtlLocale(lang);
+
   const questions = useMemo(() => flatQuestions(paper), [paper]);
   const sectionIndices = useMemo(() => sectionOfIndex(paper), [paper]);
   const currentSectionIndex = sectionIndices[index] ?? 0;
@@ -220,7 +227,7 @@ export function Runner({
   const isMarked = marked.has(current.id);
 
   return (
-    <div className="exam-runner">
+    <div className="exam-runner" dir={isRtl ? "rtl" : "ltr"}>
       <header className="exam-runner-bar">
         {/* The rail is to the right of the question, which is where a
             candidate looks for it — so the keyboard needs a way to it
@@ -281,7 +288,7 @@ export function Runner({
             <button
               type="button"
               className="exam-button"
-              aria-label="Previous question"
+              aria-label={t("exam.prev")}
               // At the start of the paper it is disabled, not absent:
               // there is a previous question in principle and the
               // candidate will have one in a moment. A *locked* previous
@@ -291,19 +298,19 @@ export function Runner({
                 onIndex(index - 1);
               }}
             >
-              Previous
+              {t("exam.prev")}
             </button>
           )}
           <button
             type="button"
             className="exam-button"
-            aria-label="Next question"
+            aria-label={t("exam.next")}
             disabled={index >= questions.length - 1}
             onClick={() => {
               onIndex(index + 1);
             }}
           >
-            Next
+            {t("exam.next")}
           </button>
           <button
             type="button"
@@ -313,7 +320,7 @@ export function Runner({
               onToggleMark(current.id);
             }}
           >
-            Mark for review
+            {t("exam.review")}
           </button>
           <button
             type="button"
@@ -322,7 +329,7 @@ export function Runner({
               setConfirmingClear(true);
             }}
           >
-            Clear answer
+            {t("exam.clear")}
           </button>
         </div>
 

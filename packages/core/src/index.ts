@@ -144,3 +144,6 @@ export * from "./item-analysis.js";
 
 // Phase 11 Task 1 (O-06): Extensibility plugin interface and registry.
 export * from "./plugins/index.js";
+
+// Phase 11 Task 2 (T-24): Internationalization and RTL translation.
+export * from "./i18n/index.js";

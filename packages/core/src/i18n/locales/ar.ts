@@ -1,0 +1,27 @@
+import type { TranslationDictionary } from "../types.js";
+
+export const ar: TranslationDictionary = {
+  "exam.start": "بدء الاختبار",
+  "exam.next": "التالي",
+  "exam.prev": "السابق",
+  "exam.clear": "مسح الاختيار",
+  "exam.review": "مراجعة",
+  "exam.submit": "تسليم الاختبار",
+  "exam.submitting": "جارٍ التسليم...",
+  "exam.confirm_submit": "هل أنت متأكد أنك تريد تسليم الاختبار؟",
+  "exam.time_remaining": "الوقت المتبقي: {time}",
+  "exam.reconnecting": "إعادة الاتصال... {count} إجابة في قائمة الانتظار",
+  "exam.question_counter": "السؤال {current} من {total}",
+  "exam.section": "القسم: {name}",
+  "exam.points": "{points} نقطة",
+  "exam.saved": "تم الحفظ",
+  "exam.saving": "جارٍ الحفظ...",
+  "exam.offline": "غير متصل",
+  "exam.all_questions": "جميع الأسئلة",
+  "exam.unanswered": "غير مجاب ({count})",
+  "exam.answered": "تمت الإجابة ({count})",
+  "exam.flagged": "محدد للمراجعة ({count})",
+  "exam.finished_title": "تم تسليم الاختبار بنجاح",
+  "exam.finished_message": "تم تسجيل إجاباتك.",
+  "exam.result_code": "رمز الوصول إلى نتيجتك:",
+};

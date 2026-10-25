@@ -1,0 +1,27 @@
+import type { TranslationDictionary } from "../types.js";
+
+export const es: TranslationDictionary = {
+  "exam.start": "Iniciar evaluación",
+  "exam.next": "Siguiente",
+  "exam.prev": "Anterior",
+  "exam.clear": "Borrar selección",
+  "exam.review": "Revisar",
+  "exam.submit": "Enviar examen",
+  "exam.submitting": "Enviando...",
+  "exam.confirm_submit": "¿Está seguro de que desea enviar su examen?",
+  "exam.time_remaining": "Tiempo restante: {time}",
+  "exam.reconnecting": "Reconectando... {count} respuesta(s) en cola",
+  "exam.question_counter": "Pregunta {current} de {total}",
+  "exam.section": "Sección: {name}",
+  "exam.points": "{points} pts",
+  "exam.saved": "Guardado",
+  "exam.saving": "Guardando...",
+  "exam.offline": "Sin conexión",
+  "exam.all_questions": "Todas las preguntas",
+  "exam.unanswered": "Sin responder ({count})",
+  "exam.answered": "Respondidas ({count})",
+  "exam.flagged": "Marcadas para revisión ({count})",
+  "exam.finished_title": "Examen enviado",
+  "exam.finished_message": "Sus respuestas han sido registradas.",
+  "exam.result_code": "Su código de acceso a resultados:",
+};

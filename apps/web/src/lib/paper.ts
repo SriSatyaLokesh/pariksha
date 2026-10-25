@@ -124,4 +124,6 @@ export interface AttemptPaper {
    */
   proctoring: ResolvedProctoring;
   violations: number;
+  /** Phase 11 Task 2 (T-24): candidate interface language */
+  language?: string;
 }

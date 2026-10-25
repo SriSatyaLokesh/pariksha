@@ -1,0 +1,27 @@
+import type { TranslationDictionary } from "../types.js";
+
+export const hi: TranslationDictionary = {
+  "exam.start": "परीक्षा शुरू करें",
+  "exam.next": "अगला",
+  "exam.prev": "पिछला",
+  "exam.clear": "चयन साफ़ करें",
+  "exam.review": "समीक्षा करें",
+  "exam.submit": "परीक्षा जमा करें",
+  "exam.submitting": "जमा हो रहा है...",
+  "exam.confirm_submit": "क्या आप वाकई अपनी परीक्षा जमा करना चाहते हैं?",
+  "exam.time_remaining": "शेष समय: {time}",
+  "exam.reconnecting": "पुनः कनेक्ट हो रहा है... {count} उत्तर कतार में हैं",
+  "exam.question_counter": "प्रश्न {current} / {total}",
+  "exam.section": "खंड: {name}",
+  "exam.points": "{points} अंक",
+  "exam.saved": "सहेजा गया",
+  "exam.saving": "सहेजा जा रहा है...",
+  "exam.offline": "ऑफ़लाइन",
+  "exam.all_questions": "सभी प्रश्न",
+  "exam.unanswered": "अनुत्तरित ({count})",
+  "exam.answered": "उत्तर दिया गया ({count})",
+  "exam.flagged": "समीक्षा के लिए चिह्नित ({count})",
+  "exam.finished_title": "परीक्षा सफलतापूर्वक जमा हुई",
+  "exam.finished_message": "आपकी प्रतिक्रियाएँ दर्ज कर ली गई हैं।",
+  "exam.result_code": "आपका परिणाम एक्सेस कोड:",
+};
