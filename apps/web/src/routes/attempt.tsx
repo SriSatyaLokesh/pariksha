@@ -86,7 +86,7 @@ export function AttemptRoute({
 
   return (
     <main id="main-content" className="organiser organiser--wide">
-      <AttemptReview review={data} onBack={onBack} />
+      <AttemptReview review={data} {...(onBack ? { onBack } : {})} />
     </main>
   );
 }

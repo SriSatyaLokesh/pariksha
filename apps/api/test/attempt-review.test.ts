@@ -497,12 +497,17 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
       tokenHash: newId("tok"),
     });
 
+    await deps.db.run(
+      "INSERT INTO webhook (id, workspace_id, url, signing_secret, events_json, active, created_at) VALUES (?, ?, ?, ?, ?, 1, ?)",
+      [newId("whk"), workspaceId, "https://example.test/flagged-hook", "whsec_test", JSON.stringify(["attempt.flagged"]), NOW],
+    );
+
     // Post enough violations to trigger review in integrity recompute
     await appendEvents(deps.db, workspaceId, {
       attemptId: flagAttemptId,
       events: [
-        { type: "tab_blur", clientTs: NOW + 1_000 },
-        { type: "tab_blur", clientTs: NOW + 2_000 },
+        { type: "window_blur", clientTs: NOW + 1_000 },
+        { type: "window_blur", clientTs: NOW + 2_000 },
       ],
       serverTs: NOW + 2_000,
     });
@@ -514,8 +519,6 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
       "SELECT COUNT(*) AS n FROM webhook_delivery WHERE workspace_id = ? AND event = ?",
       [workspaceId, "attempt.flagged"],
     );
-    // When a webhook exists subscribed to attempt.flagged (or all active hooks):
-    // Even with 0 registered hooks, listActiveWebhooksForEvent returns 0 and delivered/queued is 0,
-    // so let's register a webhook for attempt.flagged and verify delivery row is created!
+    expect(rows[0]?.n).toBe(1);
   });
 });

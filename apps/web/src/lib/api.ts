@@ -804,6 +804,7 @@ export interface AttemptReviewData {
     key: unknown;
     pointsAwarded: number | null;
     maxPoints: number;
+    correct?: boolean | null | undefined;
     verdict?: string;
   }>;
   sectionScores: Array<{

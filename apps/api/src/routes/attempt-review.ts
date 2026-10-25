@@ -238,7 +238,7 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
       }
 
       // Unobserved attempt fallback
-      if (!Boolean(attemptRow.observed) && !hasCameraLost) {
+      if (!attemptRow.observed && !hasCameraLost) {
         timeline.push({
           kind: "unobserved",
           timestamp: Number(attemptRow.started_at),

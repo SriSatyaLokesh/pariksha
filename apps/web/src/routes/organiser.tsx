@@ -78,7 +78,7 @@ type View =
   // builder, not the top nav.
   | { kind: "analytics"; actor: Actor; workspace: Workspace; testId: string }
   // Phase 8g Task 4 (`#91`, `R-03`): the per-attempt review screen.
-  | { kind: "attempt"; actor: Actor; workspace: Workspace; attemptId: string; testId?: string }
+  | { kind: "attempt"; actor: Actor; workspace: Workspace; attemptId: string; testId?: string | undefined }
   // `bankName` is absent exactly when the browser was deep-linked rather
   // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
   // not in `ViewParams` and no call in this component fetches one.
@@ -553,7 +553,13 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
     case "attempt":
       return params.attempt === undefined
         ? home
-        : { kind: "attempt", actor, workspace, attemptId: params.attempt, testId: params.test };
+        : {
+            kind: "attempt",
+            actor,
+            workspace,
+            attemptId: params.attempt,
+            ...(params.test !== undefined && { testId: params.test }),
+          };
     case "bank":
       return params.bank === undefined
         ? home

@@ -3,7 +3,7 @@ import type { AttemptReviewData } from "../../lib/api";
 
 export interface AttemptReviewProps {
   review: AttemptReviewData;
-  onBack?: () => void;
+  onBack?: (() => void) | undefined;
 }
 
 function formatTime(ts: number): string {
