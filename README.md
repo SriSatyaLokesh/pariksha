@@ -10,16 +10,27 @@ Question pools, 12 question types, browser proctoring, a registration form build
 
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![Content: CC BY 4.0](https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
-[![Status: pre-alpha](https://img.shields.io/badge/Status-pre--alpha-orange.svg)](#roadmap)
+[![Status: alpha](https://img.shields.io/badge/Status-alpha-yellow.svg)](#roadmap)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-[What it does](#what-it-does) · [See a real test](#see-a-real-test) · [Docs](#documentation) · [Roadmap](#roadmap) · [Contributing](#contributing)
+[What it does](#what-it-does) · [Screens](#screens) · [See a real test](#see-a-real-test) · [Docs](#documentation) · [Roadmap](#roadmap) · [Contributing](#contributing)
 
 </div>
 
 ---
 
-> **Status: pre-alpha.** This repository holds the product requirements, the open question and test formats, their JSON Schemas, and a complete worked example. The scoring core, the database layer, the API's sign-in and workspace routes, and the landing page and organiser screens are built: a fresh instance already runs locally and reaches a signed-in, empty dashboard — see [Running Pariksha locally](#running-pariksha-locally). **Test authoring and the candidate runtime land with v0.1.** Issues and pull requests are open — see [good first issues](#contributing).
+> **Status: alpha.** The whole exam path runs. You can deploy Pariksha to your
+> own Cloudflare account, import a question bank, build a test with pools and
+> sets and a registration form, publish it, have candidates sit it under
+> proctoring, score it, grade the written answers and download the results CSV
+> — all of that is on `main` today. See [Screens](#screens) for what it looks
+> like and [Running Pariksha locally](#running-pariksha-locally) to try it.
+>
+> **Alpha, not beta, and the difference is one specific thing:** Pariksha has
+> never carried a real exam with 300 candidates at once. That is the v0.1 exit
+> gate — one real test, 300+ candidates, zero lost answers — and until it is
+> met, run Pariksha beside what you use now rather than instead of it.
+> Issues and pull requests are open — see [Contributing](#contributing).
 
 *Pariksha* — **పరీక్ష**, **परीक्षा** — means "examination".
 
@@ -44,11 +55,76 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Different paper for every candidate.** Draw N questions from a pool filtered by tag and difficulty, or hand out fixed sets A/B/C round-robin so neighbours never match. Question and option order shuffles per candidate; pinned options stay put.
 - **Scoring that matches your rules.** All-or-nothing, partial credit, negative marking, position-based for ordering, rubrics for written answers. Change a key afterwards and regrade every attempt, with an audit entry.
 - **A registration form you design.** Eleven field types, server-side validation, "unique per test" fields that block repeat registrations, and a consent screen whose text you write.
-- **Proctoring you choose — Off, Standard or Strict.** Desktop-only, fullscreen, tab-switch logging, copy/paste blocking, watermarking; and in Strict, camera, periodic snapshots, on-device face counting and violation limits. **No video or audio is ever recorded.**
+- **Proctoring you choose — Off, Standard or Strict.** Desktop-only, fullscreen, tab-switch logging, copy/paste blocking, watermarking; and in Strict, camera, periodic snapshots, a violation limit and the four actions it can take, up to locking the attempt for an organiser to unlock. **No video or audio is ever recorded** — Strict stores 320×240 JPEG stills, about 25 KB each, behind signed URLs that expire in ten minutes. (On-device face counting is *not* shipped: MediaPipe needs a CSP relaxation the candidate runtime refuses. It is tracked, not quietly dropped.)
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
-- **Results that fit your spreadsheet.** Live monitor, grading queue, item analysis, a results CSV with one column per form field and section, per-answer and event exports, a REST API and signed webhooks.
+- **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. (The *live* monitor — attempts updating while the exam runs — is the one results surface still to come; see [What is still to come](#what-is-still-to-come).)
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
-- **Two deployment targets, one codebase.** Cloudflare's free plan (Workers, Workers Static Assets, D1, R2) or Docker on any server (Node, SQLite or Postgres, S3/MinIO).
+- **Written for two deployment targets, shipping one.** Every adapter — database, object storage, identity — exists for both, and the Cloudflare free-plan path (Workers, Workers Static Assets, D1, R2) is the one that is built and deployed. Docker with Postgres and MinIO is Phase 11; `deploy/docker/` holds its README and nothing else yet.
+
+## Screens
+
+Captured from the running application — headless Chromium against the built
+app on a seeded instance, by
+[`apps/web/e2e/measurement/marketing-shots.spec.ts`](apps/web/e2e/measurement/marketing-shots.spec.ts)
+and
+[`ui-audit-walkthrough.spec.ts`](apps/web/e2e/measurement/ui-audit-walkthrough.spec.ts).
+Nothing below is a mockup, and nothing below is retouched. Re-take them with
+`pnpm --filter @pariksha/web e2e`.
+
+### The candidate's paper
+
+Server-authoritative clock, an offline save queue, a palette that survives a
+reload or a crash, and text size and high contrast the candidate chooses. The
+question shown is multi-matching, one of the twelve types.
+
+![The candidate exam runtime: a multi-matching grid, a question palette, a countdown and text-size controls](apps/web/public/screens/exam-runner.png)
+
+### The test builder
+
+Sections drawing from fixed lists, random pools or round-robin sets; numbered
+frozen versions, so publishing never moves the paper under an attempt already
+running; and one publish checklist that the server and the screen compute from
+the same function.
+
+![The test builder: version history, three sections with question and point counts, and a publish checklist reading All clear](apps/web/public/screens/test-builder.png)
+
+### Question banks
+
+All twelve types with live preview, passage groups, tag and difficulty
+filters, and import from Pariksha JSON, CSV or Moodle GIFT — all-or-nothing,
+with a line-by-line error report. The bank shown is
+[the worked example](examples/reasoning-aptitude/), imported as itself.
+
+![A question bank: a passage group and rows of questions with their type, difficulty, tags, points and usage](apps/web/public/screens/bank-browser.png)
+
+### Results and analytics
+
+Attempt counts by state, a score distribution, mean, median, pass and
+completion rates, item analysis below the fold, and the results and per-answer
+CSVs beside them.
+
+![The analytics screen: attempt counts, a score distribution and a summary with mean and median](apps/web/public/screens/analytics.png)
+
+### Home, and the landing page
+
+![The organiser home screen: a workspace switcher, a What needs you queue and recently edited tests](apps/web/public/screens/organiser-home.png)
+
+![The public landing page: a dark hero reading Run real exams on infrastructure you own, beside a live pool draw](apps/web/public/screens/landing.png)
+
+## What is still to come
+
+Phases 1–8 are merged. What is not built, with the phase that owns it —
+[`docs/ROADMAP.md`](docs/ROADMAP.md) is authoritative:
+
+| Not built yet | Phase |
+| --- | --- |
+| One real exam with 300+ candidates — **the gate that ends alpha** | v0.1 exit gate |
+| The live monitor: attempts updating while the exam runs, and the integrity review queue | 8.5 — the watchtower |
+| Microphone monitoring, and on-device face counting | 8.5 — the ear ([#223](https://github.com/SriSatyaLokesh/pariksha/issues/223)) |
+| Bring-your-own-key AI question drafting, into a bank, never auto-published | 9 |
+| A public demo instance, no sign-in, wiped on a schedule | 10 |
+| Docker + Postgres + MinIO self-hosting, email/password with Argon2id and TOTP | 11 |
+| WCAG 2.1 AA audit, translations and RTL, OpenAPI 3.1, the plugin interface, k6 load test, signed releases | 12 |
 
 ## See a real test
 
@@ -66,23 +142,12 @@ A 45-minute campus screening round in reasoning and aptitude. The folder walks t
 | [`results.csv`](examples/reasoning-aptitude/results.csv) | What you download afterwards |
 | [`README.md`](examples/reasoning-aptitude/README.md) | The registration form, the test screen, a violation warning and the scoring, drawn out screen by screen |
 
-A taste of the candidate's screen:
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│ Section 2 of 3 · Logical reasoning     Section 08:41 ▸ Total 22:10 │
-├────────────────────────────────────────────┬─────────────────┤
-│  Question 6 of 12                   2 pts  │  Questions      │
-│                                            │  Section 1      │
-│  What comes next in the series?            │  ① ② ③ ④        │
-│      3, 7, 15, 31, 63, ?                   │  Section 2      │
-│                                            │  ⑤ ⑥ ⑦ ⑧        │
-│   ( ) 95     (•) 127                       │  Section 3      │
-│   ( ) 117    ( ) 131                       │  🔒 locked      │
-├────────────────────────────────────────────┴─────────────────┤
-│  ✓ Saved 2 seconds ago                     Ananya Rao 21CS0147│
-└──────────────────────────────────────────────────────────────┘
-```
+That folder's own README draws the candidate's screen as the design intends
+it, with a per-section timer and a palette grouped by section. **The shipped
+runtime does not group the palette by section yet** — see
+[the screenshot above](#the-candidates-paper) for what it actually looks like
+today. The gap is known and tracked; the drawing is kept because it is what
+the test format already expresses.
 
 ## How it works
 
@@ -110,7 +175,10 @@ Full architecture, candidate journey and data model: the [PRD](docs/PRD.md). Hig
 | [Design system](DESIGN.md) | `DESIGN.md` — colours, type, components and the rules behind them, machine-readable |
 | [Architecture decisions](docs/adr/) | Why Cloudflare + adapters, why Apache-2.0 |
 | [JSON Schemas](schemas/) | Machine-readable question, bank and test schemas |
-| [Phase 1 plan](docs/superpowers/plans/2026-10-16-phase-1-foundation-and-scoring.md) | How `packages/core` (question types, scoring, selection and import validation — pure TypeScript, zero I/O) was built, task by task |
+| [Build roadmap](docs/ROADMAP.md) | The twelve phases, what each one shipped, and what it deliberately left behind. **Authoritative on what is built** |
+| [Exports](docs/exports.md) and [webhooks](docs/webhooks.md) | The results, per-answer and event CSVs; signed outbound webhooks and scoped API keys |
+| [Deploy on Cloudflare](deploy/cloudflare/README.md) | The one-Worker topology, the setup script, and why it is one Worker and not two |
+| [Phase plans](docs/superpowers/plans/) | How each phase was built, task by task, with the deferrals recorded rather than lost |
 
 ## Repository layout
 
@@ -125,12 +193,29 @@ pariksha/
 │   └── storage/          # R2, S3 and local-disk adapters
 ├── deploy/
 │   ├── cloudflare/       # zero-cost reference deployment
-│   └── docker/           # self-host with Docker Compose
+│   └── docker/           # self-host with Docker Compose (Phase 11 — README only so far)
 ├── docs/                 # PRD, format specs, ADRs, diagrams
 ├── schemas/              # JSON Schemas (question, bank, test)
 ├── examples/             # complete worked tests, one folder per subject
 └── .github/              # issue and PR templates, CI
 ```
+
+## Deploying to Cloudflare
+
+The reference deployment is one Worker serving the built web app as Static
+Assets with the Hono API as its script, plus D1, R2 and a Cron Trigger for the
+retention job — all on the free plan. `deploy/cloudflare/setup.mjs` creates
+what is missing and applies pending migrations, and it is idempotent:
+
+```bash
+node deploy/cloudflare/setup.mjs --dry-run   # the whole flow, twice, against
+                                             # an in-memory Cloudflare
+node deploy/cloudflare/setup.mjs             # the real thing, against your account
+pnpm deploy:cf
+```
+
+The topology, the free-tier arithmetic and the reason it is one Worker and not
+two are in [`deploy/cloudflare/README.md`](deploy/cloudflare/README.md).
 
 ## Running Pariksha locally
 
@@ -173,9 +258,10 @@ pnpm --filter @pariksha/web e2e
 
 That walks a browser from the landing page to a signed-in, empty dashboard against an in-memory database and an OpenID provider that exists only in `apps/web/e2e/stub-idp.mjs`. It touches no network and leaves nothing behind, so every run is a first run.
 
-## Try the formats today
+## Validating questions without installing anything
 
-No install needed — validate the examples against the schemas:
+The formats are published and stable, so a bank can be written and checked
+before Pariksha is anywhere near it — and the same file imports unchanged:
 
 ```bash
 git clone https://github.com/SriSatyaLokesh/pariksha.git
@@ -188,32 +274,40 @@ npx -y -p ajv-cli@5.0.0 -p ajv-formats@2.1.1 ajv validate --spec=draft2020 --str
   -s schemas/test-1.json -d "examples/*/test.json"
 ```
 
-Write your own questions, validate them, and they will import into Pariksha on day one.
+Write your own questions, validate them, and import them whole — Pariksha JSON, CSV or Moodle GIFT, all-or-nothing with a line-by-line error report.
 
 ## Roadmap
 
-| Release | Focus |
-| --- | --- |
-| **v0.1 Pilot-ready** | All 12 question types, question banks and authoring, the test builder (sets, pools, registration forms, access codes), the candidate runtime, Cloudflare deploy |
-| **v0.2 Teams and security** | Workspaces, roles, OIDC sign-in, invite links, email codes, audit log, retention jobs, Standard and Strict proctoring, live monitor, CSV export |
-| **v0.3 Grading and analytics** | Grading queue, item analysis, per-set comparison, regrade |
-| **v1.0 Public release** | Docker + Postgres, REST API, webhooks, CSV and GIFT import, plugins, WCAG 2.1 AA, translations, signed releases |
+| Release | Focus | State |
+| --- | --- | --- |
+| **v0.1 Pilot-ready** | All 12 question types, question banks and authoring, the test builder (sets, pools, registration forms, access codes), the candidate runtime, Cloudflare deploy | **Built** — waiting on its exit gate |
+| **v0.2 Teams and security** | Workspaces, roles, OIDC sign-in, invite links, email codes, audit log, retention jobs, Standard and Strict proctoring, live monitor, CSV export | **Built except the live monitor** (Phase 8.5) |
+| **v0.3 Grading and analytics** | Grading queue, item analysis, per-set comparison, regrade | **Built** |
+| **v1.0 Public release** | Docker + Postgres, REST API, webhooks, CSV and GIFT import, plugins, WCAG 2.1 AA, translations, signed releases | Webhooks, API keys and CSV/GIFT import built; the rest is Phases 9–12 |
 
-Each release has an exit gate — v0.1's is one real test with 300+ candidates and zero lost answers. Details: [PRD roadmap](docs/PRD.md#roadmap). **`docs/ROADMAP.md` is authoritative on phasing** — where the two disagree, re-read that file rather than this table.
+Each release has an exit gate, and **v0.1's is the one that matters right now:
+one real test with 300+ candidates and zero lost answers.** The features are
+there; that run has not happened. If you have a cohort that size and the
+appetite to run Pariksha alongside whatever you use today, open an issue —
+that is the single most useful contribution available.
+
+Details: [PRD roadmap](docs/PRD.md#roadmap). **`docs/ROADMAP.md` is authoritative on phasing** — where the two disagree, re-read that file rather than this table.
 
 ## Contributing
 
-Pariksha is at the best possible moment to join: the shape is decided, the code is not yet written, and an early contributor still gets to decide how large parts of it work.
+Pariksha is at a good moment to join: the product is built and the hard part
+left is *use* — running it, breaking it, and telling us where it bent.
 
 **You do not need to write TypeScript to help.** The most valuable contributions right now are:
 
 | | |
 | --- | --- |
+| 🧪 **Run a real exam** | Deploy it, put a real cohort through it, and report what happened. This is the v0.1 exit gate and the one thing no amount of code closes |
+| 🐞 **Break it and say how** | A reproduction against a local instance is worth more than a code change; the issue templates ask for exactly what we need |
 | 📝 **Question sets** | Add a subject under [`examples/`](examples/) — school science, GATE-style engineering, nursing, language comprehension, civil-service reasoning, your own field. Original content only, CC BY 4.0 |
-| 🌐 **Translations** | Interface strings and candidate-facing text in Indian and other languages |
-| 🔍 **Review the design** | Read the [PRD](docs/PRD.md) and argue with it in an issue. Especially the [open questions](docs/PRD.md#risks-and-open-questions) |
-| 🧪 **Formats** | Try writing a real test in [`pariksha/test@1`](docs/test-format.md) and tell us what you could not express |
-| 💻 **Code** | `packages/core` (scoring) has shipped — see [the phase 1 plan](docs/superpowers/plans/2026-10-16-phase-1-foundation-and-scoring.md). Still open for v0.1: `apps/api` (Hono), `apps/web` (React) |
+| 🌐 **Translations** | Interface strings and candidate-facing text in Indian and other languages. The translation layer itself is Phase 12, so the strings land before the machinery does |
+| ♿ **Accessibility** | The WCAG 2.1 AA audit is Phase 12 and the register is open; a real screen-reader pass over the exam runtime would be the most valuable single report |
+| 💻 **Code** | Phases 1–8 are merged, so there is a codebase to work in: see [the roadmap](docs/ROADMAP.md) for Phase 8.5 onward, and the open issues for what each phase left behind |
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues go through [SECURITY.md](SECURITY.md) — never a public issue.
 

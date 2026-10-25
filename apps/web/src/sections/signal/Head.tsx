@@ -2,11 +2,13 @@
 // Implements `.planning/landing/signal-reference.html`. Every claim here
 // traces to `.planning/landing/content-inventory.md`.
 //
-// The hero's frame stands in for a product screenshot the project cannot
-// honestly take: the application does not exist yet. What it shows instead
-// is the one capability that is shipped today and impossible in a form
-// tool — a pool drawing a different paper for every candidate. The markup
-// below is the complete, readable state with JavaScript off; the island at
+// The hero's frame was written when a product screenshot was one "the
+// project cannot honestly take" — the application did not exist. It does
+// now (issue 253: real screens live in the band below, from
+// `public/screens/`), and the frame STAYS anyway: it is the one thing a
+// screenshot cannot show, a pool drawing a different paper for every
+// candidate, redrawn in front of the reader. The markup below is the
+// complete, readable state with JavaScript off; the island at
 // src/island/exam-demo.ts upgrades it in place by its data- attributes
 // and must never rewrite it from scratch.
 
@@ -15,6 +17,7 @@ const WORKED_EXAMPLE = `${REPO}/tree/main/examples/reasoning-aptitude`;
 
 const NAV_LINKS = [
   { label: "How it works", href: "#how-it-works" },
+  { label: "Screens", href: "#screens" },
   { label: "Integrity", href: "#integrity" },
   { label: "Compare", href: "#compare" },
   { label: "Status", href: "#status" },
@@ -39,7 +42,7 @@ export function SignalNav() {
           ))}
         </nav>
         <a className="signal-btn" href="#start">
-          Start your question bank
+          Run your first exam
         </a>
       </div>
     </header>
@@ -62,7 +65,7 @@ export function SignalHero() {
         <div className="signal-hero__grid">
           <div>
             <p className="signal-eyebrow">
-              Pre-alpha · scoring engine and formats live
+              Alpha · the whole exam path runs
             </p>
             <h1>
               Run real exams on infrastructure{" "}
@@ -76,7 +79,7 @@ export function SignalHero() {
             </p>
             <div className="signal-actions signal-actions--hero">
               <a className="signal-btn" href="#start">
-                Start your question bank
+                Run your first exam
               </a>
               <a
                 className="signal-btn signal-btn--ghost"
@@ -242,7 +245,7 @@ export function SignalTypeRail() {
         </h2>
         <p className="signal-fine signal-fine--flush">
           Markdown, LaTeX, code blocks and images in every one. All twelve are
-          implemented and unit-tested today.
+          authorable, previewable, sittable and scored today.
         </p>
       </div>
       <div className="signal-cards">

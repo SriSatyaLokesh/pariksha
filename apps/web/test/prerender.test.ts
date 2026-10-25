@@ -134,7 +134,7 @@ describe("T6 — title and description in the artefact", () => {
     expect(title).toContain("Pariksha");
   });
 
-  it("exactly one description meta, 110-160 characters, containing pre-alpha and October 2026", () => {
+  it("exactly one description meta, 110-160 characters, carrying the alpha status line", () => {
     const metas = [
       ...indexHtml.matchAll(/<meta name="description" content="([^"]*)"\s*\/?>/g),
     ];
@@ -142,8 +142,7 @@ describe("T6 — title and description in the artefact", () => {
     const description = metas[0]![1]!;
     expect(description.length).toBeGreaterThanOrEqual(110);
     expect(description.length).toBeLessThanOrEqual(160);
-    expect(description.toLowerCase()).toContain("pre-alpha");
-    expect(description).toContain("October 2026");
+    expect(description).toContain("Status: alpha, October 2026.");
   });
 
   it("both theme-color metas are present with their media attributes", () => {
@@ -289,12 +288,17 @@ describe("T12 — structured data in the artefact", () => {
   });
 });
 
-describe("T17 — the literal string pre-alpha in the artefact", () => {
+describe("T17 — the literal status line in the artefact", () => {
+  // The whole line in all three places, never the word alone: "alpha" is
+  // a substring of "pre-alpha", so a word-level check passes on a status
+  // that has silently reverted. #253 is the change that proved it.
+  const STATUS = "Status: alpha, October 2026.";
+
   it("appears in the meta description, in releaseNotes, and in dist/llms.txt", async () => {
     const description = indexHtml.match(
       /<meta name="description" content="([^"]*)"\s*\/?>/,
     )?.[1];
-    expect(description).toContain("pre-alpha");
+    expect(description).toContain(STATUS);
 
     const block = indexHtml.match(
       /<script type="application\/ld\+json">([\s\S]*?)<\/script>/,
@@ -305,10 +309,10 @@ describe("T17 — the literal string pre-alpha in the artefact", () => {
     const software = graph["@graph"].find(
       (n) => n["@type"] === "SoftwareApplication",
     );
-    expect(software?.releaseNotes).toContain("pre-alpha");
+    expect(software?.releaseNotes).toContain(STATUS);
 
     const llms = await readFile(resolve(outDir, "llms.txt"), "utf8");
-    expect(llms).toContain("pre-alpha");
+    expect(llms).toContain(STATUS);
   });
 });
 

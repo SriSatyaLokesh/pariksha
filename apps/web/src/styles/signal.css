@@ -1020,3 +1020,50 @@
   color: var(--color-signal-text-2);
   max-width: 68ch;
 }
+
+/* ---- the screens band (issue 253) ----------------------------------- */
+
+/* Captured screens of the running app, replacing the "software that does
+   not exist yet" the head of this file was written against.
+
+   No font-size and no radius literal: `no-literal-radius-or-font-size`
+   allowlists this file's existing ones BY COUNT, so a new 13.5px here is
+   a failure rather than a nit. The caption therefore wears `.signal-fine`
+   and these rules set only space. Its lead-in is a <strong>, which
+   `:where(.signal) strong` already lifts to --color-signal-text and
+   `contrast-usage.test.ts` already covers — a `.signal-shot figcaption b`
+   of our own would have been a third selector to register for no gain. */
+
+.signal-screens {
+  display: grid;
+  gap: var(--space-2xl);
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  margin-top: var(--space-2xl);
+}
+
+.signal-shot {
+  margin: 0;
+}
+
+/* The shots are light-ground organiser screens on a dark page. A hairline
+   and a surface pad keep them from reading as holes punched in the
+   ground, which is what a bare 1280x800 PNG looks like here. */
+.signal-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--color-signal-line);
+  border-radius: var(--rounded-lg);
+  background: var(--color-signal-surface);
+}
+
+.signal-shot figcaption {
+  margin-top: var(--space-md);
+  max-width: 54ch;
+}
+
+@media (max-width: 560px) {
+  .signal-screens {
+    grid-template-columns: 1fr;
+  }
+}

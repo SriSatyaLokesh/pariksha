@@ -1,10 +1,16 @@
 // The landing page, on the Signal direction.
 // `.planning/landing/signal-reference.html` is the prototype; its spine is
-// eight movements of deliberately unequal weight rather than a stack of
+// nine movements of deliberately unequal weight rather than a stack of
 // identical bands: an ink hero carrying a live pool draw, the type rail,
-// the anti-form argument, the integrity ethic on its own ground, the cost
-// arithmetic, the comparison, the build status, the FAQ and the close.
+// the captured screens, the anti-form argument, the integrity ethic on its
+// own ground, the cost arithmetic, the comparison, the build status, the
+// FAQ and the close.
+//
+// The screens band (issue 253) goes directly after the type rail, so the
+// claim ("twelve question types") and its proof (the paper, the builder,
+// the bank, the analytics) sit together rather than a scroll apart.
 import { SignalHero, SignalNav, SignalTypeRail } from "../sections/signal/Head";
+import { SignalScreens } from "../sections/signal/Screens";
 import {
   SignalCompare,
   SignalCost,
@@ -28,6 +34,7 @@ export function Landing() {
       <main id="main-content">
         <SignalHero />
         <SignalTypeRail />
+        <SignalScreens />
         <SignalNotAForm />
         <SignalIntegrity />
         <SignalCost />

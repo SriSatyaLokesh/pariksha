@@ -20,6 +20,11 @@ const SECTIONS: { id: string; level: 2 | 3; heading: string }[] = [
     level: 2,
     heading: "Twelve question types. Five ways to score them.",
   },
+  {
+    id: "screens",
+    level: 2,
+    heading: "Five screens, captured from the running app.",
+  },
   { id: "integrity", level: 2, heading: "No video. No audio. No verdicts." },
   {
     id: "cost",
@@ -34,7 +39,7 @@ const SECTIONS: { id: string; level: 2 | 3; heading: string }[] = [
   {
     id: "status",
     level: 2,
-    heading: "What exists today, and what lands with v0.1.",
+    heading: "What is built, and what is honestly not.",
   },
   { id: "faq", level: 2, heading: "FAQs" },
   { id: "start", level: 3, heading: "What you can do today" },
@@ -43,6 +48,7 @@ const SECTIONS: { id: string; level: 2 | 3; heading: string }[] = [
 
 const NAV_LINKS: { text: string; href: string }[] = [
   { text: "How it works", href: "#how-it-works" },
+  { text: "Screens", href: "#screens" },
   { text: "Integrity", href: "#integrity" },
   { text: "Compare", href: "#compare" },
   { text: "Status", href: "#status" },
@@ -62,7 +68,7 @@ const FAQ_QUESTIONS = [
   "Does Pariksha record video of candidates?",
   "Is Pariksha better than Google Forms for an exam?",
   "How is it different from Mettl, HackerEarth or Testlify?",
-  "Can I write questions before the app exists?",
+  "Can I write questions outside Pariksha and import them?",
   "Can Pariksha generate questions with AI?",
 ];
 
@@ -109,7 +115,7 @@ describe("landing content — Signal", () => {
     expect(screen.getByRole("contentinfo")).toBeInTheDocument();
   });
 
-  it("the primary nav has exactly these five links, in order, to the right targets", () => {
+  it("the primary nav has exactly these six links, in order, to the right targets", () => {
     render(<Landing />);
     const nav = screen.getByRole("navigation", { name: "Primary" });
     const links = within(nav).getAllByRole("link");
@@ -121,39 +127,42 @@ describe("landing content — Signal", () => {
     });
   });
 
-  it("carries the three CTA labels, each pointing at the real repo or an in-page anchor", () => {
+  // #253 retired "Start your question bank" and "Watch the repo for v0.1":
+  // the app exists, so the primary ask is to run it, not to write questions
+  // against a format and wait.
+  it("carries the two CTA labels, each pointing at the real repo or an in-page anchor", () => {
     const { container } = render(<Landing />);
     const byText = (text: string) =>
       [...container.querySelectorAll("a.signal-btn")].filter(
         (el) => el.textContent === text,
       );
 
-    const startBank = byText("Start your question bank");
-    expect(startBank.length).toBeGreaterThanOrEqual(2);
+    const runIt = byText("Run your first exam");
+    expect(runIt.length).toBeGreaterThanOrEqual(3);
     expect(
-      startBank.every((el) => {
+      runIt.every((el) => {
         const href = el.getAttribute("href") ?? "";
         return (
           href === "#start" ||
           href ===
-            "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude"
+            "https://github.com/SriSatyaLokesh/pariksha/blob/main/README.md"
         );
       }),
     ).toBe(true);
 
     const seeExam = byText("See a real exam");
-    expect(seeExam).toHaveLength(1);
-    expect(seeExam[0]).toHaveAttribute(
-      "href",
-      "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude",
-    );
+    expect(seeExam).toHaveLength(2);
+    expect(
+      seeExam.every(
+        (el) =>
+          el.getAttribute("href") ===
+          "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude",
+      ),
+    ).toBe(true);
 
-    const watchRepo = byText("Watch the repo for v0.1");
-    expect(watchRepo).toHaveLength(1);
-    expect(watchRepo[0]).toHaveAttribute(
-      "href",
-      "https://github.com/SriSatyaLokesh/pariksha",
-    );
+    // The retired labels must not come back by a stale copy-paste.
+    expect(byText("Start your question bank")).toHaveLength(0);
+    expect(byText("Watch the repo for v0.1")).toHaveLength(0);
   });
 
   it("the FAQ contains exactly these nine questions, in order", () => {
