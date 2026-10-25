@@ -117,10 +117,11 @@ export function monitorRoutes(deps: AppDeps): Hono<AppBindings> {
       }
       if (totalQuestions === 0 && version?.body.sections) {
         for (const sec of version.body.sections) {
+          const src = sec.source as unknown as { count?: number; questions?: unknown[] } | undefined;
           const count =
-            sec.source?.kind === "bank"
-              ? sec.source.count
-              : (sec.source?.questions?.length ?? 0);
+            typeof src?.count === "number"
+              ? src.count
+              : (Array.isArray(src?.questions) ? src.questions.length : 0);
           totalQuestions += count ?? 0;
         }
       }

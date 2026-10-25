@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { axe } from "jest-axe";
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -156,6 +156,164 @@ describe("Monitor Screen", () => {
     );
     const results = await axe(container);
     expect(results).toHaveNoViolations();
+  });
+
+  describe("Proctor Action Controls", () => {
+    const lockedRow: MonitorAttemptRow = {
+      ...quietRow,
+      attemptId: "att_locked",
+      status: "locked",
+      lockedAt: 2500,
+    };
+
+    it("performs extend time action with minutes dialog", async () => {
+      const performActionSpy = vi.fn().mockResolvedValue({ extended: true });
+      const client = fakeClient({
+        getMonitor: vi.fn().mockResolvedValue(mockResponse),
+        performProctorAction: performActionSpy,
+      });
+
+      render(
+        <Monitor
+          client={client}
+          workspaceId={WORKSPACE_ID}
+          testId={TEST_ID}
+          rows={[quietRow]}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /extend/i }));
+      expect(await screen.findByRole("heading", { name: "Extend Time" })).toBeInTheDocument();
+
+      const input = screen.getByLabelText(/minutes to add/i);
+      fireEvent.change(input, { target: { value: "15" } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => {
+        expect(performActionSpy).toHaveBeenCalledWith(WORKSPACE_ID, "att_quiet", {
+          kind: "extend_time",
+          minutes: 15,
+        });
+      });
+    });
+
+    it("unlocks a locked attempt on button click", async () => {
+      const performActionSpy = vi.fn().mockResolvedValue({ unlocked: true });
+      const client = fakeClient({
+        getMonitor: vi.fn().mockResolvedValue(mockResponse),
+        performProctorAction: performActionSpy,
+      });
+
+      render(
+        <Monitor
+          client={client}
+          workspaceId={WORKSPACE_ID}
+          testId={TEST_ID}
+          rows={[lockedRow]}
+        />,
+      );
+
+      const unlockBtn = screen.getByRole("button", { name: /unlock/i });
+      fireEvent.click(unlockBtn);
+
+      await waitFor(() => {
+        expect(performActionSpy).toHaveBeenCalledWith(WORKSPACE_ID, "att_locked", {
+          kind: "unlock",
+        });
+      });
+    });
+
+    it("resets attempt with confirmation naming non-destructive preservation", async () => {
+      const performActionSpy = vi.fn().mockResolvedValue({ ok: true, newAttemptId: "att_new" });
+      const client = fakeClient({
+        getMonitor: vi.fn().mockResolvedValue(mockResponse),
+        performProctorAction: performActionSpy,
+      });
+
+      render(
+        <Monitor
+          client={client}
+          workspaceId={WORKSPACE_ID}
+          testId={TEST_ID}
+          rows={[quietRow]}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /reset/i }));
+      expect(await screen.findByRole("heading", { name: "Reset Attempt" })).toBeInTheDocument();
+      expect(
+        screen.getByText(/current attempt and its responses will be preserved and remain intact/i),
+      ).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => {
+        expect(performActionSpy).toHaveBeenCalledWith(WORKSPACE_ID, "att_quiet", {
+          kind: "reset",
+        });
+      });
+    });
+
+    it("force submits attempt with confirmation dialog", async () => {
+      const performActionSpy = vi.fn().mockResolvedValue({ ok: true, submitted: true });
+      const client = fakeClient({
+        getMonitor: vi.fn().mockResolvedValue(mockResponse),
+        performProctorAction: performActionSpy,
+      });
+
+      render(
+        <Monitor
+          client={client}
+          workspaceId={WORKSPACE_ID}
+          testId={TEST_ID}
+          rows={[quietRow]}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /force submit/i }));
+      expect(await screen.findByRole("heading", { name: "Force Submit Attempt" })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => {
+        expect(performActionSpy).toHaveBeenCalledWith(WORKSPACE_ID, "att_quiet", {
+          kind: "force_submit",
+        });
+      });
+    });
+
+    it("sends proctor message to candidate via text modal", async () => {
+      const performActionSpy = vi.fn().mockResolvedValue({ ok: true, sent: true });
+      const client = fakeClient({
+        getMonitor: vi.fn().mockResolvedValue(mockResponse),
+        performProctorAction: performActionSpy,
+      });
+
+      render(
+        <Monitor
+          client={client}
+          workspaceId={WORKSPACE_ID}
+          testId={TEST_ID}
+          rows={[quietRow]}
+        />,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: /message/i }));
+      expect(await screen.findByRole("heading", { name: "Send Message" })).toBeInTheDocument();
+
+      const textarea = screen.getByPlaceholderText(/enter message for candidate/i);
+      fireEvent.change(textarea, { target: { value: "Please keep your camera centered." } });
+
+      fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+      await waitFor(() => {
+        expect(performActionSpy).toHaveBeenCalledWith(WORKSPACE_ID, "att_quiet", {
+          kind: "message",
+          text: "Please keep your camera centered.",
+        });
+      });
+    });
   });
 
   describe("KG7: candidate runtime adds no polling fetch", () => {

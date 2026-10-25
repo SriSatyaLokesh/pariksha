@@ -75,6 +75,7 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     lockedAttempts: notStubbed("lockedAttempts"),
     unlockAttempt: notStubbed("unlockAttempt"),
     getMonitor: notStubbed("getMonitor"),
+    performProctorAction: notStubbed("performProctorAction"),
     gradingQueue: notStubbed("gradingQueue"),
     grade: notStubbed("grade"),
     recordVerdict: notStubbed("recordVerdict"),

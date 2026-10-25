@@ -1,8 +1,21 @@
-import type { MonitorAttemptRow } from "../../lib/api";
+import { useState } from "react";
+import type { ApiClient, MonitorAttemptRow } from "../../lib/api";
+import { useDialogKeys } from "../useDialogKeys";
 
 export interface MonitorTableProps {
   rows: readonly MonitorAttemptRow[];
   now?: number;
+  client?: ApiClient;
+  workspaceId?: string;
+  onActionComplete?: () => void;
+}
+
+type ModalType = "extend_time" | "reset" | "force_submit" | "message";
+
+interface ActiveModalState {
+  type: ModalType;
+  attemptId: string;
+  candidateName: string;
 }
 
 function formatLastContact(ts: number | null, now: number): string {
@@ -51,7 +64,89 @@ function cameraLabel(camera: MonitorAttemptRow["camera"]): string {
   }
 }
 
-export function MonitorTable({ rows, now = Date.now() }: MonitorTableProps) {
+export function MonitorTable({
+  rows,
+  now = Date.now(),
+  client,
+  workspaceId,
+  onActionComplete,
+}: MonitorTableProps) {
+  const [activeModal, setActiveModal] = useState<ActiveModalState | null>(null);
+  const [minutes, setMinutes] = useState<number>(10);
+  const [messageText, setMessageText] = useState<string>("");
+  const [pending, setPending] = useState<boolean>(false);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const dialog = useDialogKeys<HTMLDivElement>(
+    activeModal !== null,
+    () => {
+      if (!pending) {
+        setActiveModal(null);
+        setActionError(null);
+      }
+    },
+    { trapTab: true },
+  );
+
+  const handleUnlock = async (attemptId: string) => {
+    if (!client || !workspaceId) return;
+    try {
+      setPending(true);
+      await client.performProctorAction(workspaceId, attemptId, { kind: "unlock" });
+      onActionComplete?.();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to unlock attempt");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  const handleConfirmAction = async () => {
+    if (!client || !workspaceId || !activeModal) return;
+    try {
+      setPending(true);
+      setActionError(null);
+
+      switch (activeModal.type) {
+        case "extend_time":
+          await client.performProctorAction(workspaceId, activeModal.attemptId, {
+            kind: "extend_time",
+            minutes: Number(minutes),
+          });
+          break;
+        case "unlock":
+          await client.performProctorAction(workspaceId, activeModal.attemptId, {
+            kind: "unlock",
+          });
+          break;
+        case "reset":
+          await client.performProctorAction(workspaceId, activeModal.attemptId, {
+            kind: "reset",
+          });
+          break;
+        case "force_submit":
+          await client.performProctorAction(workspaceId, activeModal.attemptId, {
+            kind: "force_submit",
+          });
+          break;
+        case "message":
+          await client.performProctorAction(workspaceId, activeModal.attemptId, {
+            kind: "message",
+            text: messageText,
+          });
+          break;
+      }
+
+      setActiveModal(null);
+      setMessageText("");
+      onActionComplete?.();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Action failed");
+    } finally {
+      setPending(false);
+    }
+  };
+
   if (rows.length === 0) {
     return (
       <p role="status" className="monitor-empty">
@@ -73,6 +168,7 @@ export function MonitorTable({ rows, now = Date.now() }: MonitorTableProps) {
             <th scope="col">Last Contact</th>
             <th scope="col">Camera</th>
             <th scope="col">Face count</th>
+            <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -87,6 +183,8 @@ export function MonitorTable({ rows, now = Date.now() }: MonitorTableProps) {
                 : row.candidateId;
 
             const isQuiet = row.lastContactAt === null;
+            const isLocked = row.status === "locked" || row.lockedAt !== null;
+            const isSubmitted = row.status === "submitted" || row.status === "auto_submitted" || row.submittedAt !== null;
 
             return (
               <tr key={row.attemptId} data-attempt-id={row.attemptId}>
@@ -123,11 +221,197 @@ export function MonitorTable({ rows, now = Date.now() }: MonitorTableProps) {
                     ? "not counted"
                     : `${row.faceCount} faces`}
                 </td>
+                <td className="monitor-cell-actions">
+                  <div className="action-buttons-group">
+                    <button
+                      type="button"
+                      className="btn-action"
+                      onClick={() => {
+                        setActiveModal({
+                          type: "extend_time",
+                          attemptId: row.attemptId,
+                          candidateName: displayName,
+                        });
+                        setMinutes(10);
+                        setActionError(null);
+                      }}
+                      title="Extend Time"
+                    >
+                      Extend
+                    </button>
+
+                    {isLocked && (
+                      <button
+                        type="button"
+                        className="btn-action btn-unlock"
+                        onClick={() => void handleUnlock(row.attemptId)}
+                        disabled={pending}
+                        title="Unlock Attempt"
+                      >
+                        Unlock
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn-action"
+                      onClick={() => {
+                        setActiveModal({
+                          type: "reset",
+                          attemptId: row.attemptId,
+                          candidateName: displayName,
+                        });
+                        setActionError(null);
+                      }}
+                      title="Reset Attempt"
+                    >
+                      Reset
+                    </button>
+
+                    {!isSubmitted && (
+                      <button
+                        type="button"
+                        className="btn-action btn-danger"
+                        onClick={() => {
+                          setActiveModal({
+                            type: "force_submit",
+                            attemptId: row.attemptId,
+                            candidateName: displayName,
+                          });
+                          setActionError(null);
+                        }}
+                        title="Force Submit"
+                      >
+                        Force Submit
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      className="btn-action"
+                      onClick={() => {
+                        setActiveModal({
+                          type: "message",
+                          attemptId: row.attemptId,
+                          candidateName: displayName,
+                        });
+                        setMessageText("");
+                        setActionError(null);
+                      }}
+                      title="Send Message"
+                    >
+                      Message
+                    </button>
+                  </div>
+                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+
+      {activeModal && (
+        <div className="modal-backdrop">
+          <div
+            className="modal-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="modal-heading"
+            ref={dialog.dialogRef}
+            tabIndex={-1}
+            onKeyDown={dialog.onKeyDown}
+          >
+            {activeModal.type === "extend_time" && (
+              <>
+                <h3 id="modal-heading">Extend Time</h3>
+                <p>Extend deadline for {activeModal.candidateName}</p>
+                <div className="modal-form-group">
+                  <label htmlFor="extend-minutes">Minutes to add</label>
+                  <input
+                    id="extend-minutes"
+                    type="number"
+                    min="1"
+                    max="180"
+                    value={minutes}
+                    onChange={(e) => setMinutes(Math.max(1, Number(e.target.value)))}
+                    disabled={pending}
+                  />
+                </div>
+              </>
+            )}
+
+            {activeModal.type === "reset" && (
+              <>
+                <h3 id="modal-heading">Reset Attempt</h3>
+                <p>
+                  Are you sure you want to reset this attempt for {activeModal.candidateName}?
+                </p>
+                <p className="modal-notice">
+                  A new attempt will be created for this candidate. The current attempt and its responses will be preserved and remain intact.
+                </p>
+              </>
+            )}
+
+            {activeModal.type === "force_submit" && (
+              <>
+                <h3 id="modal-heading">Force Submit Attempt</h3>
+                <p>
+                  Are you sure you want to force submit the attempt for {activeModal.candidateName}?
+                </p>
+                <p className="modal-notice">
+                  The candidate will no longer be able to answer questions or modify responses.
+                </p>
+              </>
+            )}
+
+            {activeModal.type === "message" && (
+              <>
+                <h3 id="modal-heading">Send Message</h3>
+                <p>Send a proctor message to {activeModal.candidateName}</p>
+                <div className="modal-form-group">
+                  <label htmlFor="proctor-message-text">Message text</label>
+                  <textarea
+                    id="proctor-message-text"
+                    rows={3}
+                    value={messageText}
+                    onChange={(e) => setMessageText(e.target.value)}
+                    placeholder="Enter message for candidate…"
+                    disabled={pending}
+                  />
+                </div>
+              </>
+            )}
+
+            {actionError && (
+              <p role="alert" className="modal-error">
+                {actionError}
+              </p>
+            )}
+
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="btn-secondary"
+                onClick={() => {
+                  setActiveModal(null);
+                  setActionError(null);
+                }}
+                disabled={pending}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={() => void handleConfirmAction()}
+                disabled={pending || (activeModal.type === "message" && messageText.trim() === "")}
+              >
+                {pending ? "Processing…" : "Confirm"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

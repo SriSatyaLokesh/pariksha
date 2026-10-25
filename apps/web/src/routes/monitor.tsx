@@ -145,7 +145,13 @@ export function Monitor({
           Loading monitor…
         </p>
       ) : (
-        <MonitorTable rows={displayedRows} now={now} />
+        <MonitorTable
+          rows={displayedRows}
+          now={now}
+          client={client}
+          workspaceId={workspaceId}
+          onActionComplete={fetchMonitor}
+        />
       )}
     </div>
   );

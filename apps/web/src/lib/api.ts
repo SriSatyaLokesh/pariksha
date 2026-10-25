@@ -636,6 +636,11 @@ export interface ApiClient {
     testId: string,
     query?: { flagged?: boolean; inactive?: boolean },
   ): Promise<MonitorResponse>;
+  performProctorAction(
+    workspaceId: string,
+    attemptId: string,
+    action: ProctorAction,
+  ): Promise<ProctorActionResult>;
   /**
    * Phase 8b Task 2 (`K15`): the grading queue. `blind: true` is what makes
    * a request blind — the server never puts a candidate-identifying field
@@ -846,6 +851,24 @@ export interface MonitorResponse {
     autoSubmitted: number;
   };
   rows: MonitorAttemptRow[];
+}
+
+export type ProctorAction =
+  | { kind: "extend_time"; minutes: number }
+  | { kind: "unlock" }
+  | { kind: "reset" }
+  | { kind: "force_submit" }
+  | { kind: "message"; text: string };
+
+export interface ProctorActionResult {
+  ok?: boolean;
+  extended?: boolean;
+  reason?: string;
+  deadlineAt?: number;
+  unlocked?: boolean;
+  newAttemptId?: string;
+  submitted?: boolean;
+  sent?: boolean;
 }
 
 export interface CandidateIssue {
@@ -1354,6 +1377,12 @@ export function createApiClient(): ApiClient {
         `/workspaces/${workspaceId}/tests/${testId}/monitor${qs ? `?${qs}` : ""}`,
       );
     },
+
+    performProctorAction: (workspaceId, attemptId, action) =>
+      json<ProctorActionResult>(
+        `/workspaces/${workspaceId}/attempts/${attemptId}/action`,
+        post(action),
+      ),
 
     async gradingQueue(workspaceId, testId, opts = {}) {
       const qs = query({
