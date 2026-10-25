@@ -2,7 +2,13 @@
 // which each own their own test file next to the job they register.
 
 import { beforeEach, expect, it, vi } from "vitest";
-import { SCHEDULED_JOBS, runScheduled, type ScheduledJob } from "../src/scheduled.js";
+import {
+  SCHEDULED_JOBS,
+  matchesCron,
+  runScheduled,
+  runScheduledDue,
+  type ScheduledJob,
+} from "../src/scheduled.js";
 import { regradeJob } from "../src/grade/regrade.js";
 import { SUBREQUEST_LIMIT } from "../src/instrument.js";
 import { webhookDrainJob } from "../src/webhooks/drain.js";
@@ -121,4 +127,40 @@ it("every cron's registered jobs stay under the subrequest ceiling together, not
     overBudget.set(job.cron, (overBudget.get(job.cron) ?? 0) + job.maxSubrequests);
   }
   expect(overBudget.get("*/5 * * * *")).toBeGreaterThan(SUBREQUEST_LIMIT);
+});
+
+it("matchesCron correctly matches standard cron patterns", () => {
+  // 2026-10-26 03:17:00 UTC (Monday, month 10, day 26)
+  const d1 = new Date(Date.UTC(2026, 9, 26, 3, 17, 0));
+  expect(matchesCron("17 3 * * *", d1)).toBe(true);
+  expect(matchesCron("18 3 * * *", d1)).toBe(false);
+  expect(matchesCron("17 4 * * *", d1)).toBe(false);
+
+  // */5 minute matching
+  const d2 = new Date(Date.UTC(2026, 9, 26, 12, 15, 0));
+  expect(matchesCron("*/5 * * * *", d2)).toBe(true);
+  const d3 = new Date(Date.UTC(2026, 9, 26, 12, 16, 0));
+  expect(matchesCron("*/5 * * * *", d3)).toBe(false);
+
+  // 2-59/5 minute matching
+  const d4 = new Date(Date.UTC(2026, 9, 26, 12, 2, 0));
+  expect(matchesCron("2-59/5 * * * *", d4)).toBe(true);
+  const d5 = new Date(Date.UTC(2026, 9, 26, 12, 7, 0));
+  expect(matchesCron("2-59/5 * * * *", d5)).toBe(true);
+  const d6 = new Date(Date.UTC(2026, 9, 26, 12, 0, 0));
+  expect(matchesCron("2-59/5 * * * *", d6)).toBe(false);
+});
+
+it("runScheduledDue runs only the jobs due for the given date", async () => {
+  const d = new Date(Date.UTC(2026, 9, 26, 3, 17, 0));
+  const jobA = fake("nightly", "17 3 * * *");
+  const jobB = fake("frequent", "*/5 * * * *"); // 17 % 5 !== 0
+  const jobC = fake("other", "0 0 * * *");
+  SCHEDULED_JOBS.push(jobA, jobB, jobC);
+
+  const res = await runScheduledDue(deps, d);
+  expect(res.ran).toEqual(["nightly"]);
+  expect(jobA.run).toHaveBeenCalledTimes(1);
+  expect(jobB.run).not.toHaveBeenCalled();
+  expect(jobC.run).not.toHaveBeenCalled();
 });

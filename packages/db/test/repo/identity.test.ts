@@ -34,6 +34,12 @@ const UNSCOPED_BY_DESIGN = [
   "touchSession",
   "deleteSession",
   "deleteUserSessions",
+  // Phase 10: Docker self-host password & TOTP credentials (S-01, S-02).
+  "getUserCredentialsByEmail",
+  "getUserCredentialsById",
+  "setUserPassword",
+  "setUserTotp",
+  "createPasswordUser",
 ];
 
 function functionNames(module: Record<string, unknown>): string[] {

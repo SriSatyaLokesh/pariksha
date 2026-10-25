@@ -11,12 +11,16 @@ export interface IdentityProvider {
   label: string;
 }
 
-/** `password` is Phase 11 and Docker-only (ADR 0002); nothing lists it yet. */
+/** Phase 10: `password` is Docker/Node-only (S-01, ADR 0002). */
 export function identityProviders(env: AppEnv): IdentityProvider[] {
-  const oidc: IdentityProvider[] = (env.oidcProviders ?? []).map(
+  const providers: IdentityProvider[] = (env.oidcProviders ?? []).map(
     ({ id, label }) => ({ id, kind: "oidc", label }),
   );
-  return env.email || env.allowConsoleEmail
-    ? [...oidc, { id: "magic-link", kind: "magic_link", label: "Email a link" }]
-    : oidc;
+  if (env.email || env.allowConsoleEmail) {
+    providers.push({ id: "magic-link", kind: "magic_link", label: "Email a link" });
+  }
+  if (env.target === "node") {
+    providers.push({ id: "password", kind: "password", label: "Email and password" });
+  }
+  return providers;
 }

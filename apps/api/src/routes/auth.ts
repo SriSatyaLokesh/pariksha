@@ -16,11 +16,26 @@
 import { Hono, type Context } from "hono";
 import { getSignedCookie } from "hono/cookie";
 import { z } from "zod";
-import { appendAudit } from "@pariksha/db";
+import {
+  anyWorkspaceExists,
+  appendAudit,
+  createPasswordUser,
+  getUserCredentialsByEmail,
+  getUserCredentialsById,
+  setUserPassword,
+  setUserTotp,
+} from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
 import type { Actor } from "../auth/session.js";
 import { consumeMagicLink, requestMagicLink } from "../auth/magicLink.js";
 import { authorizationUrl, handleCallback, safeReturnTo } from "../auth/oidc.js";
+import {
+  generateTotpSecret,
+  getTotpUri,
+  hashPassword,
+  verifyPassword,
+  verifyTotp,
+} from "../auth/password.js";
 import {
   issueSession,
   readSession,
@@ -39,6 +54,27 @@ import { actorOnly, actorOr401 } from "../middleware/authorize.js";
 const MAGIC_LINK = "magic-link";
 
 const magicLinkRequest = z.object({ email: z.string().min(3).max(320) });
+
+const passwordSignInRequest = z.object({
+  email: z.string().trim().min(3).max(320),
+  password: z.string().min(1).max(1000),
+  totpCode: z.string().optional(),
+  returnTo: z.string().optional(),
+});
+
+const passwordRegisterRequest = z.object({
+  email: z.string().trim().email(),
+  password: z.string().min(8, "Password must be at least 8 characters long"),
+  returnTo: z.string().optional(),
+});
+
+const totpVerifyRequest = z.object({
+  code: z.string().trim().min(6).max(8),
+});
+
+const totpDisableRequest = z.object({
+  password: z.string().min(1),
+});
 
 export function authRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
@@ -98,6 +134,127 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
       provider,
     });
     return c.redirect(signedIn.returnTo, 302);
+  });
+
+  // Phase 10: Docker self-host password authentication (S-01, S-02).
+  routes.post("/password/signin", async (c) => {
+    if (deps.env.target !== "node") {
+      throw new ApiError(
+        400,
+        "password_not_supported",
+        "Password authentication is only supported on Docker/Node deployments.",
+      );
+    }
+    const body = passwordSignInRequest.safeParse(await json(c.req.raw));
+    if (!body.success) {
+      throw new ApiError(400, "invalid_request", "Email and password are required.");
+    }
+    const creds = await getUserCredentialsByEmail(deps.db, body.data.email);
+    if (!creds || !creds.passwordHash) {
+      throw new ApiError(401, "invalid_credentials", "Invalid email or password.");
+    }
+    const valid = await verifyPassword(creds.passwordHash, body.data.password);
+    if (!valid) {
+      throw new ApiError(401, "invalid_credentials", "Invalid email or password.");
+    }
+    if (creds.totpEnabled) {
+      if (!body.data.totpCode) {
+        return c.json({ status: "totp_required" }, 200);
+      }
+      if (!creds.totpSecret || !verifyTotp(body.data.totpCode, creds.totpSecret, 1, deps.now())) {
+        throw new ApiError(400, "invalid_totp", "Invalid two-factor authentication code.");
+      }
+    }
+    const { token } = await issueSession(deps, creds.id);
+    await setSessionCookie(c, deps, token);
+    await audit(deps, await readSession(deps, token), "auth.signin", {
+      provider: "password",
+    });
+    return c.json({ status: "signed_in", returnTo: safeReturnTo(body.data.returnTo) }, 200);
+  });
+
+  routes.post("/password/register", async (c) => {
+    if (deps.env.target !== "node") {
+      throw new ApiError(
+        400,
+        "password_not_supported",
+        "Password authentication is only supported on Docker/Node deployments.",
+      );
+    }
+    const body = passwordRegisterRequest.safeParse(await json(c.req.raw));
+    if (!body.success) {
+      throw new ApiError(400, "invalid_request", body.error.issues[0]?.message ?? "Invalid request.");
+    }
+    const firstRun = !(await anyWorkspaceExists(deps.db));
+    const actor = c.get("actor");
+    if (!firstRun && !actor) {
+      throw new ApiError(403, "forbidden", "Registration is closed. Please sign in or contact your administrator.");
+    }
+
+    const existing = await getUserCredentialsByEmail(deps.db, body.data.email);
+    const passwordHash = await hashPassword(body.data.password);
+    let userId = existing?.id;
+
+    if (existing) {
+      if (existing.passwordHash) {
+        throw new ApiError(409, "user_exists", "An account with this email already exists.");
+      }
+      await setUserPassword(deps.db, existing.id, passwordHash);
+    } else {
+      userId = await createPasswordUser(deps.db, {
+        email: body.data.email,
+        passwordHash,
+        now: deps.now(),
+      });
+    }
+
+    const { token } = await issueSession(deps, userId!);
+    await setSessionCookie(c, deps, token);
+    await audit(deps, await readSession(deps, token), "auth.register", {
+      provider: "password",
+    });
+    return c.json({ status: "registered", returnTo: safeReturnTo(body.data.returnTo) }, 201);
+  });
+
+  routes.post("/password/totp/setup", actorOnly(), async (c) => {
+    const actor = actorOr401(c);
+    const secret = generateTotpSecret();
+    await setUserTotp(deps.db, actor.userId, secret, false);
+    const uri = getTotpUri(actor.email, secret);
+    return c.json({ secret, uri }, 200);
+  });
+
+  routes.post("/password/totp/verify", actorOnly(), async (c) => {
+    const actor = actorOr401(c);
+    const body = totpVerifyRequest.safeParse(await json(c.req.raw));
+    if (!body.success) {
+      throw new ApiError(400, "invalid_request", "A 6-digit verification code is required.");
+    }
+    const creds = await getUserCredentialsById(deps.db, actor.userId);
+    if (!creds?.totpSecret) {
+      throw new ApiError(400, "totp_not_setup", "Two-factor authentication has not been initiated.");
+    }
+    if (!verifyTotp(body.data.code, creds.totpSecret, 1, deps.now())) {
+      throw new ApiError(400, "invalid_totp", "The verification code is incorrect.");
+    }
+    await setUserTotp(deps.db, actor.userId, creds.totpSecret, true);
+    await audit(deps, actor, "auth.totp_enabled", {});
+    return c.json({ status: "enabled" }, 200);
+  });
+
+  routes.post("/password/totp/disable", actorOnly(), async (c) => {
+    const actor = actorOr401(c);
+    const body = totpDisableRequest.safeParse(await json(c.req.raw));
+    if (!body.success) {
+      throw new ApiError(400, "invalid_request", "Your current password is required.");
+    }
+    const creds = await getUserCredentialsById(deps.db, actor.userId);
+    if (!creds?.passwordHash || !(await verifyPassword(creds.passwordHash, body.data.password))) {
+      throw new ApiError(401, "invalid_credentials", "Incorrect password.");
+    }
+    await setUserTotp(deps.db, actor.userId, null, false);
+    await audit(deps, actor, "auth.totp_disabled", {});
+    return c.json({ status: "disabled" }, 200);
   });
 
   routes.post("/signout", async (c) => {

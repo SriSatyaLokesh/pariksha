@@ -152,6 +152,9 @@ export const sqliteMigrations: Migration[] = [
   { name: "0012_proctor_broadcast.sql", statements: [
     "-- Phase 8g Task 3: The Proctor Broadcast (`C-10`, `K12`, `K13`).\n-- A nullable `proctor_message` and epoch ms timestamp `proctor_message_at`.\n-- Null means no broadcast pending; populated means pending delivery on candidate responses.\nALTER TABLE `attempt` ADD COLUMN `proctor_message` text;\nALTER TABLE `attempt` ADD COLUMN `proctor_message_at` integer;",
   ] },
+  { name: "0013_user_password.sql", statements: [
+    "-- Phase 10: Docker self-host password and optional TOTP (S-01, S-02).\nALTER TABLE `user` ADD COLUMN `password_hash` text;\nALTER TABLE `user` ADD COLUMN `totp_secret` text;\nALTER TABLE `user` ADD COLUMN `totp_enabled` integer DEFAULT 0 NOT NULL;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -285,5 +288,8 @@ export const pgMigrations: Migration[] = [
   ] },
   { name: "0012_proctor_broadcast.sql", statements: [
     "-- Phase 8g Task 3: The Proctor Broadcast (`C-10`, `K12`, `K13`).\n-- A nullable `proctor_message` and epoch ms timestamp `proctor_message_at`.\n-- Null means no broadcast pending; populated means pending delivery on candidate responses.\nALTER TABLE \"attempt\" ADD COLUMN \"proctor_message\" text;\nALTER TABLE \"attempt\" ADD COLUMN \"proctor_message_at\" bigint;",
+  ] },
+  { name: "0013_user_password.sql", statements: [
+    "-- Phase 10: Docker self-host password and optional TOTP (S-01, S-02).\nALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS \"password_hash\" text;\nALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS \"totp_secret\" text;\nALTER TABLE \"user\" ADD COLUMN IF NOT EXISTS \"totp_enabled\" boolean DEFAULT false NOT NULL;",
   ] },
 ];

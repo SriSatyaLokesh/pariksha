@@ -83,6 +83,9 @@ it("the public set is a literal allowlist, so widening it is a visible diff", ()
     "GET /api/v1/setup/status",
     "GET /t/:code",
     "POST /api/v1/auth/magic-link",
+    // Phase 10: Docker self-host password authentication (S-01, S-02).
+    "POST /api/v1/auth/password/register",
+    "POST /api/v1/auth/password/signin",
     "POST /api/v1/auth/signout",
     "POST /api/v1/demo/provision",
     "POST /api/v1/run/:workspaceSlug/:testSlug/access",
@@ -164,6 +167,10 @@ it("the actor set is a literal allowlist too — signed in, but naming no worksp
   ).toEqual([
     "GET /api/v1/me",
     "GET /api/v1/workspaces",
+    // Phase 10: Docker self-host TOTP (S-02).
+    "POST /api/v1/auth/password/totp/disable",
+    "POST /api/v1/auth/password/totp/setup",
+    "POST /api/v1/auth/password/totp/verify",
     "POST /api/v1/auth/signout-everywhere",
     "POST /api/v1/setup/complete",
     "POST /api/v1/workspaces",

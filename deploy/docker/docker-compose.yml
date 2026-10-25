@@ -1,0 +1,119 @@
+# Pariksha Production Docker Compose (Postgres 16 + MinIO + Caddy + Pariksha)
+# See deploy/docker/README.md for setup instructions (< 30 min deployment).
+
+services:
+  pariksha:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 8787
+      DATABASE_URL: postgres://${POSTGRES_USER:-pariksha}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-pariksha}
+      SESSION_SECRET: ${SESSION_SECRET}
+      PUBLIC_URL: ${PUBLIC_URL}
+      APP_URL: ${PUBLIC_URL}
+      STATIC_DIR: /app/apps/web/dist
+      # S3 / MinIO storage
+      S3_ENDPOINT: http://minio:9000
+      S3_BUCKET: ${S3_BUCKET:-pariksha}
+      S3_ACCESS_KEY: ${MINIO_ROOT_USER}
+      S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      S3_REGION: us-east-1
+      # Email (optional)
+      EMAIL_ENDPOINT: ${EMAIL_ENDPOINT:-}
+      EMAIL_TOKEN: ${EMAIL_TOKEN:-}
+      EMAIL_FROM: ${EMAIL_FROM:-}
+      EMAIL_CONSOLE: ${EMAIL_CONSOLE:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    networks:
+      - pariksha-net
+    expose:
+      - "8787"
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-pariksha}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-pariksha}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-pariksha} -d ${POSTGRES_DB:-pariksha}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pariksha-net
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - pariksha-net
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
+      mc mb --ignore-existing local/$${S3_BUCKET:-pariksha};
+      mc anonymous set download local/$${S3_BUCKET:-pariksha};
+      exit 0;
+      "
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-pariksha}
+    networks:
+      - pariksha-net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.com}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      pariksha:
+        condition: service_healthy
+    networks:
+      - pariksha-net
+
+networks:
+  pariksha-net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  minio_data:
+  caddy_data:
+  caddy_config:

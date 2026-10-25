@@ -388,6 +388,18 @@ export interface ApiClient {
   workspaces(): Promise<Workspace[]>;
   completeSetup(input: { workspaceName: string }): Promise<Workspace>;
   requestMagicLink(email: string): Promise<void>;
+  /** Phase 10: Docker self-host email/password authentication (S-01, S-02). */
+  signInWithPassword?(
+    email: string,
+    password: string,
+    totpCode?: string,
+    returnTo?: string,
+  ): Promise<{ status: "signed_in" | "totp_required"; returnTo?: string }>;
+  registerWithPassword?(
+    email: string,
+    password: string,
+    returnTo?: string,
+  ): Promise<{ status: "registered"; returnTo?: string }>;
   signOut(): Promise<void>;
 
   listBanks(workspaceId: string): Promise<Bank[]>;
@@ -1102,6 +1114,18 @@ export function createApiClient(): ApiClient {
     async requestMagicLink(email) {
       await request("/auth/magic-link", post({ email }));
     },
+
+    signInWithPassword: (email, password, totpCode, returnTo) =>
+      json<{ status: "signed_in" | "totp_required"; returnTo?: string }>(
+        "/auth/password/signin",
+        post({ email, password, totpCode, returnTo }),
+      ),
+
+    registerWithPassword: (email, password, returnTo) =>
+      json<{ status: "registered"; returnTo?: string }>(
+        "/auth/password/register",
+        post({ email, password, returnTo }),
+      ),
 
     async signOut() {
       await request("/auth/signout", post({}));
