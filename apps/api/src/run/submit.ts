@@ -260,13 +260,46 @@ function counts(
  */
 export async function recomputeIntegrity(
   deps: AppDeps,
-  attempt: { workspaceId: string; attemptId: string; startedAt: number; settings: unknown },
-  now: number,
+  attempt: string | { workspaceId: string; attemptId: string; startedAt: number; settings: unknown },
+  now?: number,
 ): Promise<void> {
-  const resolved = resolvedProctoringOf(attempt.settings);
+  const actualNow = now ?? deps.now();
+  let target: { workspaceId: string; attemptId: string; startedAt: number; settings: unknown };
+  let previousFlag: string | undefined;
+
+  if (typeof attempt === "string") {
+    const rows = await deps.db.query<{
+      workspace_id: string;
+      id: string;
+      started_at: number;
+      test_version_id: string;
+      integrity_flag: string;
+    }>(
+      "SELECT workspace_id, id, started_at, test_version_id, integrity_flag FROM attempt WHERE id = ?",
+      [attempt],
+    );
+    if (!rows[0]) return;
+    previousFlag = rows[0].integrity_flag ?? "clean";
+    const versionRows = await deps.db.query<{ settings_json: unknown }>(
+      "SELECT settings_json FROM test_version WHERE workspace_id = ? AND id = ?",
+      [rows[0].workspace_id, rows[0].test_version_id],
+    );
+    target = {
+      workspaceId: rows[0].workspace_id,
+      attemptId: rows[0].id,
+      startedAt: Number(rows[0].started_at),
+      settings: versionRows[0]?.settings_json
+        ? deps.db.jsonValue(versionRows[0].settings_json)
+        : {},
+    };
+  } else {
+    target = attempt;
+  }
+
+  const resolved = resolvedProctoringOf(target.settings);
   const [counts, snapshotFacts] = await Promise.all([
-    listIntegrityCounts(deps.db, attempt.workspaceId, attempt.attemptId),
-    listSnapshotFaceCounts(deps.db, attempt.workspaceId, attempt.attemptId),
+    listIntegrityCounts(deps.db, target.workspaceId, target.attemptId),
+    listSnapshotFaceCounts(deps.db, target.workspaceId, target.attemptId),
   ]);
   // M1: `listSnapshotFaceCounts` now returns the two aggregate numbers
   // `integrityFor` actually reads off a snapshot list — its length and how
@@ -303,17 +336,31 @@ export async function recomputeIntegrity(
     ),
     ...Array.from({ length: counts.failureCount }, () => ({ type: "snapshot_failed" as const })),
   ];
-  const elapsedSeconds = Math.max(0, (now - attempt.startedAt) / 1000);
+  const elapsedSeconds = Math.max(0, (actualNow - target.startedAt) / 1000);
   const expectedSnapshots =
     resolved.requireCamera && resolved.snapshotIntervalSeconds > 0
       ? Math.floor(elapsedSeconds / resolved.snapshotIntervalSeconds)
       : 0;
   const { flag, observed } = integrityFor({ events, snapshots, resolved, expectedSnapshots });
-  await setIntegrity(deps.db, attempt.workspaceId, {
-    attemptId: attempt.attemptId,
+
+  await setIntegrity(deps.db, target.workspaceId, {
+    attemptId: target.attemptId,
     integrityFlag: flag,
     observed,
   });
+
+  if (
+    typeof attempt === "string" &&
+    (flag === "review" || flag === "high_risk") &&
+    previousFlag !== flag
+  ) {
+    await fireWebhooks(deps, {
+      workspaceId: target.workspaceId,
+      event: "attempt.flagged" as any,
+      payload: { attemptId: target.attemptId },
+      now: actualNow,
+    });
+  }
 }
 
 /**

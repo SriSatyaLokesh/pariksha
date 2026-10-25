@@ -79,6 +79,7 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     gradingQueue: notStubbed("gradingQueue"),
     grade: notStubbed("grade"),
     recordVerdict: notStubbed("recordVerdict"),
+    attemptReview: notStubbed("attemptReview"),
     analytics: notStubbed("analytics"),
     exportPage: notStubbed("exportPage"),
 

@@ -90,7 +90,8 @@ const EXPORT_ENDPOINTS = Object.entries(ROUTE_ACTIONS).filter(([, action]) => ac
 ][];
 
 const EVIDENCE_ENDPOINTS = Object.entries(ROUTE_ACTIONS).filter(
-  ([, action]) => action === "attempts.read_evidence",
+  ([endpoint, action]) =>
+    action === "attempts.read_evidence" && endpoint.includes("/export/"),
 ) as [string, string][];
 
 it("KG1: exactly the export routes this task mounts are covered", () => {

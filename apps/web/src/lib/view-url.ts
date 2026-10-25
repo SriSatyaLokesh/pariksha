@@ -59,11 +59,13 @@ export interface ViewParams {
     | "import"
     | "grading"
     | "analytics"
-    | "monitor";
+    | "monitor"
+    | "attempt";
   test?: string;
   bank?: string;
   section?: string;
   panel?: string;
+  attempt?: string;
 }
 
 /* Typed as the union and not as `string[]`: this is the module whose whole
@@ -84,10 +86,11 @@ const VIEWS: readonly ViewParams["view"][] = [
   "grading",
   "analytics",
   "monitor",
+  "attempt",
 ];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */
-const IDS = ["test", "bank", "section", "panel"] as const;
+const IDS = ["test", "bank", "section", "panel", "attempt"] as const;
 
 /** An unknown or absent `?view=` is Home — a hand-typed URL lands somewhere
  *  real rather than on a blank switch arm. */

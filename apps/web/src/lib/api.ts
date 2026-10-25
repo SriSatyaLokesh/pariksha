@@ -716,6 +716,15 @@ export interface ApiClient {
     input: { verdict: Verdict; note?: string },
   ): Promise<{ reviewId: string }>;
 
+  /**
+   * Phase 8g Task 4 (`#91`, `R-03`): the per-attempt review payload.
+   * Snapshots are served via presigned URLs (K3/K4).
+   */
+  attemptReview?(
+    workspaceId: string,
+    attemptId: string,
+  ): Promise<AttemptReviewData>;
+
   // Phase 8e Task 2 (`S-14`, issue 101): `candidates.delete`, Owner-only —
   // both methods share the one permission. `exportCandidateData` hands
   // back the parsed document and the filename the server named it, rather
@@ -765,6 +774,56 @@ export interface ApiClient {
  *  only, never from `@pariksha/db`, which is a server-only package the
  *  browser bundle must not pull in. */
 export type Verdict = "clear" | "suspicious" | "disqualified";
+
+/** Phase 8g Task 4 (`R-03`): wire shape of per-attempt review payload. */
+export interface AttemptReviewData {
+  attempt: {
+    id: string;
+    candidateId: string;
+    status: string;
+    startedAt: number | null;
+    submittedAt: number | null;
+    totalScore: number | null;
+    maxScore: number | null;
+    integrityFlag: "clean" | "review" | "scoring_blocked";
+    observed: boolean;
+  };
+  registration: Record<string, unknown>;
+  identityPhotoUrl: string | null;
+  timeline: Array<{
+    kind: "snapshot" | "event" | "unobserved";
+    timestamp: number;
+    snapshotUrl?: string;
+    flagged?: boolean;
+    reason?: string;
+    faceCount?: number | null;
+    eventKind?: string;
+    details?: Record<string, unknown>;
+  }>;
+  events: Array<{
+    id: string;
+    kind: string;
+    serverTs: number;
+    clientTs: number;
+    payload: Record<string, unknown>;
+  }>;
+  answers: Array<{
+    questionId: string;
+    sectionId: string;
+    answer: unknown;
+    key: unknown;
+    pointsAwarded: number | null;
+    maxPoints: number;
+    correct?: boolean | null | undefined;
+    verdict?: string;
+  }>;
+  sectionScores: Array<{
+    sectionId: string;
+    title: string;
+    score: number;
+    maxScore: number;
+  }>;
+}
 
 /** Mirrors `packages/db/src/repo/webhooks.ts`'s `WebhookRow` — the wire
  * shape, never `signingSecret`. */
@@ -1406,6 +1465,11 @@ export function createApiClient(): ApiClient {
       json<{ reviewId: string }>(
         `/workspaces/${workspaceId}/attempts/${attemptId}/verdict`,
         post(input),
+      ),
+
+    attemptReview: (workspaceId, attemptId) =>
+      json<AttemptReviewData>(
+        `/workspaces/${workspaceId}/attempts/${attemptId}/review`,
       ),
 
     analytics: (workspaceId, testId) =>

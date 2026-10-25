@@ -273,7 +273,7 @@ export interface AttemptPaper {
 // attempt's stored settings shares the one cast — `routes/proctoring.ts`
 // used to carry a second, identical one inline.
 export const resolvedProctoringOf = (settings: unknown): ResolvedProctoring =>
-  resolveProctoring((settings as { proctoring?: Test["proctoring"] }).proctoring);
+  resolveProctoring((settings as { proctoring?: Test["proctoring"] } | undefined)?.proctoring);
 
 const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(settings).allowCalculator;
 
