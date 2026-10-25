@@ -246,6 +246,7 @@ export interface RunClient {
   putAnswer(save: QueuedSave): Promise<{
     outcome: SaveOutcome;
     message?: string;
+    messageAt?: number;
     remainingMs?: number;
     maxIndex?: number;
     /** `null` on a paper with no section time limit — a reading, not an
@@ -563,6 +564,8 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
           remainingMs: number;
           maxIndex: number;
           sectionRemainingMs: number | null;
+          message?: string;
+          messageAt?: number;
         }>(ANSWER_PATH, {
           method: "PUT",
           headers: { "content-type": "application/json" },
@@ -579,6 +582,8 @@ export function createRunClient(workspaceSlug: string, testSlug: string): RunCli
           ...(body?.sectionRemainingMs === undefined
             ? {}
             : { sectionRemainingMs: body.sectionRemainingMs }),
+          ...(body?.message !== undefined ? { message: body.message } : {}),
+          ...(body?.messageAt !== undefined ? { messageAt: body.messageAt } : {}),
         };
       } catch (error) {
         // Anything that is not a refusal the server *chose* — a dropped

@@ -259,6 +259,10 @@ export const attempt = sqliteTable(
     // when `violationOutcome`'s `lock` branch fired. No `status` column
     // exists on this table — this is `submitted_at`'s own shape.
     lockedAt: integer("locked_at"),
+    // Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast message
+    // pending delivery to candidate runtime via response carrier.
+    proctorMessage: text("proctor_message"),
+    proctorMessageAt: integer("proctor_message_at"),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

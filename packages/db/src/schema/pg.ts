@@ -265,6 +265,10 @@ export const attempt = pgTable(
     observed: boolean("observed").notNull(),
     // Phase 7e Task 3 (`E-R1`): the sqlite.ts sibling's own comment.
     lockedAt: bigint("locked_at", { mode: "number" }),
+    // Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast message
+    // pending delivery to candidate runtime via response carrier.
+    proctorMessage: text("proctor_message"),
+    proctorMessageAt: bigint("proctor_message_at", { mode: "number" }),
   },
   (t) => [
     index("attempt_workspace_idx").on(t.workspaceId),

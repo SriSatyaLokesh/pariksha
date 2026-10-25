@@ -32,6 +32,7 @@ import {
 } from "../components/exam/Runner";
 import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
+import { ProctorBanner } from "../components/exam/ProctorBanner";
 import { ProctoringErrorBoundary, ProctoringLayer } from "../components/exam/ProctoringLayer";
 import { acquireCamera, captureJpeg } from "../lib/camera";
 import { createSaveQueue, type SaveState } from "../lib/queue";
@@ -560,6 +561,23 @@ function AttemptView({
     anchorFrom(paper.remainingMs, paper.sectionRemainingMs),
   );
 
+  /** Phase 8g Task 3 (`C-10`, `K12`, `K13`): candidate proctor broadcast. */
+  const [proctorMessage, setProctorMessage] = useState<{ message: string; messageAt: number } | null>(null);
+  const dismissedAtRef = useRef<number | null>(null);
+
+  const handleProctorMessage = useCallback((message: string, messageAt: number) => {
+    if (dismissedAtRef.current === null || messageAt > dismissedAtRef.current) {
+      setProctorMessage({ message, messageAt });
+    }
+  }, []);
+
+  const handleDismiss = useCallback(() => {
+    if (proctorMessage) {
+      dismissedAtRef.current = proctorMessage.messageAt;
+      setProctorMessage(null);
+    }
+  }, [proctorMessage]);
+
   /**
    * One queue for this attempt (Task 8).
    *
@@ -580,6 +598,9 @@ function AttemptView({
         paper.attemptId,
         async (save) => {
           const answer = await client.putAnswer(save);
+          if (answer.message && typeof answer.messageAt === "number") {
+            handleProctorMessage(answer.message, answer.messageAt);
+          }
           // Every save re-anchors the countdown, which is why the route
           // carries `remainingMs` at all: a tab that slept for an hour is
           // corrected by the next keystroke rather than by a reload. It
@@ -599,7 +620,7 @@ function AttemptView({
         undefined,
         paper.clientSeq,
       ),
-    [paper.attemptId, paper.clientSeq, client],
+    [paper.attemptId, paper.clientSeq, client, handleProctorMessage],
   );
 
   /**
@@ -771,8 +792,16 @@ function AttemptView({
             initialLocked={paper.lockedAt != null}
             cameraStream={cameraStream}
             cameraUnavailable={cameraUnavailable}
+            onProctorMessage={handleProctorMessage}
           />
         </ProctoringErrorBoundary>
+      )}
+      {proctorMessage && (
+        <ProctorBanner
+          message={proctorMessage.message}
+          messageAt={proctorMessage.messageAt}
+          onDismiss={handleDismiss}
+        />
       )}
       <Runner
         paper={{ ...paper, responses, maxIndex }}

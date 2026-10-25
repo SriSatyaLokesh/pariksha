@@ -47,6 +47,7 @@
   --control-accent: var(--color-voltage);
   --control-accent-ink: var(--color-canvas);
   --control-edge: var(--color-muted);
+  --accent-voltage: var(--color-voltage);
 }
 
 .exam-landing {
@@ -1754,6 +1755,68 @@
 .exam-proctoring-overlay-action {
   min-height: 44px;
   padding: 0 24px;
+  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border-radius: var(--rounded-md);
+  background: var(--color-voltage-deep);
+  color: var(--color-cream);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+/* Phase 8g Task 3 (`C-10`, `D8`): Candidate proctor broadcast banner.
+   Fixed overlay positioned over the layout so it never reflows the paper (`D8`).
+   Voltage border accent using candidate runtime palette. */
+.exam-proctor-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  width: min(560px, calc(100% - 32px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  border: 2px solid var(--accent-voltage, var(--color-voltage));
+  border-radius: var(--rounded-md);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  box-shadow: 0 4px 20px rgb(from var(--color-shadow) r g b / 0.18);
+}
+
+.exam-proctor-banner-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.exam-proctor-banner-tag {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+  color: var(--color-voltage-deep);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.exam-proctor-banner-message {
+  margin: 0;
+  font-family: var(--type-body-md-family);
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-line-height);
+  word-break: break-word;
+}
+
+.exam-proctor-banner-dismiss {
+  flex-shrink: 0;
+  min-height: 36px;
+  padding: 0 16px;
   border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
   border-radius: var(--rounded-md);
   background: var(--color-voltage-deep);

@@ -29,6 +29,7 @@ import { z } from "zod";
 import {
   appendEvents,
   claimViolationLimit,
+  clearProctorMessage,
   countViolations,
   lockAttempt,
   recordSnapshot,
@@ -335,6 +336,14 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       }
     }
 
+    // Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast response carrier.
+    // If a broadcast message is pending, deliver it and clear on the attempt.
+    const proctorMessage = attempt.proctorMessage;
+    const proctorMessageAt = attempt.proctorMessageAt;
+    if (proctorMessage !== null) {
+      await clearProctorMessage(deps.db, attempt.workspaceId, attempt.attemptId);
+    }
+
     // `submitted`/`locked` tell the browser this very request is the one
     // that ended or froze the attempt, so the runner can move itself to
     // the receipt or raise the lock overlay instead of finding out on its
@@ -345,6 +354,7 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       action: resolved.violationAction,
       submitted,
       locked,
+      ...(proctorMessage !== null ? { message: proctorMessage, messageAt: proctorMessageAt } : {}),
     });
   });
 
@@ -397,8 +407,17 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
     // immediately above, for the same `AG1` reason: a proctoring failure —
     // and a lock is exactly that, from this route's point of view — must
     // never surface anything to the candidate.
+    const proctorMessage = attempt.proctorMessage;
+    const proctorMessageAt = attempt.proctorMessageAt;
+
     if (attempt.submittedAt !== null || attempt.lockedAt !== null) {
-      return c.json({ stored: true });
+      if (proctorMessage !== null) {
+        await clearProctorMessage(deps.db, attempt.workspaceId, attempt.attemptId);
+      }
+      return c.json({
+        stored: true,
+        ...(proctorMessage !== null ? { message: proctorMessage, messageAt: proctorMessageAt } : {}),
+      });
     }
 
     const takenAt = deps.now();
@@ -418,10 +437,14 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       // above is what actually narrows this — an assertion here asserted
       // nothing (`@typescript-eslint/no-unnecessary-type-assertion`).
       reason,
+      clearProctorMessage: proctorMessage !== null,
     });
 
     // `Q4a`: the response carries no key at all.
-    return c.json({ stored: true });
+    return c.json({
+      stored: true,
+      ...(proctorMessage !== null ? { message: proctorMessage, messageAt: proctorMessageAt } : {}),
+    });
   });
 
   return routes;

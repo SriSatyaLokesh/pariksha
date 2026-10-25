@@ -6,6 +6,7 @@ import {
   countAttemptsForCandidate,
   createAttempt,
   newId,
+  setProctorMessage,
   unlockAttempt,
 } from "@pariksha/db";
 import type { AppBindings, AppDeps } from "../app.js";
@@ -38,6 +39,8 @@ interface AttemptRow {
   max_index: number;
   flag: string;
   locked_at: number | null;
+  proctor_message: string | null;
+  proctor_message_at: number | null;
   score_json: unknown;
   test_id: string;
   version: number;
@@ -62,7 +65,7 @@ export function proctorActionsRoutes(deps: AppDeps): Hono<AppBindings> {
     const rows = await deps.db.query<AttemptRow>(
       "SELECT a.id, a.workspace_id, a.candidate_id, a.test_version_id, a.set_no, a.layout_json, " +
         "a.started_at, a.deadline_at, a.submitted_at, a.submit_reason, a.section_started_at, " +
-        "a.max_index, a.flag, a.locked_at, a.score_json, " +
+        "a.max_index, a.flag, a.locked_at, a.proctor_message, a.proctor_message_at, a.score_json, " +
         "v.test_id AS test_id, v.version AS version, v.settings_json AS settings_json, " +
         "v.sections_json AS sections_json " +
         "FROM attempt a JOIN test_version v ON v.id = a.test_version_id " +
@@ -97,6 +100,8 @@ export function proctorActionsRoutes(deps: AppDeps): Hono<AppBindings> {
       maxIndex: Number(row.max_index),
       flag: row.flag,
       lockedAt: row.locked_at === null ? null : Number(row.locked_at),
+      proctorMessage: row.proctor_message ?? null,
+      proctorMessageAt: row.proctor_message_at == null ? null : Number(row.proctor_message_at),
       score: row.score_json == null ? null : deps.db.jsonValue(row.score_json),
       settings: deps.db.jsonValue(row.settings_json),
       sections: deps.db.jsonValue(row.sections_json),
@@ -213,11 +218,14 @@ export function proctorActionsRoutes(deps: AppDeps): Hono<AppBindings> {
           throw new ApiError(400, "invalid_request", "text is required.");
         }
 
+        const messageText = body.text.trim();
+        await setProctorMessage(deps.db, workspaceId, attemptId, messageText, now);
+
         await appendAudit(deps.db, workspaceId, {
           actor: actor.userId,
           action: "proctor.message",
           target: attemptId,
-          detail: { candidateId: attempt.candidateId, text: body.text.trim() },
+          detail: { candidateId: attempt.candidateId, text: messageText },
           now,
         });
 

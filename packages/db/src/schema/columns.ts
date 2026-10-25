@@ -422,6 +422,10 @@ export const TABLE_MANIFEST: TableSpec[] = [
       // `parity.test.ts` checks it the same as every other column instead
       // of silently drifting from what the migration actually shipped.
       ts("locked_at", { null: true }),
+      // Phase 8g Task 3 (`C-10`, `K12`, `K13`, migration 0012, both dialects):
+      // proctor broadcast message pending delivery to candidate runtime.
+      text("proctor_message", { null: true }),
+      ts("proctor_message_at", { null: true }),
     ],
     indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
     uniques: [["token_hash"]],

@@ -1047,12 +1047,15 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
     // common case by far, issues no second statement at all.
     const movedOn = target > attempt.maxIndex;
     const sectionStartsAt = sectionStartIndexOf(attempt.layout, target);
+    const proctorMessage = attempt.proctorMessage;
+    const proctorMessageAt = attempt.proctorMessageAt;
     const { stored, advanced } = await upsertResponse(deps.db, attempt.workspaceId, {
       attemptId: attempt.attemptId,
       questionId,
       value,
       clientSeq,
       savedAt: now,
+      clearProctorMessage: proctorMessage !== null,
       ...(movedOn
         ? {
             advance: {
@@ -1126,6 +1129,7 @@ export function attemptRoutes(deps: AppDeps): Hono<AppBindings> {
       ...(movedOn && !committed
         ? {}
         : { maxIndex: committed ? target : attempt.maxIndex, sectionRemainingMs: clock.sectionRemainingMs }),
+      ...(proctorMessage !== null ? { message: proctorMessage, messageAt: proctorMessageAt } : {}),
     });
   });
 
