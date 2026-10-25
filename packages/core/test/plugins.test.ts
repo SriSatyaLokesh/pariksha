@@ -54,9 +54,12 @@ describe("Core Plugin Extensibility Architecture (O-06)", () => {
 
     it("registers and retrieves custom question type plugin", () => {
       expect(plugins.hasQuestion("code_runner")).toBe(false);
+      expect(plugins.listQuestions()).toEqual([]);
+      expect(plugins.getQuestion("non_existent")).toBeUndefined();
       plugins.registerQuestion(codingPlugin);
       expect(plugins.hasQuestion("code_runner")).toBe(true);
       expect(plugins.getQuestion("code_runner")).toBe(codingPlugin);
+      expect(plugins.listQuestions()).toEqual(["code_runner"]);
     });
 
     it("validates question config and response through plugin", () => {
@@ -130,8 +133,11 @@ describe("Core Plugin Extensibility Architecture (O-06)", () => {
     };
 
     it("registers and evaluates custom proctoring signals", () => {
+      expect(plugins.listProctoringSignals()).toEqual([]);
+      expect(plugins.getProctoringSignal("non_existent")).toBeUndefined();
       plugins.registerProctoringSignal(audioSpikePlugin);
       expect(plugins.getProctoringSignal("audio_spike")).toBe(audioSpikePlugin);
+      expect(plugins.listProctoringSignals()).toEqual(["audio_spike"]);
 
       const eval1 = plugins.getProctoringSignal("audio_spike")?.evaluate({
         type: "audio_spike",
@@ -144,6 +150,8 @@ describe("Core Plugin Extensibility Architecture (O-06)", () => {
         payload: { decibels: 75 },
       });
       expect(eval2).toEqual({ severity: "warning", penalty: 0 });
+
+      expect(() => plugins.registerProctoringSignal(audioSpikePlugin)).toThrow(/already registered/i);
     });
   });
 
@@ -156,11 +164,16 @@ describe("Core Plugin Extensibility Architecture (O-06)", () => {
     };
 
     it("registers and executes export format transformers", async () => {
+      expect(plugins.listExportTargets()).toEqual([]);
+      expect(plugins.getExportTarget("non_existent")).toBeUndefined();
       plugins.registerExportTarget(qtiPlugin);
       expect(plugins.getExportTarget("qti_xml")).toBe(qtiPlugin);
+      expect(plugins.listExportTargets()).toEqual(["qti_xml"]);
 
       const output = await plugins.getExportTarget("qti_xml")?.transform({ id: "tst_test1" });
       expect(output).toBe('<qti-assessment id="tst_test1" />');
+
+      expect(() => plugins.registerExportTarget(qtiPlugin)).toThrow(/already registered/i);
     });
   });
 });

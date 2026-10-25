@@ -29,6 +29,9 @@ compatibility_date = "2026-10-18"
 # `@pariksha/db` and `hono` reach node:crypto and node:buffer.
 compatibility_flags = ["nodejs_compat"]
 
+[alias]
+"@node-rs/argon2" = "./argon2-stub.ts"
+
 [assets]
 directory = "../../apps/web/dist"
 # The entry point needs to hand unmatched non-API paths back to the asset
