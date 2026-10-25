@@ -1959,3 +1959,82 @@
   font-weight: var(--type-button-md-weight);
   cursor: pointer;
 }
+
+/* ---- Public Demo Banner (Phase 9 Task 5) --------------------------------- */
+
+.demo-banner {
+  border-bottom: 1px solid var(--color-hairline-strong);
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.demo-banner-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.demo-banner-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 700;
+  color: var(--color-voltage-deep);
+}
+
+.demo-banner-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-voltage-deep);
+}
+
+.demo-banner-text {
+  margin: 0;
+  flex: 1;
+}
+
+.demo-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.demo-banner-link {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  color: var(--color-voltage-deep);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.demo-banner-btn {
+  background: var(--color-canvas);
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  color: var(--color-ink);
+  padding: 4px 10px;
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+.demo-banner-btn--exit {
+  border-color: var(--color-flag-risk);
+  color: var(--color-flag-risk);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+}

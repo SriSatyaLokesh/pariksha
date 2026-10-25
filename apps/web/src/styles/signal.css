@@ -1125,7 +1125,7 @@
 .demo-modal__close {
   background: transparent;
   border: none;
-  font-size: 24px;
+  font-size: var(--type-heading-md-size);
   cursor: pointer;
   line-height: 1;
   padding: 4px;
@@ -1148,7 +1148,7 @@
 }
 
 .demo-card__tag {
-  font-size: 12px;
+  font-size: var(--type-caption-size);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -1157,12 +1157,12 @@
 
 .demo-card__title {
   margin: 0 0 8px;
-  font-size: 18px;
+  font-size: var(--type-heading-sm-size);
   font-weight: 600;
 }
 
 .demo-card__desc {
-  font-size: 14px;
+  font-size: var(--type-body-sm-size);
   line-height: 1.5;
   margin: 0 0 20px;
   flex: 1;
@@ -1180,6 +1180,6 @@
   border-radius: var(--rounded-sm);
   background: rgb(from var(--color-flag-risk) r g b / 0.15);
   border: 1px solid var(--color-flag-risk);
-  font-size: 13px;
+  font-size: var(--type-body-sm-size);
 }
 

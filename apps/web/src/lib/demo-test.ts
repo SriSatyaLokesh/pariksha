@@ -192,7 +192,7 @@ export const DEMO_LANDING_FIXTURE: LandingPayload = {
   branding: {
     logo: null,
     logoAlt: null,
-    primaryColour: "#2f6fd0",
+    primaryColour: null,
     footerText: "Powered by Pariksha Open Source Examination Platform",
     startMessage: "Welcome to the Pariksha Public Demo! Take this sample test to evaluate candidate navigation and section breakdown.",
   },

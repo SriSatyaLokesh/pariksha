@@ -747,6 +747,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // runner has painted underneath — which is always the page's own cream,
   // the same ground every other ambient mark in this file reads on.
   ".exam-watermark": both("cream"),
+  // Phase 9 Task 5: public demo banner.
+  ".demo-banner": both("cream"),
+  ".demo-banner-badge": both("cream"),
+  ".demo-banner-link": both("cream"),
+  ".demo-banner-btn": both("canvas"),
+  ".demo-banner-btn--exit": both("canvas"),
 
   // ---- exam.css: the answer block (Phase 6 Task 7, #71) ------------------
   // The runner's own ground is the cream base.css paints on <body>; every
