@@ -1,13 +1,11 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import {
   closeClient,
-  createBank,
   createCandidate,
   insertAuthToken,
   newId,
   resolvePublishedTest,
   setProctorMessage,
-  upsertQuestions,
   type AttemptPaper,
 } from "@pariksha/db";
 import { createApp } from "../src/app.js";

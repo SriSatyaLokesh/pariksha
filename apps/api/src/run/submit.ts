@@ -39,6 +39,7 @@ import {
   listSnapshotFaceCounts,
   setIntegrity,
   workspaceQuestions,
+  type WebhookEvent,
 } from "@pariksha/db";
 import {
   integrityFor,
@@ -356,7 +357,7 @@ export async function recomputeIntegrity(
   ) {
     await fireWebhooks(deps, {
       workspaceId: target.workspaceId,
-      event: "attempt.flagged" as any,
+      event: "attempt.flagged" as unknown as WebhookEvent,
       payload: { attemptId: target.attemptId },
       now: actualNow,
     });

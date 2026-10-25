@@ -1,7 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import {
   addMembership,
-  appendAudit,
   closeClient,
   createBank,
   createUser,
@@ -9,7 +8,6 @@ import {
   listAudit,
   listResponses,
   newId,
-  unlockAttempt,
   upsertQuestions,
   upsertResponse,
 } from "@pariksha/db";

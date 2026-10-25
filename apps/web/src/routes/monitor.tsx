@@ -150,7 +150,9 @@ export function Monitor({
           now={now}
           client={client}
           workspaceId={workspaceId}
-          onActionComplete={fetchMonitor}
+          onActionComplete={() => {
+          void fetchMonitor();
+        }}
         />
       )}
     </div>

@@ -130,7 +130,9 @@ async function uploadSnapshot(
     if (data?.message && typeof data?.messageAt === "number") {
       onProctorMessage?.(data.message, data.messageAt);
     }
-  } catch {}
+  } catch {
+    // Non-JSON response or parse error is ignored on broadcast poll
+  }
 }
 
 /**

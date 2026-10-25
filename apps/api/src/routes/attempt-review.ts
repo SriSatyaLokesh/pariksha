@@ -20,6 +20,28 @@ import { liveQuestions } from "../run/submit.js";
 /** Presigned URL TTL: 10 minutes (K3/K4: 600s expiry, 0 storage subrequests). */
 const SIGNED_URL_TTL = 600;
 
+const VIOLATION_SET: ReadonlySet<string> = VIOLATION_EVENTS;
+const FAILURE_SET: ReadonlySet<string> = FAILURE_EVENTS;
+
+interface ScoredQuestionItem {
+  points?: number;
+  max?: number;
+  correct?: boolean | null;
+}
+
+interface ScoredSectionItem {
+  sectionId: string;
+  points?: number;
+  max?: number;
+}
+
+interface StoredAttemptScore {
+  total?: number;
+  max?: number;
+  perQuestion?: Record<string, ScoredQuestionItem>;
+  sections?: ScoredSectionItem[];
+}
+
 export interface AttemptReviewPayload {
   attempt: {
     id: string;
@@ -113,7 +135,7 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
         [workspaceId, attemptRow.candidate_id],
       );
       const registration = candidateRows[0]?.form_values_json
-        ? (deps.db.jsonValue(candidateRows[0].form_values_json) as Record<string, unknown>)
+        ? (deps.db.jsonValue<Record<string, unknown>>(candidateRows[0].form_values_json) ?? {})
         : {};
 
       // 3. Test version lookup (1 query)
@@ -126,10 +148,10 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
         [workspaceId, attemptRow.test_version_id],
       );
       const versionSettings = versionRows[0]?.settings_json
-        ? deps.db.jsonValue(versionRows[0].settings_json)
+        ? (deps.db.jsonValue<Record<string, unknown>>(versionRows[0].settings_json) ?? {})
         : {};
       const versionSections = versionRows[0]?.sections_json
-        ? (deps.db.jsonValue(versionRows[0].sections_json) as Section[])
+        ? (deps.db.jsonValue<Section[]>(versionRows[0].sections_json) ?? [])
         : [];
 
       // 4. Snapshots lookup (1 query)
@@ -196,9 +218,9 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
       for (const e of eventRows) {
         const detail = e.detail_json == null
           ? {}
-          : (deps.db.jsonValue(e.detail_json) as Record<string, unknown>);
-        const isViolation = VIOLATION_EVENTS.has(e.type as any);
-        const isFailure = FAILURE_EVENTS.has(e.type as any);
+          : (deps.db.jsonValue<Record<string, unknown>>(e.detail_json) ?? {});
+        const isViolation = VIOLATION_SET.has(e.type);
+        const isFailure = FAILURE_SET.has(e.type);
 
         timeline.push({
           kind: "event",
@@ -261,7 +283,7 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
 
       const scoreJson = attemptRow.score_json == null
         ? null
-        : (deps.db.jsonValue(attemptRow.score_json) as any);
+        : deps.db.jsonValue<StoredAttemptScore>(attemptRow.score_json);
 
       const integrityFlag: "clean" | "review" | "scoring_blocked" =
         attemptRow.flag === "scoring_blocked"
@@ -290,24 +312,24 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
         clientTs: Number(e.client_ts),
         payload: e.detail_json == null
           ? {}
-          : (deps.db.jsonValue(e.detail_json) as Record<string, unknown>),
+          : (deps.db.jsonValue<Record<string, unknown>>(e.detail_json) ?? {}),
       }));
 
       // --- Answers ---
-      const layout = deps.db.jsonValue(attemptRow.layout_json) as PinnedLayout;
+      const layout = deps.db.jsonValue<PinnedLayout>(attemptRow.layout_json);
       const answers: AttemptReviewPayload["answers"] = [];
 
-      for (const section of layout.sections ?? []) {
+      for (const section of layout?.sections ?? []) {
         for (const qId of section.questionIds ?? []) {
           const qDoc = questionsMap.get(qId);
           const resp = responseMap.get(qId);
           const scoredQ = scoreJson?.perQuestion?.[qId];
 
           const answerVal = resp ? resp.value : null;
-          const keyVal = (qDoc as any)?.key ?? null;
-          const pointsAwarded = scoredQ ? scoredQ.points : (resp?.points ?? null);
-          const maxPoints = scoredQ ? scoredQ.max : (qDoc?.scoring?.points ?? 1);
-          const correct = scoredQ ? scoredQ.correct : null;
+          const keyVal = qDoc && "key" in qDoc ? (qDoc as { key?: unknown }).key ?? null : null;
+          const pointsAwarded = scoredQ?.points ?? resp?.points ?? null;
+          const maxPoints = scoredQ?.max ?? qDoc?.scoring?.points ?? 1;
+          const correct = scoredQ?.correct ?? null;
           const verdict = scoredQ
             ? (scoredQ.correct === true ? "correct" : scoredQ.correct === false ? "incorrect" : "pending")
             : undefined;
@@ -328,8 +350,8 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
       // --- Section Scores ---
       const sectionScores: AttemptReviewPayload["sectionScores"] = [];
       for (const sec of versionSections) {
-        const scoredSec = scoreJson?.sections?.find((s: any) => s.sectionId === sec.id);
-        const sectionQuestions = (layout.sections?.find((s) => s.sectionId === sec.id)?.questionIds ?? [])
+        const scoredSec = scoreJson?.sections?.find((s) => s.sectionId === sec.id);
+        const sectionQuestions = (layout?.sections?.find((s) => s.sectionId === sec.id)?.questionIds ?? [])
           .map((qid) => questionsMap.get(qid))
           .filter((q): q is Question => q !== undefined);
         const fallbackMax = sectionQuestions.reduce((sum, q) => sum + (q.scoring?.points ?? 1), 0);
@@ -337,8 +359,8 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
         sectionScores.push({
           sectionId: sec.id,
           title: sec.title ?? "Untitled Section",
-          score: scoredSec ? scoredSec.points : 0,
-          maxScore: scoredSec ? scoredSec.max : fallbackMax,
+          score: scoredSec?.points ?? 0,
+          maxScore: scoredSec?.max ?? fallbackMax,
         });
       }
 

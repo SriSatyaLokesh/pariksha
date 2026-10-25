@@ -17,11 +17,11 @@ import {
   getDraftVersion,
   newId,
   recordSnapshot,
-  setIntegrity,
   upsertQuestions,
   upsertResponse,
 } from "@pariksha/db";
 import type { Question } from "@pariksha/core";
+import type { AttemptReviewPayload } from "../src/routes/attempt-review.js";
 import {
   createApp,
   ROUTE_ACTIONS,
@@ -304,7 +304,7 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
       headers: { cookie: asReviewer },
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as AttemptReviewPayload;
 
     // attempt
     expect(body.attempt).toMatchObject({
@@ -374,10 +374,10 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
     const res = await app.request(reviewPath(workspaceId, cleanAttemptId), {
       headers: { cookie: asReviewer },
     });
-    const body = (await res.json()) as any;
-    const snapshotItem = body.timeline.find((t: any) => t.kind === "snapshot");
+    const body = (await res.json()) as AttemptReviewPayload;
+    const snapshotItem = body.timeline.find((t) => t.kind === "snapshot");
     expect(snapshotItem).toBeDefined();
-    expect(snapshotItem.faceCount).toBeNull();
+    expect(snapshotItem?.faceCount).toBeNull();
   });
 
   it("serves snapshots by presigned URL and spends no storage subrequests (K3/K4)", async () => {
@@ -411,8 +411,8 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
       headers: { cookie: asReviewer },
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
-    expect(body.timeline.filter((t: any) => t.kind === "snapshot")).toHaveLength(60);
+    const body = (await res.json()) as AttemptReviewPayload;
+    expect(body.timeline.filter((t) => t.kind === "snapshot")).toHaveLength(60);
 
     // K3/K4 check: 0 storage subrequests spent
     expect(counting.counts().storage).toBe(0);
@@ -453,8 +453,8 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
       headers: { cookie: asReviewer },
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
-    const unobserved = body.timeline.find((t: any) => t.kind === "unobserved");
+    const body = (await res.json()) as AttemptReviewPayload;
+    const unobserved = body.timeline.find((t) => t.kind === "unobserved");
     expect(unobserved).toBeDefined();
   });
 

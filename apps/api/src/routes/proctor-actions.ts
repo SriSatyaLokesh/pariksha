@@ -78,7 +78,7 @@ export function proctorActionsRoutes(deps: AppDeps): Hono<AppBindings> {
       throw new ApiError(404, "not_found", "No such resource.");
     }
 
-    const layout = (deps.db.jsonValue(row.layout_json) ?? {}) as Record<string, unknown>;
+    const layout = deps.db.jsonValue<Record<string, unknown>>(row.layout_json) ?? {};
     if (!Array.isArray(layout.paper)) {
       layout.paper = [];
     }
