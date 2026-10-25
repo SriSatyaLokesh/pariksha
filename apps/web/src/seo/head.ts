@@ -10,12 +10,18 @@ import { tokens } from "../styles/tokens";
 // line, so the four can never say different things.
 export const DESCRIPTION =
   "Pariksha is an open-source, self-hosted exam platform: question pools, 12 question types, browser proctoring, CSV results.";
-// SEO-32 needs the literal lowercase substring "pre-alpha" to survive in
-// every one of its three load-bearing homes (T17); "Pre-alpha" (capital P,
-// as a sentence's first word) does not contain that substring, which is
-// exactly the bug T17 is rewritten to catch rather than paper over by
-// lowercasing both sides of the comparison.
-export const STATUS_LINE = "Status: pre-alpha, October 2026.";
+// SEO-32 needs this exact line to survive in every one of its three
+// load-bearing homes (T17) — the meta description, the JSON-LD release
+// notes and llms.txt. It is asserted whole rather than by substring:
+// "alpha" is a substring of "pre-alpha", so a substring check would have
+// gone on passing through the very change that retired that word.
+//
+// **alpha, not pre-alpha, since issue 253.** Phases 1-8 are on `main`, so the
+// whole path — author, build, publish, sit, proctor, score, grade,
+// export — runs. What is still unproven is scale: the v0.1 exit gate is
+// one real exam with 300+ candidates and no lost answer, and no such exam
+// has been run. Beta is the word for after that, not before it.
+export const STATUS_LINE = "Status: alpha, October 2026.";
 export const META_DESCRIPTION = `${DESCRIPTION} ${STATUS_LINE}`;
 
 // SEO-8. Matches the h1 (T19) except for the h1's trailing full stop.

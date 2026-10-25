@@ -58,3 +58,4 @@ scratch/
 # Phase 6.5 prototypes (D11) — throwaway HTML the owner approves before any
 # implementer starts. Local only, never committed, never an Artifact.
 .prototypes/
+apps/web/e2e/screenshots/

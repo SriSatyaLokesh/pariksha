@@ -6,18 +6,19 @@ Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT
 
 ## Where to start
 
-Pariksha is pre-alpha: the requirements, formats and schemas exist; the application code lands with v0.1. That makes the next few months the best time to join — the shape is decided, the implementation is not.
+Pariksha is **alpha**: Phases 1–8 are merged, so the whole exam path is built — authoring, the test builder, the candidate runtime, proctoring, results, grading, exports and retention. What it has never done is carry a real exam with 300 candidates at once, which is the v0.1 exit gate. The most useful thing a contributor can do right now is put real use behind it and report what bent.
 
 **No TypeScript required.** Pick whichever of these fits you:
 
 | | What it involves | Where |
 | --- | --- | --- |
 | 📝 **Add a question set** | A subject folder with questions, answer keys and explanations. School science, engineering, nursing, comprehension, civil-service reasoning, anything | [`examples/`](examples/) |
-| 🌐 **Translate** | Candidate-facing text and interface strings, especially Indian languages | from v0.1 |
+| 🧪 **Run a real exam** | Deploy it, put a cohort through it, and report what happened — the v0.1 exit gate is exactly this | an issue |
+| 🌐 **Translate** | Candidate-facing text and interface strings, especially Indian languages. The translation layer is Phase 12, so strings land before the machinery | an issue |
 | 🔍 **Review the design** | Read the [PRD](docs/PRD.md) and disagree with it in an issue. The [open questions](docs/PRD.md#risks-and-open-questions) most of all | an issue |
 | 🧪 **Stress the formats** | Write a real test in [`pariksha/test@1`](docs/test-format.md) and report what you could not express | an issue |
 | 📚 **Improve the docs** | The PRD, the format specs, the worked example, future guides | [`docs/`](docs/) |
-| 💻 **Write code** | `packages/core` (scoring), `apps/api` (Hono), `apps/web` (React) | from v0.1 |
+| 💻 **Write code** | `packages/core` (scoring), `apps/api` (Hono), `apps/web` (React) — see [the roadmap](docs/ROADMAP.md) for Phase 8.5 onward and what each phase left behind | an issue |
 
 Issues labelled **`good first issue`** are scoped so you can finish them in an evening. Comment on one to claim it; if it goes quiet for a week it is free again.
 

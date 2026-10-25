@@ -87,9 +87,12 @@ describe("T14 — robots.txt", () => {
 describe("T15 — llms.txt", () => {
   const llms = buildLlmsTxt(SITE_URL);
 
-  it("starts '# Pariksha', contains pre-alpha, and has >= 5 absolute Markdown links", () => {
+  it("starts '# Pariksha', carries STATUS_LINE whole, and has >= 5 absolute Markdown links", () => {
     expect(llms.startsWith("# Pariksha")).toBe(true);
-    expect(llms.toLowerCase()).toContain("pre-alpha");
+    // The whole line, not a word from it: "alpha" is a substring of
+    // "pre-alpha", so a substring check would pass on either and notice
+    // neither a silent revert nor a drift in the date.
+    expect(llms).toContain(STATUS_LINE);
     const links = [...llms.matchAll(/\]\(([^)]+)\)/g)].map((m) => m[1]);
     expect(links.length).toBeGreaterThanOrEqual(5);
     for (const link of links) {
@@ -116,12 +119,12 @@ describe("constants reused across T6/T9b/T17 do not drift", () => {
     expect(TITLE.length).toBeLessThanOrEqual(60);
   });
 
-  it("STATUS_LINE literally contains lowercase pre-alpha and October 2026 (T17's real requirement)", () => {
-    // Guards exactly the bug T17 is rewritten to catch: "Pre-alpha ..."
-    // (capital P) does not contain the substring "pre-alpha", and a test
-    // that lowercases both sides before comparing never notices.
-    expect(STATUS_LINE).toContain("pre-alpha");
-    expect(STATUS_LINE).toContain("October 2026");
+  it("STATUS_LINE is the exact alpha line, character for character (T17's real requirement)", () => {
+    // Asserted whole, which is what T17 was always reaching for. A
+    // substring check cannot do the job here at all: "alpha" occurs
+    // inside "pre-alpha", so the one assertion that would survive the
+    // #253 status change unchanged is the one that proves nothing.
+    expect(STATUS_LINE).toBe("Status: alpha, October 2026.");
   });
 
   it("buildHead's icon hrefs are root-relative (no origin needed, so they can be static)", () => {

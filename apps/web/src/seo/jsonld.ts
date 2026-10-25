@@ -55,7 +55,7 @@ export function buildJsonLd({ siteUrl, dateModified }: JsonLdOptions) {
         description: META_DESCRIPTION,
         applicationCategory: "BusinessApplication",
         applicationSubCategory: "Online examination and assessment software",
-        softwareVersion: "pre-alpha",
+        softwareVersion: "alpha",
         releaseNotes: STATUS_LINE,
         license: "https://www.apache.org/licenses/LICENSE-2.0",
         url: home,
