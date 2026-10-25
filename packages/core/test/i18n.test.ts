@@ -63,6 +63,6 @@ describe("Core i18n & Translation System (T-24)", () => {
 
     // English lookup
     const t = createTranslator("hi");
-    expect(t("exam.unsupported_key" as any)).toBe("exam.unsupported_key");
+    expect(t("exam.unsupported_key" as unknown as Parameters<typeof t>[0])).toBe("exam.unsupported_key");
   });
 });

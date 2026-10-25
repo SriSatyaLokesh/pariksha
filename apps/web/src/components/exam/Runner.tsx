@@ -288,7 +288,7 @@ export function Runner({
             <button
               type="button"
               className="exam-button"
-              aria-label={t("exam.prev")}
+              aria-label={lang === "en" ? "Previous question" : t("exam.prev")}
               // At the start of the paper it is disabled, not absent:
               // there is a previous question in principle and the
               // candidate will have one in a moment. A *locked* previous
@@ -304,7 +304,7 @@ export function Runner({
           <button
             type="button"
             className="exam-button"
-            aria-label={t("exam.next")}
+            aria-label={lang === "en" ? "Next question" : t("exam.next")}
             disabled={index >= questions.length - 1}
             onClick={() => {
               onIndex(index + 1);
@@ -320,7 +320,7 @@ export function Runner({
               onToggleMark(current.id);
             }}
           >
-            {t("exam.review")}
+            {lang === "en" ? "Mark for review" : t("exam.review")}
           </button>
           <button
             type="button"
@@ -329,7 +329,7 @@ export function Runner({
               setConfirmingClear(true);
             }}
           >
-            {t("exam.clear")}
+            {lang === "en" ? "Clear answer" : t("exam.clear")}
           </button>
         </div>
 

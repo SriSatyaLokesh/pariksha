@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { Runner } from "../../src/components/exam/Runner";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 
@@ -20,6 +21,8 @@ const MOCK_PAPER: AttemptPaper = {
     {
       id: "sec_1",
       title: "General Knowledge",
+      instructions: null,
+      timeLimitMinutes: null,
       questions: [MOCK_QUESTION],
     },
   ],
@@ -35,17 +38,7 @@ const MOCK_PAPER: AttemptPaper = {
   serverNow: Date.now(),
   submittedAt: null,
   lockedAt: null,
-  proctoring: {
-    recordFullscreen: false,
-    recordTabSwitches: false,
-    requireCamera: false,
-    identityPhoto: false,
-    periodicIntervalSeconds: null,
-    violationCeiling: 5,
-    violationAction: "flag",
-    screenWatermark: false,
-    requirements: [],
-  },
+  proctoring: PROCTORING_DEFAULTS.off,
   violations: 0,
 };
 
@@ -68,8 +61,8 @@ describe("Runner i18n and RTL Support (T-24)", () => {
 
     const runner = container.querySelector(".exam-runner");
     expect(runner).toHaveAttribute("dir", "ltr");
-    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Clear selection" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Next/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Clear answer" })).toBeInTheDocument();
   });
 
   it("renders Arabic with rtl direction and translated buttons", () => {

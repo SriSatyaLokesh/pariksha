@@ -8,7 +8,7 @@ import type {
  * Registry managing runtime plugins for Pariksha (O-06).
  */
 export class PluginRegistry {
-  private questions = new Map<string, QuestionPlugin<any, any>>();
+  private questions = new Map<string, QuestionPlugin<unknown, unknown>>();
   private proctoringSignals = new Map<string, ProctoringSignalPlugin>();
   private exportTargets = new Map<string, ExportTargetPlugin>();
 
@@ -19,8 +19,8 @@ export class PluginRegistry {
     this.questions.set(plugin.type, plugin);
   }
 
-  getQuestion<C = unknown, R = unknown>(type: string): QuestionPlugin<C, R> | undefined {
-    return this.questions.get(type) as QuestionPlugin<C, R> | undefined;
+  getQuestion(type: string): QuestionPlugin<unknown, unknown> | undefined {
+    return this.questions.get(type);
   }
 
   hasQuestion(type: string): boolean {

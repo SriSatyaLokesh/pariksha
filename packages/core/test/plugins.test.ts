@@ -1,6 +1,5 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import {
-  PluginRegistry,
   plugins,
   type QuestionPlugin,
   type ProctoringSignalPlugin,
