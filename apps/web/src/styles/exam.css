@@ -918,6 +918,38 @@
   background: var(--color-cream);
 }
 
+.exam-palette-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.exam-palette-section + .exam-palette-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-hairline-strong);
+}
+
+.exam-palette-section-header {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.exam-palette-section-title {
+  margin: 0;
+  font-family: var(--type-heading-sm-family);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.exam-palette-section-tally {
+  font-family: var(--type-mono-sm-family);
+  font-size: 11px;
+  line-height: 1.2;
+}
+
 .exam-palette-grid {
   display: grid;
   grid-template-columns: repeat(5, 36px);

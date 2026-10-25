@@ -1,4 +1,4 @@
-import { useRef, useState, type KeyboardEvent, type RefObject } from "react";
+import { useMemo, useRef, useState, type KeyboardEvent, type RefObject } from "react";
 
 /**
  * `DESIGN.md`'s `palette-square`, as a navigation rail.
@@ -12,6 +12,15 @@ import { useRef, useState, type KeyboardEvent, type RefObject } from "react";
  * than trusting the stylesheet.
  */
 export type PaletteState = "unanswered" | "answered" | "marked";
+
+/**
+ * A group of questions in one section of the palette.
+ */
+export interface PaletteSectionGroup {
+  id: string;
+  title: string;
+  questions: PaletteQuestion[];
+}
 
 /**
  * `current` and `locked` are **flags beside** `state`, not values of it.
@@ -71,11 +80,13 @@ function nameFor(question: PaletteQuestion): string {
 
 export function Palette({
   questions,
+  sections,
   onJump,
   focusRef,
   lockedReason,
 }: {
-  questions: PaletteQuestion[];
+  questions?: PaletteQuestion[];
+  sections?: PaletteSectionGroup[];
   onJump: (questionId: string) => void;
   /** The roving tab stop, so a "skip to the palette" control elsewhere on
    * the screen can hand focus to the rail in one keystroke. */
@@ -94,18 +105,33 @@ export function Palette({
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
   const [focused, setFocused] = useState<number | null>(null);
 
+  const allQuestions = useMemo(() => {
+    if (sections) {
+      return sections.flatMap((section) => section.questions);
+    }
+    return questions ?? [];
+  }, [sections, questions]);
+
+  const indexMap = useMemo(() => {
+    const map = new Map<string, number>();
+    allQuestions.forEach((q, i) => {
+      map.set(q.id, i);
+    });
+    return map;
+  }, [allQuestions]);
+
   // One tab stop for the whole rail, arrow keys inside it — the APG's
   // roving tabindex. Seventeen tab stops between the candidate and their
   // question is not keyboard access, it is a penalty for not using a
   // mouse.
   const fallback = Math.max(
-    questions.findIndex((question) => question.current),
+    allQuestions.findIndex((question) => question.current),
     0,
   );
   const stop = focused ?? fallback;
 
   const move = (to: number) => {
-    const next = Math.min(Math.max(to, 0), questions.length - 1);
+    const next = Math.min(Math.max(to, 0), allQuestions.length - 1);
     setFocused(next);
     refs.current[next]?.focus();
   };
@@ -127,51 +153,81 @@ export function Palette({
       move(0);
     } else if (event.key === "End") {
       event.preventDefault();
-      move(questions.length - 1);
+      move(allQuestions.length - 1);
     }
+  };
+
+  const renderSquare = (question: PaletteQuestion) => {
+    const at = indexMap.get(question.id) ?? 0;
+    return (
+      <li key={question.id}>
+        <button
+          type="button"
+          ref={(element) => {
+            refs.current[at] = element;
+            if (focusRef && at === stop) focusRef.current = element;
+          }}
+          className={classesFor(question)}
+          // The accessible name is a superset of the visible label
+          // (WCAG 2.5.3): the square shows its number, the name adds
+          // the word "question" and the state.
+          aria-label={nameFor(question)}
+          aria-current={question.current ? "true" : undefined}
+          // `aria-disabled`, not `disabled`: a locked square still has
+          // to be reachable and readable, or a candidate cannot find
+          // out why it will not open. It is genuinely inert all the
+          // same — `onJump` is not called for it below.
+          aria-disabled={isLocked(question) ? "true" : undefined}
+          aria-describedby={
+            isLocked(question) && lockedReason ? "exam-palette-locked-reason" : undefined
+          }
+          tabIndex={at === stop ? 0 : -1}
+          onKeyDown={(event) => {
+            onKeyDown(event, at);
+          }}
+          onFocus={() => {
+            setFocused(at);
+          }}
+          onClick={() => {
+            if (!isLocked(question)) onJump(question.id);
+          }}
+        >
+          {question.number}
+        </button>
+      </li>
+    );
   };
 
   return (
     <nav className="exam-palette" aria-label="Question palette">
-      <ul className="exam-palette-grid">
-        {questions.map((question, at) => (
-          <li key={question.id}>
-            <button
-              type="button"
-              ref={(element) => {
-                refs.current[at] = element;
-                if (focusRef && at === stop) focusRef.current = element;
-              }}
-              className={classesFor(question)}
-              // The accessible name is a superset of the visible label
-              // (WCAG 2.5.3): the square shows its number, the name adds
-              // the word "question" and the state.
-              aria-label={nameFor(question)}
-              aria-current={question.current ? "true" : undefined}
-              // `aria-disabled`, not `disabled`: a locked square still has
-              // to be reachable and readable, or a candidate cannot find
-              // out why it will not open. It is genuinely inert all the
-              // same — `onJump` is not called for it below.
-              aria-disabled={isLocked(question) ? "true" : undefined}
-              aria-describedby={
-                isLocked(question) && lockedReason ? "exam-palette-locked-reason" : undefined
-              }
-              tabIndex={at === stop ? 0 : -1}
-              onKeyDown={(event) => {
-                onKeyDown(event, at);
-              }}
-              onFocus={() => {
-                setFocused(at);
-              }}
-              onClick={() => {
-                if (!isLocked(question)) onJump(question.id);
-              }}
+      {sections ? (
+        sections.map((section) => {
+          const answeredCount = section.questions.filter((q) => q.state === "answered").length;
+          const totalCount = section.questions.length;
+          return (
+            <div
+              key={section.id}
+              className="exam-palette-section"
+              role="group"
+              aria-label={section.title}
             >
-              {question.number}
-            </button>
-          </li>
-        ))}
-      </ul>
+              <div className="exam-palette-section-header">
+                <h3 className="exam-palette-section-title">{section.title}</h3>
+                <span className="exam-palette-section-tally">
+                  {answeredCount}/{totalCount} answered
+                </span>
+              </div>
+              <ul className="exam-palette-grid">
+                {section.questions.map(renderSquare)}
+              </ul>
+            </div>
+          );
+        })
+      ) : (
+        <ul className="exam-palette-grid">
+          {allQuestions.map(renderSquare)}
+        </ul>
+      )}
       {lockedReason && (
         <p id="exam-palette-locked-reason" className="exam-palette-reason">
           {lockedReason}

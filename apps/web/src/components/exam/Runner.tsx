@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState, type ReactElement } from "react";
 import { NAVIGATION_LOCKED_MESSAGE } from "@pariksha/core";
 import type { AttemptPaper, CandidateQuestion } from "../../lib/paper";
-import { Palette, type PaletteQuestion, type PaletteState } from "./Palette";
+import { Palette, type PaletteQuestion, type PaletteSectionGroup, type PaletteState } from "./Palette";
 import { ViewControls, useViewPreferences } from "./ViewControls";
 import { Calculator } from "./Calculator";
 import { SectionNav } from "./SectionNav";
@@ -199,6 +199,19 @@ export function Runner({
   });
 
   const squares = paletteStates(paper, marked, index);
+  const groupedSections: PaletteSectionGroup[] = useMemo(() => {
+    let offset = 0;
+    return paper.sections.map((section) => {
+      const count = section.questions.length;
+      const sectionSquares = squares.slice(offset, offset + count);
+      offset += count;
+      return {
+        id: section.id,
+        title: section.title,
+        questions: sectionSquares,
+      };
+    });
+  }, [paper.sections, squares]);
   const locked = lockedIndices(paper);
   const reason = lockedReasonFor(paper);
 
@@ -359,7 +372,7 @@ export function Runner({
       </main>
 
       <Palette
-        questions={squares}
+        sections={groupedSections}
         onJump={(id) => {
           onIndex(questions.findIndex((question) => question.id === id));
         }}
