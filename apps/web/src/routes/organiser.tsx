@@ -21,6 +21,7 @@ import { TestBuilder } from "./test";
 import { ImportScreen } from "./import";
 import { GradingRoute } from "./grading";
 import { AnalyticsRoute } from "./analytics";
+import { AttemptRoute } from "./attempt";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 
@@ -76,6 +77,8 @@ type View =
   // `grading` above and for the same reason — reached from the test
   // builder, not the top nav.
   | { kind: "analytics"; actor: Actor; workspace: Workspace; testId: string }
+  // Phase 8g Task 4 (`#91`, `R-03`): the per-attempt review screen.
+  | { kind: "attempt"; actor: Actor; workspace: Workspace; attemptId: string; testId?: string }
   // `bankName` is absent exactly when the browser was deep-linked rather
   // than opened from the list (`?view=bank&bank=bnk_1`), because a name is
   // not in `ViewParams` and no call in this component fetches one.
@@ -368,6 +371,25 @@ export function OrganiserApp({
         { title: "Analytics", crumb: "Analytics" },
         <AnalyticsRoute client={client} workspaceId={view.workspace.id} testId={view.testId} />,
       );
+    case "attempt":
+      return shell(
+        "tests",
+        view.actor,
+        view.workspace,
+        { title: "Attempt Review", crumb: "Attempt" },
+        <AttemptRoute
+          client={client}
+          workspaceId={view.workspace.id}
+          attemptId={view.attemptId}
+          onBack={() => {
+            if (view.testId) {
+              go({ kind: "test", actor: view.actor, workspace: view.workspace, testId: view.testId });
+            } else {
+              go({ kind: "tests", actor: view.actor, workspace: view.workspace });
+            }
+          }}
+        />,
+      );
     case "banks":
       return shell(
         "banks",
@@ -528,6 +550,10 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
       return params.test === undefined
         ? home
         : { kind: "analytics", actor, workspace, testId: params.test };
+    case "attempt":
+      return params.attempt === undefined
+        ? home
+        : { kind: "attempt", actor, workspace, attemptId: params.attempt, testId: params.test };
     case "bank":
       return params.bank === undefined
         ? home
@@ -567,6 +593,12 @@ function paramsOf(view: View): ViewParams | null {
       return { view: "grading", test: view.testId };
     case "analytics":
       return { view: "analytics", test: view.testId };
+    case "attempt":
+      return {
+        view: "attempt",
+        attempt: view.attemptId,
+        ...(view.testId !== undefined && { test: view.testId }),
+      };
     case "bank":
       return { view: "bank", bank: view.bankId };
     case "question":

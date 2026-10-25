@@ -51,11 +51,20 @@ export interface ViewParams {
    * "Analytics" button, carrying the same `test` id parameter, not a
    * second one.
    */
-  view: NavKey | "test" | "bank" | "question" | "import" | "grading" | "analytics";
+  view:
+    | NavKey
+    | "test"
+    | "bank"
+    | "question"
+    | "import"
+    | "grading"
+    | "analytics"
+    | "attempt";
   test?: string;
   bank?: string;
   section?: string;
   panel?: string;
+  attempt?: string;
 }
 
 /* Typed as the union and not as `string[]`: this is the module whose whole
@@ -75,10 +84,11 @@ const VIEWS: readonly ViewParams["view"][] = [
   "import",
   "grading",
   "analytics",
+  "attempt",
 ];
 
 /** The id-bearing half, in one place so reading and writing cannot drift. */
-const IDS = ["test", "bank", "section", "panel"] as const;
+const IDS = ["test", "bank", "section", "panel", "attempt"] as const;
 
 /** An unknown or absent `?view=` is Home — a hand-typed URL lands somewhere
  *  real rather than on a blank switch arm. */

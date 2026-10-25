@@ -42,6 +42,7 @@ import { requireMember } from "./middleware/authorize.js";
 import { webhookRoutes } from "./routes/webhooks.js";
 import { analyticsRoutes } from "./routes/analytics.js";
 import { keyRoutes } from "./routes/keys.js";
+import { attemptReviewRoutes } from "./routes/attempt-review.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -871,6 +872,11 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // a declared, tested ceiling this route is proven to survive, not the
   // number every request is expected to cost.
   "/api/v1/workspaces/:id/tests/:testId/analytics": 8,
+  // Phase 8g Task 4 (`#91`, `R-03`): the per-attempt review endpoint.
+  // Auth (2) + attempt (1) + candidate (1) + test_version (1) + snapshots (1)
+  // + events (1) + responses (1) + questions (1) = 9. Presigning snapshots
+  // spends 0 storage subrequests (K3/K4).
+  "/api/v1/workspaces/:id/attempts/:attemptId/review": 9,
 };
 
 /**
@@ -1036,6 +1042,10 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // holds it and nothing wider; an Author (`tests.edit`) does not hold it
   // at all.
   "GET /api/v1/workspaces/:id/tests/:testId/analytics": "results.export",
+  // Phase 8g Task 4 (`#91`, `R-03`): per-attempt review evidence.
+  // Guarded by attempts.read_evidence — Reviewers and Proctors see evidence,
+  // Viewers (results.export) receive 403.
+  "GET /api/v1/workspaces/:id/attempts/:attemptId/review": "attempts.read_evidence",
 };
 
 /**
@@ -1276,6 +1286,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "workspace",
   // Phase 8c Task 1 (`R-06`, #94): test analytics.
   "GET /api/v1/workspaces/:id/tests/:testId/analytics": "workspace",
+  // Phase 8g Task 4 (`#91`, `R-03`): attempt review.
+  "GET /api/v1/workspaces/:id/attempts/:attemptId/review": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -1361,6 +1373,8 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // Phase 8d Task 2: scoped API keys, mounted beside webhooks for the same
   // locality reason — no prefix below collides.
   app.route("/api/v1/workspaces", keyRoutes(deps));
+  // Phase 8g Task 4 (`#91`, `R-03`): per-attempt review endpoint.
+  app.route("/api/v1/workspaces", attemptReviewRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing
