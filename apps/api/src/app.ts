@@ -46,6 +46,7 @@ import { webhookRoutes } from "./routes/webhooks.js";
 import { analyticsRoutes } from "./routes/analytics.js";
 import { keyRoutes } from "./routes/keys.js";
 import { attemptReviewRoutes } from "./routes/attempt-review.js";
+import { byokRoutes } from "./routes/byok.js";
 import { demoRoutes } from "./routes/demo.js";
 import type { EmailSender } from "./email/adapter.js";
 
@@ -869,6 +870,10 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // write (1) + `appendAudit` (1).
   "/api/v1/workspaces/:id/keys": 4,
   "/api/v1/workspaces/:id/keys/:keyId": 4,
+  // Phase 12: BYOK encrypted API keys and AI question drafting (S-15).
+  "/api/v1/workspaces/:id/byok": 4,
+  "/api/v1/workspaces/:id/byok/:provider": 4,
+  "/api/v1/workspaces/:id/banks/:bankId/draft-ai": 10,
 
   // Phase 8c Task 1/2 (`R-06`/`R-07`, #94/#95): test and item analytics,
   // one screen. Measured (`apps/api/test/analytics.test.ts`'s own
@@ -1019,6 +1024,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/keys": "keys.manage",
   "POST /api/v1/workspaces/:id/keys": "keys.manage",
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "keys.manage",
+  // Phase 12: BYOK credentials and AI drafting
+  "GET /api/v1/workspaces/:id/byok": "workspace.settings",
+  "PUT /api/v1/workspaces/:id/byok/:provider": "workspace.settings",
+  "DELETE /api/v1/workspaces/:id/byok/:provider": "workspace.settings",
+  "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai": "banks.edit",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 
@@ -1319,6 +1329,11 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "GET /api/v1/workspaces/:id/keys": "workspace",
   "POST /api/v1/workspaces/:id/keys": "workspace",
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "workspace",
+  // Phase 12: BYOK credentials and AI drafting
+  "GET /api/v1/workspaces/:id/byok": "workspace",
+  "PUT /api/v1/workspaces/:id/byok/:provider": "workspace",
+  "DELETE /api/v1/workspaces/:id/byok/:provider": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai": "workspace",
   // Phase 8c Task 1 (`R-06`, #94): test analytics.
   "GET /api/v1/workspaces/:id/tests/:testId/analytics": "workspace",
   // Phase 8g Task 4 (`#91`, `R-03`): attempt review.
@@ -1414,6 +1429,8 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", keyRoutes(deps));
   // Phase 8g Task 4 (`#91`, `R-03`): per-attempt review endpoint.
   app.route("/api/v1/workspaces", attemptReviewRoutes(deps));
+  // Phase 12: BYOK credentials and AI drafting
+  app.route("/api/v1/workspaces", byokRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing
