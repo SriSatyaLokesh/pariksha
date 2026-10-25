@@ -213,6 +213,7 @@ export function SignIn({
               id="signin-email"
               type="email"
               label="Email address"
+              help="The address your workspace account was created with."
               value={email}
               onChange={setEmail}
               autoComplete="email"
@@ -222,6 +223,7 @@ export function SignIn({
               id="signin-password"
               type="password"
               label="Password"
+              help="Your account password."
               error={error}
               value={password}
               onChange={setPassword}

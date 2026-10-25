@@ -45,7 +45,7 @@ export function createStaticHandler(staticDir: string) {
     const pathname = decodeURIComponent(url.pathname);
 
     // Directory traversal guard
-    const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, "");
+    const safePath = path.normalize(pathname).replace(/^(\.\.[/\\])+/, "");
 
     // 1. Admin routes -> admin.html
     if (pathname === "/admin" || pathname.startsWith("/admin/")) {

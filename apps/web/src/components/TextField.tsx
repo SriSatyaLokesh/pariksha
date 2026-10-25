@@ -39,7 +39,7 @@ export function TextField({
   required?: boolean;
   value: string;
   onChange: (value: string) => void;
-  type?: "text" | "email";
+  type?: "text" | "email" | "password";
   autoComplete?: string | undefined;
   inputRef?: Ref<HTMLInputElement> | undefined;
 }) {

@@ -5,7 +5,6 @@ import { beforeEach, expect, it, vi } from "vitest";
 import {
   SCHEDULED_JOBS,
   matchesCron,
-  matchCronField,
   runScheduled,
   runScheduledDue,
   type ScheduledJob,
