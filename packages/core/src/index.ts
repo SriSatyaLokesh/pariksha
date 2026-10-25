@@ -141,3 +141,6 @@ export * from "./cost.js";
 // `packages/db/src/repo/analytics.ts` and the analytics screen are its
 // consumers.
 export * from "./item-analysis.js";
+
+// Phase 11 Task 1 (O-06): Extensibility plugin interface and registry.
+export * from "./plugins/index.js";
