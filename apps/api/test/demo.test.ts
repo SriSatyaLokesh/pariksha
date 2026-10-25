@@ -5,12 +5,10 @@ import {
   listBanks,
   listTests,
   getPublishedVersion,
-  type DbClient,
 } from "@pariksha/db";
 import { createApp, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps } from "../src/instrument.js";
-import { FIXED_NOW, sessionCookie, testDeps } from "./deps.js";
-import { createUser, addMembership, issueSession } from "@pariksha/db";
+import { FIXED_NOW, testDeps } from "./deps.js";
 
 const { deps } = await testDeps();
 const app = createApp(deps);
