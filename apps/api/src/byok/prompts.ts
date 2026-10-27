@@ -59,3 +59,16 @@ export function buildUserPrompt(topicOrText: string, count: number): string {
 ${topicOrText.trim()}
 """`;
 }
+
+/**
+ * Strips markdown code fences (```json ... ```) if present.
+ */
+export function cleanJsonOutput(raw: string): string {
+  const trimmed = raw.trim();
+  const fenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+  if (fenceMatch && fenceMatch[1]) {
+    return fenceMatch[1].trim();
+  }
+  return trimmed;
+}
+
