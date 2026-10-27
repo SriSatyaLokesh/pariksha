@@ -22,7 +22,7 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 <p>
 <a href="#screens"><b>Screens</b></a>&nbsp;·
 <a href="#what-it-does">What it does</a>&nbsp;·
-<a href="#deploying-to-cloudflare">Deploy</a>&nbsp;·
+<a href="#deployment-options">Deploy</a>&nbsp;·
 <a href="#see-a-real-test">A real test</a>&nbsp;·
 <a href="#documentation">Docs</a>&nbsp;·
 <a href="#roadmap">Roadmap</a>&nbsp;·
@@ -74,7 +74,7 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
 - **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. (The *live* monitor — attempts updating while the exam runs — is the one results surface still to come; see [What is still to come](#what-is-still-to-come).)
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
-- **Written for two deployment targets, shipping one.** Every adapter — database, object storage, identity — exists for both, and the Cloudflare free-plan path (Workers, Workers Static Assets, D1, R2) is the one that is built and deployed. Docker with Postgres and MinIO is Phase 11; `deploy/docker/` holds its README and nothing else yet.
+- **Two deployment targets: Cloudflare serverless and Docker self-host.** Every adapter — database, object storage, identity — exists for both. Deploy on Cloudflare's free tier (Workers, D1, R2) with zero operational cost, or self-host on any Linux server, VPS, or air-gapped on-premise network with Docker Compose (Postgres 16 / SQLite, MinIO, and Caddy for automatic HTTPS). See the [Deployment Guide](docs/deployment.md).
 
 ## Screens
 
@@ -186,6 +186,7 @@ Full architecture, candidate journey and data model: the [PRD](docs/PRD.md). Hig
 | Document | What it covers |
 | --- | --- |
 | [Product requirements (PRD)](docs/PRD.md) | Scope, roles, question types, proctoring, security, acceptance criteria, roadmap |
+| [Deployment Guide](docs/deployment.md) | Full setup for Cloudflare serverless, Docker (Postgres/SQLite), and on-premise air-gapped labs |
 | [Question format](docs/question-format.md) | `pariksha/question@1` — the 12 types and how they are scored |
 | [Test format](docs/test-format.md) | `pariksha/test@1` — timing, access, registration form, sections, release |
 | [Worked example](examples/reasoning-aptitude/) | One whole test, from input to results CSV |
@@ -210,29 +211,45 @@ pariksha/
 │   └── storage/          # R2, S3 and local-disk adapters
 ├── deploy/
 │   ├── cloudflare/       # zero-cost reference deployment
-│   └── docker/           # self-host with Docker Compose (Phase 11 — README only so far)
+│   └── docker/           # self-host with Docker Compose (Postgres/SQLite, MinIO, Caddy)
 ├── docs/                 # PRD, format specs, ADRs, diagrams
 ├── schemas/              # JSON Schemas (question, bank, test)
 ├── examples/             # complete worked tests, one folder per subject
 └── .github/              # issue and PR templates, CI
 ```
 
-## Deploying to Cloudflare
+## Deployment Options
 
-The reference deployment is one Worker serving the built web app as Static
-Assets with the Hono API as its script, plus D1, R2 and a Cron Trigger for the
-retention job — all on the free plan. `deploy/cloudflare/setup.mjs` creates
-what is missing and applies pending migrations, and it is idempotent:
+Pariksha offers two zero-licensing-fee deployment paths. Read the comprehensive **[Deployment Guide](docs/deployment.md)** for detailed architectures, hardware sizing, and on-premises air-gapped instructions.
+
+### 1. Cloudflare Serverless (Zero Maintenance)
+
+Deploy on Cloudflare's free tier (100k requests/day, 10 GB storage, $0/month) with one Worker serving Static Assets and the Hono API, plus D1 and R2:
 
 ```bash
-node deploy/cloudflare/setup.mjs --dry-run   # the whole flow, twice, against
-                                             # an in-memory Cloudflare
-node deploy/cloudflare/setup.mjs             # the real thing, against your account
+# Provision Cloudflare resources and deploy
+node deploy/cloudflare/setup.mjs
 pnpm deploy:cf
 ```
 
-The topology, the free-tier arithmetic and the reason it is one Worker and not
-two are in [`deploy/cloudflare/README.md`](deploy/cloudflare/README.md).
+Details in [`deploy/cloudflare/README.md`](deploy/cloudflare/README.md).
+
+### 2. Docker Compose (Self-Host & On-Premises)
+
+Deploy on any Linux server, VPS ($4/mo), or local machine with Docker Compose and automatic Let's Encrypt HTTPS:
+
+```bash
+cd deploy/docker
+cp .env.example .env
+
+# Option A: Lightweight SQLite (~80 MB RAM)
+docker compose -f docker-compose.sqlite.yml up -d --build
+
+# Option B: Production PostgreSQL 16 + MinIO S3 cluster (~350 MB RAM)
+docker compose up -d --build
+```
+
+Details in [`deploy/docker/README.md`](deploy/docker/README.md) and the [Deployment Guide](docs/deployment.md).
 
 ## Running Pariksha locally
 

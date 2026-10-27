@@ -216,56 +216,82 @@ export function ImportScreen({
             import" message needs a live region of its own, and
             `role="status"` (implicit `aria-live="polite"`) is that region
             without nesting one inside another. */}
-        {report !== undefined && hasIssues && (
-          <>
-            <p className="field-error" role="alert">
-              Nothing was imported — {report.issues.length} {report.issues.length === 1 ? "issue" : "issues"} found.
-            </p>
+        {report !== undefined && hasIssues && (() => {
+          const duplicateCount = report.issues.filter((i) =>
+            i.message.toLowerCase().includes("already in this bank") ||
+            i.message.toLowerCase().includes("already exists")
+          ).length;
+          const otherCount = report.issues.length - duplicateCount;
+          let summary = `Nothing was imported — ${report.issues.length} ${
+            report.issues.length === 1 ? "issue" : "issues"
+          } found.`;
+          if (duplicateCount > 0 && otherCount === 0) {
+            summary = `Nothing was imported — all ${report.issues.length} ${
+              report.issues.length === 1 ? "question already exists" : "questions already exist"
+            } in this bank.`;
+          } else if (duplicateCount > 0) {
+            summary = `Nothing was imported — ${duplicateCount} duplicate ${
+              duplicateCount === 1 ? "question" : "questions"
+            } already in this bank, and ${otherCount} other ${
+              otherCount === 1 ? "issue" : "issues"
+            } found.`;
+          }
+          return (
+            <>
+              <p className="field-error" role="alert">
+                {summary}
+              </p>
+              {duplicateCount > 0 && (
+                <p className="field-help">
+                  Question IDs are unique per bank. If you want to re-import these questions, delete the existing ones from this bank first or use different question IDs.
+                </p>
+              )}
 
-            {/* `.import-dialog__table` (authoring.css) is kept by name: the
-                bank browser's export-issue table renders the same block,
-                so this class outlived the dialog it was named for. Renaming
-                it is a sweep of its own, not this task's.
+              {/* `.import-dialog__table` (authoring.css) is kept by name: the
+                  bank browser's export-issue table renders the same block,
+                  so this class outlived the dialog it was named for. Renaming
+                  it is a sweep of its own, not this task's.
 
-                Task 8: a fourth "Line" column extends the same three-column
-                design rather than replacing it with per-row `aria-label`s —
-                for a CSV/GIFT import `issue.line` is the only position a
-                person can act on (there is no `bank.questions` to show
-                them), and it also keeps two otherwise-identical rows (no
-                `questionId`, the same field) distinguishable by accessible
-                name. */}
-            <table className="import-dialog__table">
-              <caption className="visually-hidden">Import issues, one row per problem found</caption>
-              <thead>
-                <tr>
-                  <th scope="col">Question</th>
-                  <th scope="col">Line</th>
-                  <th scope="col">Field</th>
-                  <th scope="col">Problem</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.issues.map((issue, index) => (
-                  // `index` is a stable key here — the dry-run report is
-                  // replaced wholesale on every file change, never patched
-                  // in place, so there is no row identity to preserve
-                  // across a reorder.
-                  <tr key={index}>
-                    {/* Fix round 1, finding 14: this used to repeat the line
-                        number here too ("line 4") when there was no
-                        `questionId` — the Line column already shows it. "—"
-                        falls back to the `bank.questions` index only when
-                        there is neither a question id nor a line to show. */}
-                    <td>{issue.questionId ?? (issue.line === undefined ? `entry ${issue.index}` : "—")}</td>
-                    <td>{issue.line ?? "—"}</td>
-                    <td>{issue.field}</td>
-                    <td>{issue.message}</td>
+                  Task 8: a fourth "Line" column extends the same three-column
+                  design rather than replacing it with per-row `aria-label`s —
+                  for a CSV/GIFT import `issue.line` is the only position a
+                  person can act on (there is no `bank.questions` to show
+                  them), and it also keeps two otherwise-identical rows (no
+                  `questionId`, the same field) distinguishable by accessible
+                  name. */}
+              <table className="import-dialog__table">
+                <caption className="visually-hidden">Import issues, one row per problem found</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Question</th>
+                    <th scope="col">Line</th>
+                    <th scope="col">Field</th>
+                    <th scope="col">Problem</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </>
-        )}
+                </thead>
+                <tbody>
+                  {report.issues.map((issue, index) => (
+                    // `index` is a stable key here — the dry-run report is
+                    // replaced wholesale on every file change, never patched
+                    // in place, so there is no row identity to preserve
+                    // across a reorder.
+                    <tr key={index}>
+                      {/* Fix round 1, finding 14: this used to repeat the line
+                          number here too ("line 4") when there was no
+                          `questionId` — the Line column already shows it. "—"
+                          falls back to the `bank.questions` index only when
+                          there is neither a question id nor a line to show. */}
+                      <td>{issue.questionId ?? (issue.line === undefined ? `entry ${issue.index}` : "—")}</td>
+                      <td>{issue.line ?? "—"}</td>
+                      <td>{issue.field}</td>
+                      <td>{issue.message}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </>
+          );
+        })()}
 
         {/* #63's own line: a question that resolved into a bank other than
             the file's `banks` entry implied still imports, and the page

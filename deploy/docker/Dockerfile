@@ -17,13 +17,17 @@ COPY apps/web/package.json ./apps/web/
 
 RUN pnpm install --frozen-lockfile
 
-# Copy source trees and scripts
+# Copy source trees, configs, and scripts
+COPY DESIGN.md tsconfig.base.json ./
 COPY scripts ./scripts
+COPY schemas ./schemas
 COPY packages ./packages
 COPY apps ./apps
 
 # Build design tokens, database migrations, web application, and API
 ENV NODE_ENV=production
+ARG SITE_URL=https://localhost
+ENV SITE_URL=${SITE_URL}
 RUN node scripts/tokens.mjs
 RUN pnpm turbo run build
 
@@ -44,6 +48,7 @@ RUN mkdir -p /app/data/storage && chown -R node:node /app
 # Copy built node_modules, packages and dist assets
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/package.json ./
+COPY --from=builder --chown=node:node /app/schemas ./schemas
 COPY --from=builder --chown=node:node /app/packages/core ./packages/core
 COPY --from=builder --chown=node:node /app/packages/db ./packages/db
 COPY --from=builder --chown=node:node /app/packages/storage ./packages/storage

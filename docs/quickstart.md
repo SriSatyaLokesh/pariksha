@@ -6,6 +6,8 @@ Pariksha offers two primary deployment architectures:
 1. **Docker Self-Host (Recommended for complete data sovereignty):** Runs on any Linux/macOS/Windows virtual machine or bare-metal server using Docker Compose, Postgres 16 (or lean SQLite), MinIO (or local storage), and Caddy for automatic HTTPS.
 2. **Cloudflare Serverless:** Zero-compute cost on the Cloudflare Free Tier using Cloudflare Workers, D1 database, and R2 object storage.
 
+> For comprehensive production clustering, on-premises air-gapped labs, and automated backup/restore scripts, see the [Full Deployment Guide](deployment.md).
+
 ---
 
 ## Path A: Docker Self-Host (< 15 Minutes)

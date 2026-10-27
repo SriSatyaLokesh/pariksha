@@ -161,7 +161,7 @@ async function drain(deps: AppDeps): Promise<{ summary: string }> {
       // A paused row's age (from `created_at`) keeps advancing in real
       // time while it waits here, so a long pause does not store up a
       // burst on resume — it lets the 24h give-up deadline do its job.
-      "WHERE w.active = 1 AND wd.delivered_at IS NULL AND wd.next_attempt_at <= ? " +
+      "WHERE w.active AND wd.delivered_at IS NULL AND wd.next_attempt_at <= ? " +
       "ORDER BY wd.next_attempt_at ASC LIMIT ?",
     [now, DRAIN_BATCH_LIMIT],
   );

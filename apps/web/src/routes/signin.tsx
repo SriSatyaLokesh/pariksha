@@ -39,6 +39,7 @@ export function SignIn({
   const [sentTo, setSentTo] = useState<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [useMagicLink, setUseMagicLink] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
 
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -101,6 +102,35 @@ export function SignIn({
         cause instanceof ApiError
           ? cause.message
           : "Invalid email or password. Please try again.",
+      );
+      setBusy(false);
+    }
+  }
+
+  async function onRegisterSubmit(event: FormEvent) {
+    event.preventDefault();
+    setError(undefined);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError(EMAIL_ERROR);
+      emailRef.current?.focus();
+      return;
+    }
+    if (!password || password.length < 8) {
+      setError("Password must be at least 8 characters long.");
+      passwordRef.current?.focus();
+      return;
+    }
+    setBusy(true);
+    try {
+      if (client.registerWithPassword) {
+        const res = await client.registerWithPassword(email, password, returnTo ?? undefined);
+        window.location.assign(res.returnTo ?? returnTo ?? "/");
+      }
+    } catch (cause) {
+      setError(
+        cause instanceof ApiError
+          ? cause.message
+          : "Registration failed. Please check your details and try again.",
       );
       setBusy(false);
     }
@@ -206,14 +236,14 @@ export function SignIn({
         ) : passwordProvider && !useMagicLink ? (
           <form
             className="organiser-form"
-            onSubmit={(event) => void onPasswordSubmit(event)}
+            onSubmit={(event) => void (isRegistering ? onRegisterSubmit(event) : onPasswordSubmit(event))}
             noValidate
           >
             <TextField
               id="signin-email"
               type="email"
               label="Email address"
-              help="The address your workspace account was created with."
+              help={isRegistering ? "The address you will use to sign in." : "The address your workspace account was created with."}
               value={email}
               onChange={setEmail}
               autoComplete="email"
@@ -223,11 +253,11 @@ export function SignIn({
               id="signin-password"
               type="password"
               label="Password"
-              help="Your account password."
+              help={isRegistering ? "Must be at least 8 characters." : "Your account password."}
               error={error}
               value={password}
               onChange={setPassword}
-              autoComplete="current-password"
+              autoComplete={isRegistering ? "new-password" : "current-password"}
               inputRef={passwordRef}
             />
             <button
@@ -235,7 +265,17 @@ export function SignIn({
               className="button-primary button-primary--surface"
               disabled={busy}
             >
-              Sign in
+              {isRegistering ? "Create account" : "Sign in"}
+            </button>
+            <button
+              type="button"
+              className="button-secondary button-secondary--surface"
+              onClick={() => {
+                setIsRegistering(!isRegistering);
+                setError(undefined);
+              }}
+            >
+              {isRegistering ? "Already have an account? Sign in" : "Need an account? Sign up"}
             </button>
             {magicLink && (
               <button

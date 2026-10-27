@@ -21,11 +21,8 @@ services:
       S3_ACCESS_KEY: ${MINIO_ROOT_USER}
       S3_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       S3_REGION: us-east-1
-      # Email (optional)
-      EMAIL_ENDPOINT: ${EMAIL_ENDPOINT:-}
-      EMAIL_TOKEN: ${EMAIL_TOKEN:-}
-      EMAIL_FROM: ${EMAIL_FROM:-}
-      EMAIL_CONSOLE: ${EMAIL_CONSOLE:-}
+      # Email (console mode for local)
+      EMAIL_CONSOLE: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,6 +30,8 @@ services:
         condition: service_healthy
     networks:
       - pariksha-net
+    ports:
+      - "8787:8787"
     expose:
       - "8787"
 
@@ -54,7 +53,7 @@ services:
       - pariksha-net
 
   minio:
-    image: minio/minio:latest
+    image: cgr.dev/chainguard/minio:latest
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
@@ -63,20 +62,20 @@ services:
     volumes:
       - minio_data:/data
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 10s
+      test: ["CMD", "/usr/bin/bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000"]
+      interval: 5s
       timeout: 5s
       retries: 5
     networks:
       - pariksha-net
 
   minio-init:
-    image: minio/mc:latest
+    image: cgr.dev/chainguard/minio:latest
     depends_on:
       minio:
         condition: service_healthy
     entrypoint: >
-      /bin/sh -c "
+      /usr/bin/bash -c "
       mc alias set local http://minio:9000 $${MINIO_ROOT_USER} $${MINIO_ROOT_PASSWORD};
       mc mb --ignore-existing local/$${S3_BUCKET:-pariksha};
       mc anonymous set download local/$${S3_BUCKET:-pariksha};
