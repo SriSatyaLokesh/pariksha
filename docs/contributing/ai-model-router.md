@@ -11,16 +11,16 @@ This document explains how the **Provider Router** works and how community contr
 You can copy and post this issue directly to GitHub to invite community contributors:
 
 ```markdown
-### 🚀 Feature: Add Additional AI Providers to Pariksha BYOK Router (Gemini, DeepSeek, Local Ollama)
+### 🚀 Feature: Add Additional AI Providers to Pariksha BYOK Router (Local Ollama, vLLM, Mistral, Groq)
 
 #### Description
-Pariksha currently supports Bring-Your-Own-Key (BYOK) question drafting via **Anthropic**, **OpenAI**, and generic **OpenAI-Compatible / OpenRouter** endpoints using a zero-dependency native `fetch` provider router.
+Pariksha natively supports Bring-Your-Own-Key (BYOK) question drafting via **Anthropic** (Claude 3.7 / 3.5 Sonnet, 3.5 Haiku), **OpenAI** (GPT-4o, o1, o3-mini), **Google Gemini** (Gemini 2.5 Pro / Flash), **OpenRouter** (DeepSeek, Llama 3.3), and **OpenCode** (open & local models) using a zero-dependency native `fetch` provider router.
 
 We would love community contributions to expand our AI model router with dedicated adapters for:
-1. **Google Gemini** (`gemini-2.0-flash`, `gemini-1.5-pro`)
-2. **DeepSeek** (`deepseek-chat`, `deepseek-reasoner`)
-3. **Local Ollama / vLLM** (Self-hosted air-gapped LLMs)
-4. **Mistral AI** (`mistral-large-2411`, `codestral`)
+1. **Local Ollama / vLLM** (Self-hosted air-gapped LLMs on campus infrastructure)
+2. **Mistral AI** (`mistral-large-2411`, `codestral`)
+3. **Groq** (`llama-3.3-70b-versatile`)
+4. **Cohere** (`command-r-plus`)
 
 #### Architecture & Constraints
 - **Zero External SDKs:** Do not import `@google/genai`, `openai`, or other third-party client SDKs. All requests must use standard `fetch` and WebCrypto.

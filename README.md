@@ -40,7 +40,7 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 > **Built and on `main`:** deploy to your own Cloudflare account or Docker server, import a bank,
 > build a test with pools and sets and a registration form, publish it, have
 > candidates sit it under proctoring, grade the written answers, export the
-> results CSV, or draft schema-validated questions using BYOK AI with Anthropic, OpenAI, or OpenRouter. Phases 1&ndash;12, all completed.
+> results CSV, or draft schema-validated questions using BYOK AI with Anthropic, OpenAI, Google Gemini, OpenRouter, or OpenCode. Phases 1&ndash;12, all completed.
 >
 > **Never done:** carried one real exam with 300 candidates at once. That is the
 > v0.1 exit gate — one real test, 300+ candidates, zero lost answers — and it is
@@ -88,7 +88,7 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
 - **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. (The *live* monitor — attempts updating while the exam runs — is the one results surface still to come; see [What is still to come](#what-is-still-to-come).)
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
-- **BYOK AI question drafting.** Generate complete, schema-validated questions directly from course topics, syllabi, or raw text using Anthropic (Claude 3.5 Sonnet / 3.7 Sonnet), OpenAI (GPT-4o, o1, o3-mini), or OpenRouter (DeepSeek, Llama 3.3, Mistral). Pure native `fetch`, WebCrypto AES-256-GCM zero-knowledge key encryption at rest, hard monthly spend caps, and interactive in-modal review with schema validation badges, 1-click question flagging/exclusion, and inline editing before bank import.
+- **BYOK AI question drafting.** Generate complete, schema-validated questions directly from course topics, syllabi, or raw text using Anthropic (Claude 3.7 / 3.5 Sonnet, 3.5 Haiku), OpenAI (GPT-4o, o1, o3-mini), Google Gemini (Gemini 2.5 Pro / 2.5 Flash), OpenRouter (DeepSeek, Llama 3.3, Mistral), or OpenCode (open & local models). Pure native `fetch`, WebCrypto AES-256-GCM zero-knowledge key encryption at rest, hard monthly spend caps, and interactive in-modal review with schema validation badges, 1-click question flagging/exclusion, and inline editing before bank import.
 - **Two deployment targets: Cloudflare serverless and Docker self-host.** Every adapter — database, object storage, identity — exists for both. Deploy on Cloudflare's free tier (Workers, D1, R2) with zero operational cost, or self-host on any Linux server, VPS, or air-gapped on-premise network with Docker Compose (Postgres 16 / SQLite, MinIO, and Caddy for automatic HTTPS). See the [Deployment Guide](docs/deployment.md).
 
 ## Screens
