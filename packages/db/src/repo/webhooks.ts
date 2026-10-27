@@ -107,7 +107,7 @@ export const createWebhook = scoped(
     const signingSecret = generateSigningSecret();
     const { changes } = await db.run(
       "INSERT INTO webhook (id, workspace_id, url, events_json, signing_secret, active, created_at) " +
-        "SELECT ?, ?, ?, ?, ?, 1, ? WHERE NOT EXISTS (" +
+        "SELECT ?, ?, ?, ?, ?, true, ? WHERE NOT EXISTS (" +
         "SELECT 1 FROM workspace WHERE id = ? AND (" +
         "slug LIKE 'demo-%' OR " +
         "settings_json LIKE '%\"is_demo\":true%' OR " +
@@ -148,7 +148,7 @@ export const setWebhookActive = scoped(
   async (db: DbClient, workspaceId: string, webhookId: string, active: boolean): Promise<void> => {
     const { changes } = await db.run(
       "UPDATE webhook SET active = ? WHERE workspace_id = ? AND id = ?",
-      [active ? 1 : 0, workspaceId, webhookId],
+      [db.dialect === "pg" ? active : (active ? 1 : 0), workspaceId, webhookId],
     );
     if (changes === 0) throw new Error("setWebhookActive: no such webhook in this workspace.");
   },
@@ -201,7 +201,7 @@ export const listActiveWebhooksForEvent = scoped(
   "listActiveWebhooksForEvent",
   async (db: DbClient, workspaceId: string, event: WebhookEvent): Promise<DeliverableWebhook[]> => {
     const rows = await db.query<{ id: string; url: string; signing_secret: string; events_json: unknown }>(
-      "SELECT id, url, signing_secret, events_json FROM webhook WHERE workspace_id = ? AND active = 1",
+      "SELECT id, url, signing_secret, events_json FROM webhook WHERE workspace_id = ? AND active",
       [workspaceId],
     );
     return rows

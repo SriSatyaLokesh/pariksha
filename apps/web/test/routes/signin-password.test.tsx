@@ -82,4 +82,35 @@ describe("SignIn component with Password and TOTP (Phase 10)", () => {
     expect(screen.getByRole("button", { name: "Send me a sign-in link" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Sign in with password instead/i })).toBeInTheDocument();
   });
+
+  it("toggles between sign in and sign up registration", async () => {
+    const registerWithPassword = vi.fn().mockResolvedValue({ status: "registered", returnTo: "/admin" });
+    const client = mockClient({ registerWithPassword });
+
+    render(
+      <SignIn
+        client={client}
+        providers={[{ id: "password", kind: "password", label: "Email and password" }]}
+        returnTo="/admin"
+      />,
+    );
+
+    const toggleBtn = screen.getByRole("button", { name: /Need an account\? Sign up/i });
+    fireEvent.click(toggleBtn);
+
+    expect(screen.getByRole("button", { name: "Create account" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Already have an account\? Sign in/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/Email address/i), {
+      target: { value: "owner@pariksha.org" },
+    });
+    fireEvent.change(screen.getByLabelText(/Password/i), {
+      target: { value: "SecretPassword123!" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+
+    await waitFor(() => {
+      expect(registerWithPassword).toHaveBeenCalledWith("owner@pariksha.org", "SecretPassword123!", "/admin");
+    });
+  });
 });

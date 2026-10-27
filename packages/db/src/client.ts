@@ -71,7 +71,12 @@ interface RawOps {
 
 /** SQLite and D1 store JSON as text; Postgres hands back a parsed value. */
 function parseJsonText<T>(raw: unknown): T {
-  return typeof raw === "string" ? (JSON.parse(raw) as T) : (raw as T);
+  if (typeof raw !== "string") return raw as T;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return raw as unknown as T;
+  }
 }
 
 export type DbClient =
@@ -217,10 +222,9 @@ export function pgClient(url: string): DbClient {
       });
       return counts;
     },
-    // postgres.js serialises a JS value into jsonb; handing it a JSON string
-    // would store the string itself, quotes and all.
-    jsonParam: (value) => sql.json(value as never),
-    jsonValue: <T>(raw: unknown) => parseJsonText<T>(raw),
+    jsonParam: (value) => JSON.stringify(value),
+    // postgres.js already parses jsonb columns into JS values; don't re-parse.
+    jsonValue: <T>(raw: unknown) => raw as T,
     close: () => sql.end(),
   };
 }

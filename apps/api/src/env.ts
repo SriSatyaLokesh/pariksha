@@ -228,7 +228,13 @@ function take<T extends z.ZodType>(
   schema: T,
   raw: Record<string, unknown>,
 ): z.infer<T> {
-  const result = schema.safeParse(raw);
+  const cleaned: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== "") {
+      cleaned[k] = v;
+    }
+  }
+  const result = schema.safeParse(cleaned);
   if (result.success) return result.data;
   const named = result.error.issues
     .map((issue) => `${issue.path.join(".")} (${issue.message})`)

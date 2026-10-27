@@ -17,15 +17,14 @@ services:
       APP_URL: ${PUBLIC_URL}
       STATIC_DIR: /app/apps/web/dist
       STORAGE_DIR: /app/data/storage
-      # Email (optional)
-      EMAIL_ENDPOINT: ${EMAIL_ENDPOINT:-}
-      EMAIL_TOKEN: ${EMAIL_TOKEN:-}
-      EMAIL_FROM: ${EMAIL_FROM:-}
-      EMAIL_CONSOLE: ${EMAIL_CONSOLE:-}
+      # Email (console mode for local)
+      EMAIL_CONSOLE: "true"
     volumes:
       - pariksha_data:/app/data
     networks:
       - pariksha-net
+    ports:
+      - "8787:8787"
     expose:
       - "8787"
 

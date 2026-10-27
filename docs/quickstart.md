@@ -1,94 +1,99 @@
-# Pariksha Quick Start Guide
+# Quickstart Guide
 
-Deploy your own independent instance of Pariksha in under 30 minutes (`AC-01`, `O-04`).
+This guide walks you through setting up a complete Pariksha exam platform instance in under 5 minutes.
 
-Pariksha offers two primary deployment architectures:
+Pariksha offers two primary deployment models:
 1. **Docker Self-Host (Recommended for complete data sovereignty):** Runs on any Linux/macOS/Windows virtual machine or bare-metal server using Docker Compose, Postgres 16 (or lean SQLite), MinIO (or local storage), and Caddy for automatic HTTPS.
 2. **Cloudflare Serverless:** Zero-compute cost on the Cloudflare Free Tier using Cloudflare Workers, D1 database, and R2 object storage.
 
 > **Tip — Evaluate without deploying:** You can test the candidate runtime immediately without installing Docker or configuring Cloudflare by trying the [Live Candidate Demo](/exam?demo=true) (Access code: `DEMO`).
+> For comprehensive production clustering, on-premises air-gapped labs, and automated backup/restore scripts, see the [Full Deployment Guide](deployment.md).
 
 ---
 
-## Path A: Docker Self-Host (< 15 Minutes)
+## Option A: Docker Self-Host (Local / On-Premise)
 
 ### Prerequisites
-- A virtual machine or server (Ubuntu 22.04+ / Debian 12 / AlmaLinux) with 2 GB+ RAM.
-- A registered domain name or subdomain pointing at your server's IP address (e.g. `exam.example.org`).
-- Docker Engine 24+ and Docker Compose v2.
+- [Docker](https://docs.docker.com/get-docker/) & Docker Compose v2.20+
+- 2 GB RAM, 10 GB disk space
 
-### Step-by-Step Setup
+### 1. Clone & Configure
+```bash
+git clone https://github.com/SriSatyaLokesh/pariksha.git
+cd pariksha
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/SriSatyaLokesh/pariksha.git /opt/pariksha
-   cd /opt/pariksha/deploy/docker
-   ```
+# Copy the example environment
+cp deploy/docker/.env.example deploy/docker/.env
+```
 
-2. **Configure your environment:**
-   Copy the example environment configuration:
-   ```bash
-   cp .env.example .env
-   ```
-   Open `.env` in an editor and update the core parameters:
-   - `APP_URL`: Your full HTTPS URL, e.g. `https://exam.example.org`
-   - `SESSION_SECRET`: A secure random 64-character hex string (run `openssl rand -hex 32` to generate)
-   - `STORAGE_SECRET_KEY`: A secure random key for MinIO
-   - `POSTGRES_PASSWORD`: A secure random password for Postgres
+Review `deploy/docker/.env` and update `PUBLIC_URL` to your domain or `http://localhost:8787`.
 
-3. **Start the stack:**
-   ```bash
-   docker compose up -d
-   ```
-   Docker pulls and builds the containers. Caddy automatically requests and provisions a trusted Let's Encrypt TLS certificate for your domain.
+### 2. Start Services
+```bash
+# Production stack: Postgres 16 + MinIO S3 + Caddy Reverse Proxy
+docker compose -f deploy/docker/docker-compose.yml up -d
 
-4. **Run the First-Run Setup Wizard:**
-   Visit your configured `APP_URL` in your browser:
-   - Navigate to `https://exam.example.org`.
-   - The first-run setup wizard detects that the instance has no owner.
-   - Enter your administrator email and account password.
-   - Set up optional RFC 6238 TOTP two-factor authentication.
-   - Pariksha seeds your primary workspace and opens your organiser dashboard.
+# OR Lean stack: SQLite + local storage (minimal resources)
+docker compose -f deploy/docker/docker-compose.sqlite.yml up -d
+```
+
+### 3. Complete Initial Setup
+Open your browser to `http://localhost:8787` (or your configured `PUBLIC_URL`).
+The first-run setup wizard will prompt you to:
+1. Register the Administrator account (email + secure password).
+2. Configure optional Two-Factor Authentication (TOTP via Google Authenticator / 1Password).
+3. Create your first Organiser Workspace.
 
 ---
 
-## Path B: Cloudflare Serverless Free Tier (< 25 Minutes)
+## Option B: Cloudflare Serverless Deployment
 
 ### Prerequisites
-- A Cloudflare account with Workers, D1, and R2 enabled.
-- Node.js 22+ and `pnpm` installed locally.
+- Node.js 20+ and `pnpm`
+- A free [Cloudflare Account](https://dash.cloudflare.com/sign-up)
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) (`pnpm install -g wrangler`)
 
-### Step-by-Step Setup
+### 1. Clone & Install
+```bash
+git clone https://github.com/SriSatyaLokesh/pariksha.git
+cd pariksha
+pnpm install
+```
 
-1. **Authenticate Wrangler:**
-   ```bash
-   pnpm exec wrangler login
-   ```
+### 2. Login to Cloudflare
+```bash
+wrangler login
+```
 
-2. **Provision D1 and R2:**
-   Run the deployment initialization script:
-   ```bash
-   pnpm --filter @pariksha/api exec wrangler d1 create pariksha-db
-   pnpm --filter @pariksha/api exec wrangler r2 bucket create pariksha-storage
-   ```
+### 3. Provision Cloudflare Resources
+```bash
+# Create D1 Serverless SQLite Database
+wrangler d1 create pariksha-db
 
-3. **Deploy the Worker:**
-   ```bash
-   pnpm deploy:cf
-   ```
+# Create R2 Object Storage Bucket
+wrangler r2 bucket create pariksha-storage
+```
 
-4. **Apply Database Migrations:**
-   ```bash
-   pnpm --filter @pariksha/api exec wrangler d1 migrations apply pariksha-db --remote
-   ```
+Copy the generated `database_id` and bucket names into `apps/api/wrangler.jsonc`.
 
-5. **Open your instance:**
-   Visit your assigned `*.workers.dev` or custom Cloudflare domain to complete the owner onboarding wizard.
+### 4. Apply Database Migrations
+```bash
+pnpm --filter @pariksha/db migrate
+```
+
+### 5. Deploy API Worker & Frontend Pages
+```bash
+# Deploy backend API worker
+pnpm --filter @pariksha/api deploy
+
+# Build and deploy frontend web SPA to Cloudflare Pages
+pnpm --filter @pariksha/web build
+wrangler pages deploy apps/web/dist --project-name pariksha
+```
 
 ---
 
 ## Next Steps
-
-- Consult the [Organiser Guide](organiser-guide.md) to author question banks and assemble your first examination.
-- Review the [Admin Security Guide](security-guide.md) to configure authentication providers, webhooks, and audit logging.
-- Provide the [Candidate FAQ](candidate-faq.md) link to prospective students and candidates.
+- Import an example question bank: see [Question Authoring Guide](authoring.md).
+- Assemble a test with randomized pools: see [Test Builder Guide](test-builder.md).
+- Configure proctoring profiles and violation limits: see [Proctoring Overview](proctoring.md).
