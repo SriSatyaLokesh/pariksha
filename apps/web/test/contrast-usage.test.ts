@@ -529,6 +529,13 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".bank-browser__filter-select select": { dark: "signal-surface", light: "signal-l-surface" },
   ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
+  ".byok-card__badge--active": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-card__badge--inactive": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-card__desc": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-usage-stat__value": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-usage-stat__label": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-preview__item-meta": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-preview__item-prompt": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
   // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
@@ -833,6 +840,11 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // the mechanism and changes nothing but weight and ink, so its size is the
   // body-sm scale `.screen__facts li` sets on the line it sits in.
   ".screen__facts b": { px: 14, weight: 600 },
+
+  // Phase 12 BYOK & AI drafting (Task 4a)
+  ".byok-card__badge--active": { px: 12, weight: 400 },
+  ".byok-card__badge--inactive": { px: 12, weight: 400 },
+  ".byok-usage-stat__value": { px: 20, weight: 600 },
 
   // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
   // The builder's facts, consequences and summaries are <p> elements that
