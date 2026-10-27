@@ -6,7 +6,7 @@ Pariksha offers two primary deployment models:
 1. **Docker Self-Host (Recommended for complete data sovereignty):** Runs on any Linux/macOS/Windows virtual machine or bare-metal server using Docker Compose, Postgres 16 (or lean SQLite), MinIO (or local storage), and Caddy for automatic HTTPS.
 2. **Cloudflare Serverless:** Zero-compute cost on the Cloudflare Free Tier using Cloudflare Workers, D1 database, and R2 object storage.
 
-> **Tip — Evaluate without deploying:** You can test the candidate runtime immediately without installing Docker or configuring Cloudflare by trying the [Live Candidate Demo](/exam?demo=true) (Access code: `DEMO`).
+> **Tip — Evaluate without deploying:** You can test the candidate runtime immediately without installing Docker or configuring Cloudflare by trying the [Live Candidate Demo](https://github.com/SriSatyaLokesh/pariksha#try-the-live-demo) (Access code: `DEMO`).
 > For comprehensive production clustering, on-premises air-gapped labs, and automated backup/restore scripts, see the [Full Deployment Guide](deployment.md).
 
 ---
@@ -94,6 +94,7 @@ wrangler pages deploy apps/web/dist --project-name pariksha
 ---
 
 ## Next Steps
-- Import an example question bank: see [Question Authoring Guide](authoring.md).
-- Assemble a test with randomized pools: see [Test Builder Guide](test-builder.md).
-- Configure proctoring profiles and violation limits: see [Proctoring Overview](proctoring.md).
+- Import an example question bank: see [Question Format Specification](question-format.md) and [Organiser Guide](organiser-guide.md).
+- Assemble a test with randomized pools: see [Test Format](test-format.md) and [Organiser Guide](organiser-guide.md).
+- Security and proctoring overview: see [Security Guide](security-guide.md) and [Candidate FAQ](candidate-faq.md).
+- Production multi-target setups: see [Deployment Guide](deployment.md).

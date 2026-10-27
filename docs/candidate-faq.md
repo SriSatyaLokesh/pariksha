@@ -23,7 +23,7 @@ If your examination specifies camera proctoring:
 
 ### Can I try a sample examination before my real test?
 Yes. Pariksha offers an interactive public demo that requires zero registration, credentials, or installation:
-- **Demo Link:** [pariksha.example/exam?demo=true](/exam?demo=true)
+- **Demo Link:** [pariksha.example/exam?demo=true](https://pariksha.example/exam?demo=true)
 - **Access Code:** `DEMO`
 - **Format:** 15 minutes total, 3 sections (5 minutes each), 12 question types, floating calculator, and local proctoring checks.
 

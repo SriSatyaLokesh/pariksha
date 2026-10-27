@@ -10,7 +10,7 @@ test.describe("Public Demo Instance Flows (Phase 9)", () => {
     ).toBeVisible();
 
     // Click "Try Live Demo" in hero
-    const tryDemoLink = page.getByRole("link", { name: /try live demo/i });
+    const tryDemoLink = page.locator(".signal-actions--hero").getByRole("link", { name: /try live demo/i });
     await expect(tryDemoLink).toBeVisible();
     await expect(tryDemoLink).toHaveAttribute("href", "/exam?demo=true");
 
