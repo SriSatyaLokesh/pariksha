@@ -44,13 +44,13 @@ describe("Demo Exam Client (Zero Cloudflare Subrequests)", () => {
     }
   });
 
-  it("initializes attempt paper from local fixture with proctoring off", async () => {
+  it("initializes attempt paper from local fixture with demo proctoring", async () => {
     const client = createDemoClient();
     const paper = await client.start("demo-token");
     expect(paper.sections.length).toBe(3);
     expect(paper.proctoring.profile).toBe("off");
     expect(paper.proctoring.requireCamera).toBe(false);
-    expect(paper.proctoring.requireFullscreen).toBe(false);
+    expect(paper.proctoring.requireFullscreen).toBe(true);
   });
 
   it("saves answers locally in memory without making network fetch", async () => {
