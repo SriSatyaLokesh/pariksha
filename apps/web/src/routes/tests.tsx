@@ -618,10 +618,8 @@ export function TestList({
                       <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
                       <td>
                         <div className="field">
-                          <label className="visually-hidden" htmlFor={slugId}>
-                            Slug
-                          </label>
                           <input
+                            aria-label="Slug"
                             className="text-input"
                             id={slugId}
                             value={slugDrafts[test.id] ?? test.slug}
@@ -647,28 +645,28 @@ export function TestList({
                         <div className="testbuilder-shortlink">
                           <QrCode value={`${window.location.origin}${shortLinkPath}`} label="QR code for the short link" size={64} />
                           <a href={shortLinkPath}>{shortLinkPath}</a>
+                          <button type="button" className="button-secondary" onClick={() => void copyShortLink(test)}>
+                            Copy short link
+                          </button>
+                          {/* Rendered on every row, always — only the text
+                              content changes. A live region that is inserted
+                              already carrying its text does not reliably
+                              announce; one that is already present and has
+                              its text updated does. */}
+                          <p className="organiser__status" role="status">
+                            {copiedId === test.id ? "Copied." : ""}
+                          </p>
                         </div>
                       </td>
                       {/* `D21a`: the row-action gutter, whose rule lives in
                           primitives.css so every table inherits it. */}
                       <td className="acts">
-                        <button type="button" className="button-secondary" onClick={() => void copyShortLink(test)}>
-                          Copy short link
-                        </button>
                         <button type="button" className="button-secondary" onClick={() => void onClone(test)}>
                           Duplicate
                         </button>
                         <button type="button" className="button-secondary" onClick={() => void onExport(test)}>
                           Export
                         </button>
-                        {/* Rendered on every row, always — only the text
-                            content changes. A live region that is inserted
-                            already carrying its text does not reliably
-                            announce; one that is already present and has
-                            its text updated does. */}
-                        <p className="organiser__status" role="status">
-                          {copiedId === test.id ? "Copied." : ""}
-                        </p>
                       </td>
                     </tr>
                   );

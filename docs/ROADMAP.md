@@ -223,7 +223,7 @@ keeps their **endpoint**.
 - **Extensible Provider Router & Model Registry:** Unified abstraction for Anthropic, OpenAI, Google Gemini, OpenRouter, and OpenCode with curated models (Claude 3.7/3.5, GPT-4o/o1/o3-mini, Gemini 2.5/1.5, DeepSeek-V4.1, GLM-5.3) and custom model IDs without external SDK dependencies.
 - **Two-Step Drafting Engine:** Decoupled computational preview generation (`POST .../draft-ai`) and atomic bank persistence (`POST .../draft-ai/commit`), preventing unvetted persistence.
 - **Author Review UX:** Organiser in-modal review with `@pariksha/core` schema validation badges, 1-click question flagging/exclusion, and inline editing before bank commitment.
-- **Verification:** Unit tests across provider router, crypto, adapters, and two-step routes, plus full Playwright end-to-end verification (`byok-drafting.spec.ts`).
+- **Verification:** Unit tests across provider router, crypto, adapters, and two-step routes, plus full Playwright end-to-end verification (`post-byok-drafting.spec.ts`).
 
 **Gate.** A generated batch that fails schema validation is rejected whole with its errors, exactly like a bad import. No request to a provider is made without a key belonging to the calling workspace. No key value is readable through any API response. Hard spend caps prevent overage. All Playwright E2E and monorepo tests pass.
 

@@ -218,4 +218,4 @@ Two tables govern BYOK in `packages/db/src/schema/columns.ts`, `sqlite.ts`, and 
    - `apps/web/test/admin/byok-settings.test.tsx`: Provider configuration, masked input, spend limit updates, token usage rendering.
    - `apps/web/test/admin/draft-ai-modal.test.tsx`: Full preview and flagging flow, flagging toggles, inline editing, exclude behavior on import.
 3. **End-to-End Tests:**
-   - `apps/web/e2e/byok-drafting.spec.ts`: Complete user journey: Settings BYOK setup -> Bank browser -> Draft with AI -> Flagging incorrect question -> Importing vetted drafts.
+   - `apps/web/e2e/post-byok-drafting.spec.ts`: Complete user journey: Settings BYOK setup -> Bank browser -> Draft with AI -> Flagging incorrect question -> Importing vetted drafts.

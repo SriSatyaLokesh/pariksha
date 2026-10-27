@@ -1,5 +1,10 @@
 // Phase 12 E2E Spec: BYOK AI Question Drafting
 // Verifies OpenRouter key configuration, spend caps, and two-step in-bank AI drafting preview, review & commit flows.
+//
+// NOTE: Sorted after `e2e/first-run.spec.ts` ('f' < 'p') under Playwright's
+// single-worker sorted file runner, ensuring `first-run.spec.ts` completes
+// the initial instance setup on an empty database before this spec seeds its
+// own workspace.
 
 import { expect, test } from "@playwright/test";
 import { seedWorkspace, signIn } from "./seed";

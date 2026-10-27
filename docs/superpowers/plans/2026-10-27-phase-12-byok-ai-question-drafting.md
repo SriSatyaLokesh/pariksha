@@ -186,13 +186,13 @@ git commit -m "feat(web): add in-modal question preview, validation flagging, an
 ### Task 4: Full Monorepo Integration, Playwright E2E & Roadmap Update
 
 **Files:**
-- Modify: `apps/web/e2e/byok-drafting.spec.ts`
+- Modify: `apps/web/e2e/post-byok-drafting.spec.ts`
 - Modify: `docs/ROADMAP.md`
 - Test: Full monorepo verification (`turbo run typecheck`, `turbo run lint`, `turbo run test`, `pnpm --filter @pariksha/web e2e`)
 
 - [ ] **Step 1: Update Playwright E2E spec for preview & flagging**
 
-In `apps/web/e2e/byok-drafting.spec.ts`:
+In `apps/web/e2e/post-byok-drafting.spec.ts`:
 - Test generating questions via "Draft with AI".
 - Verify review cards appear with validation badges.
 - Click "Flag as Incorrect" on one question and confirm it is marked excluded.
@@ -200,7 +200,7 @@ In `apps/web/e2e/byok-drafting.spec.ts`:
 
 - [ ] **Step 2: Run Playwright E2E spec**
 
-Run: `pnpm --filter @pariksha/web e2e byok-drafting.spec.ts`  
+Run: `pnpm --filter @pariksha/web e2e post-byok-drafting.spec.ts`  
 Expected: PASS
 
 - [ ] **Step 3: Run full monorepo quality checks**
