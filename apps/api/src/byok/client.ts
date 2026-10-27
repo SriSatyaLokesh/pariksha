@@ -11,8 +11,8 @@ export interface AiDraftRequest {
   apiKey: string;
   prompt: string;
   count: number;
-  types?: QuestionType[];
-  model?: string;
+  types?: QuestionType[] | undefined;
+  model?: string | undefined;
 }
 
 export interface AiDraftResponse {

@@ -42,7 +42,7 @@ per-phase sections below describe the *plan*, this table describes the *state*.
 | 9 — Public demo instance and section division | **Done** | Zero-bill public demo instance with local-first scoring, client question caching, `proctoring: "off"`, and candidate exam section division. Merged to `main` (`783364b`). | Shipped. |
 | 10 — Docker self-host | **Done** | Containerized Pariksha serving API & web SPA, Postgres 16 & SQLite Compose stacks, MinIO & local-disk storage, Caddy automatic HTTPS, Argon2id password & TOTP 2FA, in-process scheduler, and backup/restore scripts (`AC-01`, `S-01`, `S-02`, `O-03`). | Shipped. |
 | 11 — v1.0 release readiness | **Done** | Extensible plugin architecture (`O-06`), i18n & RTL translation (`T-24`), OpenAPI 3.1 specification (`O-04`), full documentation suite (`O-04`), k6 500-VU load test suite (`AC-29`), and WCAG 2.1 AA accessibility audit (`O-05`). | Shipped. |
-| 12 — BYOK AI question drafting | **Planned** | — | Per-workspace encrypted API key storage, structured question drafting flow. | Next phase. |
+| 12 — BYOK AI question drafting | **Done** | Per-workspace AES-256-GCM encrypted API key storage (`byok_credential`, `byok_usage`), zero-dependency native `fetch` HTTP clients for Anthropic & OpenAI, all-or-nothing schema validation gate with `@pariksha/core`, Organiser BYOK settings, and In-Bank AI Question Drafting modal. | Shipped. |
 
 **The landing page is independent of the API** — it is static output with no backend call,
 which is why Phase 3's tasks 7 and 8 could ship ahead of Phase 2. The rest of Phase 3

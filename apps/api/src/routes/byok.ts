@@ -84,7 +84,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
     const actor = c.get("actor");
     await appendAudit(deps.db, workspaceId, {
       action: "byok.updated",
-      actor: actor?.type === "user" ? actor.user.id : "system",
+      actor: actor?.userId ?? "system",
       target: credential.id,
       detail: { provider, keyHint: hint, spendLimitCents: credential.spendLimitCents },
       now: deps.now(),
@@ -103,7 +103,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
     const actor = c.get("actor");
     await appendAudit(deps.db, workspaceId, {
       action: "byok.deleted",
-      actor: actor?.type === "user" ? actor.user.id : "system",
+      actor: actor?.userId ?? "system",
       target: provider,
       detail: { provider },
       now: deps.now(),
@@ -140,7 +140,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
       const result = await draftQuestions(deps.db, workspaceId, bankId, secretKey, {
         prompt: parsed.data.prompt,
         count: parsed.data.count,
-        types: parsed.data.types as QuestionType[] | undefined,
+        types: parsed.data.types ? (parsed.data.types as QuestionType[]) : undefined,
         provider: parsed.data.provider,
         model: parsed.data.model,
       });
@@ -148,7 +148,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
       const actor = c.get("actor");
       await appendAudit(deps.db, workspaceId, {
         action: "bank.ai_drafted",
-        actor: actor?.type === "user" ? actor.user.id : "system",
+        actor: actor?.userId ?? "system",
         target: bankId,
         detail: {
           count: result.questions.length,
