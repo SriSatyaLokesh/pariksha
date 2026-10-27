@@ -30,7 +30,7 @@ export function DemoBanner({
         <p className="demo-banner-text">
           {mode === "exam" ? (
             <>
-              <b>Sample Candidate Exam</b> · 12 question types · Evaluated locally with no Cloudflare subrequests.
+              <b>Sample Candidate Exam</b> · 12 question types · Access Code: DEMO · Evaluated locally with no Cloudflare subrequests.
             </>
           ) : (
             <>

@@ -83,6 +83,9 @@ export function SignalHero() {
               >
                 Try Live Demo
               </a>
+              <span className="signal-badge-code">
+                Code: <strong>DEMO</strong>
+              </span>
               <a className="signal-btn" href="#start">
                 Run your first exam
               </a>

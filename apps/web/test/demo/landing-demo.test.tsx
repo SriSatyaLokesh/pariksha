@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Landing } from "../../src/routes/landing";
 import { DemoModal } from "../../src/components/demo/DemoModal";
+import { DemoBanner } from "../../src/components/demo/DemoBanner";
 
 describe("Landing Page Live Demo Entry", () => {
   it("renders 'Try Live Demo' link in hero pointing to /exam?demo=true", () => {
@@ -9,6 +10,16 @@ describe("Landing Page Live Demo Entry", () => {
     const demoLink = screen.getByRole("link", { name: /try live demo/i });
     expect(demoLink).toBeInTheDocument();
     expect(demoLink).toHaveAttribute("href", "/exam?demo=true");
+  });
+
+  it("renders demo access code 'DEMO' prominently in landing hero", () => {
+    render(<Landing />);
+    const heroDemo = screen.getByRole("link", { name: /try live demo/i });
+    expect(heroDemo).toBeInTheDocument();
+    const codeBadge = screen.getByText(
+      (_, el) => Boolean(el?.classList.contains("signal-badge-code") && /code:\s*DEMO/i.test(el.textContent || "")),
+    );
+    expect(codeBadge).toBeInTheDocument();
   });
 });
 
@@ -28,6 +39,14 @@ describe("DemoModal Component", () => {
     render(<DemoModal isOpen={true} onClose={() => {}} />);
     const candidateLink = screen.getByRole("link", { name: /take sample exam/i });
     expect(candidateLink).toHaveAttribute("href", "/exam?demo=true");
+  });
+
+  it("displays DEMO access code for candidate sample exam", () => {
+    render(<DemoModal isOpen={true} onClose={() => {}} />);
+    const codePill = screen.getByText(
+      (_, el) => Boolean(el?.classList.contains("demo-code-pill") && /access code:\s*DEMO/i.test(el.textContent || "")),
+    );
+    expect(codePill).toBeInTheDocument();
   });
 
   it("provisions demo workspace when 'Explore Organiser Dashboard' is clicked", async () => {
@@ -63,5 +82,12 @@ describe("DemoModal Component", () => {
       writable: true,
       value: originalLocation,
     });
+  });
+});
+
+describe("DemoBanner Component Access Code", () => {
+  it("displays access code DEMO in exam mode", () => {
+    render(<DemoBanner mode="exam" />);
+    expect(screen.getByText(/access code:\s*DEMO/i)).toBeInTheDocument();
   });
 });
