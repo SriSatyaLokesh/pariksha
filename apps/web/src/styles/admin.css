@@ -929,3 +929,180 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* ---- Phase 12: BYOK & AI Question Drafting ----------------------------- */
+
+.byok-section {
+  margin-top: var(--space-xl);
+}
+
+.byok-title {
+  font-size: var(--type-title-md-size);
+  font-weight: 600;
+  margin: 0;
+}
+
+.byok-settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xl);
+}
+
+.byok-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: var(--space-md);
+}
+
+.byok-card {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--space-md);
+}
+
+.byok-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.byok-card__title {
+  font-size: var(--type-title-md-size);
+  font-weight: 600;
+  margin: 0;
+}
+
+.byok-card__badge {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--rounded-full);
+  border: 1px solid var(--edge-strong);
+}
+
+.byok-card__badge--active {
+  border-color: var(--accent);
+  background-color: var(--accent-wash);
+  color: var(--accent);
+}
+
+.byok-card__badge--inactive {
+  color: var(--ink-3);
+  background-color: var(--wash);
+}
+
+.byok-card__desc {
+  margin: 0;
+  font-size: var(--type-body-sm-size);
+  color: var(--ink-2);
+}
+
+.byok-card__meta {
+  margin: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.byok-card__actions {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: center;
+}
+
+.byok-usage-card {
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.byok-usage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: var(--space-md);
+}
+
+.byok-usage-stat {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.byok-usage-stat__value {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-title-md-size);
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.byok-usage-stat__label {
+  font-size: var(--type-body-sm-size);
+  color: var(--ink-3);
+  text-transform: uppercase;
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+}
+
+/* AI Drafting Modal */
+.draft-ai-modal {
+  width: min(580px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.draft-ai-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.draft-ai-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-md);
+}
+
+.draft-ai-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-xs);
+}
+
+.draft-ai-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 320px;
+  overflow-y: auto;
+  padding-block: var(--space-xs);
+}
+
+.draft-ai-preview__item {
+  padding: var(--space-sm);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-sm);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.draft-ai-preview__item-meta {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  color: var(--ink-3);
+  text-transform: uppercase;
+}
+
+.draft-ai-preview__item-prompt {
+  margin: 0;
+  font-size: var(--type-body-sm-size);
+  color: var(--ink);
+}
+
