@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { PROCTORING_DEFAULTS, proctoringRequirements, type ResolvedProctoring } from "@pariksha/core";
+import { PROCTORING_DEFAULTS, type ResolvedProctoring } from "@pariksha/core";
 import { deviceReport, ExamApp } from "../../src/routes/exam";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import * as demoTestModule from "../../src/lib/demo-test";
