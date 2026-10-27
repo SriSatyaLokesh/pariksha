@@ -40,7 +40,7 @@ export const DEMO_SECTION_1_QUESTIONS: CandidateQuestion[] = [
   {
     id: "demo_q4",
     type: "fill_blank",
-    prompt: "The standard port used for secure HTTPS connections is [[b1]].",
+    prompt: "The standard port used for secure HTTPS connections is {{b1}}.",
     points: 2,
     blanks: [{ id: "b1" }],
   },
@@ -241,7 +241,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
   {
     id: "demo_q4",
     type: "fill_blank",
-    prompt: "The standard port used for secure HTTPS connections is [[b1]].",
+    prompt: "The standard port used for secure HTTPS connections is {{b1}}.",
     scoring: { points: 1 },
     tags: ["web"],
     blanks: [{ id: "b1", accepted: ["443"], match: "exact" }],

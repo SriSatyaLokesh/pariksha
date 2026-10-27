@@ -38,7 +38,8 @@ function FillBlank({ question, value, onChange, disabled }: AnswerProps) {
     // here. Without this a prompt holding the marker's literal text
     // forges a blank, which is the plan's own named failure. U+2063 has
     // no visible effect in prose, so nothing a candidate reads changes.
-    const safe = question.prompt.replaceAll(SEP, "");
+    const normalizedPrompt = question.prompt.replace(/\[\[([^[\]]+)\]\]/g, "{{$1}}");
+    const safe = normalizedPrompt.replaceAll(SEP, "");
     return placeholderIds(safe)
       .filter((id) => declared.has(id))
       .reduce((text, id) => text.replaceAll(`{{${id}}}`, BLANK_MARKER(id)), safe);
