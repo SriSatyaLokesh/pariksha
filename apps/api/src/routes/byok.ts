@@ -5,7 +5,6 @@ import { Hono } from "hono";
 import { z } from "zod";
 import {
   appendAudit,
-  getByokCredential,
   listByokCredentials,
   setByokCredential,
   deleteByokCredential,
@@ -13,7 +12,7 @@ import {
   getBank,
   type ByokProvider,
 } from "@pariksha/db";
-import { QUESTION_TYPES, type QuestionType } from "@pariksha/core";
+import { QUESTION_TYPES } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { requires } from "../middleware/authorize.js";
@@ -140,7 +139,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
       const result = await draftQuestions(deps.db, workspaceId, bankId, secretKey, {
         prompt: parsed.data.prompt,
         count: parsed.data.count,
-        types: parsed.data.types ? (parsed.data.types as QuestionType[]) : undefined,
+        types: parsed.data.types,
         provider: parsed.data.provider,
         model: parsed.data.model,
       });
