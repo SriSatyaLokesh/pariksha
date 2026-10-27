@@ -15,7 +15,7 @@ export interface DraftAiModalProps {
   onSuccess: () => void;
 }
 
-type Provider = "anthropic" | "openai" | "openrouter";
+type Provider = "anthropic" | "openai" | "openrouter" | "gemini";
 type ModalStep = "config" | "review";
 
 const SUPPORTED_TYPES: Array<{ type: QuestionType; label: string }> = [
@@ -73,6 +73,14 @@ const CURATED_MODELS: Record<
     { id: "openai/gpt-6.1-terra", label: "GPT-6.1 Terra (via OpenRouter)" },
     { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B Instruct" },
     { id: "mistralai/mistral-large-2411", label: "Mistral Large 2411" },
+    { id: "custom", label: "Custom model..." },
+  ],
+  gemini: [
+    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recommended)" },
+    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
+    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
+    { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
+    { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
     { id: "custom", label: "Custom model..." },
   ],
 };
@@ -371,6 +379,7 @@ export function DraftAiModal({
                   >
                     <option value="anthropic">Anthropic</option>
                     <option value="openai">OpenAI</option>
+                    <option value="gemini">Google Gemini</option>
                     <option value="openrouter">OpenRouter (OpenAI-compatible)</option>
                   </select>
                 </div>
@@ -409,7 +418,9 @@ export function DraftAiModal({
                     placeholder={
                       provider === "openrouter"
                         ? "e.g. meta-llama/llama-3.3-70b-instruct"
-                        : "e.g. claude-3-7-sonnet"
+                        : provider === "gemini"
+                          ? "e.g. gemini-2.5-pro"
+                          : "e.g. claude-3-7-sonnet"
                     }
                     disabled={loading}
                     required

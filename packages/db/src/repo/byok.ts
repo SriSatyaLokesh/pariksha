@@ -5,7 +5,7 @@ import type { DbClient } from "../client.js";
 import { newId } from "../ids.js";
 import { scoped } from "./guard.js";
 
-export type ByokProvider = "anthropic" | "openai" | "openrouter";
+export type ByokProvider = "anthropic" | "openai" | "openrouter" | "gemini";
 
 export interface ByokCredentialRow {
   id: string;

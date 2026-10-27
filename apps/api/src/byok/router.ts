@@ -3,6 +3,7 @@
 
 import type { Question } from "@pariksha/core";
 import { AnthropicAdapter } from "./adapters/anthropic.js";
+import { GeminiAdapter } from "./adapters/gemini.js";
 import { OpenAIAdapter } from "./adapters/openai.js";
 import { OpenRouterAdapter } from "./adapters/openrouter.js";
 import { calculateCostCents, getFallbackPricing, getModelMetadata } from "./models.js";
@@ -39,6 +40,7 @@ export function listAdapters(): ProviderAdapter[] {
 // Register built-in default adapters
 registerAdapter(new AnthropicAdapter());
 registerAdapter(new OpenAIAdapter());
+registerAdapter(new GeminiAdapter());
 registerAdapter(new OpenRouterAdapter());
 
 /**

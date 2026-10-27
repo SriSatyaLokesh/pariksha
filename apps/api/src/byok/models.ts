@@ -165,9 +165,44 @@ export const OPENROUTER_MODELS: ModelMetadata[] = [
   },
 ];
 
+export const GEMINI_MODELS: ModelMetadata[] = [
+  {
+    id: "gemini-2.5-flash",
+    name: "Gemini 2.5 Flash",
+    provider: "gemini",
+    pricing: { promptPerMillionCents: 15, completionPerMillionCents: 60 },
+    recommended: true,
+  },
+  {
+    id: "gemini-2.5-pro",
+    name: "Gemini 2.5 Pro",
+    provider: "gemini",
+    pricing: { promptPerMillionCents: 125, completionPerMillionCents: 500 },
+  },
+  {
+    id: "gemini-2.5-flash-lite",
+    name: "Gemini 2.5 Flash Lite",
+    provider: "gemini",
+    pricing: { promptPerMillionCents: 10, completionPerMillionCents: 40 },
+  },
+  {
+    id: "gemini-1.5-pro",
+    name: "Gemini 1.5 Pro",
+    provider: "gemini",
+    pricing: { promptPerMillionCents: 125, completionPerMillionCents: 500 },
+  },
+  {
+    id: "gemini-1.5-flash",
+    name: "Gemini 1.5 Flash",
+    provider: "gemini",
+    pricing: { promptPerMillionCents: 15, completionPerMillionCents: 60 },
+  },
+];
+
 export const ALL_MODELS: ModelMetadata[] = [
   ...ANTHROPIC_MODELS,
   ...OPENAI_MODELS,
+  ...GEMINI_MODELS,
   ...OPENROUTER_MODELS,
 ];
 
@@ -230,6 +265,13 @@ export function getFallbackPricing(provider: string, modelId?: string): ModelPri
 
   if (normProvider === "openrouter") {
     return { promptPerMillionCents: 50, completionPerMillionCents: 150 };
+  }
+
+  if (normProvider === "gemini") {
+    if (normModel.includes("pro")) {
+      return { promptPerMillionCents: 125, completionPerMillionCents: 500 };
+    }
+    return { promptPerMillionCents: 15, completionPerMillionCents: 60 };
   }
 
   return { promptPerMillionCents: 200, completionPerMillionCents: 800 };

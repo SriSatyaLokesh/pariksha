@@ -12,7 +12,7 @@ export interface ByokSettingsProps {
   workspaceId: string;
 }
 
-type ByokProvider = "anthropic" | "openai" | "openrouter";
+type ByokProvider = "anthropic" | "openai" | "openrouter" | "gemini";
 
 function providerLabel(provider: ByokProvider): string {
   switch (provider) {
@@ -22,6 +22,8 @@ function providerLabel(provider: ByokProvider): string {
       return "OpenAI";
     case "openrouter":
       return "OpenRouter";
+    case "gemini":
+      return "Google Gemini";
   }
 }
 
@@ -138,13 +140,14 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
   const anthropicCred = credentials.find((c) => c.provider === "anthropic");
   const openAiCred = credentials.find((c) => c.provider === "openai");
   const openRouterCred = credentials.find((c) => c.provider === "openrouter");
+  const geminiCred = credentials.find((c) => c.provider === "gemini");
 
   return (
     <div className="byok-settings">
       <header className="byok-header">
         <h2 className="byok-title">Bring Your Own Key</h2>
         <p className="release-panel__fact">
-          Store your own Anthropic or OpenAI API keys securely. Keys are encrypted at rest with AES-256-GCM
+          Store your own Anthropic, OpenAI, Google Gemini, or OpenRouter API keys securely. Keys are encrypted at rest with AES-256-GCM
           using workspace secrets and never exposed to candidate browsers or logs.
         </p>
       </header>
@@ -179,7 +182,9 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
                   ? "Begins with sk-ant-..."
                   : editingProvider === "openai"
                     ? "Begins with sk-proj-... or sk-..."
-                    : "Begins with sk-or-..."
+                    : editingProvider === "gemini"
+                      ? "Google AI Studio key (begins with AIza...)"
+                      : "Begins with sk-or-..."
               }
               value={keyInput}
               onChange={setKeyInput}
@@ -435,6 +440,81 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
                   type="button"
                   className="button-secondary"
                   onClick={() => setConfirmingDelete("openrouter")}
+                  disabled={loading || saving}
+                >
+                  Delete
+                </button>
+              ))}
+          </div>
+        </CardHairline>
+
+        {/* Google Gemini Card */}
+        <CardHairline className="byok-card">
+          <div className="byok-card__header">
+            <h3 className="byok-card__title">Google Gemini</h3>
+            <span
+              className={
+                geminiCred
+                  ? "byok-card__badge byok-card__badge--active"
+                  : "byok-card__badge byok-card__badge--inactive"
+              }
+            >
+              {geminiCred ? "Active" : "Not configured"}
+            </span>
+          </div>
+
+          <p className="byok-card__desc">
+            Gemini 2.5 Flash, Gemini 2.5 Pro, and Flash-Lite models via Google AI Studio.
+          </p>
+
+          {geminiCred && (
+            <div className="byok-card__meta">
+              <div>
+                Key: <code>{geminiCred.keyHint}</code>
+              </div>
+              <div>
+                Monthly Cap:{" "}
+                {geminiCred.spendLimitCents != null
+                  ? `$${(geminiCred.spendLimitCents / 100).toFixed(2)} / month`
+                  : "No cap"}
+              </div>
+            </div>
+          )}
+
+          <div className="byok-card__actions">
+            <button
+              type="button"
+              className="button-primary button-primary--surface"
+              onClick={() => handleOpenEdit("gemini")}
+              disabled={loading || saving}
+            >
+              {geminiCred ? "Update Key" : "Configure Key"}
+            </button>
+            {geminiCred &&
+              (confirmingDelete === "gemini" ? (
+                <>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => void handleDelete("gemini")}
+                    disabled={loading || saving}
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => setConfirmingDelete(null)}
+                    disabled={loading || saving}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setConfirmingDelete("gemini")}
                   disabled={loading || saving}
                 >
                   Delete

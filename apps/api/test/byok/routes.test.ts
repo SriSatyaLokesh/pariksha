@@ -258,7 +258,23 @@ describe("BYOK HTTP Endpoints (Phase 12)", () => {
     expect(Array.isArray(body.models)).toBe(true);
     expect(body.models.some((m) => m.id === "claude-sonnet-5-5")).toBe(true);
     expect(body.models.some((m) => m.id === "gpt-6.1-sol")).toBe(true);
+    expect(body.models.some((m) => m.id === "gemini-2.5-flash")).toBe(true);
     expect(body.models.some((m) => m.id === "deepseek/deepseek-v4.1-flash")).toBe(true);
+  });
+
+  it("PUT /byok/gemini allows configuring Google Gemini API keys", async () => {
+    const res = await app.request(`/api/v1/workspaces/${wspId}/byok/gemini`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: ownerCookie },
+      body: JSON.stringify({
+        apiKey: "AIzaSyDummyKeyForTesting1234",
+        spendLimitCents: 3000,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { credential: { provider: string; keyHint: string } };
+    expect(body.credential.provider).toBe("gemini");
+    expect(body.credential.keyHint).toBe("AIza...1234");
   });
 
   it("PUT /byok/openrouter allows configuring OpenRouter API keys", async () => {
