@@ -1,4 +1,4 @@
-import { useReducer, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
+import { useEffect, useReducer, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useDialogKeys } from "../useDialogKeys";
 
 /**
@@ -221,6 +221,24 @@ export function Calculator({ onClose }: { onClose: () => void }) {
     }
   };
 
+  useEffect(() => {
+    const el = dialogRef.current;
+    if (!el) return;
+    if (position !== null) {
+      el.style.position = "fixed";
+      el.style.left = `${position.x}px`;
+      el.style.top = `${position.y}px`;
+      el.style.right = "auto";
+      el.style.bottom = "auto";
+    } else {
+      el.style.position = "";
+      el.style.left = "";
+      el.style.top = "";
+      el.style.right = "";
+      el.style.bottom = "";
+    }
+  }, [position]);
+
   return (
     <div
       className="exam-calculator"
@@ -230,17 +248,6 @@ export function Calculator({ onClose }: { onClose: () => void }) {
       ref={dialogRef}
       tabIndex={-1}
       onKeyDown={onKey}
-      style={
-        position !== null
-          ? {
-              position: "fixed",
-              left: `${position.x}px`,
-              top: `${position.y}px`,
-              right: "auto",
-              bottom: "auto",
-            }
-          : undefined
-      }
     >
       <div
         className="exam-calc-handle"

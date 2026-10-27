@@ -1064,6 +1064,14 @@
   z-index: 100;
 }
 
+.exam-calculator--positioned {
+  position: fixed;
+  left: var(--calc-x);
+  top: var(--calc-y);
+  right: auto;
+  bottom: auto;
+}
+
 .exam-calc-handle {
   display: flex;
   justify-content: space-between;
