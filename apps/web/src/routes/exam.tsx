@@ -131,6 +131,9 @@ export function deviceReport(resolved: ResolvedProctoring): {
   // device check that throws is worse than one that reports a failure.
   const finePointer = window.matchMedia?.("(pointer: fine)").matches ?? false;
   const browser = browserName(navigator.userAgent);
+  const isMobileUA =
+    typeof navigator !== "undefined" &&
+    Boolean(navigator.userAgent && /\b(Mobi|Android|iPhone|iPad|iPod)\b/i.test(navigator.userAgent));
 
   const screenOk = width >= MIN_WIDTH;
   const pointerOk = finePointer;
@@ -170,7 +173,7 @@ export function deviceReport(resolved: ResolvedProctoring): {
 
   return {
     ok: findings.every((finding) => finding.ok),
-    refused: resolved.desktopOnly && (!screenOk || !pointerOk),
+    refused: resolved.desktopOnly && (!screenOk || !pointerOk || isMobileUA),
     findings,
   };
 }
@@ -374,7 +377,8 @@ export function ExamLanding({
             screen reader has never seen is a live region it does not
             announce. */}
         <p id="exam-device-blocked" className="exam-device-blocked" role="status">
-          {refused && "This test needs a laptop or desktop computer."}
+          {refused &&
+            "This test must be taken on a desktop or laptop, not a phone or tablet. This test needs a laptop or desktop computer."}
         </p>
 
         {/* `P-05`/`Q2a`: the start gate's own live region, present from
