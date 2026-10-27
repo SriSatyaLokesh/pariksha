@@ -67,6 +67,26 @@ export default defineConfig({
   plugins: [
     react(),
     {
+      name: "landing-dev-prerender",
+      apply: "serve",
+      async transformIndexHtml(html, ctx) {
+        if (!ctx.server) return html;
+        const url = ctx.path.split("?")[0];
+        if (url === "/" || url === "/index.html") {
+          try {
+            const { renderToStaticMarkup } = await import("react-dom/server");
+            const { createElement } = await import("react");
+            const mod = await ctx.server.ssrLoadModule("/src/routes/landing.tsx");
+            const markup = renderToStaticMarkup(createElement(mod.Landing));
+            return html.replace('<div id="root"></div>', `<div id="root">${markup}</div>`);
+          } catch (err) {
+            console.error("Landing dev prerender failed:", err);
+          }
+        }
+        return html;
+      },
+    },
+    {
       name: "candidate-url-rewrite",
       // `vite preview` has no file behind T-02's candidate URL either, and
       // unlike the deployed Worker it has no Worker-level rewrite to
@@ -79,10 +99,23 @@ export default defineConfig({
       // only exists on this surface. Preview only — never part of the
       // built `dist/` this serves, and never read by the deployed Worker,
       // which has its own `CANDIDATE_URL` already.
+      configureServer(server) {
+        server.middlewares.use((req, _res, next) => {
+          const path = req.url?.split("?")[0] ?? "";
+          if (path === "/exam" || CANDIDATE_URL.test(path)) {
+            const query = req.url && req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+            req.url = `/exam.html${query}`;
+          }
+          next();
+        });
+      },
       configurePreviewServer(server) {
         server.middlewares.use((req, _res, next) => {
           const path = req.url?.split("?")[0] ?? "";
-          if (CANDIDATE_URL.test(path)) req.url = "/exam.html";
+          if (path === "/exam" || CANDIDATE_URL.test(path)) {
+            const query = req.url && req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+            req.url = `/exam.html${query}`;
+          }
           next();
         });
       },
