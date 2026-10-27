@@ -23,7 +23,7 @@ import {
   type Test,
   type TestBranding,
 } from "@pariksha/core";
-export type { Role, Action };
+export type { Role, Action, Question, QuestionType };
 // Aliased on import: this file's own `Bank` (below) is the `BankRow` wire
 // shape every other bank route already answers with, not the
 // `pariksha/bank@1` document export produces — same name, two different
@@ -779,6 +779,54 @@ export interface ApiClient {
     input: { name: string; scopes: Action[] },
   ): Promise<{ id: string; name: string; scopes: Action[]; secret: string }>;
   revokeApiKey(workspaceId: string, keyId: string): Promise<void>;
+
+  // Phase 12: BYOK encrypted keys and AI drafting (S-15)
+  getByok(workspaceId: string): Promise<{ credentials: ByokCredential[]; usage: ByokUsage }>;
+  saveByokKey(
+    workspaceId: string,
+    provider: "anthropic" | "openai",
+    apiKey: string,
+    spendLimitCents?: number | null,
+  ): Promise<{ credential: ByokCredential }>;
+  deleteByokKey(workspaceId: string, provider: "anthropic" | "openai"): Promise<void>;
+  draftAiQuestions(
+    workspaceId: string,
+    bankId: string,
+    options: DraftAiOptions,
+  ): Promise<DraftAiResult>;
+}
+
+export interface ByokCredential {
+  id: string;
+  provider: "anthropic" | "openai";
+  keyHint: string;
+  spendLimitCents: number | null;
+  status: "active" | "revoked";
+  createdAt: number;
+  updatedAt: number;
+  lastUsedAt: number | null;
+}
+
+export interface ByokUsage {
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalCostCents: number;
+}
+
+export interface DraftAiOptions {
+  prompt: string;
+  count: number;
+  types?: QuestionType[];
+  provider?: "anthropic" | "openai";
+}
+
+export interface DraftAiResult {
+  questions: Question[];
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    estimatedCostCents: number;
+  };
 }
 
 /** Mirrors `Verdict` in `packages/db/src/repo/review.ts`, duplicated rather
@@ -1547,6 +1595,23 @@ export function createApiClient(): ApiClient {
     async revokeApiKey(workspaceId, keyId) {
       await request(`/workspaces/${workspaceId}/keys/${keyId}`, { method: "DELETE" });
     },
+
+    getByok: (workspaceId) =>
+      json<{ credentials: ByokCredential[]; usage: ByokUsage }>(`/workspaces/${workspaceId}/byok`),
+
+    saveByokKey: (workspaceId, provider, apiKey, spendLimitCents) =>
+      json<{ credential: ByokCredential }>(`/workspaces/${workspaceId}/byok/${provider}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey, spendLimitCents }),
+      }),
+
+    async deleteByokKey(workspaceId, provider) {
+      await request(`/workspaces/${workspaceId}/byok/${provider}`, { method: "DELETE" });
+    },
+
+    draftAiQuestions: (workspaceId, bankId, options) =>
+      json<DraftAiResult>(`/workspaces/${workspaceId}/banks/${bankId}/draft-ai`, post(options)),
   };
 }
 
