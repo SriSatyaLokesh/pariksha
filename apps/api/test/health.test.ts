@@ -26,7 +26,7 @@ it("every response carries the security headers the PRD requires", async () => {
   expect(h.get("content-security-policy")).toContain("frame-ancestors 'none'");
   expect(h.get("x-content-type-options")).toBe("nosniff");
   expect(h.get("referrer-policy")).toBe("no-referrer");
-  expect(h.get("permissions-policy")).toContain("microphone=()");
+  expect(h.get("permissions-policy")).toContain("microphone=(self)");
   expect(h.get("strict-transport-security")).toBe(
     "max-age=31536000; includeSubDomains",
   );
@@ -36,4 +36,9 @@ it("every response carries the request ID it was logged under", async () => {
   expect(
     (await app.request("/api/v1/health")).headers.get("x-request-id"),
   ).toMatch(/\S/);
+});
+
+it("returns permissions-policy header permitting camera and microphone for self", async () => {
+  const res = await app.request("/health");
+  expect(res.headers.get("permissions-policy")).toContain("microphone=(self)");
 });
