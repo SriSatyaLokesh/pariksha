@@ -146,6 +146,8 @@ export const CANDIDATE_DATA_EXEMPT: Readonly<Record<string, string>> = {
     "short code) — never a candidate identifier, and the row carries no personal data to erase.",
   api_key: "scopes_json is the key's own permission scopes — not candidate data.",
   webhook: "events_json is the subscribed event-type list (e.g. \"attempt.submitted\") — configuration, not data.",
+  byok_credential: "Workspace AI API credentials encrypted at rest — never candidate data.",
+  byok_usage: "Workspace aggregate AI token and cost usage records — never candidate data.",
 };
 
 /** `KG4`. See the file header. */
