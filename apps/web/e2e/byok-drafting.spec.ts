@@ -1,17 +1,8 @@
 // Phase 12 E2E Spec: BYOK AI Question Drafting
 // Verifies OpenRouter key configuration, spend caps, and two-step in-bank AI drafting preview, review & commit flows.
 
-import { expect, test, type Page } from "@playwright/test";
-import { seedWorkspace } from "./seed";
-
-async function ensureSignedIn(page: Page): Promise<void> {
-  await page.goto("/admin.html");
-  const continueLink = page.getByRole("link", { name: /continue with/i });
-  if (await continueLink.isVisible()) {
-    await continueLink.click();
-  }
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-}
+import { expect, test } from "@playwright/test";
+import { seedWorkspace, signIn } from "./seed";
 
 test.describe("Phase 12: BYOK AI Question Drafting", () => {
   test.beforeAll(async ({ request }) => {
@@ -19,7 +10,7 @@ test.describe("Phase 12: BYOK AI Question Drafting", () => {
   });
 
   test.beforeEach(async ({ page }) => {
-    await ensureSignedIn(page);
+    await signIn(page);
   });
 
   test("organiser can configure OpenRouter key and spend cap in API keys panel", async ({
@@ -209,7 +200,9 @@ test.describe("Phase 12: BYOK AI Question Drafting", () => {
     });
 
     // Intercept POST **/draft-ai/commit (Step 2: atomic bank commit)
-    let interceptedCommitPayload: unknown = null;
+    let interceptedCommitPayload: {
+      questions?: Array<{ id?: string; prompt: string }>;
+    } | null = null;
     await page.route(
       "**/api/v1/workspaces/*/banks/bnk_demo/draft-ai/commit",
       async (route) => {
@@ -311,9 +304,7 @@ test.describe("Phase 12: BYOK AI Question Drafting", () => {
 
     // Assert the intercepted commit payload sends only the approved Question 1 (Question 2 excluded)
     expect(interceptedCommitPayload).not.toBeNull();
-    const commitBody = interceptedCommitPayload as {
-      questions?: Array<{ id?: string; prompt: string }>;
-    };
+    const commitBody = interceptedCommitPayload!;
     expect(commitBody.questions).toHaveLength(1);
     expect(commitBody.questions?.[0]?.prompt).toContain(
       "What consensus protocol uses leader election",
