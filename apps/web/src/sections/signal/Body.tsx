@@ -245,10 +245,9 @@ export function SignalCost() {
       <p className="signal-eyebrow">What it costs</p>
       <h2 id="cost-heading">Five hundred candidates in an hour, for nothing.</h2>
       <p className="signal-lede signal-lede--after">
-        By arithmetic rather than by a bill. The reference deployment is
-        designed to fit inside Cloudflare&apos;s free tier — and there is no
-        Pariksha billing of any kind, because there is no hosted service to bill
-        for.
+        By arithmetic rather than by a bill. Deploy serverless on
+        Cloudflare&apos;s free tier or self-host with Docker and PostgreSQL /
+        SQLite on your own servers — there is zero Pariksha billing of any kind.
       </p>
       <div className="signal-metrics">
         {METRICS.map((metric) => (
@@ -262,8 +261,9 @@ export function SignalCost() {
         An estimate with published arithmetic. The 500-candidate figure is a
         design target; the load test that would prove it (<code>AC-29</code>) is
         a Phase 12 gate and has not been run. Free-tier limits can change — the
-        mitigation is three adapter seams, so moving to Docker and Postgres is
-        configuration, not a rewrite.
+        mitigation is three adapter seams, so moving between Cloudflare, Docker
+        (Postgres / SQLite) and on-premise infrastructure is configuration, not
+        a rewrite.
       </p>
     </section>
   );

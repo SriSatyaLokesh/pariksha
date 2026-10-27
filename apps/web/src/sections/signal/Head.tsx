@@ -93,9 +93,8 @@ export function SignalHero() {
               <li>
                 <b>12</b> types
               </li>
-              <li>
-                <b>97%</b> coverage
-              </li>
+              <li>Cloudflare & Docker</li>
+              <li>On-prem / air-gapped</li>
               <li>no telemetry</li>
               <li>
                 <b>$0</b> per candidate

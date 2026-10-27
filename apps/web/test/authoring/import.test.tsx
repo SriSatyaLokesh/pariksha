@@ -372,6 +372,24 @@ describe("the import rules are unchanged by the move", () => {
     ]);
   });
 
+  it("renders a clear duplicate message and uniqueness hint when questions already exist in the bank", async () => {
+    await openImport(
+      fakeClient({
+        importBank: async () => ({
+          imported: 0,
+          issues: [
+            { questionId: "SQL-001", index: 0, field: "id", message: 'question id "SQL-001" is already in this bank' },
+            { questionId: "SQL-002", index: 1, field: "id", message: 'question id "SQL-002" is already in this bank' },
+          ],
+        }),
+      }),
+    );
+
+    upload(jsonFile("bank.json", GOOD_BANK));
+    expect(await screen.findByText(/all 2 questions already exist in this bank/i)).toBeVisible();
+    expect(screen.getByText(/Question IDs are unique per bank/i)).toBeVisible();
+  });
+
   it("a CSV import issue renders its source line, and the Question column does not repeat it", async () => {
     await openImport(
       fakeClient({

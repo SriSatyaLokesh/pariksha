@@ -28,16 +28,14 @@ const LIVE = [
   "Proctoring — Off, Standard and Strict, with the violation limit and the lock",
   "Results: live counts, item analysis, grading queue, regrade, CSV and evidence exports",
   "Webhooks, scoped API keys, retention jobs, candidate export and erasure",
-  "Organiser sign-in (OIDC and magic link), workspaces, roles, audit log",
+  "Organiser sign-in (OIDC, magic link, password + 2FA), workspaces, roles, audit log",
+  "Deploy anywhere: Cloudflare free tier or Docker self-host (Postgres/SQLite + MinIO)",
 ] as const;
 
 const NEXT = [
   "One real exam with 300+ candidates — the gate that ends alpha",
-  "Microphone monitoring and the proctoring watchtower (Phase 8.5)",
-  "Bring-your-own-key AI question drafting (Phase 9)",
-  "A public demo instance you can open without signing in (Phase 10)",
-  "Docker and Postgres self-hosting (Phase 11)",
-  "WCAG 2.1 AA, translations, OpenAPI, plugins, signed releases (Phase 12)",
+  "Microphone monitoring (Phase 8.5)",
+  "Bring-your-own-key AI question drafting (Phase 12)",
 ] as const;
 
 export function SignalStatus() {
@@ -94,8 +92,9 @@ export function SignalStatus() {
           <ol>
             <li>
               <b>Deploy it.</b> One setup script against your own Cloudflare
-              account — Worker, D1 and R2, all on the free plan — or clone it
-              and run it on your own machine.
+              account — Worker, D1 and R2, all on the free plan — or launch
+              with Docker Compose on any server or private network (Postgres or
+              SQLite, MinIO S3 storage, and automated HTTPS).
             </li>
             <li>
               <b>Import a bank and build a test.</b> Pariksha JSON, CSV or
@@ -121,12 +120,12 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Can I use Pariksha today?",
     answer:
-      "You can run Pariksha today. Deploy it to your own Cloudflare account on the free plan, import a question bank, build a test, send the link, and download the results CSV — the whole path is built and on the main branch. You can also test-drive the candidate exam runtime immediately with zero setup: click 'Try Live Demo' or visit /exam?demo=true (access code: DEMO) to try all 12 question types, timed sections, floating calculator, and local proctoring with no server subrequests. It is alpha: the one thing Pariksha has not yet done is carry a real exam with 300 candidates at once, so run it beside what you use now rather than instead of it.",
+      "You can run Pariksha today. Deploy it to your own Cloudflare account on the free plan, or self-host on any server or private cloud with Docker Compose (Postgres or SQLite, MinIO S3 storage, and Caddy for automatic HTTPS). Import a question bank, build a test, send the link, and download the results CSV — the whole path is built and on the main branch. You can also test-drive the candidate exam runtime immediately with zero setup: click 'Try Live Demo' or visit /exam?demo=true (access code: DEMO) to try all 12 question types, timed sections, floating calculator, and local proctoring with no server subrequests. It is alpha: the one thing Pariksha has not yet done is carry a real exam with 300 candidates at once, so run it beside what you use now rather than instead of it.",
   },
   {
     question: "Where is candidate data stored?",
     answer:
-      "Pariksha stores candidate data in the organiser's own account — your Cloudflare D1 database and R2 bucket, or your own Postgres and disk under Docker. There is no Pariksha server in the path. You pick the database region and storage jurisdiction where the host allows it, and there is no telemetry or third-party script anywhere.",
+      "Pariksha stores candidate data in the organiser's own account — your Cloudflare D1 database and R2 bucket, or your own on-premise Postgres and disk/MinIO under Docker. There is no Pariksha server in the path. You pick the database region and storage jurisdiction where the host allows it, and there is no telemetry or third-party script anywhere. Air-gapped and local network deployments are fully supported.",
   },
   {
     question: "How many question types does it support?",
@@ -161,7 +160,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Can Pariksha generate questions with AI?",
     answer:
-      "Pariksha cannot generate questions with AI yet; it is Phase 9, the next feature phase after proctoring and results. The plan is bring-your-own-key drafting: your own Anthropic or OpenAI key, stored encrypted per workspace and never sent to the browser, drafting questions into a bank — never whole tests. Every draft is schema-validated and waits for a human to accept it, and nothing auto-publishes.",
+      "Pariksha cannot generate questions with AI yet; it is Phase 12, the next feature phase after multi-target deployment and v1.0 release readiness. The plan is bring-your-own-key drafting: your own Anthropic or OpenAI key, stored encrypted per workspace and never sent to the browser, drafting questions into a bank — never whole tests. Every draft is schema-validated and waits for a human to accept it, and nothing auto-publishes.",
   },
 ];
 

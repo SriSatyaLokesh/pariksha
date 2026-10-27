@@ -15,7 +15,7 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
 <a href="https://creativecommons.org/licenses/by/4.0/"><img src="https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg" alt="Content: CC BY 4.0"></a>
 <a href="#roadmap"><img src="https://img.shields.io/badge/Status-alpha-E8A33D.svg" alt="Status: alpha"></a>
-<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--9-merged-19E68C.svg" alt="Phases 1 to 9 merged"></a>
+<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--11-complete-19E68C.svg" alt="Phases 1 to 11 complete"></a>
 <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
 </p>
 
@@ -23,7 +23,8 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 <a href="#try-the-live-demo"><b>Try Live Demo</b></a>&nbsp;·
 <a href="#screens">Screens</a>&nbsp;·
 <a href="#what-it-does">What it does</a>&nbsp;·
-<a href="#deploying-to-cloudflare">Deploy</a>&nbsp;·
+<a href="#deployment-options">Deploy</a>&nbsp;·
+<a href="#frequently-asked-questions">FAQ</a>&nbsp;·
 <a href="#see-a-real-test">A real test</a>&nbsp;·
 <a href="#documentation">Docs</a>&nbsp;·
 <a href="#roadmap">Roadmap</a>&nbsp;·
@@ -36,10 +37,10 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 
 > ### Alpha — and here is exactly what that means
 >
-> **Built and on `main`:** deploy to your own Cloudflare account, import a bank,
+> **Built and on `main`:** deploy to your own Cloudflare account or Docker server, import a bank,
 > build a test with pools and sets and a registration form, publish it, have
 > candidates sit it under proctoring, grade the written answers, export the
-> results CSV. Phases 1&ndash;8, all merged.
+> results CSV. Phases 1&ndash;11, all completed.
 >
 > **Never done:** carried one real exam with 300 candidates at once. That is the
 > v0.1 exit gate — one real test, 300+ candidates, zero lost answers — and it is
@@ -87,7 +88,7 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
 - **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. (The *live* monitor — attempts updating while the exam runs — is the one results surface still to come; see [What is still to come](#what-is-still-to-come).)
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
-- **Written for two deployment targets, shipping one.** Every adapter — database, object storage, identity — exists for both, and the Cloudflare free-plan path (Workers, Workers Static Assets, D1, R2) is the one that is built and deployed. Docker with Postgres and MinIO is Phase 11; `deploy/docker/` holds its README and nothing else yet.
+- **Two deployment targets: Cloudflare serverless and Docker self-host.** Every adapter — database, object storage, identity — exists for both. Deploy on Cloudflare's free tier (Workers, D1, R2) with zero operational cost, or self-host on any Linux server, VPS, or air-gapped on-premise network with Docker Compose (Postgres 16 / SQLite, MinIO, and Caddy for automatic HTTPS). See the [Deployment Guide](docs/deployment.md).
 
 ## Screens
 
@@ -143,7 +144,7 @@ full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
-Phases 1–11 are merged (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, and Phase 11 v1.0 Release Readiness). What is not built, with the phase that owns it —
+Phases 1–11 are completed (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, and Phase 11 Multi-Target Deployment & v1.0 Release Readiness). What is scheduled next, with the phase that owns it —
 [`docs/ROADMAP.md`](docs/ROADMAP.md) is authoritative:
 
 | Not built yet | Phase |
@@ -196,6 +197,7 @@ Full architecture, candidate journey and data model: the [PRD](docs/PRD.md). Hig
 | Document | What it covers |
 | --- | --- |
 | [Product requirements (PRD)](docs/PRD.md) | Scope, roles, question types, proctoring, security, acceptance criteria, roadmap |
+| [Deployment Guide](docs/deployment.md) | Full setup for Cloudflare serverless, Docker (Postgres/SQLite), and on-premise air-gapped labs |
 | [Question format](docs/question-format.md) | `pariksha/question@1` — the 12 types and how they are scored |
 | [Test format](docs/test-format.md) | `pariksha/test@1` — timing, access, registration form, sections, release |
 | [Worked example](examples/reasoning-aptitude/) | One whole test, from input to results CSV |
@@ -220,29 +222,45 @@ pariksha/
 │   └── storage/          # R2, S3 and local-disk adapters
 ├── deploy/
 │   ├── cloudflare/       # zero-cost reference deployment
-│   └── docker/           # self-host with Docker Compose (Phase 11 — README only so far)
+│   └── docker/           # self-host with Docker Compose (Postgres/SQLite, MinIO, Caddy)
 ├── docs/                 # PRD, format specs, ADRs, diagrams
 ├── schemas/              # JSON Schemas (question, bank, test)
 ├── examples/             # complete worked tests, one folder per subject
 └── .github/              # issue and PR templates, CI
 ```
 
-## Deploying to Cloudflare
+## Deployment Options
 
-The reference deployment is one Worker serving the built web app as Static
-Assets with the Hono API as its script, plus D1, R2 and a Cron Trigger for the
-retention job — all on the free plan. `deploy/cloudflare/setup.mjs` creates
-what is missing and applies pending migrations, and it is idempotent:
+Pariksha offers two zero-licensing-fee deployment paths. Read the comprehensive **[Deployment Guide](docs/deployment.md)** for detailed architectures, hardware sizing, and on-premises air-gapped instructions.
+
+### 1. Cloudflare Serverless (Zero Maintenance)
+
+Deploy on Cloudflare's free tier (100k requests/day, 10 GB storage, $0/month) with one Worker serving Static Assets and the Hono API, plus D1 and R2:
 
 ```bash
-node deploy/cloudflare/setup.mjs --dry-run   # the whole flow, twice, against
-                                             # an in-memory Cloudflare
-node deploy/cloudflare/setup.mjs             # the real thing, against your account
+# Provision Cloudflare resources and deploy
+node deploy/cloudflare/setup.mjs
 pnpm deploy:cf
 ```
 
-The topology, the free-tier arithmetic and the reason it is one Worker and not
-two are in [`deploy/cloudflare/README.md`](deploy/cloudflare/README.md).
+Details in [`deploy/cloudflare/README.md`](deploy/cloudflare/README.md).
+
+### 2. Docker Compose (Self-Host & On-Premises)
+
+Deploy on any Linux server, VPS ($4/mo), or local machine with Docker Compose and automatic Let's Encrypt HTTPS:
+
+```bash
+cd deploy/docker
+cp .env.example .env
+
+# Option A: Lightweight SQLite (~80 MB RAM)
+docker compose -f docker-compose.sqlite.yml up -d --build
+
+# Option B: Production PostgreSQL 16 + MinIO S3 cluster (~350 MB RAM)
+docker compose up -d --build
+```
+
+Details in [`deploy/docker/README.md`](deploy/docker/README.md) and the [Deployment Guide](docs/deployment.md).
 
 ## Running Pariksha locally
 
@@ -320,6 +338,20 @@ that is the single most useful contribution available.
 
 Details: [PRD roadmap](docs/PRD.md#roadmap). **`docs/ROADMAP.md` is authoritative on phasing** — where the two disagree, re-read that file rather than this table.
 
+## Frequently Asked Questions
+
+### What makes Pariksha different from Google Forms, Moodle, or Canvas?
+Pariksha is purpose-built for high-integrity examinations with zero external telemetry. Unlike Google Forms, it provides server-authoritative timers, randomized question pools so no two candidates receive the same paper, and 12 specialized question types with LaTeX and code rendering. Unlike heavy LMS platforms like Moodle or Canvas, Pariksha is lightweight, compiles to zero runtime JavaScript on landing pages, and runs serverless on Cloudflare's free tier or as a lean Docker container with zero per-candidate licensing fees.
+
+### How does Pariksha enforce proctoring without violating candidate privacy?
+Pariksha rejects invasive continuous video/audio surveillance and AI facial biometric analysis. Instead, its proctoring captures low-resolution 320×240 periodic JPEG snapshots (under 25 KB) alongside full-screen lock and tab-switch event logging. All snapshot assets are stored strictly in the organiser's own private storage bucket (Cloudflare R2 or MinIO S3) behind 10-minute expiring signed URLs.
+
+### What deployment options are available for air-gapped or on-premise environments?
+Pariksha supports fully air-gapped, isolated campus LAN deployments via Docker Compose. The self-hosted stack includes PostgreSQL 16 (or lean SQLite), MinIO for S3-compatible asset storage, and Caddy for automatic local TLS termination. The platform has zero outbound network calls, zero telemetry scripts, and zero dependency on external DNS or Cloudflare services. Detailed instructions are available in the [Deployment Guide](docs/deployment.md).
+
+### What question types can be authored and scored?
+Pariksha natively supports 12 authorable question types: single choice, multiple choice, select exactly K, true/false, assertion–reason, matching, multi-matching, ordering, fill-in-the-blank (with bracket syntax), numeric with tolerance, short answer, and long answer with custom rubrics. Scoring modes include all-or-nothing, partial credit, and negative marking.
+
 ## Contributing
 
 Pariksha is at a good moment to join: the product is built and the hard part
@@ -332,9 +364,9 @@ left is *use* — running it, breaking it, and telling us where it bent.
 | 🧪 **Run a real exam** | Deploy it, put a real cohort through it, and report what happened. This is the v0.1 exit gate and the one thing no amount of code closes |
 | 🐞 **Break it and say how** | A reproduction against a local instance is worth more than a code change; the issue templates ask for exactly what we need |
 | 📝 **Question sets** | Add a subject under [`examples/`](examples/) — school science, GATE-style engineering, nursing, language comprehension, civil-service reasoning, your own field. Original content only, CC BY 4.0 |
-| 🌐 **Translations** | Interface strings and candidate-facing text in Indian and other languages. The translation layer itself is Phase 12, so the strings land before the machinery does |
-| ♿ **Accessibility** | The WCAG 2.1 AA audit is Phase 12 and the register is open; a real screen-reader pass over the exam runtime would be the most valuable single report |
-| 💻 **Code** | Phases 1–8 are merged, so there is a codebase to work in: see [the roadmap](docs/ROADMAP.md) for Phase 8.5 onward, and the open issues for what each phase left behind |
+| 🌐 **Translations** | Interface strings and candidate-facing text in Indian and other languages to extend the i18n registry shipped in Phase 11 |
+| ♿ **Accessibility** | Screen-reader usability feedback across devices to build upon the automated WCAG 2.1 AA audit suite |
+| 💻 **Code** | Phases 1–11 are completed, so there is a mature codebase to work in: see [the roadmap](docs/ROADMAP.md) for Phase 12 (BYOK AI drafting), and the open issues |
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues go through [SECURITY.md](SECURITY.md) — never a public issue.
 
