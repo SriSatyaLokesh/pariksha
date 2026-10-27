@@ -40,26 +40,99 @@ const JPEG_QUALITY = 0.8;
  * apart because a future caller may reasonably want to say something
  * different about a browser with no camera API at all.
  */
+export interface MediaAcquireOptions {
+  video?: boolean;
+  audio?: boolean;
+}
+
+export type MediaAcquireResult =
+  | { ok: true; stream: MediaStream; audioAvailable: boolean }
+  | { ok: false; reason: "denied" | "absent" | "failed" };
+
+function classifyMediaError(error: unknown): "denied" | "absent" | "failed" {
+  const name = error instanceof Error ? error.name : "";
+  if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
+    return "denied";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "absent";
+  }
+  return "failed";
+}
+
+function createEmptyMediaStream(): MediaStream {
+  if (typeof MediaStream !== "undefined") {
+    return new MediaStream();
+  }
+  return {
+    getVideoTracks: () => [],
+    getAudioTracks: () => [],
+    getTracks: () => [],
+  } as unknown as MediaStream;
+}
+
+/**
+ * Unified media acquisition supporting camera, microphone, or both with AG1
+ * fail-open degradation. If joint acquisition fails because audio permission
+ * is denied or no microphone is found, it automatically falls back to video-only.
+ */
+export async function acquireMedia(options: MediaAcquireOptions): Promise<MediaAcquireResult> {
+  const video = Boolean(options.video);
+  const audio = Boolean(options.audio);
+
+  if (!video && !audio) {
+    return { ok: true, stream: createEmptyMediaStream(), audioAvailable: false };
+  }
+
+  if (typeof navigator.mediaDevices?.getUserMedia !== "function") {
+    return { ok: false, reason: "absent" };
+  }
+
+  if (video && audio) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const audioAvailable = typeof stream.getAudioTracks === "function" ? stream.getAudioTracks().length > 0 : true;
+      return { ok: true, stream, audioAvailable };
+    } catch {
+      // AG1 fail-open: if joint request fails (e.g. microphone denied or absent),
+      // retry with video only so candidate can still proceed.
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        return { ok: true, stream, audioAvailable: false };
+      } catch (videoError) {
+        return { ok: false, reason: classifyMediaError(videoError) };
+      }
+    }
+  }
+
+  if (video) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      return { ok: true, stream, audioAvailable: false };
+    } catch (error) {
+      return { ok: false, reason: classifyMediaError(error) };
+    }
+  }
+
+  // audio only
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const audioAvailable = typeof stream.getAudioTracks === "function" ? stream.getAudioTracks().length > 0 : true;
+    return { ok: true, stream, audioAvailable };
+  } catch (error) {
+    return { ok: false, reason: classifyMediaError(error) };
+  }
+}
+
 export async function acquireCamera(): Promise<
   | { ok: true; stream: MediaStream }
   | { ok: false; reason: "denied" | "absent" | "failed" }
 > {
-  if (typeof navigator.mediaDevices?.getUserMedia !== "function") {
-    return { ok: false, reason: "absent" };
+  const result = await acquireMedia({ video: true, audio: false });
+  if (result.ok) {
+    return { ok: true, stream: result.stream };
   }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-    return { ok: true, stream };
-  } catch (error) {
-    const name = error instanceof Error ? error.name : "";
-    if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError") {
-      return { ok: false, reason: "denied" };
-    }
-    if (name === "NotFoundError" || name === "DevicesNotFoundError") {
-      return { ok: false, reason: "absent" };
-    }
-    return { ok: false, reason: "failed" };
-  }
+  return { ok: false, reason: result.reason };
 }
 
 /**
