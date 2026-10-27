@@ -79,9 +79,9 @@ export async function invokeAiDrafting(req: AiDraftRequest): Promise<AiDraftResp
   const systemPrompt = buildSystemPrompt(req.types);
   const userPrompt = buildUserPrompt(req.prompt, req.count);
 
-  let rawJson = "";
-  let promptTokens = 0;
-  let completionTokens = 0;
+  let rawJson: string;
+  let promptTokens: number;
+  let completionTokens: number;
   let resolvedModel = req.model ?? "";
 
   if (req.provider === "anthropic") {
@@ -146,13 +146,13 @@ export async function invokeAiDrafting(req: AiDraftRequest): Promise<AiDraftResp
     promptTokens = data.usage?.prompt_tokens ?? 0;
     completionTokens = data.usage?.completion_tokens ?? 0;
   } else {
-    throw new Error(`Unsupported AI provider: ${req.provider}`);
+    throw new Error(`Unsupported AI provider: ${String(req.provider)}`);
   }
 
   const cleaned = cleanJsonOutput(rawJson);
   let parsed: { questions?: Question[] };
   try {
-    parsed = JSON.parse(cleaned);
+    parsed = JSON.parse(cleaned) as { questions?: Question[] };
   } catch {
     throw new Error("AI provider returned invalid non-JSON output.");
   }
