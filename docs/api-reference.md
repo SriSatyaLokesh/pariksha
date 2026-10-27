@@ -124,3 +124,56 @@ curl -X GET "https://exam.example.org/api/v1/workspaces/wsp_01j7h8k9a1b2c3d4e5f6
   -H "x-api-key: pk_live_secretkey123" \
   -o results.csv
 ```
+
+---
+
+## 7. BYOK AI Question Drafting
+
+### Configure Provider Credential
+```bash
+curl -X PUT "https://exam.example.org/api/v1/workspaces/wsp_01j7h8k9a1b2c3d4e5f6g7h8/byok/gemini" \
+  -H "Authorization: Bearer <session-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "apiKey": "AIzaSy...",
+    "model": "gemini-2.5-flash",
+    "spendLimitCents": 1500
+  }'
+```
+
+### Step 1: Generate Draft Preview (Computational)
+```bash
+curl -X POST "https://exam.example.org/api/v1/workspaces/wsp_01j7h8k9a1b2c3d4e5f6g7h8/banks/bnk_01j7h8k9a1b2c3d4e5f6g7h8/draft-ai" \
+  -H "Authorization: Bearer <session-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "prompt": "Create 5 questions testing Dijkstra algorithm edge cases",
+    "count": 5,
+    "provider": "gemini",
+    "model": "gemini-2.5-flash"
+  }'
+```
+
+### Step 2: Atomic Commit of Approved Drafts
+```bash
+curl -X POST "https://exam.example.org/api/v1/workspaces/wsp_01j7h8k9a1b2c3d4e5f6g7h8/banks/bnk_01j7h8k9a1b2c3d4e5f6g7h8/draft-ai/commit" \
+  -H "Authorization: Bearer <session-token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "questions": [
+      {
+        "type": "single",
+        "prompt": "What is the worst-case time complexity of Dijkstra using a Fibonacci heap?",
+        "options": [
+          { "id": "a", "text": "O(V^2)" },
+          { "id": "b", "text": "O(E + V log V)" },
+          { "id": "c", "text": "O(E log V)" }
+        ],
+        "answer": "b",
+        "points": 2,
+        "difficulty": "medium",
+        "tags": ["algorithms", "graphs"]
+      }
+    ]
+  }'
+```

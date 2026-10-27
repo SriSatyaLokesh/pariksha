@@ -97,6 +97,33 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createApiKey: notStubbed("createApiKey"),
     revokeApiKey: notStubbed("revokeApiKey"),
 
+    getByok: async () => ({
+      credentials: [],
+      usage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalCostCents: 0 },
+    }),
+    saveByokKey: async () => ({
+      credential: {
+        id: "byok_1",
+        provider: "anthropic",
+        keyHint: "sk-ant-...1234",
+        spendLimitCents: null,
+        status: "active",
+        createdAt: 0,
+        updatedAt: 0,
+        lastUsedAt: null,
+      },
+    }),
+    deleteByokKey: async () => undefined,
+    draftAiQuestions: async () => ({
+      questions: [],
+      usage: { promptTokens: 0, completionTokens: 0, estimatedCostCents: 0 },
+    }),
+    commitDraftQuestions: async () => ({
+      importedCount: 0,
+      bankId: "",
+    }),
+    listByokModels: async () => ({ models: [] }),
+
     ...overrides,
   };
 }

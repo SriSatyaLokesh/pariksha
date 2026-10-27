@@ -5,6 +5,7 @@ import { downloadJson } from "../lib/download";
 import { MonoCaption } from "../components/MonoCaption";
 import { GroupEditor } from "../components/authoring/GroupEditor";
 import { useDialogKeys } from "../components/useDialogKeys";
+import { DraftAiModal } from "../components/admin/DraftAiModal";
 // G4-10: `TYPE_LABELS` already exists for the type picker's own cards —
 // reused here rather than duplicated, so the filter dropdown and the type
 // column never learn to spell `select_k` one way and `assertion_reason`
@@ -98,6 +99,7 @@ export function BankBrowser({
   const [questions, setQuestions] = useState<QuestionSummary[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [passageGroups, setPassageGroups] = useState<PassageGroupSummary[]>([]);
+  const [isAiDraftOpen, setAiDraftOpen] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({});
   const [notice, setNotice] = useState<string | undefined>(undefined);
@@ -474,6 +476,10 @@ export function BankBrowser({
             New question
           </button>
 
+          <button type="button" className="button-secondary" onClick={() => setAiDraftOpen(true)}>
+            Draft with AI
+          </button>
+
           {/* `D18`: a link to a page, not a toggle that unfolds a dialog.
               `aria-expanded` went with the dialog — nothing here expands. */}
           <button type="button" className="button-secondary" onClick={onImport}>
@@ -681,6 +687,18 @@ export function BankBrowser({
           </div>
         </div>
       )}
+
+      <DraftAiModal
+        client={client}
+        workspaceId={workspaceId}
+        bankId={bankId}
+        isOpen={isAiDraftOpen}
+        onClose={() => setAiDraftOpen(false)}
+        onSuccess={() => {
+          setAiDraftOpen(false);
+          void load();
+        }}
+      />
     </>
   );
 }

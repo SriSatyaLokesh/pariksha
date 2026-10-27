@@ -111,7 +111,9 @@
 }
 
 .qr-code {
-  color: var(--ink);
+  color: var(--color-ink);
+  border-radius: var(--rounded-xs);
+  display: block;
 }
 
 /* A `<button>` that reads as the test's name, not as a button — the same

@@ -261,6 +261,7 @@ export const CHAINS: Chain[] = [
     name: "organiser",
     page: "admin.html",
     owns: [
+      "components/admin/",
       "components/testbuilder/",
       "components/authoring/",
       "components/organiser/",

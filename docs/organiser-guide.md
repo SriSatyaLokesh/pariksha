@@ -82,3 +82,28 @@ Configure proctoring intensity based on exam stakes:
 - **Proctor Broadcast:** Send live advisory announcements directly to active candidates.
 - **Item Analysis & Analytics:** Detailed facility index, discrimination score, and response distribution per question item.
 - **Results Export:** Instant CSV export carrying scores, attempt timelines, proctoring outcomes, and cryptographic verification links.
+
+---
+
+## 6. Bring-Your-Own-Key (BYOK) AI Question Drafting
+
+Pariksha includes a zero-knowledge, zero-external-SDK question generator enabling organisers to generate high-quality, schema-validated questions directly from subject topics, curriculum syllabi, or raw lecture notes.
+
+### Supported Providers & Models
+- **Anthropic:** Claude 3.7 Sonnet, Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus.
+- **OpenAI:** GPT-4o, GPT-4o-mini, o1, o3-mini.
+- **Google Gemini:** Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 1.5 Pro, Gemini 1.5 Flash.
+- **OpenRouter:** DeepSeek-Chat, DeepSeek-Reasoner, Llama 3.3 70B, Mistral Large.
+- **OpenCode:** DeepSeek-V4.1 Flash, GLM-5.3 Flash, Qwen 2.5 Coder, Llama 3.3, and local/custom endpoints.
+
+### Key Security & Cost Protection
+- **Zero-Knowledge Encryption:** Credentials are encrypted at rest with AES-256-GCM. Decryption occurs only in ephemeral worker memory during upstream model requests.
+- **Monthly Spend Caps:** Enforce hard monthly budget caps (e.g. $10/mo) per provider with a 1-cent floor per non-zero usage. Requests are rejected if the cap is reached.
+- **Two-Step Human-in-the-Loop Review:** Generating a draft is decoupled from committing to a question bank. Authors review generated drafts, verify `@pariksha/core` schema validation badges, edit prompts or options inline, and 1-click flag and exclude hallucinated or low-quality items before atomic persistence.
+
+---
+
+## 7. Scoped API Keys & Developer Webhooks
+
+- **Scoped API Keys:** Issue granular workspace keys across permission groups (Tests & Banks, Candidates, Attempts, Results, Settings) rendered in a responsive matrix checklist. Keys only inherit the creator's current role and are displayed once upon creation.
+- **HMAC-SHA256 Webhooks:** Subscribe endpoints to assessment lifecycle events (`attempt.submitted`, `attempt.graded`, `test.published`) with automatic signing secret rotation and delivery verification.

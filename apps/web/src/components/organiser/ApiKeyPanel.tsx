@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError, type Action, type ApiClient, type ApiKey } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
+import { ByokSettings } from "../admin/ByokSettings";
 
 // Phase 8d Task 2: the organiser's scoped-API-key CRUD screen (`K25`,
 // `K26`, `KG5`). Built from the same tokens and primitives
@@ -161,24 +162,28 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
             onChange={setName}
           />
 
-          {SCOPE_GROUPS.map((group) => (
-            <fieldset className="release-panel__group" key={group.title}>
-              <legend>{group.title}</legend>
-              {group.scopes.map((scope) => (
-                <div className="field" key={scope}>
-                  <label className="field-label field-choice" htmlFor={`api-key-scope-${scope}`}>
-                    <input
-                      type="checkbox"
-                      id={`api-key-scope-${scope}`}
-                      checked={scopes.includes(scope)}
-                      onChange={() => toggleScope(scope)}
-                    />
-                    {SCOPE_LABEL[scope]}
-                  </label>
+          <div className="api-key-matrix" role="group" aria-label="Permission scopes">
+            {SCOPE_GROUPS.map((group) => (
+              <fieldset className="api-key-matrix__card" key={group.title}>
+                <legend className="api-key-matrix__legend">{group.title}</legend>
+                <div className="api-key-matrix__list">
+                  {group.scopes.map((scope) => (
+                    <div className="field" key={scope}>
+                      <label className="field-label field-choice api-key-matrix__choice" htmlFor={`api-key-scope-${scope}`}>
+                        <input
+                          type="checkbox"
+                          id={`api-key-scope-${scope}`}
+                          checked={scopes.includes(scope)}
+                          onChange={() => toggleScope(scope)}
+                        />
+                        {SCOPE_LABEL[scope]}
+                      </label>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </fieldset>
-          ))}
+              </fieldset>
+            ))}
+          </div>
           {scopesError !== undefined && (
             <p className="release-panel__risk" role="alert">
               <span aria-hidden="true">⚠ </span>
@@ -291,6 +296,10 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
           ))}
         </div>
       )}
+
+      <div className="byok-section">
+        <ByokSettings client={client} workspaceId={workspaceId} />
+      </div>
     </>
   );
 }

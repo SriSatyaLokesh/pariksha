@@ -15,7 +15,7 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
 <a href="https://creativecommons.org/licenses/by/4.0/"><img src="https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg" alt="Content: CC BY 4.0"></a>
 <a href="#roadmap"><img src="https://img.shields.io/badge/Status-alpha-E8A33D.svg" alt="Status: alpha"></a>
-<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--11-complete-19E68C.svg" alt="Phases 1 to 11 complete"></a>
+<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--12-complete-19E68C.svg" alt="Phases 1 to 12 complete"></a>
 <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
 </p>
 
@@ -40,7 +40,7 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 > **Built and on `main`:** deploy to your own Cloudflare account or Docker server, import a bank,
 > build a test with pools and sets and a registration form, publish it, have
 > candidates sit it under proctoring, grade the written answers, export the
-> results CSV. Phases 1&ndash;11, all completed.
+> results CSV, or draft schema-validated questions using BYOK AI with Anthropic, OpenAI, Google Gemini, OpenRouter, or OpenCode. Phases 1&ndash;12, all completed.
 >
 > **Never done:** carried one real exam with 300 candidates at once. That is the
 > v0.1 exit gate — one real test, 300+ candidates, zero lost answers — and it is
@@ -88,6 +88,7 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
 - **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. (The *live* monitor — attempts updating while the exam runs — is the one results surface still to come; see [What is still to come](#what-is-still-to-come).)
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
+- **BYOK AI question drafting.** Generate complete, schema-validated questions directly from course topics, syllabi, or raw text using Anthropic (Claude 3.7 / 3.5 Sonnet, 3.5 Haiku), OpenAI (GPT-4o, o1, o3-mini), Google Gemini (Gemini 2.5 Pro / 2.5 Flash), OpenRouter (DeepSeek, Llama 3.3, Mistral), or OpenCode (open & local models). Pure native `fetch`, WebCrypto AES-256-GCM zero-knowledge key encryption at rest, hard monthly spend caps, and interactive in-modal review with schema validation badges, 1-click question flagging/exclusion, and inline editing before bank import.
 - **Two deployment targets: Cloudflare serverless and Docker self-host.** Every adapter — database, object storage, identity — exists for both. Deploy on Cloudflare's free tier (Workers, D1, R2) with zero operational cost, or self-host on any Linux server, VPS, or air-gapped on-premise network with Docker Compose (Postgres 16 / SQLite, MinIO, and Caddy for automatic HTTPS). See the [Deployment Guide](docs/deployment.md).
 
 ## Screens
@@ -144,7 +145,7 @@ full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
-Phases 1–11 are completed (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, and Phase 11 Multi-Target Deployment & v1.0 Release Readiness). What is scheduled next, with the phase that owns it —
+Phases 1–12 are completed (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, Phase 11 Multi-Target Deployment & v1.0 Release Readiness, and Phase 12 BYOK AI Question Drafting). What is scheduled next, with the phase that owns it —
 [`docs/ROADMAP.md`](docs/ROADMAP.md) is authoritative:
 
 | Not built yet | Phase |
@@ -152,7 +153,6 @@ Phases 1–11 are completed (including Phase 9 Public Demo & Sections, Phase 10 
 | One real exam with 300+ candidates — **the gate that ends alpha** | v0.1 exit gate |
 | The live monitor: attempts updating while the exam runs, and the integrity review queue | 8.5 — the watchtower |
 | Microphone monitoring, and on-device face counting | 8.5 — the ear ([#223](https://github.com/SriSatyaLokesh/pariksha/issues/223)) |
-| Bring-your-own-key AI question drafting, into a bank, never auto-published | 12 |
 
 ## See a real test
 
@@ -366,7 +366,7 @@ left is *use* — running it, breaking it, and telling us where it bent.
 | 📝 **Question sets** | Add a subject under [`examples/`](examples/) — school science, GATE-style engineering, nursing, language comprehension, civil-service reasoning, your own field. Original content only, CC BY 4.0 |
 | 🌐 **Translations** | Interface strings and candidate-facing text in Indian and other languages to extend the i18n registry shipped in Phase 11 |
 | ♿ **Accessibility** | Screen-reader usability feedback across devices to build upon the automated WCAG 2.1 AA audit suite |
-| 💻 **Code** | Phases 1–11 are completed, so there is a mature codebase to work in: see [the roadmap](docs/ROADMAP.md) for Phase 12 (BYOK AI drafting), and the open issues |
+| 💻 **Code** | Phases 1–12 are completed, so there is a mature codebase to work in: see [the roadmap](docs/ROADMAP.md), the [Model Router Contributor Guide](docs/contributing/ai-model-router.md) ([#261](https://github.com/SriSatyaLokesh/pariksha/issues/261)), and open issues |
 
 Start with [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Security issues go through [SECURITY.md](SECURITY.md) — never a public issue.
 

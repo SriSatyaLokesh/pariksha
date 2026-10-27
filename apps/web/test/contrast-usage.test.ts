@@ -529,6 +529,27 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".bank-browser__filter-select select": { dark: "signal-surface", light: "signal-l-surface" },
   ".bank-browser__notice": { dark: "signal-bg", light: "signal-l-bg" },
   ".bank-browser__empty": { dark: "signal-bg", light: "signal-l-bg" },
+  ".byok-card__badge--active": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-card__badge--inactive": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-card__desc": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-usage-stat__value": { dark: "signal-surface", light: "signal-l-surface" },
+  ".byok-usage-stat__label": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-preview__item-meta": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-preview__item-prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-stat": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-stat--approved": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-stat--flagged": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card--flagged .draft-ai-card__prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__meta-left": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-badge--valid": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-badge--warning": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__warning-msg": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__options li": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__options li.draft-ai-option--correct": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__key": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-key-select": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-bottom-bar__summary": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
   // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
@@ -555,7 +576,9 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // `.test-badge`/`.test-version` above — it renders in the same row, on
   // the same unfilled page ground.
   ".test-readiness": { dark: "signal-bg", light: "signal-l-bg" },
-  ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
+  // `QrCode.tsx` fills its background with `var(--color-canvas)`, so its
+  // modules (`currentColor`) render on `canvas` on both grounds.
+  ".qr-code": both("canvas"),
   ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
   // `D19`'s shuffle chip (6.5e Task 6). A bordered chip with no fill of its
@@ -833,6 +856,25 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // the mechanism and changes nothing but weight and ink, so its size is the
   // body-sm scale `.screen__facts li` sets on the line it sits in.
   ".screen__facts b": { px: 14, weight: 600 },
+
+  // Phase 12 BYOK & AI drafting (Task 4a)
+  ".byok-card__badge--active": { px: 12, weight: 400 },
+  ".byok-card__badge--inactive": { px: 12, weight: 400 },
+  ".byok-usage-stat__value": { px: 20, weight: 600 },
+  ".draft-ai-stat": { px: 13, weight: 400 },
+  ".draft-ai-stat--approved": { px: 13, weight: 600 },
+  ".draft-ai-stat--flagged": { px: 13, weight: 600 },
+  ".draft-ai-card--flagged .draft-ai-card__prompt": { px: 15, weight: 400 },
+  ".draft-ai-card__meta-left": { px: 13, weight: 400 },
+  ".draft-ai-badge--valid": { px: 13, weight: 400 },
+  ".draft-ai-badge--warning": { px: 13, weight: 400 },
+  ".draft-ai-card__warning-msg": { px: 14, weight: 400 },
+  ".draft-ai-card__prompt": { px: 15, weight: 400 },
+  ".draft-ai-card__options li": { px: 14, weight: 400 },
+  ".draft-ai-card__options li.draft-ai-option--correct": { px: 14, weight: 600 },
+  ".draft-ai-card__key": { px: 14, weight: 400 },
+  ".draft-ai-key-select": { px: 14, weight: 400 },
+  ".draft-ai-bottom-bar__summary": { px: 14, weight: 400 },
 
   // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
   // The builder's facts, consequences and summaries are <p> elements that

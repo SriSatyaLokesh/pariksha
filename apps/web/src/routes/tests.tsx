@@ -618,10 +618,8 @@ export function TestList({
                       <td>{new Date(test.updatedAt).toLocaleDateString()}</td>
                       <td>
                         <div className="field">
-                          <label className="field-label" htmlFor={slugId}>
-                            Slug
-                          </label>
                           <input
+                            aria-label="Slug"
                             className="text-input"
                             id={slugId}
                             value={slugDrafts[test.id] ?? test.slug}

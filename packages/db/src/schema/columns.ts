@@ -573,6 +573,42 @@ export const TABLE_MANIFEST: TableSpec[] = [
     indexes: [["workspace_id"], ["next_attempt_at"]],
     uniques: [],
   },
+  // Phase 12: BYOK encrypted provider credentials (S-15).
+  // Stores AES-GCM encrypted API key per workspace per provider.
+  {
+    name: "byok_credential",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("provider"),
+      text("encrypted_key"),
+      text("key_hint"),
+      int("spend_limit_cents", { null: true }),
+      text("status"),
+      ts("created_at"),
+      ts("updated_at"),
+      ts("last_used_at", { null: true }),
+    ],
+    indexes: [["workspace_id"]],
+    uniques: [["workspace_id", "provider"]],
+  },
+  // Phase 12: BYOK usage and spend telemetry.
+  // Records token counts and estimated costs for drafting requests.
+  {
+    name: "byok_usage",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("provider"),
+      text("model"),
+      int("prompt_tokens"),
+      int("completion_tokens"),
+      int("estimated_cost_cents"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"], ["workspace_id", "created_at"]],
+    uniques: [],
+  },
 ];
 
 export const TABLE_NAMES = TABLE_MANIFEST.map((t) => t.name);
