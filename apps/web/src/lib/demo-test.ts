@@ -1,6 +1,6 @@
 import type { AttemptPaper, CandidateQuestion, PaperSection } from "./paper.js";
 import type { LandingPayload } from "./run.js";
-import { PROCTORING_DEFAULTS, type Question } from "@pariksha/core";
+import { PROCTORING_DEFAULTS, proctoringRequirements, type Question, type ResolvedProctoring } from "@pariksha/core";
 
 export const DEMO_SECTION_1_QUESTIONS: CandidateQuestion[] = [
   {
@@ -146,6 +146,18 @@ export const DEMO_PAPER_SECTIONS: PaperSection[] = [
   },
 ];
 
+export const DEMO_PROCTORING_CONFIG: ResolvedProctoring = {
+  ...PROCTORING_DEFAULTS.off,
+  desktopOnly: true,
+  requireFullscreen: true,
+  watermark: true,
+  blockCopyPaste: true,
+  extraMonitorCheck: true,
+  allowCalculator: true,
+  violationLimit: 3,
+  violationAction: "warn_then_flag",
+};
+
 export const DEMO_PAPER_FIXTURE: AttemptPaper = {
   attemptId: "att_demo_evaluator",
   sections: DEMO_PAPER_SECTIONS,
@@ -161,10 +173,7 @@ export const DEMO_PAPER_FIXTURE: AttemptPaper = {
   serverNow: Date.now(),
   submittedAt: null,
   lockedAt: null,
-  proctoring: {
-    ...PROCTORING_DEFAULTS.off,
-    allowCalculator: true,
-  },
+  proctoring: DEMO_PROCTORING_CONFIG,
   violations: 0,
 };
 
@@ -181,7 +190,7 @@ export const DEMO_LANDING_FIXTURE: LandingPayload = {
   rules: "Calculators allowed. You may navigate freely between sections.",
   proctoring: {
     profile: "off",
-    requirements: ["No proctoring active — public demonstration mode."],
+    requirements: proctoringRequirements(DEMO_PROCTORING_CONFIG),
   },
   accessMode: "link_code",
   state: "open",
