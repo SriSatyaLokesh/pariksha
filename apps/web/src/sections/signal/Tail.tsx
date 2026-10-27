@@ -121,7 +121,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Can I use Pariksha today?",
     answer:
-      "You can run Pariksha today. Deploy it to your own Cloudflare account on the free plan, import a question bank, build a test, send the link, and download the results CSV — the whole path is built and on the main branch. It is alpha: the one thing Pariksha has not yet done is carry a real exam with 300 candidates at once, so run it beside what you use now rather than instead of it.",
+      "You can run Pariksha today. Deploy it to your own Cloudflare account on the free plan, import a question bank, build a test, send the link, and download the results CSV — the whole path is built and on the main branch. You can also test-drive the candidate exam runtime immediately with zero setup: click 'Try Live Demo' or visit /exam?demo=true (access code: DEMO) to try all 12 question types, timed sections, floating calculator, and local proctoring with no server subrequests. It is alpha: the one thing Pariksha has not yet done is carry a real exam with 300 candidates at once, so run it beside what you use now rather than instead of it.",
   },
   {
     question: "Where is candidate data stored?",

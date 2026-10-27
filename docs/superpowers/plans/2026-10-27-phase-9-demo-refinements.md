@@ -1,6 +1,8 @@
 # Phase 9 Subphase: Interactive Public Demo Refinements Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Status: Complete** — Delivered, tested, and merged into main in PR [#255](https://github.com/SriSatyaLokesh/pariksha/pull/255) (closes [#256](https://github.com/SriSatyaLokesh/pariksha/issues/256), commit 9a2adb6).
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Complete the final subphase of Phase 9 by exposing the public demo on the landing page with access code `DEMO`, enforcing exam proctoring features (fullscreen, watermark, draggable calculator, phone/tablet block, copy-paste block, extra monitor detection, 3-violation limit), configuring the 15-minute exam with 5-minute section time limits, fixing `fill_blank` question rendering for `{{b1}}`/`[[b1]]`, and allowing repeated option selections in `matching` questions without disabling options.
 
@@ -43,7 +45,7 @@
 - Consumes: none.
 - Produces: Updated hero section with demo CTA and access code badge `Access Code: DEMO`, updated `DemoModal` showing access code for the candidate sample exam card, and updated `DemoBanner` displaying `Access Code: DEMO`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // apps/web/test/demo/landing-demo.test.tsx
@@ -58,12 +60,12 @@ it("renders demo access code 'DEMO' prominently in landing hero and demo modal",
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/demo/landing-demo.test.tsx`
 Expected: FAIL ("Unable to find element with text /code: DEMO/i")
 
-- [ ] **Step 3: Implement access code badges on landing page and demo components**
+- [x] **Step 3: Implement access code badges on landing page and demo components**
 
 1. In `apps/web/src/sections/signal/Head.tsx`:
    - Beside or beneath `Try Live Demo`, render a code pill `<span className="signal-badge-code">Code: <strong>DEMO</strong></span>`.
@@ -72,12 +74,12 @@ Expected: FAIL ("Unable to find element with text /code: DEMO/i")
 3. In `apps/web/src/components/demo/DemoBanner.tsx`:
    - In `mode === "exam"`, include `· Access Code: DEMO`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/demo/landing-demo.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/sections/signal/Head.tsx apps/web/src/components/demo/DemoModal.tsx apps/web/src/components/demo/DemoBanner.tsx apps/web/test/demo/landing-demo.test.tsx
@@ -100,7 +102,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(demo): dis
   - `DEMO_LANDING_FIXTURE`: `durationMinutes: 15`, 3 sections with `timeLimitMinutes: 5`.
   - `DEMO_PAPER_FIXTURE`: `remainingMs: 900_000`, `sectionRemainingMs: 300_000`, 3 sections with `timeLimitMinutes: 5`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```ts
 // in apps/web/test/exam/demo-client.test.ts
@@ -130,12 +132,12 @@ it("configures total duration to 15 minutes and each section to 5 minutes", asyn
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/exam/demo-client.test.ts`
 Expected: FAIL ("client.access({}) does not throw")
 
-- [ ] **Step 3: Implement access validation and 15m/5m timings**
+- [x] **Step 3: Implement access validation and 15m/5m timings**
 
 1. In `apps/web/src/lib/demo-client.ts`:
    - Update `access`:
@@ -153,12 +155,12 @@ Expected: FAIL ("client.access({}) does not throw")
    - Update `DEMO_LANDING_FIXTURE`: set `durationMinutes: 15`, and each section `timeLimitMinutes: 5`.
    - Update `DEMO_PAPER_FIXTURE`: set `remainingMs: 15 * 60_000` (900000), `sectionRemainingMs: 5 * 60_000` (300000).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/exam/demo-client.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/lib/demo-test.ts apps/web/src/lib/demo-client.ts apps/web/test/exam/demo-client.test.ts
@@ -178,7 +180,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(demo): enf
 - Consumes: `onClose: () => void`.
 - Produces: Updated `<Calculator />` with draggable header handle, pointer capture drag tracking, viewport clamping, keyboard arrow nudging, and `z-index: 100` in `.exam-calculator`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
 // in apps/web/test/exam/calculator.test.tsx
@@ -208,12 +210,12 @@ it("supports keyboard arrow keys to nudge calculator position", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/exam/calculator.test.tsx`
 Expected: FAIL ("Unable to find element with testid 'calc-drag-handle'")
 
-- [ ] **Step 3: Implement draggable calculator and styling**
+- [x] **Step 3: Implement draggable calculator and styling**
 
 1. In `apps/web/src/components/exam/Calculator.tsx`:
    - Add state: `position: { x: number; y: number } | null = null`.
@@ -266,12 +268,12 @@ Expected: FAIL ("Unable to find element with testid 'calc-drag-handle'")
      }
      ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/exam/calculator.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/components/exam/Calculator.tsx apps/web/src/styles/exam.css apps/web/test/exam/calculator.test.tsx
@@ -291,7 +293,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(exam): mak
 - Consumes: `CandidateQuestion` of type `fill_blank`.
 - Produces: Normalized placeholder matching that supports both `{{id}}` and `[[id]]` formats, rendering inline text inputs in `<FillBlank />`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // in apps/web/test/exam/answer-written.test.tsx
@@ -312,12 +314,12 @@ it("renders inline inputs for bracketed placeholders like [[b1]] as well as {{b1
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/exam/answer-written.test.tsx`
 Expected: FAIL ("Unable to find role textbox with name /blank 1/i")
 
-- [ ] **Step 3: Implement bracket placeholder normalization and fix demo fixture**
+- [x] **Step 3: Implement bracket placeholder normalization and fix demo fixture**
 
 1. In `apps/web/src/components/exam/answer/Written.tsx`:
    - In `FillBlank`: normalize `[[id]]` delimiters into `{{id}}` before matching placeholders:
@@ -329,12 +331,12 @@ Expected: FAIL ("Unable to find role textbox with name /blank 1/i")
    - In `DEMO_SECTION_1_QUESTIONS` (demo_q4) and `DEMO_QUESTIONS_CATALOG`:
      Update prompt to: `"The standard port used for secure HTTPS connections is {{b1}}."` with `blanks: [{ id: "b1" }]`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/exam/answer-written.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/components/exam/answer/Written.tsx apps/web/src/lib/demo-test.ts apps/web/test/exam/answer-written.test.tsx
@@ -354,7 +356,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "fix(exam): supp
 - Consumes: `Matching` question with `left: string[]` and `right: string[]`.
 - Produces: `<select>` dropdowns where all `<option>` items remain enabled, allowing candidates to select the same option across multiple left items (such as `O(n log n)` for both Merge Sort and Quick Sort).
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // in apps/web/test/exam/answer-structured.test.tsx
@@ -385,12 +387,12 @@ it("matching: does not disable options after selecting, permitting multiple left
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/exam/answer-structured.test.tsx`
 Expected: FAIL ("expect(quickOption).toBeEnabled() failed because option is disabled")
 
-- [ ] **Step 3: Remove option disabling in `Structured.tsx` and deduplicate `right` array**
+- [x] **Step 3: Remove option disabling in `Structured.tsx` and deduplicate `right` array**
 
 1. In `apps/web/src/components/exam/answer/Structured.tsx`:
    - In `<Matching />`:
@@ -415,12 +417,12 @@ Expected: FAIL ("expect(quickOption).toBeEnabled() failed because option is disa
 3. In `apps/web/test/exam/answer-structured.test.tsx`:
    - Update the older test asserting option disabling to assert that options remain enabled and reusable.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/exam/answer-structured.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/components/exam/answer/Structured.tsx apps/web/src/lib/demo-test.ts apps/web/test/exam/answer-structured.test.tsx
@@ -442,7 +444,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "fix(exam): perm
   - `DEMO_PROCTORING_CONFIG`: Full proctoring enabled (`desktopOnly: true`, `requireFullscreen: true`, `watermark: true`, `blockCopyPaste: true`, `extraMonitorCheck: true`, `allowCalculator: true`, `violationLimit: 3`, `violationAction: "warn_then_flag"`).
   - In `ProctoringLayer.tsx`: When `attemptId.startsWith("att_demo_")`, bypass server network fetch and handle violation accumulation locally with 3-violation auto-submit limit.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 ```tsx
 // apps/web/test/exam/proctoring-demo.test.tsx
@@ -494,12 +496,12 @@ describe("Demo Mode Proctoring Layer", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/exam/proctoring-demo.test.tsx`
 Expected: FAIL ("DEMO_PROCTORING_CONFIG is not defined / fetch fails")
 
-- [ ] **Step 3: Implement `DEMO_PROCTORING_CONFIG` and client-side demo violation handler**
+- [x] **Step 3: Implement `DEMO_PROCTORING_CONFIG` and client-side demo violation handler**
 
 1. In `apps/web/src/lib/demo-test.ts`:
    - Export `DEMO_PROCTORING_CONFIG`:
@@ -538,12 +540,12 @@ Expected: FAIL ("DEMO_PROCTORING_CONFIG is not defined / fetch fails")
      ```
    - Wire `sendDemoEvents` into `createProctoringQueue` when `attemptId.startsWith("att_demo_")`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/exam/proctoring-demo.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/lib/demo-test.ts apps/web/src/components/exam/ProctoringLayer.tsx apps/web/test/exam/proctoring-demo.test.tsx
@@ -562,7 +564,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(demo): act
 - Consumes: `deviceReport(resolved: ResolvedProctoring)` in `apps/web/src/routes/exam.tsx`.
 - Produces: Refuses mobile/tablet devices (`screen width < 1024`, touch-only pointer, or mobile user-agents) with `ok: false, refused: true`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```tsx
 // apps/web/test/exam/device-gate-demo.test.tsx
@@ -588,21 +590,21 @@ describe("Demo Device Gate (Block Phones & Tablets)", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test test/exam/device-gate-demo.test.tsx`
 Expected: Verify test assertions fail if window/pointer defaults diverge.
 
-- [ ] **Step 3: Implement device report refinements in `routes/exam.tsx`**
+- [x] **Step 3: Implement device report refinements in `routes/exam.tsx`**
 
 Ensure `deviceReport` accurately detects mobile platforms and properly surfaces refusal when `resolved.desktopOnly` is active in demo mode.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test test/exam/device-gate-demo.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/routes/exam.tsx apps/web/test/exam/device-gate-demo.test.tsx
@@ -621,7 +623,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(exam): ver
 - Consumes: Tasks 1-7 deliverables.
 - Produces: Fully green test suite across `@pariksha/core` and `@pariksha/web`, updated documentation and roadmap status.
 
-- [ ] **Step 1: Run comprehensive tests**
+- [x] **Step 1: Run comprehensive tests**
 
 ```bash
 pnpm --filter @pariksha/core test
@@ -630,7 +632,7 @@ pnpm --filter @pariksha/web test test/exam/
 ```
 Expected: PASS across all test suites.
 
-- [ ] **Step 2: Run typecheck and linting**
+- [x] **Step 2: Run typecheck and linting**
 
 ```bash
 pnpm turbo run typecheck
@@ -638,7 +640,7 @@ pnpm turbo run lint
 ```
 Expected: Zero type errors, zero lint warnings.
 
-- [ ] **Step 3: Mark Phase 9 plan complete and commit**
+- [x] **Step 3: Mark Phase 9 plan complete and commit**
 
 ```bash
 git add docs/superpowers/plans/2026-10-25-phase-9-public-demo-and-sections.md
@@ -649,13 +651,13 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "chore(docs): ma
 
 ## Final Checklist
 
-- [ ] "DEMO" access code shown on landing page, demo modal, and demo banner.
-- [ ] Entering any access code other than "DEMO" is refused.
-- [ ] Demo exam duration is 15 minutes, with 3 sections of 5 minutes each.
-- [ ] Calculator is floating, draggable, with high z-index (`z-index: 100`) so it never gets obscured under sections.
-- [ ] Fill-in-the-blank question renders an active input box inline with prompt text for both `{{b1}}` and `[[b1]]`.
-- [ ] Matching questions never disable options after selection, allowing multiple left items to select the same right complexity (e.g. `O(n log n)`).
-- [ ] Proctoring in demo enforces fullscreen, watermark, copy-paste blocking, and extra monitor check.
-- [ ] Violation warning count tracks 1, 2, and auto-submits on 3 violations locally without server errors.
-- [ ] Phones and tablets are blocked under `desktopOnly`.
-- [ ] Monorepo verification passes with 100% green tests.
+- [x] "DEMO" access code shown on landing page, demo modal, and demo banner.
+- [x] Entering any access code other than "DEMO" is refused.
+- [x] Demo exam duration is 15 minutes, with 3 sections of 5 minutes each.
+- [x] Calculator is floating, draggable, with high z-index (`z-index: 100`) so it never gets obscured under sections.
+- [x] Fill-in-the-blank question renders an active input box inline with prompt text for both `{{b1}}` and `[[b1]]`.
+- [x] Matching questions never disable options after selection, allowing multiple left items to select the same right complexity (e.g. `O(n log n)`).
+- [x] Proctoring in demo enforces fullscreen, watermark, copy-paste blocking, and extra monitor check.
+- [x] Violation warning count tracks 1, 2, and auto-submits on 3 violations locally without server errors.
+- [x] Phones and tablets are blocked under `desktopOnly`.
+- [x] Monorepo verification passes with 100% green tests.
