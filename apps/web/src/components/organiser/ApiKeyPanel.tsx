@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError, type Action, type ApiClient, type ApiKey } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
+import { ByokSettings } from "../admin/ByokSettings";
 
 // Phase 8d Task 2: the organiser's scoped-API-key CRUD screen (`K25`,
 // `K26`, `KG5`). Built from the same tokens and primitives
@@ -291,6 +292,10 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
           ))}
         </div>
       )}
+
+      <div className="byok-section">
+        <ByokSettings client={client} workspaceId={workspaceId} />
+      </div>
     </>
   );
 }
