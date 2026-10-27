@@ -576,7 +576,9 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // `.test-badge`/`.test-version` above — it renders in the same row, on
   // the same unfilled page ground.
   ".test-readiness": { dark: "signal-bg", light: "signal-l-bg" },
-  ".qr-code": { dark: "signal-bg", light: "signal-l-bg" },
+  // `QrCode.tsx` fills its background with `var(--color-canvas)`, so its
+  // modules (`currentColor`) render on `canvas` on both grounds.
+  ".qr-code": both("canvas"),
   ".button-link": { dark: "signal-bg", light: "signal-l-bg" },
   ".section-row__summary": { dark: "signal-bg", light: "signal-l-bg" },
   // `D19`'s shuffle chip (6.5e Task 6). A bordered chip with no fill of its
