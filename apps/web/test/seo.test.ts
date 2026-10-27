@@ -43,12 +43,14 @@ describe("T13 — no fake social proof in the structured-data graph", () => {
     expect(parsed.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
-  it("runtimePlatform names only what has shipped (Docker self-host is Phase 11, not built)", () => {
+  it("runtimePlatform names what has shipped including Docker self-host", () => {
     const jsonld = buildJsonLd({ siteUrl: SITE_URL, dateModified: DATE_MODIFIED });
     const sourceCode = jsonld["@graph"].find(
       (n) => n["@type"] === "SoftwareSourceCode",
     ) as { runtimePlatform: string[] };
-    expect(sourceCode.runtimePlatform).not.toContain("Docker");
+    expect(sourceCode.runtimePlatform).toContain("Cloudflare Workers");
+    expect(sourceCode.runtimePlatform).toContain("Node.js");
+    expect(sourceCode.runtimePlatform).toContain("Docker");
   });
 });
 

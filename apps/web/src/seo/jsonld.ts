@@ -53,8 +53,9 @@ export function buildJsonLd({ siteUrl, dateModified }: JsonLdOptions) {
         name: "Pariksha",
         alternateName: ALTERNATE_NAMES,
         description: META_DESCRIPTION,
-        applicationCategory: "BusinessApplication",
+        applicationCategory: "EducationalApplication",
         applicationSubCategory: "Online examination and assessment software",
+        operatingSystem: "Linux, macOS, Windows, Docker, Cloudflare Workers",
         softwareVersion: "alpha",
         releaseNotes: STATUS_LINE,
         license: "https://www.apache.org/licenses/LICENSE-2.0",
@@ -75,10 +76,7 @@ export function buildJsonLd({ siteUrl, dateModified }: JsonLdOptions) {
         codeRepository: REPO,
         programmingLanguage: ["TypeScript", "React"],
         license: "https://www.apache.org/licenses/LICENSE-2.0",
-        // Docker self-host is ROADMAP Phase 11 ("planned for v1.0",
-        // docs/ROADMAP.md:135-141) — not shipped, and structured data is
-        // read literally by machines with no room for a qualifier.
-        runtimePlatform: ["Cloudflare Workers", "Node.js"],
+        runtimePlatform: ["Cloudflare Workers", "Node.js", "Docker"],
       },
       {
         "@type": "WebPage",

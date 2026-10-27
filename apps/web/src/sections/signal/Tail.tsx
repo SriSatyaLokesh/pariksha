@@ -34,11 +34,8 @@ const LIVE = [
 
 const NEXT = [
   "One real exam with 300+ candidates — the gate that ends alpha",
-  "Microphone monitoring and the proctoring watchtower (Phase 8.5)",
-  "Bring-your-own-key AI question drafting (Phase 9)",
-  "A public demo instance you can open without signing in (Phase 10)",
-  "Docker and Postgres self-hosting (Phase 11)",
-  "WCAG 2.1 AA, translations, OpenAPI, plugins, signed releases (Phase 12)",
+  "Microphone monitoring (Phase 8.5)",
+  "Bring-your-own-key AI question drafting (Phase 12)",
 ] as const;
 
 export function SignalStatus() {
@@ -163,7 +160,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Can Pariksha generate questions with AI?",
     answer:
-      "Pariksha cannot generate questions with AI yet; it is Phase 9, the next feature phase after proctoring and results. The plan is bring-your-own-key drafting: your own Anthropic or OpenAI key, stored encrypted per workspace and never sent to the browser, drafting questions into a bank — never whole tests. Every draft is schema-validated and waits for a human to accept it, and nothing auto-publishes.",
+      "Pariksha cannot generate questions with AI yet; it is Phase 12, the next feature phase after multi-target deployment and v1.0 release readiness. The plan is bring-your-own-key drafting: your own Anthropic or OpenAI key, stored encrypted per workspace and never sent to the browser, drafting questions into a bank — never whole tests. Every draft is schema-validated and waits for a human to accept it, and nothing auto-publishes.",
   },
 ];
 

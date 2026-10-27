@@ -41,8 +41,8 @@ per-phase sections below describe the *plan*, this table describes the *state*.
 | 8.5 — Proctoring: the watchtower and the ear | **8g Done, 8f Deferred** | **8g (The Watchtower) built**: The live monitor with flat query scaling (`KG3`, #89), all five proctor actions with audit logs and non-destructive reset (`R-02`, `KG9`, `K39`, #90), candidate broadcast riding existing responses with no polling (`C-10`, `K12`, `K13`, #87), and the per-attempt review page with unobserved timeline gaps (`R-03`, `K1`, `K3`/`K4`, #91). **8f (The Ear / Microphone) is deferred** (owner directive: hardware-dependent, cannot be proved in CI). | Epic [#223](https://github.com/SriSatyaLokesh/pariksha/issues/223). 8g completed all 4 tasks under SDD with parallel lanes across worktrees. Full test suite passing across all packages. |
 | 9 — Public demo instance and section division | **Done** | Zero-bill public demo instance with local-first scoring, client question caching, candidate exam section division, and interactive candidate demo refinements: prominent "Try Live Demo" CTA in navigation bar, clean two-button hero, bold DEMO access code in instructions, floating draggable calculator, matching option reuse, bracket fill-in-the-blank input support, 15m/5m timings, and 3-violation proctoring auto-submit guard. Merged in PR [#255](https://github.com/SriSatyaLokesh/pariksha/pull/255) (closes [#256](https://github.com/SriSatyaLokesh/pariksha/issues/256), `9a2adb6`). | Shipped. |
 | 10 — Docker self-host | **Done** | Containerized Pariksha serving API & web SPA, Postgres 16 & SQLite Compose stacks, MinIO & local-disk storage, Caddy automatic HTTPS, Argon2id password & TOTP 2FA, in-process scheduler, and backup/restore scripts (`AC-01`, `S-01`, `S-02`, `O-03`). | Shipped. |
-| 11 — v1.0 release readiness | **Done** | Extensible plugin architecture (`O-06`), i18n & RTL translation (`T-24`), OpenAPI 3.1 specification (`O-04`), full documentation suite (`O-04`), k6 500-VU load test suite (`AC-29`), and WCAG 2.1 AA accessibility audit (`O-05`). | Shipped. |
-| 12 — BYOK AI question drafting | **Planned** | — | Per-workspace encrypted API key storage, structured question drafting flow. | Next phase. |
+| 11 — v1.0 release readiness & multi-target deployment | **Done** | Extensible plugin architecture (`O-06`), i18n & RTL translation (`T-24`), OpenAPI 3.1 specification (`O-04`), full documentation suite (`O-04`), comprehensive deployment guide ([`docs/deployment.md`](deployment.md)) covering Cloudflare, Docker SQLite, Docker PostgreSQL 16 + MinIO S3 cluster, and air-gapped on-premise LAN, k6 500-VU load test suite (`AC-29`), WCAG 2.1 AA accessibility audit (`O-05`), and complete SEO/GEO/AEO optimization (JSON-LD FAQPage, agent-welcoming robots.txt, llms.txt). Merged in PR [#260](https://github.com/SriSatyaLokesh/pariksha/pull/260) (closes [#258](https://github.com/SriSatyaLokesh/pariksha/issues/258)). | Shipped. |
+| 12 — BYOK AI question drafting | **Planned** | — | Per-workspace encrypted API key storage, structured question drafting flow. Scheduled for next phase. | Next phase. |
 
 **The landing page is independent of the API** — it is static output with no backend call,
 which is why Phase 3's tasks 7 and 8 could ship ahead of Phase 2. The rest of Phase 3
@@ -208,11 +208,11 @@ keeps their **endpoint**.
 
 **PRD.** `O-03`, architecture table.
 
-### Phase 11 — v1.0 release readiness
+### Phase 11 — v1.0 release readiness & multi-target deployment
 
-**Delivers.** The WCAG 2.1 AA audit and its fixes, translation files and right-to-left layout, the OpenAPI 3.1 description, the plugin interface for question types, proctoring signals and export targets, the k6 load-test script, the full documentation set (quick start, organiser guide, candidate FAQ, security guide, API reference, privacy template), semantic-versioned signed releases and dependency scanning.
+**Delivers.** The WCAG 2.1 AA audit and its fixes, translation files and right-to-left layout, the OpenAPI 3.1 description, the plugin interface for question types, proctoring signals and export targets, the k6 load-test script, the full documentation set (quick start, organiser guide, candidate FAQ, security guide, API reference, privacy template), comprehensive multi-target deployment guide (`docs/deployment.md`) for Cloudflare and Docker (PostgreSQL 16 + MinIO S3 and SQLite), search and generative engine optimization (SEO, GEO, AEO), semantic-versioned signed releases and dependency scanning.
 
-**Gate.** `AC-29`: a k6 run of 500 candidates on the Cloudflare free plan ends with under 0.5% errors, p95 at or under 300 ms, and usage inside the daily limits. Every acceptance criterion passes on both deployment targets.
+**Gate.** `AC-29`: a k6 run of 500 candidates on the Cloudflare free plan ends with under 0.5% errors, p95 at or under 300 ms, and usage inside the daily limits. Every acceptance criterion passes on both deployment targets. Zero accessibility violations, valid JSON-LD schemas, and complete deployment walkthrough.
 
 **PRD.** `O-04` through `O-07`, non-functional requirements.
 

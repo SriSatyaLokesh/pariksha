@@ -143,7 +143,7 @@ full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
-Phases 1–11 are merged (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, and Phase 11 v1.0 Release Readiness). What is not built, with the phase that owns it —
+Phases 1–11 are completed (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, and Phase 11 Multi-Target Deployment & v1.0 Release Readiness). What is scheduled next, with the phase that owns it —
 [`docs/ROADMAP.md`](docs/ROADMAP.md) is authoritative:
 
 | Not built yet | Phase |
