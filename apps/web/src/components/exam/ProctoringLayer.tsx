@@ -103,6 +103,7 @@ import {
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
 import { acquireCamera, captureJpeg, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
+import { monitorNoise } from "../../lib/noise";
 import { ProctoringOverlay } from "./ProctoringOverlay";
 import { Watermark } from "./Watermark";
 
@@ -228,6 +229,11 @@ export interface ProctoringLayerProps {
    */
   cameraStream?: MediaStream | null;
   /**
+   * Phase 8.5 / #209: Unified media stream or audio stream.
+   * Accepted either as `stream` or `cameraStream`.
+   */
+  stream?: MediaStream | null;
+  /**
    * B1 (whole-branch review, BLOCKING): true only when `routes/exam.tsx`'s
    * resume path tried to reacquire a required camera and was refused —
    * never inferred here from `proctoring.requireCamera && !cameraStream`,
@@ -261,11 +267,13 @@ export function ProctoringLayer({
   proctoring,
   initialViolations,
   cameraStream = null,
+  stream: streamProp,
   cameraUnavailable = false,
   initialLocked = false,
   onProctorMessage,
   onAutoSubmit,
 }: ProctoringLayerProps) {
+  const initialStream = streamProp ?? cameraStream;
   /**
    * The paper's fullscreen state **at the moment this layer first
    * renders** — captured once and kept, not read-and-discarded. Task 4's
@@ -435,9 +443,15 @@ export function ProctoringLayer({
    * so must read whichever stream is CURRENT through a ref rather than
    * close over whatever `liveStream` was the render they mounted.
    */
-  const [liveStream, setLiveStream] = useState<MediaStream | null>(cameraStream);
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(initialStream);
   const liveStreamRef = useRef(liveStream);
   liveStreamRef.current = liveStream;
+
+  const [prevStream, setPrevStream] = useState(initialStream);
+  if (initialStream !== prevStream) {
+    setPrevStream(initialStream);
+    setLiveStream(initialStream);
+  }
 
   /** Swaps in a newly acquired stream and stops the discarded one's tracks
    *  — a reconnect must not leave two streams' hardware lights on, and
@@ -1076,6 +1090,32 @@ export function ProctoringLayer({
       /* Q2: degrade — an unreadable screen is not a violation */
     }
   }, [proctoring.extraMonitorCheck]);
+
+  // ---- microphone noise monitoring (`Q12`/Phase 8.5, #209) -----------------
+
+  useEffect(() => {
+    const activeStream = streamProp ?? liveStream;
+    if (
+      !proctoring.requireMicrophone ||
+      !activeStream ||
+      typeof activeStream.getAudioTracks !== "function" ||
+      activeStream.getAudioTracks().length === 0
+    ) {
+      return;
+    }
+
+    const monitor = monitorNoise(activeStream, {
+      thresholdDb: -40,
+      windowMs: 200,
+      onCrossing: (durationMs) => {
+        queueRef.current?.push("noise_above_threshold", { durationMs });
+      },
+    });
+
+    return () => {
+      monitor?.stop();
+    };
+  }, [proctoring.requireMicrophone, streamProp, liveStream]);
 
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 

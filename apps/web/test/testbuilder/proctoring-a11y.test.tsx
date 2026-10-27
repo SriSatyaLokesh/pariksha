@@ -125,7 +125,7 @@ describe("the proctoring panel's accessibility gate (D1, D20, Q3)", () => {
     const control = screen.getByLabelText(/Count faces in each image/i);
     expect(control).toBeDisabled();
     expect(control).toHaveAccessibleName(/Count faces in each image/i);
-    expect(control).toHaveAccessibleDescription(/Phase 8/i);
+    expect(control).toHaveAccessibleDescription(/Issue #264/i);
     expect(await axe(container)).toHaveNoViolations();
   });
 });
