@@ -816,7 +816,7 @@ export function ProctoringLayer({
     // reused rather than rebuilt. `reportLost` raises the SAME overlay and
     // records the SAME event a mid-attempt loss would, rather than leaving
     // the rest of the attempt silently unproctored.
-    if (!liveStream && !cameraUnavailable) return;
+    if (!proctoring.requireCamera || (!liveStream && !cameraUnavailable)) return;
     if (!liveStream) reportLost("ended");
 
     function onEnded(): void {

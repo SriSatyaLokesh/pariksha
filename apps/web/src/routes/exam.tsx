@@ -254,6 +254,9 @@ function MicMeter({ stream }: { stream: MediaStream }) {
     let audioContext: AudioContext | null = null;
     try {
       audioContext = new AudioContextClass();
+      if (audioContext.state === "suspended") {
+        void audioContext.resume().catch(() => {});
+      }
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       analyser.fftSize = 256;
@@ -326,6 +329,7 @@ export function ExamLanding({
   const [deviceMediaOpen, setDeviceMediaOpen] = useState(false);
   const [deviceMediaStream, setDeviceMediaStream] = useState<MediaStream | null>(null);
   const [micNotice, setMicNotice] = useState<string | null>(null);
+  const [cameraNotice, setCameraNotice] = useState<string | null>(null);
   const notice = STATE_NOTICE[test.state];
 
   // `Q1b`: the landing payload ships the resolved REQUIREMENT SENTENCES,
@@ -352,6 +356,7 @@ export function ExamLanding({
     }
     setDeviceMediaOpen(false);
     setMicNotice(null);
+    setCameraNotice(null);
   }, [deviceMediaStream]);
 
   useEffect(() => {
@@ -372,14 +377,21 @@ export function ExamLanding({
       }
       setDeviceMediaOpen(true);
       setMicNotice(null);
+      setCameraNotice(null);
       const res = await acquireMedia({ video: needCam, audio: needMic });
       if (res.ok) {
         setDeviceMediaStream(res.stream);
+        if (needCam && res.stream.getVideoTracks().length === 0) {
+          setCameraNotice("Camera not detected or permission denied. A camera is required to start.");
+        }
         if (needMic && !res.audioAvailable) {
           setMicNotice("Microphone not detected. You may still take the test.");
         }
       } else {
         setDeviceMediaStream(null);
+        if (needCam) {
+          setCameraNotice("Camera not detected or permission denied. A camera is required to start.");
+        }
         if (needMic) {
           setMicNotice("Microphone not detected. You may still take the test.");
         }
@@ -565,8 +577,13 @@ export function ExamLanding({
         {deviceMediaOpen && (
           <section className="exam-device-test-panel" aria-label="Device test preview">
             <h3>Device test</h3>
-            {requiresCamera(test) && deviceMediaStream && (
+            {requiresCamera(test) && deviceMediaStream && deviceMediaStream.getVideoTracks().length > 0 && (
               <CameraPreview stream={deviceMediaStream} />
+            )}
+            {cameraNotice && (
+              <p className="exam-camera-notice" role="status">
+                {cameraNotice}
+              </p>
             )}
             {requiresMicrophone(test) && deviceMediaStream && !micNotice && (
               <MicMeter stream={deviceMediaStream} />

@@ -45,6 +45,10 @@ export function monitorNoise(
     return null;
   }
 
+  if (context.state === "suspended") {
+    void context.resume().catch(() => {});
+  }
+
   let stopped = false;
   let node: AudioWorkletNode | null = null;
   let source: MediaStreamAudioSourceNode | null = null;
