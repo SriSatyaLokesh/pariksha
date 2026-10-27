@@ -18,10 +18,10 @@ import { invokeAiDrafting, type AiDraftResponse } from "./client.js";
 
 export interface DraftOptions {
   prompt: string;
-  count?: number;
-  types?: QuestionType[];
-  provider?: ByokProvider;
-  model?: string;
+  count?: number | undefined;
+  types?: QuestionType[] | undefined;
+  provider?: ByokProvider | undefined;
+  model?: string | undefined;
 }
 
 export interface DraftOutput {

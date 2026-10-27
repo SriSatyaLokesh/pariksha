@@ -7,7 +7,7 @@ const IV_LENGTH = 12;
 /**
  * Derives a 256-bit CryptoKey from a secret string using SHA-256 digest.
  */
-async function deriveKey(secret: string): Promise<CryptoKey> {
+async function deriveKey(secret: string) {
   const enc = new TextEncoder();
   const digest = await crypto.subtle.digest("SHA-256", enc.encode(secret));
   return crypto.subtle.importKey("raw", digest, "AES-GCM", false, ["encrypt", "decrypt"]);
