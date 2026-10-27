@@ -7,7 +7,7 @@ describe("Demo Exam Client (Zero Cloudflare Subrequests)", () => {
     const client = createDemoClient();
 
     // Rejects missing/empty/invalid codes
-    await expect(client.access()).rejects.toThrow("Invalid access code. Please enter DEMO.");
+    await expect(client.access({})).rejects.toThrow("Invalid access code. Please enter DEMO.");
     await expect(client.access({ code: "" })).rejects.toThrow("Invalid access code. Please enter DEMO.");
     await expect(client.access({ code: "   " })).rejects.toThrow("Invalid access code. Please enter DEMO.");
     await expect(client.access({ code: "WRONG" })).rejects.toThrow("Invalid access code. Please enter DEMO.");

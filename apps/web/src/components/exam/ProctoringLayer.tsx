@@ -461,7 +461,7 @@ export function ProctoringLayer({
     const demoViolationsRef = { current: initialViolations };
 
     const sendFn = isDemo
-      ? async (events: QueuedEvent[]): Promise<EventsResponse> => {
+      ? (events: QueuedEvent[]): Promise<EventsResponse> => {
           for (const ev of events) {
             if (isViolation(ev.type)) {
               demoViolationsRef.current += 1;
@@ -469,12 +469,12 @@ export function ProctoringLayer({
           }
           const limit = proctoring.violationLimit || 3;
           const current = demoViolationsRef.current;
-          return {
+          return Promise.resolve({
             violations: current,
             limit,
             action: proctoring.violationAction,
             submitted: current >= limit,
-          };
+          });
         }
       : sendEvents;
 
