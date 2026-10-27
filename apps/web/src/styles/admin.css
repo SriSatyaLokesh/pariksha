@@ -751,6 +751,75 @@
   word-break: break-all;
 }
 
+/* ---- Phase 8d Task 2: API key matrix checklist -------------------------- */
+
+.api-key-matrix {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-md);
+  width: 100%;
+}
+
+.api-key-matrix__card {
+  flex: 1 1 240px;
+  min-width: 220px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-md);
+  background-color: var(--surface);
+  padding: var(--space-md);
+  margin: 0;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.api-key-matrix__card:hover {
+  border-color: var(--edge-2);
+  background-color: var(--surface-2);
+}
+
+.api-key-matrix__card:focus-within {
+  border-color: var(--edge-strong);
+}
+
+.api-key-matrix__legend {
+  padding-inline: var(--space-xs);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+  font-weight: 600;
+}
+
+.api-key-matrix__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.api-key-matrix__card .field {
+  margin: 0;
+  width: 100%;
+}
+
+.api-key-matrix__choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--rounded-xs);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.api-key-matrix__choice:hover {
+  background-color: var(--wash);
+}
+
 /* ---- Phase 8g Task 4: per-attempt review screen (R-03) ------------------ */
 
 .attempt-review {
