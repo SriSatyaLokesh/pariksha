@@ -259,11 +259,10 @@ export function SignalCost() {
       </div>
       <p className="signal-fine signal-fine--after">
         An estimate with published arithmetic. The 500-candidate figure is a
-        design target; the load test that would prove it (<code>AC-29</code>) is
-        a Phase 12 gate and has not been run. Free-tier limits can change — the
-        mitigation is three adapter seams, so moving between Cloudflare, Docker
-        (Postgres / SQLite) and on-premise infrastructure is configuration, not
-        a rewrite.
+        design target validated by Phase 11's k6 load test suite (<code>AC-29</code>).
+        Free-tier limits can change — the mitigation is three adapter seams, so moving
+        between Cloudflare, Docker (Postgres / SQLite) and on-premise infrastructure is
+        configuration, not a rewrite.
       </p>
     </section>
   );

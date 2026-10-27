@@ -30,12 +30,12 @@ const LIVE = [
   "Webhooks, scoped API keys, retention jobs, candidate export and erasure",
   "Organiser sign-in (OIDC, magic link, password + 2FA), workspaces, roles, audit log",
   "Deploy anywhere: Cloudflare free tier or Docker self-host (Postgres/SQLite + MinIO)",
+  "Zero-SDK BYOK AI question drafting (Anthropic, OpenAI, OpenRouter with spend caps)",
 ] as const;
 
 const NEXT = [
   "One real exam with 300+ candidates — the gate that ends alpha",
   "Microphone monitoring (Phase 8.5)",
-  "Bring-your-own-key AI question drafting (Phase 12)",
 ] as const;
 
 export function SignalStatus() {
@@ -160,7 +160,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "Can Pariksha generate questions with AI?",
     answer:
-      "Pariksha cannot generate questions with AI yet; it is Phase 12, the next feature phase after multi-target deployment and v1.0 release readiness. The plan is bring-your-own-key drafting: your own Anthropic or OpenAI key, stored encrypted per workspace and never sent to the browser, drafting questions into a bank — never whole tests. Every draft is schema-validated and waits for a human to accept it, and nothing auto-publishes.",
+      "Yes. Pariksha supports Bring-Your-Own-Key (BYOK) AI question drafting with zero external AI SDKs (using native fetch and WebCrypto AES-256-GCM encryption at rest). Workspace organisers can connect their own Anthropic (Claude 3.5 Sonnet / 3.7 Sonnet), OpenAI (GPT-4o, o1, o3-mini), or OpenRouter (DeepSeek, Llama 3.3, Mistral) API keys with hard monthly spend caps. Generated questions are previewed in-modal with schema validation badges, 1-click flagging/exclusion of inaccurate items, and inline editing before atomic commit to a bank. Questions are never auto-published without author approval.",
   },
 ];
 
