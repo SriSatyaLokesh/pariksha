@@ -1,4 +1,4 @@
-import { useReducer, type KeyboardEvent } from "react";
+import { useReducer, useRef, useState, type KeyboardEvent, type PointerEvent } from "react";
 import { useDialogKeys } from "../useDialogKeys";
 
 /**
@@ -100,11 +100,105 @@ const KEYS: readonly { key: string; label: string; name?: string; className?: st
   { key: ".", label: ".", name: "Decimal point" },
 ];
 
+function clamp(val: number, min: number, max: number): number {
+  return Math.min(Math.max(val, min), Math.max(min, max));
+}
+
 export function Calculator({ onClose }: { onClose: () => void }) {
   const [state, press] = useReducer(reduce, START);
+  const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
+  const dragRef = useRef<{
+    isDragging: boolean;
+    startX: number;
+    startY: number;
+    originX: number;
+    originY: number;
+  } | null>(null);
+
   // `trapTab` because this overlays a live attempt and claims
   // `aria-modal`; the hook returns focus to the control that opened it.
   const { dialogRef, onKeyDown } = useDialogKeys<HTMLDivElement>(true, onClose, { trapTab: true });
+
+  const getBounds = () => {
+    const rect = dialogRef.current?.getBoundingClientRect();
+    const width = rect && rect.width > 0 ? rect.width : 240;
+    const height = rect && rect.height > 0 ? rect.height : 340;
+    const viewportW = typeof window !== "undefined" ? window.innerWidth : 1024;
+    const viewportH = typeof window !== "undefined" ? window.innerHeight : 768;
+    const minX = 10;
+    const minY = 10;
+    const maxX = Math.max(minX, viewportW - width - 10);
+    const maxY = Math.max(minY, viewportH - height - 10);
+    const curX =
+      position !== null
+        ? position.x
+        : rect && rect.left > 0
+          ? rect.left
+          : Math.max(minX, viewportW - width - 32);
+    const curY =
+      position !== null
+        ? position.y
+        : rect && rect.top > 0
+          ? rect.top
+          : Math.max(minY, viewportH - height - 32);
+    return { minX, minY, maxX, maxY, curX, curY };
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const { curX, curY } = getBounds();
+    dragRef.current = {
+      isDragging: true,
+      startX: event.clientX,
+      startY: event.clientY,
+      originX: curX,
+      originY: curY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current?.isDragging) return;
+    const { startX, startY, originX, originY } = dragRef.current;
+    const { minX, minY, maxX, maxY } = getBounds();
+    const deltaX = event.clientX - startX;
+    const deltaY = event.clientY - startY;
+    const nextX = clamp(originX + deltaX, minX, maxX);
+    const nextY = clamp(originY + deltaY, minY, maxY);
+    setPosition({ x: nextX, y: nextY });
+  };
+
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.isDragging) {
+      dragRef.current = null;
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+
+  const onHandleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (
+      event.key !== "ArrowUp" &&
+      event.key !== "ArrowDown" &&
+      event.key !== "ArrowLeft" &&
+      event.key !== "ArrowRight"
+    ) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const { minX, minY, maxX, maxY, curX, curY } = getBounds();
+    let deltaX = 0;
+    let deltaY = 0;
+    if (event.key === "ArrowUp") deltaY = -20;
+    if (event.key === "ArrowDown") deltaY = 20;
+    if (event.key === "ArrowLeft") deltaX = -20;
+    if (event.key === "ArrowRight") deltaX = 20;
+
+    const nextX = clamp(curX + deltaX, minX, maxX);
+    const nextY = clamp(curY + deltaY, minY, maxY);
+    setPosition({ x: nextX, y: nextY });
+  };
 
   const onKey = (event: KeyboardEvent<HTMLDivElement>) => {
     onKeyDown(event);
@@ -136,7 +230,35 @@ export function Calculator({ onClose }: { onClose: () => void }) {
       ref={dialogRef}
       tabIndex={-1}
       onKeyDown={onKey}
+      style={
+        position !== null
+          ? {
+              position: "fixed",
+              left: `${position.x}px`,
+              top: `${position.y}px`,
+              right: "auto",
+              bottom: "auto",
+            }
+          : undefined
+      }
     >
+      <div
+        className="exam-calc-handle"
+        data-testid="calc-drag-handle"
+        tabIndex={0}
+        role="toolbar"
+        aria-label="Drag calculator handle. Use arrow keys to reposition."
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onKeyDown={onHandleKeyDown}
+      >
+        <span className="exam-calc-title">Calculator</span>
+        <span className="exam-calc-grip" aria-hidden="true">
+          ⋮⋮
+        </span>
+      </div>
       <output className="exam-calc-display" role="status">
         {state.shown}
       </output>
