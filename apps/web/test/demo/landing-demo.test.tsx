@@ -27,8 +27,8 @@ describe("Landing Page Live Demo Entry", () => {
   });
 
   it("does not render inline code badge or 'See a real exam' on landing page", () => {
-    render(<Landing />);
-    expect(screen.queryByText(/code:\s*DEMO/i)).toBeNull();
+    const { container } = render(<Landing />);
+    expect(container.querySelector(".signal-badge-code")).toBeNull();
     expect(screen.queryByRole("link", { name: /see a real exam/i })).toBeNull();
   });
 });

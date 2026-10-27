@@ -15,12 +15,13 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
 <a href="https://creativecommons.org/licenses/by/4.0/"><img src="https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg" alt="Content: CC BY 4.0"></a>
 <a href="#roadmap"><img src="https://img.shields.io/badge/Status-alpha-E8A33D.svg" alt="Status: alpha"></a>
-<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--8-merged-19E68C.svg" alt="Phases 1 to 8 merged"></a>
+<a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--9-merged-19E68C.svg" alt="Phases 1 to 9 merged"></a>
 <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs welcome"></a>
 </p>
 
 <p>
-<a href="#screens"><b>Screens</b></a>&nbsp;·
+<a href="#try-the-live-demo"><b>Try Live Demo</b></a>&nbsp;·
+<a href="#screens">Screens</a>&nbsp;·
 <a href="#what-it-does">What it does</a>&nbsp;·
 <a href="#deploying-to-cloudflare">Deploy</a>&nbsp;·
 <a href="#see-a-real-test">A real test</a>&nbsp;·
@@ -48,6 +49,18 @@ Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate
 > [tell us what bent](https://github.com/SriSatyaLokesh/pariksha/issues).
 
 *Pariksha* — **పరీక్ష**, **परीक्षा** — means "examination".
+
+## Try the Live Demo
+
+You can test the candidate examination experience right now in your browser with zero setup, zero cost, and zero server calls:
+
+### → **[Try the Live Candidate Demo](/exam?demo=true)** (Access Code: **`DEMO`**)
+
+- **12 Question Types**: Single and multiple choice, true/false, fill-in-the-blank (`{{b1}}` and `[[b1]]`), numeric with tolerance, assertion–reason, matching (with multi-option mapping), ordering, select exactly K, and written responses.
+- **Timed Sections**: 15 minutes total duration with 3 distinct 5-minute sections (Computer Science Fundamentals, Algorithms & Quantitative Analysis, Distributed Systems).
+- **Floating Draggable Calculator**: A lightweight 4-function calculator modal (`z-index: 100`) with boundary-clamped dragging and arrow-key nudging that never gets obscured under question content.
+- **Client-Side Proctoring**: Fullscreen lock, watermarking, copy-paste blocking, and dual-monitor detection with a 3-violation escalation limit and automatic local submission.
+- **Instant Client-Side Grading**: Scored locally in pure TypeScript with instant feedback and answer review.
 
 ## Why
 
@@ -130,7 +143,7 @@ full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
-Phases 1–8 are merged. What is not built, with the phase that owns it —
+Phases 1–11 are merged (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, and Phase 11 v1.0 Release Readiness). What is not built, with the phase that owns it —
 [`docs/ROADMAP.md`](docs/ROADMAP.md) is authoritative:
 
 | Not built yet | Phase |
@@ -138,10 +151,7 @@ Phases 1–8 are merged. What is not built, with the phase that owns it —
 | One real exam with 300+ candidates — **the gate that ends alpha** | v0.1 exit gate |
 | The live monitor: attempts updating while the exam runs, and the integrity review queue | 8.5 — the watchtower |
 | Microphone monitoring, and on-device face counting | 8.5 — the ear ([#223](https://github.com/SriSatyaLokesh/pariksha/issues/223)) |
-| Bring-your-own-key AI question drafting, into a bank, never auto-published | 9 |
-| A public demo instance, no sign-in, wiped on a schedule | 10 |
-| Docker + Postgres + MinIO self-hosting, email/password with Argon2id and TOTP | 11 |
-| WCAG 2.1 AA audit, translations and RTL, OpenAPI 3.1, the plugin interface, k6 load test, signed releases | 12 |
+| Bring-your-own-key AI question drafting, into a bank, never auto-published | 12 |
 
 ## See a real test
 
