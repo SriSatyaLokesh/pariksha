@@ -94,6 +94,19 @@ describe("fill_blank renders its inputs inside the prompt", () => {
     expect(screen.getByLabelText(/blank 2/i).previousSibling).toHaveTextContent(/and the currency is/);
   });
 
+  it("bracketed placeholders like [[b1]] render inline text inputs just like {{b1}}", async () => {
+    const bracketQuestion: CandidateQuestion = {
+      id: "q_bracket",
+      type: "fill_blank",
+      prompt: "The standard port used for secure HTTPS connections is [[b1]].",
+      points: 1,
+      blanks: [{ id: "b1" }],
+    };
+    render(<Harness question={bracketQuestion} />);
+    expect(await screen.findAllByRole("textbox")).toHaveLength(1);
+    expect(screen.getByLabelText(/blank 1/i)).toBeInTheDocument();
+  });
+
   it("each blank answers under its own id, and emptying the last one answers null", async () => {
     const spy = vi.fn();
     render(<Harness question={fillBlank} onChange={spy} />);

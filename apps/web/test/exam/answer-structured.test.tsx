@@ -101,17 +101,22 @@ function gripFor(item: string): HTMLElement {
 }
 
 describe("matching", () => {
-  it("matching: each left item takes one right item, and a used right item cannot be reused", () => {
-    render(<Harness question={matching} />);
+  it("matching: options remain enabled after selection, permitting multiple left items to select the same right option", () => {
+    const spy = vi.fn();
+    render(<Harness question={matching} onChange={spy} />);
     fireEvent.change(screen.getByLabelText(/INNER JOIN/), { target: { value: "Only matching rows" } });
     expect(
       within(screen.getByLabelText(/LEFT JOIN/)).getByRole("option", { name: "Only matching rows" }),
-    ).toBeDisabled();
-    // The one that took it is still selectable on its own row, or the
-    // choice could not be changed.
+    ).toBeEnabled();
     expect(
       within(screen.getByLabelText(/INNER JOIN/)).getByRole("option", { name: "Only matching rows" }),
     ).toBeEnabled();
+
+    fireEvent.change(screen.getByLabelText(/LEFT JOIN/), { target: { value: "Only matching rows" } });
+    expect(spy).toHaveBeenLastCalledWith({
+      kind: "map",
+      pairs: { "INNER JOIN": "Only matching rows", "LEFT JOIN": "Only matching rows" },
+    });
   });
 
   it("matching answers with a map of left text to right text", () => {

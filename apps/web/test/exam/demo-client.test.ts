@@ -3,13 +3,54 @@ import { createDemoClient } from "../../src/lib/demo-client.js";
 import { DEMO_PAPER_FIXTURE } from "../../src/lib/demo-test.js";
 
 describe("Demo Exam Client (Zero Cloudflare Subrequests)", () => {
-  it("initializes attempt paper from local fixture with proctoring off", async () => {
+  it("enforces access code DEMO case-insensitively and rejects invalid codes", async () => {
+    const client = createDemoClient();
+
+    // Rejects missing/empty/invalid codes
+    await expect(client.access({})).rejects.toThrow("Invalid access code. Please enter DEMO.");
+    await expect(client.access({ code: "" })).rejects.toThrow("Invalid access code. Please enter DEMO.");
+    await expect(client.access({ code: "   " })).rejects.toThrow("Invalid access code. Please enter DEMO.");
+    await expect(client.access({ code: "WRONG" })).rejects.toThrow("Invalid access code. Please enter DEMO.");
+
+    // Accepts DEMO and demo (case-insensitive with whitespace trimmed)
+    const upperResult = await client.access({ code: "DEMO" });
+    expect(upperResult.entryToken).toBe("demo_entry_token");
+
+    const lowerResult = await client.access({ code: "demo" });
+    expect(lowerResult.entryToken).toBe("demo_entry_token");
+
+    const paddedResult = await client.access({ code: "  demo  " });
+    expect(paddedResult.entryToken).toBe("demo_entry_token");
+  });
+
+  it("configures 15-minute total exam duration and 5-minute section time limits", async () => {
+    const client = createDemoClient();
+
+    // Verify Landing fixture configuration
+    const landing = await client.landing();
+    expect(landing.durationMinutes).toBe(15);
+    expect(landing.sections.length).toBe(3);
+    for (const section of landing.sections) {
+      expect(section.timeLimitMinutes).toBe(5);
+    }
+
+    // Verify Start paper fixture configuration
+    const paper = await client.start("demo-token");
+    expect(paper.remainingMs).toBe(15 * 60_000);
+    expect(paper.sectionRemainingMs).toBe(5 * 60_000);
+    expect(paper.sections.length).toBe(3);
+    for (const section of paper.sections) {
+      expect(section.timeLimitMinutes).toBe(5);
+    }
+  });
+
+  it("initializes attempt paper from local fixture with demo proctoring", async () => {
     const client = createDemoClient();
     const paper = await client.start("demo-token");
     expect(paper.sections.length).toBe(3);
     expect(paper.proctoring.profile).toBe("off");
     expect(paper.proctoring.requireCamera).toBe(false);
-    expect(paper.proctoring.requireFullscreen).toBe(false);
+    expect(paper.proctoring.requireFullscreen).toBe(true);
   });
 
   it("saves answers locally in memory without making network fetch", async () => {

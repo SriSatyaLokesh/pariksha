@@ -89,6 +89,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Component } from "react";
 import {
   anyProctoringControlActive,
+  isViolation,
   type ContextmenuBlockedDetail,
   type CopyBlockedDetail,
   type ExtraMonitorDetail,
@@ -251,6 +252,8 @@ export interface ProctoringLayerProps {
    initialLocked?: boolean;
   /** Phase 8g Task 3 (`C-10`, `K12`, `K13`): proctor broadcast callback. */
   onProctorMessage?: (message: string, messageAt: number) => void;
+  /** Demo mode / auto-submit trigger callback. */
+  onAutoSubmit?: () => void;
 }
 
 export function ProctoringLayer({
@@ -261,6 +264,7 @@ export function ProctoringLayer({
   cameraUnavailable = false,
   initialLocked = false,
   onProctorMessage,
+  onAutoSubmit,
 }: ProctoringLayerProps) {
   /**
    * The paper's fullscreen state **at the moment this layer first
@@ -379,13 +383,21 @@ export function ProctoringLayer({
    * interval. `queueRef` is also the handle Tasks 4 and 5 push and
    * `pushImmediate` into from their own effects in this same file.
    */
+  const isDemo = attemptId.startsWith("att_demo_");
+
   const queueRef = useRef<ReturnType<typeof createProctoringQueue> | null>(null);
   const onProctorMessageRef = useRef(onProctorMessage);
   useEffect(() => {
     onProctorMessageRef.current = onProctorMessage;
   }, [onProctorMessage]);
 
+  const onAutoSubmitRef = useRef(onAutoSubmit);
+  useEffect(() => {
+    onAutoSubmitRef.current = onAutoSubmit;
+  }, [onAutoSubmit]);
+
   function doCaptureAndUpload(stream: MediaStream, reason: "interval" | "violation") {
+    if (isDemo) return;
     void captureAndUpload(stream, reason, queueRef.current, (msg, at) => onProctorMessageRef.current?.(msg, at));
   }
 
@@ -446,8 +458,28 @@ export function ProctoringLayer({
       clearTimeout(cameraStopTimerRef.current);
       cameraStopTimerRef.current = null;
     }
+    const demoViolationsRef = { current: initialViolations };
+
+    const sendFn = isDemo
+      ? (events: QueuedEvent[]): Promise<EventsResponse> => {
+          for (const ev of events) {
+            if (isViolation(ev.type)) {
+              demoViolationsRef.current += 1;
+            }
+          }
+          const limit = proctoring.violationLimit || 3;
+          const current = demoViolationsRef.current;
+          return Promise.resolve({
+            violations: current,
+            limit,
+            action: proctoring.violationAction,
+            submitted: current >= limit,
+          });
+        }
+      : sendEvents;
+
     const queue = createProctoringQueue({
-      send: sendEvents,
+      send: sendFn,
       onCount: (violations, limit, action, submitted, lockedNow) => {
         // Checked against the ref, not a boolean: a state update from
         // *this* queue instance only lands while it is still the live
@@ -460,7 +492,10 @@ export function ProctoringLayer({
         setLeaveCountKnown(true);
         // Phase 7e Task 2: never unset — see `autoSubmitted`'s own doc
         // comment above.
-        if (submitted) setAutoSubmitted(true);
+        if (submitted) {
+          setAutoSubmitted(true);
+          onAutoSubmitRef.current?.();
+        }
         // Phase 7e Task 3: never unset — see `locked`'s own doc comment
         // above.
         if (lockedNow) setLocked(true);
@@ -655,9 +690,10 @@ export function ProctoringLayer({
       // by the browser itself and still sent after the page is gone; kept
       // guarded and falling back to the buffered queue (same as before this
       // fix) when it is absent, never thrown (`AG1`/`AG4`).
-      if (!sendBeaconEvent(pending.type, detail)) {
-        queueRef.current?.push(pending.type, detail);
+      if (!isDemo && sendBeaconEvent(pending.type, detail)) {
+        return;
       }
+      queueRef.current?.push(pending.type, detail);
     }
     window.addEventListener("blur", onBlur);
     window.addEventListener("focus", onFocus);

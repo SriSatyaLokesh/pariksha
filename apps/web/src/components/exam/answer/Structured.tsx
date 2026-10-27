@@ -10,9 +10,8 @@ import type { AnswerProps } from "./props";
  *
  * `matching` is one native `<select>` per left item rather than a grid of
  * radios. The author's grid has to show a whole key at once; a candidate
- * answers one row at a time, and a `<select>` gives the one-right-item-per
- * -left rule for free — a used option is simply `disabled` on every other
- * row, which is a state the platform already announces.
+ * answers one row at a time, and options remain reusable across rows so
+ * multiple left items can map to the same right item.
  *
  * `multi_matching` keeps the grid, because there is no one-at-a-time
  * reading of "a left item may match several right items".
@@ -72,17 +71,8 @@ function Matching({ question, value, onChange, disabled }: AnswerProps) {
               }}
             >
               <option value="">Not matched</option>
-              {right.map((candidate) => (
-                <option
-                  key={candidate}
-                  value={candidate}
-                  // One right item per left item: taken elsewhere means
-                  // unavailable here, but never on the row that took it,
-                  // or the choice could not be changed.
-                  disabled={Object.entries(pairs).some(
-                    ([other, taken]) => other !== item && taken === candidate,
-                  )}
-                >
+              {right.map((candidate, optIndex) => (
+                <option key={`${candidate}-${optIndex}`} value={candidate}>
                   {candidate}
                 </option>
               ))}

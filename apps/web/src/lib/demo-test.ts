@@ -1,6 +1,6 @@
 import type { AttemptPaper, CandidateQuestion, PaperSection } from "./paper.js";
 import type { LandingPayload } from "./run.js";
-import { PROCTORING_DEFAULTS, type Question } from "@pariksha/core";
+import { PROCTORING_DEFAULTS, proctoringRequirements, type Question, type ResolvedProctoring } from "@pariksha/core";
 
 export const DEMO_SECTION_1_QUESTIONS: CandidateQuestion[] = [
   {
@@ -40,7 +40,7 @@ export const DEMO_SECTION_1_QUESTIONS: CandidateQuestion[] = [
   {
     id: "demo_q4",
     type: "fill_blank",
-    prompt: "The standard port used for secure HTTPS connections is [[b1]].",
+    prompt: "The standard port used for secure HTTPS connections is {{b1}}.",
     points: 2,
     blanks: [{ id: "b1" }],
   },
@@ -75,7 +75,7 @@ export const DEMO_SECTION_2_QUESTIONS: CandidateQuestion[] = [
     prompt: "Match each time complexity to its representative sorting algorithm (average case):",
     points: 3,
     left: ["Merge Sort", "Quick Sort", "Bubble Sort"],
-    right: ["O(n log n)", "O(n log n)", "O(n^2)"],
+    right: ["O(n log n)", "O(n^2)", "O(n)"],
   },
   {
     id: "demo_q8",
@@ -127,24 +127,36 @@ export const DEMO_PAPER_SECTIONS: PaperSection[] = [
     id: "sec_core",
     title: "Section 1: Computer Science Fundamentals",
     instructions: "Answer all 4 questions. Standard multiple choice and fill in the blank.",
-    timeLimitMinutes: 20,
+    timeLimitMinutes: 5,
     questions: DEMO_SECTION_1_QUESTIONS,
   },
   {
     id: "sec_algo",
     title: "Section 2: Algorithms & Quantitative Analysis",
     instructions: "Calculators and scratch work permitted. Review your numeric calculations.",
-    timeLimitMinutes: 25,
+    timeLimitMinutes: 5,
     questions: DEMO_SECTION_2_QUESTIONS,
   },
   {
     id: "sec_cloud",
     title: "Section 3: Systems & Distributed Architecture",
     instructions: "Includes matching, short answers, and architectural conceptual questions.",
-    timeLimitMinutes: 15,
+    timeLimitMinutes: 5,
     questions: DEMO_SECTION_3_QUESTIONS,
   },
 ];
+
+export const DEMO_PROCTORING_CONFIG: ResolvedProctoring = {
+  ...PROCTORING_DEFAULTS.off,
+  desktopOnly: true,
+  requireFullscreen: true,
+  watermark: true,
+  blockCopyPaste: true,
+  extraMonitorCheck: true,
+  allowCalculator: true,
+  violationLimit: 3,
+  violationAction: "warn_then_flag",
+};
 
 export const DEMO_PAPER_FIXTURE: AttemptPaper = {
   attemptId: "att_demo_evaluator",
@@ -153,35 +165,32 @@ export const DEMO_PAPER_FIXTURE: AttemptPaper = {
   clientSeq: 0,
   navigation: "free",
   maxIndex: 0,
-  remainingMs: 3_600_000,
-  sectionRemainingMs: 1_200_000,
+  remainingMs: 15 * 60_000,
+  sectionRemainingMs: 5 * 60_000,
   warnAtMinutes: [5, 1],
   lateSyncGraceSeconds: 60,
   allowCalculator: true,
   serverNow: Date.now(),
   submittedAt: null,
   lockedAt: null,
-  proctoring: {
-    ...PROCTORING_DEFAULTS.off,
-    allowCalculator: true,
-  },
+  proctoring: DEMO_PROCTORING_CONFIG,
   violations: 0,
 };
 
 export const DEMO_LANDING_FIXTURE: LandingPayload = {
   name: "Pariksha Interactive Demo Exam",
   description: "Experience the candidate exam interface across multiple sections and all 12 question types with zero registration required.",
-  durationMinutes: 60,
+  durationMinutes: 15,
   questionCount: 12,
   sections: [
-    { id: "sec_core", title: "Section 1: Computer Science Fundamentals", questionCount: 4, timeLimitMinutes: 20 },
-    { id: "sec_algo", title: "Section 2: Algorithms & Quantitative Analysis", questionCount: 4, timeLimitMinutes: 25 },
-    { id: "sec_cloud", title: "Section 3: Systems & Distributed Architecture", questionCount: 4, timeLimitMinutes: 15 },
+    { id: "sec_core", title: "Section 1: Computer Science Fundamentals", questionCount: 4, timeLimitMinutes: 5 },
+    { id: "sec_algo", title: "Section 2: Algorithms & Quantitative Analysis", questionCount: 4, timeLimitMinutes: 5 },
+    { id: "sec_cloud", title: "Section 3: Systems & Distributed Architecture", questionCount: 4, timeLimitMinutes: 5 },
   ],
   rules: "Calculators allowed. You may navigate freely between sections.",
   proctoring: {
     profile: "off",
-    requirements: ["No proctoring active — public demonstration mode."],
+    requirements: proctoringRequirements(DEMO_PROCTORING_CONFIG),
   },
   accessMode: "link_code",
   state: "open",
@@ -241,7 +250,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
   {
     id: "demo_q4",
     type: "fill_blank",
-    prompt: "The standard port used for secure HTTPS connections is [[b1]].",
+    prompt: "The standard port used for secure HTTPS connections is {{b1}}.",
     scoring: { points: 1 },
     tags: ["web"],
     blanks: [{ id: "b1", accepted: ["443"], match: "exact" }],
@@ -271,7 +280,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     scoring: { points: 3 },
     tags: ["algorithms"],
     left: ["Merge Sort", "Quick Sort", "Bubble Sort"],
-    right: ["O(n log n)", "O(n log n)", "O(n^2)"],
+    right: ["O(n log n)", "O(n^2)", "O(n)"],
     key: {
       "Merge Sort": "O(n log n)",
       "Quick Sort": "O(n log n)",

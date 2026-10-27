@@ -13,7 +13,6 @@
 // place by its data- attributes and must never rewrite it from scratch.
 
 const REPO = "https://github.com/SriSatyaLokesh/pariksha";
-const WORKED_EXAMPLE = `${REPO}/tree/main/examples/reasoning-aptitude`;
 
 const NAV_LINKS = [
   { label: "How it works", href: "#how-it-works" },
@@ -40,8 +39,8 @@ export function SignalNav() {
             </a>
           ))}
         </nav>
-        <a className="signal-btn" href="#start">
-          Run your first exam
+        <a className="signal-btn signal-btn--demo" href="/exam?demo=true">
+          Try Live Demo
         </a>
       </div>
     </header>
@@ -78,19 +77,13 @@ export function SignalHero() {
             </p>
             <div className="signal-actions signal-actions--hero">
               <a
-                className="signal-btn signal-btn--secondary signal-btn--demo"
+                className="signal-btn signal-btn--demo"
                 href="/exam?demo=true"
               >
                 Try Live Demo
               </a>
-              <a className="signal-btn" href="#start">
+              <a className="signal-btn signal-btn--ghost" href="#start">
                 Run your first exam
-              </a>
-              <a
-                className="signal-btn signal-btn--ghost"
-                href={WORKED_EXAMPLE}
-              >
-                See a real exam
               </a>
             </div>
             <ul className="signal-trust">

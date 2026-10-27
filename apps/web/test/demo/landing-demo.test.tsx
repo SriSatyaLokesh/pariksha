@@ -2,13 +2,34 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { Landing } from "../../src/routes/landing";
 import { DemoModal } from "../../src/components/demo/DemoModal";
+import { DemoBanner } from "../../src/components/demo/DemoBanner";
 
 describe("Landing Page Live Demo Entry", () => {
-  it("renders 'Try Live Demo' link in hero pointing to /exam?demo=true", () => {
+  it("renders 'Try Live Demo' links in nav and hero pointing to /exam?demo=true", () => {
     render(<Landing />);
-    const demoLink = screen.getByRole("link", { name: /try live demo/i });
-    expect(demoLink).toBeInTheDocument();
-    expect(demoLink).toHaveAttribute("href", "/exam?demo=true");
+    const demoLinks = screen.getAllByRole("link", { name: /try live demo/i });
+    expect(demoLinks.length).toBeGreaterThanOrEqual(2);
+    demoLinks.forEach((link) => {
+      expect(link).toHaveAttribute("href", "/exam?demo=true");
+    });
+  });
+
+  it("highlights 'Try Live Demo' on the primary navigation bar", () => {
+    render(<Landing />);
+    const nav = screen.getByRole("banner");
+    const navDemos = screen.getAllByRole("link", { name: /try live demo/i });
+    const navDemo = navDemos[0];
+    expect(navDemo).toBeDefined();
+    if (!navDemo) throw new Error("navDemo not found");
+    expect(navDemo).toBeInTheDocument();
+    expect(nav.contains(navDemo)).toBe(true);
+    expect(navDemo).toHaveClass("signal-btn");
+  });
+
+  it("does not render inline code badge or 'See a real exam' on landing page", () => {
+    render(<Landing />);
+    expect(screen.queryByText(/code:\s*DEMO/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /see a real exam/i })).toBeNull();
   });
 });
 
@@ -28,6 +49,14 @@ describe("DemoModal Component", () => {
     render(<DemoModal isOpen={true} onClose={() => {}} />);
     const candidateLink = screen.getByRole("link", { name: /take sample exam/i });
     expect(candidateLink).toHaveAttribute("href", "/exam?demo=true");
+  });
+
+  it("displays DEMO access code for candidate sample exam", () => {
+    render(<DemoModal isOpen={true} onClose={() => {}} />);
+    const codePill = screen.getByText(
+      (_, el) => Boolean(el?.classList.contains("demo-code-pill") && /access code:\s*DEMO/i.test(el.textContent || "")),
+    );
+    expect(codePill).toBeInTheDocument();
   });
 
   it("provisions demo workspace when 'Explore Organiser Dashboard' is clicked", async () => {
@@ -63,5 +92,16 @@ describe("DemoModal Component", () => {
       writable: true,
       value: originalLocation,
     });
+  });
+});
+
+describe("DemoBanner Component Access Code", () => {
+  it("displays access code DEMO in bold in exam mode", () => {
+    render(<DemoBanner mode="exam" />);
+    const bannerText = screen.getByText(
+      (_, el) => Boolean(el?.classList.contains("demo-banner-text") && /access code:\s*DEMO/i.test(el.textContent || "")),
+    );
+    expect(bannerText).toBeInTheDocument();
+    expect(screen.getByText("DEMO").tagName.toLowerCase()).toMatch(/^(strong|b)$/);
   });
 });

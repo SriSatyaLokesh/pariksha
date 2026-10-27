@@ -124,7 +124,7 @@ describe("landing content — Signal", () => {
   // #253 retired "Start your question bank" and "Watch the repo for v0.1":
   // the app exists, so the primary ask is to run it, not to write questions
   // against a format and wait.
-  it("carries the two CTA labels, each pointing at the real repo or an in-page anchor", () => {
+  it("carries the CTA labels, each pointing at the real repo, in-page anchor or live demo", () => {
     const { container } = render(<Landing />);
     const byText = (text: string) =>
       [...container.querySelectorAll("a.signal-btn")].filter(
@@ -132,7 +132,7 @@ describe("landing content — Signal", () => {
       );
 
     const runIt = byText("Run your first exam");
-    expect(runIt.length).toBeGreaterThanOrEqual(3);
+    expect(runIt.length).toBeGreaterThanOrEqual(2);
     expect(
       runIt.every((el) => {
         const href = el.getAttribute("href") ?? "";
@@ -144,17 +144,14 @@ describe("landing content — Signal", () => {
       }),
     ).toBe(true);
 
-    const seeExam = byText("See a real exam");
-    expect(seeExam).toHaveLength(2);
+    const tryDemo = byText("Try Live Demo");
+    expect(tryDemo.length).toBeGreaterThanOrEqual(2);
     expect(
-      seeExam.every(
-        (el) =>
-          el.getAttribute("href") ===
-          "https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude",
-      ),
+      tryDemo.every((el) => el.getAttribute("href") === "/exam?demo=true"),
     ).toBe(true);
 
     // The retired labels must not come back by a stale copy-paste.
+    expect(byText("See a real exam")).toHaveLength(0);
     expect(byText("Start your question bank")).toHaveLength(0);
     expect(byText("Watch the repo for v0.1")).toHaveLength(0);
   });

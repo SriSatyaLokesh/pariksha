@@ -73,6 +73,9 @@ export function DemoModal({ isOpen, onClose }: DemoModalProps): ReactElement | n
               Sit a multi-section exam covering all 12 question types. Zero cost,
               instant start, scored locally with no server calls.
             </p>
+            <div className="demo-code-pill">
+              Access Code: <code><strong>DEMO</strong></code>
+            </div>
             <a
               href="/exam?demo=true"
               className="signal-btn demo-card__action"

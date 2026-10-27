@@ -271,7 +271,8 @@ describe("the calculator's keyboard and focus behaviour", () => {
     open();
     const dialog = screen.getByRole("dialog", { name: /calculator/i });
     expect(dialog).toHaveAttribute("aria-modal", "true");
-    const stops = screen.getAllByRole("button");
+    const handle = screen.getByTestId("calc-drag-handle");
+    const stops = [handle, ...screen.getAllByRole("button")];
     const first = stops[0];
     const last = stops[stops.length - 1];
     last?.focus();
@@ -298,5 +299,72 @@ describe("the calculator's keyboard and focus behaviour", () => {
     for (const el of container.querySelectorAll("*")) {
       expect(getComputedStyle(el).animationName).toBe("none");
     }
+  });
+
+  describe("draggable and floating calculator behaviour", () => {
+    it("renders a draggable handle with accessible toolbar role and labels", () => {
+      open();
+      const handle = screen.getByTestId("calc-drag-handle");
+      expect(handle).toBeInTheDocument();
+      expect(handle).toHaveAttribute("role", "toolbar");
+      expect(handle).toHaveAttribute("tabindex", "0");
+      expect(handle).toHaveAttribute(
+        "aria-label",
+        "Drag calculator handle. Use arrow keys to reposition.",
+      );
+    });
+
+    it("updates position on pointer drag and maintains fixed positioning", () => {
+      open();
+      const dialog = screen.getByRole("dialog", { name: /calculator/i });
+      const handle = screen.getByTestId("calc-drag-handle");
+
+      // Pointer drag sequence
+      fireEvent.pointerDown(handle, { clientX: 200, clientY: 200 });
+      fireEvent.pointerMove(handle, { clientX: 260, clientY: 290 });
+      fireEvent.pointerUp(handle);
+
+      expect(dialog).toHaveStyle({ position: "fixed" });
+      expect(dialog.style.left).toBeTruthy();
+      expect(dialog.style.top).toBeTruthy();
+    });
+
+    it("supports keyboard arrow keys on handle to nudge calculator position", () => {
+      open();
+      const dialog = screen.getByRole("dialog", { name: /calculator/i });
+      const handle = screen.getByTestId("calc-drag-handle");
+      handle.focus();
+
+      fireEvent.keyDown(handle, { key: "ArrowRight" });
+      const leftAfterRight = parseInt(dialog.style.left, 10);
+      expect(Number.isNaN(leftAfterRight)).toBe(false);
+
+      fireEvent.keyDown(handle, { key: "ArrowDown" });
+      const topAfterDown = parseInt(dialog.style.top, 10);
+      expect(Number.isNaN(topAfterDown)).toBe(false);
+
+      fireEvent.keyDown(handle, { key: "ArrowLeft" });
+      const leftAfterLeft = parseInt(dialog.style.left, 10);
+      expect(leftAfterLeft).toBe(leftAfterRight - 20);
+
+      fireEvent.keyDown(handle, { key: "ArrowUp" });
+      const topAfterUp = parseInt(dialog.style.top, 10);
+      expect(topAfterUp).toBe(topAfterDown - 20);
+    });
+
+    it("clamps position within viewport boundaries when nudged or dragged out of bounds", () => {
+      open();
+      const dialog = screen.getByRole("dialog", { name: /calculator/i });
+      const handle = screen.getByTestId("calc-drag-handle");
+      handle.focus();
+
+      // Drag far beyond top-left viewport boundary (negative coords)
+      fireEvent.pointerDown(handle, { clientX: 500, clientY: 500 });
+      fireEvent.pointerMove(handle, { clientX: -1000, clientY: -1000 });
+      fireEvent.pointerUp(handle);
+
+      expect(parseInt(dialog.style.left, 10)).toBeGreaterThanOrEqual(10);
+      expect(parseInt(dialog.style.top, 10)).toBeGreaterThanOrEqual(10);
+    });
   });
 });
