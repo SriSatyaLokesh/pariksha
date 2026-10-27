@@ -244,7 +244,9 @@ export function DraftAiModal({
 
   const toggleOptionKey = (optId: string, qType: QuestionType) => {
     if (qType === "multiple") {
-      const currentKeys = Array.isArray(editKey) ? [...editKey] : [];
+      const currentKeys: string[] = Array.isArray(editKey)
+        ? (editKey as unknown[]).filter((k): k is string => typeof k === "string")
+        : [];
       if (currentKeys.includes(optId)) {
         setEditKey(currentKeys.filter((k) => k !== optId));
       } else {
@@ -680,8 +682,12 @@ export function DraftAiModal({
                               Answer Key:{" "}
                               <strong>
                                 {typeof qKey === "object" && qKey !== null && "value" in qKey
-                                  ? String((qKey as { value: unknown }).value)
-                                  : String(qKey)}
+                                  ? String(qKey.value)
+                                  : typeof qKey === "string" ||
+                                      typeof qKey === "number" ||
+                                      typeof qKey === "boolean"
+                                    ? String(qKey)
+                                    : JSON.stringify(qKey)}
                               </strong>
                             </div>
                           )}

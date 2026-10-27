@@ -536,6 +536,20 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".byok-usage-stat__label": { dark: "signal-surface", light: "signal-l-surface" },
   ".draft-ai-preview__item-meta": { dark: "signal-surface", light: "signal-l-surface" },
   ".draft-ai-preview__item-prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-stat": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-stat--approved": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-stat--flagged": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card--flagged .draft-ai-card__prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__meta-left": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-badge--valid": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-badge--warning": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__warning-msg": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__options li": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__options li.draft-ai-option--correct": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-card__key": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-key-select": { dark: "signal-surface", light: "signal-l-surface" },
+  ".draft-ai-bottom-bar__summary": { dark: "signal-surface", light: "signal-l-surface" },
 
   // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
   // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
@@ -845,6 +859,20 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".byok-card__badge--active": { px: 12, weight: 400 },
   ".byok-card__badge--inactive": { px: 12, weight: 400 },
   ".byok-usage-stat__value": { px: 20, weight: 600 },
+  ".draft-ai-stat": { px: 13, weight: 400 },
+  ".draft-ai-stat--approved": { px: 13, weight: 600 },
+  ".draft-ai-stat--flagged": { px: 13, weight: 600 },
+  ".draft-ai-card--flagged .draft-ai-card__prompt": { px: 15, weight: 400 },
+  ".draft-ai-card__meta-left": { px: 13, weight: 400 },
+  ".draft-ai-badge--valid": { px: 13, weight: 400 },
+  ".draft-ai-badge--warning": { px: 13, weight: 400 },
+  ".draft-ai-card__warning-msg": { px: 14, weight: 400 },
+  ".draft-ai-card__prompt": { px: 15, weight: 400 },
+  ".draft-ai-card__options li": { px: 14, weight: 400 },
+  ".draft-ai-card__options li.draft-ai-option--correct": { px: 14, weight: 600 },
+  ".draft-ai-card__key": { px: 14, weight: 400 },
+  ".draft-ai-key-select": { px: 14, weight: 400 },
+  ".draft-ai-bottom-bar__summary": { px: 14, weight: 400 },
 
   // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
   // The builder's facts, consequences and summaries are <p> elements that

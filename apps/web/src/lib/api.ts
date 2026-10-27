@@ -821,8 +821,8 @@ export interface ByokUsage {
 export interface DraftAiOptions {
   prompt: string;
   count?: number;
-  types?: (QuestionType | string)[];
-  provider?: "anthropic" | "openai" | "openrouter" | string;
+  types?: (QuestionType | (string & {}))[];
+  provider?: "anthropic" | "openai" | "openrouter" | (string & {});
   model?: string;
 }
 
@@ -1637,7 +1637,7 @@ export async function draftAiQuestions(
   validationIssues: Array<{ field?: string; message: string }>;
   usage: { promptTokens: number; completionTokens: number; estimatedCostCents: number };
 }> {
-  const result = await createApiClient().draftAiQuestions(workspaceId, bankId, options as DraftAiOptions);
+  const result = await createApiClient().draftAiQuestions(workspaceId, bankId, options);
   return {
     questions: result.questions,
     validationIssues: result.validationIssues ?? [],

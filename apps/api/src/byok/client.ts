@@ -8,7 +8,7 @@ import type { RouteDraftResult } from "./types.js";
 export type AiProvider = "anthropic" | "openai" | "openrouter";
 
 export interface AiDraftRequest {
-  provider: AiProvider | string;
+  provider: AiProvider | (string & {});
   apiKey: string;
   prompt: string;
   count: number;

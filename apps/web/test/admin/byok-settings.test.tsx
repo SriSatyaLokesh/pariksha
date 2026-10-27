@@ -1,8 +1,8 @@
 // Tests for ByokSettings component (Phase 12, Task 4b, S-15).
 import { describe, it, expect, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { axe } from "jest-axe";
-import type { ApiClient, ByokCredential, ByokUsage } from "../../src/lib/api";
+import type { ByokCredential, ByokUsage } from "../../src/lib/api";
 import { fakeClient } from "../fixtures/api-client";
 import { ByokSettings } from "../../src/components/admin/ByokSettings";
 

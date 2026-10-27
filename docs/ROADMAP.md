@@ -3,7 +3,7 @@
 | | |
 | --- | --- |
 | **Status** | Active |
-| **Last updated** | 2026-10-26 |
+| **Last updated** | 2026-10-27 |
 | **Implements** | [PRD.md](PRD.md) |
 | **Design system** | [DESIGN.md](../DESIGN.md) |
 
@@ -42,7 +42,7 @@ per-phase sections below describe the *plan*, this table describes the *state*.
 | 9 — Public demo instance and section division | **Done** | Zero-bill public demo instance with local-first scoring, client question caching, candidate exam section division, and interactive candidate demo refinements: prominent "Try Live Demo" CTA in navigation bar, clean two-button hero, bold DEMO access code in instructions, floating draggable calculator, matching option reuse, bracket fill-in-the-blank input support, 15m/5m timings, and 3-violation proctoring auto-submit guard. Merged in PR [#255](https://github.com/SriSatyaLokesh/pariksha/pull/255) (closes [#256](https://github.com/SriSatyaLokesh/pariksha/issues/256), `9a2adb6`). | Shipped. |
 | 10 — Docker self-host | **Done** | Containerized Pariksha serving API & web SPA, Postgres 16 & SQLite Compose stacks, MinIO & local-disk storage, Caddy automatic HTTPS, Argon2id password & TOTP 2FA, in-process scheduler, and backup/restore scripts (`AC-01`, `S-01`, `S-02`, `O-03`). | Shipped. |
 | 11 — v1.0 release readiness & multi-target deployment | **Done** | Extensible plugin architecture (`O-06`), i18n & RTL translation (`T-24`), OpenAPI 3.1 specification (`O-04`), full documentation suite (`O-04`), comprehensive deployment guide ([`docs/deployment.md`](deployment.md)) covering Cloudflare, Docker SQLite, Docker PostgreSQL 16 + MinIO S3 cluster, and air-gapped on-premise LAN, k6 500-VU load test suite (`AC-29`), WCAG 2.1 AA accessibility audit (`O-05`), and complete SEO/GEO/AEO optimization (JSON-LD FAQPage, agent-welcoming robots.txt, llms.txt). Merged in PR [#260](https://github.com/SriSatyaLokesh/pariksha/pull/260) (closes [#258](https://github.com/SriSatyaLokesh/pariksha/issues/258)). | Shipped. |
-| 12 — BYOK AI question drafting | **In progress** | Per-workspace AES-256-GCM encrypted API key storage (`byok_credential`, `byok_usage`), zero-dependency native `fetch` HTTP clients for Anthropic & OpenAI, all-or-nothing schema validation gate with `@pariksha/core`, Organiser BYOK settings, and In-Bank AI Question Drafting modal. | In progress. |
+| 12 — BYOK AI question drafting | **Done** | BYOK AI Question Drafting with zero third-party AI SDK dependencies (native `fetch` + WebCrypto AES-256-GCM); extensible Provider Router and Model Registry supporting Anthropic, OpenAI, and OpenRouter plus custom model IDs; two-step draft engine: preview generation (`/draft-ai`) decoupled from atomic bank commit (`/draft-ai/commit`); Author review UX with schema validation badges, 1-click question flagging/exclusion, and inline editing before bank import; full E2E Playwright verification and unit/integration coverage. | Shipped. |
 
 **The landing page is independent of the API** — it is static output with no backend call,
 which is why Phase 3's tasks 7 and 8 could ship ahead of Phase 2. The rest of Phase 3
@@ -218,9 +218,14 @@ keeps their **endpoint**.
 
 ### Phase 12 — BYOK AI question drafting
 
-**Delivers.** Per-workspace storage of an organiser-supplied Anthropic or OpenAI API key, encrypted at rest with the deployment's field-encryption key and never sent to the browser. A drafting flow that turns a topic, syllabus or pasted source text into questions in `pariksha/question@1` form, validated against the JSON Schema and the cross-field import rules before anything is stored. Drafts land in a bank as unpublished items an Author must review; nothing is ever auto-published. Per-workspace usage and spend display, and a hard cap the owner sets.
+**Delivers.**
+- **Zero-SDK Architecture:** Native `fetch` + WebCrypto AES-256-GCM encrypted API key storage (`byok_credential`, `byok_usage`) with hard monthly spend caps.
+- **Extensible Provider Router & Model Registry:** Unified abstraction for Anthropic, OpenAI, and OpenRouter with curated models and custom model IDs without external SDK dependencies.
+- **Two-Step Drafting Engine:** Decoupled computational preview generation (`POST .../draft-ai`) and atomic bank persistence (`POST .../draft-ai/commit`), preventing unvetted persistence.
+- **Author Review UX:** Organiser in-modal review with `@pariksha/core` schema validation badges, 1-click question flagging/exclusion, and inline editing before bank commitment.
+- **Verification:** Unit tests across provider router, crypto, adapters, and two-step routes, plus full Playwright end-to-end verification (`byok-drafting.spec.ts`).
 
-**Gate.** A generated batch that fails schema validation is rejected whole with its errors, exactly like a bad import. No request to a provider is made without a key belonging to the calling workspace. No key value is readable through any API response.
+**Gate.** A generated batch that fails schema validation is rejected whole with its errors, exactly like a bad import. No request to a provider is made without a key belonging to the calling workspace. No key value is readable through any API response. Hard spend caps prevent overage. All Playwright E2E and monorepo tests pass.
 
 **Extends the PRD** — see [Decisions that extend the PRD](#decisions-that-extend-the-prd).
 

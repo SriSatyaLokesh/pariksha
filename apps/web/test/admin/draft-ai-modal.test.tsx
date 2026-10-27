@@ -3,7 +3,6 @@ import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import type { Question } from "@pariksha/core";
-import type { ApiClient } from "../../src/lib/api";
 import { fakeClient } from "../fixtures/api-client";
 import { DraftAiModal } from "../../src/components/admin/DraftAiModal";
 
