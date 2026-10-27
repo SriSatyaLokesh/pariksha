@@ -10,6 +10,7 @@ import {
   DEMO_PAPER_SECTIONS,
 } from "./demo-test.js";
 import type {
+  AccessRequest,
   LandingPayload,
   Receipt,
   RegistrationPayload,
@@ -70,7 +71,12 @@ export function createDemoClient(): RunClient {
   return {
     landing: (): Promise<LandingPayload> => Promise.resolve(DEMO_LANDING_FIXTURE),
 
-    access: (): Promise<{ entryToken: string }> => Promise.resolve({ entryToken: "demo_entry_token" }),
+    access: (req?: AccessRequest): Promise<{ entryToken: string }> => {
+      if (req?.code?.trim().toUpperCase() === "DEMO") {
+        return Promise.resolve({ entryToken: "demo_entry_token" });
+      }
+      return Promise.reject(new Error("Invalid access code. Please enter DEMO."));
+    },
 
     requestEmailCode: (): Promise<void> => Promise.resolve(),
 
@@ -123,9 +129,9 @@ export function createDemoClient(): RunClient {
 
       return Promise.resolve({
         outcome: "accepted" as const,
-        remainingMs: 3_600_000,
+        remainingMs: 900_000,
         maxIndex: currentMaxIndex,
-        sectionRemainingMs: null,
+        sectionRemainingMs: 300_000,
       });
     },
 
