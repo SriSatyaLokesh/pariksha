@@ -62,12 +62,14 @@ describe("ByokSettings — unconfigured state", () => {
     expect(screen.getByRole("heading", { name: "Anthropic" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "OpenAI" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "OpenRouter" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Google Gemini" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OpenCode" })).toBeInTheDocument();
 
     const notConfiguredBadges = screen.getAllByText("Not configured");
-    expect(notConfiguredBadges).toHaveLength(3);
+    expect(notConfiguredBadges).toHaveLength(5);
 
     const configureButtons = screen.getAllByRole("button", { name: "Configure Key" });
-    expect(configureButtons).toHaveLength(3);
+    expect(configureButtons).toHaveLength(5);
 
     expect(screen.getByText("Total Tokens")).toBeInTheDocument();
     expect(screen.getByText("$0.00")).toBeInTheDocument();
