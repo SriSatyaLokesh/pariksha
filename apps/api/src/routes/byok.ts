@@ -12,12 +12,12 @@ import {
   getBank,
   type ByokProvider,
 } from "@pariksha/db";
-import { QUESTION_TYPES } from "@pariksha/core";
+import { QUESTION_TYPES, type Question } from "@pariksha/core";
 import type { AppBindings, AppDeps } from "../app.js";
 import { ApiError } from "../errors.js";
 import { requires } from "../middleware/authorize.js";
 import { encryptApiKey, formatKeyHint } from "../byok/crypto.js";
-import { draftQuestions } from "../byok/draft.js";
+import { draftQuestions, commitDraftQuestions } from "../byok/draft.js";
 
 const putKeySchema = z.object({
   apiKey: z.string().min(1).max(500),
@@ -30,6 +30,11 @@ const draftAiSchema = z.object({
   types: z.array(z.enum(QUESTION_TYPES)).optional(),
   provider: z.enum(["anthropic", "openai"]).optional(),
   model: z.string().optional(),
+  baseUrl: z.string().optional(),
+});
+
+const commitDraftSchema = z.object({
+  questions: z.array(z.record(z.string(), z.unknown())),
 });
 
 function validProviderOr400(param: string): ByokProvider {
@@ -43,7 +48,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
   // GET /api/v1/workspaces/:id/byok
-  routes.get("/:id/byok", requires("workspace.settings"), async (c) => {
+  routes.get("/:id/byok", requires("keys.manage"), async (c) => {
     const workspaceId = c.req.param("id");
     const credentials = await listByokCredentials(deps.db, workspaceId);
     const usage = await getByokUsageSummary(deps.db, workspaceId);
@@ -51,7 +56,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
   });
 
   // PUT /api/v1/workspaces/:id/byok/:provider
-  routes.put("/:id/byok/:provider", requires("workspace.settings"), async (c) => {
+  routes.put("/:id/byok/:provider", requires("keys.manage"), async (c) => {
     const workspaceId = c.req.param("id");
     const provider = validProviderOr400(c.req.param("provider"));
 
@@ -93,7 +98,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
   });
 
   // DELETE /api/v1/workspaces/:id/byok/:provider
-  routes.delete("/:id/byok/:provider", requires("workspace.settings"), async (c) => {
+  routes.delete("/:id/byok/:provider", requires("keys.manage"), async (c) => {
     const workspaceId = c.req.param("id");
     const provider = validProviderOr400(c.req.param("provider"));
 
@@ -112,6 +117,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
   });
 
   // POST /api/v1/workspaces/:id/banks/:bankId/draft-ai
+  // Computational preview generator - returns questions, validation issues, and usage without DB write.
   routes.post("/:id/banks/:bankId/draft-ai", requires("banks.edit"), async (c) => {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
@@ -142,6 +148,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
         types: parsed.data.types,
         provider: parsed.data.provider,
         model: parsed.data.model,
+        baseUrl: parsed.data.baseUrl,
       });
 
       const actor = c.get("actor");
@@ -159,6 +166,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
 
       return c.json({
         questions: result.questions,
+        validationIssues: result.validationIssues,
         usage: result.usage,
       });
     } catch (err) {
@@ -173,6 +181,58 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
         throw new ApiError(422, "schema_validation_failed", msg);
       }
       throw new ApiError(500, "ai_draft_failed", msg);
+    }
+  });
+
+  // POST /api/v1/workspaces/:id/banks/:bankId/draft-ai/commit
+  // Atomic commit endpoint - persists vetted/edited questions to the bank with unique q_... IDs.
+  routes.post("/:id/banks/:bankId/draft-ai/commit", requires("banks.edit"), async (c) => {
+    const workspaceId = c.req.param("id");
+    const bankId = c.req.param("bankId");
+
+    const bank = await getBank(deps.db, workspaceId, bankId);
+    if (!bank) {
+      throw new ApiError(404, "not_found", "Question bank not found.");
+    }
+
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      throw new ApiError(400, "invalid_json", "Malformed JSON body.");
+    }
+
+    const parsed = commitDraftSchema.safeParse(body);
+    if (!parsed.success) {
+      throw new ApiError(400, "validation_error", parsed.error.issues.map((i) => i.message).join(", "));
+    }
+
+    try {
+      const result = await commitDraftQuestions(
+        deps.db,
+        workspaceId,
+        bankId,
+        parsed.data.questions as unknown as Question[],
+      );
+
+      const actor = c.get("actor");
+      await appendAudit(deps.db, workspaceId, {
+        action: "bank.ai_committed",
+        actor: actor?.userId ?? "system",
+        target: bankId,
+        detail: {
+          importedCount: result.importedCount,
+        },
+        now: deps.now(),
+      });
+
+      return c.json(result, 201);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("validation failed")) {
+        throw new ApiError(422, "schema_validation_failed", msg);
+      }
+      throw new ApiError(500, "commit_failed", msg);
     }
   });
 

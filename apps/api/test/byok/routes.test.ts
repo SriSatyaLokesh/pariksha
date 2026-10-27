@@ -4,13 +4,17 @@ import { createUser, addMembership } from "@pariksha/db";
 import { createApp, type AppDeps } from "../../src/app.js";
 import { issueSession } from "../../src/auth/session.js";
 import { testDeps, sessionCookie, FIXED_NOW } from "../deps.js";
-import * as clientModule from "../../src/byok/client.js";
+import * as routerModule from "../../src/byok/router.js";
 
 describe("BYOK HTTP Endpoints (Phase 12)", () => {
   let wspId: string;
   let bankId: string;
-  let userId: string;
+  let ownerUserId: string;
+  let authorUserId: string;
+  let viewerUserId: string;
   let ownerCookie: string;
+  let authorCookie: string;
+  let viewerCookie: string;
   let deps: AppDeps;
   let app: ReturnType<typeof createApp>;
 
@@ -23,15 +27,35 @@ describe("BYOK HTTP Endpoints (Phase 12)", () => {
     await createWorkspace(deps.db, wspId, { name: "Org Byok", slug: "org-byok" });
     bankId = await createBank(deps.db, wspId, { name: "Exam Bank" });
 
-    userId = await createUser(deps.db, {
+    // Setup Owner
+    ownerUserId = await createUser(deps.db, {
       email: "owner@alpha.test",
       authProvider: "magic_link",
       now: FIXED_NOW,
     });
-    await addMembership(deps.db, wspId, { userId, role: "owner", now: FIXED_NOW });
+    await addMembership(deps.db, wspId, { userId: ownerUserId, role: "owner", now: FIXED_NOW });
+    const ownerSession = await issueSession(deps, ownerUserId);
+    ownerCookie = await sessionCookie(deps, ownerSession.token);
 
-    const session = await issueSession(deps, userId);
-    ownerCookie = await sessionCookie(deps, session.token);
+    // Setup Author
+    authorUserId = await createUser(deps.db, {
+      email: "author@alpha.test",
+      authProvider: "magic_link",
+      now: FIXED_NOW,
+    });
+    await addMembership(deps.db, wspId, { userId: authorUserId, role: "author", now: FIXED_NOW });
+    const authorSession = await issueSession(deps, authorUserId);
+    authorCookie = await sessionCookie(deps, authorSession.token);
+
+    // Setup Viewer
+    viewerUserId = await createUser(deps.db, {
+      email: "viewer@alpha.test",
+      authProvider: "magic_link",
+      now: FIXED_NOW,
+    });
+    await addMembership(deps.db, wspId, { userId: viewerUserId, role: "viewer", now: FIXED_NOW });
+    const viewerSession = await issueSession(deps, viewerUserId);
+    viewerCookie = await sessionCookie(deps, viewerSession.token);
   });
 
   afterEach(() => {
@@ -103,35 +127,38 @@ describe("BYOK HTTP Endpoints (Phase 12)", () => {
     expect(getBody.credentials).toEqual([]);
   });
 
-  it("POST /banks/:bankId/draft-ai invokes drafting and returns drafted questions", async () => {
-    // Set active key first
+  it("Two-step drafting: POST /draft-ai previews without writing, POST /draft-ai/commit inserts with unique q_... IDs", async () => {
+    // 1. Setup workspace BYOK key
     await app.request(`/api/v1/workspaces/${wspId}/byok/anthropic`, {
       method: "PUT",
       headers: { "content-type": "application/json", cookie: ownerCookie },
       body: JSON.stringify({ apiKey: "sk-ant-test-key-0001" }),
     });
 
-    vi.spyOn(clientModule, "invokeAiDrafting").mockResolvedValue({
-      questions: [
-        {
-          id: "Q1",
-          type: "single",
-          prompt: "What is the boiling point of water in Celsius?",
-          options: [
-            { id: "a", text: "100" },
-            { id: "b", text: "0" },
-          ],
-          key: "a",
-          scoring: { mode: "all_or_nothing", points: 1 },
-        },
-      ] as never,
-      model: "claude-3-5-sonnet",
+    const mockAiQuestions = [
+      {
+        id: "Q1",
+        type: "single",
+        prompt: "What is the boiling point of water in Celsius?",
+        options: [
+          { id: "a", text: "100" },
+          { id: "b", text: "0" },
+        ],
+        key: "a",
+        scoring: { mode: "all_or_nothing", points: 1 },
+      },
+    ];
+
+    vi.spyOn(routerModule, "routeDraftRequest").mockResolvedValue({
+      questions: mockAiQuestions as never,
+      model: "claude-3-5-sonnet-20241022",
       usage: { promptTokens: 90, completionTokens: 40, estimatedCostCents: 1 },
     });
 
-    const res = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai`, {
+    // Step 1: Preview via Author (Author holds banks.edit)
+    const draftRes = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai`, {
       method: "POST",
-      headers: { "content-type": "application/json", cookie: ownerCookie },
+      headers: { "content-type": "application/json", cookie: authorCookie },
       body: JSON.stringify({
         prompt: "Water boiling point",
         count: 1,
@@ -139,15 +166,71 @@ describe("BYOK HTTP Endpoints (Phase 12)", () => {
       }),
     });
 
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as { questions: unknown[]; usage: { promptTokens: number } };
-    expect(body.questions.length).toBe(1);
-    expect(body.usage.promptTokens).toBe(90);
+    expect(draftRes.status).toBe(200);
+    const draftBody = (await draftRes.json()) as {
+      questions: Array<{ prompt: string }>;
+      validationIssues: unknown[];
+      usage: { promptTokens: number; estimatedCostCents: number };
+    };
+    expect(draftBody.questions).toHaveLength(1);
+    expect(draftBody.questions[0]?.prompt).toBe("What is the boiling point of water in Celsius?");
+    expect(draftBody.validationIssues).toEqual([]);
+    expect(draftBody.usage.promptTokens).toBe(90);
+    expect(draftBody.usage.estimatedCostCents).toBe(1);
 
-    // Verify question is now in the bank
-    const inBank = await listQuestions(deps.db, wspId, bankId);
-    expect(inBank.rows.length).toBe(1);
-    expect(inBank.rows[0]?.document.prompt).toBe("What is the boiling point of water in Celsius?");
+    // Verify question is NOT yet in the bank (strictly computational preview)
+    const inBankAfterPreview = await listQuestions(deps.db, wspId, bankId);
+    expect(inBankAfterPreview.rows.length).toBe(0);
+
+    // Step 2: Commit approved questions
+    const commitRes = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai/commit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: authorCookie },
+      body: JSON.stringify({
+        questions: draftBody.questions,
+      }),
+    });
+
+    expect(commitRes.status).toBe(201);
+    const commitBody = (await commitRes.json()) as { importedCount: number; bankId: string };
+    expect(commitBody.importedCount).toBe(1);
+    expect(commitBody.bankId).toBe(bankId);
+
+    // Verify question is now in the bank with a unique q_... ID
+    const inBankAfterCommit = await listQuestions(deps.db, wspId, bankId);
+    expect(inBankAfterCommit.rows.length).toBe(1);
+    expect(inBankAfterCommit.rows[0]?.refId.startsWith("q_")).toBe(true);
+    expect(inBankAfterCommit.rows[0]?.document.prompt).toBe("What is the boiling point of water in Celsius?");
+  });
+
+  it("Enforces RBAC permissions: banks.edit for drafting/commit, keys.manage for credentials", async () => {
+    // Author has banks.edit but not keys.manage
+    const authorKeyRes = await app.request(`/api/v1/workspaces/${wspId}/byok`, {
+      method: "GET",
+      headers: { cookie: authorCookie },
+    });
+    expect(authorKeyRes.status).toBe(403);
+
+    // Viewer has neither banks.edit nor keys.manage
+    const viewerKeyRes = await app.request(`/api/v1/workspaces/${wspId}/byok`, {
+      method: "GET",
+      headers: { cookie: viewerCookie },
+    });
+    expect(viewerKeyRes.status).toBe(403);
+
+    const viewerDraftRes = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: viewerCookie },
+      body: JSON.stringify({ prompt: "Test prompt" }),
+    });
+    expect(viewerDraftRes.status).toBe(403);
+
+    const viewerCommitRes = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai/commit`, {
+      method: "POST",
+      headers: { "content-type": "application/json", cookie: viewerCookie },
+      body: JSON.stringify({ questions: [] }),
+    });
+    expect(viewerCommitRes.status).toBe(403);
   });
 
   it("POST /banks/:bankId/draft-ai returns 400 when no BYOK key is configured", async () => {

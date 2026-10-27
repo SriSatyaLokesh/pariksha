@@ -874,6 +874,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   "/api/v1/workspaces/:id/byok": 4,
   "/api/v1/workspaces/:id/byok/:provider": 4,
   "/api/v1/workspaces/:id/banks/:bankId/draft-ai": 10,
+  "/api/v1/workspaces/:id/banks/:bankId/draft-ai/commit": 10,
 
   // Phase 8c Task 1/2 (`R-06`/`R-07`, #94/#95): test and item analytics,
   // one screen. Measured (`apps/api/test/analytics.test.ts`'s own
@@ -1025,10 +1026,11 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "POST /api/v1/workspaces/:id/keys": "keys.manage",
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "keys.manage",
   // Phase 12: BYOK credentials and AI drafting
-  "GET /api/v1/workspaces/:id/byok": "workspace.settings",
-  "PUT /api/v1/workspaces/:id/byok/:provider": "workspace.settings",
-  "DELETE /api/v1/workspaces/:id/byok/:provider": "workspace.settings",
+  "GET /api/v1/workspaces/:id/byok": "keys.manage",
+  "PUT /api/v1/workspaces/:id/byok/:provider": "keys.manage",
+  "DELETE /api/v1/workspaces/:id/byok/:provider": "keys.manage",
   "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai": "banks.edit",
+  "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai/commit": "banks.edit",
   // `GET /t/:code` carries no entry here at all: it is the one route this
   // phase mounts outside the workspace guard (Review Focus 5, ADR 0006).
 
@@ -1334,6 +1336,7 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "PUT /api/v1/workspaces/:id/byok/:provider": "workspace",
   "DELETE /api/v1/workspaces/:id/byok/:provider": "workspace",
   "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai": "workspace",
+  "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai/commit": "workspace",
   // Phase 8c Task 1 (`R-06`, #94): test analytics.
   "GET /api/v1/workspaces/:id/tests/:testId/analytics": "workspace",
   // Phase 8g Task 4 (`#91`, `R-03`): attempt review.
