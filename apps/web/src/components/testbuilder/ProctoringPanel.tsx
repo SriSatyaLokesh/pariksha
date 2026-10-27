@@ -446,7 +446,7 @@ export function ProctoringPanel({
           // enforcement refusal is `resolveProctoring`'s, not a fact about
           // what an imported document holds), so a document authored for
           // Phase 8 round-trips visibly even though nothing here can act on
-          // it yet. Tracked in Issue #264.
+          // it yet. Tracked in issue 264.
           <div className="field" key="face_check">
             <label className="field-label" htmlFor={`${ids}-face_check`}>
               Count faces in each image
@@ -461,11 +461,11 @@ export function ProctoringPanel({
               }
             />
             <p className="field-help" id={faceCheckHelpId}>
-              On-device face counting is tracked in Issue #264. This control is disabled until then.
+              On-device face counting is tracked in Issue &#35;264. This control is disabled until then.
             </p>
             {faceCheckMarker?.node}
           </div>,
-          // Phase 8.5 / #209: microphone noise monitoring enabled.
+          // Phase 8.5 / issue 209: microphone noise monitoring enabled.
           <div className="field" key="require_microphone">
             <label className="field-label" htmlFor={`${ids}-require_microphone`}>
               Require a microphone

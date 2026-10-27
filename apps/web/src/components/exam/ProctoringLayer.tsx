@@ -1091,7 +1091,7 @@ export function ProctoringLayer({
     }
   }, [proctoring.extraMonitorCheck]);
 
-  // ---- microphone noise monitoring (`Q12`/Phase 8.5, #209) -----------------
+  // ---- microphone noise monitoring (`Q12`/Phase 8.5, issue 209) ------------
 
   useEffect(() => {
     const activeStream = streamProp ?? liveStream;

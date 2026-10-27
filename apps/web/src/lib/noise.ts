@@ -1,4 +1,4 @@
-// Phase 8.5 / #209: noise-level monitoring, not recording.
+// Phase 8.5 / issue 209: noise-level monitoring, not recording.
 // AG2/AG3: this module and the worklet it loads (/noise-worklet.js) never
 // record audio, retain buffers, or extract raw PCM. The worklet reduces a
 // window of samples to a single dB level; this module converts those levels

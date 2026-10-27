@@ -273,7 +273,7 @@
   max-width: 320px;
   height: auto;
   border-radius: var(--rounded-sm);
-  background: #000;
+  background: var(--color-ink);
   display: block;
   margin-bottom: 12px;
 }
@@ -293,7 +293,7 @@
 
 .exam-mic-notice {
   color: var(--color-muted);
-  font-size: var(--type-body-sm-size, 14px);
+  font-size: var(--type-body-sm-size);
   margin-bottom: 12px;
 }
 
