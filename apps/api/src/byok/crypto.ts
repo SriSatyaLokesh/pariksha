@@ -64,6 +64,9 @@ export async function decryptApiKey(encryptedBase64: string, secret: string): Pr
  */
 export function formatKeyHint(key: string): string {
   const trimmed = key.trim();
+  if (trimmed.toLowerCase() === "public") {
+    return "public";
+  }
   const last4 = trimmed.slice(-4);
   if (trimmed.startsWith("sk-ant-")) {
     return `sk-ant-...${last4}`;
@@ -76,6 +79,9 @@ export function formatKeyHint(key: string): string {
   }
   if (trimmed.startsWith("AIza")) {
     return `AIza...${last4}`;
+  }
+  if (trimmed.startsWith("opencode-")) {
+    return `opencode-...${last4}`;
   }
   return `sk-...${last4}`;
 }

@@ -12,7 +12,7 @@ export interface ByokSettingsProps {
   workspaceId: string;
 }
 
-type ByokProvider = "anthropic" | "openai" | "openrouter" | "gemini";
+type ByokProvider = "anthropic" | "openai" | "openrouter" | "gemini" | "opencode";
 
 function providerLabel(provider: ByokProvider): string {
   switch (provider) {
@@ -24,6 +24,8 @@ function providerLabel(provider: ByokProvider): string {
       return "OpenRouter";
     case "gemini":
       return "Google Gemini";
+    case "opencode":
+      return "OpenCode";
   }
 }
 
@@ -141,13 +143,14 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
   const openAiCred = credentials.find((c) => c.provider === "openai");
   const openRouterCred = credentials.find((c) => c.provider === "openrouter");
   const geminiCred = credentials.find((c) => c.provider === "gemini");
+  const opencodeCred = credentials.find((c) => c.provider === "opencode");
 
   return (
     <div className="byok-settings">
       <header className="byok-header">
         <h2 className="byok-title">Bring Your Own Key</h2>
         <p className="release-panel__fact">
-          Store your own Anthropic, OpenAI, Google Gemini, or OpenRouter API keys securely. Keys are encrypted at rest with AES-256-GCM
+          Store your own Anthropic, OpenAI, Google Gemini, OpenRouter, or OpenCode API keys securely. Keys are encrypted at rest with AES-256-GCM
           using workspace secrets and never exposed to candidate browsers or logs.
         </p>
       </header>
@@ -184,7 +187,9 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
                     ? "Begins with sk-proj-... or sk-..."
                     : editingProvider === "gemini"
                       ? "Google AI Studio key (begins with AIza...)"
-                      : "Begins with sk-or-..."
+                      : editingProvider === "opencode"
+                        ? "Enter 'public' for free inference, or your OpenCode token"
+                        : "Begins with sk-or-..."
               }
               value={keyInput}
               onChange={setKeyInput}
@@ -515,6 +520,81 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
                   type="button"
                   className="button-secondary"
                   onClick={() => setConfirmingDelete("gemini")}
+                  disabled={loading || saving}
+                >
+                  Delete
+                </button>
+              ))}
+          </div>
+        </CardHairline>
+
+        {/* OpenCode Card */}
+        <CardHairline className="byok-card">
+          <div className="byok-card__header">
+            <h3 className="byok-card__title">OpenCode</h3>
+            <span
+              className={
+                opencodeCred
+                  ? "byok-card__badge byok-card__badge--active"
+                  : "byok-card__badge byok-card__badge--inactive"
+              }
+            >
+              {opencodeCred ? "Active" : "Not configured"}
+            </span>
+          </div>
+
+          <p className="byok-card__desc">
+            Open-weights inference (DeepSeek V4.1 Flash, GLM 5.3, Nemotron 3.5, Flint 40B).
+          </p>
+
+          {opencodeCred && (
+            <div className="byok-card__meta">
+              <div>
+                Key: <code>{opencodeCred.keyHint}</code>
+              </div>
+              <div>
+                Monthly Cap:{" "}
+                {opencodeCred.spendLimitCents != null
+                  ? `$${(opencodeCred.spendLimitCents / 100).toFixed(2)} / month`
+                  : "No cap"}
+              </div>
+            </div>
+          )}
+
+          <div className="byok-card__actions">
+            <button
+              type="button"
+              className="button-primary button-primary--surface"
+              onClick={() => handleOpenEdit("opencode")}
+              disabled={loading || saving}
+            >
+              {opencodeCred ? "Update Key" : "Configure Key"}
+            </button>
+            {opencodeCred &&
+              (confirmingDelete === "opencode" ? (
+                <>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => void handleDelete("opencode")}
+                    disabled={loading || saving}
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => setConfirmingDelete(null)}
+                    disabled={loading || saving}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setConfirmingDelete("opencode")}
                   disabled={loading || saving}
                 >
                   Delete

@@ -199,11 +199,64 @@ export const GEMINI_MODELS: ModelMetadata[] = [
   },
 ];
 
+export const OPENCODE_MODELS: ModelMetadata[] = [
+  {
+    id: "deepseek-v4.1-flash-free",
+    name: "DeepSeek V4.1 Flash Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+    recommended: true,
+  },
+  {
+    id: "glm-5.3-flash-free",
+    name: "GLM 5.3 Flash Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+  {
+    id: "nemotron-3.5-super-vl-free",
+    name: "Nemotron 3.5 Super VL Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+  {
+    id: "nemotron-3.5-lightning-free",
+    name: "Nemotron 3.5 Lightning Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+  {
+    id: "flint-40b-free",
+    name: "Flint 40B Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+  {
+    id: "mimo-v2.6-flash-free",
+    name: "MiMo V2.6 Flash Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+  {
+    id: "beam-free",
+    name: "Beam Free",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+  {
+    id: "big-pickle",
+    name: "Big Pickle",
+    provider: "opencode",
+    pricing: { promptPerMillionCents: 0, completionPerMillionCents: 0 },
+  },
+];
+
 export const ALL_MODELS: ModelMetadata[] = [
   ...ANTHROPIC_MODELS,
   ...OPENAI_MODELS,
   ...GEMINI_MODELS,
   ...OPENROUTER_MODELS,
+  ...OPENCODE_MODELS,
 ];
 
 /**
@@ -272,6 +325,10 @@ export function getFallbackPricing(provider: string, modelId?: string): ModelPri
       return { promptPerMillionCents: 125, completionPerMillionCents: 500 };
     }
     return { promptPerMillionCents: 15, completionPerMillionCents: 60 };
+  }
+
+  if (normProvider === "opencode") {
+    return { promptPerMillionCents: 0, completionPerMillionCents: 0 };
   }
 
   return { promptPerMillionCents: 200, completionPerMillionCents: 800 };

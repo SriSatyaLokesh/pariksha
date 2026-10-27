@@ -784,11 +784,11 @@ export interface ApiClient {
   getByok(workspaceId: string): Promise<{ credentials: ByokCredential[]; usage: ByokUsage }>;
   saveByokKey(
     workspaceId: string,
-    provider: "anthropic" | "openai" | "openrouter" | "gemini",
+    provider: "anthropic" | "openai" | "openrouter" | "gemini" | "opencode",
     apiKey: string,
     spendLimitCents?: number | null,
   ): Promise<{ credential: ByokCredential }>;
-  deleteByokKey(workspaceId: string, provider: "anthropic" | "openai" | "openrouter" | "gemini"): Promise<void>;
+  deleteByokKey(workspaceId: string, provider: "anthropic" | "openai" | "openrouter" | "gemini" | "opencode"): Promise<void>;
   draftAiQuestions(
     workspaceId: string,
     bankId: string,
@@ -814,7 +814,7 @@ export interface ApiClient {
 
 export interface ByokCredential {
   id: string;
-  provider: "anthropic" | "openai" | "openrouter" | "gemini";
+  provider: "anthropic" | "openai" | "openrouter" | "gemini" | "opencode";
   keyHint: string;
   spendLimitCents: number | null;
   status: "active" | "revoked";
@@ -833,8 +833,9 @@ export interface DraftAiOptions {
   prompt: string;
   count?: number;
   types?: (QuestionType | (string & {}))[];
-  provider?: "anthropic" | "openai" | "openrouter" | "gemini" | (string & {});
+  provider?: "anthropic" | "openai" | "openrouter" | "gemini" | "opencode" | (string & {});
   model?: string;
+  baseUrl?: string;
 }
 
 export interface DraftAiResult {

@@ -15,7 +15,7 @@ export interface DraftAiModalProps {
   onSuccess: () => void;
 }
 
-type Provider = "anthropic" | "openai" | "openrouter" | "gemini";
+type Provider = "anthropic" | "openai" | "openrouter" | "gemini" | "opencode";
 type ModalStep = "config" | "review";
 
 const SUPPORTED_TYPES: Array<{ type: QuestionType; label: string }> = [
@@ -81,6 +81,17 @@ const CURATED_MODELS: Record<
     { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
     { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
     { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
+    { id: "custom", label: "Custom model..." },
+  ],
+  opencode: [
+    { id: "deepseek-v4.1-flash-free", label: "DeepSeek V4.1 Flash Free (Recommended)" },
+    { id: "glm-5.3-flash-free", label: "GLM 5.3 Flash Free" },
+    { id: "nemotron-3.5-super-vl-free", label: "Nemotron 3.5 Super VL Free" },
+    { id: "nemotron-3.5-lightning-free", label: "Nemotron 3.5 Lightning Free" },
+    { id: "flint-40b-free", label: "Flint 40B Free" },
+    { id: "mimo-v2.6-flash-free", label: "MiMo V2.6 Flash Free" },
+    { id: "beam-free", label: "Beam Free" },
+    { id: "big-pickle", label: "Big Pickle" },
     { id: "custom", label: "Custom model..." },
   ],
 };
@@ -380,6 +391,7 @@ export function DraftAiModal({
                     <option value="anthropic">Anthropic</option>
                     <option value="openai">OpenAI</option>
                     <option value="gemini">Google Gemini</option>
+                    <option value="opencode">OpenCode (Free Open Models)</option>
                     <option value="openrouter">OpenRouter (OpenAI-compatible)</option>
                   </select>
                 </div>
@@ -420,7 +432,9 @@ export function DraftAiModal({
                         ? "e.g. meta-llama/llama-3.3-70b-instruct"
                         : provider === "gemini"
                           ? "e.g. gemini-2.5-pro"
-                          : "e.g. claude-3-7-sonnet"
+                          : provider === "opencode"
+                            ? "e.g. deepseek-v4.1-flash-free"
+                            : "e.g. claude-3-7-sonnet"
                     }
                     disabled={loading}
                     required

@@ -24,6 +24,7 @@ import {
   ANTHROPIC_MODELS,
   OPENAI_MODELS,
   GEMINI_MODELS,
+  OPENCODE_MODELS,
 } from "../byok/models.js";
 
 const putKeySchema = z.object({
@@ -35,7 +36,7 @@ const draftAiSchema = z.object({
   prompt: z.string().min(1).max(10000),
   count: z.number().int().min(1).max(10).default(3),
   types: z.array(z.enum(QUESTION_TYPES)).optional(),
-  provider: z.enum(["anthropic", "openai", "openrouter", "gemini"]).optional(),
+  provider: z.enum(["anthropic", "openai", "openrouter", "gemini", "opencode"]).optional(),
   model: z.string().optional(),
   baseUrl: z.string().optional(),
 });
@@ -49,12 +50,13 @@ function validProviderOr400(param: string): ByokProvider {
     param !== "anthropic" &&
     param !== "openai" &&
     param !== "openrouter" &&
-    param !== "gemini"
+    param !== "gemini" &&
+    param !== "opencode"
   ) {
     throw new ApiError(
       400,
       "invalid_provider",
-      `Unsupported provider "${param}". Must be "anthropic", "openai", "openrouter", or "gemini".`,
+      `Unsupported provider "${param}". Must be "anthropic", "openai", "openrouter", "gemini", or "opencode".`,
     );
   }
   return param;
@@ -78,7 +80,7 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
       const liveOpenRouter = await fetchLiveOpenRouterModels();
       if (liveOpenRouter.length > 0) {
         return c.json({
-          models: [...ANTHROPIC_MODELS, ...OPENAI_MODELS, ...GEMINI_MODELS, ...liveOpenRouter],
+          models: [...ANTHROPIC_MODELS, ...OPENAI_MODELS, ...GEMINI_MODELS, ...OPENCODE_MODELS, ...liveOpenRouter],
         });
       }
     }
