@@ -34,7 +34,7 @@ import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
 import { ProctorBanner } from "../components/exam/ProctorBanner";
 import { ProctoringErrorBoundary, ProctoringLayer } from "../components/exam/ProctoringLayer";
-import { acquireCamera, captureJpeg } from "../lib/camera";
+import { acquireMedia, captureJpeg, type MediaAcquireResult } from "../lib/camera";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
@@ -96,8 +96,15 @@ function browserName(userAgent: string): string | null {
  * sentence at the `packages/core` end should break the gate visibly, not
  * leave it silently never firing.
  */
-function requiresCamera(test: LandingPayload): boolean {
+export function requiresCamera(test: LandingPayload): boolean {
   return test.proctoring.requirements.some((line) => /camera/i.test(line));
+}
+
+/**
+ * Phase 8.5 Task 4 (#209): checks if proctoring requirements include microphone.
+ */
+export function requiresMicrophone(test: LandingPayload): boolean {
+  return test.proctoring.requirements.some((line) => /microphone/i.test(line));
 }
 
 /** Task 1's upload route — the body is the raw JPEG bytes, no key comes
@@ -205,6 +212,99 @@ function formatInstant(at: number, timezone: string): string {
   }
 }
 
+function CameraPreview({ stream }: { stream: MediaStream }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.srcObject = stream;
+      try {
+        void videoRef.current.play?.()?.catch?.(() => {});
+      } catch {
+        // Autoplay or jsdom unimplemented stub
+      }
+    }
+  }, [stream]);
+
+  return (
+    <div className="exam-camera-preview-container">
+      <video
+        ref={videoRef}
+        className="exam-camera-preview"
+        aria-label="Camera preview"
+        data-testid="camera-preview"
+        autoPlay
+        playsInline
+        muted
+      />
+    </div>
+  );
+}
+
+function MicMeter({ stream }: { stream: MediaStream }) {
+  const [volume, setVolume] = useState(0);
+
+  useEffect(() => {
+    const AudioContextClass =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    let animId: number | null = null;
+    let audioContext: AudioContext | null = null;
+    try {
+      audioContext = new AudioContextClass();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      const tick = () => {
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i] ?? 0;
+        }
+        const avg = dataArray.length > 0 ? sum / dataArray.length : 0;
+        setVolume(Math.round((avg / 255) * 100));
+        if (typeof requestAnimationFrame === "function") {
+          animId = requestAnimationFrame(tick);
+        }
+      };
+      tick();
+    } catch {
+      // Degrade gracefully if AudioContext initialization fails
+    }
+
+    return () => {
+      if (animId !== null && typeof cancelAnimationFrame === "function") {
+        cancelAnimationFrame(animId);
+      }
+      if (audioContext && audioContext.state !== "closed") {
+        void audioContext.close();
+      }
+    };
+  }, [stream]);
+
+  return (
+    <div className="exam-vu-meter-container" data-testid="mic-vu-meter">
+      <label htmlFor="exam-mic-level">Microphone level</label>
+      <meter
+        id="exam-mic-level"
+        className="exam-vu-meter"
+        min={0}
+        max={100}
+        value={volume}
+        aria-label="Microphone level"
+      />
+      <span className="exam-vu-meter-value" aria-hidden="true">
+        {volume}%
+      </span>
+    </div>
+  );
+}
+
 export function ExamLanding({
   test,
   onStart,
@@ -223,6 +323,9 @@ export function ExamLanding({
   cameraError?: string | null;
 }) {
   const [report, setReport] = useState<ReturnType<typeof deviceReport> | null>(null);
+  const [deviceMediaOpen, setDeviceMediaOpen] = useState(false);
+  const [deviceMediaStream, setDeviceMediaStream] = useState<MediaStream | null>(null);
+  const [micNotice, setMicNotice] = useState<string | null>(null);
   const notice = STATE_NOTICE[test.state];
 
   // `Q1b`: the landing payload ships the resolved REQUIREMENT SENTENCES,
@@ -241,6 +344,48 @@ export function ExamLanding({
   // running on — not from `report`, which stays `null` until "Check my
   // device" is clicked and must not be able to gate Start.
   const [refused] = useState(() => deviceReport(resolved).refused);
+
+  const handleDismissDeviceTest = useCallback(() => {
+    if (deviceMediaStream) {
+      deviceMediaStream.getTracks().forEach((track) => track.stop());
+      setDeviceMediaStream(null);
+    }
+    setDeviceMediaOpen(false);
+    setMicNotice(null);
+  }, [deviceMediaStream]);
+
+  useEffect(() => {
+    return () => {
+      if (deviceMediaStream) {
+        deviceMediaStream.getTracks().forEach((track) => track.stop());
+      }
+    };
+  }, [deviceMediaStream]);
+
+  const handleCheckDevice = async () => {
+    setReport(deviceReport(resolved));
+    const needCam = requiresCamera(test);
+    const needMic = requiresMicrophone(test);
+    if (needCam || needMic) {
+      if (deviceMediaStream) {
+        deviceMediaStream.getTracks().forEach((track) => track.stop());
+      }
+      setDeviceMediaOpen(true);
+      setMicNotice(null);
+      const res = await acquireMedia({ video: needCam, audio: needMic });
+      if (res.ok) {
+        setDeviceMediaStream(res.stream);
+        if (needMic && !res.audioAvailable) {
+          setMicNotice("Microphone not detected. You may still take the test.");
+        }
+      } else {
+        setDeviceMediaStream(null);
+        if (needMic) {
+          setMicNotice("Microphone not detected. You may still take the test.");
+        }
+      }
+    }
+  };
 
   return (
     <div className="exam-landing">
@@ -334,7 +479,12 @@ export function ExamLanding({
         )}
 
         <div className="exam-landing-actions">
-          <button type="button" onClick={() => setReport(deviceReport(resolved))}>
+          <button
+            type="button"
+            onClick={() => {
+              void handleCheckDevice();
+            }}
+          >
             Check my device
           </button>
           {/* WCAG 2.5.3: the accessible name is a SUPERSET of the visible
@@ -411,6 +561,30 @@ export function ExamLanding({
             </ul>
           )}
         </div>
+
+        {deviceMediaOpen && (
+          <section className="exam-device-test-panel" aria-label="Device test preview">
+            <h3>Device test</h3>
+            {requiresCamera(test) && deviceMediaStream && (
+              <CameraPreview stream={deviceMediaStream} />
+            )}
+            {requiresMicrophone(test) && deviceMediaStream && !micNotice && (
+              <MicMeter stream={deviceMediaStream} />
+            )}
+            {micNotice && (
+              <p className="exam-mic-notice" role="status">
+                {micNotice}
+              </p>
+            )}
+            <button
+              type="button"
+              className="exam-device-test-dismiss"
+              onClick={handleDismissDeviceTest}
+            >
+              Dismiss
+            </button>
+          </section>
+        )}
       </main>
 
       {test.branding.footerText && (
@@ -456,6 +630,8 @@ type View =
        * there never reaches this view at all (it bounces to landing first).
        */
       cameraUnavailable: boolean;
+      /** Phase 8.5 Task 4 (#209): candidate audio stream or null when degraded under AG1. */
+      audioStream?: MediaStream | null;
     }
   /** `C-09`: no cookie, no attempt, just a reference and an address. */
   | { kind: "result-code"; test: LandingPayload }
@@ -502,6 +678,7 @@ function AttemptView({
   onFinished,
   cameraStream,
   cameraUnavailable,
+  audioStream = null,
 }: {
   paper: AttemptPaper;
   client: RunClient;
@@ -516,6 +693,7 @@ function AttemptView({
   /** B1 (`View`'s own doc comment) — threaded straight through, the same
    *  way as `cameraStream`. */
   cameraUnavailable: boolean;
+  audioStream?: MediaStream | null | undefined;
 }) {
   /**
    * The first question this candidate may still write to.
@@ -681,8 +859,13 @@ function AttemptView({
       cameraStream?.getTracks().forEach((track) => {
         track.stop();
       });
+      if (audioStream && audioStream !== cameraStream) {
+        audioStream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
     };
-  }, [paper.proctoring, cameraStream]);
+  }, [paper.proctoring, cameraStream, audioStream]);
 
   /** The answer blocks for all twelve types (Task 7), each change both
    * shown at once and queued for the server. The local state is not the
@@ -921,10 +1104,13 @@ export function ExamApp({ client }: { client: RunClient }) {
     async (registrationToken: string, test: LandingPayload) => {
       setCameraError(null);
 
-      let camera: { ok: true; stream: MediaStream } | null = null;
-      if (requiresCamera(test)) {
-        const acquired = await acquireCamera();
-        if (!acquired.ok) {
+      const needCamera = requiresCamera(test);
+      const needMicrophone = requiresMicrophone(test);
+      let media: MediaAcquireResult | null = null;
+
+      if (needCamera || needMicrophone) {
+        media = await acquireMedia({ video: needCamera, audio: needMicrophone });
+        if (needCamera && !media.ok) {
           // Refused before `client.start` is ever reached — no attempt
           // row, nothing to resume into, and Start stays pressable again
           // once the candidate allows the camera.
@@ -932,21 +1118,24 @@ export function ExamApp({ client }: { client: RunClient }) {
           setView({ kind: "landing", test });
           return;
         }
-        camera = acquired;
       }
 
       setView({ kind: "loading" });
       try {
         const paper = await client.start(registrationToken);
+        const stream = media && media.ok ? media.stream : null;
+        const cameraStream = needCamera && stream ? stream : (needMicrophone && stream ? stream : null);
+        const audioStream = needMicrophone && media && media.ok && media.audioAvailable ? media.stream : null;
+
         // `Q11b`'s own identity-photo gate, read off the RESOLVED paper
         // this time (not the landing payload's sentences) — `/start` is
         // the first point this module holds `ResolvedProctoring` at all.
         // `AG1`: a capture or an upload failure degrades — the candidate
         // still reaches the paper either way, which is why this is inside
         // its own `try` rather than the outer one.
-        if (camera && paper.proctoring?.identityPhoto) {
+        if (needCamera && stream && paper.proctoring?.identityPhoto) {
           try {
-            const blob = await captureJpeg(camera.stream);
+            const blob = await captureJpeg(stream);
             // M3: the CAPTURE happens before the first question (`Q11a`) —
             // the UPLOAD does not need to, and awaiting it here held the
             // loading view hostage to a slow POST with the server-authoritative
@@ -965,14 +1154,22 @@ export function ExamApp({ client }: { client: RunClient }) {
         // Always `false`: a refused camera never reaches this line at all
         // (`startWith`'s own gate bounces to landing above, before
         // `client.start` is even called).
-        setView({ kind: "attempt", paper, cameraStream: camera?.stream ?? null, cameraUnavailable: false });
+        setView({
+          kind: "attempt",
+          paper,
+          cameraStream,
+          cameraUnavailable: false,
+          audioStream,
+        });
       } catch (error) {
         // The attempt never minted — nothing to hand a camera stream to,
         // so it is stopped here rather than leaked to a view that will
         // never render `ProctoringLayer`.
-        camera?.stream.getTracks().forEach((track) => {
-          track.stop();
-        });
+        if (media?.ok) {
+          media.stream.getTracks().forEach((track) => {
+            track.stop();
+          });
+        }
         setView({
           kind: "error",
           message: error instanceof Error ? error.message : "This test could not be started.",
@@ -1023,23 +1220,36 @@ export function ExamApp({ client }: { client: RunClient }) {
         // is what tells `ProctoringLayer` to raise its own lost-camera
         // overlay, reused rather than rebuilt, instead of inferring it from
         // `cameraStream` alone (`View`'s own doc comment on the flag).
+        const needCamera = Boolean(resumed.proctoring?.requireCamera);
+        const needMicrophone = Boolean(resumed.proctoring?.requireMicrophone);
         let resumedCameraStream: MediaStream | null = null;
         let resumedCameraUnavailable = false;
+        let resumedAudioStream: MediaStream | null = null;
         // `?.`, matching the `paper.proctoring &&` guard this file already
         // carries at the render site above and its own reason: an older
         // cached payload can still arrive without `proctoring`. Unguarded,
         // the deref throws into `boot`'s catch and a perfectly resumable
         // attempt is refused with "This test could not be started."
-        if (resumed.proctoring?.requireCamera) {
-          const acquired = await acquireCamera();
-          if (acquired.ok) resumedCameraStream = acquired.stream;
-          else resumedCameraUnavailable = true;
+        if (needCamera || needMicrophone) {
+          const acquired = await acquireMedia({ video: needCamera, audio: needMicrophone });
+          if (acquired.ok) {
+            resumedCameraStream = acquired.stream;
+            resumedAudioStream = acquired.audioAvailable ? acquired.stream : null;
+          } else {
+            if (needCamera) {
+              resumedCameraUnavailable = true;
+            }
+            // Review Focus 5: If microphone fails, do NOT set cameraUnavailable: true.
+            // The attempt resumes smoothly with audioStream: null under AG1.
+            resumedAudioStream = null;
+          }
         }
         setView({
           kind: "attempt",
           paper: resumed,
           cameraStream: resumedCameraStream,
           cameraUnavailable: resumedCameraUnavailable,
+          audioStream: resumedAudioStream,
         });
         return;
       }
@@ -1085,6 +1295,7 @@ export function ExamApp({ client }: { client: RunClient }) {
         client={client}
         cameraStream={view.cameraStream}
         cameraUnavailable={view.cameraUnavailable}
+        audioStream={view.audioStream ?? null}
         onFinished={({ receipt, released }) => {
           setView({ kind: "finished", receipt, released });
         }}
