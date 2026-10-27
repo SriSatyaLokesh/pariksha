@@ -26,6 +26,20 @@ const SUPPORTED_TYPES: Array<{ type: QuestionType; label: string }> = [
   { type: "short_answer", label: "Short Answer" },
 ];
 
+function getQuestionOptions(q: Question): Array<{ id: string; text: string }> | null {
+  if ("options" in q && Array.isArray((q as { options?: unknown }).options)) {
+    return (q as { options: Array<{ id: string; text: string }> }).options;
+  }
+  return null;
+}
+
+function getQuestionKey(q: Question): unknown {
+  if ("key" in q) {
+    return (q as { key?: unknown }).key;
+  }
+  return undefined;
+}
+
 const CURATED_MODELS: Record<
   Provider,
   Array<{ id: string; label: string }>
@@ -159,7 +173,7 @@ export function DraftAiModal({
         count,
         types: selectedTypes,
         provider,
-        model: effectiveModel || undefined,
+        ...(effectiveModel ? { model: effectiveModel } : {}),
       });
 
       setQuestions(res.questions ?? []);
@@ -190,10 +204,11 @@ export function DraftAiModal({
   const startEdit = (index: number) => {
     const q = questions[index];
     if (!q) return;
+    const opts = getQuestionOptions(q);
     setEditingIndex(index);
     setEditPrompt(q.prompt);
-    setEditOptions(q.options ? q.options.map((opt) => ({ ...opt })) : []);
-    setEditKey(q.key);
+    setEditOptions(opts ? opts.map((opt) => ({ ...opt })) : []);
+    setEditKey(getQuestionKey(q));
   };
 
   const cancelEdit = () => {
@@ -208,12 +223,12 @@ export function DraftAiModal({
     const currentQ = questions[editingIndex];
     if (!currentQ) return;
 
-    const updatedQ: Question = {
+    const updatedQ = {
       ...currentQ,
       prompt: editPrompt.trim(),
       ...(editOptions.length > 0 ? { options: editOptions } : {}),
-      key: editKey as Question["key"],
-    };
+      ...(editKey !== undefined ? { key: editKey } : {}),
+    } as Question;
 
     setQuestions((prev) =>
       prev.map((q, idx) => (idx === editingIndex ? updatedQ : q)),
@@ -470,6 +485,8 @@ export function DraftAiModal({
                 {questions.map((q, idx) => {
                   const isFlagged = flaggedIndices.has(idx);
                   const isEditing = editingIndex === idx;
+                  const qOptions = getQuestionOptions(q);
+                  const qKey = getQuestionKey(q);
 
                   // Find issues matching this item
                   const itemIssues = validationIssues.filter((issue) => {
@@ -640,12 +657,12 @@ export function DraftAiModal({
                         <>
                           <p className="draft-ai-card__prompt">{q.prompt}</p>
 
-                          {q.options && q.options.length > 0 && (
+                          {qOptions && qOptions.length > 0 && (
                             <ul className="draft-ai-card__options">
-                              {q.options.map((opt) => {
-                                const isCorrect = Array.isArray(q.key)
-                                  ? q.key.includes(opt.id)
-                                  : q.key === opt.id;
+                              {qOptions.map((opt) => {
+                                const isCorrect = Array.isArray(qKey)
+                                  ? qKey.includes(opt.id)
+                                  : qKey === opt.id;
                                 return (
                                   <li
                                     key={opt.id}
@@ -658,13 +675,13 @@ export function DraftAiModal({
                             </ul>
                           )}
 
-                          {!q.options && q.key !== undefined && (
+                          {!qOptions && qKey !== undefined && (
                             <div className="draft-ai-card__key">
                               Answer Key:{" "}
                               <strong>
-                                {typeof q.key === "object" && q.key !== null && "value" in q.key
-                                  ? String((q.key as { value: unknown }).value)
-                                  : String(q.key)}
+                                {typeof qKey === "object" && qKey !== null && "value" in qKey
+                                  ? String((qKey as { value: unknown }).value)
+                                  : String(qKey)}
                               </strong>
                             </div>
                           )}
