@@ -75,7 +75,7 @@ export const DEMO_SECTION_2_QUESTIONS: CandidateQuestion[] = [
     prompt: "Match each time complexity to its representative sorting algorithm (average case):",
     points: 3,
     left: ["Merge Sort", "Quick Sort", "Bubble Sort"],
-    right: ["O(n log n)", "O(n log n)", "O(n^2)"],
+    right: ["O(n log n)", "O(n^2)", "O(n)"],
   },
   {
     id: "demo_q8",
@@ -271,7 +271,7 @@ export const DEMO_QUESTIONS_CATALOG: Question[] = [
     scoring: { points: 3 },
     tags: ["algorithms"],
     left: ["Merge Sort", "Quick Sort", "Bubble Sort"],
-    right: ["O(n log n)", "O(n log n)", "O(n^2)"],
+    right: ["O(n log n)", "O(n^2)", "O(n)"],
     key: {
       "Merge Sort": "O(n log n)",
       "Quick Sort": "O(n log n)",
