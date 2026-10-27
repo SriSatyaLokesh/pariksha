@@ -209,8 +209,8 @@ export function SignalClose() {
           <a className="signal-btn" href={blob("README.md")}>
             Run your first exam
           </a>
-          <a className="signal-btn signal-btn--ghost" href={tree("examples/reasoning-aptitude")}>
-            See a real exam
+          <a className="signal-btn signal-btn--ghost" href="/exam?demo=true">
+            Try Live Demo
           </a>
         </div>
       </div>

@@ -74,7 +74,7 @@ export function DemoModal({ isOpen, onClose }: DemoModalProps): ReactElement | n
               instant start, scored locally with no server calls.
             </p>
             <div className="demo-code-pill">
-              Access Code: <code>DEMO</code>
+              Access Code: <code><strong>DEMO</strong></code>
             </div>
             <a
               href="/exam?demo=true"

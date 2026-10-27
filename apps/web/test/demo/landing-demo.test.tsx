@@ -5,21 +5,31 @@ import { DemoModal } from "../../src/components/demo/DemoModal";
 import { DemoBanner } from "../../src/components/demo/DemoBanner";
 
 describe("Landing Page Live Demo Entry", () => {
-  it("renders 'Try Live Demo' link in hero pointing to /exam?demo=true", () => {
+  it("renders 'Try Live Demo' links in nav and hero pointing to /exam?demo=true", () => {
     render(<Landing />);
-    const demoLink = screen.getByRole("link", { name: /try live demo/i });
-    expect(demoLink).toBeInTheDocument();
-    expect(demoLink).toHaveAttribute("href", "/exam?demo=true");
+    const demoLinks = screen.getAllByRole("link", { name: /try live demo/i });
+    expect(demoLinks.length).toBeGreaterThanOrEqual(2);
+    demoLinks.forEach((link) => {
+      expect(link).toHaveAttribute("href", "/exam?demo=true");
+    });
   });
 
-  it("renders demo access code 'DEMO' prominently in landing hero", () => {
+  it("highlights 'Try Live Demo' on the primary navigation bar", () => {
     render(<Landing />);
-    const heroDemo = screen.getByRole("link", { name: /try live demo/i });
-    expect(heroDemo).toBeInTheDocument();
-    const codeBadge = screen.getByText(
-      (_, el) => Boolean(el?.classList.contains("signal-badge-code") && /code:\s*DEMO/i.test(el.textContent || "")),
-    );
-    expect(codeBadge).toBeInTheDocument();
+    const nav = screen.getByRole("banner");
+    const navDemos = screen.getAllByRole("link", { name: /try live demo/i });
+    const navDemo = navDemos[0];
+    expect(navDemo).toBeDefined();
+    if (!navDemo) throw new Error("navDemo not found");
+    expect(navDemo).toBeInTheDocument();
+    expect(nav.contains(navDemo)).toBe(true);
+    expect(navDemo).toHaveClass("signal-btn");
+  });
+
+  it("does not render inline code badge or 'See a real exam' on landing page", () => {
+    render(<Landing />);
+    expect(screen.queryByText(/code:\s*DEMO/i)).toBeNull();
+    expect(screen.queryByRole("link", { name: /see a real exam/i })).toBeNull();
   });
 });
 
@@ -86,8 +96,12 @@ describe("DemoModal Component", () => {
 });
 
 describe("DemoBanner Component Access Code", () => {
-  it("displays access code DEMO in exam mode", () => {
+  it("displays access code DEMO in bold in exam mode", () => {
     render(<DemoBanner mode="exam" />);
-    expect(screen.getByText(/access code:\s*DEMO/i)).toBeInTheDocument();
+    const bannerText = screen.getByText(
+      (_, el) => Boolean(el?.classList.contains("demo-banner-text") && /access code:\s*DEMO/i.test(el.textContent || "")),
+    );
+    expect(bannerText).toBeInTheDocument();
+    expect(screen.getByText("DEMO").tagName.toLowerCase()).toMatch(/^(strong|b)$/);
   });
 });
