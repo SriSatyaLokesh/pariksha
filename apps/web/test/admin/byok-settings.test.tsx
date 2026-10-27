@@ -30,6 +30,17 @@ const SAMPLE_OPENAI_CRED: ByokCredential = {
   lastUsedAt: null,
 };
 
+const SAMPLE_OPENROUTER_CRED: ByokCredential = {
+  id: "byok_or_1",
+  provider: "openrouter",
+  keyHint: "sk-or-...3b12",
+  spendLimitCents: 1500,
+  status: "active",
+  createdAt: 1700002000000,
+  updatedAt: 1700002000000,
+  lastUsedAt: null,
+};
+
 const SAMPLE_USAGE: ByokUsage = {
   totalPromptTokens: 12000,
   totalCompletionTokens: 3450,
@@ -50,12 +61,13 @@ describe("ByokSettings — unconfigured state", () => {
     expect(await screen.findByRole("heading", { name: "Bring Your Own Key" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Anthropic" })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "OpenAI" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "OpenRouter" })).toBeInTheDocument();
 
     const notConfiguredBadges = screen.getAllByText("Not configured");
-    expect(notConfiguredBadges).toHaveLength(2);
+    expect(notConfiguredBadges).toHaveLength(3);
 
     const configureButtons = screen.getAllByRole("button", { name: "Configure Key" });
-    expect(configureButtons).toHaveLength(2);
+    expect(configureButtons).toHaveLength(3);
 
     expect(screen.getByText("Total Tokens")).toBeInTheDocument();
     expect(screen.getByText("$0.00")).toBeInTheDocument();
@@ -66,7 +78,7 @@ describe("ByokSettings — active credentials and telemetry", () => {
   it("renders active credentials, masked key hints, spend limits, and usage stats", async () => {
     const client = fakeClient({
       getByok: async () => ({
-        credentials: [SAMPLE_ANTHROPIC_CRED, SAMPLE_OPENAI_CRED],
+        credentials: [SAMPLE_ANTHROPIC_CRED, SAMPLE_OPENAI_CRED, SAMPLE_OPENROUTER_CRED],
         usage: SAMPLE_USAGE,
       }),
     });
@@ -75,13 +87,15 @@ describe("ByokSettings — active credentials and telemetry", () => {
 
     expect(await screen.findByText("sk-ant-...4a9b")).toBeInTheDocument();
     expect(screen.getByText("sk-proj-...9z1x")).toBeInTheDocument();
+    expect(screen.getByText("sk-or-...3b12")).toBeInTheDocument();
 
     const activeBadges = screen.getAllByText("Active");
-    expect(activeBadges).toHaveLength(2);
+    expect(activeBadges).toHaveLength(3);
 
-    // Spend limits: $50.00 / month for Anthropic, No cap for OpenAI
+    // Spend limits: $50.00 / month for Anthropic, No cap for OpenAI, $15.00 / month for OpenRouter
     expect(screen.getByText(/\$50\.00 \/ month/)).toBeInTheDocument();
     expect(screen.getByText(/No cap/)).toBeInTheDocument();
+    expect(screen.getByText(/\$15\.00 \/ month/)).toBeInTheDocument();
 
     // Telemetry: 12,000 + 3,450 = 15,450 total tokens, $1.54 estimated cost
     expect(screen.getByText("15,450")).toBeInTheDocument();
@@ -89,12 +103,12 @@ describe("ByokSettings — active credentials and telemetry", () => {
     expect(screen.getByText("12,000")).toBeInTheDocument();
     expect(screen.getByText("3,450")).toBeInTheDocument();
 
-    // Update & Delete buttons present for both
+    // Update & Delete buttons present for all 3
     const updateButtons = screen.getAllByRole("button", { name: "Update Key" });
-    expect(updateButtons).toHaveLength(2);
+    expect(updateButtons).toHaveLength(3);
 
     const deleteButtons = screen.getAllByRole("button", { name: "Delete" });
-    expect(deleteButtons).toHaveLength(2);
+    expect(deleteButtons).toHaveLength(3);
   });
 });
 
@@ -188,6 +202,52 @@ describe("ByokSettings — configure and save key", () => {
         null,
       );
     });
+  });
+
+  it("submits OpenRouter key with spend cap", async () => {
+    const saveByokKey = vi.fn().mockResolvedValue({
+      credential: SAMPLE_OPENROUTER_CRED,
+    });
+    const getByok = vi.fn().mockResolvedValue({
+      credentials: [],
+      usage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalCostCents: 0 },
+    });
+
+    const client = fakeClient({ getByok, saveByokKey });
+
+    render(<ByokSettings client={client} workspaceId={WORKSPACE_ID} />);
+
+    const configureButtons = await screen.findAllByRole("button", { name: "Configure Key" });
+    // Third button is for OpenRouter
+    const openRouterButton = configureButtons[2];
+    expect(openRouterButton).toBeDefined();
+    fireEvent.click(openRouterButton!);
+
+    expect(
+      screen.getByRole("heading", { name: "Configure OpenRouter Key" }),
+    ).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText(/OpenRouter API Key/), {
+      target: { value: "sk-or-testkey-12345" },
+    });
+    fireEvent.change(screen.getByLabelText(/Monthly Spend Cap/), {
+      target: { value: "15.00" },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Save Key" }));
+
+    await waitFor(() => {
+      expect(saveByokKey).toHaveBeenCalledWith(
+        WORKSPACE_ID,
+        "openrouter",
+        "sk-or-testkey-12345",
+        1500,
+      );
+    });
+
+    expect(
+      await screen.findByText(/Successfully configured OpenRouter API key\./),
+    ).toBeInTheDocument();
   });
 
   it("validates required API key in form", async () => {
@@ -327,6 +387,35 @@ describe("ByokSettings — deletion with inline confirmation", () => {
     });
 
     expect(await screen.findByRole("status")).toHaveTextContent("Removed Anthropic key.");
+  });
+
+  it("confirming deletion of OpenRouter key calls deleteByokKey and reloads credentials", async () => {
+    const deleteByokKey = vi.fn().mockResolvedValue(undefined);
+    const getByok = vi
+      .fn()
+      .mockResolvedValueOnce({
+        credentials: [SAMPLE_OPENROUTER_CRED],
+        usage: SAMPLE_USAGE,
+      })
+      .mockResolvedValueOnce({
+        credentials: [],
+        usage: SAMPLE_USAGE,
+      });
+
+    const client = fakeClient({ getByok, deleteByokKey });
+
+    render(<ByokSettings client={client} workspaceId={WORKSPACE_ID} />);
+
+    const deleteButton = await screen.findByRole("button", { name: "Delete" });
+    fireEvent.click(deleteButton);
+
+    fireEvent.click(screen.getByRole("button", { name: "Confirm delete" }));
+
+    await waitFor(() => {
+      expect(deleteByokKey).toHaveBeenCalledWith(WORKSPACE_ID, "openrouter");
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Removed OpenRouter key.");
   });
 
   it("handles deletion errors with role=alert", async () => {

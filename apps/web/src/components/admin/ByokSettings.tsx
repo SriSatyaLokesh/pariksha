@@ -12,6 +12,19 @@ export interface ByokSettingsProps {
   workspaceId: string;
 }
 
+type ByokProvider = "anthropic" | "openai" | "openrouter";
+
+function providerLabel(provider: ByokProvider): string {
+  switch (provider) {
+    case "anthropic":
+      return "Anthropic";
+    case "openai":
+      return "OpenAI";
+    case "openrouter":
+      return "OpenRouter";
+  }
+}
+
 export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
   const [credentials, setCredentials] = useState<ByokCredential[]>([]);
   const [usage, setUsage] = useState<ByokUsage | null>(null);
@@ -20,8 +33,8 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
   const [success, setSuccess] = useState<string | null>(null);
 
   // Form state
-  const [editingProvider, setEditingProvider] = useState<"anthropic" | "openai" | null>(null);
-  const [confirmingDelete, setConfirmingDelete] = useState<"anthropic" | "openai" | null>(null);
+  const [editingProvider, setEditingProvider] = useState<ByokProvider | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState<ByokProvider | null>(null);
   const [keyInput, setKeyInput] = useState("");
   const [spendLimitInput, setSpendLimitInput] = useState("");
   const [saving, setSaving] = useState(false);
@@ -44,7 +57,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
     void load();
   }, [load]);
 
-  const handleOpenEdit = (provider: "anthropic" | "openai") => {
+  const handleOpenEdit = (provider: ByokProvider) => {
     const cred = credentials.find((c) => c.provider === provider);
     setEditingProvider(provider);
     setConfirmingDelete(null);
@@ -92,7 +105,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
         spendLimitCents,
       );
 
-      setSuccess(`Successfully configured ${editingProvider === "anthropic" ? "Anthropic" : "OpenAI"} API key.`);
+      setSuccess(`Successfully configured ${providerLabel(editingProvider)} API key.`);
       setEditingProvider(null);
       setKeyInput("");
       setSpendLimitInput("");
@@ -104,12 +117,12 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
     }
   };
 
-  const handleDelete = async (provider: "anthropic" | "openai") => {
+  const handleDelete = async (provider: ByokProvider) => {
     try {
       setSaving(true);
       setError(null);
       await client.deleteByokKey(workspaceId, provider);
-      setSuccess(`Removed ${provider === "anthropic" ? "Anthropic" : "OpenAI"} key.`);
+      setSuccess(`Removed ${providerLabel(provider)} key.`);
       setConfirmingDelete(null);
       if (editingProvider === provider) {
         setEditingProvider(null);
@@ -124,6 +137,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
 
   const anthropicCred = credentials.find((c) => c.provider === "anthropic");
   const openAiCred = credentials.find((c) => c.provider === "openai");
+  const openRouterCred = credentials.find((c) => c.provider === "openrouter");
 
   return (
     <div className="byok-settings">
@@ -153,17 +167,19 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
         <CardHairline className="organiser__panel">
           <form className="organiser-form byok-form" onSubmit={(e) => void handleSave(e)} noValidate>
             <h3 className="byok-card__title">
-              Configure {editingProvider === "anthropic" ? "Anthropic" : "OpenAI"} Key
+              Configure {providerLabel(editingProvider)} Key
             </h3>
 
             <TextField
               id="byok-api-key"
               type="password"
-              label={`${editingProvider === "anthropic" ? "Anthropic" : "OpenAI"} API Key`}
+              label={`${providerLabel(editingProvider)} API Key`}
               help={
                 editingProvider === "anthropic"
                   ? "Begins with sk-ant-..."
-                  : "Begins with sk-proj-... or sk-..."
+                  : editingProvider === "openai"
+                    ? "Begins with sk-proj-... or sk-..."
+                    : "Begins with sk-or-..."
               }
               value={keyInput}
               onChange={setKeyInput}
@@ -344,6 +360,81 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
                   type="button"
                   className="button-secondary"
                   onClick={() => setConfirmingDelete("openai")}
+                  disabled={loading || saving}
+                >
+                  Delete
+                </button>
+              ))}
+          </div>
+        </CardHairline>
+
+        {/* OpenRouter Card */}
+        <CardHairline className="byok-card">
+          <div className="byok-card__header">
+            <h3 className="byok-card__title">OpenRouter</h3>
+            <span
+              className={
+                openRouterCred
+                  ? "byok-card__badge byok-card__badge--active"
+                  : "byok-card__badge byok-card__badge--inactive"
+              }
+            >
+              {openRouterCred ? "Active" : "Not configured"}
+            </span>
+          </div>
+
+          <p className="byok-card__desc">
+            DeepSeek, Llama 3.3, Mistral, and other models via OpenRouter (OpenAI-compatible).
+          </p>
+
+          {openRouterCred && (
+            <div className="byok-card__meta">
+              <div>
+                Key: <code>{openRouterCred.keyHint}</code>
+              </div>
+              <div>
+                Monthly Cap:{" "}
+                {openRouterCred.spendLimitCents != null
+                  ? `$${(openRouterCred.spendLimitCents / 100).toFixed(2)} / month`
+                  : "No cap"}
+              </div>
+            </div>
+          )}
+
+          <div className="byok-card__actions">
+            <button
+              type="button"
+              className="button-primary button-primary--surface"
+              onClick={() => handleOpenEdit("openrouter")}
+              disabled={loading || saving}
+            >
+              {openRouterCred ? "Update Key" : "Configure Key"}
+            </button>
+            {openRouterCred &&
+              (confirmingDelete === "openrouter" ? (
+                <>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => void handleDelete("openrouter")}
+                    disabled={loading || saving}
+                  >
+                    Confirm delete
+                  </button>
+                  <button
+                    type="button"
+                    className="button-secondary"
+                    onClick={() => setConfirmingDelete(null)}
+                    disabled={loading || saving}
+                  >
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="button-secondary"
+                  onClick={() => setConfirmingDelete("openrouter")}
                   disabled={loading || saving}
                 >
                   Delete

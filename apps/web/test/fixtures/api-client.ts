@@ -118,6 +118,10 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       questions: [],
       usage: { promptTokens: 0, completionTokens: 0, estimatedCostCents: 0 },
     }),
+    commitDraftQuestions: async () => ({
+      importedCount: 0,
+      bankId: "",
+    }),
 
     ...overrides,
   };

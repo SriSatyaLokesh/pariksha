@@ -784,21 +784,26 @@ export interface ApiClient {
   getByok(workspaceId: string): Promise<{ credentials: ByokCredential[]; usage: ByokUsage }>;
   saveByokKey(
     workspaceId: string,
-    provider: "anthropic" | "openai",
+    provider: "anthropic" | "openai" | "openrouter",
     apiKey: string,
     spendLimitCents?: number | null,
   ): Promise<{ credential: ByokCredential }>;
-  deleteByokKey(workspaceId: string, provider: "anthropic" | "openai"): Promise<void>;
+  deleteByokKey(workspaceId: string, provider: "anthropic" | "openai" | "openrouter"): Promise<void>;
   draftAiQuestions(
     workspaceId: string,
     bankId: string,
     options: DraftAiOptions,
   ): Promise<DraftAiResult>;
+  commitDraftQuestions(
+    workspaceId: string,
+    bankId: string,
+    questions: Question[],
+  ): Promise<{ importedCount: number; bankId: string }>;
 }
 
 export interface ByokCredential {
   id: string;
-  provider: "anthropic" | "openai";
+  provider: "anthropic" | "openai" | "openrouter";
   keyHint: string;
   spendLimitCents: number | null;
   status: "active" | "revoked";
@@ -815,13 +820,15 @@ export interface ByokUsage {
 
 export interface DraftAiOptions {
   prompt: string;
-  count: number;
-  types?: QuestionType[];
-  provider?: "anthropic" | "openai";
+  count?: number;
+  types?: (QuestionType | string)[];
+  provider?: "anthropic" | "openai" | "openrouter" | string;
+  model?: string;
 }
 
 export interface DraftAiResult {
   questions: Question[];
+  validationIssues?: Array<{ field?: string; message: string }>;
   usage: {
     promptTokens: number;
     completionTokens: number;
@@ -1612,7 +1619,38 @@ export function createApiClient(): ApiClient {
 
     draftAiQuestions: (workspaceId, bankId, options) =>
       json<DraftAiResult>(`/workspaces/${workspaceId}/banks/${bankId}/draft-ai`, post(options)),
+
+    commitDraftQuestions: (workspaceId, bankId, questions) =>
+      json<{ importedCount: number; bankId: string }>(
+        `/workspaces/${workspaceId}/banks/${bankId}/draft-ai/commit`,
+        post({ questions }),
+      ),
   };
+}
+
+export async function draftAiQuestions(
+  workspaceId: string,
+  bankId: string,
+  options: { prompt: string; count?: number; types?: string[]; provider?: string; model?: string },
+): Promise<{
+  questions: Question[];
+  validationIssues: Array<{ field?: string; message: string }>;
+  usage: { promptTokens: number; completionTokens: number; estimatedCostCents: number };
+}> {
+  const result = await createApiClient().draftAiQuestions(workspaceId, bankId, options as DraftAiOptions);
+  return {
+    questions: result.questions,
+    validationIssues: result.validationIssues ?? [],
+    usage: result.usage,
+  };
+}
+
+export async function commitDraftQuestions(
+  workspaceId: string,
+  bankId: string,
+  questions: Question[],
+): Promise<{ importedCount: number; bankId: string }> {
+  return createApiClient().commitDraftQuestions(workspaceId, bankId, questions);
 }
 
 function isCandidateReport(value: unknown): value is CandidateImportReport {
