@@ -48,6 +48,7 @@ export function buildLlmsTxt(siteUrl: string): string {
 > ${META_DESCRIPTION}
 
 - [Pariksha](${home}): what it is, how running an exam works, what it costs
+- [Interactive Live Demo](${home}exam?demo=true): test-drive the candidate exam runtime (12 question types, floating calculator, proctoring, access code DEMO)
 - [Repository](https://github.com/SriSatyaLokesh/pariksha): source, issues, the build
 - [Question format](https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/question-format.md): the JSON Schema for every question type
 - [PRD](https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/PRD.md): product requirements and scope

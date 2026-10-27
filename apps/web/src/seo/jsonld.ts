@@ -62,6 +62,11 @@ export function buildJsonLd({ siteUrl, dateModified }: JsonLdOptions) {
         sameAs: REPO,
         publisher: { "@id": `${home}#organization` },
         isBasedOn: { "@id": `${home}#sourcecode` },
+        potentialAction: {
+          "@type": "PlayAction",
+          name: "Try Interactive Demo",
+          target: `${home}exam?demo=true`,
+        },
       },
       {
         "@type": "SoftwareSourceCode",
