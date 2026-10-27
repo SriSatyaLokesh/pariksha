@@ -248,6 +248,34 @@ describe("BYOK HTTP Endpoints (Phase 12)", () => {
     expect(body.error.code).toBe("missing_byok_key");
   });
 
+  it("GET /byok/models returns supported models and pricing catalog", async () => {
+    const res = await app.request(`/api/v1/workspaces/${wspId}/byok/models`, {
+      method: "GET",
+      headers: { cookie: authorCookie },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { models: Array<{ id: string; provider: string }> };
+    expect(Array.isArray(body.models)).toBe(true);
+    expect(body.models.some((m) => m.id === "claude-sonnet-5-5")).toBe(true);
+    expect(body.models.some((m) => m.id === "gpt-6.1-sol")).toBe(true);
+    expect(body.models.some((m) => m.id === "deepseek/deepseek-v4.1-flash")).toBe(true);
+  });
+
+  it("PUT /byok/openrouter allows configuring OpenRouter API keys", async () => {
+    const res = await app.request(`/api/v1/workspaces/${wspId}/byok/openrouter`, {
+      method: "PUT",
+      headers: { "content-type": "application/json", cookie: ownerCookie },
+      body: JSON.stringify({
+        apiKey: "sk-or-v1-abcdef123456",
+        spendLimitCents: 5000,
+      }),
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { credential: { provider: string; keyHint: string } };
+    expect(body.credential.provider).toBe("openrouter");
+    expect(body.credential.keyHint).toContain("sk-or-");
+  });
+
   it("refuses unauthorized requests with 401 without cookie", async () => {
     const res = await app.request(`/api/v1/workspaces/${wspId}/byok`, {
       method: "GET",

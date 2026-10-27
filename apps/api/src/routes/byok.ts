@@ -18,6 +18,12 @@ import { ApiError } from "../errors.js";
 import { requires } from "../middleware/authorize.js";
 import { encryptApiKey, formatKeyHint } from "../byok/crypto.js";
 import { draftQuestions, commitDraftQuestions } from "../byok/draft.js";
+import {
+  getAllSupportedModels,
+  fetchLiveOpenRouterModels,
+  ANTHROPIC_MODELS,
+  OPENAI_MODELS,
+} from "../byok/models.js";
 
 const putKeySchema = z.object({
   apiKey: z.string().min(1).max(500),
@@ -28,7 +34,7 @@ const draftAiSchema = z.object({
   prompt: z.string().min(1).max(10000),
   count: z.number().int().min(1).max(10).default(3),
   types: z.array(z.enum(QUESTION_TYPES)).optional(),
-  provider: z.enum(["anthropic", "openai"]).optional(),
+  provider: z.enum(["anthropic", "openai", "openrouter"]).optional(),
   model: z.string().optional(),
   baseUrl: z.string().optional(),
 });
@@ -38,8 +44,8 @@ const commitDraftSchema = z.object({
 });
 
 function validProviderOr400(param: string): ByokProvider {
-  if (param !== "anthropic" && param !== "openai") {
-    throw new ApiError(400, "invalid_provider", `Unsupported provider "${param}". Must be "anthropic" or "openai".`);
+  if (param !== "anthropic" && param !== "openai" && param !== "openrouter") {
+    throw new ApiError(400, "invalid_provider", `Unsupported provider "${param}". Must be "anthropic", "openai", or "openrouter".`);
   }
   return param;
 }
@@ -53,6 +59,20 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
     const credentials = await listByokCredentials(deps.db, workspaceId);
     const usage = await getByokUsageSummary(deps.db, workspaceId);
     return c.json({ credentials, usage });
+  });
+
+  // GET /api/v1/workspaces/:id/byok/models
+  routes.get("/:id/byok/models", requires("banks.edit"), async (c) => {
+    const live = c.req.query("live") === "true";
+    if (live) {
+      const liveOpenRouter = await fetchLiveOpenRouterModels();
+      if (liveOpenRouter.length > 0) {
+        return c.json({
+          models: [...ANTHROPIC_MODELS, ...OPENAI_MODELS, ...liveOpenRouter],
+        });
+      }
+    }
+    return c.json({ models: getAllSupportedModels() });
   });
 
   // PUT /api/v1/workspaces/:id/byok/:provider

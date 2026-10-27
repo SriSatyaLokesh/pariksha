@@ -5,11 +5,41 @@ import type { ModelMetadata, ModelPricing } from "./types.js";
 
 export const ANTHROPIC_MODELS: ModelMetadata[] = [
   {
+    id: "claude-sonnet-5-5",
+    name: "Claude Sonnet 5.5",
+    provider: "anthropic",
+    pricing: { promptPerMillionCents: 200, completionPerMillionCents: 1000 },
+    recommended: true,
+  },
+  {
+    id: "claude-haiku-5-5",
+    name: "Claude Haiku 5.5",
+    provider: "anthropic",
+    pricing: { promptPerMillionCents: 10, completionPerMillionCents: 50 },
+  },
+  {
+    id: "claude-opus-5-5",
+    name: "Claude Opus 5.5",
+    provider: "anthropic",
+    pricing: { promptPerMillionCents: 400, completionPerMillionCents: 2000 },
+  },
+  {
+    id: "claude-fable-5-1",
+    name: "Claude Fable 5.1",
+    provider: "anthropic",
+    pricing: { promptPerMillionCents: 1000, completionPerMillionCents: 5000 },
+  },
+  {
+    id: "claude-3-7-sonnet",
+    name: "Claude 3.7 Sonnet",
+    provider: "anthropic",
+    pricing: { promptPerMillionCents: 300, completionPerMillionCents: 1500 },
+  },
+  {
     id: "claude-3-5-sonnet-20241022",
     name: "Claude 3.5 Sonnet",
     provider: "anthropic",
     pricing: { promptPerMillionCents: 300, completionPerMillionCents: 1500 },
-    recommended: true,
   },
   {
     id: "claude-3-5-haiku-20241022",
@@ -23,21 +53,51 @@ export const ANTHROPIC_MODELS: ModelMetadata[] = [
     provider: "anthropic",
     pricing: { promptPerMillionCents: 1500, completionPerMillionCents: 7500 },
   },
-  {
-    id: "claude-3-7-sonnet",
-    name: "Claude 3.7 Sonnet",
-    provider: "anthropic",
-    pricing: { promptPerMillionCents: 300, completionPerMillionCents: 1500 },
-  },
 ];
 
 export const OPENAI_MODELS: ModelMetadata[] = [
+  {
+    id: "gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    provider: "openai",
+    pricing: { promptPerMillionCents: 200, completionPerMillionCents: 1000 },
+    recommended: true,
+  },
+  {
+    id: "gpt-6.1-terra",
+    name: "GPT-6.1 Terra",
+    provider: "openai",
+    pricing: { promptPerMillionCents: 100, completionPerMillionCents: 500 },
+  },
+  {
+    id: "gpt-6-luna",
+    name: "GPT-6 Luna",
+    provider: "openai",
+    pricing: { promptPerMillionCents: 10, completionPerMillionCents: 50 },
+  },
+  {
+    id: "gpt-6-astra",
+    name: "GPT-6 Astra",
+    provider: "openai",
+    pricing: { promptPerMillionCents: 1000, completionPerMillionCents: 5000 },
+  },
+  {
+    id: "o3-mini",
+    name: "o3 Mini",
+    provider: "openai",
+    pricing: { promptPerMillionCents: 110, completionPerMillionCents: 440 },
+  },
+  {
+    id: "o3",
+    name: "o3 Standard",
+    provider: "openai",
+    pricing: { promptPerMillionCents: 200, completionPerMillionCents: 800 },
+  },
   {
     id: "gpt-4o-mini",
     name: "GPT-4o mini",
     provider: "openai",
     pricing: { promptPerMillionCents: 15, completionPerMillionCents: 60 },
-    recommended: true,
   },
   {
     id: "gpt-4o",
@@ -57,21 +117,39 @@ export const OPENAI_MODELS: ModelMetadata[] = [
     provider: "openai",
     pricing: { promptPerMillionCents: 300, completionPerMillionCents: 1200 },
   },
-  {
-    id: "o3-mini",
-    name: "o3 Mini",
-    provider: "openai",
-    pricing: { promptPerMillionCents: 110, completionPerMillionCents: 440 },
-  },
 ];
 
 export const OPENROUTER_MODELS: ModelMetadata[] = [
+  {
+    id: "deepseek/deepseek-v4.1-flash",
+    name: "DeepSeek V4.1 Flash",
+    provider: "openrouter",
+    pricing: { promptPerMillionCents: 14, completionPerMillionCents: 42 },
+    recommended: true,
+  },
   {
     id: "deepseek/deepseek-chat",
     name: "DeepSeek V3",
     provider: "openrouter",
     pricing: { promptPerMillionCents: 14, completionPerMillionCents: 28 },
-    recommended: true,
+  },
+  {
+    id: "anthropic/claude-sonnet-5.5",
+    name: "Claude Sonnet 5.5 (OpenRouter)",
+    provider: "openrouter",
+    pricing: { promptPerMillionCents: 200, completionPerMillionCents: 1000 },
+  },
+  {
+    id: "anthropic/claude-haiku-5.5",
+    name: "Claude Haiku 5.5 (OpenRouter)",
+    provider: "openrouter",
+    pricing: { promptPerMillionCents: 10, completionPerMillionCents: 50 },
+  },
+  {
+    id: "openai/gpt-6.1-terra",
+    name: "GPT-6.1 Terra (OpenRouter)",
+    provider: "openrouter",
+    pricing: { promptPerMillionCents: 100, completionPerMillionCents: 500 },
   },
   {
     id: "meta-llama/llama-3.3-70b-instruct",
@@ -176,4 +254,41 @@ export function calculateCostCents(
     1_000_000;
 
   return Math.max(1, Math.round(cost));
+}
+
+/**
+ * Fetches live models and pricing dynamically from OpenRouter's public API.
+ * Maps prompt/completion rates to USD cents per million tokens.
+ */
+export async function fetchLiveOpenRouterModels(): Promise<ModelMetadata[]> {
+  try {
+    const res = await fetch("https://openrouter.ai/api/v1/models", {
+      headers: { "Content-Type": "application/json" },
+    });
+    if (!res.ok) return [];
+    const data = (await res.json()) as {
+      data?: Array<{
+        id: string;
+        name: string;
+        pricing?: { prompt?: string; completion?: string };
+      }>;
+    };
+    if (!Array.isArray(data.data)) return [];
+
+    return data.data.map((m) => {
+      const promptRate = parseFloat(m.pricing?.prompt ?? "0");
+      const completionRate = parseFloat(m.pricing?.completion ?? "0");
+      return {
+        id: m.id,
+        name: m.name,
+        provider: "openrouter",
+        pricing: {
+          promptPerMillionCents: Math.round(promptRate * 1_000_000 * 100),
+          completionPerMillionCents: Math.round(completionRate * 1_000_000 * 100),
+        },
+      };
+    });
+  } catch {
+    return [];
+  }
 }

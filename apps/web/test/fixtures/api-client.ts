@@ -122,6 +122,7 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
       importedCount: 0,
       bankId: "",
     }),
+    listByokModels: async () => ({ models: [] }),
 
     ...overrides,
   };

@@ -71,5 +71,8 @@ export function formatKeyHint(key: string): string {
   if (trimmed.startsWith("sk-proj-")) {
     return `sk-proj-...${last4}`;
   }
+  if (trimmed.startsWith("sk-or-")) {
+    return `sk-or-...${last4}`;
+  }
   return `sk-...${last4}`;
 }

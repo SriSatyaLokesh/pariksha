@@ -873,6 +873,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // Phase 12: BYOK encrypted API keys and AI question drafting (S-15).
   "/api/v1/workspaces/:id/byok": 4,
   "/api/v1/workspaces/:id/byok/:provider": 4,
+  "/api/v1/workspaces/:id/byok/models": 4,
   "/api/v1/workspaces/:id/banks/:bankId/draft-ai": 10,
   "/api/v1/workspaces/:id/banks/:bankId/draft-ai/commit": 10,
 
@@ -1027,6 +1028,7 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "keys.manage",
   // Phase 12: BYOK credentials and AI drafting
   "GET /api/v1/workspaces/:id/byok": "keys.manage",
+  "GET /api/v1/workspaces/:id/byok/models": "banks.edit",
   "PUT /api/v1/workspaces/:id/byok/:provider": "keys.manage",
   "DELETE /api/v1/workspaces/:id/byok/:provider": "keys.manage",
   "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai": "banks.edit",
@@ -1333,6 +1335,7 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "DELETE /api/v1/workspaces/:id/keys/:keyId": "workspace",
   // Phase 12: BYOK credentials and AI drafting
   "GET /api/v1/workspaces/:id/byok": "workspace",
+  "GET /api/v1/workspaces/:id/byok/models": "workspace",
   "PUT /api/v1/workspaces/:id/byok/:provider": "workspace",
   "DELETE /api/v1/workspaces/:id/byok/:provider": "workspace",
   "POST /api/v1/workspaces/:id/banks/:bankId/draft-ai": "workspace",

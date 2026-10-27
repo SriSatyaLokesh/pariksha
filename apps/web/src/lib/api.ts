@@ -799,6 +799,17 @@ export interface ApiClient {
     bankId: string,
     questions: Question[],
   ): Promise<{ importedCount: number; bankId: string }>;
+  listByokModels(
+    workspaceId: string,
+    live?: boolean,
+  ): Promise<{
+    models: Array<{
+      id: string;
+      name: string;
+      provider: string;
+      pricing: { promptPerMillionCents: number; completionPerMillionCents: number };
+    }>;
+  }>;
 }
 
 export interface ByokCredential {
@@ -1625,6 +1636,16 @@ export function createApiClient(): ApiClient {
         `/workspaces/${workspaceId}/banks/${bankId}/draft-ai/commit`,
         post({ questions }),
       ),
+
+    listByokModels: (workspaceId, live = false) =>
+      json<{
+        models: Array<{
+          id: string;
+          name: string;
+          provider: string;
+          pricing: { promptPerMillionCents: number; completionPerMillionCents: number };
+        }>;
+      }>(`/workspaces/${workspaceId}/byok/models${live ? "?live=true" : ""}`),
   };
 }
 

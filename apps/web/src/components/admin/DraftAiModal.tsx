@@ -45,21 +45,32 @@ const CURATED_MODELS: Record<
   Array<{ id: string; label: string }>
 > = {
   anthropic: [
-    { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet (Recommended)" },
-    { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
-    { id: "claude-3-opus-20240229", label: "Claude 3 Opus" },
+    { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 (Recommended)" },
+    { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
+    { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
+    { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
     { id: "claude-3-7-sonnet", label: "Claude 3.7 Sonnet" },
+    { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
+    { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
     { id: "custom", label: "Custom model..." },
   ],
   openai: [
-    { id: "gpt-4o-mini", label: "GPT-4o mini (Recommended)" },
-    { id: "gpt-4o", label: "GPT-4o" },
-    { id: "o1-preview", label: "o1 Preview" },
+    { id: "gpt-6.1-sol", label: "GPT-6.1 Sol (Recommended)" },
+    { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
+    { id: "gpt-6-luna", label: "GPT-6 Luna" },
+    { id: "gpt-6-astra", label: "GPT-6 Astra" },
     { id: "o3-mini", label: "o3 Mini" },
+    { id: "o3", label: "o3 Standard" },
+    { id: "gpt-4o", label: "GPT-4o" },
+    { id: "gpt-4o-mini", label: "GPT-4o mini" },
     { id: "custom", label: "Custom model..." },
   ],
   openrouter: [
-    { id: "deepseek/deepseek-chat", label: "DeepSeek V3 (Recommended)" },
+    { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash (Recommended)" },
+    { id: "deepseek/deepseek-chat", label: "DeepSeek V3" },
+    { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5 (via OpenRouter)" },
+    { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5 (via OpenRouter)" },
+    { id: "openai/gpt-6.1-terra", label: "GPT-6.1 Terra (via OpenRouter)" },
     { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B Instruct" },
     { id: "mistralai/mistral-large-2411", label: "Mistral Large 2411" },
     { id: "custom", label: "Custom model..." },
@@ -86,7 +97,7 @@ export function DraftAiModal({
     "true_false",
   ]);
   const [provider, setProvider] = useState<Provider>("anthropic");
-  const [selectedModel, setSelectedModel] = useState<string>("claude-3-5-sonnet-20241022");
+  const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5-5");
   const [customModel, setCustomModel] = useState("");
 
   // Review states
