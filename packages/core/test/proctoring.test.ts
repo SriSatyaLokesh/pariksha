@@ -9,6 +9,7 @@ import { describe, expect, it } from "vitest";
 import {
   anyProctoringControlActive,
   CANDIDATE_PROCTORING_EVENTS,
+  detailFor,
   FAILURE_EVENTS,
   isViolation,
   KB_PER_MB,
@@ -128,17 +129,15 @@ describe("resolveProctoring", () => {
     expect(resolveProctoring({ profile: "strict", overrides: { face_check: true } }).faceCheck).toBe(false);
   });
 
-  // Q12b (issue #209) — pre-cut the same way Q3 cut faceCheck. Positive
-  // control first: the same override object resolves every OTHER control it
-  // sets, proving the input is real and the query is right, before the
-  // negative assertion that requireMicrophone alone is refused.
-  it("resolves requireMicrophone false even when the document asks for it, leaving its sibling overrides honoured", () => {
-    const r = resolveProctoring({
-      profile: "off",
-      overrides: { require_microphone: true, desktop_only: true },
-    });
-    expect(r.desktopOnly).toBe(true);
-    expect(r.requireMicrophone).toBe(false);
+  it("resolves require_microphone: true when explicitly overridden", () => {
+    const resolved = resolveProctoring({ profile: "off", overrides: { require_microphone: true } });
+    expect(resolved.requireMicrophone).toBe(true);
+  });
+
+  it("defaults requireMicrophone to false across off, standard, and strict profiles", () => {
+    expect(resolveProctoring({ profile: "off" }).requireMicrophone).toBe(false);
+    expect(resolveProctoring({ profile: "standard" }).requireMicrophone).toBe(false);
+    expect(resolveProctoring({ profile: "strict" }).requireMicrophone).toBe(false);
   });
 
   // Phase 7e Task 1 (#213) restores this: `violationAction` was refused
@@ -246,21 +245,11 @@ describe("proctoringRequirements", () => {
     expect(lines.join(" ")).not.toMatch(/every 60 seconds/i);
   });
 
-  // Q12b (issue #209) — pre-cut. `require_microphone: true` never resolves
-  // true (see `resolveProctoring` above), so this sentence can never fire;
-  // shipping it anyway would promise a candidate an enforcement that does
-  // not exist. Positive control first: the same Strict-profile override
-  // object still emits the camera and watermark sentences that configuration
-  // should produce — proving this is a real configuration whose output the
-  // query actually inspects, not an empty list the assertion below passes
-  // against for free.
-  it("omits the microphone sentence even when require_microphone is overridden true, while still naming the camera and watermark", () => {
-    const lines = proctoringRequirements(
-      resolveProctoring({ profile: "strict", overrides: { require_microphone: true } }),
+  it("emits the exact candidate microphone disclosure sentence", () => {
+    const resolved = resolveProctoring({ overrides: { require_microphone: true } });
+    expect(proctoringRequirements(resolved)).toContain(
+      "Your microphone is on. Noise level is monitored; no audio is recorded or stored."
     );
-    expect(lines.join(" ")).toMatch(/camera/i);
-    expect(lines.join(" ")).toMatch(/watermark/i);
-    expect(lines.join(" ")).not.toMatch(/microphone/i);
   });
 });
 
@@ -387,6 +376,17 @@ describe("proctoring events", () => {
 
   it("does not count noise toward a limit", () => {
     expect(isViolation("noise_above_threshold")).toBe(false);
+    expect(FAILURE_EVENTS.has("noise_above_threshold")).toBe(false);
+  });
+
+  it("serialises noise_above_threshold detail carrying only durationMs", () => {
+    expect(detailFor(1250)).toEqual({ durationMs: 1250 });
+    expect(JSON.parse(JSON.stringify(detailFor(1250)))).toEqual({ durationMs: 1250 });
+  });
+
+  it("keeps noise_above_threshold non-punitive (neither violation nor failure event)", () => {
+    expect(isViolation("noise_above_threshold")).toBe(false);
+    expect(VIOLATION_EVENTS.has("noise_above_threshold")).toBe(false);
     expect(FAILURE_EVENTS.has("noise_above_threshold")).toBe(false);
   });
 });

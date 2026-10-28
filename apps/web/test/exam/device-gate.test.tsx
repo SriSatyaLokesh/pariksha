@@ -126,6 +126,108 @@ it.each(SIGNATURES)("admits $name when desktop_only is off", (sig) => {
   });
 });
 
+const UNSUPPORTED_BROWSER_UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Lynx/2.9";
+
+it("refuses unsupported browser when any proctoring control is active", () => {
+  stubDevice({
+    name: "desktop with unsupported browser",
+    width: 1440,
+    pointerFine: true,
+    ua: UNSUPPORTED_BROWSER_UA,
+    refused: true,
+  });
+  const rDesktop = deviceReport({ ...offResolved, desktopOnly: true });
+  expect(rDesktop.refused).toBe(true);
+  expect(rDesktop.refusedReason).toBe("browser");
+
+  const rCam = deviceReport({ ...offResolved, desktopOnly: false, requireCamera: true });
+  expect(rCam.refused).toBe(true);
+  expect(rCam.refusedReason).toBe("browser");
+
+  const rCopy = deviceReport({ ...offResolved, desktopOnly: false, blockCopyPaste: true });
+  expect(rCopy.refused).toBe(true);
+  expect(rCopy.refusedReason).toBe("browser");
+});
+
+it("admits unsupported browser when proctoring is off (honesty without refusal)", () => {
+  stubDevice({
+    name: "desktop with unsupported browser",
+    width: 1440,
+    pointerFine: true,
+    ua: UNSUPPORTED_BROWSER_UA,
+    refused: false,
+  });
+  const r = deviceReport(offResolved);
+  expect(r.refused).toBe(false);
+  expect(r.refusedReason).toBeNull();
+  expect(r.ok).toBe(false);
+  const browserFinding = r.findings.find((f) => f.label === "Browser");
+  expect(browserFinding?.ok).toBe(false);
+});
+
+it("distinguishes between desktop and browser refusal reasons", () => {
+  stubDevice(SIGNATURES[0]);
+  const rMobile = deviceReport({ ...offResolved, desktopOnly: true });
+  expect(rMobile.refused).toBe(true);
+  expect(rMobile.refusedReason).toBe("desktop");
+
+  stubDevice({
+    name: "desktop with unsupported browser",
+    width: 1440,
+    pointerFine: true,
+    ua: UNSUPPORTED_BROWSER_UA,
+    refused: true,
+  });
+  const rBrowser = deviceReport({ ...offResolved, desktopOnly: true });
+  expect(rBrowser.refused).toBe(true);
+  expect(rBrowser.refusedReason).toBe("browser");
+
+  stubDevice({
+    name: "mobile with unsupported browser",
+    width: 390,
+    pointerFine: false,
+    ua: UNSUPPORTED_BROWSER_UA,
+    refused: true,
+  });
+  const rNonDesktop = deviceReport({ ...offResolved, desktopOnly: false, requireCamera: true });
+  expect(rNonDesktop.refused).toBe(true);
+  expect(rNonDesktop.refusedReason).toBe("browser");
+
+  stubDevice(SIGNATURES[3]);
+  const rCompliant = deviceReport({ ...offResolved, desktopOnly: true });
+  expect(rCompliant.refused).toBe(false);
+  expect(rCompliant.refusedReason).toBeNull();
+});
+
+it("announces browser requirement message in exam-device-blocked when browser is unsupported", async () => {
+  stubDevice({
+    name: "desktop with unsupported browser",
+    width: 1440,
+    pointerFine: true,
+    ua: UNSUPPORTED_BROWSER_UA,
+    refused: true,
+  });
+  render(
+    <ExamApp
+      client={clientFor({
+        ...landingFixture,
+        proctoring: { profile: "strict", requirements: STRICT_DESKTOP_REQUIREMENTS },
+      })}
+    />,
+  );
+  await screen.findByRole("heading", { level: 1 });
+  const start = screen.getByRole("button", { name: /Start/ });
+  expect(start).toBeDisabled();
+  expect(
+    await screen.findByText(
+      "This test requires a fully updated Chrome, Edge, Firefox or Safari. Please open this link in a supported browser.",
+    ),
+  ).toBeVisible();
+  expect(start).toHaveAccessibleDescription(
+    /This test requires a fully updated Chrome, Edge, Firefox or Safari\. Please open this link in a supported browser\./,
+  );
+});
+
 // --- the landing page's gate ----------------------------------------------
 
 const DAY = 86_400_000;

@@ -43,7 +43,7 @@ import {
   type ResolvedProctoring,
 } from "@pariksha/core";
 import { captureJpeg } from "../../src/lib/camera";
-import { ExamApp, writeRegistrationToken } from "../../src/routes/exam";
+import { ExamApp, ExamLanding, writeRegistrationToken } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -133,15 +133,16 @@ const user = {
   },
 };
 
-function fakeTrack(): MediaStreamTrack {
-  return { kind: "video", stop: vi.fn() } as unknown as MediaStreamTrack;
+function fakeTrack(kind: "video" | "audio" = "video"): MediaStreamTrack {
+  return { kind, readyState: "live", stop: vi.fn() } as unknown as MediaStreamTrack;
 }
 
 /** A plain object shaped like a `MediaStream` — jsdom has no `MediaStream`
  *  constructor to instantiate for real (D-R3). */
 function fakeStream(tracks: MediaStreamTrack[] = [fakeTrack()]): MediaStream {
   return {
-    getVideoTracks: () => tracks,
+    getVideoTracks: () => tracks.filter((t) => t.kind === "video"),
+    getAudioTracks: () => tracks.filter((t) => t.kind === "audio"),
     getTracks: () => tracks,
   } as unknown as MediaStream;
 }
@@ -162,8 +163,8 @@ async function withCamera(opts: CameraOptions, fn: () => Promise<void>): Promise
   } else {
     const stream = opts.stream ?? fakeStream();
     const getUserMedia = opts.denied
-      ? () => Promise.reject(Object.assign(new Error("Permission denied"), { name: "NotAllowedError" }))
-      : () => Promise.resolve(stream);
+      ? vi.fn(() => Promise.reject(Object.assign(new Error("Permission denied"), { name: "NotAllowedError" })))
+      : vi.fn(() => Promise.resolve(stream));
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
   }
   try {
@@ -303,6 +304,148 @@ describe("the camera start gate (P-05, Q2a)", () => {
       await openCandidateStart({ proctoring: { profile: "off", requirements: [] } });
       await user.click(screen.getByRole("button", { name: /Start/ }));
       expect(await screen.findByRole("radio", { name: /Option A/ })).toBeVisible();
+    });
+  });
+});
+
+describe("the inline device check gate on Start click (Task 3)", () => {
+  it("acquires camera inline and passes verified stream to onStart when camera is allowed on Start click", async () => {
+    stubDesktop();
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: {
+        profile: "strict",
+        requirements: ["A working camera is required for the whole test."],
+      },
+    };
+    const onStart = vi.fn();
+    await withCamera({}, async () => {
+      render(<ExamLanding test={test} onStart={onStart} />);
+      const startButton = screen.getByRole("button", { name: "Start Aptitude" });
+      await user.click(startButton);
+
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ getVideoTracks: expect.any(Function) }));
+    });
+  });
+
+  it("stays on landing page with cameraNotice and does not call onStart when camera is denied on Start click", async () => {
+    stubDesktop();
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: {
+        profile: "strict",
+        requirements: ["A working camera is required for the whole test."],
+      },
+    };
+    const onStart = vi.fn();
+    await withCamera({ denied: true }, async () => {
+      render(<ExamLanding test={test} onStart={onStart} />);
+      const startButton = screen.getByRole("button", { name: "Start Aptitude" });
+
+      await user.click(startButton);
+      expect(onStart).not.toHaveBeenCalled();
+      expect(await screen.findByText(/This test needs a working camera/i)).toBeVisible();
+
+      // Subsequent click also stays blocked
+      await user.click(startButton);
+      expect(onStart).not.toHaveBeenCalled();
+    });
+  });
+
+  it("calls onStart immediately without opening device test when camera is not required", async () => {
+    stubDesktop();
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "off", requirements: [] },
+    };
+    const onStart = vi.fn();
+    await withCamera({}, async () => {
+      render(<ExamLanding test={test} onStart={onStart} />);
+      const startButton = screen.getByRole("button", { name: "Start Aptitude" });
+
+      await user.click(startButton);
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(screen.queryByLabelText(/Device test preview/i)).toBeNull();
+    });
+  });
+});
+
+describe("stream forwarding across start/registration to prevent duplicate permissions (Task 4)", () => {
+  it("does not call getUserMedia a second time during startWith when stream was verified on landing", async () => {
+    installFakeCanvas();
+    captureUploads();
+    stubDesktop();
+    const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: false };
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "strict", requirements: proctoringRequirements(resolved) },
+    };
+    writeRegistrationToken("tok_stream_forwarding");
+    const track = fakeTrack("video");
+    const stream = fakeStream([track]);
+
+    await withCamera({ stream }, async () => {
+      render(<ExamApp client={clientFor(test, paperFixture(resolved))} />);
+      await screen.findByRole("heading", { level: 1 });
+      const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+      expect(getUserMedia).toHaveBeenCalledTimes(0);
+
+      await user.click(await screen.findByRole("button", { name: /Start/ }));
+      await screen.findByRole("navigation", { name: /question palette/i });
+
+      // Only ONE call during inline landing device check; no duplicate call in startWith!
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("preserves stream across registration and does not re-acquire media in startWith", async () => {
+    installFakeCanvas();
+    captureUploads();
+    stubDesktop();
+    const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: false };
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "strict", requirements: proctoringRequirements(resolved) },
+    };
+    const track = fakeTrack("video");
+    const stream = fakeStream([track]);
+
+    const paper = paperFixture(resolved);
+    const client: RunClient = {
+      ...clientFor(test, paper),
+      access: vi.fn(() => Promise.resolve({ entryToken: "ent_forwarding" })),
+      form: vi.fn(() => Promise.resolve({ consent: null, form: { title: "Register", fields: [] } })),
+      register: vi.fn(() => Promise.resolve({ registrationToken: "reg_forwarding" })),
+      start: vi.fn(() => Promise.resolve(paper)),
+    };
+
+    await withCamera({ stream }, async () => {
+      render(<ExamApp client={client} />);
+      await screen.findByRole("heading", { level: 1 });
+      const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+      expect(getUserMedia).toHaveBeenCalledTimes(0);
+
+      // Start on landing: camera is required, inline check acquires it (call 1)
+      await user.click(await screen.findByRole("button", { name: /Start/ }));
+
+      // Moves to registration view
+      await screen.findByRole("heading", { level: 1, name: /register/i });
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+      // Pass access gate
+      fireEvent.change(screen.getByLabelText(/access code/i), { target: { value: "TESTCODE" } });
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+      // Complete registration
+      const registerButton = await screen.findByRole("button", { name: /register and start/i });
+      fireEvent.click(registerButton);
+
+      // Reaches attempt view
+      await screen.findByRole("navigation", { name: /question palette/i });
+
+      // Still only ONE getUserMedia call in total!
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
     });
   });
 });

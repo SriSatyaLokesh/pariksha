@@ -252,6 +252,61 @@
   color: var(--color-state-answered);
 }
 
+/* Phase 8.5 Task 4 (#209): Interactive Device Test Panel */
+.exam-device-test-panel {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+}
+
+.exam-device-test-panel h3 {
+  margin: 0 0 12px 0;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: 600;
+}
+
+.exam-camera-preview {
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  border-radius: var(--rounded-sm);
+  background: var(--color-ink);
+  display: block;
+  margin-bottom: 12px;
+}
+
+.exam-vu-meter-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.exam-vu-meter {
+  flex: 1;
+  max-width: 200px;
+  height: 12px;
+}
+
+.exam-mic-notice {
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  margin-bottom: 12px;
+}
+
+.exam-camera-notice {
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  margin-bottom: 12px;
+}
+
+.exam-device-test-dismiss {
+  margin-top: 8px;
+}
+
 .exam-landing-footer {
   padding: 24px 32px;
   border-top: 1px solid var(--color-hairline);

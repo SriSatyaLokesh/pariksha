@@ -446,7 +446,7 @@ export function ProctoringPanel({
           // enforcement refusal is `resolveProctoring`'s, not a fact about
           // what an imported document holds), so a document authored for
           // Phase 8 round-trips visibly even though nothing here can act on
-          // it yet.
+          // it yet. Tracked in issue 264.
           <div className="field" key="face_check">
             <label className="field-label" htmlFor={`${ids}-face_check`}>
               Count faces in each image
@@ -461,16 +461,11 @@ export function ProctoringPanel({
               }
             />
             <p className="field-help" id={faceCheckHelpId}>
-              On-device face counting ships in Phase 8. This control is disabled until then.
+              On-device face counting is tracked in Issue &#35;264. This control is disabled until then.
             </p>
             {faceCheckMarker?.node}
           </div>,
-          // `Q12b` (issue 209): pre-cut and shipped disabled, the same treatment as
-          // `face_check` above. The raw document value is shown, not
-          // `resolved.requireMicrophone` (always `false` — the enforcement
-          // refusal is `resolveProctoring`'s, not a fact about what an
-          // imported document holds), so a document authored for Phase 8
-          // round-trips visibly even though nothing here can act on it yet.
+          // Phase 8.5 / issue 209: microphone noise monitoring enabled.
           <div className="field" key="require_microphone">
             <label className="field-label" htmlFor={`${ids}-require_microphone`}>
               Require a microphone
@@ -478,8 +473,8 @@ export function ProctoringPanel({
             <input
               type="checkbox"
               id={`${ids}-require_microphone`}
-              checked={value.overrides.require_microphone ?? false}
-              disabled
+              checked={resolved.requireMicrophone}
+              onChange={(event) => setOverride("require_microphone", event.target.checked)}
               aria-describedby={
                 requireMicrophoneMarker === undefined
                   ? requireMicrophoneHelpId
@@ -487,7 +482,7 @@ export function ProctoringPanel({
               }
             />
             <p className="field-help" id={requireMicrophoneHelpId}>
-              Microphone noise monitoring ships in Phase 8. This control is disabled until then.
+              Monitors ambient noise level. No audio is ever recorded or stored.
             </p>
             {requireMicrophoneMarker?.node}
           </div>,
