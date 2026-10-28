@@ -36,8 +36,7 @@ export interface ResolvedProctoring {
   snapshotIntervalSeconds: number;
   /** Always resolves false in Phase 7: the control is pre-cut (`Q3`). */
   faceCheck: boolean;
-  /** Always resolves false in Phase 7: the control is pre-cut (`Q12b`,
-   *  issue #209). */
+  /** Phase 8.5 (#209): microphone noise monitoring enabled via overrides. */
   requireMicrophone: boolean;
   extraMonitorCheck: boolean;
   violationLimit: number;
@@ -82,9 +81,8 @@ export const PROFILE_LABEL: Readonly<Record<ProctoringProfile, string>> = {
 //   organiser who just picked a preset was never the plan.
 // - `face_check` is `false` on every row. `Q3` pre-cut it; see
 //   `resolveProctoring` below for why it is refused even when overridden.
-// - `require_microphone` is `false` on every row too, for the same reason:
-//   `Q12b`'s noise monitoring is pre-cut (issue #209), and `resolveProctoring`
-//   refuses the override below exactly as it refuses `face_check`'s.
+// - `require_microphone` is `false` on every row: profiles default it off,
+//   and organizers enable it explicitly via overrides (Phase 8.5, issue #209).
 // - `violation_action` was `warn_only` on every row from issue #214 until
 //   Phase 7e Task 1 (#213) gave it a consumer (`violationOutcome`) and
 //   restored Standard and Strict to their intended `warn_then_flag` —
@@ -193,12 +191,8 @@ export function resolveProctoring(
     // not an omission, a deliberate `false` regardless of profile or
     // override, so nothing in Phase 7 can act on it.
     faceCheck: false,
-    // #209: pre-cut, same as `faceCheck` immediately above. Accepted and
-    // round-tripped (Task 2) so a document authored for Phase 8 survives,
-    // but resolution refuses it outright — not an omission, a deliberate
-    // `false` regardless of profile or override, so nothing in Phase 7 can
-    // act on it.
-    requireMicrophone: false,
+    // Phase 8.5 (#209): microphone proctoring resolved from overrides or defaults.
+    requireMicrophone: overrideOr(overrides, "require_microphone", defaults.requireMicrophone),
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
     // M7: `PUT /draft` and `POST /tests/import` accept arbitrary JSON —
     // `violation_limit: 0` would lock (or flag `high_risk`) every candidate
@@ -373,7 +367,7 @@ export function proctoringRequirements(resolved: ResolvedProctoring): string[] {
     lines.push(`The camera captures an image every ${String(resolved.snapshotIntervalSeconds)} seconds.`);
   }
   if (resolved.requireMicrophone) {
-    lines.push("A working microphone is required for the whole test.");
+    lines.push("Your microphone is on. Noise level is monitored; no audio is recorded or stored.");
   }
   if (resolved.extraMonitorCheck) {
     // Review finding 2: nothing refuses or blocks on `extra_monitor` — it
@@ -518,3 +512,15 @@ export type CopyBlockedDetail = Record<string, never>;
 export type PasteBlockedDetail = Record<string, never>;
 export type ContextmenuBlockedDetail = Record<string, never>;
 export type ExtraMonitorDetail = Record<string, never>;
+
+/**
+ * #209: The event's `detail` contains only a duration — no samples, no levels,
+ * no derived audio features.
+ */
+export interface NoiseAboveThresholdDetail {
+  durationMs: number;
+}
+
+export function detailFor(durationMs: number): NoiseAboveThresholdDetail {
+  return { durationMs };
+}

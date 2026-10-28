@@ -20,7 +20,7 @@ export const SECURITY_HEADERS: Record<string, string> = {
   "X-Content-Type-Options": "nosniff",
   "Referrer-Policy": "no-referrer",
   "Permissions-Policy":
-    "camera=(self), microphone=(), geolocation=(), interest-cohort=()",
+    "camera=(self), microphone=(self), geolocation=(), interest-cohort=()",
   "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
 };
 

@@ -158,3 +158,12 @@ describe("L2: each scan's own pattern can really produce a hit", () => {
     expect(findings(publicJsFiles(dir), MEDIA_RECORDER_PATTERN)).toHaveLength(1);
   });
 });
+
+describe("K34: P-06 privacy invariant is documented in PRD", () => {
+  it("docs/PRD.md states that no audio is ever recorded or stored", () => {
+    const prdPath = resolve(REPO_ROOT, "docs/PRD.md");
+    const prd = readFileSync(prdPath, "utf8");
+    expect(prd).toContain("no audio is ever recorded or stored");
+  });
+});
+

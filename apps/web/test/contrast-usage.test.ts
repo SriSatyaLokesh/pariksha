@@ -667,6 +667,8 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // in `.exam-landing-body`.
   '.exam-device-report li[data-ok="false"] .exam-finding-mark': both("cream"),
   '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("cream"),
+  ".exam-mic-notice": both("canvas"),
+  ".exam-camera-notice": both("canvas"),
   ".exam-landing-footer": both("cream"),
 
   // ---- exam.css: registration (C-02/C-03, Task 6). The alert sits on the

@@ -147,6 +147,18 @@ it("lists Strict's requirements on the start page", async () => {
   expect(await screen.findByText(/A working camera, on for the whole test\./)).toBeVisible();
 });
 
+it("renders landing action buttons above proctoring requirements in DOM order", async () => {
+  const { container } = await mount();
+  const actionsElement = container.querySelector(".exam-landing-actions");
+  const requirementsElement = container.querySelector(".exam-landing-requirements");
+  expect(actionsElement).not.toBeNull();
+  expect(requirementsElement).not.toBeNull();
+  expect(
+    (actionsElement!.compareDocumentPosition(requirementsElement!) &
+      Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+  ).toBe(true);
+});
+
 // Review Focus 5 — most fixtures have no proctoring block at all, which
 // resolves to fully-populated Off: no requirements, and no heading over
 // an empty list either.

@@ -133,21 +133,22 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
   });
 
   // Review Focus 4 — the disabled control explains itself to a screen reader.
-  it("names the phase in the face check's own accessible description", async () => {
+  it("cites Issue #264 in the face check's own accessible description", async () => {
     await openProctoringPanel({});
     const control = screen.getByLabelText(/Count faces in each image/i);
     expect(control).toBeDisabled();
-    expect(control).toHaveAccessibleDescription(/Phase 8/);
+    expect(control).toHaveAccessibleDescription(/Issue #264/);
   });
 
-  // `Q12b`/#209: the microphone control gets the identical treatment as
-  // face check above — same disabled styling, same accessible-description
-  // voice.
-  it("names the phase in the microphone's own accessible description", async () => {
+  // `Q12b`/#209 / Phase 8.5: the microphone control is enabled and explains
+  // noise monitoring without storing audio.
+  it("enables the microphone control with ambient noise monitoring copy", async () => {
     await openProctoringPanel({});
     const control = screen.getByLabelText(/Require a microphone/i);
-    expect(control).toBeDisabled();
-    expect(control).toHaveAccessibleDescription(/Phase 8/);
+    expect(control).not.toBeDisabled();
+    expect(control).toHaveAccessibleDescription(
+      /Monitors ambient noise level\. No audio is ever recorded or stored\./i,
+    );
   });
 
   // Phase 7e Task 3: re-enabled — issue 214's disabled treatment is gone
@@ -189,17 +190,11 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
 // in the branch green. This table drives each control the way an organiser
 // would and asserts the key in the resulting `onChange` payload.
 //
-// Thirteen of the panel's fifteen override keys are driven below — eight
+// Fourteen of the panel's fifteen override keys are driven below — nine
 // checkboxes, four number boxes, and (since Phase 7e Task 3 re-enabled it)
-// `violation_action`'s own select. The other two, `face_check` and
-// `require_microphone`, ship permanently `disabled` (`Q3`, `Q12b`/#209 —
-// both pre-cut Phase 8 features), so there is no organiser gesture that can
-// drive either; "checking %s writes true" above has nothing to click for
-// them. Their labels and accessible descriptions are pinned by "names the
-// phase in the face check's/microphone's own accessible description"
-// above, and what each renders — the raw imported document value, never
-// the resolved one — is exercised by `proctoring-profile.test.tsx`'s
-// profile-change coverage of the same keys.
+// `violation_action`'s own select. The remaining one, `face_check`, ships
+// disabled (`Q3`, Issue #264), so there is no organiser gesture that can
+// drive it; "checking %s writes true" above has nothing to click for it.
 describe("each override key is written by the control its label names (branch-review Finding 2)", () => {
   it.each([
     ["Block phones and tablets", "desktop_only"],
@@ -210,6 +205,7 @@ describe("each override key is written by the control its label names (branch-re
     ["Allow the calculator", "allow_calculator"],
     ["Require a camera", "require_camera"],
     ["Identity photo", "identity_photo"],
+    ["Require a microphone", "require_microphone"],
   ] as const)("checking %s writes override.%s = true", async (label, key) => {
     const onChange = vi.fn();
     await openProctoringPanel({}, { onChange });

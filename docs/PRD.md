@@ -309,7 +309,7 @@ Each test picks a proctoring profile — Off, Standard or Strict — and can the
 - **P-03 Fullscreen.** The test starts only from a click that enters fullscreen. On exit, an overlay hides the questions until fullscreen is restored; the timer keeps running.
 - **P-04 Leaving the window.** `visibilitychange` and window `blur` record when the candidate left and how long they were away. On return, a modal shows "Leaving the test window is not allowed. Warning 2 of 5."
 - **P-05 Camera.** In Strict, the attempt cannot start without camera permission and a live frame. If the camera stops, is unplugged or goes black during the test, an overlay blocks the questions until it is back, and the outage is logged.
-- **P-06 Snapshots.** 320×240 JPEG (about 25 KB) at the set interval and on each violation, uploaded to private storage. No video and no audio are ever recorded.
+- **P-06 Snapshots.** 320×240 JPEG (about 25 KB) at the set interval and on each violation, uploaded to private storage. No video and no audio is ever recorded or stored.
 - **P-07 Face check.** An on-device model (MediaPipe) counts faces in each snapshot and flags none or several. No face data or biometric templates are stored.
 - **P-08 Extra monitors.** Where the browser exposes it (Window Management API in Chromium), a second screen is detected and logged.
 - **P-09 Violation limit.** Configurable count (default 5) and action: warn only, auto-submit, or lock the attempt pending proctor review.
