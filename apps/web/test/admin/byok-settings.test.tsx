@@ -73,6 +73,35 @@ describe("ByokSettings — unconfigured state", () => {
 
     expect(screen.getByText("Total Tokens")).toBeInTheDocument();
     expect(screen.getByText("$0.00")).toBeInTheDocument();
+
+    // Dynamically derived model catalog from models.ts
+    expect(screen.getAllByText(/Claude Sonnet 5\.5/)).toHaveLength(2);
+    expect(screen.getByText(/GPT-6\.1 Sol/)).toBeInTheDocument();
+    expect(screen.getByText(/Gemini 2\.5 Flash/)).toBeInTheDocument();
+    expect(screen.getByText(/DeepSeek V4\.1 Flash Free/)).toBeInTheDocument();
+  });
+
+  it("updates model descriptions when client.listByokModels returns custom models", async () => {
+    const client = fakeClient({
+      getByok: async () => ({
+        credentials: [],
+        usage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalCostCents: 0 },
+      }),
+      listByokModels: async () => ({
+        models: [
+          {
+            id: "custom-anthropic-v9",
+            name: "Claude Super Intelligence 9",
+            provider: "anthropic",
+            pricing: { promptPerMillionCents: 100, completionPerMillionCents: 500 },
+          },
+        ],
+      }),
+    });
+
+    render(<ByokSettings client={client} workspaceId={WORKSPACE_ID} />);
+
+    expect(await screen.findByText(/Claude Super Intelligence 9/)).toBeInTheDocument();
   });
 });
 

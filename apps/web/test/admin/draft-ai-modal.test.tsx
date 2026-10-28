@@ -468,6 +468,39 @@ describe("DraftAiModal — review step, validation badges, flagging, and inline 
     });
   });
 
+  it("dynamically loads models from models.ts catalog and merges live models", async () => {
+    const listModelsFn = vi.fn().mockResolvedValue({
+      models: [
+        {
+          id: "custom-live-model",
+          name: "Live Model Dynamic",
+          provider: "anthropic",
+          pricing: { promptPerMillionCents: 50, completionPerMillionCents: 200 },
+        },
+      ],
+    });
+    const client = fakeClient({ listByokModels: listModelsFn });
+
+    render(
+      <DraftAiModal
+        client={client}
+        workspaceId={WORKSPACE_ID}
+        bankId={BANK_ID}
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    // Initial catalog from models.ts should be present immediately
+    expect(screen.getByText("Claude Sonnet 5.5 (Recommended)")).toBeInTheDocument();
+
+    // After async fetch, dynamic live models are merged
+    await waitFor(() => {
+      expect(screen.getByText("Live Model Dynamic")).toBeInTheDocument();
+    });
+  });
+
   it("can navigate back to config step from review step", async () => {
     const draftFn = vi.fn().mockResolvedValue({
       questions: SAMPLE_QUESTIONS,

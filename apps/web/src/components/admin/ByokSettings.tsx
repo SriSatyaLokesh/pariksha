@@ -2,6 +2,12 @@
 // Allows workspace owners to configure encrypted Anthropic / OpenAI keys and monthly spend caps.
 
 import { useState, useEffect, useCallback, type FormEvent } from "react";
+import {
+  getAllSupportedModels,
+  providerModelsSummary,
+  type ModelMetadata,
+  type ByokProvider,
+} from "@pariksha/core";
 import type { ApiClient, ByokCredential, ByokUsage } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
@@ -11,8 +17,6 @@ export interface ByokSettingsProps {
   client: ApiClient;
   workspaceId: string;
 }
-
-type ByokProvider = "anthropic" | "openai" | "openrouter" | "gemini" | "opencode";
 
 function providerLabel(provider: ByokProvider): string {
   switch (provider) {
@@ -29,9 +33,18 @@ function providerLabel(provider: ByokProvider): string {
   }
 }
 
+function getModelsForProvider(provider: ByokProvider, modelList: ModelMetadata[]): string {
+  const provModels = modelList.filter(
+    (m) => m.provider.toLowerCase() === provider.toLowerCase(),
+  );
+  if (provModels.length === 0) return providerModelsSummary(provider);
+  return `${provModels.map((m) => m.name).join(", ")}.`;
+}
+
 export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
   const [credentials, setCredentials] = useState<ByokCredential[]>([]);
   const [usage, setUsage] = useState<ByokUsage | null>(null);
+  const [models, setModels] = useState<ModelMetadata[]>(() => getAllSupportedModels());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -47,9 +60,15 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
     try {
       setLoading(true);
       setError(null);
-      const data = await client.getByok(workspaceId);
-      setCredentials(data.credentials);
-      setUsage(data.usage);
+      const [byokData, modelsData] = await Promise.all([
+        client.getByok(workspaceId),
+        client.listByokModels ? client.listByokModels(workspaceId).catch(() => null) : Promise.resolve(null),
+      ]);
+      setCredentials(byokData.credentials);
+      setUsage(byokData.usage);
+      if (modelsData?.models && modelsData.models.length > 0) {
+        setModels(modelsData.models);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load BYOK credentials.");
     } finally {
@@ -244,7 +263,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
           </div>
 
           <p className="byok-card__desc">
-            Claude 3.5 Sonnet and Haiku models for structured and scenario questions.
+            {getModelsForProvider("anthropic", models)}
           </p>
 
           {anthropicCred && (
@@ -319,7 +338,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
           </div>
 
           <p className="byok-card__desc">
-            GPT-4o and GPT-4o-mini models with strict JSON schema mode.
+            {getModelsForProvider("openai", models)}
           </p>
 
           {openAiCred && (
@@ -394,7 +413,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
           </div>
 
           <p className="byok-card__desc">
-            DeepSeek, Llama 3.3, Mistral, and other models via OpenRouter (OpenAI-compatible).
+            {getModelsForProvider("openrouter", models)}
           </p>
 
           {openRouterCred && (
@@ -469,7 +488,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
           </div>
 
           <p className="byok-card__desc">
-            Gemini 2.5 Flash, Gemini 2.5 Pro, and Flash-Lite models via Google AI Studio.
+            {getModelsForProvider("gemini", models)}
           </p>
 
           {geminiCred && (
@@ -544,7 +563,7 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
           </div>
 
           <p className="byok-card__desc">
-            Open-weights inference (DeepSeek V4.1 Flash, GLM 5.3, Nemotron 3.5, Flint 40B).
+            {getModelsForProvider("opencode", models)}
           </p>
 
           {opencodeCred && (

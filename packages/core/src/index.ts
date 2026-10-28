@@ -147,3 +147,6 @@ export * from "./plugins/index.js";
 
 // Phase 11 Task 2 (T-24): Internationalization and RTL translation.
 export * from "./i18n/index.js";
+
+// Phase 12 BYOK AI Models & Pricing Engine.
+export * from "./ai-models.js";
