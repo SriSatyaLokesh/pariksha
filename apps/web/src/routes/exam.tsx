@@ -483,26 +483,6 @@ export function ExamLanding({
           </section>
         )}
 
-        {/* `Q1b`: the same sentences the runtime will enforce, so a
-            candidate who will be denied for having no camera learns it
-            before the timer starts rather than after. Empty for Off —
-            and for any test with every control turned off — so no
-            heading appears over nothing to list. */}
-        {test.proctoring.requirements.length > 0 && (
-          <section className="exam-landing-requirements">
-            <h2 id="exam-requirements-heading">Requirements</h2>
-            {/* `list-style: none` (DESIGN.md) drops list semantics in
-                WebKit and takes the accessible name with it — this list
-                only; the Sections list and the device-report list share
-                the same CSS and are out of scope here. */}
-            <ul role="list" aria-labelledby="exam-requirements-heading">
-              {test.proctoring.requirements.map((requirement) => (
-                <li key={requirement}>{requirement}</li>
-              ))}
-            </ul>
-          </section>
-        )}
-
         <div className="exam-landing-actions">
           <button
             type="button"
@@ -615,6 +595,26 @@ export function ExamLanding({
             >
               Dismiss
             </button>
+          </section>
+        )}
+
+        {/* `Q1b`: the same sentences the runtime will enforce, so a
+            candidate who will be denied for having no camera learns it
+            before the timer starts rather than after. Empty for Off —
+            and for any test with every control turned off — so no
+            heading appears over nothing to list. */}
+        {test.proctoring.requirements.length > 0 && (
+          <section className="exam-landing-requirements">
+            <h2 id="exam-requirements-heading">Requirements</h2>
+            {/* `list-style: none` (DESIGN.md) drops list semantics in
+                WebKit and takes the accessible name with it — this list
+                only; the Sections list and the device-report list share
+                the same CSS and are out of scope here. */}
+            <ul role="list" aria-labelledby="exam-requirements-heading">
+              {test.proctoring.requirements.map((requirement) => (
+                <li key={requirement}>{requirement}</li>
+              ))}
+            </ul>
           </section>
         )}
       </main>
