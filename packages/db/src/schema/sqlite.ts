@@ -11,6 +11,7 @@ import {
   real,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/sqlite-core";
 
 export const workspace = sqliteTable(
@@ -390,6 +391,7 @@ export const apiKey = sqliteTable(
     createdAt: integer("created_at").notNull(),
     lastUsedAt: integer("last_used_at"),
     revokedAt: integer("revoked_at"),
+    createdBy: text("created_by"),
   },
   (t) => [
     index("api_key_workspace_idx").on(t.workspaceId),
@@ -470,5 +472,48 @@ export const byokUsage = sqliteTable(
   (t) => [
     index("byok_usage_workspace_idx").on(t.workspaceId),
     index("byok_usage_workspace_created_idx").on(t.workspaceId, t.createdAt),
+  ],
+);
+
+// Phase 13: Teams and RBAC.
+export const team = sqliteTable(
+  "team",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [index("team_workspace_idx").on(t.workspaceId)],
+);
+
+export const teamMember = sqliteTable(
+  "team_member",
+  {
+    teamId: text("team_id").notNull(),
+    userId: text("user_id").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.teamId, t.userId] }),
+    index("team_member_user_idx").on(t.userId),
+  ],
+);
+
+export const teamGrant = sqliteTable(
+  "team_grant",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    teamId: text("team_id").notNull(),
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    role: text("role").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("team_grant_resource_uq").on(t.teamId, t.resourceType, t.resourceId),
+    index("team_grant_workspace_resource_idx").on(t.workspaceId, t.resourceType, t.resourceId),
   ],
 );

@@ -35,6 +35,7 @@ export interface ApiKeyRow {
   createdAt: number;
   lastUsedAt: number | null;
   revokedAt: number | null;
+  createdBy?: string | null | undefined;
 }
 
 interface ApiKeyRecord {
@@ -44,9 +45,10 @@ interface ApiKeyRecord {
   created_at: number;
   last_used_at: number | null;
   revoked_at: number | null;
+  created_by?: string | null | undefined;
 }
 
-const API_KEY_COLUMNS = "id, name, scopes_json, created_at, last_used_at, revoked_at";
+const API_KEY_COLUMNS = "id, name, scopes_json, created_at, last_used_at, revoked_at, created_by";
 
 function toApiKeyRow(db: DbClient, row: ApiKeyRecord): ApiKeyRow {
   return {
@@ -56,6 +58,7 @@ function toApiKeyRow(db: DbClient, row: ApiKeyRecord): ApiKeyRow {
     createdAt: Number(row.created_at),
     lastUsedAt: row.last_used_at === null ? null : Number(row.last_used_at),
     revokedAt: row.revoked_at === null ? null : Number(row.revoked_at),
+    createdBy: row.created_by ?? null,
   };
 }
 
@@ -107,7 +110,7 @@ export const createApiKey = scoped(
   async (
     db: DbClient,
     workspaceId: string,
-    input: { name: string; scopes: readonly Action[]; now: number },
+    input: { name: string; scopes: readonly Action[]; now: number; createdBy?: string | null },
   ): Promise<{ apiKeyId: string; secret: string }> => {
     for (const scope of input.scopes) {
       if (!ALL_ACTIONS.has(scope)) {
@@ -122,8 +125,8 @@ export const createApiKey = scoped(
     const secret = generateApiKeySecret();
     const secretHash = await sha256Hex(secret);
     await db.run(
-      "INSERT INTO api_key (id, workspace_id, name, secret_hash, scopes_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      [id, workspaceId, input.name, secretHash, db.jsonParam(input.scopes), input.now],
+      "INSERT INTO api_key (id, workspace_id, name, secret_hash, scopes_json, created_at, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, workspaceId, input.name, secretHash, db.jsonParam(input.scopes), input.now, input.createdBy ?? null],
     );
 
     return { apiKeyId: id, secret };
@@ -173,6 +176,17 @@ export const revokeApiKey = scoped(
       [now, workspaceId, apiKeyId],
     );
     if (changes === 0) throw new ApiKeyNotFoundError(apiKeyId);
+  },
+);
+
+export const revokeApiKeysByCreator = scoped(
+  "revokeApiKeysByCreator",
+  async (db: DbClient, workspaceId: string, userId: string, now: number): Promise<number> => {
+    const { changes } = await db.run(
+      "UPDATE api_key SET revoked_at = ? WHERE workspace_id = ? AND created_by = ? AND revoked_at IS NULL",
+      [now, workspaceId, userId],
+    );
+    return changes;
   },
 );
 

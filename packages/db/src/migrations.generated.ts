@@ -163,6 +163,16 @@ export const sqliteMigrations: Migration[] = [
     "CREATE INDEX `byok_usage_workspace_idx` ON `byok_usage` (`workspace_id`);",
     "CREATE INDEX `byok_usage_workspace_created_idx` ON `byok_usage` (`workspace_id`, `created_at`);",
   ] },
+  { name: "0015_teams_and_rbac.sql", statements: [
+    "CREATE TABLE `team` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`name` text NOT NULL,\n\t`description` text,\n\t`created_at` integer NOT NULL\n);",
+    "CREATE INDEX `team_workspace_idx` ON `team` (`workspace_id`);",
+    "CREATE TABLE `team_member` (\n\t`team_id` text NOT NULL,\n\t`user_id` text NOT NULL,\n\t`created_at` integer NOT NULL,\n\tPRIMARY KEY (`team_id`, `user_id`)\n);",
+    "CREATE INDEX `team_member_user_idx` ON `team_member` (`user_id`);",
+    "CREATE TABLE `team_grant` (\n\t`id` text PRIMARY KEY NOT NULL,\n\t`workspace_id` text NOT NULL,\n\t`team_id` text NOT NULL,\n\t`resource_type` text NOT NULL,\n\t`resource_id` text NOT NULL,\n\t`role` text NOT NULL,\n\t`created_at` integer NOT NULL\n);",
+    "CREATE UNIQUE INDEX `team_grant_resource_uq` ON `team_grant` (`team_id`, `resource_type`, `resource_id`);",
+    "CREATE INDEX `team_grant_workspace_resource_idx` ON `team_grant` (`workspace_id`, `resource_type`, `resource_id`);",
+    "ALTER TABLE `api_key` ADD `created_by` text;",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -307,5 +317,15 @@ export const pgMigrations: Migration[] = [
     "CREATE TABLE IF NOT EXISTS \"byok_usage\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"workspace_id\" text NOT NULL,\n\t\"provider\" text NOT NULL,\n\t\"model\" text NOT NULL,\n\t\"prompt_tokens\" integer NOT NULL,\n\t\"completion_tokens\" integer NOT NULL,\n\t\"estimated_cost_cents\" integer NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
     "CREATE INDEX IF NOT EXISTS \"byok_usage_workspace_idx\" ON \"byok_usage\" USING btree (\"workspace_id\");",
     "CREATE INDEX IF NOT EXISTS \"byok_usage_workspace_created_idx\" ON \"byok_usage\" USING btree (\"workspace_id\", \"created_at\");",
+  ] },
+  { name: "0015_teams_and_rbac.sql", statements: [
+    "CREATE TABLE IF NOT EXISTS \"team\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"workspace_id\" text NOT NULL,\n\t\"name\" text NOT NULL,\n\t\"description\" text,\n\t\"created_at\" bigint NOT NULL\n);",
+    "CREATE INDEX IF NOT EXISTS \"team_workspace_idx\" ON \"team\" USING btree (\"workspace_id\");",
+    "CREATE TABLE IF NOT EXISTS \"team_member\" (\n\t\"team_id\" text NOT NULL,\n\t\"user_id\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL,\n\tCONSTRAINT \"team_member_pkey\" PRIMARY KEY (\"team_id\", \"user_id\")\n);",
+    "CREATE INDEX IF NOT EXISTS \"team_member_user_idx\" ON \"team_member\" USING btree (\"user_id\");",
+    "CREATE TABLE IF NOT EXISTS \"team_grant\" (\n\t\"id\" text PRIMARY KEY NOT NULL,\n\t\"workspace_id\" text NOT NULL,\n\t\"team_id\" text NOT NULL,\n\t\"resource_type\" text NOT NULL,\n\t\"resource_id\" text NOT NULL,\n\t\"role\" text NOT NULL,\n\t\"created_at\" bigint NOT NULL\n);",
+    "CREATE UNIQUE INDEX IF NOT EXISTS \"team_grant_resource_uq\" ON \"team_grant\" USING btree (\"team_id\", \"resource_type\", \"resource_id\");",
+    "CREATE INDEX IF NOT EXISTS \"team_grant_workspace_resource_idx\" ON \"team_grant\" USING btree (\"workspace_id\", \"resource_type\", \"resource_id\");",
+    "ALTER TABLE \"api_key\" ADD COLUMN IF NOT EXISTS \"created_by\" text;",
   ] },
 ];
