@@ -1,20 +1,9 @@
 // Type definitions for BYOK Provider Router and Model Registry (Phase 12).
 // Standardized interfaces for multi-provider question drafting without external AI SDKs.
 
-import type { Question, QuestionType } from "@pariksha/core";
+import type { Question, QuestionType, ModelPricing, ModelMetadata, ByokProvider } from "@pariksha/core";
 
-export interface ModelPricing {
-  promptPerMillionCents: number;
-  completionPerMillionCents: number;
-}
-
-export interface ModelMetadata {
-  id: string;
-  name: string;
-  provider: string;
-  pricing: ModelPricing;
-  recommended?: boolean;
-}
+export type { ModelPricing, ModelMetadata, ByokProvider };
 
 export interface ProviderRequest {
   apiKey: string;

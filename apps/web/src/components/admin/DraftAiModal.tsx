@@ -2,6 +2,12 @@
 // In-modal preview, validation status badges, flagging, and inline edit before committing to bank.
 
 import { useState, useEffect, type FormEvent } from "react";
+import {
+  getAllSupportedModels,
+  listModelsForProvider,
+  type ModelMetadata,
+  type ByokProvider as Provider,
+} from "@pariksha/core";
 import type { ApiClient, Question, QuestionType } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { useDialogKeys } from "../useDialogKeys";
@@ -15,7 +21,6 @@ export interface DraftAiModalProps {
   onSuccess: () => void;
 }
 
-type Provider = "anthropic" | "openai" | "openrouter" | "gemini" | "opencode";
 type ModalStep = "config" | "review";
 
 const SUPPORTED_TYPES: Array<{ type: QuestionType; label: string }> = [
@@ -40,61 +45,22 @@ function getQuestionKey(q: Question): unknown {
   return undefined;
 }
 
-const CURATED_MODELS: Record<
-  Provider,
-  Array<{ id: string; label: string }>
-> = {
-  anthropic: [
-    { id: "claude-sonnet-5-5", label: "Claude Sonnet 5.5 (Recommended)" },
-    { id: "claude-haiku-5-5", label: "Claude Haiku 5.5" },
-    { id: "claude-opus-5-5", label: "Claude Opus 5.5" },
-    { id: "claude-fable-5-1", label: "Claude Fable 5.1" },
-    { id: "claude-3-7-sonnet", label: "Claude 3.7 Sonnet" },
-    { id: "claude-3-5-sonnet-20241022", label: "Claude 3.5 Sonnet" },
-    { id: "claude-3-5-haiku-20241022", label: "Claude 3.5 Haiku" },
+export function getCuratedModels(
+  p: Provider,
+  dynamicModels: ModelMetadata[] = getAllSupportedModels(),
+): Array<{ id: string; label: string }> {
+  const provModels = dynamicModels.filter(
+    (m) => m.provider.toLowerCase() === p.toLowerCase(),
+  );
+  const effectiveModels = provModels.length > 0 ? provModels : listModelsForProvider(p);
+  return [
+    ...effectiveModels.map((m) => ({
+      id: m.id,
+      label: `${m.name}${m.recommended ? " (Recommended)" : ""}`,
+    })),
     { id: "custom", label: "Custom model..." },
-  ],
-  openai: [
-    { id: "gpt-6.1-sol", label: "GPT-6.1 Sol (Recommended)" },
-    { id: "gpt-6.1-terra", label: "GPT-6.1 Terra" },
-    { id: "gpt-6-luna", label: "GPT-6 Luna" },
-    { id: "gpt-6-astra", label: "GPT-6 Astra" },
-    { id: "o3-mini", label: "o3 Mini" },
-    { id: "o3", label: "o3 Standard" },
-    { id: "gpt-4o", label: "GPT-4o" },
-    { id: "gpt-4o-mini", label: "GPT-4o mini" },
-    { id: "custom", label: "Custom model..." },
-  ],
-  openrouter: [
-    { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash (Recommended)" },
-    { id: "deepseek/deepseek-chat", label: "DeepSeek V3" },
-    { id: "anthropic/claude-sonnet-5.5", label: "Claude Sonnet 5.5 (via OpenRouter)" },
-    { id: "anthropic/claude-haiku-5.5", label: "Claude Haiku 5.5 (via OpenRouter)" },
-    { id: "openai/gpt-6.1-terra", label: "GPT-6.1 Terra (via OpenRouter)" },
-    { id: "meta-llama/llama-3.3-70b-instruct", label: "Llama 3.3 70B Instruct" },
-    { id: "mistralai/mistral-large-2411", label: "Mistral Large 2411" },
-    { id: "custom", label: "Custom model..." },
-  ],
-  gemini: [
-    { id: "gemini-2.5-flash", label: "Gemini 2.5 Flash (Recommended)" },
-    { id: "gemini-2.5-pro", label: "Gemini 2.5 Pro" },
-    { id: "gemini-2.5-flash-lite", label: "Gemini 2.5 Flash Lite" },
-    { id: "gemini-1.5-pro", label: "Gemini 1.5 Pro" },
-    { id: "gemini-1.5-flash", label: "Gemini 1.5 Flash" },
-    { id: "custom", label: "Custom model..." },
-  ],
-  opencode: [
-    { id: "deepseek-v4.1-flash-free", label: "DeepSeek V4.1 Flash Free (Recommended)" },
-    { id: "glm-5.3-flash-free", label: "GLM 5.3 Flash Free" },
-    { id: "nemotron-3.5-super-vl-free", label: "Nemotron 3.5 Super VL Free" },
-    { id: "nemotron-3.5-lightning-free", label: "Nemotron 3.5 Lightning Free" },
-    { id: "flint-40b-free", label: "Flint 40B Free" },
-    { id: "mimo-v2.6-flash-free", label: "MiMo V2.6 Flash Free" },
-    { id: "beam-free", label: "Beam Free" },
-    { id: "big-pickle", label: "Big Pickle" },
-    { id: "custom", label: "Custom model..." },
-  ],
-};
+  ];
+}
 
 export function DraftAiModal({
   client,
@@ -116,6 +82,9 @@ export function DraftAiModal({
     "true_false",
   ]);
   const [provider, setProvider] = useState<Provider>("anthropic");
+  const [availableModels, setAvailableModels] = useState<ModelMetadata[]>(() =>
+    getAllSupportedModels(),
+  );
   const [selectedModel, setSelectedModel] = useState<string>("claude-sonnet-5-5");
   const [customModel, setCustomModel] = useState("");
 
@@ -161,14 +130,26 @@ export function DraftAiModal({
       setEditingIndex(null);
       setLoading(false);
       setCommitting(false);
+    } else if (client.listByokModels) {
+      void client
+        .listByokModels(workspaceId, true)
+        .then((res) => {
+          if (res?.models && res.models.length > 0) {
+            setAvailableModels(res.models);
+          }
+        })
+        .catch(() => {
+          // Gracefully retain core catalog
+        });
     }
-  }, [isOpen]);
+  }, [isOpen, client, workspaceId]);
 
   if (!isOpen) return null;
 
   const handleProviderChange = (newProvider: Provider) => {
     setProvider(newProvider);
-    const defaultModel = CURATED_MODELS[newProvider][0]?.id ?? "custom";
+    const options = getCuratedModels(newProvider, availableModels);
+    const defaultModel = options[0]?.id ?? "custom";
     setSelectedModel(defaultModel);
     if (defaultModel !== "custom") {
       setCustomModel("");
@@ -407,7 +388,7 @@ export function DraftAiModal({
                     onChange={(e) => setSelectedModel(e.target.value)}
                     disabled={loading}
                   >
-                    {CURATED_MODELS[provider].map((m) => (
+                    {getCuratedModels(provider, availableModels).map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.label}
                       </option>
