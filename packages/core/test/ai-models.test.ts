@@ -46,6 +46,12 @@ describe("BYOK AI Models Registry & Helpers", () => {
     expect(m?.name).toBe("Claude Sonnet 5.5");
     expect(m?.recommended).toBe(true);
 
+    const withProvider = getModelMetadata("gemini-2.5-flash", "gemini");
+    expect(withProvider?.provider).toBe("gemini");
+
+    const wrongProvider = getModelMetadata("gemini-2.5-flash", "openai");
+    expect(wrongProvider).toBeUndefined();
+
     const notFound = getModelMetadata("non-existent-model");
     expect(notFound).toBeUndefined();
   });
@@ -71,14 +77,30 @@ describe("BYOK AI Models Registry & Helpers", () => {
     expect(calculateCostCents(pricing, 500_000, 100_000)).toBe(200);
   });
 
-  it("provides sensible fallback pricing for custom model IDs", () => {
-    const anthropicHaiku = getFallbackPricing("anthropic", "claude-haiku-custom");
-    expect(anthropicHaiku.promptPerMillionCents).toBe(80);
+  it("provides sensible fallback pricing for custom model IDs across all providers", () => {
+    // Anthropic
+    expect(getFallbackPricing("anthropic", "claude-haiku-custom").promptPerMillionCents).toBe(80);
+    expect(getFallbackPricing("anthropic", "claude-opus-custom").promptPerMillionCents).toBe(1500);
+    expect(getFallbackPricing("anthropic", "claude-sonnet-custom").promptPerMillionCents).toBe(300);
 
-    const openaiMini = getFallbackPricing("openai", "custom-gpt-mini");
-    expect(openaiMini.promptPerMillionCents).toBe(15);
+    // OpenAI
+    expect(getFallbackPricing("openai", "custom-gpt-mini").promptPerMillionCents).toBe(15);
+    expect(getFallbackPricing("openai", "o1-preview").promptPerMillionCents).toBe(300);
+    expect(getFallbackPricing("openai", "o3-pro").promptPerMillionCents).toBe(300);
+    expect(getFallbackPricing("openai", "gpt-4o-custom").promptPerMillionCents).toBe(250);
 
-    const opencode = getFallbackPricing("opencode", "anything");
-    expect(opencode.promptPerMillionCents).toBe(0);
+    // OpenRouter
+    expect(getFallbackPricing("openrouter", "deepseek/custom").promptPerMillionCents).toBe(50);
+
+    // Gemini
+    expect(getFallbackPricing("gemini", "gemini-pro-custom").promptPerMillionCents).toBe(125);
+    expect(getFallbackPricing("gemini", "gemini-flash-custom").promptPerMillionCents).toBe(15);
+
+    // OpenCode
+    expect(getFallbackPricing("opencode", "anything").promptPerMillionCents).toBe(0);
+
+    // Unknown provider & undefined modelId
+    expect(getFallbackPricing("unknown-provider").promptPerMillionCents).toBe(200);
+    expect(getFallbackPricing("unknown-provider", undefined).completionPerMillionCents).toBe(800);
   });
 });
