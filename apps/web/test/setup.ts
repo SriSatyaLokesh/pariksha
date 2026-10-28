@@ -35,5 +35,12 @@ afterEach(() => {
 // is correct today, and there is no API for clearing a jsdom history stack
 // short of a fresh window per test.
 beforeEach(() => {
-  if (typeof window !== "undefined") window.history.replaceState(null, "", "/");
+  if (typeof window !== "undefined") {
+    window.history.replaceState(null, "", "/");
+    Object.defineProperty(window.navigator, "userAgent", {
+      value:
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      configurable: true,
+    });
+  }
 });
