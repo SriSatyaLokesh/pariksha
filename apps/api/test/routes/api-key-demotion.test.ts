@@ -26,7 +26,6 @@ function send(method: string, cookie: string, body?: unknown): RequestInit {
   };
 }
 
-const get = (cookie: string): RequestInit => send("GET", cookie);
 const post = (body: unknown, cookie: string): RequestInit => send("POST", cookie, body);
 const patch = (body: unknown, cookie: string): RequestInit => send("PATCH", cookie, body);
 const del = (cookie: string): RequestInit => send("DELETE", cookie);
@@ -76,7 +75,7 @@ describe("API Key Demotion Cascade", () => {
       post({ name: "CI Pipeline", scopes: ["tests.edit"] }, adminCookie),
     );
     expect(keyRes.status).toBe(201);
-    const { secret, id: keyId } = await keyRes.json();
+    const { secret } = await keyRes.json();
     expect(secret).toMatch(/^pk_/);
 
     // 2. Key can edit test

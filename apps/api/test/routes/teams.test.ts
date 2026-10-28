@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { addMembership, closeClient, createTest, createUser, putDraftVersion } from "@pariksha/db";
+import { addMembership, closeClient, createTest, createUser } from "@pariksha/db";
 import { createApp } from "../../src/app.js";
 import { issueSession } from "../../src/auth/session.js";
 import { FIXED_NOW, sessionCookie, testDeps } from "../deps.js";
@@ -11,7 +11,6 @@ afterAll(() => closeClient(deps.db));
 
 let workspaceId = "";
 let ownerCookie = "";
-let adminCookie = "";
 let authorCookie = "";
 let viewerCookie = "";
 let viewerId = "";
@@ -48,14 +47,6 @@ beforeEach(async () => {
     post({ slug: `teams-wsp-${suffix}`, name: "Teams Workspace" }, ownerCookie),
   );
   workspaceId = (await wspRes.json()).id;
-
-  const adminId = await createUser(deps.db, {
-    email: `admin-${suffix}@alpha.test`,
-    authProvider: "magic_link",
-    now: FIXED_NOW,
-  });
-  await addMembership(deps.db, workspaceId, { userId: adminId, role: "admin", now: FIXED_NOW });
-  adminCookie = await sessionCookie(deps, (await issueSession(deps, adminId)).token);
 
   const authorId = await createUser(deps.db, {
     email: `author-${suffix}@alpha.test`,

@@ -327,7 +327,7 @@ These are the planner's calls, not the PRD's. They are listed so they can be ove
 | PRD milestone | Phases | Note |
 | --- | --- | --- |
 | v0.1 Pilot-ready | 1 – 6 | Auth arrives here rather than in v0.2; all 12 types rather than 6 |
-| v0.2 Teams and security | 7 – 8 | Roles and audit log already shipped in Phase 3; this adds proctoring, retention and deletion |
+| v0.2 Teams and security | 7 – 8 | Roles and audit log shipped in Phase 3; Teams, granular RBAC (tests.view, banks.view), S-08 per-test grants, team collaboration, and API key demotion cascades fully built |
 | v0.3 All types and grading | 8 – 9 | Grading, analytics and regrade, plus the public demo |
 | v1.0 Public release | 10 – 11 | Docker, API surface, accessibility, translations, plugins, docs |
 | Post-v1.0 Enhancements | 12 | BYOK AI question drafting with encrypted keys |
@@ -351,6 +351,7 @@ Detailed, task-by-task implementation plans live in [`docs/superpowers/plans/`](
 | 10 | [Docker self-host](superpowers/plans/2026-10-26-phase-10-docker-self-host.md) |
 | 11 | [v1.0 release readiness](superpowers/plans/2026-10-26-phase-11-v1-release-readiness.md) |
 | 12 | [BYOK AI question drafting](superpowers/plans/2026-10-26-phase-12-byok-ai-question-drafting.md) |
+| Teams & RBAC | [Teams, RBAC & Credential Lifecycle](superpowers/plans/2026-10-28-teams-and-rbac.md) |
 
 ## What is needed from the operator
 

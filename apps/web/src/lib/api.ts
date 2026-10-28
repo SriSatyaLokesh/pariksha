@@ -983,7 +983,7 @@ export interface TeamGrant {
   id: string;
   workspaceId: string;
   teamId: string;
-  resourceType: "test" | "bank" | string;
+  resourceType: "test" | "bank";
   resourceId: string;
   role: Role;
   createdAt: number;

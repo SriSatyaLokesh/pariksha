@@ -25,7 +25,6 @@ import {
   newId,
   removeMembership,
   revokeApiKeysByCreator,
-  setMembershipRole,
   updateMembership,
   updateWorkspace,
 } from "@pariksha/db";
