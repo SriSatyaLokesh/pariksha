@@ -130,7 +130,8 @@ async function openBuilder(client: ApiClient = fakeClient()) {
  *  row whose summary moved into a tooltip or a title attribute fails here
  *  rather than passing quietly. */
 function rowFor(label: string): HTMLElement {
-  return screen.getByRole("button", { name: new RegExp(`^${label}\\b`) });
+  const settings = screen.getByRole("region", { name: "Settings" });
+  return within(settings).getByRole("button", { name: new RegExp(`^${label}\\b`) });
 }
 
 describe("the five settings are rows that state their own setting (D7)", () => {
