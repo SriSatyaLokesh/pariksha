@@ -34,7 +34,7 @@ import { AnswerInput } from "../components/exam/answer";
 import { SaveBanner } from "../components/exam/SaveBanner";
 import { ProctorBanner } from "../components/exam/ProctorBanner";
 import { ProctoringErrorBoundary, ProctoringLayer } from "../components/exam/ProctoringLayer";
-import { acquireMedia, captureJpeg, type MediaAcquireResult } from "../lib/camera";
+import { acquireMedia, captureJpeg } from "../lib/camera";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
@@ -1175,10 +1175,8 @@ export function ExamApp({ client }: { client: RunClient }) {
       let mediaStream = preAcquiredStream ?? landingMediaStream;
       const hasValidVideo =
         !needCamera || Boolean(mediaStream && mediaStream.getVideoTracks().some((t) => t.readyState === "live"));
-      const hasValidAudio =
-        !needMicrophone || Boolean(mediaStream && mediaStream.getAudioTracks().some((t) => t.readyState === "live"));
 
-      if (!hasValidVideo || !hasValidAudio) {
+      if (!hasValidVideo || (!mediaStream && (needCamera || needMicrophone))) {
         const acquired = await acquireMedia({ video: needCamera, audio: needMicrophone });
         if (needCamera && !acquired.ok) {
           // Refused before `client.start` is ever reached — no attempt
