@@ -13,7 +13,7 @@
 // exam-taker under a clock downloads only what they are about to use.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PROCTORING_DEFAULTS, type ResolvedProctoring } from "@pariksha/core";
+import { PROCTORING_DEFAULTS, anyProctoringControlActive, type ResolvedProctoring } from "@pariksha/core";
 import type {
   AttemptPaper,
   CandidateQuestion,
@@ -127,10 +127,11 @@ const CAMERA_GATE_MESSAGE = "This test needs a working camera to start. Allow ca
 
 export function deviceReport(resolved: ResolvedProctoring): {
   ok: boolean;
-  /** `desktop_only` is on AND this device fails it — the only thing that
-   *  blocks a start (R3). Never derived from `ok`: a finding may be
+  /** `desktop_only` or an active proctoring control has requirements this
+   *  device fails — blocks Start. Never derived from `ok`: a finding may be
    *  `ok: false` (an honest report) without refusing anything. */
   refused: boolean;
+  refusedReason: "desktop" | "browser" | null;
   findings: DeviceFinding[];
 } {
   const width = window.innerWidth;
@@ -142,9 +143,15 @@ export function deviceReport(resolved: ResolvedProctoring): {
     typeof navigator !== "undefined" &&
     Boolean(navigator.userAgent && /\b(Mobi|Android|iPhone|iPad|iPod)\b/i.test(navigator.userAgent));
 
+  const anyControlActive = anyProctoringControlActive(resolved);
   const screenOk = width >= MIN_WIDTH;
   const pointerOk = finePointer;
   const browserOk = browser !== null;
+
+  const desktopBlocked = resolved.desktopOnly && (!screenOk || !pointerOk || isMobileUA);
+  const browserBlocked = anyControlActive && !browserOk;
+  const refused = desktopBlocked || browserBlocked;
+  const refusedReason = desktopBlocked ? "desktop" : browserBlocked ? "browser" : null;
 
   const findings: DeviceFinding[] = [
     {
@@ -180,7 +187,8 @@ export function deviceReport(resolved: ResolvedProctoring): {
 
   return {
     ok: findings.every((finding) => finding.ok),
-    refused: resolved.desktopOnly && (!screenOk || !pointerOk || isMobileUA),
+    refused,
+    refusedReason,
     findings,
   };
 }
@@ -339,15 +347,20 @@ export function ExamLanding({
   // emits for it (rendered in the Requirements section below), not
   // re-derived from `profile`.
   const desktopOnly = test.proctoring.requirements.some((line) => /\b(desktop|laptop)\b/i.test(line));
-  // `deviceReport` only reads `resolved.desktopOnly` from here on — the
-  // landing payload carries no more of `ResolvedProctoring` than that one
-  // boolean (`Q1b` again), so the rest of this object is `off`'s inert
-  // defaults, never consulted.
-  const resolved: ResolvedProctoring = { ...PROCTORING_DEFAULTS.off, desktopOnly };
+  const anyControlActive = test.proctoring.requirements.length > 0;
+  const resolved: ResolvedProctoring = {
+    ...PROCTORING_DEFAULTS.off,
+    desktopOnly,
+    requireCamera: requiresCamera(test),
+    requireMicrophone: requiresMicrophone(test),
+    requireFullscreen: anyControlActive,
+  };
   // Review finding 1: computed once, from the device the page is already
   // running on — not from `report`, which stays `null` until "Check my
   // device" is clicked and must not be able to gate Start.
-  const [refused] = useState(() => deviceReport(resolved).refused);
+  const [deviceStatus] = useState(() => deviceReport(resolved));
+  const refused = report?.refused ?? deviceStatus.refused;
+  const refusedReason = report?.refusedReason ?? deviceStatus.refusedReason;
 
   const handleDismissDeviceTest = useCallback(() => {
     if (deviceMediaStream) {
@@ -540,7 +553,9 @@ export function ExamLanding({
             announce. */}
         <p id="exam-device-blocked" className="exam-device-blocked" role="status">
           {refused &&
-            "This test must be taken on a desktop or laptop, not a phone or tablet. This test needs a laptop or desktop computer."}
+            (refusedReason === "browser"
+              ? "This test requires a fully updated Chrome, Edge, Firefox or Safari. Please open this link in a supported browser."
+              : "This test must be taken on a desktop or laptop, not a phone or tablet. This test needs a laptop or desktop computer.")}
         </p>
 
         {/* `P-05`/`Q2a`: the start gate's own live region, present from
