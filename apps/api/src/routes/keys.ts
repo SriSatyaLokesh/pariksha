@@ -82,7 +82,12 @@ export function keyRoutes(deps: AppDeps): Hono<AppBindings> {
       }
     }
 
-    const created = await createApiKey(deps.db, workspaceId, { name: input.name, scopes: input.scopes, now });
+    const created = await createApiKey(deps.db, workspaceId, {
+      name: input.name,
+      scopes: input.scopes,
+      now,
+      createdBy: actor.userId,
+    });
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,

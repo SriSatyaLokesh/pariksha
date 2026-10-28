@@ -21,7 +21,8 @@
 // can therefore be put in front of every workspace route without thought.
 
 import type { Context, MiddlewareHandler, Next } from "hono";
-import { can, type Action } from "@pariksha/core";
+import { can, type Action, type ResourceGrant, type Role } from "@pariksha/core";
+import { listUserTeamGrantsForResource } from "@pariksha/db";
 import type { AppBindings } from "../app.js";
 import type { Actor } from "../auth/session.js";
 import { ApiError } from "../errors.js";
@@ -93,7 +94,7 @@ export function actorOnly(): MiddlewareHandler<AppBindings> {
 }
 
 export function requires(action: Action): MiddlewareHandler<AppBindings> {
-  return guard(action, (c, membership) => {
+  return guard(action, async (c, membership) => {
     // Phase 8d Task 2 (`K25`): a key-authenticated actor carries its own
     // scopes instead of a role `can()` would answer for. Checked first and
     // decided entirely on its own — never combined with the role below —
@@ -105,7 +106,8 @@ export function requires(action: Action): MiddlewareHandler<AppBindings> {
     // decision function for both principals, so a rule added to `can()`
     // later applies to a key the same way it applies to a session, instead
     // of silently applying to sessions only.
-    const keyScopes = actorOr401(c).apiKeyScopes;
+    const actor = actorOr401(c);
+    const keyScopes = actor.apiKeyScopes;
     if (keyScopes !== undefined) {
       if (can({ actions: keyScopes, action })) return undefined;
       throw new ApiError(403, "forbidden", `This key does not hold ${action}.`);
@@ -133,6 +135,38 @@ export function requires(action: Action): MiddlewareHandler<AppBindings> {
     ) {
       return undefined;
     }
+
+    // Check if team grants elevate access when workspace role or direct grants are insufficient
+    if (resource !== undefined) {
+      const db = c.get("db");
+      if (db) {
+        const teamGrants = await listUserTeamGrantsForResource(
+          db,
+          membership.workspaceId,
+          actor.userId,
+          resource.type,
+          resource.id,
+        );
+        if (teamGrants.length > 0) {
+          const grants: ResourceGrant[] = teamGrants.map((tg) => ({
+            resourceType: tg.resourceType as "test" | "bank",
+            resourceId: tg.resourceId,
+            role: tg.role as Role,
+          }));
+          if (
+            can({
+              role: membership.role,
+              action,
+              resource,
+              grants,
+            })
+          ) {
+            return undefined;
+          }
+        }
+      }
+    }
+
     throw new ApiError(
       403,
       "forbidden",
@@ -168,7 +202,7 @@ export function membershipOr404(
 
 function guard(
   action: Action | null,
-  check: (c: Context<AppBindings>, membership: Membership) => void,
+  check: (c: Context<AppBindings>, membership: Membership) => void | Promise<void>,
 ): MiddlewareHandler<AppBindings> {
   const handler = async (c: Context<AppBindings>, next: Next) => {
     const actor = actorOr401(c);
@@ -191,7 +225,7 @@ function guard(
         `${c.req.routePath} is guarded but names no :id workspace parameter`,
       );
     }
-    check(c, membershipOr404(actor, workspaceId));
+    await check(c, membershipOr404(actor, workspaceId));
     await next();
   };
 

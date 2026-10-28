@@ -148,6 +148,9 @@ export const CANDIDATE_DATA_EXEMPT: Readonly<Record<string, string>> = {
   webhook: "events_json is the subscribed event-type list (e.g. \"attempt.submitted\") — configuration, not data.",
   byok_credential: "Workspace AI API credentials encrypted at rest — never candidate data.",
   byok_usage: "Workspace aggregate AI token and cost usage records — never candidate data.",
+  team: "Organiser teams defined at the workspace level — never candidate data.",
+  team_member: "Organiser team memberships mapping user to team — never candidate data.",
+  team_grant: "Resource role grants assigned to teams — never candidate data.",
 };
 
 /** `KG4`. See the file header. */
