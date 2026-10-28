@@ -23,6 +23,7 @@ import { GradingRoute } from "./grading";
 import { AnalyticsRoute } from "./analytics";
 import { MonitorRoute } from "./monitor";
 import { AttemptRoute } from "./attempt";
+import { ResultsHub } from "./results-hub";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 import { TeamsPanel } from "../components/organiser/TeamsPanel";
@@ -316,12 +317,27 @@ export function OrganiserApp({
         />,
       );
     case "results":
+      if (view.testId) {
+        return shell(
+          "results",
+          view.actor,
+          view.workspace,
+          { title: "Results", crumb: "Results" },
+          <div data-testid="test-results-view">Test Results {view.testId}</div>,
+        );
+      }
       return shell(
         "results",
         view.actor,
         view.workspace,
         { title: "Results", crumb: "Results" },
-        <div data-testid="results-view">Results</div>,
+        <ResultsHub
+          client={client}
+          workspaceId={view.workspace.id}
+          onSelectTest={(testId) =>
+            go({ kind: "results", actor: view.actor, workspace: view.workspace, testId })
+          }
+        />,
       );
     case "teams":
       return shell(
