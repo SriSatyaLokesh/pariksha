@@ -115,9 +115,9 @@ it("a cross-workspace test is 404, not 403", async () => {
   expect(res.status).toBe(404);
 });
 
-it("a Viewer cannot read the test list", async () => {
+it("a Viewer can read the test list (tests.view)", async () => {
   const res = await app.request(`/api/v1/workspaces/${workspaceId}/tests`, get(viewerCookie));
-  expect(res.status).toBe(403);
+  expect(res.status).toBe(200);
 });
 
 it("T-03: the list filters by tag, searches by name and sorts, in one query", async () => {

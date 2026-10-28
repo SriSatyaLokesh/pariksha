@@ -108,12 +108,12 @@ it("a Viewer cannot write a bank", async () => {
   expect(res.status).toBe(403);
 });
 
-it("a Viewer cannot read a bank either — there is no banks.view", async () => {
+it("a Viewer can read a bank (banks.view)", async () => {
   const created = await app.request(`/api/v1/workspaces/${workspaceId}/banks`, post({ name: "x" }, authorCookie));
   const bankId = (await created.json()).id;
 
   const res = await app.request(`/api/v1/workspaces/${workspaceId}/banks/${bankId}`, get(viewerCookie));
-  expect(res.status).toBe(403);
+  expect(res.status).toBe(200);
 });
 
 it("updates a bank's editable fields and deletes it clean", async () => {

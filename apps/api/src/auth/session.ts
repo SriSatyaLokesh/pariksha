@@ -142,5 +142,12 @@ export async function revokeAllSessions(
  * against an attacker.
  */
 function grantsOf(raw: unknown): { testId: string; role: Role }[] {
-  return Array.isArray(raw) ? (raw as { testId: string; role: Role }[]) : [];
+  if (Array.isArray(raw)) return raw as { testId: string; role: Role }[];
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw as Record<string, string>).map(([testId, role]) => ({
+      testId,
+      role: role as Role,
+    }));
+  }
+  return [];
 }

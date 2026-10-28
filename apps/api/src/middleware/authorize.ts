@@ -111,16 +111,24 @@ export function requires(action: Action): MiddlewareHandler<AppBindings> {
       throw new ApiError(403, "forbidden", `This key does not hold ${action}.`);
     }
 
-    // A grant raises the role for one test and never lowers the workspace
-    // role, so it is passed through rather than substituted. No route takes
-    // a `:testId` yet; wiring it here means the first one that does inherits
-    // S-08 instead of having to remember it.
+    // A grant raises the role for one test or resource and never lowers the
+    // workspace role, so it is passed through rather than substituted.
     const testId = c.req.param("testId");
+    const bankId = c.req.param("bankId");
+    const resource =
+      testId !== undefined
+        ? ({ type: "test" as const, id: testId })
+        : bankId !== undefined
+          ? ({ type: "bank" as const, id: bankId })
+          : undefined;
+
     if (
       can({
         role: membership.role,
         action,
-        ...(testId === undefined ? {} : { testId, grants: membership.grants }),
+        ...(testId !== undefined ? { testId } : {}),
+        ...(resource !== undefined ? { resource } : {}),
+        ...(resource !== undefined ? { grants: membership.grants } : {}),
       })
     ) {
       return undefined;

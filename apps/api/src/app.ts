@@ -137,6 +137,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // The heaviest: resolve the invitee, list the members, write the change,
   // revoke the member's sessions, append the audit row.
   "/api/v1/workspaces/:id/members": 10,
+  "/api/v1/workspaces/:id/members/:userId": 10,
 
   // Phase 4 Task 2: banks, questions and media. These numbers are measured
   // (apps/api/test/banks.test.ts's and media.test.ts's "measures the real
@@ -921,17 +922,16 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/members": "members.manage",
   "POST /api/v1/workspaces/:id/members": "members.manage",
   "DELETE /api/v1/workspaces/:id/members": "members.manage",
+  "PATCH /api/v1/workspaces/:id/members/:userId": "members.manage",
 
-  // Phase 4 Task 2. There is no `banks.view` (docs/design.md's permission
-  // matrix has only `banks.edit`), so the read routes are guarded by it too
-  // — a Viewer is 403 on all of these, not just the writes.
-  "GET /api/v1/workspaces/:id/banks": "banks.edit",
+  // Phase 4 Task 2.
+  "GET /api/v1/workspaces/:id/banks": "banks.view",
   "POST /api/v1/workspaces/:id/banks": "banks.edit",
-  "GET /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId": "banks.view",
   "PATCH /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
   "DELETE /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
   "GET /api/v1/workspaces/:id/tags": "banks.edit",
-  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "banks.view",
   "POST /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
   "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
   "PATCH /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
@@ -953,14 +953,13 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export":
     "banks.edit",
 
-  // Phase 5 Task 2. There is no `tests.view` either — reads are guarded the
-  // same way banks' reads are, by the one action there is.
-  "GET /api/v1/workspaces/:id/tests": "tests.edit",
+  // Phase 5 Task 2.
+  "GET /api/v1/workspaces/:id/tests": "tests.view",
   "POST /api/v1/workspaces/:id/tests": "tests.edit",
-  "GET /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId": "tests.view",
   "PATCH /api/v1/workspaces/:id/tests/:testId": "tests.edit",
   // Task 3 (#55, P5.2).
-  "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.view",
   "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
   // Task 6 (#58, P5.5).
   "POST /api/v1/workspaces/:id/tests/:testId/check-url": "tests.edit",
@@ -1254,6 +1253,7 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "GET /api/v1/workspaces/:id/members": "workspace",
   "POST /api/v1/workspaces/:id/members": "workspace",
   "DELETE /api/v1/workspaces/:id/members": "workspace",
+  "PATCH /api/v1/workspaces/:id/members/:userId": "workspace",
   "GET /api/v1/workspaces/:id/banks": "workspace",
   "POST /api/v1/workspaces/:id/banks": "workspace",
   "GET /api/v1/workspaces/:id/banks/:bankId": "workspace",
