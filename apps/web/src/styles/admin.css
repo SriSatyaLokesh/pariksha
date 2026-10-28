@@ -1403,16 +1403,39 @@
   margin-bottom: var(--space-md);
 }
 
-.team-select-button {
-  background: none;
-  border: none;
-  padding: 0;
-  font: inherit;
-  color: var(--color-signal-text);
-  font-weight: 500;
-  cursor: pointer;
-  text-decoration: underline;
+.teams-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.teams-table th,
+.teams-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--edge-strong);
   text-align: left;
+  vertical-align: top;
+}
+
+.teams-table th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.teams-table-num {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.team-role-badge {
+  display: inline-block;
+  padding: 2px var(--space-xs);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-sm);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
 }
 
 .team-details-panel {
@@ -1440,7 +1463,6 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--color-signal-text-3);
 }
 
 .team-members-list {

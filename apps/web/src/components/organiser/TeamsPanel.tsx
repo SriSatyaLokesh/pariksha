@@ -269,7 +269,7 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
       ) : (
         <div className="organiser__panel">
           <div className="table-scroll">
-            <table className="signal-table">
+            <table className="teams-table">
               <thead>
                 <tr>
                   <th scope="col">Name</th>
@@ -286,10 +286,10 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
                   const isSelected = selectedTeamId === team.id;
                   return (
                     <tr key={team.id}>
-                      <td className="signal-td-name">
+                      <td>
                         <button
                           type="button"
-                          className="team-select-button"
+                          className="button-link"
                           onClick={() => toggleSelectTeam(team.id)}
                           aria-expanded={isSelected}
                         >
@@ -297,7 +297,7 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
                         </button>
                       </td>
                       <td>{team.description || "—"}</td>
-                      <td className="signal-td-num">{count}</td>
+                      <td className="teams-table-num">{count}</td>
                       <td className="acts">
                         <div className="button-row">
                           <button
@@ -431,7 +431,7 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
                   </p>
                 ) : (
                   <div className="table-scroll">
-                    <table className="signal-table">
+                    <table className="teams-table">
                       <thead>
                         <tr>
                           <th scope="col">Resource</th>
@@ -445,14 +445,14 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
                       <tbody>
                         {currentGrants.map((g) => (
                           <tr key={g.id}>
-                            <td className="signal-td-name">
+                            <td>
                               {g.resourceType === "test" ? "Test" : "Bank"}
                             </td>
                             <td>
                               <code>{g.resourceId}</code>
                             </td>
                             <td>
-                              <span className="signal-pill">{g.role}</span>
+                              <span className="team-role-badge">{g.role}</span>
                             </td>
                             <td className="acts">
                               <button

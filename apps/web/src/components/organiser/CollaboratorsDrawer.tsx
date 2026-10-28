@@ -156,7 +156,7 @@ export function CollaboratorsDrawer({
             </p>
           ) : (
             <div className="table-scroll">
-              <table className="signal-table">
+              <table className="teams-table">
                 <thead>
                   <tr>
                     <th scope="col">Team</th>
@@ -169,9 +169,9 @@ export function CollaboratorsDrawer({
                 <tbody>
                   {assignedGrants.map(({ grant, team }) => (
                     <tr key={grant.id}>
-                      <td className="signal-td-name">{team.name}</td>
+                      <td>{team.name}</td>
                       <td>
-                        <span className="signal-pill">{grant.role}</span>
+                        <span className="team-role-badge">{grant.role}</span>
                       </td>
                       <td className="acts">
                         <button

@@ -506,7 +506,12 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
       .filter(([, body]) => /className="[^"]*\bacts\b/.test(body))
       .map(([file]) => file)
       .sort();
-    expect(organiserActs).toEqual(["routes/bank.tsx", "routes/tests.tsx"]);
+    expect(organiserActs).toEqual([
+      "components/organiser/CollaboratorsDrawer.tsx",
+      "components/organiser/TeamsPanel.tsx",
+      "routes/bank.tsx",
+      "routes/tests.tsx",
+    ]);
 
     // The rule DOES ship into the landing chain — `primitives.css` is in it —
     // and that is fine rather than a gap. A plain landing table cell is
