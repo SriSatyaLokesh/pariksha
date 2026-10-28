@@ -26,6 +26,7 @@ import { bankRoutes } from "./routes/banks.js";
 import { questionRoutes } from "./routes/questions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { testRoutes } from "./routes/tests.js";
+import { resultsRoutes } from "./routes/results.js";
 import { resultsExportRoutes } from "./export/results.js";
 import { evidenceExportRoutes } from "./export/evidence.js";
 import { readinessRoutes } from "./publish/readiness.js";
@@ -373,6 +374,8 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // `listCandidates` (1, the whole test's registration rows) +
   // `countedFiguresForTest` (1) + `rankedScoresForTest` (1) = 9, flat in
   // how many attempts the page holds — 300 costs the same 9 as one.
+  "/api/v1/workspaces/:id/results/overview": 6,
+  "/api/v1/workspaces/:id/tests/:testId/results": 8,
   "/api/v1/workspaces/:id/tests/:testId/export/results.csv": 9,
   // The per-answer CSV. Auth (2) + `getTest` (1) + `listAttemptsForTest`
   // (1, one page — clamped to `ANSWERS_PAGE_LIMIT_MAX` so the next read's
@@ -1000,6 +1003,8 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // Phase 8c Task 3 (`R-08`, `R-09`): the results and per-answer CSVs.
   // `results.export` — held by Reviewer, Admin, Viewer and Owner
   // (`permissions.ts`), and by a key scoped to it (`K25`).
+  "GET /api/v1/workspaces/:id/results/overview": "results.export",
+  "GET /api/v1/workspaces/:id/tests/:testId/results": "results.export",
   "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv": "results.export",
   "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv": "results.export",
 
@@ -1320,6 +1325,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "POST /api/v1/workspaces/:id/tests/import": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/candidates": "workspace",
   "POST /api/v1/workspaces/:id/tests/:testId/candidates/import": "workspace",
+  "GET /api/v1/workspaces/:id/results/overview": "workspace",
+  "GET /api/v1/workspaces/:id/tests/:testId/results": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv": "workspace",
   "GET /api/v1/workspaces/:id/tests/:testId/export/events.csv": "workspace",
@@ -1426,6 +1433,7 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   // with a 404 instead.
   app.route("/api/v1/workspaces", readinessRoutes(deps));
   app.route("/api/v1/workspaces", testRoutes(deps));
+  app.route("/api/v1/workspaces", resultsRoutes(deps));
   app.route("/api/v1/workspaces", resultsExportRoutes(deps));
   app.route("/api/v1/workspaces", evidenceExportRoutes(deps));
   // Phase 7e Task 4: the minimal pair — locality with `testRoutes` rather
