@@ -67,6 +67,7 @@ type View =
   | { kind: "dashboard"; actor: Actor; workspace: Workspace }
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
+  | { kind: "results"; actor: Actor; workspace: Workspace; testId?: string | undefined }
   | { kind: "teams"; actor: Actor; workspace: Workspace }
   | { kind: "webhooks"; actor: Actor; workspace: Workspace }
   | { kind: "keys"; actor: Actor; workspace: Workspace }
@@ -313,6 +314,14 @@ export function OrganiserApp({
           // which is what tells the page it is importing a whole test.
           onImport={() => go({ kind: "import", actor: view.actor, workspace: view.workspace })}
         />,
+      );
+    case "results":
+      return shell(
+        "results",
+        view.actor,
+        view.workspace,
+        { title: "Results", crumb: "Results" },
+        <div data-testid="results-view">Results</div>,
       );
     case "teams":
       return shell(
@@ -563,6 +572,13 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
     case "webhooks":
     case "keys":
       return { kind: params.view, actor, workspace };
+    case "results":
+      return {
+        kind: "results",
+        actor,
+        workspace,
+        ...(params.test !== undefined && { testId: params.test }),
+      };
     case "test":
       return params.test === undefined
         ? home
@@ -623,6 +639,11 @@ function paramsOf(view: View): ViewParams | null {
     case "webhooks":
     case "keys":
       return { view: view.kind };
+    case "results":
+      return {
+        view: "results",
+        ...(view.testId !== undefined && { test: view.testId }),
+      };
     case "test":
       return { view: "test", test: view.testId };
     case "grading":

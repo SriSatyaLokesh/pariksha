@@ -24,6 +24,7 @@ import {
 } from "../src/lib/api";
 import { fakeClient as sharedClient } from "./fixtures/api-client";
 import { OrganiserApp } from "../src/routes/organiser";
+import { readView, writeView } from "../src/lib/view-url";
 
 const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
 
@@ -165,6 +166,31 @@ describe("the view lives in the query string (D5)", () => {
     const params = new URLSearchParams(window.location.search);
     expect(params.get("view")).toBe("test");
     expect(params.get("test")).toBe("tst_1");
+  });
+
+  it("parses ?view=results and ?view=results&test=tst_abc", () => {
+    expect(readView("?view=results")).toEqual({ view: "results" });
+    expect(readView("?view=results&test=tst_abc")).toEqual({
+      view: "results",
+      test: "tst_abc",
+    });
+  });
+
+  it("writes ?view=results and ?view=results&test=tst_abc", () => {
+    writeView({ view: "results" });
+    expect(new URLSearchParams(window.location.search).get("view")).toBe("results");
+    expect(window.location.search).toBe("?view=results");
+
+    writeView({ view: "results", test: "tst_abc" });
+    const params = new URLSearchParams(window.location.search);
+    expect(params.get("view")).toBe("results");
+    expect(params.get("test")).toBe("tst_abc");
+    expect(window.location.search).toBe("?view=results&test=tst_abc");
+  });
+
+  it("opens results view when query string has ?view=results", async () => {
+    reloadAt("?view=results");
+    expect(await screen.findByTestId("results-view")).toBeVisible();
   });
 });
 

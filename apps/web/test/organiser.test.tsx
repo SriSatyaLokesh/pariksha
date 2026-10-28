@@ -1908,11 +1908,11 @@ describe("the organiser shell (D3)", () => {
     expect(screen.queryByRole("navigation", { name: "Organiser" })).toBeNull();
   });
 
-  it("omits Results and Grading entirely", async () => {
+  it("omits Grading from the top nav", async () => {
     renderOrganiser();
     await signedIn();
 
-    expect(screen.queryByRole("button", { name: /results|grading/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^grading$/i })).toBeNull();
   });
 
   it("collapses the rail to icons and back, keeping every destination reachable", async () => {
