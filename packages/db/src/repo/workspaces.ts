@@ -167,6 +167,41 @@ export const setMembershipRole = scoped(
   },
 );
 
+export const updateMembership = scoped(
+  "updateMembership",
+  async (
+    db: DbClient,
+    workspaceId: string,
+    input: { userId: string; role?: string | undefined; testGrants?: unknown },
+  ): Promise<void> => {
+    if (input.role !== undefined && input.testGrants !== undefined) {
+      await db.run(
+        "UPDATE membership SET role = ?, test_grants_json = ? WHERE workspace_id = ? AND user_id = ?",
+        [
+          input.role,
+          input.testGrants === null ? null : db.jsonParam(input.testGrants),
+          workspaceId,
+          input.userId,
+        ],
+      );
+    } else if (input.role !== undefined) {
+      await db.run(
+        "UPDATE membership SET role = ? WHERE workspace_id = ? AND user_id = ?",
+        [input.role, workspaceId, input.userId],
+      );
+    } else if (input.testGrants !== undefined) {
+      await db.run(
+        "UPDATE membership SET test_grants_json = ? WHERE workspace_id = ? AND user_id = ?",
+        [
+          input.testGrants === null ? null : db.jsonParam(input.testGrants),
+          workspaceId,
+          input.userId,
+        ],
+      );
+    }
+  },
+);
+
 export const removeMembership = scoped(
   "removeMembership",
   async (db: DbClient, workspaceId: string, userId: string): Promise<void> => {

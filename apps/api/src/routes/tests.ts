@@ -494,7 +494,7 @@ function isSlugCollision(err: unknown): boolean {
 export function testRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
-  routes.get("/:id/tests", requires("tests.edit"), async (c) => {
+  routes.get("/:id/tests", requires("tests.view"), async (c) => {
     const workspaceId = c.req.param("id");
     const rows = await listTests(deps.db, workspaceId, filterFromQuery(c));
     const heads = await headVersionsByTest(deps.db, workspaceId);
@@ -534,7 +534,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
     return c.json(toWire(row, { draftVersion: 1, publishedTiming: undefined }, now), 201);
   });
 
-  routes.get("/:id/tests/:testId", requires("tests.edit"), async (c) => {
+  routes.get("/:id/tests/:testId", requires("tests.view"), async (c) => {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
     const row = await getTest(deps.db, workspaceId, testId);
@@ -590,7 +590,7 @@ export function testRoutes(deps: AppDeps): Hono<AppBindings> {
   // Task 3 (#55, P5.2): the one GET/PATCH pair Tasks 4 through 9 all write
   // through — each widens this payload rather than adding a route of its
   // own.
-  routes.get("/:id/tests/:testId/draft", requires("tests.edit"), async (c) => {
+  routes.get("/:id/tests/:testId/draft", requires("tests.view"), async (c) => {
     const workspaceId = c.req.param("id");
     const testId = c.req.param("testId");
     // No separate `getTest` existence check: a test that does not exist in

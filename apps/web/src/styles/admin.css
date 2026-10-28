@@ -1396,3 +1396,110 @@
   font-family: var(--type-mono-sm-family);
 }
 
+/* Phase 13: Teams & Collaborators */
+.teams-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: var(--space-md);
+}
+
+.teams-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.teams-table th,
+.teams-table td {
+  padding: var(--space-sm) var(--space-md);
+  border-block-end: 1px solid var(--edge-strong);
+  text-align: left;
+  vertical-align: top;
+}
+
+.teams-table th {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  letter-spacing: var(--type-mono-sm-letter-spacing);
+  text-transform: uppercase;
+}
+
+.teams-table-num {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+
+.team-role-badge {
+  display: inline-block;
+  padding: 2px var(--space-xs);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-sm);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.team-details-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-lg);
+  margin-top: var(--space-lg);
+}
+
+.team-details__header h3 {
+  margin: 0;
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.team-details__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.team-details__section h4 {
+  margin: 0;
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.team-members-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.team-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: var(--rounded-sm);
+}
+
+.team-member-name {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.team-add-member-form {
+  display: flex;
+  gap: var(--space-md);
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: var(--space-sm);
+}
+
+.collaborators-drawer {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+}
+

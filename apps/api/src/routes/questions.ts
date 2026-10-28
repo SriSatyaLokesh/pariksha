@@ -146,7 +146,7 @@ function filterFromQuery(c: Context<AppBindings>): QuestionFilter {
 export function questionRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
-  routes.get("/:id/banks/:bankId/questions", requires("banks.edit"), async (c) => {
+  routes.get("/:id/banks/:bankId/questions", requires("banks.view"), async (c) => {
     const workspaceId = c.req.param("id");
     const bankId = c.req.param("bankId");
     await bankOr404(deps, workspaceId, bankId);

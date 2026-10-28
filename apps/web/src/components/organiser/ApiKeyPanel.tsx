@@ -24,7 +24,9 @@ import { ByokSettings } from "../admin/ByokSettings";
 const SCOPE_LABEL: Readonly<Record<Action, string>> = {
   "members.manage": "Manage members",
   "workspace.settings": "Workspace settings",
+  "tests.view": "View tests and drafts",
   "tests.edit": "Edit tests",
+  "banks.view": "View question banks and questions",
   "banks.edit": "Edit question banks",
   "tests.publish": "Publish tests",
   "candidates.manage": "Manage candidates",
@@ -50,7 +52,7 @@ const SCOPE_LABEL: Readonly<Record<Action, string>> = {
 // assertion against it) — not the compiler.
 const SCOPE_GROUPS: readonly { title: string; scopes: Action[] }[] = [
   { title: "Workspace", scopes: ["workspace.settings"] },
-  { title: "Tests & banks", scopes: ["tests.edit", "banks.edit", "tests.publish"] },
+  { title: "Tests & banks", scopes: ["tests.view", "tests.edit", "banks.view", "banks.edit", "tests.publish"] },
   { title: "Candidates", scopes: ["candidates.manage", "candidates.read_personal", "candidates.delete"] },
   { title: "Attempts & proctoring", scopes: ["attempts.monitor", "attempts.read_evidence", "attempts.grade"] },
   { title: "Results", scopes: ["results.export"] },

@@ -102,6 +102,7 @@ async function actorForApiKey(deps: AppDeps, presented: string): Promise<Actor |
 
 export function authenticate(deps: AppDeps): MiddlewareHandler<AppBindings> {
   return async (c, next) => {
+    c.set("db", deps.db);
     const presentedKey = apiKeyFrom(c.req.header("Authorization"));
     if (presentedKey !== null) {
       c.set("actor", await actorForApiKey(deps, presentedKey));

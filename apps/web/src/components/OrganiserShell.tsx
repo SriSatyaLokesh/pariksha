@@ -16,7 +16,7 @@ import { readGround, writeGround, type Ground } from "../lib/ground";
 // a nav with nothing behind it is exactly the lie `admin.css:99-101` refused
 // when it declined to invent one for three screens. `organiser.tsx` decides
 // that, because it is the only place that knows which of the two it is.
-export type NavKey = "home" | "banks" | "tests" | "webhooks" | "keys";
+export type NavKey = "home" | "banks" | "tests" | "teams" | "webhooks" | "keys";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
@@ -96,6 +96,13 @@ export const ICONS: Record<string, string[]> = {
     "M14.4 12.4 17 15",
     "M12.6 14.2 15 16.6",
   ],
+  /* Phase 13: Teams and team-based RBAC */
+  teams: [
+    "M7 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z",
+    "M2.5 16.5v-1.5a4 4 0 0 1 8 0v1.5",
+    "M13.5 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
+    "M12.5 12.5a3.5 3.5 0 0 1 5 3.5v.5",
+  ],
 };
 
 /* The icons whose SHAPE is a fill rather than an outline — `D1`'s "glyph and
@@ -159,6 +166,7 @@ const NAV: { key: NavKey; label: string }[] = [
   { key: "home", label: "Home" },
   { key: "banks", label: "Banks" },
   { key: "tests", label: "Tests" },
+  { key: "teams", label: "Teams" },
   // Phase 8d Task 1: the first thing behind this nav slot — present, not
   // dimmed (the comment above this table's own rule).
   { key: "webhooks", label: "Webhooks" },

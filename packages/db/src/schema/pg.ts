@@ -19,6 +19,7 @@ import {
   boolean,
   index,
   uniqueIndex,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 export const workspace = pgTable(
@@ -388,6 +389,7 @@ export const apiKey = pgTable(
     createdAt: bigint("created_at", { mode: "number" }).notNull(),
     lastUsedAt: bigint("last_used_at", { mode: "number" }),
     revokedAt: bigint("revoked_at", { mode: "number" }),
+    createdBy: text("created_by"),
   },
   (t) => [
     index("api_key_workspace_idx").on(t.workspaceId),
@@ -468,5 +470,48 @@ export const byokUsage = pgTable(
   (t) => [
     index("byok_usage_workspace_idx").on(t.workspaceId),
     index("byok_usage_workspace_created_idx").on(t.workspaceId, t.createdAt),
+  ],
+);
+
+// Phase 13: Teams and RBAC.
+export const team = pgTable(
+  "team",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description"),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [index("team_workspace_idx").on(t.workspaceId)],
+);
+
+export const teamMember = pgTable(
+  "team_member",
+  {
+    teamId: text("team_id").notNull(),
+    userId: text("user_id").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    primaryKey({ name: "team_member_pkey", columns: [t.teamId, t.userId] }),
+    index("team_member_user_idx").on(t.userId),
+  ],
+);
+
+export const teamGrant = pgTable(
+  "team_grant",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    teamId: text("team_id").notNull(),
+    resourceType: text("resource_type").notNull(),
+    resourceId: text("resource_id").notNull(),
+    role: text("role").notNull(),
+    createdAt: bigint("created_at", { mode: "number" }).notNull(),
+  },
+  (t) => [
+    uniqueIndex("team_grant_resource_uq").on(t.teamId, t.resourceType, t.resourceId),
+    index("team_grant_workspace_resource_idx").on(t.workspaceId, t.resourceType, t.resourceId),
   ],
 );

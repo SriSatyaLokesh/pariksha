@@ -154,8 +154,8 @@ it("GET .../draft answers the empty draft createTest already seeded", async () =
   });
 });
 
-it("a Viewer cannot read the draft (there is no tests.view)", async () => {
-  expect((await draft(workspaceId, testId, viewerCookie)).status).toBe(403);
+it("a Viewer can read the draft (tests.view)", async () => {
+  expect((await draft(workspaceId, testId, viewerCookie)).status).toBe(200);
 });
 
 it("a draft in another workspace is 404, not 403", async () => {
@@ -650,8 +650,8 @@ it("the registration form replaces whole, so a deleted field does not survive un
   expect(JSON.stringify(body.body)).not.toContain('"b"');
 });
 
-it("GET and PATCH .../draft are both guarded by tests.edit", () => {
-  expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.edit");
+it("GET .../draft is guarded by tests.view and PATCH is guarded by tests.edit", () => {
+  expect(ROUTE_ACTIONS["GET /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.view");
   expect(ROUTE_ACTIONS["PATCH /api/v1/workspaces/:id/tests/:testId/draft"]).toBe("tests.edit");
 });
 

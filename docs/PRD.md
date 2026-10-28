@@ -632,7 +632,7 @@ v1 is accepted when every item passes on both deployment targets (Cloudflare fre
 ### Security and privacy
 
 - [ ] **AC-22** (S-10) No candidate API response contains keys, explanations or other candidates' data. This is checked by an automated test that scans every response.
-- [ ] **AC-23** (S-08, S-09) For every role in the permission matrix, each allowed action succeeds and each other action returns 403. A member of workspace A gets 404 for any workspace-B resource.
+- [x] **AC-23** (S-08, S-09) For every role in the permission matrix, each allowed action succeeds and each other action returns 403. A member of workspace A gets 404 for any workspace-B resource.
 - [ ] **AC-24** (S-13) After the retention period, the daily job deletes snapshots and personal data for that test, and the audit log records it.
 - [ ] **AC-25** (S-14) Deleting one candidate removes their data from the database and storage. Their score row stays only if anonymised.
 - [ ] **AC-26** (S-16) A snapshot URL stops working after 10 minutes.

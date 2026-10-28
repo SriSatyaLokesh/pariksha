@@ -48,6 +48,7 @@ import { keyRoutes } from "./routes/keys.js";
 import { attemptReviewRoutes } from "./routes/attempt-review.js";
 import { byokRoutes } from "./routes/byok.js";
 import { demoRoutes } from "./routes/demo.js";
+import { teamRoutes } from "./routes/teams.js";
 import type { EmailSender } from "./email/adapter.js";
 
 export interface AppDeps {
@@ -85,6 +86,7 @@ export type AppBindings = {
      * which is exactly the `attempt` authority in `ROUTE_AUTH`.
      */
     attempt: AttemptContextVar;
+    db?: DbClient;
   };
 };
 
@@ -137,6 +139,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // The heaviest: resolve the invitee, list the members, write the change,
   // revoke the member's sessions, append the audit row.
   "/api/v1/workspaces/:id/members": 10,
+  "/api/v1/workspaces/:id/members/:userId": 10,
 
   // Phase 4 Task 2: banks, questions and media. These numbers are measured
   // (apps/api/test/banks.test.ts's and media.test.ts's "measures the real
@@ -905,6 +908,13 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // + events (1) + responses (1) + questions (1) = 9. Presigning snapshots
   // spends 0 storage subrequests (K3/K4).
   "/api/v1/workspaces/:id/attempts/:attemptId/review": 9,
+  // Phase 13 Task 4: Teams, members, and grants.
+  "/api/v1/workspaces/:id/teams": 6,
+  "/api/v1/workspaces/:id/teams/:teamId": 8,
+  "/api/v1/workspaces/:id/teams/:teamId/members": 8,
+  "/api/v1/workspaces/:id/teams/:teamId/members/:userId": 6,
+  "/api/v1/workspaces/:id/teams/:teamId/grants": 8,
+  "/api/v1/workspaces/:id/teams/:teamId/grants/:grantId": 6,
 };
 
 /**
@@ -921,17 +931,17 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/members": "members.manage",
   "POST /api/v1/workspaces/:id/members": "members.manage",
   "DELETE /api/v1/workspaces/:id/members": "members.manage",
+  "DELETE /api/v1/workspaces/:id/members/:userId": "members.manage",
+  "PATCH /api/v1/workspaces/:id/members/:userId": "members.manage",
 
-  // Phase 4 Task 2. There is no `banks.view` (docs/design.md's permission
-  // matrix has only `banks.edit`), so the read routes are guarded by it too
-  // — a Viewer is 403 on all of these, not just the writes.
-  "GET /api/v1/workspaces/:id/banks": "banks.edit",
+  // Phase 4 Task 2.
+  "GET /api/v1/workspaces/:id/banks": "banks.view",
   "POST /api/v1/workspaces/:id/banks": "banks.edit",
-  "GET /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId": "banks.view",
   "PATCH /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
   "DELETE /api/v1/workspaces/:id/banks/:bankId": "banks.edit",
   "GET /api/v1/workspaces/:id/tags": "banks.edit",
-  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
+  "GET /api/v1/workspaces/:id/banks/:bankId/questions": "banks.view",
   "POST /api/v1/workspaces/:id/banks/:bankId/questions": "banks.edit",
   "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
   "PATCH /api/v1/workspaces/:id/banks/:bankId/questions/:qid": "banks.edit",
@@ -953,14 +963,13 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   "GET /api/v1/workspaces/:id/banks/:bankId/questions/:qid/export":
     "banks.edit",
 
-  // Phase 5 Task 2. There is no `tests.view` either — reads are guarded the
-  // same way banks' reads are, by the one action there is.
-  "GET /api/v1/workspaces/:id/tests": "tests.edit",
+  // Phase 5 Task 2.
+  "GET /api/v1/workspaces/:id/tests": "tests.view",
   "POST /api/v1/workspaces/:id/tests": "tests.edit",
-  "GET /api/v1/workspaces/:id/tests/:testId": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId": "tests.view",
   "PATCH /api/v1/workspaces/:id/tests/:testId": "tests.edit",
   // Task 3 (#55, P5.2).
-  "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
+  "GET /api/v1/workspaces/:id/tests/:testId/draft": "tests.view",
   "PATCH /api/v1/workspaces/:id/tests/:testId/draft": "tests.edit",
   // Task 6 (#58, P5.5).
   "POST /api/v1/workspaces/:id/tests/:testId/check-url": "tests.edit",
@@ -1083,6 +1092,19 @@ export const ROUTE_ACTIONS: Record<string, Action | null> = {
   // Guarded by attempts.read_evidence — Reviewers and Proctors see evidence,
   // Viewers (results.export) receive 403.
   "GET /api/v1/workspaces/:id/attempts/:attemptId/review": "attempts.read_evidence",
+
+  // Phase 13 Task 4: Teams and team grants.
+  "GET /api/v1/workspaces/:id/teams": null,
+  "POST /api/v1/workspaces/:id/teams": "members.manage",
+  "GET /api/v1/workspaces/:id/teams/:teamId": null,
+  "PATCH /api/v1/workspaces/:id/teams/:teamId": "members.manage",
+  "DELETE /api/v1/workspaces/:id/teams/:teamId": "members.manage",
+  "GET /api/v1/workspaces/:id/teams/:teamId/members": null,
+  "POST /api/v1/workspaces/:id/teams/:teamId/members": "members.manage",
+  "DELETE /api/v1/workspaces/:id/teams/:teamId/members/:userId": "members.manage",
+  "GET /api/v1/workspaces/:id/teams/:teamId/grants": null,
+  "POST /api/v1/workspaces/:id/teams/:teamId/grants": "members.manage",
+  "DELETE /api/v1/workspaces/:id/teams/:teamId/grants/:grantId": "members.manage",
 };
 
 /**
@@ -1254,6 +1276,8 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "GET /api/v1/workspaces/:id/members": "workspace",
   "POST /api/v1/workspaces/:id/members": "workspace",
   "DELETE /api/v1/workspaces/:id/members": "workspace",
+  "DELETE /api/v1/workspaces/:id/members/:userId": "workspace",
+  "PATCH /api/v1/workspaces/:id/members/:userId": "workspace",
   "GET /api/v1/workspaces/:id/banks": "workspace",
   "POST /api/v1/workspaces/:id/banks": "workspace",
   "GET /api/v1/workspaces/:id/banks/:bankId": "workspace",
@@ -1344,6 +1368,19 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   "GET /api/v1/workspaces/:id/tests/:testId/analytics": "workspace",
   // Phase 8g Task 4 (`#91`, `R-03`): attempt review.
   "GET /api/v1/workspaces/:id/attempts/:attemptId/review": "workspace",
+
+  // Phase 13 Task 4: Teams and team grants.
+  "GET /api/v1/workspaces/:id/teams": "workspace",
+  "POST /api/v1/workspaces/:id/teams": "workspace",
+  "GET /api/v1/workspaces/:id/teams/:teamId": "workspace",
+  "PATCH /api/v1/workspaces/:id/teams/:teamId": "workspace",
+  "DELETE /api/v1/workspaces/:id/teams/:teamId": "workspace",
+  "GET /api/v1/workspaces/:id/teams/:teamId/members": "workspace",
+  "POST /api/v1/workspaces/:id/teams/:teamId/members": "workspace",
+  "DELETE /api/v1/workspaces/:id/teams/:teamId/members/:userId": "workspace",
+  "GET /api/v1/workspaces/:id/teams/:teamId/grants": "workspace",
+  "POST /api/v1/workspaces/:id/teams/:teamId/grants": "workspace",
+  "DELETE /api/v1/workspaces/:id/teams/:teamId/grants/:grantId": "workspace",
 };
 
 export function createApp(deps: AppDeps): Hono<AppBindings> {
@@ -1437,6 +1474,8 @@ export function createApp(deps: AppDeps): Hono<AppBindings> {
   app.route("/api/v1/workspaces", attemptReviewRoutes(deps));
   // Phase 12: BYOK credentials and AI drafting
   app.route("/api/v1/workspaces", byokRoutes(deps));
+  // Phase 13 Task 4: Teams and team grants
+  app.route("/api/v1/workspaces/:id/teams", teamRoutes(deps));
   // Phase 7c Task 1: mounted before `runRoutes`, for locality with the
   // other `/api/v1/run/attempt/*` routes rather than out of necessity —
   // `POST /attempt/events` is a different HTTP method from the landing

@@ -39,6 +39,8 @@ export * from "./demo.js";
 // `src/index.ts`'s — it takes no workspace ID, so `scoped()` cannot wrap
 // it and this barrel's own "every export is scoped" guard
 // (`test/repo/scoping.test.ts`) would fail the moment it appeared here.
-export { createApiKey, listApiKeys, revokeApiKey, KEY_FORBIDDEN_ACTIONS, type ApiKeyRow } from "./keys.js";
+export { createApiKey, listApiKeys, revokeApiKey, revokeApiKeysByCreator, KEY_FORBIDDEN_ACTIONS, type ApiKeyRow } from "./keys.js";
 // Phase 12: BYOK credentials and usage telemetry (S-15).
 export * from "./byok.js";
+// Phase 13: Teams and RBAC.
+export * from "./teams.js";

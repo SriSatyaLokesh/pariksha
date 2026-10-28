@@ -529,6 +529,7 @@ export const TABLE_MANIFEST: TableSpec[] = [
       ts("created_at"),
       ts("last_used_at", { null: true }),
       ts("revoked_at", { null: true }),
+      text("created_by", { null: true }),
     ],
     indexes: [["workspace_id"]],
     uniques: [["secret_hash"]],
@@ -608,6 +609,44 @@ export const TABLE_MANIFEST: TableSpec[] = [
     ],
     indexes: [["workspace_id"], ["workspace_id", "created_at"]],
     uniques: [],
+  },
+  // Phase 13: Teams and RBAC.
+  {
+    name: "team",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("name"),
+      text("description", { null: true }),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id"]],
+    uniques: [],
+  },
+  {
+    name: "team_member",
+    tenant: false,
+    columns: [
+      text("team_id"),
+      text("user_id"),
+      ts("created_at"),
+    ],
+    indexes: [["user_id"]],
+    uniques: [],
+  },
+  {
+    name: "team_grant",
+    tenant: true,
+    columns: [
+      ...tenantHead(),
+      text("team_id"),
+      text("resource_type"),
+      text("resource_id"),
+      text("role"),
+      ts("created_at"),
+    ],
+    indexes: [["workspace_id", "resource_type", "resource_id"]],
+    uniques: [["team_id", "resource_type", "resource_id"]],
   },
 ];
 

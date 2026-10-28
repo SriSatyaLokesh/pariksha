@@ -142,7 +142,7 @@ function assertExportable(doc: Bank): void {
 export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
 
-  routes.get("/:id/banks", requires("banks.edit"), async (c) =>
+  routes.get("/:id/banks", requires("banks.view"), async (c) =>
     c.json({ banks: await listBanks(deps.db, c.req.param("id")) }),
   );
 
@@ -165,7 +165,7 @@ export function bankRoutes(deps: AppDeps): Hono<AppBindings> {
     return c.json(await getBank(deps.db, workspaceId, id), 201);
   });
 
-  routes.get("/:id/banks/:bankId", requires("banks.edit"), async (c) => {
+  routes.get("/:id/banks/:bankId", requires("banks.view"), async (c) => {
     const bank = await getBank(deps.db, c.req.param("id"), c.req.param("bankId"));
     if (!bank) throw new ApiError(404, "not_found", "No such resource.");
     return c.json(bank);

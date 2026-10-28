@@ -9,7 +9,9 @@ export type Role = (typeof ROLES)[number];
 export const ACTIONS = [
   "members.manage",
   "workspace.settings",
+  "tests.view",
   "tests.edit",
+  "banks.view",
   "banks.edit",
   "tests.publish",
   "candidates.manage",
@@ -30,13 +32,22 @@ export interface TestGrant {
   role: Role;
 }
 
+/** A role held on a specific resource (test or bank), elevating or narrowing workspace permissions. */
+export interface ResourceGrant {
+  resourceType: "test" | "bank";
+  resourceId: string;
+  role: Role;
+}
+
 // Transcribed cell for cell from the permission matrix in docs/PRD.md,
 // "Roles and permissions" — one entry per Y, in the table's row order. The
 // PRD is the specification; change the table there first, then this.
 export const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
   owner: ACTIONS,
   admin: [
+    "tests.view",
     "tests.edit",
+    "banks.view",
     "banks.edit",
     "tests.publish",
     "candidates.manage",
@@ -47,20 +58,22 @@ export const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
     "results.export",
     "keys.manage",
   ],
-  author: ["tests.edit", "banks.edit"],
-  proctor: ["attempts.monitor", "candidates.read_personal", "attempts.read_evidence"],
+  author: ["tests.view", "tests.edit", "banks.view", "banks.edit"],
+  proctor: ["tests.view", "attempts.monitor", "candidates.read_personal", "attempts.read_evidence"],
   reviewer: [
+    "tests.view",
+    "banks.view",
     "candidates.read_personal",
     "attempts.read_evidence",
     "attempts.grade",
     "results.export",
   ],
-  viewer: ["candidates.read_personal", "results.export"],
+  viewer: ["tests.view", "banks.view", "candidates.read_personal", "results.export"],
 };
 
 /**
- * Whether `role` may perform `action`, optionally on one test — or, given
- * `actions` instead of `role`, whether `action` is one of them.
+ * Whether `role` may perform `action`, optionally on one test or resource — or,
+ * given `actions` instead of `role`, whether `action` is one of them.
  *
  * A grant is a union with the workspace role, never a replacement: roles are
  * not a ladder (an Author cannot grade, a Reviewer cannot author), so there
@@ -76,19 +89,42 @@ export const PERMISSIONS: Readonly<Record<Role, readonly Action[]>> = {
  * path this function never saw, so a future rule added here (a tightened
  * action, a trimmed role) would apply to every session and silently not to
  * a single key. One function now decides both, which is the actual fix:
- * `role` and `actions` are mutually exclusive, and `testId`/`grants` (S-08's
- * per-test narrowing) apply only to the role path — a key has no role to
- * narrow and no per-test grant.
+ * `role` and `actions` are mutually exclusive, and `testId`/`resource`/`grants`
+ * apply only to the role path — a key has no role to narrow and no grant.
  */
 export function can(
   input:
-    | { role: Role; action: Action; testId?: string; grants?: readonly TestGrant[]; actions?: undefined }
-    | { actions: readonly Action[]; action: Action; role?: undefined; testId?: undefined; grants?: undefined },
+    | {
+        role: Role;
+        action: Action;
+        testId?: string;
+        grants?: readonly TestGrant[] | readonly ResourceGrant[];
+        resource?: { type: "test" | "bank"; id: string };
+        actions?: undefined;
+      }
+    | {
+        actions: readonly Action[];
+        action: Action;
+        role?: undefined;
+        testId?: undefined;
+        grants?: undefined;
+        resource?: undefined;
+      },
 ): boolean {
   if (input.actions !== undefined) return input.actions.includes(input.action);
 
-  const { role, action, testId, grants } = input;
+  const { role, action, testId, grants, resource } = input;
   if (PERMISSIONS[role].includes(action)) return true;
-  if (testId === undefined || grants === undefined) return false;
-  return grants.some((grant) => grant.testId === testId && PERMISSIONS[grant.role].includes(action));
+  if (grants === undefined) return false;
+
+  const target = resource ?? (testId !== undefined ? { type: "test" as const, id: testId } : undefined);
+  if (target === undefined) return false;
+
+  return grants.some((grant) => {
+    const matches =
+      "resourceType" in grant
+        ? grant.resourceType === target.type && grant.resourceId === target.id
+        : target.type === "test" && grant.testId === target.id;
+    return matches && PERMISSIONS[grant.role].includes(action);
+  });
 }

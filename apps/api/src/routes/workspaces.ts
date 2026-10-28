@@ -11,7 +11,7 @@
 // so dropping it is what makes a demotion take effect on the member's next
 // request rather than at the end of their twelve-hour idle window.
 
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
   addMembership,
@@ -24,7 +24,8 @@ import {
   listUserWorkspaces,
   newId,
   removeMembership,
-  setMembershipRole,
+  revokeApiKeysByCreator,
+  updateMembership,
   updateWorkspace,
 } from "@pariksha/db";
 import { CREAM, EXAMPLE_BRAND_COLOUR, HEX_COLOUR, ROLES, contrastRatio, meetsAA } from "@pariksha/core";
@@ -99,11 +100,23 @@ const memberInput = z
     userId: z.string().optional(),
     email: z.string().min(3).max(320).optional(),
     role: z.enum(ROLES),
+    testGrants: z.record(z.string(), z.enum(ROLES)).optional(),
   })
   .refine(
     (input) => (input.userId === undefined) !== (input.email === undefined),
     "names either a user or an email address, not both",
   );
+
+const updateMemberInput = z.object({
+  role: z.enum(ROLES).optional(),
+  testGrants: z.record(z.string(), z.enum(ROLES)).optional(),
+});
+
+const BELOW_AUTHOR: ReadonlySet<string> = new Set(["proctor", "reviewer", "viewer"]);
+
+function isDemotedBelowAuthor(fromRole: string, toRole: string): boolean {
+  return BELOW_AUTHOR.has(toRole) && !BELOW_AUTHOR.has(fromRole);
+}
 
 export function workspaceRoutes(deps: AppDeps): Hono<AppBindings> {
   const routes = new Hono<AppBindings>();
@@ -183,33 +196,114 @@ export function workspaceRoutes(deps: AppDeps): Hono<AppBindings> {
       await addMembership(deps.db, workspaceId, {
         userId,
         role: input.role,
+        testGrants: input.testGrants,
         now: deps.now(),
       });
       await audit(deps, workspaceId, actor.userId, "member.invite", userId, {
         role: input.role,
+        ...(input.testGrants !== undefined ? { testGrants: input.testGrants } : {}),
       });
-      return c.json({ userId, role: input.role }, 201);
+      return c.json(
+        {
+          userId,
+          role: input.role,
+          ...(input.testGrants !== undefined ? { testGrants: input.testGrants } : {}),
+        },
+        201,
+      );
     }
 
-    if (existing.role === input.role) return c.json({ userId, role: input.role });
-    refuseIfLastOwner(members, existing.role, input.role);
+    if (existing.role === input.role && input.testGrants === undefined) {
+      return c.json({
+        userId,
+        role: input.role,
+        ...(existing.testGrants ? { testGrants: existing.testGrants } : {}),
+      });
+    }
+    if (existing.role !== input.role) {
+      refuseIfLastOwner(members, existing.role, input.role);
+    }
 
-    await setMembershipRole(deps.db, workspaceId, { userId, role: input.role });
+    await updateMembership(deps.db, workspaceId, {
+      userId,
+      role: input.role,
+      ...(input.testGrants !== undefined ? { testGrants: input.testGrants } : {}),
+    });
     // Before the audit row, not after: a demotion that is logged but not
     // enforced is the failure this ordering makes impossible to ship.
     await revokeAllSessions(deps, userId);
+    if (isDemotedBelowAuthor(existing.role, input.role)) {
+      const revoked = await revokeApiKeysByCreator(deps.db, workspaceId, userId, deps.now());
+      if (revoked > 0) {
+        await audit(deps, workspaceId, actor.userId, "api_key.demotion_revoked", userId, {
+          revokedKeys: revoked,
+        });
+      }
+    }
     await audit(deps, workspaceId, actor.userId, "member.role_change", userId, {
       from: existing.role,
       to: input.role,
+      ...(input.testGrants !== undefined ? { testGrants: input.testGrants } : {}),
     });
 
-    return c.json({ userId, role: input.role });
+    return c.json({
+      userId,
+      role: input.role,
+      ...(input.testGrants !== undefined
+        ? { testGrants: input.testGrants }
+        : existing.testGrants
+          ? { testGrants: existing.testGrants }
+          : {}),
+    });
   });
 
-  routes.delete("/:id/members", requires("members.manage"), async (c) => {
+  routes.patch("/:id/members/:userId", requires("members.manage"), async (c) => {
     const actor = actorOr401(c);
     const workspaceId = c.req.param("id");
-    const userId = c.req.query("userId") ?? "";
+    const userId = c.req.param("userId");
+    const patch = parse(updateMemberInput, await json(c.req.raw));
+
+    const members = await listMemberships(deps.db, workspaceId);
+    const existing = members.find((member) => member.userId === userId);
+    if (!existing) throw new ApiError(404, "not_found", "No such resource.");
+
+    if (patch.role !== undefined && patch.role !== existing.role) {
+      refuseIfLastOwner(members, existing.role, patch.role);
+    }
+
+    await updateMembership(deps.db, workspaceId, {
+      userId,
+      ...(patch.role !== undefined ? { role: patch.role } : {}),
+      ...(patch.testGrants !== undefined ? { testGrants: patch.testGrants } : {}),
+    });
+    await revokeAllSessions(deps, userId);
+    if (patch.role !== undefined && isDemotedBelowAuthor(existing.role, patch.role)) {
+      const revoked = await revokeApiKeysByCreator(deps.db, workspaceId, userId, deps.now());
+      if (revoked > 0) {
+        await audit(deps, workspaceId, actor.userId, "api_key.demotion_revoked", userId, {
+          revokedKeys: revoked,
+        });
+      }
+    }
+    await audit(deps, workspaceId, actor.userId, "member.role_change", userId, {
+      from: existing.role,
+      to: patch.role ?? existing.role,
+      ...(patch.testGrants !== undefined ? { testGrants: patch.testGrants } : {}),
+    });
+
+    const nextRole = patch.role ?? existing.role;
+    const nextGrants = patch.testGrants !== undefined ? patch.testGrants : existing.testGrants;
+
+    return c.json({
+      userId,
+      role: nextRole,
+      ...(nextGrants ? { testGrants: nextGrants } : {}),
+    });
+  });
+
+  const removeMemberHandler = async (c: Context<AppBindings>, userId: string) => {
+    const actor = actorOr401(c);
+    const workspaceId = c.req.param("id") ?? "";
 
     const members = await listMemberships(deps.db, workspaceId);
     const existing = members.find((member) => member.userId === userId);
@@ -218,12 +312,26 @@ export function workspaceRoutes(deps: AppDeps): Hono<AppBindings> {
 
     await removeMembership(deps.db, workspaceId, userId);
     await revokeAllSessions(deps, userId);
+    const revoked = await revokeApiKeysByCreator(deps.db, workspaceId, userId, deps.now());
+    if (revoked > 0) {
+      await audit(deps, workspaceId, actor.userId, "api_key.demotion_revoked", userId, {
+        revokedKeys: revoked,
+      });
+    }
     await audit(deps, workspaceId, actor.userId, "member.remove", userId, {
       role: existing.role,
     });
 
     return c.body(null, 204);
-  });
+  };
+
+  routes.delete("/:id/members", requires("members.manage"), async (c) =>
+    removeMemberHandler(c, c.req.query("userId") ?? ""),
+  );
+
+  routes.delete("/:id/members/:userId", requires("members.manage"), async (c) =>
+    removeMemberHandler(c, c.req.param("userId") ?? ""),
+  );
 
   return routes;
 }
