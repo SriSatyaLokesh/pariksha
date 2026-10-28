@@ -253,9 +253,6 @@ async function startStrictAttempt(opts: { identityPhoto: boolean }): Promise<Ret
   const view = render(<ExamApp client={clientFor(test, paperFixture(resolved))} />);
   await screen.findByRole("heading", { level: 1 });
   await user.click(await screen.findByRole("button", { name: /Start/ }));
-  if (screen.queryByRole("navigation", { name: /question palette/i }) === null) {
-    await user.click(await screen.findByRole("button", { name: /Start/ }));
-  }
   await screen.findByRole("navigation", { name: /question palette/i });
   return view;
 }
@@ -312,7 +309,7 @@ describe("the camera start gate (P-05, Q2a)", () => {
 });
 
 describe("the inline device check gate on Start click (Task 3)", () => {
-  it("triggers inline device check and opens device test panel instead of calling onStart when camera is required", async () => {
+  it("acquires camera inline and passes verified stream to onStart when camera is allowed on Start click", async () => {
     stubDesktop();
     const test: LandingPayload = {
       ...landingFixture,
@@ -324,17 +321,9 @@ describe("the inline device check gate on Start click (Task 3)", () => {
     const onStart = vi.fn();
     await withCamera({}, async () => {
       render(<ExamLanding test={test} onStart={onStart} />);
-      expect(screen.queryByLabelText(/Device test preview/i)).toBeNull();
-
-      // First click on Start triggers check and opens preview, does NOT call onStart
       const startButton = screen.getByRole("button", { name: "Start Aptitude" });
       await user.click(startButton);
 
-      expect(onStart).not.toHaveBeenCalled();
-      expect(await screen.findByLabelText(/Device test preview/i)).toBeVisible();
-
-      // Subsequent click on Start proceeds because camera stream is verified
-      await user.click(startButton);
       expect(onStart).toHaveBeenCalledTimes(1);
       expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ getVideoTracks: expect.any(Function) }));
     });

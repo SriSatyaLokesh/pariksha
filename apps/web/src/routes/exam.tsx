@@ -381,35 +381,39 @@ export function ExamLanding({
     };
   }, [deviceMediaStream]);
 
-  const handleCheckDevice = async () => {
+  const handleCheckDevice = async (): Promise<{ ok: boolean; stream: MediaStream | null }> => {
     setReport(deviceReport(resolved));
     const needCam = requiresCamera(test);
     const needMic = requiresMicrophone(test);
-    if (needCam || needMic) {
-      if (deviceMediaStream) {
-        deviceMediaStream.getTracks().forEach((track) => track.stop());
+    if (!needCam && !needMic) {
+      return { ok: true, stream: null };
+    }
+    if (deviceMediaStream) {
+      deviceMediaStream.getTracks().forEach((track) => track.stop());
+    }
+    setDeviceMediaOpen(true);
+    setMicNotice(null);
+    setCameraNotice(null);
+    const res = await acquireMedia({ video: needCam, audio: needMic });
+    if (res.ok) {
+      setDeviceMediaStream(res.stream);
+      if (needCam && res.stream.getVideoTracks().length === 0) {
+        setCameraNotice(CAMERA_GATE_MESSAGE);
+        return { ok: false, stream: res.stream };
       }
-      setDeviceMediaOpen(true);
-      setMicNotice(null);
-      setCameraNotice(null);
-      const res = await acquireMedia({ video: needCam, audio: needMic });
-      if (res.ok) {
-        setDeviceMediaStream(res.stream);
-        if (needCam && res.stream.getVideoTracks().length === 0) {
-          setCameraNotice(CAMERA_GATE_MESSAGE);
-        }
-        if (needMic && !res.audioAvailable) {
-          setMicNotice("Microphone not detected. You may still take the test.");
-        }
-      } else {
-        setDeviceMediaStream(null);
-        if (needCam) {
-          setCameraNotice(CAMERA_GATE_MESSAGE);
-        }
-        if (needMic) {
-          setMicNotice("Microphone not detected. You may still take the test.");
-        }
+      if (needMic && !res.audioAvailable) {
+        setMicNotice("Microphone not detected. You may still take the test.");
       }
+      return { ok: true, stream: res.stream };
+    } else {
+      setDeviceMediaStream(null);
+      if (needCam) {
+        setCameraNotice(CAMERA_GATE_MESSAGE);
+      }
+      if (needMic) {
+        setMicNotice("Microphone not detected. You may still take the test.");
+      }
+      return { ok: false, stream: null };
     }
   };
 
@@ -422,13 +426,17 @@ export function ExamLanding({
       deviceMediaStream.getVideoTracks().length > 0 &&
       !deviceMediaStream.getVideoTracks().every((t) => t.readyState === "ended");
 
+    let streamToPass = deviceMediaStream;
     if (needCam && !hasActiveVideoTrack) {
-      await handleCheckDevice();
-      return;
+      const checkRes = await handleCheckDevice();
+      if (!checkRes.ok || !checkRes.stream || checkRes.stream.getVideoTracks().length === 0) {
+        return;
+      }
+      streamToPass = checkRes.stream;
     }
 
     startedRef.current = true;
-    onStart?.(deviceMediaStream);
+    onStart?.(streamToPass);
   };
 
   return (
