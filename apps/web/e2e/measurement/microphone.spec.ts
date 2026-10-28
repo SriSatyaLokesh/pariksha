@@ -93,11 +93,19 @@ test.describe("Phase 8.5: Real Browser Microphone Validation", () => {
     await page.goto(`/${seeded.workspaceSlug}/${seeded.testSlug}`);
     await page.waitForLoadState("networkidle");
 
-    // 2. Verify proctoring disclosure sentences appear
+    // 2. Verify proctoring disclosure sentences appear and action buttons are positioned above requirements
     await expect(
       page.getByText("Your microphone is on. Noise level is monitored; no audio is recorded or stored."),
     ).toBeVisible();
     await expect(page.getByText("A working camera is required for the whole test.")).toBeVisible();
+
+    const isActionsAbove = await page.evaluate(() => {
+      const actions = document.querySelector(".exam-landing-actions");
+      const requirements = document.querySelector(".exam-landing-requirements");
+      if (!actions || !requirements) return false;
+      return Boolean(actions.compareDocumentPosition(requirements) & Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+    expect(isActionsAbove).toBe(true);
 
     // 3. Click "Check my device"
     await page.getByRole("button", { name: /check my device/i }).click();
