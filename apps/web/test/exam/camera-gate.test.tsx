@@ -163,8 +163,8 @@ async function withCamera(opts: CameraOptions, fn: () => Promise<void>): Promise
   } else {
     const stream = opts.stream ?? fakeStream();
     const getUserMedia = opts.denied
-      ? () => Promise.reject(Object.assign(new Error("Permission denied"), { name: "NotAllowedError" }))
-      : () => Promise.resolve(stream);
+      ? vi.fn(() => Promise.reject(Object.assign(new Error("Permission denied"), { name: "NotAllowedError" })))
+      : vi.fn(() => Promise.resolve(stream));
     Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia } });
   }
   try {
@@ -367,6 +367,85 @@ describe("the inline device check gate on Start click (Task 3)", () => {
       await user.click(startButton);
       expect(onStart).toHaveBeenCalledTimes(1);
       expect(screen.queryByLabelText(/Device test preview/i)).toBeNull();
+    });
+  });
+});
+
+describe("stream forwarding across start/registration to prevent duplicate permissions (Task 4)", () => {
+  it("does not call getUserMedia a second time during startWith when stream was verified on landing", async () => {
+    installFakeCanvas();
+    captureUploads();
+    stubDesktop();
+    const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: false };
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "strict", requirements: proctoringRequirements(resolved) },
+    };
+    writeRegistrationToken("tok_stream_forwarding");
+    const track = fakeTrack("video");
+    const stream = fakeStream([track]);
+
+    await withCamera({ stream }, async () => {
+      render(<ExamApp client={clientFor(test, paperFixture(resolved))} />);
+      await screen.findByRole("heading", { level: 1 });
+      const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+      expect(getUserMedia).toHaveBeenCalledTimes(0);
+
+      await user.click(await screen.findByRole("button", { name: /Start/ }));
+      await screen.findByRole("navigation", { name: /question palette/i });
+
+      // Only ONE call during inline landing device check; no duplicate call in startWith!
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("preserves stream across registration and does not re-acquire media in startWith", async () => {
+    installFakeCanvas();
+    captureUploads();
+    stubDesktop();
+    const resolved: ResolvedProctoring = { ...resolveProctoring({ profile: "strict" }), identityPhoto: false };
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "strict", requirements: proctoringRequirements(resolved) },
+    };
+    const track = fakeTrack("video");
+    const stream = fakeStream([track]);
+
+    const paper = paperFixture(resolved);
+    const client: RunClient = {
+      ...clientFor(test, paper),
+      access: vi.fn(() => Promise.resolve({ entryToken: "ent_forwarding" })),
+      form: vi.fn(() => Promise.resolve({ consent: null, form: { title: "Register", fields: [] } })),
+      register: vi.fn(() => Promise.resolve({ registrationToken: "reg_forwarding" })),
+      start: vi.fn(() => Promise.resolve(paper)),
+    };
+
+    await withCamera({ stream }, async () => {
+      render(<ExamApp client={client} />);
+      await screen.findByRole("heading", { level: 1 });
+      const getUserMedia = navigator.mediaDevices.getUserMedia as ReturnType<typeof vi.fn>;
+      expect(getUserMedia).toHaveBeenCalledTimes(0);
+
+      // Start on landing: camera is required, inline check acquires it (call 1)
+      await user.click(await screen.findByRole("button", { name: /Start/ }));
+
+      // Moves to registration view
+      await screen.findByRole("heading", { level: 1, name: /register/i });
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
+
+      // Pass access gate
+      fireEvent.change(screen.getByLabelText(/access code/i), { target: { value: "TESTCODE" } });
+      fireEvent.click(screen.getByRole("button", { name: /continue/i }));
+
+      // Complete registration
+      const registerButton = await screen.findByRole("button", { name: /register and start/i });
+      fireEvent.click(registerButton);
+
+      // Reaches attempt view
+      await screen.findByRole("navigation", { name: /question palette/i });
+
+      // Still only ONE getUserMedia call in total!
+      expect(getUserMedia).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -1144,6 +1144,7 @@ export function ExamApp({ client }: { client: RunClient }) {
    *  `null` whenever nothing has been refused yet, including on first
    *  render and after a start that never needed a camera at all. */
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [landingMediaStream, setLandingMediaStream] = useState<MediaStream | null>(null);
 
   /**
    * Spend the registration token. Both callers pass one they have just
@@ -1162,16 +1163,24 @@ export function ExamApp({ client }: { client: RunClient }) {
    * case; every other proctoring failure in this phase degrades instead).
    */
   const startWith = useCallback(
-    async (registrationToken: string, test: LandingPayload) => {
+    async (
+      registrationToken: string,
+      test: LandingPayload,
+      preAcquiredStream?: MediaStream | null,
+    ) => {
       setCameraError(null);
 
       const needCamera = requiresCamera(test);
       const needMicrophone = requiresMicrophone(test);
-      let media: MediaAcquireResult | null = null;
+      let mediaStream = preAcquiredStream ?? landingMediaStream;
+      const hasValidVideo =
+        !needCamera || Boolean(mediaStream && mediaStream.getVideoTracks().some((t) => t.readyState === "live"));
+      const hasValidAudio =
+        !needMicrophone || Boolean(mediaStream && mediaStream.getAudioTracks().some((t) => t.readyState === "live"));
 
-      if (needCamera || needMicrophone) {
-        media = await acquireMedia({ video: needCamera, audio: needMicrophone });
-        if (needCamera && !media.ok) {
+      if (!hasValidVideo || !hasValidAudio) {
+        const acquired = await acquireMedia({ video: needCamera, audio: needMicrophone });
+        if (needCamera && !acquired.ok) {
           // Refused before `client.start` is ever reached — no attempt
           // row, nothing to resume into, and Start stays pressable again
           // once the candidate allows the camera.
@@ -1179,14 +1188,18 @@ export function ExamApp({ client }: { client: RunClient }) {
           setView({ kind: "landing", test });
           return;
         }
+        if (acquired.ok) {
+          mediaStream = acquired.stream;
+        }
       }
 
       setView({ kind: "loading" });
       try {
         const paper = await client.start(registrationToken);
-        const stream = media && media.ok ? media.stream : null;
+        const stream = mediaStream;
         const cameraStream = needCamera && stream ? stream : (needMicrophone && stream ? stream : null);
-        const audioStream = needMicrophone && media && media.ok && media.audioAvailable ? media.stream : null;
+        const audioStream =
+          needMicrophone && stream && stream.getAudioTracks().some((t) => t.readyState === "live") ? stream : null;
 
         // `Q11b`'s own identity-photo gate, read off the RESOLVED paper
         // this time (not the landing payload's sentences) — `/start` is
@@ -1226,8 +1239,8 @@ export function ExamApp({ client }: { client: RunClient }) {
         // The attempt never minted — nothing to hand a camera stream to,
         // so it is stopped here rather than leaked to a view that will
         // never render `ProctoringLayer`.
-        if (media?.ok) {
-          media.stream.getTracks().forEach((track) => {
+        if (mediaStream) {
+          mediaStream.getTracks().forEach((track) => {
             track.stop();
           });
         }
@@ -1237,7 +1250,7 @@ export function ExamApp({ client }: { client: RunClient }) {
         });
       }
     },
-    [client],
+    [client, landingMediaStream],
   );
 
   const boot = useCallback(async () => {
@@ -1384,7 +1397,7 @@ export function ExamApp({ client }: { client: RunClient }) {
           // not cost the candidate the token they just paid a proof of
           // work for.
           writeRegistrationToken(registrationToken);
-          void startWith(registrationToken, view.test);
+          void startWith(registrationToken, view.test, landingMediaStream);
         }}
       />
     );
@@ -1397,6 +1410,7 @@ export function ExamApp({ client }: { client: RunClient }) {
         setView({ kind: "result-code", test: view.test });
       }}
       onStart={(stream) => {
+        setLandingMediaStream(stream);
         // The registration screen is where a candidate without a token
         // goes — C-03's whole flow hangs off this branch.
         const registrationToken = readRegistrationToken();
@@ -1404,7 +1418,7 @@ export function ExamApp({ client }: { client: RunClient }) {
           setView({ kind: "register", test: view.test });
           return;
         }
-        void startWith(registrationToken, view.test);
+        void startWith(registrationToken, view.test, stream);
       }}
     />
   );
