@@ -43,7 +43,7 @@ import {
   type ResolvedProctoring,
 } from "@pariksha/core";
 import { captureJpeg } from "../../src/lib/camera";
-import { ExamApp, writeRegistrationToken } from "../../src/routes/exam";
+import { ExamApp, ExamLanding, writeRegistrationToken } from "../../src/routes/exam";
 import type { AttemptPaper, CandidateQuestion } from "../../src/lib/paper";
 import type { LandingPayload, RunClient } from "../../src/lib/run";
 import { RESULT_STUB } from "./run-client-stub";
@@ -133,15 +133,16 @@ const user = {
   },
 };
 
-function fakeTrack(): MediaStreamTrack {
-  return { kind: "video", stop: vi.fn() } as unknown as MediaStreamTrack;
+function fakeTrack(kind: "video" | "audio" = "video"): MediaStreamTrack {
+  return { kind, readyState: "live", stop: vi.fn() } as unknown as MediaStreamTrack;
 }
 
 /** A plain object shaped like a `MediaStream` — jsdom has no `MediaStream`
  *  constructor to instantiate for real (D-R3). */
 function fakeStream(tracks: MediaStreamTrack[] = [fakeTrack()]): MediaStream {
   return {
-    getVideoTracks: () => tracks,
+    getVideoTracks: () => tracks.filter((t) => t.kind === "video"),
+    getAudioTracks: () => tracks.filter((t) => t.kind === "audio"),
     getTracks: () => tracks,
   } as unknown as MediaStream;
 }
@@ -252,6 +253,9 @@ async function startStrictAttempt(opts: { identityPhoto: boolean }): Promise<Ret
   const view = render(<ExamApp client={clientFor(test, paperFixture(resolved))} />);
   await screen.findByRole("heading", { level: 1 });
   await user.click(await screen.findByRole("button", { name: /Start/ }));
+  if (screen.queryByRole("navigation", { name: /question palette/i }) === null) {
+    await user.click(await screen.findByRole("button", { name: /Start/ }));
+  }
   await screen.findByRole("navigation", { name: /question palette/i });
   return view;
 }
@@ -303,6 +307,77 @@ describe("the camera start gate (P-05, Q2a)", () => {
       await openCandidateStart({ proctoring: { profile: "off", requirements: [] } });
       await user.click(screen.getByRole("button", { name: /Start/ }));
       expect(await screen.findByRole("radio", { name: /Option A/ })).toBeVisible();
+    });
+  });
+});
+
+describe("the inline device check gate on Start click (Task 3)", () => {
+  it("triggers inline device check and opens device test panel instead of calling onStart when camera is required", async () => {
+    stubDesktop();
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: {
+        profile: "strict",
+        requirements: ["A working camera is required for the whole test."],
+      },
+    };
+    const onStart = vi.fn();
+    await withCamera({}, async () => {
+      render(<ExamLanding test={test} onStart={onStart} />);
+      expect(screen.queryByLabelText(/Device test preview/i)).toBeNull();
+
+      // First click on Start triggers check and opens preview, does NOT call onStart
+      const startButton = screen.getByRole("button", { name: "Start Aptitude" });
+      await user.click(startButton);
+
+      expect(onStart).not.toHaveBeenCalled();
+      expect(await screen.findByLabelText(/Device test preview/i)).toBeVisible();
+
+      // Subsequent click on Start proceeds because camera stream is verified
+      await user.click(startButton);
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(onStart).toHaveBeenCalledWith(expect.objectContaining({ getVideoTracks: expect.any(Function) }));
+    });
+  });
+
+  it("stays on landing page with cameraNotice and does not call onStart when camera is denied on Start click", async () => {
+    stubDesktop();
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: {
+        profile: "strict",
+        requirements: ["A working camera is required for the whole test."],
+      },
+    };
+    const onStart = vi.fn();
+    await withCamera({ denied: true }, async () => {
+      render(<ExamLanding test={test} onStart={onStart} />);
+      const startButton = screen.getByRole("button", { name: "Start Aptitude" });
+
+      await user.click(startButton);
+      expect(onStart).not.toHaveBeenCalled();
+      expect(await screen.findByText(/This test needs a working camera/i)).toBeVisible();
+
+      // Subsequent click also stays blocked
+      await user.click(startButton);
+      expect(onStart).not.toHaveBeenCalled();
+    });
+  });
+
+  it("calls onStart immediately without opening device test when camera is not required", async () => {
+    stubDesktop();
+    const test: LandingPayload = {
+      ...landingFixture,
+      proctoring: { profile: "off", requirements: [] },
+    };
+    const onStart = vi.fn();
+    await withCamera({}, async () => {
+      render(<ExamLanding test={test} onStart={onStart} />);
+      const startButton = screen.getByRole("button", { name: "Start Aptitude" });
+
+      await user.click(startButton);
+      expect(onStart).toHaveBeenCalledTimes(1);
+      expect(screen.queryByLabelText(/Device test preview/i)).toBeNull();
     });
   });
 });

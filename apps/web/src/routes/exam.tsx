@@ -323,7 +323,7 @@ export function ExamLanding({
   cameraError,
 }: {
   test: LandingPayload;
-  onStart?: () => void;
+  onStart?: (stream: MediaStream | null) => void;
   /** `C-09`'s way in. The landing page is the only address a candidate
    *  keeps — the one on their invitation — so the return visit a week
    *  later starts here, on a test that has usually closed by then. */
@@ -338,6 +338,7 @@ export function ExamLanding({
   const [deviceMediaStream, setDeviceMediaStream] = useState<MediaStream | null>(null);
   const [micNotice, setMicNotice] = useState<string | null>(null);
   const [cameraNotice, setCameraNotice] = useState<string | null>(null);
+  const startedRef = useRef(false);
   const notice = STATE_NOTICE[test.state];
 
   // `Q1b`: the landing payload ships the resolved REQUIREMENT SENTENCES,
@@ -374,7 +375,7 @@ export function ExamLanding({
 
   useEffect(() => {
     return () => {
-      if (deviceMediaStream) {
+      if (!startedRef.current && deviceMediaStream) {
         deviceMediaStream.getTracks().forEach((track) => track.stop());
       }
     };
@@ -395,7 +396,7 @@ export function ExamLanding({
       if (res.ok) {
         setDeviceMediaStream(res.stream);
         if (needCam && res.stream.getVideoTracks().length === 0) {
-          setCameraNotice("Camera not detected or permission denied. A camera is required to start.");
+          setCameraNotice(CAMERA_GATE_MESSAGE);
         }
         if (needMic && !res.audioAvailable) {
           setMicNotice("Microphone not detected. You may still take the test.");
@@ -403,13 +404,31 @@ export function ExamLanding({
       } else {
         setDeviceMediaStream(null);
         if (needCam) {
-          setCameraNotice("Camera not detected or permission denied. A camera is required to start.");
+          setCameraNotice(CAMERA_GATE_MESSAGE);
         }
         if (needMic) {
           setMicNotice("Microphone not detected. You may still take the test.");
         }
       }
     }
+  };
+
+  const handleStartClick = async () => {
+    if (refused || test.state !== "open") return;
+    const needCam = requiresCamera(test);
+
+    const hasActiveVideoTrack =
+      deviceMediaStream &&
+      deviceMediaStream.getVideoTracks().length > 0 &&
+      !deviceMediaStream.getVideoTracks().every((t) => t.readyState === "ended");
+
+    if (needCam && !hasActiveVideoTrack) {
+      await handleCheckDevice();
+      return;
+    }
+
+    startedRef.current = true;
+    onStart?.(deviceMediaStream);
   };
 
   return (
@@ -503,7 +522,9 @@ export function ExamLanding({
             aria-label={`Start ${test.name}`}
             aria-describedby="exam-device-blocked"
             disabled={test.state !== "open" || refused}
-            onClick={onStart}
+            onClick={() => {
+              void handleStartClick();
+            }}
           >
             Start
           </button>
@@ -1367,7 +1388,7 @@ export function ExamApp({ client }: { client: RunClient }) {
       onResult={() => {
         setView({ kind: "result-code", test: view.test });
       }}
-      onStart={() => {
+      onStart={(stream) => {
         // The registration screen is where a candidate without a token
         // goes — C-03's whole flow hangs off this branch.
         const registrationToken = readRegistrationToken();
