@@ -29,6 +29,7 @@ import { ResultsPanel } from "../components/testbuilder/ResultsPanel";
 import { BrandingPanel } from "../components/testbuilder/BrandingPanel";
 import { ProctoringPanel } from "../components/testbuilder/ProctoringPanel";
 import { LockedAttempts } from "../components/testbuilder/LockedAttempts";
+import { CollaboratorsDrawer } from "../components/organiser/CollaboratorsDrawer";
 import {
   PANEL_KEYS,
   SettingRow,
@@ -150,6 +151,7 @@ export function TestBuilder({
   // shows the derived state, the lifecycle buttons depend on it, and
   // `currentVersion` is what `UX-18`'s banner compares the draft against.
   const [test, setTest] = useState<TestSummary | null>(null);
+  const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [versions, setVersions] = useState<readonly TestVersionSummary[]>([]);
   const [confirming, setConfirming] = useState<"close" | "archive" | null>(null);
   // Task 13 (#64, P5.11), re-sited by 6.5d's `D7`: `null` is "not read
@@ -763,6 +765,9 @@ export function TestBuilder({
               Live monitor
             </button>
           )}
+          <button type="button" className="button-secondary" onClick={() => setCollaboratorsOpen(true)}>
+            Collaborators
+          </button>
         </div>
       )}
 
@@ -1004,6 +1009,17 @@ export function TestBuilder({
             />
           </SettingRow>
         </section>
+      )}
+
+      {collaboratorsOpen && (
+        <CollaboratorsDrawer
+          client={client}
+          workspaceId={workspaceId}
+          resourceType="test"
+          resourceId={testId}
+          resourceName={test?.name ?? "Test"}
+          onClose={() => setCollaboratorsOpen(false)}
+        />
       )}
       </div>
     </>

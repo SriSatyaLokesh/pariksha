@@ -6,6 +6,7 @@ import { MonoCaption } from "../components/MonoCaption";
 import { GroupEditor } from "../components/authoring/GroupEditor";
 import { useDialogKeys } from "../components/useDialogKeys";
 import { DraftAiModal } from "../components/admin/DraftAiModal";
+import { CollaboratorsDrawer } from "../components/organiser/CollaboratorsDrawer";
 // G4-10: `TYPE_LABELS` already exists for the type picker's own cards —
 // reused here rather than duplicated, so the filter dropdown and the type
 // column never learn to spell `select_k` one way and `assertion_reason`
@@ -100,6 +101,7 @@ export function BankBrowser({
   const [tags, setTags] = useState<string[]>([]);
   const [passageGroups, setPassageGroups] = useState<PassageGroupSummary[]>([]);
   const [isAiDraftOpen, setAiDraftOpen] = useState(false);
+  const [collaboratorsOpen, setCollaboratorsOpen] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [filter, setFilter] = useState<Filter>({});
   const [notice, setNotice] = useState<string | undefined>(undefined);
@@ -485,6 +487,10 @@ export function BankBrowser({
           <button type="button" className="button-secondary" onClick={onImport}>
             Import
           </button>
+
+          <button type="button" className="button-secondary" onClick={() => setCollaboratorsOpen(true)}>
+            Collaborators
+          </button>
         </div>
 
         <section aria-labelledby={groupsHeadingId}>
@@ -699,6 +705,17 @@ export function BankBrowser({
           void load();
         }}
       />
+
+      {collaboratorsOpen && (
+        <CollaboratorsDrawer
+          client={client}
+          workspaceId={workspaceId}
+          resourceType="bank"
+          resourceId={bankId}
+          resourceName="Question Bank"
+          onClose={() => setCollaboratorsOpen(false)}
+        />
+      )}
     </>
   );
 }

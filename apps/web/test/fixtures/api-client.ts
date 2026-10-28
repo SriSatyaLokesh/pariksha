@@ -97,6 +97,18 @@ export function fakeClient(overrides: Partial<ApiClient> = {}): ApiClient {
     createApiKey: notStubbed("createApiKey"),
     revokeApiKey: notStubbed("revokeApiKey"),
 
+    listTeams: notStubbed("listTeams"),
+    createTeam: notStubbed("createTeam"),
+    updateTeam: notStubbed("updateTeam"),
+    deleteTeam: notStubbed("deleteTeam"),
+    listTeamMembers: notStubbed("listTeamMembers"),
+    addTeamMember: notStubbed("addTeamMember"),
+    removeTeamMember: notStubbed("removeTeamMember"),
+    listTeamGrants: notStubbed("listTeamGrants"),
+    grantTeamResource: notStubbed("grantTeamResource"),
+    revokeTeamResource: notStubbed("revokeTeamResource"),
+    listWorkspaceMembers: notStubbed("listWorkspaceMembers"),
+
     getByok: async () => ({
       credentials: [],
       usage: { totalPromptTokens: 0, totalCompletionTokens: 0, totalCostCents: 0 },

@@ -25,6 +25,7 @@ import { MonitorRoute } from "./monitor";
 import { AttemptRoute } from "./attempt";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
+import { TeamsPanel } from "../components/organiser/TeamsPanel";
 
 // Routing, without a router.
 //
@@ -66,6 +67,7 @@ type View =
   | { kind: "dashboard"; actor: Actor; workspace: Workspace }
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
+  | { kind: "teams"; actor: Actor; workspace: Workspace }
   | { kind: "webhooks"; actor: Actor; workspace: Workspace }
   | { kind: "keys"; actor: Actor; workspace: Workspace }
   | { kind: "test"; actor: Actor; workspace: Workspace; testId: string }
@@ -312,6 +314,14 @@ export function OrganiserApp({
           onImport={() => go({ kind: "import", actor: view.actor, workspace: view.workspace })}
         />,
       );
+    case "teams":
+      return shell(
+        "teams",
+        view.actor,
+        view.workspace,
+        { title: "Teams", crumb: "Teams" },
+        <TeamsPanel client={client} workspace={view.workspace} actor={view.actor} />,
+      );
     case "webhooks":
       return shell(
         "webhooks",
@@ -549,6 +559,7 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
   switch (params.view) {
     case "banks":
     case "tests":
+    case "teams":
     case "webhooks":
     case "keys":
       return { kind: params.view, actor, workspace };
@@ -608,6 +619,7 @@ function paramsOf(view: View): ViewParams | null {
       return { view: "home" };
     case "banks":
     case "tests":
+    case "teams":
     case "webhooks":
     case "keys":
       return { view: view.kind };

@@ -780,6 +780,30 @@ export interface ApiClient {
   ): Promise<{ id: string; name: string; scopes: Action[]; secret: string }>;
   revokeApiKey(workspaceId: string, keyId: string): Promise<void>;
 
+  // Phase 13: Teams and team-based RBAC
+  listTeams(workspaceId: string): Promise<{ teams: Team[] }>;
+  createTeam(
+    workspaceId: string,
+    input: { name: string; description?: string | null },
+  ): Promise<{ team: Team }>;
+  updateTeam(
+    workspaceId: string,
+    teamId: string,
+    patch: { name?: string; description?: string | null },
+  ): Promise<{ team: Team }>;
+  deleteTeam(workspaceId: string, teamId: string): Promise<void>;
+  listTeamMembers(workspaceId: string, teamId: string): Promise<{ members: TeamMember[] }>;
+  addTeamMember(workspaceId: string, teamId: string, userId: string): Promise<void>;
+  removeTeamMember(workspaceId: string, teamId: string, userId: string): Promise<void>;
+  listTeamGrants(workspaceId: string, teamId: string): Promise<{ grants: TeamGrant[] }>;
+  grantTeamResource(
+    workspaceId: string,
+    teamId: string,
+    grant: { resourceType: "test" | "bank"; resourceId: string; role: Role },
+  ): Promise<{ grant: TeamGrant }>;
+  revokeTeamResource(workspaceId: string, teamId: string, grantId: string): Promise<void>;
+  listWorkspaceMembers?(workspaceId: string): Promise<{ members: Array<{ id: string; userId: string; role: string }> }>;
+
   // Phase 12: BYOK encrypted keys and AI drafting (S-15)
   getByok(workspaceId: string): Promise<{ credentials: ByokCredential[]; usage: ByokUsage }>;
   saveByokKey(
@@ -937,6 +961,32 @@ export interface ApiKey {
   createdAt: number;
   lastUsedAt: number | null;
   revokedAt: number | null;
+}
+
+/** Teams and team grants (Phase 13). Mirrors packages/db/src/repo/teams.ts */
+export interface Team {
+  id: string;
+  workspaceId: string;
+  name: string;
+  description: string | null;
+  createdAt: number;
+}
+
+export interface TeamMember {
+  teamId: string;
+  userId: string;
+  createdAt: number;
+  email?: string | null | undefined;
+}
+
+export interface TeamGrant {
+  id: string;
+  workspaceId: string;
+  teamId: string;
+  resourceType: "test" | "bank" | string;
+  resourceId: string;
+  role: Role;
+  createdAt: number;
 }
 
 /** One row of the uploaded list. Mirrors `CandidateRow` in
@@ -1614,6 +1664,42 @@ export function createApiClient(): ApiClient {
     async revokeApiKey(workspaceId, keyId) {
       await request(`/workspaces/${workspaceId}/keys/${keyId}`, { method: "DELETE" });
     },
+
+    listTeams: (workspaceId) => json<{ teams: Team[] }>(`/workspaces/${workspaceId}/teams`),
+
+    createTeam: (workspaceId, input) =>
+      json<{ team: Team }>(`/workspaces/${workspaceId}/teams`, post(input)),
+
+    updateTeam: (workspaceId, teamId, patch) =>
+      json<{ team: Team }>(`/workspaces/${workspaceId}/teams/${teamId}`, patchBody(patch)),
+
+    async deleteTeam(workspaceId, teamId) {
+      await request(`/workspaces/${workspaceId}/teams/${teamId}`, { method: "DELETE" });
+    },
+
+    listTeamMembers: (workspaceId, teamId) =>
+      json<{ members: TeamMember[] }>(`/workspaces/${workspaceId}/teams/${teamId}/members`),
+
+    async addTeamMember(workspaceId, teamId, userId) {
+      await request(`/workspaces/${workspaceId}/teams/${teamId}/members`, post({ userId }));
+    },
+
+    async removeTeamMember(workspaceId, teamId, userId) {
+      await request(`/workspaces/${workspaceId}/teams/${teamId}/members/${userId}`, { method: "DELETE" });
+    },
+
+    listTeamGrants: (workspaceId, teamId) =>
+      json<{ grants: TeamGrant[] }>(`/workspaces/${workspaceId}/teams/${teamId}/grants`),
+
+    grantTeamResource: (workspaceId, teamId, grant) =>
+      json<{ grant: TeamGrant }>(`/workspaces/${workspaceId}/teams/${teamId}/grants`, post(grant)),
+
+    async revokeTeamResource(workspaceId, teamId, grantId) {
+      await request(`/workspaces/${workspaceId}/teams/${teamId}/grants/${grantId}`, { method: "DELETE" });
+    },
+
+    listWorkspaceMembers: (workspaceId) =>
+      json<{ members: Array<{ id: string; userId: string; role: string }> }>(`/workspaces/${workspaceId}/members`),
 
     getByok: (workspaceId) =>
       json<{ credentials: ByokCredential[]; usage: ByokUsage }>(`/workspaces/${workspaceId}/byok`),
