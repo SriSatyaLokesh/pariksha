@@ -19,6 +19,8 @@ export function httpSender(
     async send(message: EmailMessage): Promise<void> {
       const response = await http(config.endpoint, {
         method: "POST",
+        redirect: "manual",
+        signal: AbortSignal.timeout(10_000),
         headers: {
           authorization: `Bearer ${config.token}`,
           "content-type": "application/json",

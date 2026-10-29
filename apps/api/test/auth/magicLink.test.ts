@@ -234,3 +234,20 @@ it("a sender that refuses the message says so", async () => {
     ).send({ to: KNOWN, subject: "s", text: "t" }),
   ).rejects.toThrow(/401/);
 });
+
+it("httpSender configures a 10s AbortSignal timeout and manual redirect refusal (#279)", async () => {
+  let capturedInit: RequestInit | undefined = undefined;
+  const http: typeof globalThis.fetch = (_url, init) => {
+    capturedInit = init;
+    return Promise.resolve(new Response(null, { status: 202 }));
+  };
+
+  await httpSender(
+    { endpoint: "https://mail.test/send", token: "secret", from: "test@example.com" },
+    http,
+  ).send({ to: KNOWN, subject: "Hello", text: "World" });
+
+  expect(capturedInit).toBeDefined();
+  expect(capturedInit?.redirect).toBe("manual");
+  expect(capturedInit?.signal).toBeInstanceOf(AbortSignal);
+});

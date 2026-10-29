@@ -10,6 +10,7 @@ import {
   deleteByokCredential,
   getByokUsageSummary,
   getBank,
+  urlRefusal,
   type ByokProvider,
 } from "@pariksha/db";
 import { QUESTION_TYPES, type Question } from "@pariksha/core";
@@ -169,6 +170,13 @@ export function byokRoutes(deps: AppDeps): Hono<AppBindings> {
     const parsed = draftAiSchema.safeParse(body);
     if (!parsed.success) {
       throw new ApiError(400, "validation_error", parsed.error.issues.map((i) => i.message).join(", "));
+    }
+
+    if (parsed.data.baseUrl) {
+      const refused = urlRefusal(parsed.data.baseUrl);
+      if (refused !== null) {
+        throw new ApiError(422, "url_refused", `${refused}.`);
+      }
     }
 
     const secretKey = deps.env.sessionSecret;

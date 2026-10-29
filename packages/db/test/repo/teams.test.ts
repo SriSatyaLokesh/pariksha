@@ -75,11 +75,12 @@ describe("Teams repository", () => {
 
     it("deletes a team and cascades member & grant cleanup", async () => {
       const team = await repo.createTeam(db, WS_A, { name: "Temporary Team" });
+      const tempTest = await repo.createTest(db, WS_A, { slug: "tst-temp", name: "Temp Test" });
       await repo.addTeamMember(db, WS_A, team.id, userA);
       await repo.grantTeamResource(db, WS_A, {
         teamId: team.id,
         resourceType: "test",
-        resourceId: "tst_temp12345678",
+        resourceId: tempTest.id,
         role: "reviewer",
       });
 
@@ -131,12 +132,13 @@ describe("Teams repository", () => {
   describe("team resource grants", () => {
     it("grants, updates, lists and revokes resource grants", async () => {
       const team = await repo.createTeam(db, WS_A, { name: "Physics Dept" });
+      const physTest = await repo.createTest(db, WS_A, { slug: "phys-101", name: "Physics 101" });
       await repo.addTeamMember(db, WS_A, team.id, userA);
 
       const grant = await repo.grantTeamResource(db, WS_A, {
         teamId: team.id,
         resourceType: "test",
-        resourceId: "tst_phys101_1234",
+        resourceId: physTest.id,
         role: "author",
       });
 
@@ -144,14 +146,14 @@ describe("Teams repository", () => {
       expect(grant.workspaceId).toBe(WS_A);
       expect(grant.teamId).toBe(team.id);
       expect(grant.resourceType).toBe("test");
-      expect(grant.resourceId).toBe("tst_phys101_1234");
+      expect(grant.resourceId).toBe(physTest.id);
       expect(grant.role).toBe("author");
 
       // Updating role for existing resource grant
       const updatedGrant = await repo.grantTeamResource(db, WS_A, {
         teamId: team.id,
         resourceType: "test",
-        resourceId: "tst_phys101_1234",
+        resourceId: physTest.id,
         role: "reviewer",
       });
       expect(updatedGrant.id).toBe(grant.id);
@@ -167,7 +169,7 @@ describe("Teams repository", () => {
         db,
         WS_A,
         "test",
-        "tst_phys101_1234",
+        physTest.id,
       );
       expect(resourceGrants).toHaveLength(1);
       expect(resourceGrants[0].teamName).toBe("Physics Dept");
@@ -179,7 +181,7 @@ describe("Teams repository", () => {
         WS_A,
         userA,
         "test",
-        "tst_phys101_1234",
+        physTest.id,
       );
       expect(userGrants).toHaveLength(1);
       expect(userGrants[0].teamId).toBe(team.id);
@@ -191,7 +193,7 @@ describe("Teams repository", () => {
         WS_A,
         userB,
         "test",
-        "tst_phys101_1234",
+        physTest.id,
       );
       expect(userBGrants).toHaveLength(0);
 
@@ -199,7 +201,7 @@ describe("Teams repository", () => {
       await repo.revokeTeamResource(db, WS_A, grant.id);
       expect(await repo.listTeamGrants(db, WS_A, team.id)).toHaveLength(0);
       expect(
-        await repo.listUserTeamGrantsForResource(db, WS_A, userA, "test", "tst_phys101_1234"),
+        await repo.listUserTeamGrantsForResource(db, WS_A, userA, "test", physTest.id),
       ).toHaveLength(0);
     });
 
@@ -212,6 +214,20 @@ describe("Teams repository", () => {
           role: "author",
         }),
       ).rejects.toThrow(/not found/i);
+    });
+
+    it("throws when granting a resource belonging to a different workspace (#280)", async () => {
+      const team = await repo.createTeam(db, WS_A, { name: "Audit Team" });
+      const testInB = await repo.createTest(db, WS_B, { slug: "test-b-isolation", name: "Test B" });
+
+      await expect(
+        repo.grantTeamResource(db, WS_A, {
+          teamId: team.id,
+          resourceType: "test",
+          resourceId: testInB.id,
+          role: "reviewer",
+        }),
+      ).rejects.toThrow(/not found in workspace/i);
     });
   });
 

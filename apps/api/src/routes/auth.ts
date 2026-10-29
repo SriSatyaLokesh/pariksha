@@ -49,6 +49,9 @@ import {
   setSessionCookie,
 } from "../middleware/authenticate.js";
 import { actorOnly, actorOr401 } from "../middleware/authorize.js";
+import { normaliseEmail } from "@pariksha/core";
+import { sha256Hex } from "../auth/tokens.js";
+import { limitOrThrow, limitMisses, assertNotRateLimited } from "../run/limit.js";
 
 /** The provider id `auth/identity.ts` gives the email flow. */
 const MAGIC_LINK = "magic-link";
@@ -93,6 +96,8 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
         "An email address is required.",
       );
     }
+    const emailKey = await sha256Hex(normaliseEmail(body.data.email));
+    await limitOrThrow(deps, "auth_magic_link_address", emailKey);
     await requestMagicLink(deps, body.data.email);
     return c.json({ status: "sent" }, 202);
   });
@@ -149,28 +154,32 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!body.success) {
       throw new ApiError(400, "invalid_request", "Email and password are required.");
     }
-    const creds = await getUserCredentialsByEmail(deps.db, body.data.email);
-    if (!creds || !creds.passwordHash) {
-      throw new ApiError(401, "invalid_credentials", "Invalid email or password.");
-    }
-    const valid = await verifyPassword(creds.passwordHash, body.data.password);
-    if (!valid) {
-      throw new ApiError(401, "invalid_credentials", "Invalid email or password.");
-    }
-    if (creds.totpEnabled) {
-      if (!body.data.totpCode) {
-        return c.json({ status: "totp_required" }, 200);
+    const emailKey = await sha256Hex(normaliseEmail(body.data.email));
+    await assertNotRateLimited(deps, "auth_password_signin_address", emailKey);
+    return await limitMisses(deps, "auth_password_signin_address", emailKey, async () => {
+      const creds = await getUserCredentialsByEmail(deps.db, body.data.email);
+      if (!creds || !creds.passwordHash) {
+        throw new ApiError(401, "invalid_credentials", "Invalid email or password.");
       }
-      if (!creds.totpSecret || !verifyTotp(body.data.totpCode, creds.totpSecret, 1, deps.now())) {
-        throw new ApiError(400, "invalid_totp", "Invalid two-factor authentication code.");
+      const valid = await verifyPassword(creds.passwordHash, body.data.password);
+      if (!valid) {
+        throw new ApiError(401, "invalid_credentials", "Invalid email or password.");
       }
-    }
-    const { token } = await issueSession(deps, creds.id);
-    await setSessionCookie(c, deps, token);
-    await audit(deps, await readSession(deps, token), "auth.signin", {
-      provider: "password",
+      if (creds.totpEnabled) {
+        if (!body.data.totpCode) {
+          return c.json({ status: "totp_required" }, 200);
+        }
+        if (!creds.totpSecret || !verifyTotp(body.data.totpCode, creds.totpSecret, 1, deps.now())) {
+          throw new ApiError(400, "invalid_totp", "Invalid two-factor authentication code.");
+        }
+      }
+      const { token } = await issueSession(deps, creds.id);
+      await setSessionCookie(c, deps, token);
+      await audit(deps, await readSession(deps, token), "auth.signin", {
+        provider: "password",
+      });
+      return c.json({ status: "signed_in", returnTo: safeReturnTo(body.data.returnTo) }, 200);
     });
-    return c.json({ status: "signed_in", returnTo: safeReturnTo(body.data.returnTo) }, 200);
   });
 
   routes.post("/password/register", async (c) => {
@@ -234,12 +243,16 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!creds?.totpSecret) {
       throw new ApiError(400, "totp_not_setup", "Two-factor authentication has not been initiated.");
     }
-    if (!verifyTotp(body.data.code, creds.totpSecret, 1, deps.now())) {
-      throw new ApiError(400, "invalid_totp", "The verification code is incorrect.");
-    }
-    await setUserTotp(deps.db, actor.userId, creds.totpSecret, true);
-    await audit(deps, actor, "auth.totp_enabled", {});
-    return c.json({ status: "enabled" }, 200);
+    const totpSecret = creds.totpSecret;
+    await assertNotRateLimited(deps, "auth_totp_verify_user", actor.userId);
+    return await limitMisses(deps, "auth_totp_verify_user", actor.userId, async () => {
+      if (!verifyTotp(body.data.code, totpSecret, 1, deps.now())) {
+        throw new ApiError(400, "invalid_totp", "The verification code is incorrect.");
+      }
+      await setUserTotp(deps.db, actor.userId, totpSecret, true);
+      await audit(deps, actor, "auth.totp_enabled", {});
+      return c.json({ status: "enabled" }, 200);
+    });
   });
 
   routes.post("/password/totp/disable", actorOnly(), async (c) => {

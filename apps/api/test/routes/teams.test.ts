@@ -262,4 +262,32 @@ describe("Teams REST API", () => {
     );
     expect(patchTest2Denied.status).toBe(403);
   });
+
+  it("returns 404 when granting a resource belonging to another workspace (#280)", async () => {
+    // Create a second workspace with a test
+    const otherWspRes = await app.request(
+      "/api/v1/workspaces",
+      post({ slug: `other-wsp-${Date.now()}`, name: "Other Workspace" }, ownerCookie),
+    );
+    const otherWspId = (await otherWspRes.json()).id;
+    const otherTest = await createTest(deps.db, otherWspId, {
+      slug: "other-test",
+      name: "Other Test",
+      now: FIXED_NOW,
+    });
+
+    const teamRes = await app.request(
+      `/api/v1/workspaces/${workspaceId}/teams`,
+      post({ name: "Cross Test Team" }, ownerCookie),
+    );
+    const { team } = await teamRes.json();
+
+    const grantRes = await app.request(
+      `/api/v1/workspaces/${workspaceId}/teams/${team.id}/grants`,
+      post({ resourceType: "test", resourceId: otherTest.id, role: "reviewer" }, ownerCookie),
+    );
+    expect(grantRes.status).toBe(404);
+    const body = (await grantRes.json()) as { error: { code: string } };
+    expect(body.error.code).toBe("not_found");
+  });
 });

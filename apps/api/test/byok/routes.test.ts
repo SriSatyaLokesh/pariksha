@@ -314,4 +314,60 @@ describe("BYOK HTTP Endpoints (Phase 12)", () => {
     });
     expect(res.status).toBe(401);
   });
+
+  describe("SSRF protection on baseUrl (#277)", () => {
+    beforeEach(async () => {
+      // Configure an active key so draft-ai reaches URL validation
+      await app.request(`/api/v1/workspaces/${wspId}/byok/opencode`, {
+        method: "PUT",
+        headers: { "content-type": "application/json", cookie: ownerCookie },
+        body: JSON.stringify({ apiKey: "sk-test-12345678" }),
+      });
+    });
+
+    it("refuses draft-ai baseUrl pointing to cloud metadata (169.254.169.254) with 422 url_refused", async () => {
+      const res = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: authorCookie },
+        body: JSON.stringify({
+          prompt: "Draft 2 questions",
+          provider: "opencode",
+          baseUrl: "http://169.254.169.254/latest/meta-data",
+        }),
+      });
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("url_refused");
+    });
+
+    it("refuses draft-ai baseUrl pointing to loopback (127.0.0.1) with 422 url_refused", async () => {
+      const res = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: authorCookie },
+        body: JSON.stringify({
+          prompt: "Draft 2 questions",
+          provider: "opencode",
+          baseUrl: "http://127.0.0.1:8787/v1",
+        }),
+      });
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("url_refused");
+    });
+
+    it("refuses draft-ai baseUrl pointing to private RFC 1918 range with 422 url_refused", async () => {
+      const res = await app.request(`/api/v1/workspaces/${wspId}/banks/${bankId}/draft-ai`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: authorCookie },
+        body: JSON.stringify({
+          prompt: "Draft 2 questions",
+          provider: "opencode",
+          baseUrl: "http://10.0.0.5:8000",
+        }),
+      });
+      expect(res.status).toBe(422);
+      const body = (await res.json()) as { error: { code: string; message: string } };
+      expect(body.error.code).toBe("url_refused");
+    });
+  });
 });

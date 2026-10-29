@@ -1,6 +1,7 @@
 // OpenRouter / OpenAI-Compatible Provider Adapter (Phase 12).
 // Direct native fetch calls to OpenRouter API without external SDKs.
 
+import { urlRefusal } from "@pariksha/db";
 import { OPENROUTER_MODELS } from "../models.js";
 import { buildSystemPrompt, buildUserPrompt } from "../prompts.js";
 import type { ProviderAdapter, ProviderRequest, ProviderResponse } from "../types.js";
@@ -25,11 +26,18 @@ export class OpenRouterAdapter implements ProviderAdapter {
       ? `${req.baseUrl.replace(/\/+$/, "")}/v1/chat/completions`
       : "https://openrouter.ai/api/v1/chat/completions";
 
+    const refused = urlRefusal(url);
+    if (refused !== null) {
+      throw new Error(`Refusing request to invalid destination URL: ${refused}`);
+    }
+
     const systemPrompt = buildSystemPrompt(req.types);
     const userPrompt = buildUserPrompt(req.prompt, req.count);
 
     const res = await fetch(url, {
       method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
       headers: {
         Authorization: `Bearer ${req.apiKey}`,
         "HTTP-Referer": "https://pariksha.io",

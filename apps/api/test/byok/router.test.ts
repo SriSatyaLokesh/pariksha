@@ -243,11 +243,11 @@ describe("BYOK Provider Router (Phase 12)", () => {
       model: "gpt-4o-mini",
       prompt: "Test",
       count: 1,
-      baseUrl: "https://my-custom-proxy.internal",
+      baseUrl: "https://my-custom-proxy.example.com",
     });
 
     const call = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
-    expect(call?.[0]).toBe("https://my-custom-proxy.internal/v1/chat/completions");
+    expect(call?.[0]).toBe("https://my-custom-proxy.example.com/v1/chat/completions");
   });
 
   it("extracts JSON content wrapped in markdown code blocks", async () => {

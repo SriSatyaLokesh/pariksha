@@ -1,6 +1,7 @@
 // Google Gemini Provider Adapter (Phase 12).
 // Direct native fetch calls to Google Generative Language REST API without external SDKs.
 
+import { urlRefusal } from "@pariksha/db";
 import { GEMINI_MODELS } from "../models.js";
 import { buildSystemPrompt, buildUserPrompt } from "../prompts.js";
 import type { ProviderAdapter, ProviderRequest, ProviderResponse } from "../types.js";
@@ -25,11 +26,18 @@ export class GeminiAdapter implements ProviderAdapter {
       ? `${req.baseUrl.replace(/\/+$/, "")}/models/${resolvedModel}:generateContent`
       : `https://generativelanguage.googleapis.com/v1beta/models/${resolvedModel}:generateContent`;
 
+    const refused = urlRefusal(url);
+    if (refused !== null) {
+      throw new Error(`Refusing request to invalid destination URL: ${refused}`);
+    }
+
     const systemPrompt = buildSystemPrompt(req.types);
     const userPrompt = buildUserPrompt(req.prompt, req.count);
 
     const res = await fetch(url, {
       method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
       headers: {
         "x-goog-api-key": req.apiKey,
         "content-type": "application/json",

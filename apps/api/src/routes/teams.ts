@@ -199,12 +199,21 @@ export function teamRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!team) throw new ApiError(404, "not_found", "No such resource.");
 
     const input = parse(grantResourceSchema, await json(c.req.raw));
-    const grant = await grantTeamResource(deps.db, workspaceId, {
-      teamId,
-      resourceType: input.resourceType,
-      resourceId: input.resourceId,
-      role: input.role,
-    });
+    let grant;
+    try {
+      grant = await grantTeamResource(deps.db, workspaceId, {
+        teamId,
+        resourceType: input.resourceType,
+        resourceId: input.resourceId,
+        role: input.role,
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("not found in workspace")) {
+        throw new ApiError(404, "not_found", "The specified resource was not found in this workspace.");
+      }
+      throw err;
+    }
 
     await appendAudit(deps.db, workspaceId, {
       actor: actor.userId,
