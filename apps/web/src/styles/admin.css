@@ -1682,8 +1682,9 @@
 }
 
 .status-badge--blocked {
-  color: var(--color-state-marked);
-  border-color: var(--color-state-marked);
+  color: var(--risk);
+  border-color: var(--risk);
+  background: var(--risk-wash);
 }
 
 .results-pagination {

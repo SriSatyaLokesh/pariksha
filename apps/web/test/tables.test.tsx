@@ -508,8 +508,10 @@ describe("D21a — one action-gutter rule, inherited by every table", () => {
       .sort();
     expect(organiserActs).toEqual([
       "components/organiser/CollaboratorsDrawer.tsx",
+      "components/organiser/ResultsTable.tsx",
       "components/organiser/TeamsPanel.tsx",
       "routes/bank.tsx",
+      "routes/results-hub.tsx",
       "routes/tests.tsx",
     ]);
 

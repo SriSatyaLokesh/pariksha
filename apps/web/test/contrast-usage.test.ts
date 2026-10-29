@@ -551,6 +551,21 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".draft-ai-key-select": { dark: "signal-surface", light: "signal-l-surface" },
   ".draft-ai-bottom-bar__summary": { dark: "signal-surface", light: "signal-l-surface" },
 
+  // Results Hub & Candidate Results Review Table (PR #273, Issue #271)
+  ".results-summary-card__label": { dark: "signal-surface", light: "signal-l-surface" },
+  ".results-summary-card__value": { dark: "signal-surface", light: "signal-l-surface" },
+  ".results-summary-card__subtext": { dark: "signal-surface", light: "signal-l-surface" },
+  ".results-toolbar__search": { dark: "signal-surface", light: "signal-l-surface" },
+  ".results-toolbar__select": { dark: "signal-surface", light: "signal-l-surface" },
+  ".results-accordion-btn": { dark: "signal-surface", light: "signal-l-surface" },
+  ".results-breakdown-table th": { dark: "signal-surface", light: "signal-l-surface" },
+  ".status-badge": { dark: "signal-surface", light: "signal-l-surface" },
+  ".status-badge--pass": { dark: "signal-surface", light: "signal-l-surface" },
+  ".status-badge--fail": { dark: "signal-surface", light: "signal-l-surface" },
+  ".status-badge--clean": { dark: "signal-surface", light: "signal-l-surface" },
+  ".status-badge--review": { dark: "signal-surface", light: "signal-l-surface" },
+  ".status-badge--blocked": { dark: "signal-surface", light: "signal-l-surface" },
+
   // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
   // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
   // through it, so for two phases its 26 colour-setting selectors were in
@@ -877,6 +892,15 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".draft-ai-card__key": { px: 14, weight: 400 },
   ".draft-ai-key-select": { px: 14, weight: 400 },
   ".draft-ai-bottom-bar__summary": { px: 14, weight: 400 },
+
+  // Results Hub & Candidate Results Review Table (PR #273, Issue #271)
+  ".results-toolbar__search": { px: 14, weight: 400 },
+  ".results-toolbar__select": { px: 14, weight: 400 },
+  ".status-badge--pass": { px: 12, weight: 400 },
+  ".status-badge--fail": { px: 12, weight: 400 },
+  ".status-badge--clean": { px: 12, weight: 400 },
+  ".status-badge--review": { px: 12, weight: 400 },
+  ".status-badge--blocked": { px: 12, weight: 400 },
 
   // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
   // The builder's facts, consequences and summaries are <p> elements that
