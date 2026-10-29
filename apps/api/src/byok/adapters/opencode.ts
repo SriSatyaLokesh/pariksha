@@ -1,6 +1,7 @@
 // OpenCode Provider Adapter (Phase 12).
 // Direct native fetch calls to OpenCode inference or local OpenAI-compatible endpoint without external SDKs.
 
+import { urlRefusal } from "@pariksha/db";
 import { OPENCODE_MODELS } from "../models.js";
 import { buildSystemPrompt, buildUserPrompt } from "../prompts.js";
 import type { ProviderAdapter, ProviderRequest, ProviderResponse } from "../types.js";
@@ -29,12 +30,19 @@ export class OpenCodeAdapter implements ProviderAdapter {
       url = "https://opencode.ai/inference/openai/v1/chat/completions";
     }
 
+    const refused = urlRefusal(url);
+    if (refused !== null) {
+      throw new Error(`Refusing request to invalid destination URL: ${refused}`);
+    }
+
     const apiKey = req.apiKey?.trim() || "public";
     const systemPrompt = buildSystemPrompt(req.types);
     const userPrompt = buildUserPrompt(req.prompt, req.count);
 
     const res = await fetch(url, {
       method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "content-type": "application/json",

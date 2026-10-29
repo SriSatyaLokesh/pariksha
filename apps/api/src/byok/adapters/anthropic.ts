@@ -1,6 +1,7 @@
 // Anthropic Provider Adapter (Phase 12).
 // Direct native fetch calls to Anthropic Messages API without external SDKs.
 
+import { urlRefusal } from "@pariksha/db";
 import { ANTHROPIC_MODELS } from "../models.js";
 import { buildSystemPrompt, buildUserPrompt } from "../prompts.js";
 import type { ProviderAdapter, ProviderRequest, ProviderResponse } from "../types.js";
@@ -25,11 +26,18 @@ export class AnthropicAdapter implements ProviderAdapter {
       ? `${req.baseUrl.replace(/\/+$/, "")}/v1/messages`
       : "https://api.anthropic.com/v1/messages";
 
+    const refused = urlRefusal(url);
+    if (refused !== null) {
+      throw new Error(`Refusing request to invalid destination URL: ${refused}`);
+    }
+
     const systemPrompt = buildSystemPrompt(req.types);
     const userPrompt = buildUserPrompt(req.prompt, req.count);
 
     const res = await fetch(url, {
       method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(15_000),
       headers: {
         "x-api-key": req.apiKey,
         "anthropic-version": "2023-06-01",

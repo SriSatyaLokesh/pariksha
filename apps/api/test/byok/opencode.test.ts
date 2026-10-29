@@ -89,11 +89,11 @@ describe("OpenCode BYOK Adapter (Phase 12)", () => {
       model: "glm-5.3-flash-free",
       prompt: "Test",
       count: 1,
-      baseUrl: "http://127.0.0.1:4096/v1",
+      baseUrl: "https://custom-opencode.example.com/v1",
     });
 
     const call = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
-    expect(call?.[0]).toBe("http://127.0.0.1:4096/v1/chat/completions");
+    expect(call?.[0]).toBe("https://custom-opencode.example.com/v1/chat/completions");
   });
 
   it("redacts API token when OpenCode API returns an error", async () => {

@@ -119,10 +119,10 @@ describe("Google Gemini BYOK Adapter (Phase 12)", () => {
       model: "gemini-2.5-pro",
       prompt: "Test",
       count: 1,
-      baseUrl: "https://custom-gateway.local/v1beta",
+      baseUrl: "https://custom-gateway.example.com/v1beta",
     });
 
     const call = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock.calls[0];
-    expect(call?.[0]).toBe("https://custom-gateway.local/v1beta/models/gemini-2.5-pro:generateContent");
+    expect(call?.[0]).toBe("https://custom-gateway.example.com/v1beta/models/gemini-2.5-pro:generateContent");
   });
 });
