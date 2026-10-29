@@ -285,11 +285,11 @@ pnpm --filter @pariksha/web dev
 
 The organiser app is `http://localhost:5173/admin.html`: sign in, name your first workspace, and you are the owner of the instance. `/` is the landing page, which only has content after `pnpm build` runs the prerender — under `vite dev` it is deliberately empty.
 
-**You need a sign-in method before anyone can sign in.** With neither configured, the sign-in page says so rather than offering a form that cannot work.
+**You need a sign-in method before anyone can sign in.** On the Node target (this local run and Docker), email-and-password sign-in is on by default, and while no workspace exists the first registration is open, so a fresh local instance needs nothing else. On Cloudflare there is no password sign-in, so the first owner has to come from an OIDC provider. With nothing available, the sign-in page says so rather than offering a form that cannot work. Step-by-step setup, including Google, Docker and Cloudflare, is in [docs/contributing/setup.md](docs/contributing/setup.md).
 
 | Variable | What it gives you |
 | --- | --- |
-| `OIDC_PROVIDERS` | A JSON array of `{ id, label, issuer, clientId, clientSecret, redirectUri }`. The only way to sign in on a brand-new instance — a magic link is sent to accounts that already exist, and a fresh instance has none. |
+| `OIDC_PROVIDERS` | A JSON array of `{ id, label, issuer, clientId, clientSecret, redirectUri }`. The way to sign in on a brand-new Cloudflare instance — a magic link is sent to accounts that already exist, and a fresh instance has none. (Node and Docker can also use password sign-in.) |
 | `EMAIL_ENDPOINT`, `EMAIL_TOKEN`, `EMAIL_FROM` | Magic-link sign-in through any transactional-email HTTP endpoint. |
 | `EMAIL_CONSOLE=true` | Prints the magic-link email to the server log instead of sending it. Refused in production unless you set it deliberately — a sign-in link in a log is a sign-in link. |
 | `APP_URL` | The origin magic-link URLs are built against. |

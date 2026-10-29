@@ -6,7 +6,7 @@ Everyone taking part is expected to follow the [Code of Conduct](CODE_OF_CONDUCT
 
 ## Where to start
 
-Pariksha is **alpha**: Phases 1–8 are merged, so the whole exam path is built — authoring, the test builder, the candidate runtime, proctoring, results, grading, exports and retention. What it has never done is carry a real exam with 300 candidates at once, which is the v0.1 exit gate. The most useful thing a contributor can do right now is put real use behind it and report what bent.
+Pariksha is **alpha**: the whole exam path is built — authoring, the test builder, the candidate runtime, proctoring (including the microphone), results, grading, exports, retention, teams and BYOK AI drafting. [The roadmap](docs/ROADMAP.md) has the per-phase status. What it has never done is carry a real exam with 300 candidates at once, which is the v0.1 exit gate. The most useful thing a contributor can do right now is put real use behind it and report what bent.
 
 **No TypeScript required.** Pick whichever of these fits you:
 
@@ -46,7 +46,7 @@ npx -y -p ajv-cli@5.0.0 -p ajv-formats@2.1.1 ajv validate --spec=draft2020 --str
 
 ## Development setup
 
-Node.js 22 and pnpm 10. `pnpm install`, then [Running Pariksha locally](README.md#running-pariksha-locally) for the two processes and the environment they need. `pnpm lint` and `pnpm typecheck` run across the workspace. `pnpm build` requires `SITE_URL` — the landing-page prerender refuses to invent an origin. The browser suite is `pnpm --filter @pariksha/web e2e`; `pnpm test` deliberately does not reach it.
+Node.js 22 and pnpm 10. The step-by-step guide — install, running the API and web app, environment variables, the safe way to run the full suite, the Cloudflare commands you must not run, and troubleshooting — is [docs/contributing/setup.md](docs/contributing/setup.md). In short: `pnpm install`, then [Running Pariksha locally](README.md#running-pariksha-locally) for the two processes. `pnpm lint` and `pnpm typecheck` run across the workspace. `pnpm build` requires `SITE_URL` — the landing-page prerender refuses to invent an origin. The browser suite is `pnpm --filter @pariksha/web e2e`; `pnpm test` deliberately does not reach it.
 
 **Which tests to run.** Three tiers, cheapest first. While you are iterating, `pnpm test:changed` runs only the test files your uncommitted changes affect — well under a second, against about a minute for the whole suite — and `pnpm vitest related <file>` does the same when you would rather name the file yourself. Once the change looks finished, run its package: `pnpm test:pkg @pariksha/web`, which rebuilds the packages it depends on first and is cached when nothing moved. Before you commit, run `pnpm test`: the full suite, exactly what CI runs. Treat the first two tiers as a fast signal and not a verdict — Vitest follows imports, and the packages import each other through their built `dist/`, so editing `packages/core` reports no affected tests in `apps/api`, and a change nothing imports reports none at all and still exits 0. Only `pnpm test` sees across packages.
 
