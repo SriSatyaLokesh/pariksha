@@ -11,6 +11,7 @@ import type { ModelMetadata } from "@pariksha/core";
 export async function fetchLiveOpenRouterModels(): Promise<ModelMetadata[]> {
   try {
     const res = await fetch("https://openrouter.ai/api/v1/models", {
+      signal: AbortSignal.timeout(5_000),
       headers: { "Content-Type": "application/json" },
     });
     if (!res.ok) return [];
