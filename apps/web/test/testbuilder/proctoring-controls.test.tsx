@@ -132,12 +132,12 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
     );
   });
 
-  // Review Focus 4 — the disabled control explains itself to a screen reader.
-  it("cites Issue #264 in the face check's own accessible description", async () => {
+  // Issue #264: native on-device face counting via Shape Detection API is enabled.
+  it("enables the face check control with on-device Shape Detection API copy (Issue #264)", async () => {
     await openProctoringPanel({});
     const control = screen.getByLabelText(/Count faces in each image/i);
-    expect(control).toBeDisabled();
-    expect(control).toHaveAccessibleDescription(/Issue #264/);
+    expect(control).not.toBeDisabled();
+    expect(control).toHaveAccessibleDescription(/Native on-device face counting/i);
   });
 
   // `Q12b`/#209 / Phase 8.5: the microphone control is enabled and explains
@@ -175,7 +175,7 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
   it("uses no browser-default checkbox or radio", async () => {
     await openProctoringPanel({});
     const boxes = screen.getAllByRole("checkbox");
-    expect(boxes.length).toBe(10); // eight editable + the two disabled boxes (face check, microphone)
+    expect(boxes.length).toBe(11); // eleven editable checkboxes
     for (const el of boxes) {
       expect(paintsIn(el, "appearance", ADMIN_CSS)).toBe("none");
     }

@@ -1137,7 +1137,7 @@ export function ProctoringLayer({
   // ---- speech recognition (Web Speech API, free native tier) ----------------
 
   useEffect(() => {
-    if (!proctoring.requireMicrophone) return;
+    if (!proctoring.requireMicrophone && !proctoring.aiAudioCheck) return;
 
     const speechHandle = startSpeechRecognition((transcript) => {
       queueRef.current?.push("speech_detected", { transcript, source: "native" });
@@ -1146,7 +1146,7 @@ export function ProctoringLayer({
     return () => {
       speechHandle.stop();
     };
-  }, [proctoring.requireMicrophone]);
+  }, [proctoring.requireMicrophone, proctoring.aiAudioCheck]);
 
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 

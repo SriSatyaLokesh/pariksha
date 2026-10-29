@@ -107,6 +107,7 @@ const OVERRIDE_KEY_TO_RESOLVED: Readonly<Record<keyof ProctoringOverrides, keyof
   snapshot_interval_seconds: "snapshotIntervalSeconds",
   face_check: "faceCheck",
   require_microphone: "requireMicrophone",
+  ai_audio_check: "aiAudioCheck",
   extra_monitor_check: "extraMonitorCheck",
   violation_limit: "violationLimit",
   violation_action: "violationAction",
@@ -321,6 +322,8 @@ export function ProctoringPanel({
   const faceCheckMarker = fieldMarker("face_check");
   const requireMicrophoneHelpId = `${ids}-require_microphone-help`;
   const requireMicrophoneMarker = fieldMarker("require_microphone");
+  const aiAudioCheckHelpId = `${ids}-ai_audio_check-help`;
+  const aiAudioCheckMarker = fieldMarker("ai_audio_check");
   const violationActionHelpId = `${ids}-violation_action-help`;
   const violationActionMarker = fieldMarker("violation_action");
 
@@ -483,6 +486,26 @@ export function ProctoringPanel({
               Monitors ambient noise level. No audio is ever recorded or stored.
             </p>
             {requireMicrophoneMarker?.node}
+          </div>,
+          <div className="field" key="ai_audio_check">
+            <label className="field-label" htmlFor={`${ids}-ai_audio_check`}>
+              AI speech evaluation
+            </label>
+            <input
+              type="checkbox"
+              id={`${ids}-ai_audio_check`}
+              checked={resolved.aiAudioCheck}
+              onChange={(event) => setOverride("ai_audio_check", event.target.checked)}
+              aria-describedby={
+                aiAudioCheckMarker === undefined
+                  ? aiAudioCheckHelpId
+                  : `${aiAudioCheckHelpId} ${aiAudioCheckMarker.id}`
+              }
+            />
+            <p className="field-help" id={aiAudioCheckHelpId}>
+              Evaluates spoken audio via browser Web Speech API or workspace BYOK models (OpenAI Whisper / Gemini).
+            </p>
+            {aiAudioCheckMarker?.node}
           </div>,
         ],
         // L4 (whole-branch review): the microphone clauses promised a

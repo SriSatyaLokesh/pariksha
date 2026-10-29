@@ -455,20 +455,28 @@ export function AttemptReview({ review, onBack }: AttemptReviewProps): JSX.Eleme
                 );
               }
 
+              const isSpeech = item.eventKind === "speech_detected";
+              const transcript = typeof item.details?.transcript === "string" ? item.details.transcript : null;
+              const source = typeof item.details?.source === "string" ? item.details.source : "audio";
+
               return (
                 <li
                   key={`event-${idx}`}
-                  className="attempt-review__timeline-event card-hairline"
+                  className={`attempt-review__timeline-event card-hairline ${isSpeech ? "attempt-review__timeline-event--speech" : ""}`}
                 >
                   <div className="attempt-review__event-meta">
                     <span className="mono-caption">
-                      Event: {item.eventKind ?? "unspecified"}
+                      {isSpeech ? "Speech Detected" : `Event: ${item.eventKind ?? "unspecified"}`}
                     </span>
-                    {item.flagged && (
+                    {isSpeech ? (
+                      <span className="badge badge--neutral">
+                        {source.toUpperCase()}
+                      </span>
+                    ) : item.flagged ? (
                       <span className="badge badge--flagged">
                         {item.reason ? item.reason : "Flagged"}
                       </span>
-                    )}
+                    ) : null}
                     <time
                       dateTime={new Date(item.timestamp).toISOString()}
                       className="mono-caption"
@@ -476,6 +484,11 @@ export function AttemptReview({ review, onBack }: AttemptReviewProps): JSX.Eleme
                       {formatTime(item.timestamp)}
                     </time>
                   </div>
+                  {isSpeech && transcript && (
+                    <p className="attempt-review__transcript field-help" style={{ marginTop: "0.25rem", fontStyle: "italic" }}>
+                      &ldquo;{transcript}&rdquo;
+                    </p>
+                  )}
                 </li>
               );
             })}
