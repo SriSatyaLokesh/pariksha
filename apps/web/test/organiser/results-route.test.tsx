@@ -241,7 +241,7 @@ describe("ResultsRoute", () => {
     );
 
     const reviewButtons = await screen.findAllByRole("button", { name: "Review" });
-    fireEvent.click(reviewButtons[0]);
+    fireEvent.click(reviewButtons[0]!);
 
     expect(onReviewAttempt).toHaveBeenCalledWith("att_1");
   });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { render, screen, fireEvent } from "@testing-library/react";
 
 import type { ApiClient, TestResultsOverviewItem } from "../../src/lib/api";
 import { fakeClient as sharedClient } from "../fixtures/api-client";

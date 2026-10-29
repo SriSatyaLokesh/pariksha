@@ -145,7 +145,7 @@ export function resultsRoutes(deps: AppDeps): Hono<AppBindings> {
       (await getDraftVersion(deps.db, workspaceId, testId));
     const candList = await listCandidates(deps.db, workspaceId, testId);
     const ranks = await rankedScoresForTest(deps.db, workspaceId, testId);
-    const attemptsPage = await listAttemptsForTest(deps.db, workspaceId, testId, { limit, cursor });
+    const attemptsPage = await listAttemptsForTest(deps.db, workspaceId, testId, cursor !== undefined ? { limit, cursor } : { limit });
     const rawQuestions = await workspaceQuestions(deps.db, workspaceId);
 
     const questionsMap = new Map<string, { prompt?: string; scoring?: { points?: number } }>();

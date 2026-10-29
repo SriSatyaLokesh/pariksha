@@ -63,10 +63,10 @@ export function ResultsRoute({
   const handleFilterChange = (newFilters: { status: string; integrity: string; search: string }) => {
     const opts: ResultsQueryOptions = {};
     if (newFilters.status && newFilters.status !== "all") {
-      opts.status = newFilters.status as ResultsQueryOptions["status"];
+      opts.status = newFilters.status as "submitted" | "in_progress" | "locked";
     }
     if (newFilters.integrity && newFilters.integrity !== "all") {
-      opts.integrity = newFilters.integrity as ResultsQueryOptions["integrity"];
+      opts.integrity = newFilters.integrity as "clean" | "review" | "scoring_blocked";
     }
     if (newFilters.search.trim()) {
       opts.search = newFilters.search.trim();
@@ -194,7 +194,7 @@ export function ResultsRoute({
         totalPoints={test.totalPoints}
         passMark={test.passMark}
         nextCursor={nextCursor}
-        onLoadMore={handleLoadMore}
+        onLoadMore={() => { void handleLoadMore(); }}
         isLoadingMore={loadingMore}
         onReviewAttempt={onReviewAttempt}
         onFilterChange={handleFilterChange}

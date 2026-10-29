@@ -89,12 +89,12 @@ export function ResultsTable({
   client,
   results,
   totalPoints,
-  passMark: _passMark,
   nextCursor,
   onLoadMore,
   isLoadingMore = false,
   onReviewAttempt,
   onFilterChange,
+  // passMark reserved for future pass-rate display; already surfaced via attempt.passed
 }: ResultsTableProps) {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");

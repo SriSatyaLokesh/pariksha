@@ -51,7 +51,6 @@ describe("Results API Routes", () => {
   let q1Id: string;
   let q2Id: string;
 
-  let ownerCookie: string;
   let viewerCookie: string;
   let reviewerCookie: string;
   let authorCookie: string;
@@ -61,7 +60,6 @@ describe("Results API Routes", () => {
     workspaceId = await seedWorkspace(deps, "alpha-results", "Alpha Results Workspace");
     otherWorkspaceId = await seedWorkspace(deps, "beta-results", "Beta Results Workspace");
 
-    ownerCookie = await cookieFor(deps, workspaceId, "owner");
     viewerCookie = await cookieFor(deps, workspaceId, "viewer");
     reviewerCookie = await cookieFor(deps, workspaceId, "reviewer");
     authorCookie = await cookieFor(deps, workspaceId, "author");
