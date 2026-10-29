@@ -101,7 +101,7 @@ function renderCandidateAnswer(answer: unknown, key?: unknown): JSX.Element | st
         <div className="attempt-review__blank-group">
           {entries.map(([k, v]) => (
             <span key={k} className="attempt-review__blank-chip mono-caption">
-              {k}: {String(v ?? "—")}
+              {k}: {typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? String(v) : "—"}
             </span>
           ))}
         </div>
@@ -118,7 +118,9 @@ function renderCandidateAnswer(answer: unknown, key?: unknown): JSX.Element | st
               <tr key={left}>
                 <td className="attempt-review__match-left">{left}</td>
                 <td className="attempt-review__match-arrow" aria-hidden="true">➔</td>
-                <td className="attempt-review__match-right">{String(right)}</td>
+                <td className="attempt-review__match-right">
+                  {typeof right === "string" || typeof right === "number" ? String(right) : "—"}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -134,7 +136,9 @@ function renderCandidateAnswer(answer: unknown, key?: unknown): JSX.Element | st
       return (
         <ol className="attempt-review__order-list">
           {obj.order.map((item, idx) => (
-            <li key={idx}>{String(item)}</li>
+            <li key={idx}>
+              {typeof item === "string" || typeof item === "number" ? String(item) : "—"}
+            </li>
           ))}
         </ol>
       );
@@ -147,7 +151,7 @@ function renderCandidateAnswer(answer: unknown, key?: unknown): JSX.Element | st
     }
   }
 
-  return String(answer);
+  return typeof answer === "number" || typeof answer === "boolean" ? String(answer) : "—";
 }
 
 function renderCorrectKey(key: unknown): JSX.Element | string {
@@ -190,7 +194,7 @@ function renderCorrectKey(key: unknown): JSX.Element | string {
       return (
         <span className="attempt-review__numeric-key">
           {obj.value}
-          {tolerance != null ? ` (± ${String(tolerance)}${tolType})` : ""}
+          {typeof tolerance === "number" ? ` (± ${tolerance}${tolType})` : ""}
         </span>
       );
     }
@@ -206,7 +210,11 @@ function renderCorrectKey(key: unknown): JSX.Element | string {
                 <td className="attempt-review__match-left">{k}</td>
                 <td className="attempt-review__match-arrow" aria-hidden="true">➔</td>
                 <td className="attempt-review__match-right">
-                  {Array.isArray(v) ? v.join(", ") : String(v)}
+                  {Array.isArray(v)
+                    ? v.map((item) => (typeof item === "string" || typeof item === "number" ? String(item) : "—")).join(", ")
+                    : typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+                      ? String(v)
+                      : "—"}
                 </td>
               </tr>
             ))}
@@ -222,7 +230,7 @@ function renderCorrectKey(key: unknown): JSX.Element | string {
     }
   }
 
-  return String(key);
+  return typeof key === "number" || typeof key === "boolean" ? String(key) : "—";
 }
 
 interface AnswerReviewCardProps {
@@ -234,9 +242,9 @@ function AnswerReviewCard({ ans, index }: AnswerReviewCardProps): JSX.Element {
   const isCorrect = ans.verdict === "correct" || ans.correct === true;
   const isIncorrect = ans.verdict === "incorrect" || ans.correct === false;
   const verdictClass = isCorrect
-    ? "status-badge--success"
+    ? "status-badge--pass"
     : isIncorrect
-      ? "status-badge--blocked"
+      ? "status-badge--fail"
       : "";
 
   return (
