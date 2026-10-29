@@ -19,6 +19,266 @@ function formatTime(ts: number): string {
   }
 }
 
+function isSingleOptionId(str: string): boolean {
+  return /^[a-zA-Z0-9]$/.test(str);
+}
+
+function renderCandidateAnswer(answer: unknown, key?: unknown): JSX.Element | string {
+  if (answer === null || answer === undefined) return "—";
+
+  if (typeof answer === "string") {
+    if (isSingleOptionId(answer)) {
+      return (
+        <span className="attempt-review__choice-badge">
+          {answer.toUpperCase()}
+        </span>
+      );
+    }
+    return answer;
+  }
+
+  if (typeof answer === "number" || typeof answer === "boolean") {
+    return String(answer);
+  }
+
+  if (typeof answer === "object") {
+    const obj = answer as Record<string, unknown>;
+    const kind = obj.kind;
+
+    if (kind === "option" && typeof obj.option === "string") {
+      const isMatch = typeof key === "string" && key.toLowerCase() === obj.option.toLowerCase();
+      return (
+        <span
+          className={`attempt-review__choice-badge ${
+            key !== undefined
+              ? isMatch
+                ? "attempt-review__choice-badge--match"
+                : "attempt-review__choice-badge--mismatch"
+              : ""
+          }`}
+        >
+          {obj.option.toUpperCase()}
+        </span>
+      );
+    }
+
+    if (kind === "options" && Array.isArray(obj.options)) {
+      const keyArr = Array.isArray(key)
+        ? (key as string[]).map((k) => String(k).toLowerCase())
+        : null;
+      return (
+        <div className="attempt-review__badge-group">
+          {obj.options.map((opt, i) => {
+            const optStr = String(opt);
+            const isMatch = keyArr ? keyArr.includes(optStr.toLowerCase()) : null;
+            return (
+              <span
+                key={i}
+                className={`attempt-review__choice-badge ${
+                  isMatch === true
+                    ? "attempt-review__choice-badge--match"
+                    : isMatch === false
+                      ? "attempt-review__choice-badge--mismatch"
+                      : ""
+                }`}
+              >
+                {optStr.toUpperCase()} {isMatch === true ? "✓" : isMatch === false ? "✕" : ""}
+              </span>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (kind === "number" && typeof obj.value === "number") {
+      return <span className="attempt-review__numeric-value">{String(obj.value)}</span>;
+    }
+
+    if (kind === "blanks" && obj.values && typeof obj.values === "object") {
+      const entries = Object.entries(obj.values as Record<string, unknown>);
+      if (entries.length === 0) return "—";
+      return (
+        <div className="attempt-review__blank-group">
+          {entries.map(([k, v]) => (
+            <span key={k} className="attempt-review__blank-chip mono-caption">
+              {k}: {String(v ?? "—")}
+            </span>
+          ))}
+        </div>
+      );
+    }
+
+    if (kind === "map" && obj.pairs && typeof obj.pairs === "object") {
+      const entries = Object.entries(obj.pairs as Record<string, unknown>);
+      if (entries.length === 0) return "—";
+      return (
+        <table className="attempt-review__match-table">
+          <tbody>
+            {entries.map(([left, right]) => (
+              <tr key={left}>
+                <td className="attempt-review__match-left">{left}</td>
+                <td className="attempt-review__match-arrow" aria-hidden="true">➔</td>
+                <td className="attempt-review__match-right">{String(right)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+
+    if (kind === "text" && typeof obj.text === "string") {
+      return <p className="attempt-review__text-answer">{obj.text}</p>;
+    }
+
+    if (kind === "order" && Array.isArray(obj.order)) {
+      return (
+        <ol className="attempt-review__order-list">
+          {obj.order.map((item, idx) => (
+            <li key={idx}>{String(item)}</li>
+          ))}
+        </ol>
+      );
+    }
+
+    try {
+      return JSON.stringify(answer);
+    } catch {
+      return "—";
+    }
+  }
+
+  return String(answer);
+}
+
+function renderCorrectKey(key: unknown): JSX.Element | string {
+  if (key === null || key === undefined) return "—";
+
+  if (typeof key === "string") {
+    if (isSingleOptionId(key)) {
+      return (
+        <span className="attempt-review__choice-badge">
+          {key.toUpperCase()}
+        </span>
+      );
+    }
+    return key;
+  }
+
+  if (typeof key === "number" || typeof key === "boolean") {
+    return String(key);
+  }
+
+  if (Array.isArray(key)) {
+    return (
+      <div className="attempt-review__badge-group">
+        {key.map((item, idx) => (
+          <span key={idx} className="attempt-review__choice-badge">
+            {typeof item === "string" ? item.toUpperCase() : String(item)}
+          </span>
+        ))}
+      </div>
+    );
+  }
+
+  if (typeof key === "object") {
+    const obj = key as Record<string, unknown>;
+
+    // NumericKey { value: number, tolerance?: number, tolerance_type?: string }
+    if ("value" in obj && typeof obj.value === "number") {
+      const tolerance = obj.tolerance;
+      const tolType = obj.tolerance_type === "percent" ? "%" : "";
+      return (
+        <span className="attempt-review__numeric-key">
+          {obj.value}
+          {tolerance != null ? ` (± ${String(tolerance)}${tolType})` : ""}
+        </span>
+      );
+    }
+
+    // Map or Blanks dictionary
+    const entries = Object.entries(obj);
+    if (entries.length > 0) {
+      return (
+        <table className="attempt-review__match-table">
+          <tbody>
+            {entries.map(([k, v]) => (
+              <tr key={k}>
+                <td className="attempt-review__match-left">{k}</td>
+                <td className="attempt-review__match-arrow" aria-hidden="true">➔</td>
+                <td className="attempt-review__match-right">
+                  {Array.isArray(v) ? v.join(", ") : String(v)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    }
+
+    try {
+      return JSON.stringify(key);
+    } catch {
+      return "—";
+    }
+  }
+
+  return String(key);
+}
+
+interface AnswerReviewCardProps {
+  ans: AttemptReviewData["answers"][number];
+  index: number;
+}
+
+function AnswerReviewCard({ ans, index }: AnswerReviewCardProps): JSX.Element {
+  const isCorrect = ans.verdict === "correct" || ans.correct === true;
+  const isIncorrect = ans.verdict === "incorrect" || ans.correct === false;
+  const verdictClass = isCorrect
+    ? "status-badge--success"
+    : isIncorrect
+      ? "status-badge--blocked"
+      : "";
+
+  return (
+    <div className="attempt-review__answer-card card-hairline">
+      <div className="attempt-review__answer-header">
+        <div className="attempt-review__answer-title-row">
+          <span className="mono-caption">Question {index + 1}</span>
+          {ans.verdict && (
+            <span className={`status-badge ${verdictClass}`}>
+              {isCorrect ? "✓ Correct" : isIncorrect ? "✕ Incorrect" : ans.verdict}
+            </span>
+          )}
+        </div>
+        <span className="mono-caption">
+          Points: {ans.pointsAwarded ?? "—"} / {ans.maxPoints}
+        </span>
+      </div>
+
+      {ans.prompt && (
+        <div className="attempt-review__question-prompt">
+          {ans.prompt}
+        </div>
+      )}
+
+      <div className="attempt-review__answer-body">
+        <div>
+          <span className="field-label">Candidate Answer:</span>
+          <div className="attempt-review__answer-box">
+            {renderCandidateAnswer(ans.answer, ans.key)}
+          </div>
+        </div>
+        <div>
+          <span className="field-label">Correct Key:</span>
+          <div className="attempt-review__answer-box">
+            {renderCorrectKey(ans.key)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function formatValue(val: unknown): string {
   if (val === null || val === undefined) return "—";
   if (typeof val === "string") return val;
@@ -237,38 +497,11 @@ export function AttemptReview({ review, onBack }: AttemptReviewProps): JSX.Eleme
                   {answers
                     .filter((a) => a.sectionId === sec.sectionId)
                     .map((ans, aIdx) => (
-                      <div
+                      <AnswerReviewCard
                         key={ans.questionId || aIdx}
-                        className="attempt-review__answer-card card-hairline"
-                      >
-                        <div className="attempt-review__answer-header">
-                          <span className="mono-caption">
-                            Question {aIdx + 1}
-                          </span>
-                          <span className="mono-caption">
-                            Points: {ans.pointsAwarded ?? "—"} / {ans.maxPoints}
-                          </span>
-                        </div>
-                        <div className="attempt-review__answer-body">
-                          <div>
-                            <span className="field-label">Candidate Answer:</span>
-                            <div className="attempt-review__code-box">
-                              {formatValue(ans.answer)}
-                            </div>
-                          </div>
-                          <div>
-                            <span className="field-label">Correct Key:</span>
-                            <div className="attempt-review__code-box">
-                              {formatValue(ans.key)}
-                            </div>
-                          </div>
-                        </div>
-                        {ans.verdict ? (
-                          <div className="attempt-review__answer-footer field-help">
-                            Verdict: {ans.verdict}
-                          </div>
-                        ) : null}
-                      </div>
+                        ans={ans}
+                        index={aIdx}
+                      />
                     ))}
                 </div>
               </div>
@@ -277,36 +510,11 @@ export function AttemptReview({ review, onBack }: AttemptReviewProps): JSX.Eleme
         ) : (
           <div className="attempt-review__answers-grid">
             {answers.map((ans, aIdx) => (
-              <div
+              <AnswerReviewCard
                 key={ans.questionId || aIdx}
-                className="attempt-review__answer-card card-hairline"
-              >
-                <div className="attempt-review__answer-header">
-                  <span className="mono-caption">Question {aIdx + 1}</span>
-                  <span className="mono-caption">
-                    Points: {ans.pointsAwarded ?? "—"} / {ans.maxPoints}
-                  </span>
-                </div>
-                <div className="attempt-review__answer-body">
-                  <div>
-                    <span className="field-label">Candidate Answer:</span>
-                    <div className="attempt-review__code-box">
-                      {formatValue(ans.answer)}
-                    </div>
-                  </div>
-                  <div>
-                    <span className="field-label">Correct Key:</span>
-                    <div className="attempt-review__code-box">
-                      {formatValue(ans.key)}
-                    </div>
-                  </div>
-                </div>
-                {ans.verdict ? (
-                  <div className="attempt-review__answer-footer field-help">
-                    Verdict: {ans.verdict}
-                  </div>
-                ) : null}
-              </div>
+                ans={ans}
+                index={aIdx}
+              />
             ))}
           </div>
         )}
