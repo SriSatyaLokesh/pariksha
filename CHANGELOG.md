@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows [Kee
 ### Added
 
 - **Contributor setup guide** — `docs/contributing/setup.md`: prerequisites, install and build, running the API and web app (bash and PowerShell), the environment variable table, the three test tiers and the safe full-suite command, the Cloudflare commands contributors must not run, the migration rule and troubleshooting.
-  Also corrects stale setup docs: `docs/quickstart.md` (Node 22, one-Worker Cloudflare flow, real commands), `apps/api/README.md`, `apps/web/README.md` and the phase status in `CONTRIBUTING.md`.
+  The guide covers local development, Docker, Cloudflare and Google sign-in. Also corrects stale setup docs: `docs/quickstart.md` (Node 22, one-Worker Cloudflare flow, real commands), `apps/api/README.md`, `apps/web/README.md` and the phase status in `CONTRIBUTING.md`.
 
 - **PRD v0.2 — Teams, RBAC & Credential Lifecycle** (Issues #175, #176, #177, #234)
   - Granular RBAC read permissions: unblocked `Reviewer` and `Viewer` workspace roles by introducing `"tests.view"` and `"banks.view"` actions, decoupling reading tests/banks from write permissions (`tests.edit`, `banks.create`).

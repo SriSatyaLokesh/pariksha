@@ -46,7 +46,7 @@ pnpm build && pnpm deploy:cf
 curl https://pariksha-web.<your-subdomain>.workers.dev/api/v1/health
 ```
 
-The health check answers `{"status":"ok","dialect":"d1","migrations":4}`.
+The health check answers `{"status":"ok","dialect":"d1","migrations":N}`, where N equals the number of files in `packages/db/migrations/sqlite/`.
 
 To use a custom domain, add it under **Workers & Pages → pariksha-web → Settings → Domains & Routes**, or add a `routes` entry to `wrangler.toml` — and then set `workers_dev = false` and `preview_urls = false`, which `apps/web/test/hosting.test.ts` enforces so the two URLs do not index alongside each other.
 
