@@ -43,7 +43,7 @@
 - Consumes: `questionsMap: Map<string, Question>` from `liveQuestions(deps, workspaceId)`
 - Produces: `AttemptReviewPayload["answers"]` enriched with `prompt: string | null` and `questionType: string | null`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 In `apps/api/test/attempt-review.test.ts`, update the authorized reviewer answers assertion around line 334 to verify `prompt` and `questionType`:
 
@@ -61,12 +61,12 @@ In `apps/api/test/attempt-review.test.ts`, update the authorized reviewer answer
     });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/api test -- -t "answers with keys for authorised reviewers"`
 Expected: FAIL with `prompt: undefined` or missing property.
 
-- [ ] **Step 3: Implement `prompt` and `questionType` in `apps/api/src/routes/attempt-review.ts` and update types**
+- [x] **Step 3: Implement `prompt` and `questionType` in `apps/api/src/routes/attempt-review.ts` and update types**
 
 1. In `apps/api/src/routes/attempt-review.ts`, update `AttemptReviewPayload["answers"]`:
 ```ts
@@ -116,12 +116,12 @@ Expected: FAIL with `prompt: undefined` or missing property.
   }>;
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/api test`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/api/src/routes/attempt-review.ts apps/api/test/attempt-review.test.ts apps/web/src/lib/api.ts
@@ -140,7 +140,7 @@ git commit -m "feat(api): expose prompt and questionType in attempt review paylo
 - Consumes: `AttemptReviewData["answers"]` with `prompt`, `questionType`, `answer`, `key`, `verdict`
 - Produces: Semantic UI elements (`.attempt-review__question-prompt`, `.attempt-review__answer-comparison`, `.attempt-review__choice-badge`, etc.)
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 In `apps/web/test/organiser/attempt-review.test.tsx`, add test cases for:
 1. Renders question prompt text when present.
@@ -209,12 +209,12 @@ In `apps/web/test/organiser/attempt-review.test.tsx`, add test cases for:
   });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web test -- -t "renders human-readable formats"`
 Expected: FAIL (raw JSON is rendered, prompt is missing).
 
-- [ ] **Step 3: Implement formatters and update `AttemptReview.tsx`**
+- [x] **Step 3: Implement formatters and update `AttemptReview.tsx`**
 
 1. Create formatter functions/components in `AttemptReview.tsx`:
    - `renderAnswerValue(val: unknown, key?: unknown): JSX.Element | string`:
@@ -236,12 +236,12 @@ Expected: FAIL (raw JSON is rendered, prompt is missing).
    - Update the answer body to use `.attempt-review__answer-comparison` with two columns: `Candidate Answer` and `Expected Key`.
    - Style the verdict pill with `.status-badge` (`.status-badge--success` / `.status-badge--blocked`).
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web test -- -t "AttemptReview"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/components/organiser/AttemptReview.tsx apps/web/test/organiser/attempt-review.test.tsx
@@ -260,7 +260,7 @@ git commit -m "feat(web): render human-readable answers, keys, and prompts in At
 - Consumes: CSS classes referenced in `AttemptReview.tsx`
 - Produces: WCAG AA contrast compliance and design token adherence
 
-- [ ] **Step 1: Add styling to `apps/web/src/styles/admin.css`**
+- [x] **Step 1: Add styling to `apps/web/src/styles/admin.css`**
 
 Add styles for:
 - `.attempt-review__question-prompt`: readable typography with `--ink`, margin bottom.
@@ -271,12 +271,12 @@ Add styles for:
 - `.attempt-review__match-table`: clean border-collapse table with `--edge` borders, padding, and subtle header.
 - `.attempt-review__blank-chip`: pill container with label and value.
 
-- [ ] **Step 2: Run contrast and theme tests**
+- [x] **Step 2: Run contrast and theme tests**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/contrast-usage.test.ts test/theme.test.ts`
 If any new selector setting `color:` is flagged, register it in `apps/web/test/contrast-usage.test.ts` under `SURFACE` and `INHERITED_SIZE_WEIGHT`.
 
-- [ ] **Step 3: Run full verification suite**
+- [x] **Step 3: Run full verification suite**
 
 Run:
 1. `pnpm typecheck`
@@ -286,7 +286,7 @@ Run:
 
 Expected: ALL PASS with 0 errors and 0 warnings.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add apps/web/src/styles/admin.css apps/web/test/contrast-usage.test.ts
