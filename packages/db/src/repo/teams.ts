@@ -263,6 +263,24 @@ export const grantTeamResource = scoped(
       throw new Error(`Team ${input.teamId} not found in workspace ${workspaceId}`);
     }
 
+    if (input.resourceType === "test") {
+      const rows = await db.query<{ id: string }>(
+        "SELECT id FROM test WHERE workspace_id = ? AND id = ?",
+        [workspaceId, input.resourceId],
+      );
+      if (!rows[0]) {
+        throw new Error(`Test ${input.resourceId} not found in workspace ${workspaceId}`);
+      }
+    } else if (input.resourceType === "bank") {
+      const rows = await db.query<{ id: string }>(
+        "SELECT id FROM bank WHERE workspace_id = ? AND id = ?",
+        [workspaceId, input.resourceId],
+      );
+      if (!rows[0]) {
+        throw new Error(`Bank ${input.resourceId} not found in workspace ${workspaceId}`);
+      }
+    }
+
     const existing = await db.query<{ id: string; created_at: number }>(
       "SELECT id, created_at FROM team_grant WHERE workspace_id = ? AND team_id = ? AND resource_type = ? AND resource_id = ?",
       [workspaceId, input.teamId, input.resourceType, input.resourceId],
