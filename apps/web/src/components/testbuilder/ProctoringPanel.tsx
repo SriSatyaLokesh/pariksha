@@ -444,7 +444,7 @@ export function ProctoringPanel({
             "seconds",
             resolved.snapshotIntervalSeconds,
           ),
-          // Issue #264: Native on-device face counting via Shape Detection API.
+          // Issue 264: Native on-device face counting via Shape Detection API.
           <div className="field" key="face_check">
             <label className="field-label" htmlFor={`${ids}-face_check`}>
               Count faces in each image

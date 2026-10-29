@@ -485,7 +485,7 @@ export function AttemptReview({ review, onBack }: AttemptReviewProps): JSX.Eleme
                     </time>
                   </div>
                   {isSpeech && transcript && (
-                    <p className="attempt-review__transcript field-help" style={{ marginTop: "0.25rem", fontStyle: "italic" }}>
+                    <p className="attempt-review__transcript field-help">
                       &ldquo;{transcript}&rdquo;
                     </p>
                   )}

@@ -943,8 +943,14 @@
 .attempt-review__timeline-event {
   padding: var(--space-sm) var(--space-md);
   display: flex;
-  align-items: center;
-  gap: var(--space-md);
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-xs);
+}
+
+.attempt-review__transcript {
+  margin: 0;
+  font-style: italic;
 }
 
 .attempt-review__sections-summary {

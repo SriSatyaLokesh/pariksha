@@ -109,7 +109,8 @@ describe("speech recognition (Web Speech API, apps/web/src/lib/speech.ts)", () =
       ],
     };
 
-    capturedInstance?.onresult?.(mockEvent);
+    const instance = capturedInstance as unknown as NativeSpeechRecognitionInstance;
+    instance.onresult?.(mockEvent);
 
     expect(onSpeech).toHaveBeenCalledTimes(1);
     expect(onSpeech).toHaveBeenCalledWith("hello proctor");
