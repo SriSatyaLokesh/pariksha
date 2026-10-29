@@ -104,6 +104,7 @@ import {
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
 import { acquireCamera, captureJpeg, captureSnapshot, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
 import { monitorNoise } from "../../lib/noise";
+import { startSpeechRecognition } from "../../lib/speech";
 import { ProctoringOverlay } from "./ProctoringOverlay";
 import { Watermark } from "./Watermark";
 
@@ -1132,6 +1133,20 @@ export function ProctoringLayer({
       monitor?.stop();
     };
   }, [proctoring.requireMicrophone, streamProp, liveStream]);
+
+  // ---- speech recognition (Web Speech API, free native tier) ----------------
+
+  useEffect(() => {
+    if (!proctoring.requireMicrophone) return;
+
+    const speechHandle = startSpeechRecognition((transcript) => {
+      queueRef.current?.push("speech_detected", { transcript, source: "native" });
+    });
+
+    return () => {
+      speechHandle.stop();
+    };
+  }, [proctoring.requireMicrophone]);
 
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 

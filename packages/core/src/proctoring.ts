@@ -386,7 +386,7 @@ export const PROCTORING_EVENTS = [
   "window_blur", "visibility_hidden",
   "copy_blocked", "paste_blocked", "contextmenu_blocked",
   "extra_monitor", "camera_lost", "camera_restored",
-  "identity_photo_captured", "noise_above_threshold",
+  "identity_photo_captured", "noise_above_threshold", "speech_detected",
   "proctoring_unavailable", "snapshot_failed",
   "violation_limit_reached", "attempt_locked", "attempt_unlocked",
 ] as const;
@@ -451,7 +451,7 @@ export const CANDIDATE_PROCTORING_EVENTS = [
   "window_blur", "visibility_hidden",
   "copy_blocked", "paste_blocked", "contextmenu_blocked",
   "extra_monitor", "camera_lost", "camera_restored",
-  "identity_photo_captured", "noise_above_threshold",
+  "identity_photo_captured", "noise_above_threshold", "speech_detected",
   "proctoring_unavailable", "snapshot_failed",
 ] as const satisfies readonly ProctoringEventType[];
 
@@ -520,4 +520,12 @@ export interface NoiseAboveThresholdDetail {
 
 export function detailFor(durationMs: number): NoiseAboveThresholdDetail {
   return { durationMs };
+}
+
+/**
+ * Speech detection details emitted by either browser Web Speech API or BYOK audio check.
+ */
+export interface SpeechDetectedDetail {
+  transcript?: string;
+  source?: "native" | "byok";
 }
