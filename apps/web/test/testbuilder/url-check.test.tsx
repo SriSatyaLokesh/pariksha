@@ -309,7 +309,8 @@ async function openBuilder({ search }: { search: string }) {
 
 /** The setting row's own control, named by its label (settings-rows.test.tsx). */
 function rowFor(label: string): HTMLElement {
-  return screen.getByRole("button", { name: new RegExp(`^${label}\\b`) });
+  const settings = screen.getByRole("region", { name: "Settings" });
+  return within(settings).getByRole("button", { name: new RegExp(`^${label}\\b`) });
 }
 
 /** The section's disclosure, which is the spine's half of the argument. */

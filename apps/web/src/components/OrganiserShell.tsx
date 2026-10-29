@@ -16,7 +16,7 @@ import { readGround, writeGround, type Ground } from "../lib/ground";
 // a nav with nothing behind it is exactly the lie `admin.css:99-101` refused
 // when it declined to invent one for three screens. `organiser.tsx` decides
 // that, because it is the only place that knows which of the two it is.
-export type NavKey = "home" | "banks" | "tests" | "teams" | "webhooks" | "keys";
+export type NavKey = "home" | "banks" | "tests" | "results" | "teams" | "webhooks" | "keys";
 
 /* One icon family, one stroke width, `currentColor` — PRD S-11 has no
    iconography exception and emoji are not icons. Inline rather than a sprite
@@ -166,6 +166,7 @@ const NAV: { key: NavKey; label: string }[] = [
   { key: "home", label: "Home" },
   { key: "banks", label: "Banks" },
   { key: "tests", label: "Tests" },
+  { key: "results", label: "Results" },
   { key: "teams", label: "Teams" },
   // Phase 8d Task 1: the first thing behind this nav slot — present, not
   // dimmed (the comment above this table's own rule).

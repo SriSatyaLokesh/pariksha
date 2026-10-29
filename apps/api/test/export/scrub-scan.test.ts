@@ -102,13 +102,15 @@ it("KG1: exactly the export routes this task mounts are covered", () => {
   // alias onto the existing `exportTest`, mounted under this action so a
   // Viewer can reach it — scanned in the ordinary loop below, no exemption;
   // see the header comment).
-  expect(EXPORT_ENDPOINTS.length).toBe(4);
+  expect(EXPORT_ENDPOINTS.length).toBe(6);
   expect(new Set(EXPORT_ENDPOINTS.map(([e]) => e))).toEqual(
     new Set([
       "GET /api/v1/workspaces/:id/tests/:testId/export/results.csv",
       "GET /api/v1/workspaces/:id/tests/:testId/export/answers.csv",
       "GET /api/v1/workspaces/:id/tests/:testId/analytics",
       "GET /api/v1/workspaces/:id/tests/:testId/export/test.json",
+      "GET /api/v1/workspaces/:id/results/overview",
+      "GET /api/v1/workspaces/:id/tests/:testId/results",
     ]),
   );
 });

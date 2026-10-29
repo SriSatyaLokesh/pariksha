@@ -140,6 +140,8 @@ export function TestBuilder({
   onOpenAnalytics: (testId: string) => void;
   /** Phase 8g Task 1: live cohort monitor. */
   onOpenMonitor?: (testId: string) => void;
+  /** Results Hub: per-test candidate results table. */
+  onOpenResults?: (testId: string) => void;
 }) {
   // T-23: only an owner holds `workspace.settings`, and the workspace half
   // of the branding panel is read-only without it. The server refuses

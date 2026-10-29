@@ -41,7 +41,8 @@ a {
   padding-inline: var(--space-lg);
 }
 
-.visually-hidden {
+.visually-hidden,
+.sr-only {
   position: absolute;
   width: 1px;
   height: 1px;

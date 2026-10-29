@@ -381,6 +381,73 @@ export class ApiError extends Error {
   }
 }
 
+export interface TestResultsOverviewItem {
+  id: string;
+  name: string;
+  slug: string;
+  state: TestState;
+  candidateCount: number;
+  attemptCount: number;
+  submittedCount: number;
+  averageScore: number | null;
+  passRate: number | null;
+}
+
+export interface TestResultAttempt {
+  attemptId: string;
+  candidateId: string;
+  candidateName: string | null;
+  candidateEmail: string | null;
+  externalId: string | null;
+  status: "locked" | "submitted" | "auto_submitted" | "in_progress";
+  startedAt: number;
+  submittedAt: number | null;
+  durationSeconds: number | null;
+  score: number | null;
+  maxScore: number | null;
+  percentage: number | null;
+  passed: boolean | null;
+  rank: number | null;
+  integrityFlag: "clean" | "review" | "scoring_blocked";
+  violations: number;
+  questionBreakdown: Array<{
+    questionId: string;
+    promptExcerpt: string;
+    pointsEarned: number;
+    maxPoints: number;
+    correct: boolean | null;
+  }>;
+}
+
+export interface TestResultsSummary {
+  totalRegistered: number;
+  submittedCount: number;
+  inProgressCount: number;
+  lockedCount: number;
+  averageScore: number | null;
+  passRate: number | null;
+}
+
+export interface TestResultsPayload {
+  test: {
+    id: string;
+    title: string;
+    totalPoints: number;
+    passMark: number | null;
+  };
+  summary: TestResultsSummary;
+  results: TestResultAttempt[];
+  nextCursor?: string | null | undefined;
+}
+
+export interface ResultsQueryOptions {
+  status?: "all" | "submitted" | "in_progress" | "locked";
+  integrity?: "all" | "clean" | "review" | "scoring_blocked";
+  search?: string;
+  limit?: number;
+  cursor?: string;
+}
+
 export interface ApiClient {
   setupStatus(): Promise<SetupStatus>;
   /** The signed-in actor, or null when the API answers 401. */
@@ -834,6 +901,13 @@ export interface ApiClient {
       pricing: { promptPerMillionCents: number; completionPerMillionCents: number };
     }>;
   }>;
+
+  resultsOverview(workspaceId: string): Promise<{ tests: TestResultsOverviewItem[] }>;
+  testResults(
+    workspaceId: string,
+    testId: string,
+    options?: ResultsQueryOptions,
+  ): Promise<TestResultsPayload>;
 }
 
 export interface ByokCredential {
@@ -1733,6 +1807,21 @@ export function createApiClient(): ApiClient {
           pricing: { promptPerMillionCents: number; completionPerMillionCents: number };
         }>;
       }>(`/workspaces/${workspaceId}/byok/models${live ? "?live=true" : ""}`),
+
+    resultsOverview: (workspaceId) =>
+      json<{ tests: TestResultsOverviewItem[] }>(`/workspaces/${workspaceId}/results/overview`),
+    testResults: (workspaceId, testId, options) => {
+      const params = new URLSearchParams();
+      if (options?.status && options.status !== "all") params.set("status", options.status);
+      if (options?.integrity && options.integrity !== "all") params.set("integrity", options.integrity);
+      if (options?.search && options.search.trim() !== "") params.set("search", options.search.trim());
+      if (options?.limit !== undefined) params.set("limit", String(options.limit));
+      if (options?.cursor) params.set("cursor", options.cursor);
+      const qs = params.toString();
+      return json<TestResultsPayload>(
+        `/workspaces/${workspaceId}/tests/${testId}/results${qs ? `?${qs}` : ""}`,
+      );
+    },
   };
 }
 

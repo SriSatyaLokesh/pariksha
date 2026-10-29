@@ -23,6 +23,8 @@ import { GradingRoute } from "./grading";
 import { AnalyticsRoute } from "./analytics";
 import { MonitorRoute } from "./monitor";
 import { AttemptRoute } from "./attempt";
+import { ResultsHub } from "./results-hub";
+import { ResultsRoute } from "./results";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 import { TeamsPanel } from "../components/organiser/TeamsPanel";
@@ -67,6 +69,7 @@ type View =
   | { kind: "dashboard"; actor: Actor; workspace: Workspace }
   | { kind: "banks"; actor: Actor; workspace: Workspace }
   | { kind: "tests"; actor: Actor; workspace: Workspace }
+  | { kind: "results"; actor: Actor; workspace: Workspace; testId?: string | undefined }
   | { kind: "teams"; actor: Actor; workspace: Workspace }
   | { kind: "webhooks"; actor: Actor; workspace: Workspace }
   | { kind: "keys"; actor: Actor; workspace: Workspace }
@@ -314,6 +317,37 @@ export function OrganiserApp({
           onImport={() => go({ kind: "import", actor: view.actor, workspace: view.workspace })}
         />,
       );
+    case "results":
+      if (view.testId) {
+        return shell(
+          "results",
+          view.actor,
+          view.workspace,
+          { title: "Test Results", crumb: "Results" },
+          <ResultsRoute
+            client={client}
+            workspaceId={view.workspace.id}
+            testId={view.testId}
+            onBack={() => go({ kind: "results", actor: view.actor, workspace: view.workspace })}
+            onReviewAttempt={(attemptId) =>
+              go({ kind: "attempt", actor: view.actor, workspace: view.workspace, attemptId, testId: view.testId })
+            }
+          />,
+        );
+      }
+      return shell(
+        "results",
+        view.actor,
+        view.workspace,
+        { title: "Results", crumb: "Results" },
+        <ResultsHub
+          client={client}
+          workspaceId={view.workspace.id}
+          onSelectTest={(testId) =>
+            go({ kind: "results", actor: view.actor, workspace: view.workspace, testId })
+          }
+        />,
+      );
     case "teams":
       return shell(
         "teams",
@@ -366,6 +400,9 @@ export function OrganiserApp({
           onOpenMonitor={(testId) =>
             go({ kind: "monitor", actor: view.actor, workspace: view.workspace, testId })
           }
+          onOpenResults={(testId) =>
+            go({ kind: "results", actor: view.actor, workspace: view.workspace, testId })
+          }
         />,
       );
     case "monitor":
@@ -407,7 +444,7 @@ export function OrganiserApp({
           attemptId={view.attemptId}
           onBack={() => {
             if (view.testId) {
-              go({ kind: "test", actor: view.actor, workspace: view.workspace, testId: view.testId });
+              go({ kind: "results", actor: view.actor, workspace: view.workspace, testId: view.testId });
             } else {
               go({ kind: "tests", actor: view.actor, workspace: view.workspace });
             }
@@ -563,6 +600,13 @@ function fromUrl(actor: Actor, workspace: Workspace): View {
     case "webhooks":
     case "keys":
       return { kind: params.view, actor, workspace };
+    case "results":
+      return {
+        kind: "results",
+        actor,
+        workspace,
+        ...(params.test !== undefined && { testId: params.test }),
+      };
     case "test":
       return params.test === undefined
         ? home
@@ -623,6 +667,11 @@ function paramsOf(view: View): ViewParams | null {
     case "webhooks":
     case "keys":
       return { view: view.kind };
+    case "results":
+      return {
+        view: "results",
+        ...(view.testId !== undefined && { test: view.testId }),
+      };
     case "test":
       return { view: "test", test: view.testId };
     case "grading":
