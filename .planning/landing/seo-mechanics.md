@@ -257,7 +257,7 @@ Use `offers` with a genuine zero price:
   "operatingSystem": "Web browser; Docker on Linux; Cloudflare Workers",
   "softwareVersion": "pre-alpha",
   "releaseNotes": "Pre-alpha. The product requirements, the open question and test JSON formats, their JSON Schemas and a worked example are published. The application lands with v0.1.",
-  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
   "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
   "url": "SITE_URL/",
   "sameAs": "https://github.com/SriSatyaLokesh/pariksha"
@@ -280,7 +280,7 @@ and answer engines read JSON-LD as a structured fact source.
   "name": "Pariksha",
   "codeRepository": "https://github.com/SriSatyaLokesh/pariksha",
   "programmingLanguage": ["TypeScript", "React"],
-  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "license": "https://www.gnu.org/licenses/agpl-3.0.html",
   "runtimePlatform": ["Cloudflare Workers", "Node.js", "Docker"]
 }
 ```
@@ -415,7 +415,7 @@ Overviews — those are served from the ordinary Google index. **Common:** `CCBo
 
 ### 3.3 `apps/web/public/robots.txt`
 
-For an Apache-2.0 project that wants to be found and quoted, the answer is: allow everything. There
+For an AGPL-3.0 project that wants to be found and quoted, the answer is: allow everything. There
 is nothing to protect and citation is the entire goal. Writing the tokens out explicitly is still
 worth the twelve lines — it documents the decision and it makes the test assertable.
 
@@ -491,7 +491,7 @@ the material an agent can actually act on:
 ```markdown
 # Pariksha
 
-> Open-source, self-hosted exam platform. Apache-2.0. Pre-alpha as of 2026-10-17: the product
+> Open-source, self-hosted exam platform. AGPL-3.0. Pre-alpha as of 2026-10-17: the product
 > requirements, the open question and test JSON formats, their JSON Schemas and a complete worked
 > example are published and stable enough to write questions against. The application lands with
 > v0.1.
@@ -535,9 +535,9 @@ Concrete rules for the new page:
   scope attributes — not a CSS grid of `<div>`s, which extracts as noise.
 - [ ] **3.5e Explicit dates and numbers in prose.** "As of October 2026, Pariksha is pre-alpha" beats
   "currently pre-alpha" — the first survives being quoted six months later; the second becomes a lie.
-  Same for "12 question types", "three proctoring levels", "under 30 minutes", "Apache-2.0".
+  Same for "12 question types", "three proctoring levels", "under 30 minutes", "AGPL-3.0".
 - [ ] **3.5f Proper-noun density.** Cited passages run far higher in proper nouns than generic prose.
-  Name things: Cloudflare Workers, D1, R2, Docker, SQLite, Postgres, JSON Schema, Apache-2.0.
+  Name things: Cloudflare Workers, D1, R2, Docker, SQLite, Postgres, JSON Schema, AGPL-3.0.
 - [ ] **3.5g Put the definitional paragraph first.** "Pariksha is a free, open-source, self-hosted
   exam platform..." must be in the first screen of HTML — above the hero's decoration in source
   order, not just visually.
@@ -563,7 +563,7 @@ runtime to compute them).
 - [ ] **4.2 `<meta name="description">`** — 110–160 characters. Not a ranking factor; it is the
   click decision and the snippet LLMs often echo. Must carry the pre-alpha fact. Suggested:
   `Open-source, self-hosted exam platform. Question pools, 12 question types, browser proctoring and
-  CSV results, at zero hosting cost. Apache-2.0, pre-alpha.` (158 chars.)
+  CSV results, at zero hosting cost. AGPL-3.0, pre-alpha.` (158 chars.)
   **Verify:** test asserts exactly one description meta, length 110–160.
 
 - [ ] **4.3 `<link rel="canonical" href="SITE_URL/">`** — absolute, trailing slash, matching
@@ -687,7 +687,7 @@ Each of these is a real penalty or a confirmed waste in 2026.
 
 - [ ] **5.8 No `<meta name="keywords">`.** Ignored by every engine for over a decade.
 
-- [ ] **5.9 Do not block AI training crawlers if citation is the goal.** For an Apache-2.0 project
+- [ ] **5.9 Do not block AI training crawlers if citation is the goal.** For an AGPL-3.0 project
   seeking adoption there is no asset to protect. Blocking `GPTBot` or `ClaudeBot` removes you from
   future model knowledge for no gain. (Note that blocking `Google-Extended` does not remove you
   from AI Overviews either way — those serve from the ordinary index.)

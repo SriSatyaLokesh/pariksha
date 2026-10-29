@@ -58,7 +58,7 @@ export function buildJsonLd({ siteUrl, dateModified }: JsonLdOptions) {
         operatingSystem: "Linux, macOS, Windows, Docker, Cloudflare Workers",
         softwareVersion: "alpha",
         releaseNotes: STATUS_LINE,
-        license: "https://www.apache.org/licenses/LICENSE-2.0",
+        license: "https://www.gnu.org/licenses/agpl-3.0.html",
         url: home,
         sameAs: REPO,
         publisher: { "@id": `${home}#organization` },
@@ -75,7 +75,7 @@ export function buildJsonLd({ siteUrl, dateModified }: JsonLdOptions) {
         name: "Pariksha",
         codeRepository: REPO,
         programmingLanguage: ["TypeScript", "React"],
-        license: "https://www.apache.org/licenses/LICENSE-2.0",
+        license: "https://www.gnu.org/licenses/agpl-3.0.html",
         runtimePlatform: ["Cloudflare Workers", "Node.js", "Docker"],
       },
       {

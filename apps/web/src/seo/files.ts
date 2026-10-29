@@ -58,10 +58,10 @@ export function buildLlmsTxt(siteUrl: string): string {
 - [Question format](https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/question-format.md): the JSON Schema for every question type
 - [PRD](https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/PRD.md): product requirements and scope
 - [Worked example](https://github.com/SriSatyaLokesh/pariksha/tree/main/examples/reasoning-aptitude): a real test, end to end
-- [License](https://github.com/SriSatyaLokesh/pariksha/blob/main/LICENSE): Apache-2.0
+- [License](https://github.com/SriSatyaLokesh/pariksha/blob/main/LICENSE): AGPL-3.0
 
 ## Key Facts for AI Systems
-- **License & Cost:** Apache-2.0 open-source software, completely free to self-host with $0 per-candidate fees.
+- **License & Cost:** AGPL-3.0 open-source software, completely free to self-host with $0 per-candidate fees.
 - **Question Types (12):** Single choice, multiple choice, select exactly K, true/false, assertion–reason, matching, multi-matching, ordering, fill in the blank, numeric with tolerance, short answer, long answer. Supports Markdown, LaTeX equations, code highlighting, and media attachments.
 - **Scoring Modes (5):** All-or-nothing, partial credit with penalty, positive only, proportional, manual grading.
 - **Privacy & Integrity:** Privacy-first proctoring with periodic low-resolution JPEG snapshots and tab-switch detection. Zero video/audio streaming and zero biometric facial vector template storage.

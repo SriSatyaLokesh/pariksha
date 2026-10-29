@@ -8,11 +8,11 @@
 
 <p>
 Twelve question types&nbsp;· a different paper for every candidate&nbsp;· proctoring that records no video&nbsp;· a results CSV<br>
-Your own Cloudflare account or your own server. Apache-2.0, and no per-candidate fee, ever.
+Your own Cloudflare account or your own server. AGPL-3.0, and no per-candidate fee, ever.
 </p>
 
 <p>
-<a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License: Apache 2.0"></a>
+<a href="LICENSE"><img src="https://img.shields.io/badge/License-AGPL_3.0-blue.svg" alt="License: AGPL 3.0"></a>
 <a href="https://creativecommons.org/licenses/by/4.0/"><img src="https://img.shields.io/badge/Content-CC_BY_4.0-lightgrey.svg" alt="Content: CC BY 4.0"></a>
 <a href="#roadmap"><img src="https://img.shields.io/badge/Status-alpha-E8A33D.svg" alt="Status: alpha"></a>
 <a href="docs/ROADMAP.md"><img src="https://img.shields.io/badge/Phases_1--12-complete-19E68C.svg" alt="Phases 1 to 12 complete"></a>
@@ -202,7 +202,7 @@ Full architecture, candidate journey and data model: the [PRD](docs/PRD.md). Hig
 | [Test format](docs/test-format.md) | `pariksha/test@1` — timing, access, registration form, sections, release |
 | [Worked example](examples/reasoning-aptitude/) | One whole test, from input to results CSV |
 | [Design system](DESIGN.md) | `DESIGN.md` — colours, type, components and the rules behind them, machine-readable |
-| [Architecture decisions](docs/adr/) | Why Cloudflare + adapters, why Apache-2.0 |
+| [Architecture decisions](docs/adr/) | Why Cloudflare + adapters, why AGPL-3.0 |
 | [JSON Schemas](schemas/) | Machine-readable question, bank and test schemas |
 | [Build roadmap](docs/ROADMAP.md) | The twelve phases, what each one shipped, and what it deliberately left behind. **Authoritative on what is built** |
 | [Exports](docs/exports.md) and [webhooks](docs/webhooks.md) | The results, per-answer and event CSVs; signed outbound webhooks and scoped API keys |
@@ -380,8 +380,8 @@ Maintainers are listed in [MAINTAINERS.md](MAINTAINERS.md).
 
 ## Licence
 
-Code is licensed under the [Apache License 2.0](LICENSE) — self-host it, modify it, embed it, offer it commercially. Documentation, the JSON Schemas in [`schemas/`](schemas/) and the sample tests in [`examples/`](examples/) are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+Code is licensed under the [GNU Affero General Public License 3.0 (AGPL-3.0)](LICENSE) — self-host it, modify it, embed it. The network-use clause ensures improvements to hosted services remain open. Documentation, the JSON Schemas in [`schemas/`](schemas/) and the sample tests in [`examples/`](examples/) are licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
-The reasoning behind that choice is recorded in [ADR 0003](docs/adr/0003-license-apache-2-0.md).
+The reasoning behind that choice is recorded in [ADR 0013](docs/adr/0013-license-agpl-v3.md).
 
 © 2026 Satya K and the Pariksha contributors.

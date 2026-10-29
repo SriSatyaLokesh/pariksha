@@ -569,7 +569,7 @@ To stay inside the daily limits, the snapshot upload doubles as the 60 s heartbe
 
 ## Open-source project
 
-- **O-01 License.** Apache-2.0 (decided; see [ADR 0003](adr/0003-license-apache-2-0.md)): anyone may self-host, modify, embed or commercially host Pariksha, and the licence carries an explicit patent grant. Documentation, JSON Schemas and the sample tests and question banks in `examples/` are CC BY 4.0. Contributions are inbound = outbound, with a Developer Certificate of Origin sign-off per commit and no CLA.
+- **O-01 License.** GNU AGPL-3.0 (decided; see [ADR 0013](adr/0013-license-agpl-v3.md)): anyone may self-host, modify, or embed Pariksha, and the network-use clause ensures improvements to hosted services remain open. Documentation, JSON Schemas and the sample tests and question banks in `examples/` are CC BY 4.0. Contributions are inbound = outbound, with a Developer Certificate of Origin sign-off per commit and no CLA.
 - **O-02 Repository.** One monorepo on GitHub:
   - `apps/web` — candidate and admin interfaces
   - `apps/api` — Hono API that runs on Workers and Node

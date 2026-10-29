@@ -46,8 +46,8 @@ import type { ReactNode } from "react";
  *  the same promise the organiser arrives having been made. */
 const FACTS = [
   {
-    term: "Apache-2.0",
-    rest: "the scoring code is public, with an explicit patent grant.",
+    term: "AGPL-3.0",
+    rest: "the scoring code is public and copyleft ensures improvements remain open.",
   },
   {
     term: "Your database",

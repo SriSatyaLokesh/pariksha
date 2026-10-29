@@ -72,7 +72,7 @@ export function SignalHero() {
             <p className="signal-lede">
               Twelve question types, a different paper for every candidate,
               proctoring that records no video, and a results CSV — running free
-              in your own Cloudflare account or server. Open source, Apache-2.0,
+              in your own Cloudflare account or server. Open source, AGPL-3.0,
               no per-candidate fee.
             </p>
             <div className="signal-actions signal-actions--hero">
@@ -88,7 +88,7 @@ export function SignalHero() {
             </div>
             <ul className="signal-trust">
               <li>
-                <b>Apache-2.0</b>
+                <b>AGPL-3.0</b>
               </li>
               <li>
                 <b>12</b> types

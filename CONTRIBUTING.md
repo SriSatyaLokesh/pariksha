@@ -66,7 +66,7 @@ Node.js 22 and pnpm 10. The step-by-step guide — install, running the API and 
    Sign-off means *you wrote this, or you have the right to contribute it*. If a tool helped you write it, you are still the author and still responsible for it; review it as if you had typed every line.
 7. CI must pass, and one maintainer must approve, before merge.
 
-There is **no CLA**. Contributions are inbound = outbound under [Apache-2.0](LICENSE) (and CC BY 4.0 for content), which is how the licence itself says it works.
+There is **no CLA**. Contributions are inbound = outbound under [AGPL-3.0](LICENSE) (and CC BY 4.0 for content), which is how the licence itself says it works.
 
 ## Principles we hold each other to
 
