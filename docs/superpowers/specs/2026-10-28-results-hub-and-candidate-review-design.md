@@ -2,7 +2,7 @@
 
 | | |
 | --- | --- |
-| **Status** | In Review (Builder Check) |
+| **Status** | Approved / Implemented |
 | **Last updated** | 2026-10-28 |
 | **Target** | Pariksha Admin / Organiser Workspace (`apps/api`, `apps/web`) |
 | **Approach** | Approach A (Dedicated Results Hub & Test Results Route) |

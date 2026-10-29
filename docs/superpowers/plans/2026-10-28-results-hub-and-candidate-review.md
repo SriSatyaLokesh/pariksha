@@ -1,6 +1,6 @@
 # Results Hub & Candidate Results Review Table Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build a first-class Results Hub in the left navigation rail and an interactive Candidate Results Table with inline question drill-downs, search/filtering, and seamless links to the Attempt Review canvas.
 
@@ -51,7 +51,7 @@
   - `GET /api/v1/workspaces/:id/results/overview` -> `{ tests: TestResultsOverviewItem[] }`
   - `GET /api/v1/workspaces/:id/tests/:testId/results` -> `TestResultsPayload`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/api/test/routes/results.test.ts` testing:
 1. `GET /api/v1/workspaces/:id/results/overview`: returns test rows with candidate counts, submitted attempts, average score, and pass rate.
@@ -60,12 +60,12 @@ Create `apps/api/test/routes/results.test.ts` testing:
 4. Handles search query parameter matching candidate name or email.
 5. Returns 403 when actor does not hold `results.export`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/api exec vitest run test/routes/results.test.ts`
 Expected: FAIL with route not found or module not found.
 
-- [ ] **Step 3: Implement `apps/api/src/routes/results.ts` and mount in `apps/api/src/app.ts`**
+- [x] **Step 3: Implement `apps/api/src/routes/results.ts` and mount in `apps/api/src/app.ts`**
 
 1. Implement `resultsRoutes(deps: AppDeps): Hono<AppBindings>`:
    - Helper `extractCandidateName(formValues)` and `extractCandidateEmail(externalId, formValues)` matching `monitor.ts`.
@@ -78,17 +78,17 @@ Expected: FAIL with route not found or module not found.
    - Declare actions in `ROUTE_ACTIONS`: `"results.export"` for both.
    - Declare authority in `ROUTE_AUTH`: `"workspace"` for both.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/api exec vitest run test/routes/results.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Run whole API test suite to verify no budget or route authority regressions**
+- [x] **Step 5: Run whole API test suite to verify no budget or route authority regressions**
 
 Run: `pnpm --filter @pariksha/api exec vitest run`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/api/src/routes/results.ts apps/api/src/app.ts apps/api/test/routes/results.test.ts
@@ -117,7 +117,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(api): add 
   - `readView` and `writeView` handling `?view=results` and `?view=results&test=<testId>`.
   - `OrganiserView` union carrying `{ kind: "results"; actor: Actor; workspace: Workspace; testId?: string | undefined }`.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Add tests to `apps/web/test/organiser-url.test.tsx`:
 - Parse `?view=results` -> `{ view: "results" }`.
@@ -128,12 +128,12 @@ Create `apps/web/test/organiser/results-nav.test.tsx`:
 - Verifies `OrganiserShell` renders a navigation link for "Results" with `ICONS.results`.
 - Verifies clicking "Results" navigates to `{ kind: "results" }`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/organiser-url.test.tsx test/organiser/results-nav.test.tsx`
 Expected: FAIL with TypeScript / navigation errors.
 
-- [ ] **Step 3: Implement client types, API methods, fixture stubs, and navigation wiring**
+- [x] **Step 3: Implement client types, API methods, fixture stubs, and navigation wiring**
 
 1. In `apps/web/src/lib/api.ts`:
    - Define interfaces `TestResultsOverviewItem`, `TestResultAttempt`, `TestResultsSummary`, `TestResultsPayload`, `ResultsQueryOptions`.
@@ -149,12 +149,12 @@ Expected: FAIL with TypeScript / navigation errors.
    - Add `{ kind: "results"; actor: Actor; workspace: Workspace; testId?: string | undefined }` to `OrganiserView`.
    - Update `readOrganiserView` and `writeOrganiserView` for `view === "results"`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/organiser-url.test.tsx test/organiser/results-nav.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/lib/api.ts apps/web/test/fixtures/api-client.ts apps/web/src/components/OrganiserShell.tsx apps/web/src/lib/view-url.ts apps/web/src/routes/organiser.tsx apps/web/test/organiser-url.test.tsx apps/web/test/organiser/results-nav.test.tsx
@@ -178,7 +178,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(web): add 
 - Produces:
   - `<ResultsHub />` component rendering tests with registered, submitted, pass rate, average score, and "Open results" button.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `apps/web/test/organiser/results-hub.test.tsx`:
 - Renders loading skeleton while fetching.
@@ -186,12 +186,12 @@ Create `apps/web/test/organiser/results-hub.test.tsx`:
 - Shows empty state when no tests exist in workspace.
 - Clicking "Open results" on a test triggers `onSelectTest(test.id)`.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/organiser/results-hub.test.tsx`
 Expected: FAIL with module not found.
 
-- [ ] **Step 3: Implement `apps/web/src/routes/results-hub.tsx`**
+- [x] **Step 3: Implement `apps/web/src/routes/results-hub.tsx`**
 
 1. Create `ResultsHub` component:
    - Fetches `client.resultsOverview(workspaceId)` on mount.
@@ -208,12 +208,12 @@ Expected: FAIL with module not found.
 2. Wire into `apps/web/src/routes/organiser.tsx`:
    - Under `case "results":`, if `!view.testId`, render `ResultsHub` wrapped in `shell("results", view.actor, view.workspace, { title: "Results", crumb: "Results" }, ...)`.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/organiser/results-hub.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add apps/web/src/routes/results-hub.tsx apps/web/src/routes/organiser.tsx apps/web/test/organiser/results-hub.test.tsx
@@ -242,7 +242,7 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(web): impl
   - `<ResultsRoute />`: Full screen with summary metric cards, table, and toolbar actions.
   - Test builder header "Results" action button.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 1. Create `apps/web/test/organiser/results-table.test.tsx`:
    - Renders candidate rows with Rank, Name/Email, Status, Score, Percentage, Pass/Fail badge, and Integrity badge.
@@ -259,12 +259,12 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(web): impl
 3. Test in `apps/web/test/testbuilder/test-header.test.tsx` or new test:
    - Verifies "Results" button appears in Test Builder toolbar and triggers navigation.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/organiser/results-table.test.tsx test/organiser/results-route.test.tsx`
 Expected: FAIL with components not found.
 
-- [ ] **Step 3: Implement `ResultsTable.tsx`, `results.tsx`, and wire `test.tsx`**
+- [x] **Step 3: Implement `ResultsTable.tsx`, `results.tsx`, and wire `test.tsx`**
 
 1. Implement `apps/web/src/components/organiser/ResultsTable.tsx`:
    - Search input, status filter select (`all`, `submitted`, `in_progress`, `locked`), integrity filter select (`all`, `clean`, `review`, `scoring_blocked`).
@@ -295,17 +295,17 @@ Expected: FAIL with components not found.
    - Wire `onOpenResults` in `case "test":` to navigate to `go({ kind: "results", actor: view.actor, workspace: view.workspace, testId })`.
    - Update `AttemptRoute` `onBack`: navigate back to `results` when `testId` is provided.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm --filter @pariksha/web exec vitest run test/organiser/results-table.test.tsx test/organiser/results-route.test.tsx`
 Expected: PASS
 
-- [ ] **Step 5: Run full web test suite**
+- [x] **Step 5: Run full web test suite**
 
 Run: `pnpm --filter @pariksha/web exec vitest run`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add apps/web/src/components/organiser/ResultsTable.tsx apps/web/src/routes/results.tsx apps/web/src/routes/organiser.tsx apps/web/src/routes/test.tsx apps/web/test/organiser/results-table.test.tsx apps/web/test/organiser/results-route.test.tsx
@@ -320,22 +320,22 @@ git commit --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "feat(web): impl
 - Modify: `docs/superpowers/specs/2026-10-28-results-hub-and-candidate-review-design.md` (mark Status as "Approved / Implemented")
 - Test: Full monorepo verification (`pnpm typecheck && pnpm lint && pnpm test`)
 
-- [ ] **Step 1: Run typechecks and linting across the monorepo**
+- [x] **Step 1: Run typechecks and linting across the monorepo**
 
 Run: `pnpm typecheck && pnpm lint`
 Expected: PASS with 0 errors across all workspaces (`@pariksha/core`, `@pariksha/db`, `@pariksha/api`, `@pariksha/web`).
 
-- [ ] **Step 2: Run full test suite across the monorepo**
+- [x] **Step 2: Run full test suite across the monorepo**
 
 Run: `pnpm test`
 Expected: All tests pass.
 
-- [ ] **Step 3: Update spec document status**
+- [x] **Step 3: Update spec document status**
 
 Update `docs/superpowers/specs/2026-10-28-results-hub-and-candidate-review-design.md` header:
 - `Status`: `Approved`
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-10-28-results-hub-and-candidate-review-design.md docs/superpowers/plans/2026-10-28-results-hub-and-candidate-review.md
