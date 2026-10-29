@@ -84,9 +84,9 @@ A college placement cell, a training institute or a 40-person company that needs
 - **Different paper for every candidate.** Draw N questions from a pool filtered by tag and difficulty, or hand out fixed sets A/B/C round-robin so neighbours never match. Question and option order shuffles per candidate; pinned options stay put.
 - **Scoring that matches your rules.** All-or-nothing, partial credit, negative marking, position-based for ordering, rubrics for written answers. Change a key afterwards and regrade every attempt, with an audit entry.
 - **A registration form you design.** Eleven field types, server-side validation, "unique per test" fields that block repeat registrations, and a consent screen whose text you write.
-- **Proctoring you choose — Off, Standard or Strict.** Desktop-only, fullscreen, tab-switch logging, copy/paste blocking, watermarking; and in Strict, camera, periodic snapshots, a violation limit and the four actions it can take, up to locking the attempt for an organiser to unlock. **No video or audio is ever recorded** — Strict stores 320×240 JPEG stills, about 25 KB each, behind signed URLs that expire in ten minutes. (On-device face counting is *not* shipped: MediaPipe needs a CSP relaxation the candidate runtime refuses. It is tracked, not quietly dropped.)
+- **Proctoring you choose — Off, Standard or Strict.** Desktop-only, fullscreen, tab-switch logging, copy/paste blocking, watermarking; and in Strict, camera, periodic snapshots, a violation limit and the four actions it can take, up to locking the attempt for an organiser to unlock. **No raw video or audio is permanently retained** (ADR 0012, PRD P-06) — Strict stores periodic JPEG stills behind signed URLs that expire in ten minutes. Supports native on-device face counting via the browser Shape Detection API (zero WASM, zero CSP changes, Issue #264), ambient microphone noise monitoring, and speech detection via the free browser Web Speech API ($0 cost) or workspace BYOK models (OpenAI Whisper & Google Gemini).
 - **Flags, never verdicts.** Browser checks deter and record; they cannot prove cheating. Pariksha marks an attempt `clean`, `review` or `high_risk` and leaves the judgement to a person.
-- **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. (The *live* monitor — attempts updating while the exam runs — is the one results surface still to come; see [What is still to come](#what-is-still-to-come).)
+- **Results that fit your spreadsheet.** Grading queue with reviewer verdicts and regrade, item analysis (share correct, discrimination, option pick rates), a score distribution, a results CSV with one column per form field and section, per-answer and event CSVs, a snapshot manifest, scoped API keys and signed outbound webhooks. Includes the **Watchtower live monitor** (attempts updating live while the exam runs, with candidate broadcast messaging) and the per-attempt review screen with unobserved gap detection.
 - **Privacy by design.** No telemetry, no third-party scripts, configurable retention, per-candidate export and deletion, an append-only audit log.
 - **BYOK AI question drafting.** Generate complete, schema-validated questions directly from course topics, syllabi, or raw text using Anthropic (Claude 3.7 / 3.5 Sonnet, 3.5 Haiku), OpenAI (GPT-4o, o1, o3-mini), Google Gemini (Gemini 2.5 Pro / 2.5 Flash), OpenRouter (DeepSeek, Llama 3.3, Mistral), or OpenCode (open & local models). Pure native `fetch`, WebCrypto AES-256-GCM zero-knowledge key encryption at rest, hard monthly spend caps, and interactive in-modal review with schema validation badges, 1-click question flagging/exclusion, and inline editing before bank import.
 - **Two deployment targets: Cloudflare serverless and Docker self-host.** Every adapter — database, object storage, identity — exists for both. Deploy on Cloudflare's free tier (Workers, D1, R2) with zero operational cost, or self-host on any Linux server, VPS, or air-gapped on-premise network with Docker Compose (Postgres 16 / SQLite, MinIO, and Caddy for automatic HTTPS). See the [Deployment Guide](docs/deployment.md).
@@ -145,14 +145,12 @@ full-size PNG, and this page loads every one of them.</sub>
 
 ## What is still to come
 
-Phases 1–12 are completed (including Phase 9 Public Demo & Sections, Phase 10 Docker Self-Host, Phase 11 Multi-Target Deployment & v1.0 Release Readiness, and Phase 12 BYOK AI Question Drafting). What is scheduled next, with the phase that owns it —
+Phases 1–12 and 8.5 (The Watchtower & The Ear) are completed (including Phase 8.5 Live Monitor, Phase 8.5 Ambient Noise Monitoring, Native Face Counting, Free Browser Web Speech Recognition & BYOK Whisper/Gemini Audio Models, Phase 9 Public Demo & Section Palette, Phase 10 Docker Self-Host, Phase 11 Multi-Target Deployment & v1.0 Release Readiness, and Phase 12 BYOK AI Question Drafting). What is scheduled next, with the phase that owns it —
 [`docs/ROADMAP.md`](docs/ROADMAP.md) is authoritative:
 
 | Not built yet | Phase |
 | --- | --- |
 | One real exam with 300+ candidates — **the gate that ends alpha** | v0.1 exit gate |
-| The live monitor: attempts updating while the exam runs, and the integrity review queue | 8.5 — the watchtower |
-| Microphone monitoring, and on-device face counting | 8.5 — the ear ([#223](https://github.com/SriSatyaLokesh/pariksha/issues/223)) |
 
 ## See a real test
 
@@ -170,12 +168,7 @@ A 45-minute campus screening round in reasoning and aptitude. The folder walks t
 | [`results.csv`](examples/reasoning-aptitude/results.csv) | What you download afterwards |
 | [`README.md`](examples/reasoning-aptitude/README.md) | The registration form, the test screen, a violation warning and the scoring, drawn out screen by screen |
 
-That folder's own README draws the candidate's screen as the design intends
-it, with a per-section timer and a palette grouped by section. **The shipped
-runtime does not group the palette by section yet** — see
-[the first screenshot above](#screens) for what it actually looks like
-today. The gap is known and tracked; the drawing is kept because it is what
-the test format already expresses.
+That folder's own README draws the candidate's screen with a per-section timer and a palette grouped by section, matching the shipped candidate runner runtime.
 
 ## How it works
 

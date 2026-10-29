@@ -34,6 +34,20 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- **Native On-Device Face Counting via Shape Detection API** (Issue #264)
+  - Implemented client-side face counting in `apps/web/src/lib/face.ts` using the browser's native `window.FaceDetector` API with fast mode and max 5 faces.
+  - Required zero WebAssembly (`'wasm-unsafe-eval'`) and zero CSP relaxations, preserving strict `script-src 'self'`.
+  - Enforced AG1 fail-open invariants: unsupported browsers or detection errors gracefully fall back to `null` without disrupting the exam.
+  - Re-enabled the `Count faces in each image` (`face_check`) checkbox in test builder's `ProctoringPanel.tsx` with accessible description.
+  - Augmented `snapshot` database schema and API to persist `face_count` on interval and violation snapshots.
+
+- **Multi-Tier Microphone & Speech Proctoring: Free Browser Web Speech API & Cloud BYOK Models** (Issue #209, PRD P-06)
+  - **Tier 1 (Free Browser-Native)**: Implemented continuous on-device speech transcription in `apps/web/src/lib/speech.ts` via the standard Web Speech API (`SpeechRecognition` / `webkitSpeechRecognition`), streaming non-punitive `speech_detected` events with zero server cost, zero dependencies, and zero audio retention (ADR 0012).
+  - **Tier 2 (Server-Side BYOK Audio Model)**: Added `evaluateByokAudio` in `apps/api/src/byok/audio.ts` supporting OpenAI Whisper (`whisper-1`) and Google Gemini Multimodal Audio (`gemini-2.5-flash`), funded directly by the organisation's encrypted BYOK credentials.
+  - Added endpoint `POST /api/v1/run/attempt/audio-check` protected by attempt cookie authority and rate limiting (60 checks / 5 min). Audio is processed in memory and immediately discarded.
+  - Added `ai_audio_check` proctoring override control in test builder and resolved proctoring defaults.
+  - Enriched `AttemptReview.tsx` timeline with dedicated speech detection cards showing transcript text and origin badge (`BYOK` / `NATIVE`).
+
 - **Results Hub & Candidate Results Review Table** (Issue #271)
   - Dedicated Results Hub in the organiser navigation shell (`OrganiserShell.tsx` and `ResultsHub.tsx`) showing workspace-level tests with aggregate stats (candidates count, submitted attempts, class average, pass rate).
   - Test-scoped Candidate Results Route (`ResultsRoute.tsx`) and Table (`ResultsTable.tsx`) with search by name/email/ID, status filter, and integrity flag filter.
