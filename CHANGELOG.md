@@ -4,6 +4,14 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Changed
+
+- **Codebase Relicensed to GNU Affero General Public License v3.0 (AGPL-3.0)** ([ADR 0013](docs/adr/0013-license-agpl-v3.md))
+  - Relicensed all core platform applications (`apps/api`, `apps/web`) and internal library packages (`packages/core`, `packages/db`, `packages/storage`) from Apache-2.0 to GNU AGPL-3.0 (`AGPL-3.0-only`).
+  - Closes the SaaS loophole through §13 (remote network interaction), ensuring all network-hosted modifications and improvements remain open.
+  - Preserved CC BY 4.0 for documentation, JSON Schemas (`schemas/`), and sample exam tests (`examples/`).
+  - Superseded ADR 0003 with [ADR 0013](docs/adr/0013-license-agpl-v3.md).
+
 ### Fixed
 
 - **Attempt Review Human-Readable Answer Display & Question Prompts** (Issue #274)

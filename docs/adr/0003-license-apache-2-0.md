@@ -1,6 +1,6 @@
 # 0003. License: Apache-2.0
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR 0013](0013-license-agpl-v3.md)
 - **Date:** 2026-10-16
 
 ## Context

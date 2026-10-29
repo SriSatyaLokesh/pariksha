@@ -115,7 +115,7 @@ example and the scoring engine exist; the application does not.** (`README.md:22
 | Append-only audit log of sign-ins, role changes, publishes, key changes, regrades, exports and deletions, kept 12 months | **SPECIFIED** | PRD `S-18` |
 | A consent screen whose text the organiser writes; the version and time of acceptance stored per candidate | **SPECIFIED**, with a real worked consent text | PRD `S-12`; `examples/reasoning-aptitude/test.json:33` |
 | A data-processing template for GDPR and India's DPDP Act 2023 | **SPECIFIED** (documentation deliverable) | PRD `S-19` |
-| Apache-2.0 code with an explicit patent grant; docs, schemas and examples CC BY 4.0 | **SHIPPED** (`LICENSE` is in the repo) | ADR 0003; `README.md:189` |
+| AGPL-3.0 code protecting self-hosters; docs, schemas and examples CC BY 4.0 | **SHIPPED** (`LICENSE` is in the repo) | ADR 0013; `README.md` |
 
 ### Job H — "Several people work on this with me"
 
@@ -165,7 +165,7 @@ Each line below is written to survive a reader who is looking for the catch.
 
 1. **They charge per candidate or per month. Pariksha's reference deployment is designed to cost nothing** — 500 candidates in one hour fits inside Cloudflare's free tier, and the arithmetic is published rather than asserted. (PRD `:70`, `:551-568`; ADR 0002)
 2. **Their candidate data sits on their servers. Yours sits in your account** — your Cloudflare account or your own machine, with the database region and storage jurisdiction your choice where the host allows it. (PRD `:43`, `S-17`)
-3. **You cannot read their scoring code. You can read all of ours** — Apache-2.0, with an explicit patent grant, so you may self-host, modify, embed or even sell it. (ADR 0003)
+3. **You cannot read their scoring code. You can read all of ours** — AGPL-3.0, with copyleft network trigger ensuring improvements stay open, so you may self-host, modify or embed it. (ADR 0013)
 4. **No lock-in by design: a test is one JSON file.** `pariksha/test@1` is what export returns and import accepts, so a test built on one installation runs unchanged on another — or is read by a tool that is not Pariksha at all. (`docs/test-format.md:3`; `docs/question-format.md:3`)
 5. **No telemetry, no third-party scripts, no trackers** — fonts and the face model are served by the app itself. This landing page already keeps that promise: self-hosted subset fonts and a `default-src 'self'` CSP. (PRD `S-11`; `CHANGELOG.md`)
 6. **Proctoring that does not record you.** No video, no audio — periodic 320×240 snapshots only, face counting on-device, no biometric template stored. Several vendors record the full session. (PRD `P-06`, `P-07`)
@@ -570,9 +570,9 @@ unique-field checks that block repeat registrations, and tab-switch logging. A f
 
 **Q11. How is it different from Mettl, HackerEarth or Testlify?**
 They charge per candidate or per month and keep candidate data on their servers. Pariksha is
-Apache-2.0, self-hosted, and designed to cost nothing. You can read and change the scoring code, and
+AGPL-3.0, self-hosted, and designed to cost nothing. You can read and change the scoring code, and
 a whole test exports as one JSON file that imports into any other installation, so nothing is trapped.
-*(PRD `:36`; ADR 0003; `docs/test-format.md:3`)*
+*(PRD `:36`; ADR 0013; `docs/test-format.md:3`)*
 
 **Q12. Do I have to write JSON to create a test?**
 No. Organisers build questions and tests in a UI: one editing screen for all twelve types, a type
@@ -591,9 +591,9 @@ per workspace and never sent to the browser, drafting questions into a bank — 
 Every draft is schema-validated and waits for a human to accept it. Nothing auto-publishes. *(`docs/ROADMAP.md:119-125`)*
 
 **Q15. What licence is it under, and can I sell a service built on it?**
-Code is Apache-2.0, which carries an explicit patent grant: you may self-host, modify, embed or offer
-it commercially, including as a closed hosted service. Documentation, the JSON Schemas and the sample
-tests are CC BY 4.0. The name "Pariksha" is not licensed with the code. *(ADR 0003)*
+Code is AGPL-3.0, which carries a network-use copyleft clause (§13): you may self-host, modify or embed it,
+and any network-accessible service running modified code must provide that source code to users. Documentation,
+the JSON Schemas and the sample tests are CC BY 4.0. The name "Pariksha" is not licensed with the code. *(ADR 0013)*
 
 **Q16. What do I need to deploy it?**
 A Cloudflare account on the free plan, or any server that runs Docker. The target is under thirty

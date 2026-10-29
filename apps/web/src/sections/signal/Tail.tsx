@@ -150,7 +150,7 @@ const FAQ_ITEMS: { question: string; answer: string }[] = [
   {
     question: "How is it different from Mettl, HackerEarth or Testlify?",
     answer:
-      "Pariksha differs from platforms such as Mettl, HackerEarth, Testlify and Testportal, whose pricing, as published in October 2026, is per candidate or per month, and which host candidate data on their own servers. Pariksha is Apache-2.0, self-hosted and free to run, with scoring code you can read and change and a whole test that exports as one portable JSON file.",
+      "Pariksha differs from platforms such as Mettl, HackerEarth, Testlify and Testportal, whose pricing, as published in October 2026, is per candidate or per month, and which host candidate data on their own servers. Pariksha is AGPL-3.0, self-hosted and free to run, with scoring code you can read and change and a whole test that exports as one portable JSON file.",
   },
   {
     question: "Can I write questions outside Pariksha and import them?",
@@ -251,7 +251,7 @@ export function SignalFooter() {
         <div>
           <h3>Licence</h3>
           <p>
-            Apache-2.0 with an explicit patent grant. Documentation, schemas and
+            AGPL-3.0 copyleft protecting self-hosters. Documentation, schemas and
             example tests under CC BY 4.0. No contributor licence agreement.
           </p>
         </div>

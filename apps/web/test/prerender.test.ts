@@ -223,13 +223,14 @@ describe("T9 — no stray https origin anywhere in dist/", () => {
   // is attribution copy, not a page claim.
   const PRERENDER_OUTPUTS = ["index.html", "404.html", "robots.txt", "llms.txt", "sitemap.xml"];
 
-  it("every https:// origin in every prerender-emitted file is SITE_URL, github.com, or a schema.org/w3.org/apache namespace", async () => {
+  it("every https:// origin in every prerender-emitted file is SITE_URL, github.com, or a schema.org/w3.org/apache/gnu namespace", async () => {
     const allowedHosts = new Set([
       new URL(SITE_URL).hostname,
       "github.com",
       "schema.org",
       "www.w3.org",
       "www.apache.org",
+      "www.gnu.org",
     ]);
     for (const name of PRERENDER_OUTPUTS) {
       const file = resolve(outDir, name);
