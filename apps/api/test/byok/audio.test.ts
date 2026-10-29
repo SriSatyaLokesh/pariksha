@@ -50,7 +50,7 @@ describe("BYOK Audio Evaluation (apps/api/src/byok/audio.ts)", () => {
       ok: true,
       json: async () => ({ text: "The candidate answered question four." }),
     });
-    globalThis.fetch = mockFetch as any;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const result = await evaluateByokAudio(deps, workspaceId, dummyAudio, "audio/webm");
 
@@ -90,7 +90,7 @@ describe("BYOK Audio Evaluation (apps/api/src/byok/audio.ts)", () => {
         ],
       }),
     });
-    globalThis.fetch = mockFetch as any;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const result = await evaluateByokAudio(deps, workspaceId, dummyAudio, "audio/webm");
 
@@ -124,7 +124,7 @@ describe("BYOK Audio Evaluation (apps/api/src/byok/audio.ts)", () => {
       status: 500,
       text: async () => "Internal Server Error",
     });
-    globalThis.fetch = mockFetch as any;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const result = await evaluateByokAudio(deps, workspaceId, dummyAudio, "audio/webm");
     expect(result).toEqual({

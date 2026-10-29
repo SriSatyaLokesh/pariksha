@@ -132,7 +132,7 @@ describe("POST /api/v1/run/attempt/audio-check", () => {
       ok: true,
       json: async () => ({ text: "I need help with this question." }),
     });
-    globalThis.fetch = mockFetch as any;
+    globalThis.fetch = mockFetch as unknown as typeof fetch;
 
     const res = await app.request(AUDIO_PATH, {
       method: "POST",

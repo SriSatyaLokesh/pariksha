@@ -102,7 +102,7 @@ import {
   type WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
-import { acquireCamera, captureJpeg, captureSnapshot, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
+import { acquireCamera, captureSnapshot, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
 import { monitorNoise } from "../../lib/noise";
 import { startSpeechRecognition } from "../../lib/speech";
 import { ProctoringOverlay } from "./ProctoringOverlay";

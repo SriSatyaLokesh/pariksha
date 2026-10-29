@@ -10,7 +10,7 @@
  * - S-15: Tenant-isolated field-level decryption using workspace session secrets.
  */
 
-import { listByokCredentials, getByokCredential } from "@pariksha/db";
+import { getByokCredential } from "@pariksha/db";
 import type { AppDeps } from "../app.js";
 import { decryptApiKey } from "./crypto.js";
 import type { ByokAudioResult } from "./types.js";
@@ -64,7 +64,7 @@ async function evaluateWithOpenAi(
     const apiKey = await decryptApiKey(encryptedKey, secretKey);
     const ext = mimeType.includes("webm") ? "webm" : mimeType.includes("mp4") ? "mp4" : "wav";
     const formData = new FormData();
-    const blob = new Blob([audioBytes as unknown as BlobPart], { type: mimeType });
+    const blob = new Blob([audioBytes], { type: mimeType });
     formData.append("file", blob, `audio.${ext}`);
     formData.append("model", "whisper-1");
 

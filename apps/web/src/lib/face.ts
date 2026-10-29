@@ -20,9 +20,9 @@ export interface NativeFaceDetector {
 
 declare global {
   interface Window {
-    FaceDetector?: {
-      new (options?: { maxDetectedFaces?: number; fastMode?: boolean }): NativeFaceDetector;
-    };
+    FaceDetector?:
+      | (new (options?: { maxDetectedFaces?: number; fastMode?: boolean }) => NativeFaceDetector)
+      | undefined;
   }
 }
 

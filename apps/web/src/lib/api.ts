@@ -1885,6 +1885,13 @@ function isImportReport(value: unknown): value is ImportReport {
   );
 }
 
+export interface AudioSnippetResult {
+  hasSpeech: boolean;
+  transcript: string;
+  provider: string;
+  model?: string;
+}
+
 /**
  * Submits an ephemeral audio snippet to the server-side BYOK audio evaluator.
  * ADR 0012: The audio snippet is evaluated in memory and discarded.
@@ -1892,12 +1899,7 @@ function isImportReport(value: unknown): value is ImportReport {
 export async function checkAudioSnippet(
   blob: Blob,
   mimeType = "audio/webm",
-): Promise<{
-  hasSpeech: boolean;
-  transcript: string;
-  provider: string;
-  model?: string;
-}> {
+): Promise<AudioSnippetResult> {
   try {
     const res = await fetch("/api/v1/run/attempt/audio-check", {
       method: "POST",
@@ -1907,7 +1909,8 @@ export async function checkAudioSnippet(
     if (!res.ok) {
       return { hasSpeech: false, transcript: "", provider: "none" };
     }
-    return (await res.json()) as any;
+    const data = (await res.json()) as AudioSnippetResult;
+    return data;
   } catch {
     return { hasSpeech: false, transcript: "", provider: "none" };
   }

@@ -1,40 +1,42 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   isSpeechRecognitionSupported,
   startSpeechRecognition,
+  type NativeSpeechRecognitionInstance,
+  type SpeechEventLike,
 } from "../../src/lib/speech";
 
 describe("speech recognition (Web Speech API, apps/web/src/lib/speech.ts)", () => {
-  const originalSpeechRecognition = (window as any).SpeechRecognition;
-  const originalWebkitSpeechRecognition = (window as any).webkitSpeechRecognition;
+  const originalSpeechRecognition = window.SpeechRecognition;
+  const originalWebkitSpeechRecognition = window.webkitSpeechRecognition;
 
   afterEach(() => {
-    (window as any).SpeechRecognition = originalSpeechRecognition;
-    (window as any).webkitSpeechRecognition = originalWebkitSpeechRecognition;
+    window.SpeechRecognition = originalSpeechRecognition;
+    window.webkitSpeechRecognition = originalWebkitSpeechRecognition;
     vi.restoreAllMocks();
   });
 
   it("reports unsupported when neither SpeechRecognition nor webkitSpeechRecognition exists", () => {
-    delete (window as any).SpeechRecognition;
-    delete (window as any).webkitSpeechRecognition;
+    delete window.SpeechRecognition;
+    delete window.webkitSpeechRecognition;
     expect(isSpeechRecognitionSupported()).toBe(false);
   });
 
   it("reports supported when SpeechRecognition exists", () => {
-    (window as any).SpeechRecognition = vi.fn();
-    delete (window as any).webkitSpeechRecognition;
+    window.SpeechRecognition = vi.fn() as unknown as new () => NativeSpeechRecognitionInstance;
+    delete window.webkitSpeechRecognition;
     expect(isSpeechRecognitionSupported()).toBe(true);
   });
 
   it("reports supported when webkitSpeechRecognition exists", () => {
-    delete (window as any).SpeechRecognition;
-    (window as any).webkitSpeechRecognition = vi.fn();
+    delete window.SpeechRecognition;
+    window.webkitSpeechRecognition = vi.fn() as unknown as new () => NativeSpeechRecognitionInstance;
     expect(isSpeechRecognitionSupported()).toBe(true);
   });
 
   it("returns no-op handle and does not throw when speech recognition is absent (AG1 fail-open)", () => {
-    delete (window as any).SpeechRecognition;
-    delete (window as any).webkitSpeechRecognition;
+    delete window.SpeechRecognition;
+    delete window.webkitSpeechRecognition;
 
     const onSpeech = vi.fn();
     const handle = startSpeechRecognition(onSpeech);
@@ -48,18 +50,18 @@ describe("speech recognition (Web Speech API, apps/web/src/lib/speech.ts)", () =
     const mockStart = vi.fn();
     const mockAbort = vi.fn();
 
-    class MockSpeechRecognition {
+    class MockSpeechRecognition implements NativeSpeechRecognitionInstance {
       continuous = false;
       interimResults = true;
       lang = "";
       start = mockStart;
       abort = mockAbort;
-      onresult: ((event: any) => void) | null = null;
+      onresult: ((event: SpeechEventLike) => void) | null = null;
       onend: (() => void) | null = null;
-      onerror: ((event: any) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
     }
 
-    (window as any).SpeechRecognition = MockSpeechRecognition;
+    window.SpeechRecognition = MockSpeechRecognition;
 
     const onSpeech = vi.fn();
     const handle = startSpeechRecognition(onSpeech, { lang: "en-US" });
@@ -71,23 +73,24 @@ describe("speech recognition (Web Speech API, apps/web/src/lib/speech.ts)", () =
   });
 
   it("invokes onSpeech callback when final transcript is emitted", () => {
-    let capturedInstance: any = null;
+    let capturedInstance: NativeSpeechRecognitionInstance | null = null;
 
-    class MockSpeechRecognition {
+    class MockSpeechRecognition implements NativeSpeechRecognitionInstance {
       continuous = false;
       interimResults = false;
       start = vi.fn();
       abort = vi.fn();
-      onresult: ((event: any) => void) | null = null;
+      onresult: ((event: SpeechEventLike) => void) | null = null;
       onend: (() => void) | null = null;
-      onerror: ((event: any) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
 
       constructor() {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         capturedInstance = this;
       }
     }
 
-    (window as any).SpeechRecognition = MockSpeechRecognition;
+    window.SpeechRecognition = MockSpeechRecognition;
 
     const onSpeech = vi.fn();
     startSpeechRecognition(onSpeech);
@@ -95,44 +98,48 @@ describe("speech recognition (Web Speech API, apps/web/src/lib/speech.ts)", () =
     expect(capturedInstance).not.toBeNull();
 
     // Simulate final speech transcript result
-    const mockEvent = {
+    const mockEvent: SpeechEventLike = {
       resultIndex: 0,
       results: [
         {
           isFinal: true,
+          length: 1,
           0: { transcript: "  hello proctor  " },
         },
       ],
     };
 
-    capturedInstance.onresult(mockEvent);
+    capturedInstance?.onresult?.(mockEvent);
 
     expect(onSpeech).toHaveBeenCalledTimes(1);
     expect(onSpeech).toHaveBeenCalledWith("hello proctor");
   });
 
   it("handles errors gracefully without throwing (AG1 fail-open)", () => {
-    let capturedInstance: any = null;
+    let capturedInstance: NativeSpeechRecognitionInstance | null = null;
 
-    class MockSpeechRecognition {
+    class MockSpeechRecognition implements NativeSpeechRecognitionInstance {
       start = vi.fn();
       abort = vi.fn();
-      onresult: ((event: any) => void) | null = null;
+      continuous = false;
+      interimResults = false;
+      onresult: ((event: SpeechEventLike) => void) | null = null;
       onend: (() => void) | null = null;
-      onerror: ((event: any) => void) | null = null;
+      onerror: ((event: unknown) => void) | null = null;
 
       constructor() {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias
         capturedInstance = this;
       }
     }
 
-    (window as any).SpeechRecognition = MockSpeechRecognition;
+    window.SpeechRecognition = MockSpeechRecognition;
 
     const onSpeech = vi.fn();
     startSpeechRecognition(onSpeech);
 
     expect(() => {
-      capturedInstance.onerror({ error: "network" });
+      capturedInstance?.onerror?.({ error: "network" });
     }).not.toThrow();
   });
 });
