@@ -76,6 +76,8 @@ export interface AttemptReviewPayload {
   answers: Array<{
     questionId: string;
     sectionId: string;
+    prompt?: string | null;
+    questionType?: string | null;
     answer: unknown;
     key: unknown;
     pointsAwarded: number | null;
@@ -337,6 +339,8 @@ export function attemptReviewRoutes(deps: AppDeps): Hono<AppBindings> {
           answers.push({
             questionId: qId,
             sectionId: section.sectionId,
+            prompt: qDoc?.prompt ?? null,
+            questionType: qDoc?.type ?? null,
             answer: answerVal,
             key: keyVal,
             pointsAwarded,

@@ -987,6 +987,8 @@ export interface AttemptReviewData {
   answers: Array<{
     questionId: string;
     sectionId: string;
+    prompt?: string | null | undefined;
+    questionType?: string | null | undefined;
     answer: unknown;
     key: unknown;
     pointsAwarded: number | null;
