@@ -24,6 +24,7 @@ import { AnalyticsRoute } from "./analytics";
 import { MonitorRoute } from "./monitor";
 import { AttemptRoute } from "./attempt";
 import { ResultsHub } from "./results-hub";
+import { ResultsRoute } from "./results";
 import { WebhookPanel } from "../components/organiser/WebhookPanel";
 import { ApiKeyPanel } from "../components/organiser/ApiKeyPanel";
 import { TeamsPanel } from "../components/organiser/TeamsPanel";
@@ -322,8 +323,16 @@ export function OrganiserApp({
           "results",
           view.actor,
           view.workspace,
-          { title: "Results", crumb: "Results" },
-          <div data-testid="test-results-view">Test Results {view.testId}</div>,
+          { title: "Test Results", crumb: "Results" },
+          <ResultsRoute
+            client={client}
+            workspaceId={view.workspace.id}
+            testId={view.testId}
+            onBack={() => go({ kind: "results", actor: view.actor, workspace: view.workspace })}
+            onReviewAttempt={(attemptId) =>
+              go({ kind: "attempt", actor: view.actor, workspace: view.workspace, attemptId, testId: view.testId })
+            }
+          />,
         );
       }
       return shell(
@@ -391,6 +400,9 @@ export function OrganiserApp({
           onOpenMonitor={(testId) =>
             go({ kind: "monitor", actor: view.actor, workspace: view.workspace, testId })
           }
+          onOpenResults={(testId) =>
+            go({ kind: "results", actor: view.actor, workspace: view.workspace, testId })
+          }
         />,
       );
     case "monitor":
@@ -432,7 +444,7 @@ export function OrganiserApp({
           attemptId={view.attemptId}
           onBack={() => {
             if (view.testId) {
-              go({ kind: "test", actor: view.actor, workspace: view.workspace, testId: view.testId });
+              go({ kind: "results", actor: view.actor, workspace: view.workspace, testId: view.testId });
             } else {
               go({ kind: "tests", actor: view.actor, workspace: view.workspace });
             }
