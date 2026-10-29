@@ -56,11 +56,11 @@ describe("ProctoringPanel microphone and face_check controls (Phase 8.5 Task 5)"
     );
   });
 
-  it("face_check checkbox remains disabled and re-points to Issue #264 without naming Phase 8", () => {
+  it("face_check checkbox is enabled and toggles on-device face counting (Issue #264)", () => {
     render(<Harness />);
     const faceControl = screen.getByLabelText(/Count faces in each image/i);
-    expect(faceControl).toBeDisabled();
-    expect(faceControl).toHaveAccessibleDescription(/Issue #264/);
+    expect(faceControl).toBeEnabled();
+    expect(faceControl).toHaveAccessibleDescription(/Native on-device face counting/i);
     expect(faceControl).not.toHaveAccessibleDescription(/Phase 8/);
   });
 });

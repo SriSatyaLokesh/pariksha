@@ -799,6 +799,7 @@ export const recordSnapshot = scoped(
       storageKey: string;
       takenAt: number;
       reason: string;
+      faceCount?: number | null;
       clearProctorMessage?: boolean;
     },
   ): Promise<void> => {
@@ -806,7 +807,15 @@ export const recordSnapshot = scoped(
       sql:
         "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason, face_count) " +
         "VALUES (?, ?, ?, ?, ?, ?, ?)",
-      params: [newId("snp"), workspaceId, input.attemptId, input.storageKey, input.takenAt, input.reason, null],
+      params: [
+        newId("snp"),
+        workspaceId,
+        input.attemptId,
+        input.storageKey,
+        input.takenAt,
+        input.reason,
+        typeof input.faceCount === "number" ? input.faceCount : null,
+      ],
     };
     if (input.clearProctorMessage) {
       await db.batch([

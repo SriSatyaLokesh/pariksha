@@ -441,12 +441,7 @@ export function ProctoringPanel({
             "seconds",
             resolved.snapshotIntervalSeconds,
           ),
-          // `Q3`: pre-cut and shipped disabled. The raw document value is
-          // shown, not `resolved.faceCheck` (always `false` — the
-          // enforcement refusal is `resolveProctoring`'s, not a fact about
-          // what an imported document holds), so a document authored for
-          // Phase 8 round-trips visibly even though nothing here can act on
-          // it yet. Tracked in issue 264.
+          // Issue #264: Native on-device face counting via Shape Detection API.
           <div className="field" key="face_check">
             <label className="field-label" htmlFor={`${ids}-face_check`}>
               Count faces in each image
@@ -454,14 +449,17 @@ export function ProctoringPanel({
             <input
               type="checkbox"
               id={`${ids}-face_check`}
-              checked={value.overrides.face_check ?? false}
-              disabled
+              checked={value.overrides.face_check ?? resolved.faceCheck}
+              onChange={(e) => {
+                const next = { ...value.overrides, face_check: e.target.checked };
+                onChange({ ...value, overrides: next });
+              }}
               aria-describedby={
                 faceCheckMarker === undefined ? faceCheckHelpId : `${faceCheckHelpId} ${faceCheckMarker.id}`
               }
             />
             <p className="field-help" id={faceCheckHelpId}>
-              On-device face counting is tracked in Issue &#35;264. This control is disabled until then.
+              Native on-device face counting via Shape Detection API. Fails open gracefully if unsupported.
             </p>
             {faceCheckMarker?.node}
           </div>,

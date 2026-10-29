@@ -284,3 +284,12 @@ it("refuses once the per-attempt snapshot bucket is empty", async () => {
   expect(res.status).toBe(429);
   expect(await listSnapshots(attemptId)).toHaveLength(0);
 });
+
+it("records face_count from query param or header into snapshot row", async () => {
+  const res = await postBytes(`${SNAPSHOT_PATH}?reason=interval&face_count=2`, jpegFixture, attemptCookie);
+  expect(res.status).toBe(200);
+  const rows = await listSnapshots(attemptId);
+  expect(rows.length).toBeGreaterThan(0);
+  const latest = rows[rows.length - 1];
+  expect(latest?.faceCount).toBe(2);
+});

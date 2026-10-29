@@ -90,7 +90,7 @@ async function openProctoringPanel(
 }
 
 describe("the proctoring panel's accessibility gate (D1, D20, Q3)", () => {
-  it("has no axe violations with a marker showing and face_check disabled", async () => {
+  it("has no axe violations with a marker showing and face_check enabled", async () => {
     const container = await openProctoringPanel({
       profile: "strict",
       overrides: { require_camera: false },
@@ -101,7 +101,7 @@ describe("the proctoring panel's accessibility gate (D1, D20, Q3)", () => {
     // tests nothing (the same `queryBy*`-needs-a-positive-control
     // discipline carried through every task on this plan).
     expect(screen.getByText(/changed from Strict/i)).toBeVisible();
-    expect(screen.getByLabelText(/Count faces in each image/i)).toBeDisabled();
+    expect(screen.getByLabelText(/Count faces in each image/i)).toBeEnabled();
     expect(await axe(container)).toHaveNoViolations();
   });
 
@@ -115,17 +115,12 @@ describe("the proctoring panel's accessibility gate (D1, D20, Q3)", () => {
     expect(await axe(container)).toHaveNoViolations();
   });
 
-  // T5-R2: the one tight spot the plan predicted — a disabled control
-  // still needs a legible, associated label. `axe`'s label-association
-  // checks (`label`, `aria-input-field-name`) run fine under jsdom even
-  // though colour contrast cannot; isolating this one row rather than
-  // relying on the whole-panel passes above to localise a failure to it.
-  it("the disabled face_check control keeps a legible, associated label", async () => {
+  it("the face_check control keeps a legible, associated label", async () => {
     const container = await openProctoringPanel({ profile: "strict" });
     const control = screen.getByLabelText(/Count faces in each image/i);
-    expect(control).toBeDisabled();
+    expect(control).toBeEnabled();
     expect(control).toHaveAccessibleName(/Count faces in each image/i);
-    expect(control).toHaveAccessibleDescription(/Issue #264/i);
+    expect(control).toHaveAccessibleDescription(/Native on-device face counting/i);
     expect(await axe(container)).toHaveNoViolations();
   });
 });

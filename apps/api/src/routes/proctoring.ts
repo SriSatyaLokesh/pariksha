@@ -420,6 +420,11 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       });
     }
 
+    const faceCountRaw = c.req.query("face_count") ?? c.req.header("x-face-count");
+    const faceCount = faceCountRaw !== undefined && /^\d+$/.test(faceCountRaw)
+      ? parseInt(faceCountRaw, 10)
+      : null;
+
     const takenAt = deps.now();
     // `Q4a`: minted server-side, from the attempt the cookie names — no
     // workspace id anywhere in it.
@@ -437,6 +442,7 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       // above is what actually narrows this — an assertion here asserted
       // nothing (`@typescript-eslint/no-unnecessary-type-assertion`).
       reason,
+      faceCount,
       clearProctorMessage: proctorMessage !== null,
     });
 

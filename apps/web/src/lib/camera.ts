@@ -269,7 +269,21 @@ export async function isCameraLensCovered(stream: MediaStream): Promise<boolean 
  * not a reason to block anything, and every caller of this treats `null`
  * as "no photo this time" rather than an error to surface.
  */
-export async function captureJpeg(stream: MediaStream): Promise<Blob | null> {
+import { detectFaces } from "./face";
+
+export interface CapturedSnapshot {
+  blob: Blob;
+  faceCount: number | null;
+}
+
+/**
+ * Draws one frame off `stream` onto an offscreen canvas, runs on-device native
+ * face counting if requested, and encodes as a JPEG `Blob`.
+ */
+export async function captureSnapshot(
+  stream: MediaStream,
+  checkFaces: boolean = false,
+): Promise<CapturedSnapshot | null> {
   if (stream.getVideoTracks().length === 0) return null;
 
   const video = document.createElement("video");
@@ -277,14 +291,9 @@ export async function captureJpeg(stream: MediaStream): Promise<Blob | null> {
   video.playsInline = true;
   video.srcObject = stream;
   try {
-    // Real browsers: resolves once a frame is actually available. jsdom:
-    // `play()` is a documented no-op stub (no `canvas` package installed)
-    // that neither throws nor returns a promise, so this resolves at once.
     await video.play();
   } catch {
-    /* AG1: a refused autoplay is not a reason to abandon the capture —
-       `loadedmetadata` having already fired is what a camera stream
-       guarantees by the time `acquireCamera` hands it over. */
+    /* AG1: a refused autoplay is not a reason to abandon the capture */
   }
 
   const canvas = document.createElement("canvas");
@@ -294,9 +303,22 @@ export async function captureJpeg(stream: MediaStream): Promise<Blob | null> {
   if (!ctx) return null;
   ctx.drawImage(video, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
 
-  return new Promise<Blob | null>((resolve) => {
-    canvas.toBlob((blob) => {
-      resolve(blob);
+  let faceCount: number | null = null;
+  if (checkFaces) {
+    faceCount = await detectFaces(canvas);
+  }
+
+  const blob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob((b) => {
+      resolve(b);
     }, "image/jpeg", JPEG_QUALITY);
   });
+
+  if (!blob) return null;
+  return { blob, faceCount };
+}
+
+export async function captureJpeg(stream: MediaStream): Promise<Blob | null> {
+  const result = await captureSnapshot(stream, false);
+  return result?.blob ?? null;
 }

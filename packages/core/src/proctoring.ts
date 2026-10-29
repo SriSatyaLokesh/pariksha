@@ -186,11 +186,8 @@ export function resolveProctoring(
       "snapshot_interval_seconds",
       defaults.snapshotIntervalSeconds,
     ),
-    // Q3: pre-cut. Accepted and round-tripped (Task 2) so a document
-    // authored for Phase 8 survives, but resolution refuses it outright —
-    // not an omission, a deliberate `false` regardless of profile or
-    // override, so nothing in Phase 7 can act on it.
-    faceCheck: false,
+    // Native on-device face counting (Issue #264).
+    faceCheck: overrideOr(overrides, "face_check", defaults.faceCheck),
     // Phase 8.5 (#209): microphone proctoring resolved from overrides or defaults.
     requireMicrophone: overrideOr(overrides, "require_microphone", defaults.requireMicrophone),
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
