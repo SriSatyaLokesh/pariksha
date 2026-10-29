@@ -834,6 +834,10 @@ it("S-07: every anti-abuse ceiling and window is pinned to a literal", () => {
     // attempt, same window as `attempt_events` — see
     // `LIMITS.attempt_snapshot`'s own comment for the arithmetic.
     attempt_snapshot: { limit: 150, windowMs: 300_000 },
+    // Phase 13 (#278): organiser auth rate limiting.
+    auth_magic_link_address: { limit: 5, windowMs: 600_000 },
+    auth_password_signin_address: { limit: 5, windowMs: 600_000 },
+    auth_totp_verify_user: { limit: 5, windowMs: 300_000 },
   });
 });
 

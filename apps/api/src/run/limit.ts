@@ -144,6 +144,12 @@ export const LIMITS = {
    *  review's own abuse scenario (~20 requests/second), refusing within
    *  about 8 seconds rather than never. */
   attempt_snapshot: { limit: 150, windowMs: 5 * 60_000 },
+  /** Magic link requests per hashed email address, per ten minutes (#278). */
+  auth_magic_link_address: { limit: 5, windowMs: 10 * 60_000 },
+  /** Failed password sign-in attempts per hashed email address, per ten minutes (#278). */
+  auth_password_signin_address: { limit: 5, windowMs: 10 * 60_000 },
+  /** Failed TOTP verification attempts per user ID, per 5 minutes (#278). */
+  auth_totp_verify_user: { limit: 5, windowMs: 5 * 60_000 },
 } as const;
 
 export type LimitKind = keyof typeof LIMITS;
@@ -170,7 +176,11 @@ export async function limitOrThrow(deps: AppDeps, kind: LimitKind, key?: string)
   // kind — one `DELETE` sees every kind's rows and clearing a live one
   // would reset its count. One extra subrequest, on the two routes that
   // already send a message.
-  if (kind === "email_code_address") {
+  if (
+    kind === "email_code_address" ||
+    kind === "auth_magic_link_address" ||
+    kind === "auth_password_signin_address"
+  ) {
     await sweepRateLimits(deps.db, deps.now() - MAX_WINDOW_MS);
   }
   if (count > limit) throw refuse("too_many_attempts");
@@ -184,12 +194,34 @@ export async function limitOrThrow(deps: AppDeps, kind: LimitKind, key?: string)
 export const MAX_WINDOW_MS = Math.max(...Object.values(LIMITS).map((one) => one.windowMs));
 
 /**
+ * Ensures a bucket that counts misses has not already exceeded its limit.
+ * If the current active window is already full, refuses immediately before
+ * any expensive credential hashing or verification runs.
+ */
+export async function assertNotRateLimited(
+  deps: AppDeps,
+  kind: LimitKind,
+  key: string,
+): Promise<void> {
+  const { limit, windowMs } = LIMITS[kind];
+  const bucket = `${kind}:${key}`;
+  const since = deps.now() - windowMs;
+  const rows = await deps.db.query<{ count: number; window_start: number }>(
+    "SELECT count, window_start FROM rate_limit WHERE bucket = ?",
+    [bucket],
+  );
+  if (rows.length > 0 && rows[0]!.window_start > since && rows[0]!.count >= limit) {
+    throw refuse("too_many_attempts");
+  }
+}
+
+/**
  * The miss-counting form: run `work`, and charge the bucket only when it
  * refuses.
  *
- * A 400 is not charged. "You sent nothing" says nothing about the secret,
- * so it is not a guess at it — and it is what the `public` reachability
- * probes in `route-authority.test.ts` answer, which must not write a row.
+ * A 400 is not charged (unless an invalid TOTP code is presented). "You sent nothing"
+ * says nothing about the secret, so it is not a guess at it — and it is what the `public`
+ * reachability probes in `route-authority.test.ts` answer, which must not write a row.
  * A 5xx is not charged either: the caller did not do anything wrong.
  */
 export async function limitMisses<T>(
@@ -203,9 +235,8 @@ export async function limitMisses<T>(
   } catch (error) {
     if (
       error instanceof ApiError &&
-      error.status >= 401 &&
-      error.status < 500 &&
-      error.code !== "not_found"
+      ((error.status >= 401 && error.status < 500 && error.code !== "not_found") ||
+        error.code === "invalid_totp")
     ) {
       // Throws `too_many_attempts` in place of the original refusal once
       // the bucket is empty, which is the one case where a candidate is
