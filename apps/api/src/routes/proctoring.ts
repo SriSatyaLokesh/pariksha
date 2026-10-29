@@ -48,6 +48,7 @@ import { limitOrThrow } from "../run/limit.js";
 import { resolvedProctoringOf } from "../run/attempt.js";
 import { recomputeIntegrity, submitAttempt } from "../run/submit.js";
 import { readBodyWithLimit } from "./media.js";
+import { evaluateByokAudio } from "../byok/audio.js";
 
 /** `Q7`: the cap `appendEvents` already documents and the daily write
  *  budget it protects. Real, not advisory — refused before the request
@@ -451,6 +452,50 @@ export function proctoringRoutes(deps: AppDeps): Hono<AppBindings> {
       stored: true,
       ...(proctorMessage !== null ? { message: proctorMessage, messageAt: proctorMessageAt } : {}),
     });
+  });
+
+  // POST /api/v1/run/attempt/audio-check
+  // Evaluates ephemeral audio clip using workspace BYOK models (OpenAI Whisper or Google Gemini)
+  // ADR 0012: Zero audio retention. Audio bytes are never written to disk or storage.
+  const AUDIO_MAX_BYTES = 512 * 1024; // 512 KB
+
+  routes.post("/attempt/audio-check", attemptContext(deps), async (c) => {
+    const attempt = c.get("attempt");
+
+    await limitOrThrow(deps, "attempt_audio_check", attempt.attemptId);
+
+    if (attempt.submittedAt !== null || attempt.lockedAt !== null) {
+      return c.json({ hasSpeech: false, transcript: "", provider: "none" });
+    }
+
+    const contentType = c.req.header("content-type") ?? "audio/webm";
+    const body = await readBodyWithLimit(c.req.raw, AUDIO_MAX_BYTES, "An audio sample");
+    const bytes = new Uint8Array(body);
+
+    const result = await evaluateByokAudio(deps, attempt.workspaceId, bytes, contentType);
+
+    if (result.hasSpeech && result.transcript) {
+      try {
+        await appendEvents(deps.db, attempt.workspaceId, {
+          attemptId: attempt.attemptId,
+          events: [
+            {
+              type: "speech_detected",
+              clientTs: deps.now(),
+              detail: {
+                transcript: result.transcript,
+                source: "byok",
+              },
+            },
+          ],
+          serverTs: deps.now(),
+        });
+      } catch {
+        /* AG1: fail-open */
+      }
+    }
+
+    return c.json(result);
   });
 
   return routes;

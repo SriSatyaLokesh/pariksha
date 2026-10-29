@@ -39,3 +39,10 @@ export interface RouteDraftResult {
     estimatedCostCents: number;
   };
 }
+
+export interface ByokAudioResult {
+  hasSpeech: boolean;
+  transcript: string;
+  provider: "openai" | "gemini" | "none";
+  model?: string;
+}

@@ -714,6 +714,7 @@ export const ROUTE_BUDGETS: Record<string, number> = {
   // happen before the write pair, so a refused snapshot costs strictly
   // less, never more.
   "/api/v1/run/attempt/snapshot": 4,
+  "/api/v1/run/attempt/audio-check": 5,
   // `C-09`, the return visit. `/code` is **4**: the address limiter, its
   // sweep, the attempt lookup and the token insert — plus the message
   // itself, which is not a subrequest in this count unless `deps.http`
@@ -1257,6 +1258,7 @@ export const ROUTE_AUTH: Record<string, RouteAuthority> = {
   // past `/start` is the attempt cookie, and the row and object this
   // route writes are both scoped to the attempt that cookie names.
   "POST /api/v1/run/attempt/snapshot": "attempt",
+  "POST /api/v1/run/attempt/audio-check": "attempt",
 
   // --- actor: signed in, but naming no workspace ------------------------
   "POST /api/v1/auth/signout-everywhere": "actor",
