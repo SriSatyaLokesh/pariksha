@@ -4,6 +4,20 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Fixed
+
+- **Attempt Review Human-Readable Answer Display & Question Prompts** (Issue #274)
+  - Enriched `GET /api/v1/workspaces/:id/attempts/:attemptId/review` to pass `prompt` and `questionType` for each answer in the review payload.
+  - Replaced raw JSON string dumps in `AttemptReview.tsx` with human-readable, semantic formatting:
+    - Uppercase choice badges for single, multiple, and select-K options with match/mismatch status indicators.
+    - Clean numeric values with tolerance notation (e.g. `25 (± 0.5)`).
+    - Side-by-side key-value mapping tables for matching questions.
+    - Labeled pill chips for fill-in blanks (`Blank 1: 52`).
+    - Typography for text, short, and long answer responses.
+  - Rendered question stems/prompts prominently on each question card so organisers have full question context.
+  - Structured side-by-side comparison layout for candidate answer vs expected scoring key.
+  - Registered all new attempt review selectors into `contrast-usage.test.ts` for WCAG AA compliance.
+
 ### Added
 
 - **Results Hub & Candidate Results Review Table** (Issue #271)

@@ -334,6 +334,8 @@ describe("GET /api/v1/workspaces/:id/attempts/:attemptId/review", () => {
     expect(body.answers[0]).toMatchObject({
       questionId: q1Id,
       sectionId: "sec-1",
+      prompt: "What is 2 + 2?",
+      questionType: "single",
       answer: "b",
       key: "b",
       pointsAwarded: 2,

@@ -148,6 +148,117 @@ describe("AttemptReview (R-03)", () => {
     expect(screen.getAllByText(/Paris/).length).toBeGreaterThan(0);
   });
 
+  it("renders human-readable formats and does not leak raw JSON into the UI", () => {
+    const reviewWithComplexAnswers: AttemptReviewData = {
+      ...SAMPLE_REVIEW,
+      answers: [
+        {
+          questionId: "q_options",
+          sectionId: "sec_1",
+          prompt: "Which of the following are prime numbers?",
+          questionType: "multiple",
+          answer: { kind: "options", options: ["e", "b"] },
+          key: ["b", "d"],
+          pointsAwarded: 0,
+          maxPoints: 2,
+          correct: false,
+          verdict: "incorrect",
+        },
+        {
+          questionId: "q_num",
+          sectionId: "sec_1",
+          prompt: "Calculate equilibrium temperature",
+          questionType: "numeric",
+          answer: { kind: "number", value: 23 },
+          key: { value: 25, tolerance: 0.5, tolerance_type: "absolute" },
+          pointsAwarded: 0,
+          maxPoints: 2,
+          correct: false,
+          verdict: "incorrect",
+        },
+        {
+          questionId: "q_map",
+          sectionId: "sec_1",
+          prompt: "Match sequences to rules",
+          questionType: "matching",
+          answer: { kind: "map", pairs: { "2, 4, 8, 16": "Doubling" } },
+          key: { "2, 4, 8, 16": "Doubling" },
+          pointsAwarded: 2,
+          maxPoints: 2,
+          correct: true,
+          verdict: "correct",
+        },
+        {
+          questionId: "q_blanks",
+          sectionId: "sec_1",
+          prompt: "Fill in the missing values",
+          questionType: "fill_blank",
+          answer: { kind: "blanks", values: { b1: "52", b2: "67" } },
+          key: { b1: ["52"], b2: ["67"] },
+          pointsAwarded: 2,
+          maxPoints: 2,
+          correct: true,
+          verdict: "correct",
+        },
+      ],
+    };
+
+    render(<AttemptReview review={reviewWithComplexAnswers} />);
+
+    // Assert prompts are rendered
+    expect(screen.getByText("Which of the following are prime numbers?")).toBeInTheDocument();
+    expect(screen.getByText("Calculate equilibrium temperature")).toBeInTheDocument();
+    expect(screen.getByText("Match sequences to rules")).toBeInTheDocument();
+    expect(screen.getByText("Fill in the missing values")).toBeInTheDocument();
+
+    // Assert human-readable formatted output
+    expect(screen.getByText(/25\s*\(±\s*0\.5\)/)).toBeInTheDocument();
+    expect(screen.getAllByText("Doubling").length).toBeGreaterThan(0);
+    expect(screen.getByText(/b1:\s*52/i)).toBeInTheDocument();
+    expect(screen.getByText(/b2:\s*67/i)).toBeInTheDocument();
+
+    // Assert no raw JSON is rendered in answer boxes
+    expect(screen.queryByText(/\{"kind":/)).not.toBeInTheDocument();
+  });
+
+  it("handles edge cases: null answers, missing prompts, and manual grading keys without crashing", () => {
+    const edgeCaseReview: AttemptReviewData = {
+      ...SAMPLE_REVIEW,
+      answers: [
+        {
+          questionId: "q_null",
+          sectionId: "sec_1",
+          prompt: undefined,
+          questionType: "short_answer",
+          answer: null,
+          key: null,
+          pointsAwarded: null,
+          maxPoints: 5,
+        },
+        {
+          questionId: "q_unknown_kind",
+          sectionId: "sec_1",
+          prompt: null,
+          questionType: "custom",
+          answer: { kind: "future_unknown_kind", data: "special" },
+          key: undefined,
+          pointsAwarded: 0,
+          maxPoints: 2,
+        },
+      ],
+    };
+
+    render(<AttemptReview review={edgeCaseReview} />);
+
+    // Assert Question header renders properly without prompt
+    expect(screen.getByText("Question 1")).toBeInTheDocument();
+    expect(screen.getByText("Question 2")).toBeInTheDocument();
+
+    // Assert null answer & key displays "—"
+    const dashes = screen.getAllByText("—");
+    expect(dashes.length).toBeGreaterThan(0);
+  });
+
   it("passes axe accessibility checks", async () => {
     const { container } = render(<AttemptReview review={SAMPLE_REVIEW} />);
     const results = await axe(container);

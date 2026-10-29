@@ -566,6 +566,21 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".status-badge--review": { dark: "signal-surface", light: "signal-l-surface" },
   ".status-badge--blocked": { dark: "signal-surface", light: "signal-l-surface" },
 
+  // Attempt Review Answer Display (Issue #274)
+  ".attempt-review__question-prompt": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__answer-box": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__choice-badge": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__choice-badge--match": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__choice-badge--mismatch": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__numeric-value, .attempt-review__numeric-key": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__tolerance": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__blank-chip": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__match-left": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__match-arrow": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__match-right": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__text-answer": { dark: "signal-surface", light: "signal-l-surface" },
+  ".attempt-review__order-list": { dark: "signal-surface", light: "signal-l-surface" },
+
   // ---- testbuilder.css: the builder (P5, swept from 6.5e Task 1b) -------
   // `admin-main.tsx` loads this stylesheet BESIDE admin.css rather than
   // through it, so for two phases its 26 colour-setting selectors were in
@@ -901,6 +916,19 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".status-badge--clean": { px: 12, weight: 400 },
   ".status-badge--review": { px: 12, weight: 400 },
   ".status-badge--blocked": { px: 12, weight: 400 },
+
+  // Attempt Review Answer Display (Issue #274)
+  ".attempt-review__question-prompt": { px: 14, weight: 400 },
+  ".attempt-review__answer-box": { px: 12, weight: 400 },
+  ".attempt-review__choice-badge--match": { px: 12, weight: 600 },
+  ".attempt-review__choice-badge--mismatch": { px: 12, weight: 600 },
+  ".attempt-review__tolerance": { px: 12, weight: 400 },
+  ".attempt-review__blank-chip": { px: 12, weight: 400 },
+  ".attempt-review__match-left": { px: 12, weight: 600 },
+  ".attempt-review__match-arrow": { px: 12, weight: 400 },
+  ".attempt-review__match-right": { px: 12, weight: 400 },
+  ".attempt-review__text-answer": { px: 14, weight: 400 },
+  ".attempt-review__order-list": { px: 14, weight: 400 },
 
   // ---- testbuilder.css (Phase 6.5e Task 1b) -------------------------------
   // The builder's facts, consequences and summaries are <p> elements that
