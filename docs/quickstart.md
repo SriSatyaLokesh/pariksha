@@ -1,6 +1,6 @@
 # Quickstart Guide
 
-This guide walks you through setting up a complete Pariksha exam platform instance in under 5 minutes.
+This guide walks you through setting up a complete Pariksha exam platform instance in about 15 minutes.
 
 Pariksha offers two primary deployment models:
 1. **Docker Self-Host (Recommended for complete data sovereignty):** Runs on any Linux/macOS/Windows virtual machine or bare-metal server using Docker Compose, Postgres 16 (or lean SQLite), MinIO (or local storage), and Caddy for automatic HTTPS.
@@ -49,9 +49,8 @@ The first-run setup wizard will prompt you to:
 ## Option B: Cloudflare Serverless Deployment
 
 ### Prerequisites
-- Node.js 20+ and `pnpm`
+- Node.js 22+ and `pnpm` 10
 - A free [Cloudflare Account](https://dash.cloudflare.com/sign-up)
-- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/install-and-update/) (`pnpm install -g wrangler`)
 
 ### 1. Clone & Install
 ```bash
@@ -60,36 +59,23 @@ cd pariksha
 pnpm install
 ```
 
-### 2. Login to Cloudflare
+### 2. Log in to Cloudflare
 ```bash
-wrangler login
+pnpm --filter @pariksha/api exec wrangler login
 ```
 
-### 3. Provision Cloudflare Resources
-```bash
-# Create D1 Serverless SQLite Database
-wrangler d1 create pariksha-db
+### 3. Provision, migrate and deploy
+Pariksha deploys as **one Worker** that serves both the web app (Static Assets) and the API, with D1 and R2 behind it. The setup script creates the D1 database and R2 bucket if they are missing and applies pending migrations; the config lives in `deploy/cloudflare/wrangler.toml`.
 
-# Create R2 Object Storage Bucket
-wrangler r2 bucket create pariksha-storage
+```bash
+SITE_URL="https://<your-worker>.workers.dev" pnpm build
+node deploy/cloudflare/setup.mjs
+pnpm deploy:cf
 ```
 
-Copy the generated `database_id` and bucket names into `apps/api/wrangler.jsonc`.
+Preview the whole setup flow without touching your account first: `node deploy/cloudflare/setup.mjs --dry-run`. Details, and why it is one Worker rather than two, are in [`deploy/cloudflare/README.md`](../deploy/cloudflare/README.md).
 
-### 4. Apply Database Migrations
-```bash
-pnpm --filter @pariksha/db migrate
-```
-
-### 5. Deploy API Worker & Frontend Pages
-```bash
-# Deploy backend API worker
-pnpm --filter @pariksha/api deploy
-
-# Build and deploy frontend web SPA to Cloudflare Pages
-pnpm --filter @pariksha/web build
-wrangler pages deploy apps/web/dist --project-name pariksha
-```
+> **Contributing instead of deploying?** You do not need Cloudflare or Docker. See the [contributor setup guide](contributing/setup.md).
 
 ---
 

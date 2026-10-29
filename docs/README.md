@@ -4,7 +4,7 @@
 | --- | --- |
 | [PRD.md](PRD.md) | Everyone: what Pariksha does, how, and how we judge it done |
 | [deployment.md](deployment.md) | Operators and admins: Cloudflare, Docker (Postgres/SQLite), on-premise, air-gapped setup |
-| [quickstart.md](quickstart.md) | Quick 15-minute setup overview for Docker and Cloudflare |
+| [quickstart.md](quickstart.md) | Deploy your own instance: Docker or Cloudflare, about 15 minutes |
 | [ROADMAP.md](ROADMAP.md) | Contributors: the twelve build phases, their gates and their order |
 | [design.md](design.md) | Designers and implementers: the organiser authoring flows — banks, the question editor, the test builder, review and publish |
 | [superpowers/plans/](superpowers/plans/) | Implementers: task-by-task plans for the phases that are in flight |
