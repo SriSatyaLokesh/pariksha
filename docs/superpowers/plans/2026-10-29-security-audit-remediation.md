@@ -37,23 +37,23 @@
 - Modify: `apps/api/src/byok/adapters/openrouter.ts:22-45`
 - Test: `apps/api/test/byok.test.ts`
 
-- [ ] **Step 1: Write failing tests for SSRF refusal and redirect manual in BYOK**
+- [x] **Step 1: Write failing tests for SSRF refusal and redirect manual in BYOK**
   In `apps/api/test/byok.test.ts`, add test cases asserting that:
   - `POST /banks/:bankId/draft-ai` with `baseUrl: "http://169.254.169.254/latest/meta-data"` returns `422 url_refused`.
   - `POST /banks/:bankId/draft-ai` with `baseUrl: "http://127.0.0.1:8787"` returns `422 url_refused`.
   - `POST /banks/:bankId/draft-ai` with `baseUrl: "http://10.0.0.1/inference"` returns `422 url_refused`.
   - An external 3xx redirect response from an adapter is not followed (`redirect: "manual"`).
-- [ ] **Step 2: Run test to confirm failure**
+- [x] **Step 2: Run test to confirm failure**
   Run: `npx vitest run apps/api/test/byok.test.ts`
-- [ ] **Step 3: Implement validation in `apps/api/src/routes/byok.ts` and adapters**
+- [x] **Step 3: Implement validation in `apps/api/src/routes/byok.ts` and adapters**
   - In `apps/api/src/routes/byok.ts`: Import `urlRefusal` from `@pariksha/db`. If `parsed.data.baseUrl` is present, check `urlRefusal(parsed.data.baseUrl)`. If not null, throw `ApiError(422, "url_refused", `${refused}.`)`.
   - In all five adapters (`opencode.ts`, `openai.ts`, `anthropic.ts`, `gemini.ts`, `openrouter.ts`):
     - Add `redirect: "manual"`.
     - Add `signal: AbortSignal.timeout(15_000)`.
     - Add defense-in-depth check `urlRefusal(url)`.
-- [ ] **Step 4: Run tests to confirm pass**
+- [x] **Step 4: Run tests to confirm pass**
   Run: `npx vitest run apps/api/test/byok.test.ts`
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   Run: `git commit -m "fix(api): block SSRF and key exfiltration via baseUrl in BYOK draft-ai (#277)" --author="Satya K <srisatyalokesh2.12@gmail.com>"`
 
 ---
@@ -65,24 +65,24 @@
 - Modify: `apps/api/src/routes/auth.ts:87-175, 227-243`
 - Test: `apps/api/test/auth.test.ts`
 
-- [ ] **Step 1: Write failing tests for organiser auth rate limiting**
+- [x] **Step 1: Write failing tests for organiser auth rate limiting**
   In `apps/api/test/auth.test.ts`, add test cases asserting that:
   - 5 consecutive magic-link requests for the same email address succeed (202), and the 6th returns `429 rate_limited`.
   - 5 consecutive failed password attempts for the same email return `401 invalid_credentials`, and the 6th returns `429 rate_limited`.
   - A successful password signin does not count against the failed attempts bucket.
   - The `rate_limit` bucket key does not contain the plaintext email address.
   - 5 consecutive failed TOTP verification attempts return `400 invalid_totp`, and the 6th returns `429 rate_limited`.
-- [ ] **Step 2: Run test to confirm failure**
+- [x] **Step 2: Run test to confirm failure**
   Run: `npx vitest run apps/api/test/auth.test.ts`
-- [ ] **Step 3: Implement rate limit buckets and checks**
+- [x] **Step 3: Implement rate limit buckets and checks**
   - In `apps/api/src/run/limit.ts`: Define `auth_magic_link_address` (5 / 10m), `auth_password_signin_address` (5 misses / 15m), and `auth_totp_verify_user` (5 misses / 5m) in `LIMITS`.
   - In `apps/api/src/routes/auth.ts`:
     - In `POST /magic-link`: Normalise email, compute hash, and call `await limitOrThrow(deps, "auth_magic_link_address", hashedEmail)`.
     - In `POST /password/signin`: Check `await limitOrThrow(deps, "auth_password_signin_address", hashedEmail)`. On invalid credentials, call `await limitMisses(deps, "auth_password_signin_address", hashedEmail)`.
     - In `POST /password/totp/verify`: Check `await limitOrThrow(deps, "auth_totp_verify_user", actor.userId)`. On invalid TOTP code, call `await limitMisses(deps, "auth_totp_verify_user", actor.userId)`.
-- [ ] **Step 4: Run tests to confirm pass**
+- [x] **Step 4: Run tests to confirm pass**
   Run: `npx vitest run apps/api/test/auth.test.ts`
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   Run: `git commit -m "fix(api): add rate limiting and brute-force throttling to organiser auth (#278)" --author="Satya K <srisatyalokesh2.12@gmail.com>"`
 
 ---
@@ -95,17 +95,17 @@
 - Test: `apps/api/test/byok.test.ts`
 - Test: `apps/api/test/email.test.ts`
 
-- [ ] **Step 1: Write failing tests for outbound timeouts**
+- [x] **Step 1: Write failing tests for outbound timeouts**
   - In `apps/api/test/byok.test.ts`: Verify `fetchLiveOpenRouterModels()` returns `[]` when HTTP call hangs.
   - In `apps/api/test/email.test.ts`: Verify `httpSender.send()` rejects with `email_send_failed` when HTTP call hangs.
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
   Run: `npx vitest run apps/api/test/byok.test.ts apps/api/test/email.test.ts`
-- [ ] **Step 3: Add `AbortSignal.timeout` to outbound calls**
+- [x] **Step 3: Add `AbortSignal.timeout` to outbound calls**
   - In `apps/api/src/byok/models.ts`: Add `signal: AbortSignal.timeout(5_000)` to `fetch()`.
   - In `apps/api/src/email/http.ts`: Add `signal: AbortSignal.timeout(10_000)` to `http()`.
-- [ ] **Step 4: Run tests to confirm pass**
+- [x] **Step 4: Run tests to confirm pass**
   Run: `npx vitest run apps/api/test/byok.test.ts apps/api/test/email.test.ts`
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   Run: `git commit -m "fix(api): add AbortSignal timeouts to outbound model and email HTTP calls (#279)" --author="Satya K <srisatyalokesh2.12@gmail.com>"`
 
 ---
@@ -118,18 +118,18 @@
 - Test: `packages/db/test/repo/teams.test.ts`
 - Test: `apps/api/test/teams.test.ts`
 
-- [ ] **Step 1: Write failing tests for cross-workspace resource grant refusal**
+- [x] **Step 1: Write failing tests for cross-workspace resource grant refusal**
   In `packages/db/test/repo/teams.test.ts` and `apps/api/test/teams.test.ts`, add test cases asserting that:
   - Attempting to grant a `test` ID that does not exist or belongs to another workspace throws an error / returns `404 not_found`.
   - Attempting to grant a `bank` ID that does not exist or belongs to another workspace throws an error / returns `404 not_found`.
-- [ ] **Step 2: Run tests to confirm failure**
+- [x] **Step 2: Run tests to confirm failure**
   Run: `npx vitest run packages/db/test/repo/teams.test.ts apps/api/test/teams.test.ts`
-- [ ] **Step 3: Implement resource workspace verification in `grantTeamResource`**
+- [x] **Step 3: Implement resource workspace verification in `grantTeamResource`**
   - In `packages/db/src/repo/teams.ts`: Before inserting into `team_grant`, query `SELECT 1 FROM test WHERE workspace_id = ? AND id = ?` or `SELECT 1 FROM bank WHERE workspace_id = ? AND id = ?`. If missing, throw `new Error("Resource not found in workspace")`.
   - In `apps/api/src/routes/teams.ts`: Catch error and throw `ApiError(404, "not_found", "No such resource in this workspace.")`.
-- [ ] **Step 4: Run tests to confirm pass**
+- [x] **Step 4: Run tests to confirm pass**
   Run: `npx vitest run packages/db/test/repo/teams.test.ts apps/api/test/teams.test.ts`
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   Run: `git commit -m "fix(db,api): enforce workspace boundary on team resource grants (#280)" --author="Satya K <srisatyalokesh2.12@gmail.com>"`
 
 ---
@@ -142,7 +142,7 @@
 - Test: `pnpm typecheck`
 - Test: `pnpm lint`
 
-- [ ] **Step 1: Update CHANGELOG.md with security fixes**
+- [x] **Step 1: Update CHANGELOG.md with security fixes**
 - [ ] **Step 2: Re-run security audit validator**
   Run: `node .agents/skills/security-audit/validate-findings.cjs C:/Users/SatyaK/security-audit-skill/pariksha/run-1/findings.json`
 - [ ] **Step 3: Run full monorepo typecheck and lint**

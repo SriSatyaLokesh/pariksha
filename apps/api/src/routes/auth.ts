@@ -243,12 +243,13 @@ export function authRoutes(deps: AppDeps): Hono<AppBindings> {
     if (!creds?.totpSecret) {
       throw new ApiError(400, "totp_not_setup", "Two-factor authentication has not been initiated.");
     }
+    const totpSecret = creds.totpSecret;
     await assertNotRateLimited(deps, "auth_totp_verify_user", actor.userId);
     return await limitMisses(deps, "auth_totp_verify_user", actor.userId, async () => {
-      if (!verifyTotp(body.data.code, creds.totpSecret, 1, deps.now())) {
+      if (!verifyTotp(body.data.code, totpSecret, 1, deps.now())) {
         throw new ApiError(400, "invalid_totp", "The verification code is incorrect.");
       }
-      await setUserTotp(deps.db, actor.userId, creds.totpSecret, true);
+      await setUserTotp(deps.db, actor.userId, totpSecret, true);
       await audit(deps, actor, "auth.totp_enabled", {});
       return c.json({ status: "enabled" }, 200);
     });

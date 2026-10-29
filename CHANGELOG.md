@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Fixed
 
+- **Security Audit Remediation** (Epic #276, Issues #277, #278, #279, #280)
+  - **BYOK SSRF & Egress Protection** (#277): Blocked SSRF and API key exfiltration via `baseUrl` in `POST /banks/:bankId/draft-ai` by enforcing `urlRefusal` validation against loopback, cloud metadata (169.254.169.254), RFC 1918 private IPs, and non-standard ports. Configured `redirect: "manual"` and `AbortSignal.timeout(15_000)` across all five provider adapters (`opencode`, `openai`, `anthropic`, `gemini`, `openrouter`).
+  - **Organiser Auth Rate Limiting & Brute-Force Throttling** (#278): Added sliding-window rate limit buckets in `LIMITS` (`limit.ts`): `auth_magic_link_address` (5/10m), `auth_password_signin_address` (5 misses/10m), and `auth_totp_verify_user` (5 misses/5m). Enforced SHA-256 hashed email bucket keys to prevent plaintext email leakage in the `rate_limit` store (`S-07`, `S-15`), counting misses only for password sign-ins to prevent lockout of honest credentials.
+  - **Bounded Outbound HTTP Timeouts** (#279): Added `signal: AbortSignal.timeout(5_000)` to `fetchLiveOpenRouterModels` and `signal: AbortSignal.timeout(10_000)` with `redirect: "manual"` to `httpSender` to eliminate unbounded HTTP connection hangs.
+  - **Workspace Boundary Validation in Team Grants** (#280): Enforced tenant boundary checks in `grantTeamResource` verifying that the referenced `test` or `bank` exists in the requesting `workspaceId` before creating a grant row, returning 404 `not_found` on cross-tenant resource references.
+
 - **Attempt Review Human-Readable Answer Display & Question Prompts** (Issue #274)
   - Enriched `GET /api/v1/workspaces/:id/attempts/:attemptId/review` to pass `prompt` and `questionType` for each answer in the review payload.
   - Replaced raw JSON string dumps in `AttemptReview.tsx` with human-readable, semantic formatting:

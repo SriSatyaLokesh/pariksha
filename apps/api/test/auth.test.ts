@@ -3,7 +3,6 @@ import { sqliteClient, migrate } from "@pariksha/db";
 import { memoryAdapter } from "@pariksha/storage";
 import { createApp } from "../src/app.js";
 import { parseEnv } from "../src/env.js";
-import { generateTotp } from "../src/auth/password.js";
 import { sha256Hex } from "../src/auth/tokens.js";
 import { normaliseEmail } from "@pariksha/core";
 
