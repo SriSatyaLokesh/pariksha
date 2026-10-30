@@ -3,6 +3,7 @@ import { CONSENT_KEY, CONSENT_REQUIRED_MESSAGE } from "@pariksha/core";
 import { RegistrationForm, validateForm } from "../testbuilder/RegistrationForm";
 import { RenderedHtml } from "../authoring/RenderedHtml";
 import { TextField } from "../TextField";
+import { Icon } from "../OrganiserShell";
 import {
   BOT_CHECK_MESSAGE,
   REGISTER_PENDING_MESSAGE,
@@ -427,7 +428,7 @@ export function ExamRegistration({
                 </label>
                 {errors[CONSENT_KEY] !== undefined && (
                   <p className="registration-form__error" id="exam-consent-error">
-                    <span aria-hidden="true">⚠</span> {errors[CONSENT_KEY]}
+                    <Icon name="warn" /> {errors[CONSENT_KEY]}
                   </p>
                 )}
               </section>

@@ -11,6 +11,7 @@ import {
 import type { ApiClient, Question, QuestionType } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { useDialogKeys } from "../useDialogKeys";
+import { Icon } from "../OrganiserShell";
 
 export interface DraftAiModalProps {
   client: ApiClient;
@@ -330,7 +331,7 @@ export function DraftAiModal({
 
           {error && (
             <p className="release-panel__risk" role="alert">
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               {error}
             </p>
           )}
@@ -453,7 +454,7 @@ export function DraftAiModal({
                         onClick={() => toggleType(type)}
                         disabled={loading}
                       >
-                        {isChecked ? "✓ " : "+ "}
+                        {isChecked ? <Icon name="check" /> : "+ "}
                         {label}
                       </button>
                     );
@@ -535,11 +536,11 @@ export function DraftAiModal({
                         <div>
                           {hasWarning ? (
                             <span className="draft-ai-badge draft-ai-badge--warning">
-                              ⚠️ Validation Warning
+                              <Icon name="warn" /> Validation Warning
                             </span>
                           ) : (
                             <span className="draft-ai-badge draft-ai-badge--valid">
-                              ✓ Schema Valid
+                              <Icon name="check" /> Schema Valid
                             </span>
                           )}
                         </div>
@@ -687,7 +688,7 @@ export function DraftAiModal({
                                     key={opt.id}
                                     className={isCorrect ? "draft-ai-option--correct" : ""}
                                   >
-                                    {isCorrect ? "✓ " : "• "} {opt.text}
+                                    {isCorrect ? <Icon name="check" /> : "• "} {opt.text}
                                   </li>
                                 );
                               })}

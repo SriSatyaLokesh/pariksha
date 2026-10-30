@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
-import { QUESTION_TYPES, type ImportIssue, type Question } from "@pariksha/core";
+import {
+  BANK_CONVERSION_PROMPT,
+  QUESTION_TYPES,
+  sampleBank,
+  SAMPLE_BANK_FILENAME,
+  type ImportIssue,
+  type Question,
+} from "@pariksha/core";
 import { ApiError, type ApiClient, type PassageGroupSummary, type QuestionSummary } from "../lib/api";
 import { downloadJson } from "../lib/download";
 import { MonoCaption } from "../components/MonoCaption";
@@ -128,6 +135,19 @@ export function BankBrowser({
   // succeeded. `CandidateDataPanel.tsx`'s own confirm dialog guards the same
   // way (`disabled={… || busy}`).
   const [confirmBusy, setConfirmBusy] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+
+  async function onCopyPrompt(): Promise<void> {
+    try {
+      await navigator.clipboard?.writeText(BANK_CONVERSION_PROMPT);
+      setPromptCopied(true);
+      setTimeout(() => {
+        setPromptCopied(false);
+      }, 3000);
+    } catch {
+      // Clipboard access can fail or be denied.
+    }
+  }
   // Fix round 1, finding 9: a static id collides if `BankBrowser` is ever
   // rendered twice on one page — `PreviewPane` and `QuestionEditor` both use
   // `useId()` for exactly this reason.
@@ -488,9 +508,31 @@ export function BankBrowser({
             Import
           </button>
 
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => void onCopyPrompt()}
+          >
+            Copy AI Prompt
+          </button>
+
+          <button
+            type="button"
+            className="button-secondary"
+            onClick={() => downloadJson(sampleBank(), SAMPLE_BANK_FILENAME)}
+          >
+            Download sample
+          </button>
+
           <button type="button" className="button-secondary" onClick={() => setCollaboratorsOpen(true)}>
             Collaborators
           </button>
+
+          {promptCopied && (
+            <span role="status" className="organiser__status">
+              Copied prompt!
+            </span>
+          )}
         </div>
 
         <section aria-labelledby={groupsHeadingId}>

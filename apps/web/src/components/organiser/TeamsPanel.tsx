@@ -11,6 +11,7 @@ import {
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
 import { useDialogKeys } from "../useDialogKeys";
+import { Icon } from "../OrganiserShell";
 
 export interface TeamsPanelProps {
   client: ApiClient;
@@ -245,7 +246,7 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
 
       {panelError && (
         <p className="release-panel__risk" role="alert">
-          <span aria-hidden="true">⚠ </span>
+          <Icon name="warn" />
           {panelError}
         </p>
       )}
@@ -415,7 +416,7 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
                   </button>
                   {addMemberError && (
                     <p className="release-panel__risk" role="alert">
-                      <span aria-hidden="true">⚠ </span>
+                      <Icon name="warn" />
                       {addMemberError}
                     </p>
                   )}
@@ -510,7 +511,7 @@ export function TeamsPanel({ client, workspace }: TeamsPanelProps) {
               />
               {createError && (
                 <p className="release-panel__risk" role="alert">
-                  <span aria-hidden="true">⚠ </span>
+                  <Icon name="warn" />
                   {createError}
                 </p>
               )}

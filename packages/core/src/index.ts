@@ -150,3 +150,7 @@ export * from "./i18n/index.js";
 
 // Phase 12 BYOK AI Models & Pricing Engine.
 export * from "./ai-models.js";
+
+// Issue #178: Question Bank Downloadable Template & LLM Conversion Prompt.
+export * from "./prompt.js";
+

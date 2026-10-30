@@ -8,6 +8,7 @@ import {
   type RegistrationFormSpec,
 } from "@pariksha/core";
 import type { ReachResult } from "../../lib/api";
+import { Icon } from "../OrganiserShell";
 import { ReorderableList } from "../authoring/ReorderableList";
 import { FORM_TEMPLATES, RegistrationForm, dialCodeFor, validateForm } from "./RegistrationForm";
 import { useDialogKeys } from "../useDialogKeys";
@@ -725,7 +726,7 @@ function FieldEditor({
 
       {unsatisfiable !== null && (
         <p className="form-builder__risk" role="alert">
-          <span aria-hidden="true">⚠</span> {unsatisfiable}
+          <Icon name="warn" /> {unsatisfiable}
         </p>
       )}
 
@@ -739,22 +740,22 @@ function FieldEditor({
 /** The sentence for each outcome — text plus glyph, never colour alone, and
  * never the word "invalid": an unverified link is one the server could not
  * confirm, which is not the same as one the organiser got wrong. */
-function reachLine(result: ReachResult): { glyph: string; text: string } {
+function reachLine(result: ReachResult): { icon: "check" | "warn"; text: string } {
   switch (result.state) {
     case "reachable":
-      return { glyph: "✓", text: "Reachable — the link returned 200." };
+      return { icon: "check", text: "Reachable — the link returned 200." };
     case "unverified":
       return {
-        glyph: "⚠",
+        icon: "warn",
         text:
           result.status === null
             ? "Unverified — the link did not return 200."
             : `Unverified — the link did not return 200 (${result.status}).`,
       };
     case "timeout":
-      return { glyph: "⚠", text: "The check timed out. The link may still be fine." };
+      return { icon: "warn", text: "The check timed out. The link may still be fine." };
     case "refused":
-      return { glyph: "⚠", text: `Not checked — ${result.reason ?? "this link cannot be checked"}.` };
+      return { icon: "warn", text: `Not checked — ${result.reason ?? "this link cannot be checked"}.` };
   }
 }
 
@@ -827,7 +828,7 @@ function UrlCheck({ id, check }: { id: string; check: (url: string) => Promise<R
           "Not checked"
         ) : (
           <>
-            <span aria-hidden="true">{line.glyph}</span> {line.text} Checked at {stampOf(result!.checkedAt)}.
+            <Icon name={line.icon} /> {line.text} Checked at {stampOf(result!.checkedAt)}.
           </>
         )}
       </p>

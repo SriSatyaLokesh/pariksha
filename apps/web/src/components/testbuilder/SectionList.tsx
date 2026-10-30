@@ -6,6 +6,7 @@ import { RenderedHtml } from "../authoring/RenderedHtml";
 import { QuestionPickerDrawer } from "./QuestionPickerDrawer";
 import { SetsPanel, ShuffleFieldset } from "./SetsPanel";
 import { useDialogKeys } from "../useDialogKeys";
+import { Icon } from "../OrganiserShell";
 
 /** A fresh section id (`^[a-z0-9_-]{1,40}$` — schemas/test-1.json's
  * `$defs/section`). Same precedent as `QuestionEditor.tsx`'s own
@@ -319,7 +320,7 @@ export function SectionList({
 
               {shortfall > 0 && (
                 <p className="section-row__flag-risk">
-                  <span aria-hidden="true">⚠</span> {shortfall} short — needs {d!.wanted}, {d!.matching} match
+                  <Icon name="warn" /> {shortfall} short — needs {d!.wanted}, {d!.matching} match
                 </p>
               )}
 

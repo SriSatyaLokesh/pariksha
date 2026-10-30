@@ -8,6 +8,7 @@ import {
 } from "@pariksha/core";
 import type { StoredSection } from "../../lib/api";
 import { useDialogKeys } from "../useDialogKeys";
+import { Icon } from "../OrganiserShell";
 
 // T-12 - T-15 (Task 7, #59, P5.6): the timing, navigation and attempt
 // policy panel.
@@ -379,7 +380,7 @@ export function TimingPanel({
           .filter((why): why is string => why !== undefined)
           .map((why) => (
             <p className="timing-panel__risk" role="alert" key={why}>
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               {why}
             </p>
           ))}
@@ -419,7 +420,7 @@ export function TimingPanel({
         </p>
         {form.timezone !== undefined && !isZone(form.timezone) && (
           <p className="timing-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {`"${form.timezone}" is not a time zone — use an IANA name, for example Asia/Kolkata. Times are being read in UTC until it is one.`}
           </p>
         )}
@@ -440,7 +441,7 @@ export function TimingPanel({
         </p>
         {issueFor("timing.duration_minutes") !== undefined && (
           <p className="timing-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {issueFor("timing.duration_minutes")}
           </p>
         )}
@@ -536,7 +537,7 @@ export function TimingPanel({
         <p className="timing-panel__fact">The countdown shows a warning at each of these marks.</p>
         {warnRaw !== null && parseWarnAt(warnRaw) === null && (
           <p className="timing-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {`"${warnRaw}" is not a list of minutes — write whole numbers separated by commas, for example 10, 2.`}
           </p>
         )}

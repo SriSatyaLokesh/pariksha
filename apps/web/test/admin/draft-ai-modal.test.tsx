@@ -214,7 +214,7 @@ describe("DraftAiModal — review step, validation badges, flagging, and inline 
     expect(within(statsBar).getByText(/\$0\.12/i)).toBeInTheDocument();
 
     // Validation status badges: all 3 should show Schema Valid
-    const validBadges = screen.getAllByText("✓ Schema Valid");
+    const validBadges = screen.getAllByText(/Schema Valid/);
     expect(validBadges).toHaveLength(3);
 
     // Action buttons: "Flag as Incorrect" on all 3 cards
@@ -252,11 +252,11 @@ describe("DraftAiModal — review step, validation badges, flagging, and inline 
     fireEvent.click(screen.getByRole("button", { name: /Generate Draft/i }));
 
     // Question 2 has validation warning
-    expect(await screen.findByText("⚠️ Validation Warning")).toBeInTheDocument();
+    expect(await screen.findByText(/Validation Warning/)).toBeInTheDocument();
     expect(screen.getByText("Answer key not found in options")).toBeInTheDocument();
 
     // Other questions are still valid
-    expect(screen.getAllByText("✓ Schema Valid")).toHaveLength(2);
+    expect(screen.getAllByText(/Schema Valid/)).toHaveLength(2);
   });
 
   it("clicking 'Flag as Incorrect' dims/strikethroughs card, updates summary, and 'Unflag & Keep' restores it", async () => {

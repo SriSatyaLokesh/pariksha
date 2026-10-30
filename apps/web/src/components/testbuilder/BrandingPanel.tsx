@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
+import { Icon } from "../OrganiserShell";
 import { CREAM, HEX_COLOUR, INK, brandColourIssue, contrastRatio, type TestBranding } from "@pariksha/core";
 
 // T-23 (Task 10, #61, P5.8): the logo, the brand colour, the footer, and
@@ -202,7 +203,7 @@ export function BrandingPanel({
           )}
           {refusal !== null && (
             <p className="branding-panel__risk" role="alert">
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               {refusal}
             </p>
           )}
@@ -234,7 +235,7 @@ export function BrandingPanel({
         </p>
         {saveError !== undefined && (
           <p className="branding-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {saveError}
           </p>
         )}

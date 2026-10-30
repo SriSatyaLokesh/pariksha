@@ -342,8 +342,16 @@ const candidatePath = (c: Context<AppBindings>): string =>
  * one level up. A second provider must land together with the `access`
  * field that pins which one a test accepts.
  */
-const providerFor = (deps: AppDeps, c: Context<AppBindings>): string =>
-  c.req.query("provider") ?? deps.env.oidcProviders?.[0]?.id ?? "";
+const providerFor = (deps: AppDeps, c: Context<AppBindings>): string => {
+  const providers = deps.env.oidcProviders ?? [];
+  const requested = c.req.query("provider");
+  if (requested) {
+    const match = providers.find((p) => p.id === requested);
+    if (!match) throw incomplete("Unknown identity provider.");
+    return match.id;
+  }
+  return providers[0]?.id ?? "";
+};
 
 function ssoTest(test: PublishedTest): TestAccess {
   const access = test.settings.access;

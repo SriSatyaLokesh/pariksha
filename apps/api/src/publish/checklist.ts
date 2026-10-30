@@ -107,14 +107,9 @@ const ISSUE_ROWS: Readonly<Record<string, readonly IssueRow[]>> = {
   "release.at": [{ id: "release_at_missing", severity: "blocking" }],
   sections: [{ id: "duplicate_ids", severity: "blocking", message: /used more than once/ }],
 
-  // Task 13's two advisory rows. `T-11` says the builder *warns* on both,
-  // while `docs/test-format.md` § "Rules checked on import" says "Import
-  // is stricter: it refuses the file for either, because an imported file
-  // is one an author can still edit" — which is exactly why these are the
-  // same `validateTest` issues wearing a different severity rather than a
-  // second set of rules: the numbers an organiser reads here and the
-  // numbers an import would refuse over are the same numbers.
-  "source.count": [{ id: "pool_short", severity: "advisory" }],
+  // #197: pool_short is blocking so tests with unsatisfied pools cannot publish.
+  // source.sets remains advisory (T-11).
+  "source.count": [{ id: "pool_short", severity: "blocking" }],
   "source.sets": [{ id: "sets_unbalanced", severity: "advisory", message: /unequal total points/ }],
 };
 
@@ -218,13 +213,10 @@ export function buildChecklist(input: ChecklistInput): ChecklistRow[] {
   //     `schemaIssues` over every section patch. So `count: 0` never reaches
   //     storage at all.
   //   - a `pool` whose filter matches **fewer questions than `count`**:
-  //     **not refused.** `validateTest` raises `source.count`, `ISSUE_ROWS`
-  //     maps that field to `pool_short` with no message regex so `mapIssue`
-  //     always matches it, and `pool_short` is **advisory**. Such a test
-  //     publishes. That is the honest boundary of this decision: it is a
-  //     real gap, it is older than this branch, and it is not closed by
-  //     adding a `no_questions` row — which would fire on a *different*
-  //     shape and leave this one exactly as it is.
+  //     refused by `pool_short` (upgraded to blocking in #197). `validateTest`
+  //     raises `source.count`, `ISSUE_ROWS` maps that field to `pool_short` with
+  //     no message regex, and `pool_short` is **blocking**. Such a test cannot
+  //     publish.
   //
   // A second test-level row for a cause `section_empty` already reports
   // would put two red lights in the builder's rail (6.5d) for one defect.
@@ -359,6 +351,23 @@ export function blockingRows(rows: readonly ChecklistRow[]): ChecklistRow[] {
 function advisoryRows(input: ChecklistInput): ChecklistRow[] {
   const { settings, sections } = input.body;
   const rows: ChecklistRow[] = [];
+
+  // #180: Free navigation plus per-section time limits. The server tracks a single
+  // section clock anchor (`section_started_at`), so in free navigation mode,
+  // leaving a timed section permanently closes it once left.
+  const navMode =
+    (settings as { navigation?: { mode?: string } }).navigation?.mode ??
+    settings.timing?.navigation ??
+    "free";
+  if (navMode === "free" && sections.some((s) => (s.time_limit_minutes ?? 0) > 0)) {
+    rows.push({
+      id: "free_nav_section_timers",
+      severity: "advisory",
+      field: "navigation.mode",
+      message:
+        "free navigation with per-section time limits closes each timed section permanently once left, because the server tracks a single section clock",
+    });
+  }
 
   // UX-17: "the registration form has at least one unique field if repeat
   // registration is to be blocked". Only when there is a form at all — a

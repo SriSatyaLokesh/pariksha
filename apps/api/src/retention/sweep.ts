@@ -144,37 +144,6 @@ interface SnapshotCandidate extends Candidate {
 }
 
 /**
- * Branch review `C1`: the shortest `snapshots_days` configured anywhere
- * right now (default included), which is the only bound that is SAFE to
- * put in `sweepSnapshots`'s own `WHERE` without a per-row join ahead of
- * the fetch. A row is due when `age >= days_for_its_own_test`; filtering
- * on `taken_at <= now - D` only ever admits a true positive when `D` is
- * no larger than the smallest `days_for_its_own_test` in play — a bigger
- * `D` would silently drop a row whose own test overrides to something
- * shorter than the default, which is a correctness bug (a promised
- * deletion that never happens), not just a slow one. `MIN` across every
- * `test_version` row, not only published or current ones: including a
- * draft's override only ever makes `D` smaller, which is the safe
- * direction, and it is one statement over a table sized by test count,
- * never by event volume — unlike `snapshot` or `candidate`, which is the
- * whole reason this query is cheap enough to add.
- */
-async function minSnapshotsDaysCutoff(deps: AppDeps): Promise<number> {
-  const pg = deps.db.dialect === "pg";
-  const daysExpr = pg
-    ? "(settings_json #>> '{retention,snapshots_days}')::numeric"
-    : "json_extract(settings_json, '$.retention.snapshots_days')";
-  const rows = await deps.db.query<{ min_days: number | null }>(
-    `SELECT MIN(COALESCE(${daysExpr}, ?)) AS min_days FROM test_version`,
-    [RETENTION_DEFAULTS.snapshotsDays],
-  );
-  // `MIN` over zero rows (no test has ever been created) is NULL — read as
-  // the default, which is also then the whole point moot: an empty
-  // `test_version` table means an empty `snapshot` table too.
-  return Number(rows[0]?.min_days ?? RETENTION_DEFAULTS.snapshotsDays);
-}
-
-/**
  * Deletes the object before the row (plan Step 3): the reverse leaves an
  * object nothing can ever find again, where this order only ever leaves a
  * row with no object — which the next tick's `storage.delete` no-ops on
@@ -201,36 +170,25 @@ async function minSnapshotsDaysCutoff(deps: AppDeps): Promise<number> {
  * larger regression for a MINOR finding whose only consequence is a
  * crash-window loss of bookkeeping, never of data.
  *
- * Branch review `C1`: `WHERE sn.taken_at <= ?` (bound by
- * `minSnapshotsDaysCutoff` above) replaces what used to be no `WHERE` at
- * all. **Correction (fix-wave re-review): this does NOT make steady state
- * ~0 rows.** `snapshot` has no index on `taken_at`
- * (`packages/db/migrations/sqlite/0000_calm_blizzard.sql`:168 declares only
- * `snapshot_workspace_idx`/`snapshot_attempt_idx`) — confirmed with
- * `EXPLAIN QUERY PLAN` against this exact query on a local, indexed
- * `better-sqlite3`, which shows `SCAN sn`, a full table scan. D1 bills rows
- * *examined*, and a `WHERE` on an unindexed column does not reduce what the
- * base scan examines; it only stops the per-row `attempt`/`test_version`
- * PK probes and the sort from running for rows that fail it. Before: every
- * scanned row paid those two probes plus the sort — ~3× `snapshot`'s row
- * count. After: the base scan still reads every row, but a not-yet-due
- * cohort skips the probes and the sort — ~1× `snapshot`'s row count, not
- * ~0. A genuine ~3×→~1× win, not the full fix. The real fix —
- * `snapshot(taken_at)`, a migration — is #226's, not this branch's (`K10`:
- * no migration here); #226 also needs to cover getting the not-yet-due case
- * to near-zero, not just in-drain batch fairness.
+ * Issue #226: per-row `snapshots_days` cutoff is pushed directly into the
+ * SQL `WHERE` clause, preventing unexpired rows from workspaces with long
+ * retention from filling the batch and starving other workspaces.
  */
 async function sweepSnapshots(deps: AppDeps): Promise<{ deleted: number; byWorkspace: Map<string, number> }> {
-  const cutoffDays = await minSnapshotsDaysCutoff(deps);
+  const pg = deps.db.dialect === "pg";
+  const daysExtract = pg
+    ? "(tv.settings_json #>> '{retention,snapshots_days}')::numeric"
+    : "json_extract(tv.settings_json, '$.retention.snapshots_days')";
+
   const rows = await deps.db.query<SnapshotCandidate>(
-    "SELECT sn.id AS id, sn.workspace_id AS workspace_id, sn.taken_at AS at, sn.storage_key AS storage_key, " +
-      "tv.settings_json AS settings_json " +
-      "FROM snapshot sn " +
-      "JOIN attempt a ON a.id = sn.attempt_id " +
-      "JOIN test_version tv ON tv.id = a.test_version_id " +
-      "WHERE sn.taken_at <= ? " +
-      "ORDER BY sn.taken_at ASC LIMIT ?",
-    [deps.now() - cutoffDays * DAY_MS, RETENTION_BATCH],
+    `SELECT sn.id AS id, sn.workspace_id AS workspace_id, sn.taken_at AS at, sn.storage_key AS storage_key, ` +
+      `tv.settings_json AS settings_json ` +
+      `FROM snapshot sn ` +
+      `JOIN attempt a ON a.id = sn.attempt_id ` +
+      `JOIN test_version tv ON tv.id = a.test_version_id ` +
+      `WHERE sn.taken_at <= ? - COALESCE(${daysExtract}, ?) * ${DAY_MS} ` +
+      `ORDER BY sn.taken_at ASC LIMIT ?`,
+    [deps.now(), RETENTION_DEFAULTS.snapshotsDays, RETENTION_BATCH],
   );
   const due = expired(deps.db, rows, deps.now(), (r) => r.snapshotsDays);
   if (due.length === 0) return { deleted: 0, byWorkspace: new Map() };
@@ -417,11 +375,11 @@ async function sweepCandidates(
 export const retentionJob: ScheduledJob = {
   name: "retention.sweep",
   cron: CRON,
-  // Merge note (phase-8b/phase-8e, `ScheduledJob.maxSubrequests`): 30, the
+  // Merge note (phase-8b/phase-8e, `ScheduledJob.maxSubrequests`): 29, the
   // composed worst case `sweep.test.ts`'s "stays inside the subrequest
   // ceiling with both halves loaded in the same tick" pins with `toBe` —
   // see that test's own comment for the arithmetic.
-  maxSubrequests: 30,
+  maxSubrequests: 29,
   run: async (deps) => {
     const snapshots = await sweepSnapshots(deps);
     const candidates = await sweepCandidates(deps);

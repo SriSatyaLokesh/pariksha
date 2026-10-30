@@ -192,7 +192,7 @@ describe("SignIn", () => {
     fireEvent.click(screen.getByRole("button", { name: /send/i }));
 
     const error = await screen.findByRole("alert");
-    expect(error).toHaveTextContent("⚠");
+    expect(error.querySelector("svg")).toBeInTheDocument();
     expect(error).toHaveTextContent(/name@college\.edu/i);
     expect(error).not.toHaveTextContent(/invalid/i);
     expect(screen.getByLabelText(/email address/i)).toHaveAttribute(
@@ -277,7 +277,7 @@ describe("Setup (the first-run wizard)", () => {
     fireEvent.click(screen.getByRole("button", { name: /create workspace/i }));
 
     const error = await screen.findByRole("alert");
-    expect(error).toHaveTextContent("⚠");
+    expect(error.querySelector("svg")).toBeInTheDocument();
     expect(error).toHaveTextContent(/1 to 60 characters/i);
     expect(error).toHaveTextContent(/placement cell/i);
     expect(error).not.toHaveTextContent(/invalid/i);

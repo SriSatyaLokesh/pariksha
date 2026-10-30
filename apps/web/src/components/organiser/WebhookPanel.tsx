@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError, WEBHOOK_EVENTS, type ApiClient, type Webhook, type WebhookEvent } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
+import { Icon } from "../OrganiserShell";
 
 // Phase 8d Task 1: the organiser's webhook CRUD screen (`K35`, `K36`,
 // `KG5`). Built entirely from tokens and primitives the test builder's
@@ -143,7 +144,7 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
           field being invalid. */}
       {panelError !== undefined && (
         <p className="release-panel__risk" role="alert">
-          <span aria-hidden="true">⚠ </span>
+          <Icon name="warn" />
           {panelError}
         </p>
       )}
@@ -179,7 +180,7 @@ export function WebhookPanel({ workspaceId, client }: { workspaceId: string; cli
                 Now its own alert, beside the control it is actually about. */}
             {eventsError !== undefined && (
               <p className="release-panel__risk" role="alert">
-                <span aria-hidden="true">⚠ </span>
+                <Icon name="warn" />
                 {eventsError}
               </p>
             )}

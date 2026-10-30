@@ -241,7 +241,7 @@ export function closeClient(db: DbClient): Promise<void> {
  * is why no repository function puts one there: values are bound, never
  * written into the SQL.
  */
-function toNumberedPlaceholders(sql: string): string {
+export function toNumberedPlaceholders(sql: string): string {
   let n = 0;
   return sql.replace(/\?/g, () => `$${++n}`);
 }

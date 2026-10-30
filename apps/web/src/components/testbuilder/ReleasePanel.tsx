@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Icon } from "../OrganiserShell";
 import {
   RELEASE_CONSEQUENCE,
   SHOW_CONSEQUENCE,
@@ -115,7 +116,7 @@ export function ReleasePanel({
           />
           {needsDate && (
             <p className="release-panel__risk" role="alert">
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               Choose a release date. Until there is one, release.at is unset and nobody would ever see a result.
             </p>
           )}

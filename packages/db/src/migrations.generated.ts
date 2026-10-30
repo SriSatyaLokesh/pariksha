@@ -173,6 +173,11 @@ export const sqliteMigrations: Migration[] = [
     "CREATE INDEX `team_grant_workspace_resource_idx` ON `team_grant` (`workspace_id`, `resource_type`, `resource_id`);",
     "ALTER TABLE `api_key` ADD `created_by` text;",
   ] },
+  { name: "0016_retention_and_usage_indexes.sql", statements: [
+    "CREATE INDEX `snapshot_workspace_taken_idx` ON `snapshot` (`workspace_id`, `taken_at`);",
+    "CREATE INDEX `attempt_workspace_started_idx` ON `attempt` (`workspace_id`, `started_at`);",
+    "CREATE INDEX `event_workspace_ts_idx` ON `event` (`workspace_id`, `server_ts`);",
+  ] },
 ];
 
 export const pgMigrations: Migration[] = [
@@ -327,5 +332,10 @@ export const pgMigrations: Migration[] = [
     "CREATE UNIQUE INDEX IF NOT EXISTS \"team_grant_resource_uq\" ON \"team_grant\" USING btree (\"team_id\", \"resource_type\", \"resource_id\");",
     "CREATE INDEX IF NOT EXISTS \"team_grant_workspace_resource_idx\" ON \"team_grant\" USING btree (\"workspace_id\", \"resource_type\", \"resource_id\");",
     "ALTER TABLE \"api_key\" ADD COLUMN IF NOT EXISTS \"created_by\" text;",
+  ] },
+  { name: "0016_retention_and_usage_indexes.sql", statements: [
+    "CREATE INDEX IF NOT EXISTS \"snapshot_workspace_taken_idx\" ON \"snapshot\" USING btree (\"workspace_id\", \"taken_at\");",
+    "CREATE INDEX IF NOT EXISTS \"attempt_workspace_started_idx\" ON \"attempt\" USING btree (\"workspace_id\", \"started_at\");",
+    "CREATE INDEX IF NOT EXISTS \"event_workspace_ts_idx\" ON \"event\" USING btree (\"workspace_id\", \"server_ts\");",
   ] },
 ];

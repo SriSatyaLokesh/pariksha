@@ -23,33 +23,43 @@ function migrationsFor(db: DbClient): Migration[] {
  * second time, so it is safe on every boot and in every deployment.
  */
 export async function migrate(db: DbClient): Promise<{ applied: string[] }> {
-  await db.exec(
-    `CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (` +
-      `name text PRIMARY KEY NOT NULL, ` +
-      `applied_at ${db.dialect === "pg" ? "bigint" : "integer"} NOT NULL)`,
-  );
-
-  const done = new Set(
-    (
-      await db.all<{ name: string }>(`SELECT name FROM ${MIGRATIONS_TABLE}`)
-    ).map((row) => row.name),
-  );
-
-  const applied: string[] = [];
-  for (const migration of migrationsFor(db)) {
-    if (done.has(migration.name)) continue;
-
-    for (const statement of migration.statements) {
-      await db.exec(statement);
-    }
-    // Recorded after the statements, so a migration that fails half way is
-    // retried rather than silently skipped on the next boot.
-    await db.exec(
-      `INSERT INTO ${MIGRATIONS_TABLE} (name, applied_at) VALUES (` +
-        `'${migration.name.replace(/'/g, "''")}', ${Date.now()})`,
-    );
-    applied.push(migration.name);
+  // Advisory lock on PostgreSQL prevents concurrent workers from racing on DDL.
+  if (db.dialect === "pg") {
+    await db.exec("SELECT pg_advisory_lock(1346458185)");
   }
+  try {
+    await db.exec(
+      `CREATE TABLE IF NOT EXISTS ${MIGRATIONS_TABLE} (` +
+        `name text PRIMARY KEY NOT NULL, ` +
+        `applied_at ${db.dialect === "pg" ? "bigint" : "integer"} NOT NULL)`,
+    );
 
-  return { applied };
+    const done = new Set(
+      (
+        await db.all<{ name: string }>(`SELECT name FROM ${MIGRATIONS_TABLE}`)
+      ).map((row) => row.name),
+    );
+
+    const applied: string[] = [];
+    for (const migration of migrationsFor(db)) {
+      if (done.has(migration.name)) continue;
+
+      for (const statement of migration.statements) {
+        await db.exec(statement);
+      }
+      // Recorded after the statements, so a migration that fails half way is
+      // retried rather than silently skipped on the next boot.
+      await db.exec(
+        `INSERT INTO ${MIGRATIONS_TABLE} (name, applied_at) VALUES (` +
+          `'${migration.name.replace(/'/g, "''")}', ${Date.now()})`,
+      );
+      applied.push(migration.name);
+    }
+
+    return { applied };
+  } finally {
+    if (db.dialect === "pg") {
+      await db.exec("SELECT pg_advisory_unlock(1346458185)");
+    }
+  }
 }

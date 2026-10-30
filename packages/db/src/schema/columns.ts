@@ -430,7 +430,12 @@ export const TABLE_MANIFEST: TableSpec[] = [
       text("proctor_message", { null: true }),
       ts("proctor_message_at", { null: true }),
     ],
-    indexes: [["workspace_id"], ["candidate_id"], ["test_version_id"]],
+    indexes: [
+      ["workspace_id"],
+      ["candidate_id"],
+      ["test_version_id"],
+      ["workspace_id", "started_at"],
+    ],
     uniques: [["token_hash"]],
   },
   {
@@ -467,7 +472,7 @@ export const TABLE_MANIFEST: TableSpec[] = [
       ts("client_ts"),
       ts("server_ts"),
     ],
-    indexes: [["workspace_id"], ["attempt_id"]],
+    indexes: [["workspace_id"], ["attempt_id"], ["workspace_id", "server_ts"]],
     // Phase 7e Task 1 fix round (F2, Major): `event_violation_limit_uq`, a
     // partial unique index (`attempt_id` only, filtered to `type =
     // 'violation_limit_reached'` — see `schema/sqlite.ts`/`pg.ts`'s own
@@ -487,7 +492,7 @@ export const TABLE_MANIFEST: TableSpec[] = [
       text("reason"),
       int("face_count", { null: true }),
     ],
-    indexes: [["workspace_id"], ["attempt_id"]],
+    indexes: [["workspace_id"], ["attempt_id"], ["workspace_id", "taken_at"]],
     uniques: [],
   },
   {

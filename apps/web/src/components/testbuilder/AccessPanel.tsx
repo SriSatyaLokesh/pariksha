@@ -1,4 +1,5 @@
 import { useId, useState } from "react";
+import { Icon } from "../OrganiserShell";
 import {
   describeAllowlists,
   invalidCidr,
@@ -207,7 +208,7 @@ export function AccessPanel({
         <p className="access-panel__fact">One per line. Leave empty to let anyone through.</p>
         {bad.map((why) => (
           <p className="access-panel__risk" role="alert" key={why}>
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {why}
           </p>
         ))}
@@ -258,7 +259,7 @@ export function AccessPanel({
           />
           {shortCode !== undefined && (
             <p className="access-panel__risk" role="alert">
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               {shortCode}
             </p>
           )}
@@ -353,7 +354,7 @@ export function AccessPanel({
         {report !== null && report.issues.length > 0 && (
           <>
             <p className="access-panel__risk" role="alert">
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               Nothing was imported. Fix the file and upload it again.
             </p>
             <table className="access-panel__issues">
@@ -385,7 +386,7 @@ export function AccessPanel({
         </p>
         {uploadError !== undefined && (
           <p className="access-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {uploadError}
           </p>
         )}

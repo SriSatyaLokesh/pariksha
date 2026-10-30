@@ -106,6 +106,71 @@ describe("setWebhookActive", () => {
   it("throws for a webhook id that does not exist in this workspace", async () => {
     await expect(repo.setWebhookActive(db, wsp, newId("whk"), false)).rejects.toThrow();
   });
+
+  it("shifts pending deliveries to PAUSED_SENTINEL on pause and restores on resume (#231)", async () => {
+    const ws = newId("wsp");
+    await repo.createWorkspace(db, ws, { slug: "pause-sentinel-ws", name: "Pause Sentinel" });
+    const { webhookId } = await repo.createWebhook(db, ws, { url, events: ["test.closed"], now: T });
+
+    const deliveredOriginalNext = T + 10_000;
+    const deliveredAt = T + 1_000;
+    const gaveUpOriginalNext = Number.MAX_SAFE_INTEGER;
+
+    await repo.queueWebhookDeliveries(db, ws, [
+      { webhookId, event: "test.closed", payload: { kind: "pending" }, attemptCount: 0, lastStatus: null, lastError: null, now: T },
+      { webhookId, event: "test.closed", payload: { kind: "delivered" }, attemptCount: 1, lastStatus: 200, lastError: null, now: T },
+      { webhookId, event: "test.closed", payload: { kind: "gave_up" }, attemptCount: 5, lastStatus: 500, lastError: "gave up", now: T },
+    ]);
+
+    const rows = await db.query<{ id: string; payload_json: unknown }>(
+      "SELECT id, payload_json FROM webhook_delivery WHERE workspace_id = ? AND webhook_id = ?",
+      [ws, webhookId],
+    );
+    const pendingId = rows.find((r) => (db.jsonValue(r.payload_json) as { kind: string }).kind === "pending")!.id;
+    const deliveredId = rows.find((r) => (db.jsonValue(r.payload_json) as { kind: string }).kind === "delivered")!.id;
+    const gaveUpId = rows.find((r) => (db.jsonValue(r.payload_json) as { kind: string }).kind === "gave_up")!.id;
+
+    await db.run(
+      "UPDATE webhook_delivery SET delivered_at = ?, next_attempt_at = ? WHERE id = ?",
+      [deliveredAt, deliveredOriginalNext, deliveredId],
+    );
+    await db.run(
+      "UPDATE webhook_delivery SET next_attempt_at = ? WHERE id = ?",
+      [gaveUpOriginalNext, gaveUpId],
+    );
+
+    await repo.setWebhookActive(db, ws, webhookId, false);
+
+    const pausedRows = await db.query<{ id: string; next_attempt_at: number; delivered_at: number | null }>(
+      "SELECT id, next_attempt_at, delivered_at FROM webhook_delivery WHERE workspace_id = ? AND webhook_id = ?",
+      [ws, webhookId],
+    );
+    const pausedPending = pausedRows.find((r) => r.id === pendingId)!;
+    const pausedDelivered = pausedRows.find((r) => r.id === deliveredId)!;
+    const pausedGaveUp = pausedRows.find((r) => r.id === gaveUpId)!;
+
+    expect(Number(pausedPending.next_attempt_at)).toBe(repo.PAUSED_SENTINEL);
+    expect(Number(pausedDelivered.next_attempt_at)).toBe(deliveredOriginalNext);
+    expect(pausedDelivered.delivered_at).toBe(deliveredAt);
+    expect(Number(pausedGaveUp.next_attempt_at)).toBe(gaveUpOriginalNext);
+    expect(pausedGaveUp.delivered_at).toBeNull();
+
+    const resumeNow = T + 20_000;
+    await repo.setWebhookActive(db, ws, webhookId, true, resumeNow);
+
+    const resumedRows = await db.query<{ id: string; next_attempt_at: number; delivered_at: number | null }>(
+      "SELECT id, next_attempt_at, delivered_at FROM webhook_delivery WHERE workspace_id = ? AND webhook_id = ?",
+      [ws, webhookId],
+    );
+    const resumedPending = resumedRows.find((r) => r.id === pendingId)!;
+    const resumedDelivered = resumedRows.find((r) => r.id === deliveredId)!;
+    const resumedGaveUp = resumedRows.find((r) => r.id === gaveUpId)!;
+
+    expect(Number(resumedPending.next_attempt_at)).toBeLessThanOrEqual(resumeNow);
+    expect(Number(resumedPending.next_attempt_at)).toBe(resumeNow);
+    expect(Number(resumedDelivered.next_attempt_at)).toBe(deliveredOriginalNext);
+    expect(Number(resumedGaveUp.next_attempt_at)).toBe(gaveUpOriginalNext);
+  });
 });
 
 describe("deleteWebhook", () => {

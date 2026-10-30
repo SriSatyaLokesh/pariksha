@@ -20,6 +20,11 @@ export interface DemoSweepResult {
 export async function demoSweep(deps: AppDeps): Promise<DemoSweepResult> {
   const now = deps.now();
 
+  const isDemoExpr =
+    deps.db.dialect === "pg"
+      ? "(slug LIKE 'demo-%' OR (settings_json ->> 'is_demo') = 'true')"
+      : "(slug LIKE 'demo-%' OR settings_json LIKE '%\"is_demo\":true%' OR settings_json LIKE '%\"is_demo\": true%')";
+
   // 1. Query potential demo workspaces
   const rows = await deps.db.query<{
     id: string;
@@ -27,9 +32,7 @@ export async function demoSweep(deps: AppDeps): Promise<DemoSweepResult> {
     settings_json: unknown;
     created_at: number;
   }>(
-    "SELECT id, slug, settings_json, created_at FROM workspace " +
-      "WHERE (slug LIKE 'demo-%' OR settings_json LIKE '%\"is_demo\":true%' OR settings_json LIKE '%\"is_demo\": true%') " +
-      "LIMIT ?",
+    `SELECT id, slug, settings_json, created_at FROM workspace WHERE ${isDemoExpr} LIMIT ?`,
     [DEMO_SWEEP_BATCH_LIMIT],
   );
 

@@ -14,6 +14,7 @@
 // either put there or did not, and there is no third state.
 
 import { RenderedHtml } from "../authoring/RenderedHtml";
+import { Icon } from "../OrganiserShell";
 import type { ReleasedResult } from "../../lib/run";
 
 /** A number the candidate will compare against another number, so it is
@@ -98,7 +99,7 @@ export function ResultView({ result }: { result: ReleasedResult }) {
       {result.passed !== null && (
         <p className="exam-verdict" data-passed={result.passed}>
           <span className="exam-verdict-mark" aria-hidden="true">
-            {result.passed ? "✓" : "—"}
+            {result.passed ? <Icon name="check" /> : "—"}
           </span>
           {result.passed ? "Passed" : "Not passed"}
         </p>

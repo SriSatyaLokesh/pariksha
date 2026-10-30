@@ -319,9 +319,10 @@ Write your own questions, validate them, and import them whole — Pariksha JSON
 | Release | Focus | State |
 | --- | --- | --- |
 | **v0.1 Pilot-ready** | All 12 question types, question banks and authoring, the test builder (sets, pools, registration forms, access codes), the candidate runtime, Cloudflare deploy | **Built** — waiting on its exit gate |
-| **v0.2 Teams and security** | Workspaces, roles, OIDC sign-in, invite links, email codes, audit log, retention jobs, Standard and Strict proctoring, live monitor, CSV export | **Built except the live monitor** (Phase 8.5) |
+| **v0.2 Teams and security** | Workspaces, roles, OIDC sign-in, invite links, email codes, audit log, retention jobs, Standard and Strict proctoring, live monitor, CSV export | **Built** (Watchtower live monitor shipped in Phase 8.5) |
 | **v0.3 Grading and analytics** | Grading queue, item analysis, per-set comparison, regrade | **Built** |
-| **v1.0 Public release** | Docker + Postgres, REST API, webhooks, CSV and GIFT import, plugins, WCAG 2.1 AA, translations, signed releases | Webhooks, API keys and CSV/GIFT import built; the rest is Phases 9–12 |
+| **v1.0 Public release** | Docker + Postgres/SQLite, REST API, webhooks, CSV and GIFT import, plugins, WCAG 2.1 AA, translations, signed releases | **Built** (Phases 9–11 complete) |
+| **Post-v1.0 Enhancements** | BYOK AI question drafting (Anthropic, OpenAI, Gemini, OpenRouter, OpenCode) & audio proctoring models (Whisper, Gemini) | **Built** (Phase 12 complete) |
 
 Each release has an exit gate, and **v0.1's is the one that matters right now:
 one real test with 300+ candidates and zero lost answers.** The features are

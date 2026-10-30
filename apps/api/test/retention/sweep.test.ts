@@ -279,6 +279,26 @@ it("respects a test's own snapshots_days when it is shorter than the default", a
   expect(await countSnapshots(deps, wsp)).toBe(0);
 });
 
+it("does not starve a workspace with short retention when another workspace has unexpired snapshots (#226)", async () => {
+  const { deps } = await testDeps();
+  const { wsp: wspA, attemptId: attemptA } = await seedAttempt(deps, { snapshots_days: 365 }, "wsp-a");
+  for (let i = 0; i < RETENTION_BATCH; i++) {
+    await addSnapshot(deps, wspA, attemptA, FIXED_NOW - 100 * DAY, `snap/${attemptA}/${i}`);
+  }
+
+  const { wsp: wspB, attemptId: attemptB } = await seedAttempt(deps, { snapshots_days: 30 }, "wsp-b");
+  for (let i = 0; i < 5; i++) {
+    await addSnapshot(deps, wspB, attemptB, FIXED_NOW - 40 * DAY, `snap/${attemptB}/${i}`);
+  }
+
+  await retentionJob.run(deps);
+
+  // Workspace B's snapshots are expired (40 > 30 days) and must be deleted.
+  expect(await countSnapshots(deps, wspB)).toBe(0);
+  // Workspace A's snapshots are not expired (100 < 365 days) and must survive.
+  expect(await countSnapshots(deps, wspA)).toBe(RETENTION_BATCH);
+}, 30_000);
+
 // --- storage: batched, never per key ------------------------------------
 
 it("removes the R2 objects in one batched call, not one per key", async () => {
@@ -343,13 +363,13 @@ it("stays inside the subrequest ceiling on one tick", async () => {
   const counting = countingDeps(deps);
   await retentionJob.run(counting.deps);
 
-  // Exact, not just under the ceiling: `C1`'s `minSnapshotsDaysCutoff`
-  // SELECT + the snapshot SELECT itself + the chunked DELETEs a full
-  // RETENTION_BATCH needs (Fix round 2, F3) + 1 batched storage.delete +
-  // 1 `dueCandidates` SELECT (empty — no candidates seeded here) + 1 audit
-  // row for the one workspace this run touched.
+  // Exact, not just under the ceiling: the snapshot SELECT itself + the
+  // chunked DELETEs a full RETENTION_BATCH needs (Fix round 2, F3) +
+  // 1 batched storage.delete + 1 `dueCandidates` SELECT (empty — no
+  // candidates seeded here) + 1 audit row for the one workspace this run
+  // touched.
   const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
-  expect(counting.counts().total).toBe(1 + 1 + deleteChunks + 1 + 1 + 1);
+  expect(counting.counts().total).toBe(1 + deleteChunks + 1 + 1 + 1);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 
@@ -374,10 +394,10 @@ it("stays inside the subrequest ceiling when the batch spans several workspaces"
   await retentionJob.run(counting.deps);
 
   const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
-  // `C1`'s cutoff SELECT + the snapshot SELECT + the chunked DELETEs +
-  // 1 batched storage.delete + 1 `dueCandidates` SELECT (empty) + one
-  // audit row per workspace touched.
-  expect(counting.counts().total).toBe(1 + 1 + deleteChunks + 1 + 1 + workspaceCount);
+  // The snapshot SELECT + the chunked DELETEs + 1 batched
+  // storage.delete + 1 `dueCandidates` SELECT (empty) + one audit row per
+  // workspace touched.
+  expect(counting.counts().total).toBe(1 + deleteChunks + 1 + 1 + workspaceCount);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 
@@ -694,12 +714,11 @@ it("stays inside the subrequest ceiling on one tick (candidates, one workspace a
 
   // 1 `dueCandidates` select + 1 attempt select + 1 snapshot select +
   // 1 `storage.delete` + 1 `db.batch` (candidate/candidate_unique/
-  // response/event/snapshot/audit, one round trip) + `C1`'s
-  // `minSnapshotsDaysCutoff` select + 1 `sweepSnapshots` select (0 due
-  // here, its own clock overridden past the fixture) + 1 `retention.sweep`
-  // audit row for the one workspace touched — the same 8 regardless of
-  // whether this loop runs 8 or 98 times.
-  expect(counting.counts().total).toBe(8);
+  // response/event/snapshot/audit, one round trip) + 1 `sweepSnapshots`
+  // select (0 due here, its own clock overridden past the fixture) +
+  // 1 `retention.sweep` audit row for the one workspace touched — the same
+  // 7 regardless of whether this loop runs 8 or 98 times.
+  expect(counting.counts().total).toBe(7);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 }, 30_000);
 
@@ -722,14 +741,14 @@ it("stays inside the subrequest ceiling when due candidates are spread one-per-w
   const counting = countingDeps(deps);
   await retentionJob.run(counting.deps);
 
-  // 1 `dueCandidates` select + `C1`'s `minSnapshotsDaysCutoff` select +
-  // 1 `sweepSnapshots` select (0 due) + `CANDIDATE_WORKSPACE_LIMIT`
-  // workspaces, each paying its own `deleteCandidates` (attempt select +
-  // snapshot select + `storage.delete` + `db.batch` = 4) plus its own
-  // `retention.sweep` audit row (5 per workspace) — the measured worst
-  // case this constant is sized against, unchanged by fix round 1 (it
-  // bounds the other dimension).
-  expect(counting.counts().total).toBe(3 + 5 * CANDIDATE_WORKSPACE_LIMIT);
+  // 1 `dueCandidates` select + 1 `sweepSnapshots` select (0 due) +
+  // `CANDIDATE_WORKSPACE_LIMIT` workspaces, each paying its own
+  // `deleteCandidates` (attempt select + snapshot select +
+  // `storage.delete` + `db.batch` = 4) plus its own `retention.sweep`
+  // audit row (5 per workspace) — the measured worst case this constant
+  // is sized against, unchanged by fix round 1 (it bounds the other
+  // dimension).
+  expect(counting.counts().total).toBe(2 + 5 * CANDIDATE_WORKSPACE_LIMIT);
   expect(counting.counts().total).toBeLessThanOrEqual(SUBREQUEST_LIMIT);
 });
 
@@ -811,17 +830,16 @@ it("stays inside the subrequest ceiling with both halves loaded in the same tick
   const counting = countingDeps(deps);
   await retentionJob.run(counting.deps);
 
-  // `C1`'s cutoff select (1) + the snapshot select (1) + its chunked
-  // DELETEs (`ceil(RETENTION_BATCH / DELETE_CHUNK)`) + 1 batched
-  // `storage.delete` + 1 `dueCandidates` select (shared across every
-  // candidate workspace) + `CANDIDATE_WORKSPACE_LIMIT` workspaces each
-  // paying `deleteCandidates`'s own 4 (attempt select + snapshot select +
-  // `storage.delete` + `db.batch`) + one `retention.sweep` audit row per
-  // workspace touched (the one snapshot workspace plus the
-  // `CANDIDATE_WORKSPACE_LIMIT` candidate ones).
+  // The snapshot select (1) + its chunked DELETEs
+  // (`ceil(RETENTION_BATCH / DELETE_CHUNK)`) + 1 batched `storage.delete` +
+  // 1 `dueCandidates` select (shared across every candidate workspace) +
+  // `CANDIDATE_WORKSPACE_LIMIT` workspaces each paying `deleteCandidates`'s
+  // own 4 (attempt select + snapshot select + `storage.delete` +
+  // `db.batch`) + one `retention.sweep` audit row per workspace touched
+  // (the one snapshot workspace plus the `CANDIDATE_WORKSPACE_LIMIT`
+  // candidate ones).
   const deleteChunks = Math.ceil(RETENTION_BATCH / DELETE_CHUNK);
   const expected =
-    1 + // minSnapshotsDaysCutoff
     1 + // sweepSnapshots select
     deleteChunks +
     1 + // storage.delete (snapshots)
@@ -884,6 +902,10 @@ it("builds the pg-dialect dueCandidates SQL with the documented jsonb operators,
   expect(dueCandidatesQuery?.sql).toContain("c.form_values_json = '{}'::jsonb");
   expect(dueCandidatesQuery?.sql).toContain("(raw.settings_json #>> '{retention,personal_data_days}')::numeric");
   expect(dueCandidatesQuery?.sql).not.toContain("json_extract");
+
+  const sweepSnapshotsQuery = queries.find((q) => q.sql.includes("FROM snapshot sn"));
+  expect(sweepSnapshotsQuery?.sql).toContain("(tv.settings_json #>> '{retention,snapshots_days}')::numeric");
+  expect(sweepSnapshotsQuery?.sql).not.toContain("json_extract");
 });
 
 // --- rateLimitJob: Phase 6's sweepRateLimits, finally scheduled -----------
