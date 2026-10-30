@@ -278,6 +278,7 @@ export const attempt = pgTable(
     index("attempt_workspace_idx").on(t.workspaceId),
     index("attempt_candidate_idx").on(t.candidateId),
     index("attempt_test_version_idx").on(t.testVersionId),
+    index("attempt_workspace_started_idx").on(t.workspaceId, t.startedAt),
     uniqueIndex("attempt_token_hash_uq").on(t.tokenHash),
   ],
 );
@@ -319,6 +320,7 @@ export const event = pgTable(
   (t) => [
     index("event_workspace_idx").on(t.workspaceId),
     index("event_attempt_idx").on(t.attemptId),
+    index("event_workspace_ts_idx").on(t.workspaceId, t.serverTs),
     // Phase 7e Task 1 fix round (F2, Major) — the sqlite.ts sibling's own
     // comment.
     uniqueIndex("event_violation_limit_uq")
@@ -341,6 +343,7 @@ export const snapshot = pgTable(
   (t) => [
     index("snapshot_workspace_idx").on(t.workspaceId),
     index("snapshot_attempt_idx").on(t.attemptId),
+    index("snapshot_workspace_taken_idx").on(t.workspaceId, t.takenAt),
   ],
 );
 

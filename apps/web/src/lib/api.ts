@@ -283,6 +283,7 @@ export interface Workspace {
  */
 export interface UsageProjection {
   projected: number;
+  spentToday?: number;
   limit: number;
   warn: boolean;
   estimated: true;

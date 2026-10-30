@@ -52,7 +52,7 @@ export function UsagePanel({ client, workspaceId }: { client: ApiClient; workspa
   // judgement (`WARN_AT`), read as-is rather than re-derived from this
   // rounded figure, so the two can never disagree over a boundary value a
   // display rounds away.
-  const pct = usage === undefined ? null : Math.round((usage.projected / usage.limit) * 100);
+  const pct = usage === undefined ? null : Math.round(((usage.projected + (usage.spentToday ?? 0)) / usage.limit) * 100);
 
   return (
     <p className="home__usage">

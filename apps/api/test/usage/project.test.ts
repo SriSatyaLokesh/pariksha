@@ -17,7 +17,7 @@
 // drops the baseline term, passed the old assertion and fails this one.
 
 import { expect, it } from "vitest";
-import { addMembership, closeClient, createUser } from "@pariksha/db";
+import { addMembership, closeClient, createUser, newId } from "@pariksha/db";
 import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS, type AppDeps } from "../../src/app.js";
 import { countingDeps } from "../../src/instrument.js";
@@ -28,6 +28,7 @@ import {
   BASELINE_REQUESTS_PER_CANDIDATE,
   FREE_PLAN_REQUESTS_PER_DAY,
   projectUsage,
+  querySpentToday,
   type TestCostInput,
 } from "../../src/usage/project.js";
 
@@ -79,6 +80,12 @@ it("warns at 70 per cent", () => {
   // alone, isolating the boundary from estimateCost's own arithmetic.
   expect(projectUsage({ target: "workers", openTests: [unproctored(1_420)] })!.warn).toBe(true);
   expect(projectUsage({ target: "workers", openTests: [unproctored(1_380)] })!.warn).toBe(false);
+});
+
+it("factors spentToday into warn threshold (Issue #232)", () => {
+  expect(projectUsage({ target: "workers", openTests: [], spentToday: 70_000 })!.warn).toBe(true);
+  expect(projectUsage({ target: "workers", openTests: [], spentToday: 69_000 })!.warn).toBe(false);
+  expect(projectUsage({ target: "workers", openTests: [unproctored(1_000)], spentToday: 20_000 })!.warn).toBe(true);
 });
 
 it("projects zero, and does not warn, for a workspace with no open tests", () => {
@@ -141,6 +148,7 @@ it("includes it under workers — control for the test above", async () => {
   // the control's own exact assertion, not merely "present".
   expect(body.usage).toEqual({
     projected: 0,
+    spentToday: 0,
     limit: FREE_PLAN_REQUESTS_PER_DAY,
     warn: false,
     estimated: true,
@@ -161,8 +169,92 @@ it("measures the real subrequest cost of the usage route", async () => {
   expect(res.status).toBe(200);
   // Flat regardless of how many tests or candidates the workspace holds —
   // an empty workspace already pays every one of the three bulk reads,
-  // because each is issued once per request, not once per row it might
-  // return.
+  // plus querySpentToday, because each is issued once per request, not
+  // once per row it might return.
   expect(counting.counts().total).toBe(ROUTE_BUDGETS["/api/v1/workspaces/:id/usage"]);
+  await closeClient(deps.db);
+});
+
+it("calculates spentToday correctly across attempts, snapshots, and events (Issue #232)", async () => {
+  const { deps } = await testDeps();
+  const workspaceId = await seedWorkspace(deps);
+  const otherWorkspaceId = await seedWorkspace(deps, "other-ws");
+  const now = FIXED_NOW;
+  const startOfDay = Math.floor(now / 86_400_000) * 86_400_000;
+  const yesterday = startOfDay - 1_000;
+
+  // 1 attempt today (50 requests), 1 yesterday (0 requests), 1 other workspace today (0 requests)
+  const att1 = newId("att");
+  await deps.db.run(
+    "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, flag, token_hash) " +
+      "VALUES (?, ?, 'can_1', 'tv_1', 1, '{}', ?, ?, 'clean', ?)",
+    [att1, workspaceId, now, now + 3600_000, `hash-${att1}`],
+  );
+  const attOld = newId("att");
+  await deps.db.run(
+    "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, flag, token_hash) " +
+      "VALUES (?, ?, 'can_2', 'tv_1', 1, '{}', ?, ?, 'clean', ?)",
+    [attOld, workspaceId, yesterday, yesterday + 3600_000, `hash-${attOld}`],
+  );
+  const attOther = newId("att");
+  await deps.db.run(
+    "INSERT INTO attempt (id, workspace_id, candidate_id, test_version_id, set_no, layout_json, started_at, deadline_at, flag, token_hash) " +
+      "VALUES (?, ?, 'can_3', 'tv_1', 1, '{}', ?, ?, 'clean', ?)",
+    [attOther, otherWorkspaceId, now, now + 3600_000, `hash-${attOther}`],
+  );
+
+  // 2 snapshots today (2 requests), 1 yesterday (0 requests), 1 other workspace today (0 requests)
+  await deps.db.run(
+    "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason) VALUES (?, ?, ?, 'key1', ?, 'interval')",
+    [newId("snp"), workspaceId, att1, now],
+  );
+  await deps.db.run(
+    "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason) VALUES (?, ?, ?, 'key2', ?, 'interval')",
+    [newId("snp"), workspaceId, att1, now + 1_000],
+  );
+  await deps.db.run(
+    "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason) VALUES (?, ?, ?, 'key3', ?, 'interval')",
+    [newId("snp"), workspaceId, attOld, yesterday],
+  );
+  await deps.db.run(
+    "INSERT INTO snapshot (id, workspace_id, attempt_id, storage_key, taken_at, reason) VALUES (?, ?, ?, 'key4', ?, 'interval')",
+    [newId("snp"), otherWorkspaceId, attOther, now],
+  );
+
+  // 3 events today (3 requests), 1 yesterday (0 requests), 1 other workspace today (0 requests)
+  await deps.db.run(
+    "INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) VALUES (?, ?, ?, 'blur', ?, ?)",
+    [newId("evt"), workspaceId, att1, now, now],
+  );
+  await deps.db.run(
+    "INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) VALUES (?, ?, ?, 'focus', ?, ?)",
+    [newId("evt"), workspaceId, att1, now, now],
+  );
+  await deps.db.run(
+    "INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) VALUES (?, ?, ?, 'tab_hidden', ?, ?)",
+    [newId("evt"), workspaceId, att1, now, now],
+  );
+  await deps.db.run(
+    "INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) VALUES (?, ?, ?, 'blur', ?, ?)",
+    [newId("evt"), workspaceId, attOld, yesterday, yesterday],
+  );
+  await deps.db.run(
+    "INSERT INTO event (id, workspace_id, attempt_id, type, client_ts, server_ts) VALUES (?, ?, ?, 'blur', ?, ?)",
+    [newId("evt"), otherWorkspaceId, attOther, now, now],
+  );
+
+  // Expected: 1 attempt * 50 + 2 snapshots * 1 + 3 events * 1 = 55
+  const spent = await querySpentToday(deps.db, workspaceId, now);
+  expect(spent).toBe(55);
+
+  // Also verify via the route
+  const cookie = await ownerCookie(deps, workspaceId);
+  const res = await createApp(deps).request(`/api/v1/workspaces/${workspaceId}/usage`, {
+    headers: { cookie },
+  });
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as { usage: { spentToday: number } };
+  expect(body.usage.spentToday).toBe(55);
+
   await closeClient(deps.db);
 });

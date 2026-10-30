@@ -123,6 +123,7 @@ export interface TestCostInput {
 export interface UsageProjection {
   /** Forward: what the workspace's configured open tests will spend. */
   projected: number;
+  spentToday: number;
   limit: number;
   warn: boolean;
   /** Always true. The surface renders this as a label. */
@@ -133,6 +134,7 @@ export interface UsageProjection {
 export function projectUsage(input: {
   target: "workers" | "node";
   openTests: TestCostInput[];
+  spentToday?: number;
 }): UsageProjection | null {
   if (input.target === "node") return null;
 
@@ -141,12 +143,15 @@ export function projectUsage(input: {
       total + (estimateCost(test)?.totalRequests ?? 0) + test.candidates * BASELINE_REQUESTS_PER_CANDIDATE,
     0,
   );
+  const spentToday = input.spentToday ?? 0;
   const limit = FREE_PLAN_REQUESTS_PER_DAY;
+  const total = projected + spentToday;
 
   return {
     projected,
+    spentToday,
     limit,
-    warn: projected / limit >= WARN_AT,
+    warn: total / limit >= WARN_AT,
     estimated: true,
   };
 }
@@ -220,6 +225,29 @@ async function openTestCosts(
 }
 
 /**
+ * Backward-looking spend for today (Phase 8e / Issue #232).
+ * Backed by migration 0016 composite indexes:
+ * `(workspace_id, started_at)` on attempt,
+ * `(workspace_id, taken_at)` on snapshot, and
+ * `(workspace_id, server_ts)` on event.
+ */
+export async function querySpentToday(
+  db: DbClient,
+  workspaceId: string,
+  now: number,
+): Promise<number> {
+  const startOfDay = Math.floor(now / 86_400_000) * 86_400_000;
+  const rows = await db.query<{ spent: number | string }>(
+    "SELECT " +
+      "(SELECT COUNT(*) FROM attempt WHERE workspace_id = ? AND started_at >= ?) * 50 + " +
+      "(SELECT COUNT(*) FROM snapshot WHERE workspace_id = ? AND taken_at >= ?) * 1 + " +
+      "(SELECT COUNT(*) FROM event WHERE workspace_id = ? AND server_ts >= ?) * 1 AS spent",
+    [workspaceId, startOfDay, workspaceId, startOfDay, workspaceId, startOfDay],
+  );
+  return Number(rows[0]?.spent ?? 0);
+}
+
+/**
  * `GET /api/v1/workspaces/:id/usage`, mounted directly in `app.ts` behind
  * `requireMember()` — membership is the whole check, the same authority
  * `GET /api/v1/workspaces/:id` already carries.
@@ -230,10 +258,8 @@ async function openTestCosts(
  *
  * Branch review `C2`: reached only when the organiser's own browser calls
  * it — no caller in `apps/web` issues this on a mount or a timer (see
- * `UsagePanel.tsx`). The three reads below are each bounded by
- * configuration, not by event volume, which is what makes an on-demand
- * call here safe to repeat as often as an organiser actually presses the
- * gesture.
+ * `UsagePanel.tsx`). The reads below are bounded by configuration and
+ * migration 0016 composite indexes.
  */
 export function usageRoute(deps: AppDeps): Handler<AppBindings> {
   return async (c) => {
@@ -246,17 +272,18 @@ export function usageRoute(deps: AppDeps): Handler<AppBindings> {
     const workspaceId = c.req.param("id") ?? "";
     const now = deps.now();
 
-    // `target === "node"` short-circuits the ternary's `: null` branch
-    // without ever evaluating the one that queries — so a self-hosted
-    // container pays no subrequest for a figure it will not be shown,
-    // and `projectUsage`'s own `K36` check (already proved in isolation by
-    // "returns null on the node target" above) is never the only thing
-    // standing between a `node` request and this field. One gate, not two:
-    // everything this response sends funnels through the line below.
-    const usage =
-      target === "node"
-        ? null
-        : projectUsage({ target, openTests: await openTestCosts(deps.db, workspaceId, now) });
+    // `target === "node"` short-circuits the query branch without ever
+    // evaluating it — so a self-hosted container pays no subrequest for a
+    // figure it will not be shown, and `projectUsage`'s own `K36` check
+    // is never the only thing standing between a `node` request and this field.
+    let usage: UsageProjection | null = null;
+    if (target !== "node") {
+      const [openTests, spentToday] = await Promise.all([
+        openTestCosts(deps.db, workspaceId, now),
+        querySpentToday(deps.db, workspaceId, now),
+      ]);
+      usage = projectUsage({ target, openTests, spentToday });
+    }
 
     return c.json(usage === null ? {} : { usage });
   };

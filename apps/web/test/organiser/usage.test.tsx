@@ -69,6 +69,18 @@ describe("the meter's one number (m2)", () => {
 
     expect(await screen.findByText("52%")).toBeInTheDocument();
   });
+
+  it("factors spentToday into the rendered percentage", async () => {
+    render(
+      <UsagePanel
+        client={fakeClient(async () => ({ ...projection, projected: 10_000, spentToday: 15_000 }))}
+        workspaceId="wsp_1"
+      />,
+    );
+    fireEvent.click(checkButton());
+
+    expect(await screen.findByText("25%")).toBeInTheDocument();
+  });
 });
 
 describe("the warn state (WARN_AT)", () => {
