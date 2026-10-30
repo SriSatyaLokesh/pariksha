@@ -352,6 +352,23 @@ function advisoryRows(input: ChecklistInput): ChecklistRow[] {
   const { settings, sections } = input.body;
   const rows: ChecklistRow[] = [];
 
+  // #180: Free navigation plus per-section time limits. The server tracks a single
+  // section clock anchor (`section_started_at`), so in free navigation mode,
+  // leaving a timed section permanently closes it once left.
+  const navMode =
+    (settings as { navigation?: { mode?: string } }).navigation?.mode ??
+    settings.timing?.navigation ??
+    "free";
+  if (navMode === "free" && sections.some((s) => (s.time_limit_minutes ?? 0) > 0)) {
+    rows.push({
+      id: "free_nav_section_timers",
+      severity: "advisory",
+      field: "navigation.mode",
+      message:
+        "free navigation with per-section time limits closes each timed section permanently once left, because the server tracks a single section clock",
+    });
+  }
+
   // UX-17: "the registration form has at least one unique field if repeat
   // registration is to be blocked". Only when there is a form at all — a
   // test with no registration form is not collecting anything to be unique.

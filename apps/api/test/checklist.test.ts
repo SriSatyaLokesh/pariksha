@@ -568,3 +568,53 @@ it("measures the real subrequest cost of the checklist route, flat in candidates
   // decision 5's "update the pin and the table together" needs both.
   expect(ROUTE_BUDGETS["/api/v1/workspaces/:id/tests/:testId/checklist"]).toBe(6);
 });
+
+it("free navigation with timed sections generates an advisory checklist row (#180)", async () => {
+  const q = await question("Q_FREE_TIMED", 2, ["free-nav"]);
+  await saveDraft({
+    settings: {
+      timing: { duration_minutes: 60, navigation: "free", opens_at: past, closes_at: future },
+    },
+    sections: [
+      {
+        id: "timed_sec",
+        title: "Timed Section",
+        time_limit_minutes: 15,
+        source: { kind: "fixed", questions: [q] },
+      },
+    ],
+  });
+  const row = (await rows()).find((r) => r.id === "free_nav_section_timers");
+  expect(row).toMatchObject({
+    severity: "advisory",
+    field: "navigation.mode",
+  });
+  expect(row?.message).toContain("free navigation with per-section time limits closes each timed section permanently once left");
+  expect((await publish()).status).toBe(200);
+
+  // Negative control: linear or per_section navigation does not generate the advisory.
+  for (const navigation of ["linear", "per_section"] as const) {
+    await saveDraft({
+      settings: {
+        timing: { duration_minutes: 60, navigation, opens_at: past, closes_at: future },
+      },
+    });
+    expect(ids(await rows())).not.toContain("free_nav_section_timers");
+  }
+
+  // Negative control: free navigation with untimed sections does not generate the advisory.
+  await saveDraft({
+    settings: {
+      timing: { duration_minutes: 60, navigation: "free", opens_at: past, closes_at: future },
+    },
+    sections: [
+      {
+        id: "untimed_sec",
+        title: "Untimed Section",
+        source: { kind: "fixed", questions: [q] },
+      },
+    ],
+  });
+  expect(ids(await rows())).not.toContain("free_nav_section_timers");
+});
+
