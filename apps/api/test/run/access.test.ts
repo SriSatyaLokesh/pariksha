@@ -598,6 +598,12 @@ it("sso: a test that is not an sso test has no sso leg", async () => {
   expect((await app.request("/api/v1/run/alpha/aptitude/sso/callback?code=c&state=s")).status).toBe(400);
 });
 
+it("sso: an unconfigured provider in ?provider= query is refused (#182)", async () => {
+  const res = await app.request("/api/v1/run/alpha/sso/sso/start?provider=evil_corp");
+  expect(res.status).toBe(400);
+  expect(((await res.json()) as { error: { message: string } }).error.message).toContain("Unknown identity provider");
+});
+
 // --- the allowlists, checked before the mode's own gate -----------------
 
 it("T-21: the IP allowlist is checked first, so an off-network candidate learns nothing about their code", async () => {
