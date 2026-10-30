@@ -98,7 +98,7 @@ describe("the url field's reachability affordance (T-19)", () => {
     tryLink();
 
     await waitFor(() => expect(status()).toHaveTextContent(/unverified — the link did not return 200 \(403\)/i));
-    expect(within(status()).getByText("⚠")).toBeInTheDocument();
+    expect(status().querySelector("svg")).toBeInTheDocument();
     expect(status()).not.toHaveTextContent(/invalid/i);
     expect(status()).not.toHaveTextContent(/unreachable/i);
   });
@@ -107,7 +107,7 @@ describe("the url field's reachability affordance (T-19)", () => {
     renderBuilder(answering({ state: "reachable", status: 200, checkedAt: CHECKED_AT }));
     tryLink();
     await waitFor(() => expect(status()).toHaveTextContent(/reachable — the link returned 200/i));
-    expect(within(status()).getByText("✓")).toBeInTheDocument();
+    expect(status().querySelector("svg")).toBeInTheDocument();
   });
 
   it("a refused link says why, and says it is not a verdict on the link", async () => {

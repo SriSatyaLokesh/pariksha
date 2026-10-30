@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { Icon } from "../OrganiserShell";
 import {
   validateField as validateFieldRule,
   validateRegistration,
@@ -267,7 +268,7 @@ function Field({
   );
   const errorText = error !== undefined && (
     <p className="registration-form__error" id={errorId}>
-      <span aria-hidden="true">⚠</span> {error}
+      <Icon name="warn" /> {error}
     </p>
   );
 

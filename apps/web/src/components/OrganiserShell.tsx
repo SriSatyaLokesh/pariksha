@@ -83,6 +83,7 @@ export const ICONS: Record<string, string[]> = {
   "state-closed": ["M5.2 5.2h9.6v9.6H5.2Z"],
   "state-archived": ["M4.4 5h11.2v10H4.4Z", "M4.4 8.2h11.2", "M8.4 11h3.2"],
   warn: ["M10 3.6 17.4 16.4H2.6Z", "M10 8.4v3.4", "M10 14h.01"],
+  check: ["M4.6 10.4l3.8 3.8 7-7.6"],
   /* Phase 8d Task 1: the perimeter's own nav destination — a bolt, for the
      event this screen's webhooks fire out on. Same viewBox, same stroke,
      same `currentColor` as every entry above. */
@@ -136,10 +137,10 @@ export function useRetractRail(): () => void {
   return useContext(RetractRail);
 }
 
-export function Icon({ name }: { name: string }) {
+export function Icon({ name, className }: { name: string; className?: string }) {
   return (
     <svg
-      className="shell__icon"
+      className={className ? `shell__icon ${className}` : "shell__icon"}
       viewBox="0 0 20 20"
       width="18"
       height="18"

@@ -7,6 +7,7 @@ import {
   type TeamGrant,
 } from "../../lib/api";
 import { useDialogKeys } from "../useDialogKeys";
+import { Icon } from "../OrganiserShell";
 
 export interface CollaboratorsDrawerProps {
   client: ApiClient;
@@ -141,7 +142,7 @@ export function CollaboratorsDrawer({
 
         {error && (
           <p className="release-panel__risk" role="alert">
-            <span aria-hidden="true">⚠ </span>
+            <Icon name="warn" />
             {error}
           </p>
         )}

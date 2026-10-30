@@ -1,4 +1,5 @@
 import type { Ref } from "react";
+import { Icon } from "./OrganiserShell";
 
 // DESIGN.md's registration form, as one component: `field-label`,
 // `text-input`, `field-help` and `field-error`.
@@ -68,7 +69,7 @@ export function TextField({
       </p>
       {error !== undefined && (
         <p className="field-error" id={errorId} role="alert">
-          <span aria-hidden="true">⚠</span>
+          <Icon name="warn" />
           <span>{error}</span>
         </p>
       )}

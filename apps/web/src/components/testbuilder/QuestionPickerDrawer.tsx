@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useState } from "react";
 import { QUESTION_TYPES, type Difficulty, type QuestionType } from "@pariksha/core";
 import { ApiError, type ApiClient, type Bank, type QuestionSummary } from "../../lib/api";
 import { TextField } from "../TextField";
+import { Icon } from "../OrganiserShell";
 import { useDialogKeys } from "../useDialogKeys";
 
 // UX-14: the question picker, with the bank browser's own filters
@@ -226,7 +227,7 @@ export function QuestionPickerDrawer({
 
           {error !== undefined && (
             <p className="field-error" role="alert">
-              <span aria-hidden="true">⚠</span> <span>{error}</span>
+              <Icon name="warn" /> <span>{error}</span>
             </p>
           )}
 

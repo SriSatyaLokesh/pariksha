@@ -12,6 +12,7 @@ import type { ApiClient, ByokCredential, ByokUsage } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
 import { MonoCaption } from "../MonoCaption";
+import { Icon } from "../OrganiserShell";
 
 export interface ByokSettingsProps {
   client: ApiClient;
@@ -176,14 +177,14 @@ export function ByokSettings({ client, workspaceId }: ByokSettingsProps) {
 
       {error && (
         <p className="release-panel__risk" role="alert">
-          <span aria-hidden="true">⚠ </span>
+          <Icon name="warn" />
           {error}
         </p>
       )}
 
       {success && (
         <p className="release-panel__fact" role="status">
-          ✓ {success}
+          <Icon name="check" /> {success}
         </p>
       )}
 

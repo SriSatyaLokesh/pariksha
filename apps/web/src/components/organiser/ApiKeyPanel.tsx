@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { ApiError, type Action, type ApiClient, type ApiKey } from "../../lib/api";
 import { CardHairline } from "../CardHairline";
 import { TextField } from "../TextField";
+import { Icon } from "../OrganiserShell";
 import { ByokSettings } from "../admin/ByokSettings";
 
 // Phase 8d Task 2: the organiser's scoped-API-key CRUD screen (`K25`,
@@ -148,7 +149,7 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
     <>
       {panelError !== undefined && (
         <p className="release-panel__risk" role="alert">
-          <span aria-hidden="true">⚠ </span>
+          <Icon name="warn" />
           {panelError}
         </p>
       )}
@@ -188,7 +189,7 @@ export function ApiKeyPanel({ workspaceId, client }: { workspaceId: string; clie
           </div>
           {scopesError !== undefined && (
             <p className="release-panel__risk" role="alert">
-              <span aria-hidden="true">⚠ </span>
+              <Icon name="warn" />
               {scopesError}
             </p>
           )}
