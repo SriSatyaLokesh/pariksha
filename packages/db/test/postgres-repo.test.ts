@@ -159,7 +159,7 @@ describePostgres("PostgreSQL Repository & Dialect Suite", () => {
       expect(attempt?.candidateId).toBe(candidateId);
       expect(attempt?.layout).toEqual(layout);
 
-      const candidate = await repo.getCandidateById(db, wsId, candidateId);
+      const candidate = await repo.getCandidateById(db, wsId, test.id, candidateId);
       expect(candidate).not.toBeNull();
       expect(candidate?.formValues).toEqual({
         full_name: "Ada Lovelace",
