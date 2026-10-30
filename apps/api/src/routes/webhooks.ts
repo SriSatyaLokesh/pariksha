@@ -130,7 +130,7 @@ export function webhookRoutes(deps: AppDeps): Hono<AppBindings> {
     const now = deps.now();
 
     try {
-      await setWebhookActive(deps.db, workspaceId, webhookId, patch.active);
+      await setWebhookActive(deps.db, workspaceId, webhookId, patch.active, now);
     } catch {
       // `setWebhookActive` throws only when the row is not in this
       // workspace — S-09's 404, not a 403 that would confirm the id.

@@ -33,25 +33,15 @@
 // cut the cost surface, because `K35`'s per-control estimates live with
 // their controls in 8a's checklist and 8d's webhook panel, not here.
 //
-// **Branch review, `C2` (CRITICAL) — `spentToday`/`countsToday`/
-// `UsageCounts` are deleted.** They existed to report what today's rows
-// already imply was spent, and every one of the three tables they counted
-// (`attempt`, `snapshot`, `event`) is indexed on `workspace_id` alone — no
-// `(workspace_id, started_at)`/`(workspace_id, taken_at)`/
-// `(workspace_id, server_ts)`. A `COUNT(*) WHERE workspace_id = ? AND
-// <date> >= ?` against that index reads every row the workspace holds in
-// that table before the date half of the condition ever narrows anything,
-// because D1 bills rows *examined*, not rows returned — windowing the
-// query to "today" (which it already was) does not change that cost; only
-// a composite index would, and that is a migration this branch must not
-// add (`K10`). One call against the 216,000-snapshot workspace this same
-// module's own worst-case scenario names would read ~216,000 rows to
-// answer a number that is normally zero. `projected` below is the half
-// that was always cheap — `openTestCosts`'s three reads are each bounded
-// by configuration (test count, candidate count, webhook count), never by
-// event volume — and the half an organiser can actually act on: "you
-// already spent 12,400 requests today" changes no decision; "the test you
-// are about to open will spend 216,000" changes one.
+// **Issue triage #232 / Migration 0016 — `spentToday` restored.**
+// Earlier in branch review (`C2`), `spentToday` was deleted because `attempt`,
+// `snapshot`, and `event` were indexed on `workspace_id` alone, which forced
+// D1 to examine every historical row for the workspace before filtering by date.
+// Migration 0016 added composite indexes `(workspace_id, started_at)` on attempt,
+// `(workspace_id, taken_at)` on snapshot, and `(workspace_id, server_ts)` on event.
+// With these composite indexes in place, `spentToday` was restored via
+// `querySpentToday()`: a single bounded query with three subselects that seek
+// directly to today's start-of-day boundary, keeping scanned row counts minimal.
 //
 // **Branch review, the `D6` amendment is reverted, not kept.** Home no
 // longer calls `usage()` automatically on mount — see `home.tsx`'s own
