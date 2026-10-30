@@ -312,4 +312,25 @@ describe("AttemptRoute", () => {
     fireEvent.click(backButton);
     expect(onBack).toHaveBeenCalled();
   });
+
+  it("renders speech detected events with transcript text and source badge", () => {
+    const reviewWithSpeech: AttemptReviewData = {
+      ...SAMPLE_REVIEW,
+      timeline: [
+        {
+          kind: "event",
+          timestamp: 1700000200000,
+          eventKind: "speech_detected",
+          details: { transcript: "What is the answer to question 2?", source: "byok" },
+          flagged: false,
+        },
+      ],
+    };
+
+    render(<AttemptReview review={reviewWithSpeech} />);
+
+    expect(screen.getByText("Speech Detected")).toBeInTheDocument();
+    expect(screen.getByText("BYOK")).toBeInTheDocument();
+    expect(screen.getByText(/What is the answer to question 2\?/)).toBeInTheDocument();
+  });
 });

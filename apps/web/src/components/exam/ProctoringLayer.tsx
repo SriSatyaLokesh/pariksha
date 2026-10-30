@@ -102,8 +102,9 @@ import {
   type WindowBlurDetail,
 } from "@pariksha/core";
 import { createProctoringQueue, type EventsResponse, type QueuedEvent } from "../../lib/proctoring-queue";
-import { acquireCamera, captureJpeg, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
+import { acquireCamera, captureSnapshot, isCameraLensCovered, releaseCameraSampler } from "../../lib/camera";
 import { monitorNoise } from "../../lib/noise";
+import { startSpeechRecognition } from "../../lib/speech";
 import { ProctoringOverlay } from "./ProctoringOverlay";
 import { Watermark } from "./Watermark";
 
@@ -118,12 +119,21 @@ const EVENTS_PATH = "/api/v1/run/attempt/events";
 async function uploadSnapshot(
   blob: Blob,
   reason: "interval" | "violation",
+  faceCount?: number | null,
   onProctorMessage?: (message: string, messageAt: number) => void,
 ): Promise<void> {
-  const res = await fetch(`/api/v1/run/attempt/snapshot?reason=${reason}`, {
+  const query = new URLSearchParams({ reason });
+  if (typeof faceCount === "number") {
+    query.set("face_count", String(faceCount));
+  }
+  const headers: Record<string, string> = { "content-type": "image/jpeg" };
+  if (typeof faceCount === "number") {
+    headers["x-face-count"] = String(faceCount);
+  }
+  const res = await fetch(`/api/v1/run/attempt/snapshot?${query.toString()}`, {
     method: "POST",
     credentials: "same-origin",
-    headers: { "content-type": "image/jpeg" },
+    headers,
     body: blob,
   });
   if (!res.ok) throw new Error(`snapshot upload failed: ${String(res.status)}`);
@@ -141,7 +151,7 @@ async function uploadSnapshot(
  * The capture schedule's one upload path, shared by the interval timer and
  * every violation snapshot below (`AC-20`, `Q4d`).
  *
- * `AG1`: a capture that produces nothing (`captureJpeg`'s own `null` —
+ * `AG1`: a capture that produces nothing (`captureSnapshot`'s own `null` —
  * jsdom's baseline with no canvas stubbed, or a refused frame) is not a
  * stack failure, and reports nothing — only a reached-but-refused UPLOAD
  * is one. `Q4d`: that failure never shows the candidate anything and never
@@ -154,12 +164,13 @@ async function captureAndUpload(
   stream: MediaStream,
   reason: "interval" | "violation",
   queue: ReturnType<typeof createProctoringQueue> | null,
+  faceCheck: boolean = false,
   onProctorMessage?: (message: string, messageAt: number) => void,
 ): Promise<void> {
-  const blob = await captureJpeg(stream).catch(() => null);
-  if (!blob) return;
+  const result = await captureSnapshot(stream, faceCheck).catch(() => null);
+  if (!result) return;
   try {
-    await uploadSnapshot(blob, reason, onProctorMessage);
+    await uploadSnapshot(result.blob, reason, result.faceCount, onProctorMessage);
   } catch {
     queue?.push("snapshot_failed");
   }
@@ -406,7 +417,13 @@ export function ProctoringLayer({
 
   function doCaptureAndUpload(stream: MediaStream, reason: "interval" | "violation") {
     if (isDemo) return;
-    void captureAndUpload(stream, reason, queueRef.current, (msg, at) => onProctorMessageRef.current?.(msg, at));
+    void captureAndUpload(
+      stream,
+      reason,
+      queueRef.current,
+      proctoring.faceCheck,
+      (msg, at) => onProctorMessageRef.current?.(msg, at),
+    );
   }
 
   /**
@@ -1116,6 +1133,20 @@ export function ProctoringLayer({
       monitor?.stop();
     };
   }, [proctoring.requireMicrophone, streamProp, liveStream]);
+
+  // ---- speech recognition (Web Speech API, free native tier) ----------------
+
+  useEffect(() => {
+    if (!proctoring.requireMicrophone && !proctoring.aiAudioCheck) return;
+
+    const speechHandle = startSpeechRecognition((transcript) => {
+      queueRef.current?.push("speech_detected", { transcript, source: "native" });
+    });
+
+    return () => {
+      speechHandle.stop();
+    };
+  }, [proctoring.requireMicrophone, proctoring.aiAudioCheck]);
 
   // ---- the overlay, and marking the covered runner (`Q2a`, `T4-R2`) -------
 

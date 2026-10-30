@@ -56,11 +56,26 @@ describe("ProctoringPanel microphone and face_check controls (Phase 8.5 Task 5)"
     );
   });
 
-  it("face_check checkbox remains disabled and re-points to Issue #264 without naming Phase 8", () => {
+  it("face_check checkbox is enabled and toggles on-device face counting (Issue #264)", () => {
     render(<Harness />);
     const faceControl = screen.getByLabelText(/Count faces in each image/i);
-    expect(faceControl).toBeDisabled();
-    expect(faceControl).toHaveAccessibleDescription(/Issue #264/);
+    expect(faceControl).toBeEnabled();
+    expect(faceControl).toHaveAccessibleDescription(/Native on-device face counting/i);
     expect(faceControl).not.toHaveAccessibleDescription(/Phase 8/);
+  });
+
+  it("ai_audio_check checkbox is enabled and toggles AI speech evaluation", () => {
+    const onChange = vi.fn();
+    render(<Harness onChange={onChange} />);
+    const aiAudioControl = screen.getByLabelText(/AI speech evaluation/i);
+    expect(aiAudioControl).toBeEnabled();
+    expect(aiAudioControl).toHaveAccessibleDescription(/Evaluates spoken audio via browser Web Speech API or workspace BYOK models/i);
+
+    fireEvent.click(aiAudioControl);
+    expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        overrides: expect.objectContaining({ ai_audio_check: true }),
+      }),
+    );
   });
 });

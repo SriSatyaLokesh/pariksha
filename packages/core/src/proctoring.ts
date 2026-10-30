@@ -38,6 +38,8 @@ export interface ResolvedProctoring {
   faceCheck: boolean;
   /** Phase 8.5 (#209): microphone noise monitoring enabled via overrides. */
   requireMicrophone: boolean;
+  /** AI speech evaluation using native Web Speech API or workspace BYOK models. */
+  aiAudioCheck: boolean;
   extraMonitorCheck: boolean;
   violationLimit: number;
   /** Phase 7e Task 1 (issue #213) restores this: `resolveProctoring`
@@ -55,6 +57,7 @@ export type ProctoringOverrides = Partial<{
   desktop_only: boolean; require_fullscreen: boolean; block_copy_paste: boolean;
   watermark: boolean; require_camera: boolean; identity_photo: boolean;
   snapshot_interval_seconds: number; face_check: boolean; require_microphone: boolean;
+  ai_audio_check: boolean;
   extra_monitor_check: boolean; violation_limit: number; violation_action: ViolationAction;
   camera_outage_seconds: number; multi_face_snapshots: number; allow_calculator: boolean;
 }>;
@@ -100,6 +103,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     snapshotIntervalSeconds: 0,
     faceCheck: false,
     requireMicrophone: false,
+    aiAudioCheck: false,
     extraMonitorCheck: false,
     violationLimit: 5,
     violationAction: "warn_only",
@@ -118,6 +122,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     snapshotIntervalSeconds: 0,
     faceCheck: false,
     requireMicrophone: false,
+    aiAudioCheck: false,
     extraMonitorCheck: false,
     violationLimit: 5,
     violationAction: "warn_then_flag",
@@ -136,6 +141,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     snapshotIntervalSeconds: 60,
     faceCheck: false,
     requireMicrophone: false,
+    aiAudioCheck: false,
     extraMonitorCheck: true,
     violationLimit: 5,
     violationAction: "warn_then_flag",
@@ -186,13 +192,11 @@ export function resolveProctoring(
       "snapshot_interval_seconds",
       defaults.snapshotIntervalSeconds,
     ),
-    // Q3: pre-cut. Accepted and round-tripped (Task 2) so a document
-    // authored for Phase 8 survives, but resolution refuses it outright —
-    // not an omission, a deliberate `false` regardless of profile or
-    // override, so nothing in Phase 7 can act on it.
-    faceCheck: false,
+    // Native on-device face counting (Issue #264).
+    faceCheck: overrideOr(overrides, "face_check", defaults.faceCheck),
     // Phase 8.5 (#209): microphone proctoring resolved from overrides or defaults.
     requireMicrophone: overrideOr(overrides, "require_microphone", defaults.requireMicrophone),
+    aiAudioCheck: overrideOr(overrides, "ai_audio_check", defaults.aiAudioCheck),
     extraMonitorCheck: overrideOr(overrides, "extra_monitor_check", defaults.extraMonitorCheck),
     // M7: `PUT /draft` and `POST /tests/import` accept arbitrary JSON —
     // `violation_limit: 0` would lock (or flag `high_risk`) every candidate
@@ -236,7 +240,9 @@ export function anyProctoringControlActive(resolved: ResolvedProctoring): boolea
     resolved.requireCamera ||
     resolved.identityPhoto ||
     resolved.snapshotIntervalSeconds > 0 ||
+    resolved.faceCheck ||
     resolved.requireMicrophone ||
+    resolved.aiAudioCheck ||
     resolved.extraMonitorCheck
   );
 }
@@ -389,7 +395,7 @@ export const PROCTORING_EVENTS = [
   "window_blur", "visibility_hidden",
   "copy_blocked", "paste_blocked", "contextmenu_blocked",
   "extra_monitor", "camera_lost", "camera_restored",
-  "identity_photo_captured", "noise_above_threshold",
+  "identity_photo_captured", "noise_above_threshold", "speech_detected",
   "proctoring_unavailable", "snapshot_failed",
   "violation_limit_reached", "attempt_locked", "attempt_unlocked",
 ] as const;
@@ -454,7 +460,7 @@ export const CANDIDATE_PROCTORING_EVENTS = [
   "window_blur", "visibility_hidden",
   "copy_blocked", "paste_blocked", "contextmenu_blocked",
   "extra_monitor", "camera_lost", "camera_restored",
-  "identity_photo_captured", "noise_above_threshold",
+  "identity_photo_captured", "noise_above_threshold", "speech_detected",
   "proctoring_unavailable", "snapshot_failed",
 ] as const satisfies readonly ProctoringEventType[];
 
@@ -523,4 +529,12 @@ export interface NoiseAboveThresholdDetail {
 
 export function detailFor(durationMs: number): NoiseAboveThresholdDetail {
   return { durationMs };
+}
+
+/**
+ * Speech detection details emitted by either browser Web Speech API or BYOK audio check.
+ */
+export interface SpeechDetectedDetail {
+  transcript?: string;
+  source?: "native" | "byok";
 }

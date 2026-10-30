@@ -144,6 +144,8 @@ export const LIMITS = {
    *  review's own abuse scenario (~20 requests/second), refusing within
    *  about 8 seconds rather than never. */
   attempt_snapshot: { limit: 150, windowMs: 5 * 60_000 },
+  /** Ephemeral audio checks per attempt per 5 minutes (#209 / BYOK Audio). */
+  attempt_audio_check: { limit: 60, windowMs: 5 * 60_000 },
   /** Magic link requests per hashed email address, per ten minutes (#278). */
   auth_magic_link_address: { limit: 5, windowMs: 10 * 60_000 },
   /** Failed password sign-in attempts per hashed email address, per ten minutes (#278). */

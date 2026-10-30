@@ -424,6 +424,17 @@ record(
   ).clone().text(),
 );
 
+record(
+  "POST /api/v1/run/attempt/audio-check",
+  await (
+    await app.request("/api/v1/run/attempt/audio-check", {
+      method: "POST",
+      headers: { cookie: A.cookie, "content-type": "audio/webm" },
+      body: new Uint8Array([0x1a, 0x45, 0xdf, 0xa3]),
+    })
+  ).clone().text(),
+);
+
 // The media on A's own paper, and a key outside it.
 const mediaKey = A.paper.sections[0]!.questions[0]!.media?.[0]?.src ?? "";
 await deps.storage.put(`media/${workspaceId}/sentinel-diagram.png`, new TextEncoder().encode("PNG"), {
@@ -538,8 +549,9 @@ it("AC-22: every candidate-reachable endpoint is covered by this scan", () => {
   // Important): a strict subset of `POST /attempt/submit`'s answer,
   // behind a second release-gate read, with no client. Back to 16 with
   // Phase 7c Task 1's `POST /api/v1/run/attempt/events` (`Q7`). **17** with
-  // Phase 7d Task 1's `POST /api/v1/run/attempt/snapshot` (`Q4`).
-  expect(CANDIDATE_ENDPOINTS.length).toBe(17);
+  // Phase 7d Task 1's `POST /api/v1/run/attempt/snapshot` (`Q4`). **18** with
+  // `POST /api/v1/run/attempt/audio-check` (BYOK audio evaluation).
+  expect(CANDIDATE_ENDPOINTS.length).toBe(18);
   expect(new Set(seen.keys())).toEqual(new Set(CANDIDATE_ENDPOINTS.map(([e]) => e)));
 });
 

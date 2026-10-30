@@ -51,6 +51,7 @@ describe("resolveProctoring", () => {
       snapshotIntervalSeconds: 0,
       faceCheck: false,
       requireMicrophone: false,
+      aiAudioCheck: false,
       extraMonitorCheck: false,
       violationLimit: 5,
       violationAction: "warn_only",
@@ -72,6 +73,7 @@ describe("resolveProctoring", () => {
       snapshotIntervalSeconds: 0,
       faceCheck: false,
       requireMicrophone: false,
+      aiAudioCheck: false,
       extraMonitorCheck: false,
       violationLimit: 5,
       violationAction: "warn_then_flag",
@@ -93,6 +95,7 @@ describe("resolveProctoring", () => {
       snapshotIntervalSeconds: 60,
       faceCheck: false,
       requireMicrophone: false,
+      aiAudioCheck: false,
       extraMonitorCheck: true,
       violationLimit: 5,
       violationAction: "warn_then_flag",
@@ -124,9 +127,11 @@ describe("resolveProctoring", () => {
     expect(explicit).toEqual(resolveProctoring({ profile: "strict" }));
   });
 
-  // Q3 — pre-cut.
-  it("resolves faceCheck false even when the document asks for it", () => {
-    expect(resolveProctoring({ profile: "strict", overrides: { face_check: true } }).faceCheck).toBe(false);
+  // Native on-device face counting (Issue #264).
+  it("resolves faceCheck true when overridden", () => {
+    expect(resolveProctoring({ profile: "strict", overrides: { face_check: true } }).faceCheck).toBe(true);
+    expect(resolveProctoring({ profile: "off", overrides: { face_check: true } }).faceCheck).toBe(true);
+    expect(resolveProctoring({ profile: "off", overrides: { face_check: false } }).faceCheck).toBe(false);
   });
 
   it("resolves require_microphone: true when explicitly overridden", () => {

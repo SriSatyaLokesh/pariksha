@@ -15,6 +15,18 @@ vi.mock("../../src/lib/noise", () => ({
   monitorNoise: (stream: MediaStream, opts: MonitorNoiseOptions) => monitorNoiseSpy(stream, opts),
 }));
 
+let capturedSpeechCallback: ((transcript: string) => void) | null = null;
+const speechStopSpy = vi.fn();
+const startSpeechRecognitionSpy = vi.fn((onSpeech: (transcript: string) => void) => {
+  capturedSpeechCallback = onSpeech;
+  return { stop: speechStopSpy };
+});
+
+vi.mock("../../src/lib/speech", () => ({
+  startSpeechRecognition: (onSpeech: (transcript: string) => void) => startSpeechRecognitionSpy(onSpeech),
+  isSpeechRecognitionSupported: () => true,
+}));
+
 const pushSpy = vi.fn();
 const pushImmediateSpy = vi.fn().mockResolvedValue(undefined);
 const queueStopSpy = vi.fn();
@@ -51,8 +63,11 @@ function makeStream(tracks: MediaStreamTrack[] = [makeAudioTrack()]): MediaStrea
 describe("ProctoringLayer audio noise monitoring (Phase 8.5 Task 5)", () => {
   beforeEach(() => {
     capturedOptions = null;
+    capturedSpeechCallback = null;
     stopSpy.mockClear();
+    speechStopSpy.mockClear();
     monitorNoiseSpy.mockClear();
+    startSpeechRecognitionSpy.mockClear();
     pushSpy.mockClear();
     pushImmediateSpy.mockClear();
     queueStopSpy.mockClear();
@@ -221,5 +236,35 @@ describe("ProctoringLayer audio noise monitoring (Phase 8.5 Task 5)", () => {
     expect(stopSpy).toHaveBeenCalledTimes(1);
     expect(monitorNoiseSpy).toHaveBeenCalledTimes(2);
     expect(monitorNoiseSpy).toHaveBeenLastCalledWith(stream2, expect.any(Object));
+  });
+
+  it("starts speech recognition when requireMicrophone is true and pushes speech_detected event on speech", () => {
+    const stream = makeStream([makeAudioTrack()]);
+    const proctoring: ResolvedProctoring = {
+      ...resolveProctoring({ profile: "off" }),
+      requireMicrophone: true,
+    };
+
+    const { unmount } = render(
+      <ProctoringLayer
+        attemptId="att_test_speech"
+        proctoring={proctoring}
+        initialViolations={0}
+        stream={stream}
+      />,
+    );
+
+    expect(startSpeechRecognitionSpy).toHaveBeenCalledTimes(1);
+    expect(capturedSpeechCallback).toBeTypeOf("function");
+
+    // Simulate speech detection
+    capturedSpeechCallback?.("talking to someone");
+    expect(pushSpy).toHaveBeenCalledWith("speech_detected", {
+      transcript: "talking to someone",
+      source: "native",
+    });
+
+    unmount();
+    expect(speechStopSpy).toHaveBeenCalledTimes(1);
   });
 });
