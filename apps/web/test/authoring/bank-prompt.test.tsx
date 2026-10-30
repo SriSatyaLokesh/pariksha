@@ -4,9 +4,7 @@ import { BANK_CONVERSION_PROMPT, SAMPLE_BANK_FILENAME, sampleBank } from "@parik
 import { BankBrowser } from "../../src/routes/bank";
 import { ImportScreen } from "../../src/routes/import";
 import { fakeClient as sharedClient } from "../fixtures/api-client";
-import type { ApiClient, Bank, QuestionSummary, Workspace } from "../../src/lib/api";
-
-const WORKSPACE: Workspace = { id: "wsp_1", name: "Placement cell" };
+import type { ApiClient, Bank } from "../../src/lib/api";
 
 const BANK: Bank = {
   id: "bnk_1",

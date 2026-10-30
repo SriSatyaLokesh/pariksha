@@ -105,14 +105,14 @@ export const createWebhook = scoped(
 
     const id = newId("whk");
     const signingSecret = generateSigningSecret();
+    const isDemoExpr =
+      db.dialect === "pg"
+        ? "(slug LIKE 'demo-%' OR (settings_json ->> 'is_demo') = 'true')"
+        : "(slug LIKE 'demo-%' OR settings_json LIKE '%\"is_demo\":true%' OR settings_json LIKE '%\"is_demo\": true%')";
     const { changes } = await db.run(
       "INSERT INTO webhook (id, workspace_id, url, events_json, signing_secret, active, created_at) " +
-        "SELECT ?, ?, ?, ?, ?, true, ? WHERE NOT EXISTS (" +
-        "SELECT 1 FROM workspace WHERE id = ? AND (" +
-        "slug LIKE 'demo-%' OR " +
-        "settings_json LIKE '%\"is_demo\":true%' OR " +
-        "settings_json LIKE '%\"is_demo\": true%'" +
-        ")" +
+        `SELECT ?, ?, ?, ?, ?, true, ? WHERE NOT EXISTS (` +
+        `SELECT 1 FROM workspace WHERE id = ? AND ${isDemoExpr}` +
         ")",
       [id, workspaceId, input.url, db.jsonParam(input.events), signingSecret, input.now, workspaceId],
     );

@@ -269,11 +269,11 @@ test.describe("Phase 12: BYOK AI Question Drafting", () => {
     await expect(page.locator(".draft-ai-stat--approved")).toContainText("2 Approved");
     await expect(page.getByText("$0.08")).toBeVisible();
 
-    // Verify question cards render with schema validation badges (✓ Schema Valid)
+    // Verify question cards render with schema validation badges (Schema Valid)
     const cards = page.locator(".draft-ai-card");
     await expect(cards).toHaveCount(2);
-    await expect(cards.nth(0).getByText(/✓ Schema Valid/i)).toBeVisible();
-    await expect(cards.nth(1).getByText(/✓ Schema Valid/i)).toBeVisible();
+    await expect(cards.nth(0).getByText(/Schema Valid/i)).toBeVisible();
+    await expect(cards.nth(1).getByText(/Schema Valid/i)).toBeVisible();
 
     // Question 1 & 2 prompt texts are visible
     await expect(cards.nth(0)).toContainText("What consensus protocol uses leader election");

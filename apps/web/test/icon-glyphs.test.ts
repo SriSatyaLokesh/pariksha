@@ -52,7 +52,7 @@ describe("Spec §13 Icon Consistency: No raw Unicode icon glyphs in JSX", () => 
 
       lines.forEach((line, index) => {
         // Warning sign is forbidden everywhere in code outside comments
-        if (/[⚠⚠️]/.test(line)) {
+        if (line.includes("⚠")) {
           violations.push({
             file: relativePath,
             line: index + 1,

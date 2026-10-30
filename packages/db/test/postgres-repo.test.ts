@@ -66,7 +66,7 @@ describePostgres("PostgreSQL Repository & Dialect Suite", () => {
 
       // Verify workspace listing via user membership
       const userWorkspaces = await listUserWorkspaces(db, user);
-      expect(userWorkspaces.map((w) => w.workspaceId)).toContain(wsId);
+      expect(userWorkspaces.map((w) => w.id)).toContain(wsId);
 
       // Verify direct workspace table query
       const rows = await db.query<{ id: string; name: string }>(
@@ -158,7 +158,10 @@ describePostgres("PostgreSQL Repository & Dialect Suite", () => {
       expect(attempt?.id).toBe(attemptId);
       expect(attempt?.candidateId).toBe(candidateId);
       expect(attempt?.layout).toEqual(layout);
-      expect(attempt?.candidate.formValues).toEqual({
+
+      const candidate = await repo.getCandidateById(db, wsId, candidateId);
+      expect(candidate).not.toBeNull();
+      expect(candidate?.formValues).toEqual({
         full_name: "Ada Lovelace",
         email: "ada@example.com",
       });
