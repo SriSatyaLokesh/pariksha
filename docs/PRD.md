@@ -365,7 +365,7 @@ Each test picks a proctoring profile — Off, Standard or Strict — and can the
 ### Organiser sign-in
 
 - **S-01** Sign-in methods, each enabled by the instance owner:
-  - **Single sign-on (OIDC):** Google, Microsoft, GitHub or any OIDC provider.
+  - **Single sign-on (OIDC):** Google, Microsoft, or any generic standard OIDC provider.
   - **Email magic link:** needs an email-sending service; most have a free tier.
   - **Email and password:** Argon2id hashing, Docker deployments only. On the Cloudflare free plan a Worker gets 10 ms of CPU per request, too little for safe password hashing, so this method is off there.
 - **S-02** Optional TOTP two-factor for password accounts; the instance owner can require 2FA or SSO for Owner and Admin roles.
