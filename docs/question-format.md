@@ -114,6 +114,14 @@ Only the forms that map onto the five types above are supported; `::title::` is 
 
 An answer block with only `=` entries (no `~`) is a fill-in-the-blank with one or more accepted answers; one with any `~` entry is multiple-choice — `single` when exactly one option has positive weight, `multiple` when more than one does (as in `Q3` above, where `2` and `3` both carry positive weight and `4` does not). An answer block with no `=` entry and no positively-weighted `~%weight%` entry has no correct answer at all, and is reported rather than guessed at. Per-answer feedback (`=Paris#Correct!`) is recognised and dropped — Pariksha has no field for it — rather than glued onto the option's own text.
 
+## AI conversion prompt & downloadable template
+
+When drafting questions from raw lecture notes, PDF worksheets, or unformatted text, organisers can use Pariksha's few-shot AI conversion prompt with any LLM (such as ChatGPT, Claude, or Gemini) to generate a valid `pariksha/bank@1` JSON document without needing API keys or custom integrations.
+
+Both the Bank Browser and Import screens provide:
+- **Copy AI Prompt**: Copies `BANK_CONVERSION_PROMPT` to the clipboard. The prompt instructs the model on Pariksha's JSON schema requirements, enforces cross-field validation rules (e.g., unique option IDs, valid fill-in-the-blank placeholders, matching key consistency), and embeds a full sample covering all 12 question types. Simply append raw questions after the prompt in any AI chat.
+- **Download sample**: Downloads `pariksha-sample-bank.json`, a complete, valid question bank containing one worked example of every supported type, which can be edited directly or referenced offline.
+
 ## Example
 
 [`examples/reasoning-aptitude/questions.json`](../examples/reasoning-aptitude/questions.json) contains one question of every type, with its answer key and explanation. The folder around it shows the same questions inside a complete test: [examples/reasoning-aptitude/](../examples/reasoning-aptitude/).

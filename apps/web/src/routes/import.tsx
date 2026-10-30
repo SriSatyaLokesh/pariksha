@@ -1,5 +1,5 @@
 import { useId, useRef, useState } from "react";
-import { sampleBank, SAMPLE_BANK_FILENAME } from "@pariksha/core";
+import { BANK_CONVERSION_PROMPT, sampleBank, SAMPLE_BANK_FILENAME } from "@pariksha/core";
 import { ApiError, type ApiClient, type ImportReport, type TestImportReport } from "../lib/api";
 import { downloadJson } from "../lib/download";
 import { CardHairline } from "../components/CardHairline";
@@ -90,6 +90,19 @@ export function ImportScreen({
   const [report, setReport] = useState<ImportResult | undefined>(undefined);
   const [error, setError] = useState<string | undefined>(undefined);
   const [importing, setImporting] = useState(false);
+  const [promptCopied, setPromptCopied] = useState(false);
+
+  async function onCopyPrompt(): Promise<void> {
+    try {
+      await navigator.clipboard?.writeText(BANK_CONVERSION_PROMPT);
+      setPromptCopied(true);
+      setTimeout(() => {
+        setPromptCopied(false);
+      }, 3000);
+    } catch {
+      // Clipboard access can fail or be denied.
+    }
+  }
   const fileId = useId();
   // Fix round 1, finding 11 (carried from `ImportDialog`): picking file A
   // then quickly picking file B starts two overlapping dry-run requests;
@@ -332,13 +345,27 @@ export function ImportScreen({
             importer would refuse it, and a button that hands someone a file
             their next click rejects is worse than no button. */}
         {kind === "bank" && (
-          <button
-            type="button"
-            className="button-secondary"
-            onClick={() => downloadJson(sampleBank(), SAMPLE_BANK_FILENAME)}
-          >
-            Download a sample
-          </button>
+          <>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => downloadJson(sampleBank(), SAMPLE_BANK_FILENAME)}
+            >
+              Download a sample
+            </button>
+            <button
+              type="button"
+              className="button-secondary"
+              onClick={() => void onCopyPrompt()}
+            >
+              Copy AI Prompt
+            </button>
+            {promptCopied && (
+              <span className="organiser__status" role="status">
+                Copied prompt!
+              </span>
+            )}
+          </>
         )}
       </div>
     </>
