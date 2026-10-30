@@ -15,6 +15,7 @@
     "lint": "eslint .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "test:pg": "TEST_POSTGRES_URL=postgres://postgres:pariksha@localhost:5432/pariksha_test vitest run test/postgres-repo.test.ts",
     "migrations": "node scripts/bundle-migrations.mjs"
   },
   "dependencies": {
