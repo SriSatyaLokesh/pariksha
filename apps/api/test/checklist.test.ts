@@ -128,6 +128,10 @@ async function saveDraft(patch: unknown): Promise<void> {
   expect(res.status, await res.clone().text()).toBe(200);
 }
 
+const GREEN_SECTIONS = [
+  { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] as string[] } },
+];
+
 const checklistUrl = (): string => `/api/v1/workspaces/${workspaceId}/tests/${testId}/checklist`;
 const publishUrl = (): string => `/api/v1/workspaces/${workspaceId}/tests/${testId}/publish`;
 
@@ -145,9 +149,9 @@ async function publish(): Promise<Response> {
 
 // --- T-11: the two rows that warn rather than block --------------------
 
-it("a pool shortfall is advisory and states both numbers", async () => {
+it("a pool shortfall is blocking and states both numbers (#197)", async () => {
   const row = (await rows()).find((r) => r.id === "pool_short");
-  expect(row).toMatchObject({ severity: "advisory", sectionId: "quant" });
+  expect(row).toMatchObject({ severity: "blocking", sectionId: "quant" });
   // The measured fact, in `validateTest`'s own words — the same sentence an
   // import of the same document would refuse over, so the checklist and the
   // import can never report different numbers.
@@ -214,18 +218,34 @@ it("a tolerance set in the test file is honoured by the gate, not overridden by 
 
 it("T-11: publish succeeds over advisory rows and refuses over blocking ones", async () => {
   expect(ids(await rows())).toContain("pool_short");
-  expect((await publish()).status).toBe(200);
-
-  await saveDraft({ sections: [{ id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] } }] });
   const refused = await publish();
   expect(refused.status).toBe(422);
-  expect((await refused.json()).error.details.rows.map((r: Row) => r.id)).toContain("section_empty");
+  expect((await refused.json()).error.details.rows.map((r: Row) => r.id)).toContain("pool_short");
+
+  // Verify that with pool satisfied but sets_unbalanced present (advisory), publish succeeds:
+  const [qA, qB] = [await question("P-A", 10, ["quantitative"]), await question("P-B", 5, ["quantitative"])];
+  await saveDraft({
+    sections: [
+      {
+        id: "quant",
+        title: "Quantitative",
+        source: {
+          kind: "sets",
+          assignment: "round_robin",
+          sets: [
+            { set: "A", questions: [qA] },
+            { set: "B", questions: [qB] },
+          ],
+        },
+      },
+    ],
+  });
+  expect(ids(await rows())).toContain("sets_unbalanced");
+  expect((await publish()).status).toBe(200);
 });
 
-it("import refuses the same pool shortfall that publish only warns about", async () => {
-  // docs/test-format.md § "Rules checked on import": "Import is stricter."
-  // Same rule, same numbers, two severities — which is why the checklist
-  // reads them off `validateTest` rather than re-deriving them.
+it("import and publish both refuse a pool shortfall (#197)", async () => {
+  // #197: both import and publish refuse a pool that draws more questions than match its filter.
   const { validateTest } = await import("@pariksha/core");
   const doc = {
     format: "pariksha/test@1",
@@ -236,6 +256,10 @@ it("import refuses the same pool shortfall that publish only warns about", async
   };
   const result = validateTest(doc, []);
   expect(result.ok).toBe(false);
+
+  expect(ids(await rows())).toContain("pool_short");
+  const refused = await publish();
+  expect(refused.status).toBe(422);
 });
 
 // --- Review Focus 4: one function, two callers -------------------------
@@ -310,7 +334,10 @@ it("an empty candidate list is advisory for invite_only and does not appear othe
 });
 
 it("an invite_only test with an empty candidate list publishes — the roster is uploaded afterwards", async () => {
-  await saveDraft({ settings: { access: { mode: "invite_only" } } });
+  await saveDraft({
+    settings: { access: { mode: "invite_only" } },
+    sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }],
+  });
   expect(ids(await rows())).toContain("candidate_list_empty");
   expect((await publish()).status).toBe(200);
 });
@@ -350,10 +377,6 @@ it("the candidate rows say nothing when nothing depends on the list", async () =
 });
 
 // --- shape and cost -----------------------------------------------------
-
-const GREEN_SECTIONS = [
-  { id: "quant", title: "Quantitative aptitude", source: { kind: "fixed", questions: [] as string[] } },
-];
 
 it("an all-green test returns nothing that blocks", async () => {
   await saveDraft({ sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }] });
@@ -422,7 +445,10 @@ it("every row names a field a screen can navigate to", async () => {
 // of what it pinned while `lock` was refused.
 
 it("advises on Strict without a camera, and never blocks", async () => {
-  await saveDraft({ settings: { proctoring: { profile: "strict", overrides: { require_camera: false } } } });
+  await saveDraft({
+    settings: { proctoring: { profile: "strict", overrides: { require_camera: false } } },
+    sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }],
+  });
   const list = await rows();
   expect(list.find((r) => r.id === "proctoring_strict_no_camera")?.severity).toBe("advisory");
   expect(list.filter((r) => r.severity === "blocking")).toHaveLength(0);
@@ -436,6 +462,7 @@ it("advises when a capture is requested with no camera to take it, and never blo
         overrides: { require_camera: false, identity_photo: true },
       },
     },
+    sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }],
   });
   const list = await rows();
   expect(list.find((r) => r.id === "proctoring_capture_without_camera")).toMatchObject({
@@ -495,7 +522,10 @@ it("is silent about cost when there is no camera to take it, even past the image
 // Issue 214 briefly made this row's absence the pinned behaviour; this is
 // the reverse of that test, not a new one.
 it("advises on a lock without recourse, and never blocks", async () => {
-  await saveDraft({ settings: { proctoring: { profile: "standard", overrides: { violation_action: "lock" } } } });
+  await saveDraft({
+    settings: { proctoring: { profile: "standard", overrides: { violation_action: "lock" } } },
+    sections: [{ ...GREEN_SECTIONS[0], source: { kind: "fixed", questions: quantIds } }],
+  });
   const list = await rows();
   expect(list.find((r) => r.id === "proctoring_lock_without_recourse")).toMatchObject({
     severity: "advisory",
