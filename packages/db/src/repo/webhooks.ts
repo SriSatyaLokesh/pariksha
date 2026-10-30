@@ -138,6 +138,12 @@ export const listWebhooks = scoped(
   },
 );
 
+/** Sentinel value for deliveries belonging to a paused webhook (#231).
+ * Excludes pending deliveries from the drain query range (`next_attempt_at <= ?`)
+ * without creating a separate column or migration. Distinct from `NEVER_AGAIN`
+ * (`Number.MAX_SAFE_INTEGER`), allowing give-up rows to remain untouched when resumed. */
+export const PAUSED_SENTINEL = Number.MAX_SAFE_INTEGER - 1;
+
 /** Toggles delivery on or off without touching the URL, the events or the
  * secret — the organiser's pause button, not a re-creation. Throws when no
  * such webhook exists in this workspace, which the route turns into its
@@ -145,12 +151,26 @@ export const listWebhooks = scoped(
  * boundary" shape `setTestStatus`'s callers already follow). */
 export const setWebhookActive = scoped(
   "setWebhookActive",
-  async (db: DbClient, workspaceId: string, webhookId: string, active: boolean): Promise<void> => {
-    const { changes } = await db.run(
-      "UPDATE webhook SET active = ? WHERE workspace_id = ? AND id = ?",
-      [db.dialect === "pg" ? active : (active ? 1 : 0), workspaceId, webhookId],
-    );
-    if (changes === 0) throw new Error("setWebhookActive: no such webhook in this workspace.");
+  async (db: DbClient, workspaceId: string, webhookId: string, active: boolean, now: number = Date.now()): Promise<void> => {
+    const stmts: { sql: string; params?: unknown[] }[] = [
+      {
+        sql: "UPDATE webhook SET active = ? WHERE workspace_id = ? AND id = ?",
+        params: [db.dialect === "pg" ? active : (active ? 1 : 0), workspaceId, webhookId],
+      },
+    ];
+    if (!active) {
+      stmts.push({
+        sql: "UPDATE webhook_delivery SET next_attempt_at = ? WHERE workspace_id = ? AND webhook_id = ? AND delivered_at IS NULL AND next_attempt_at < ?",
+        params: [PAUSED_SENTINEL, workspaceId, webhookId, PAUSED_SENTINEL],
+      });
+    } else {
+      stmts.push({
+        sql: "UPDATE webhook_delivery SET next_attempt_at = ? WHERE workspace_id = ? AND webhook_id = ? AND delivered_at IS NULL AND next_attempt_at = ?",
+        params: [now, workspaceId, webhookId, PAUSED_SENTINEL],
+      });
+    }
+    const results = await db.batch(stmts);
+    if (results[0]!.changes === 0) throw new Error("setWebhookActive: no such webhook in this workspace.");
   },
 );
 
