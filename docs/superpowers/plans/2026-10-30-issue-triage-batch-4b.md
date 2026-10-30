@@ -84,28 +84,28 @@
 - Consumes: `pgClient`, `migrate`, `packages/db/src/repo/index.ts`.
 - Produces: Complete automated test runner for Postgres repository and dialect paths.
 
-- [ ] **Step 1: Write `packages/db/test/client-pg.test.ts`**
+- [x] **Step 1: Write `packages/db/test/client-pg.test.ts`**
   - Unit tests for Postgres client type mapping, dialect checking (`db.dialect === "pg"`), JSON param handling, and SQL template formatting.
   - Run: `pnpm --filter @pariksha/db test test/client-pg.test.ts` -> Expected: PASS.
 
-- [ ] **Step 2: Create `packages/db/test/postgres-repo.test.ts`**
+- [x] **Step 2: Create `packages/db/test/postgres-repo.test.ts`**
   - Uses `describePostgres = POSTGRES_URL ? describe : describe.skip`.
   - Applies migrations 0000 to 0016 against Postgres.
   - Tests multi-tenant isolation, test creation, attempt lifecycle, webhook deliveries with `PAUSED_SENTINEL`, and retention sweep JSON queries.
   - Run: `pnpm --filter @pariksha/db test test/postgres-repo.test.ts`.
 
-- [ ] **Step 3: Update `packages/db/package.json` & docs**
+- [x] **Step 3: Update `packages/db/package.json` & docs**
   - Add `"test:pg": "TEST_POSTGRES_URL=postgres://postgres:pariksha@localhost:5432/pariksha_test vitest run test/postgres-repo.test.ts"`.
   - Document Postgres testing workflow in `packages/db/README.md`.
 
-- [ ] **Step 4: Commit changes**
+- [x] **Step 4: Commit changes**
   - Command:
     ```bash
     git add packages/db/
     git commit -s --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "test(db): establish comprehensive postgres repository test suite and dialect runner (closes #229)"
     ```
 
-- [ ] **Step 5: Close GitHub Issue #229**
+- [x] **Step 5: Close GitHub Issue #229**
   - Command:
     ```bash
     gh issue close 229 --comment "Resolved in commit $(git rev-parse --short HEAD): added end-to-end postgres repository test suite in packages/db/test/postgres-repo.test.ts running against CI Postgres service, verified migration 0000-0016 application and dialect conditional queries, and added test:pg script."
