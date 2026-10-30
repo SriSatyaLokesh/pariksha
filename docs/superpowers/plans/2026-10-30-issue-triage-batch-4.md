@@ -69,34 +69,34 @@
 - Consumes: `ICONS`, `Icon` in `OrganiserShell.tsx`.
 - Produces: Replaced glyphs with `<Icon name="..." />` and regression test.
 
-- [ ] **Step 1: Write failing regression guard test in `apps/web/test/icon-glyphs.test.ts`**
+- [x] **Step 1: Write failing regression guard test in `apps/web/test/icon-glyphs.test.ts`**
   - Scan `apps/web/src` for `<span aria-hidden="true">[⚠✓]</span>` or raw glyphs rendered in JSX.
   - Run `pnpm --filter @pariksha/web test test/icon-glyphs.test.ts` -> Expected: FAIL.
 
-- [ ] **Step 2: Add `check` to `ICONS` in `OrganiserShell.tsx`**
+- [x] **Step 2: Add `check` to `ICONS` in `OrganiserShell.tsx`**
   - Add:
     ```ts
     check: ["M4.6 10.4l3.8 3.8 7-7.6"],
     ```
 
-- [ ] **Step 3: Replace raw glyphs across components**
+- [x] **Step 3: Replace raw glyphs across components**
   - In `TextField.tsx`: replace `<span aria-hidden="true">⚠</span>` with `<Icon name="warn" />`.
   - In all listed testbuilder and organiser panels: replace `<span aria-hidden="true">⚠ </span>` with `<Icon name="warn" />` or similar.
   - In `Registration.tsx` and `ResultView.tsx`: replace with SVG icon.
 
-- [ ] **Step 4: Run tests and verify clean pass**
+- [x] **Step 4: Run tests and verify clean pass**
   - Run: `pnpm --filter @pariksha/web test test/icon-glyphs.test.ts`
   - Run: `pnpm --filter @pariksha/web test`
   - Run: `pnpm --filter @pariksha/web typecheck`
 
-- [ ] **Step 5: Commit changes**
+- [x] **Step 5: Commit changes**
   - Command:
     ```bash
     git add apps/web/
     git commit -s --author="Satya K <srisatyalokesh2.12@gmail.com>" -m "refactor(web): replace raw Unicode icon glyphs with SVG Icon family (closes #200)"
     ```
 
-- [ ] **Step 6: Close GitHub Issue #200**
+- [x] **Step 6: Close GitHub Issue #200**
   - Command:
     ```bash
     gh issue close 200 --comment "Resolved in commit $(git rev-parse --short HEAD): replaced raw Unicode glyphs with SVG Icon family in accordance with Spec §13, and added regression test in apps/web/test/icon-glyphs.test.ts."
