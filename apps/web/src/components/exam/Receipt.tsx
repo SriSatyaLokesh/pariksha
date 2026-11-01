@@ -13,7 +13,7 @@
 // because there is none to show and a blank "—" where a mark should be is
 // a worse thing to hand someone who has just finished an exam.
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Receipt as ReceiptPayload, ReleasedResult } from "../../lib/run";
 import { AttemptFigures, ResultView } from "./ResultView";
 
@@ -41,6 +41,17 @@ export function Receipt({
   receipt: ReceiptPayload;
   released: ReleasedResult | null;
 }) {
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimeoutRef.current) {
+        clearTimeout(copyTimeoutRef.current);
+      }
+    };
+  }, []);
+
   /**
    * The finish page is a view swap, and a view swap moves no focus and
    * announces nothing: `useDialogKeys`' cleanup hands focus back to a
@@ -70,25 +81,47 @@ export function Receipt({
           ever have to ask about this attempt.
         </p>
 
-        <dl className="exam-facts">
-          <dt>Reference</dt>
-          <dd>
-            {/* Selectable, monospaced and on its own line: it will be
-                copied into an email or read aloud down a phone. */}
-            <code className="exam-receipt-ref">{receipt.attemptId}</code>
-          </dd>
-          <dt>Submitted</dt>
-          <dd>{stamp(receipt.submittedAt)}</dd>
-          <dt>Attempt</dt>
-          <dd>
-            Attempt {String(receipt.attemptNo)} of {String(receipt.attemptsAllowed)}
-          </dd>
-          <dt>Answered</dt>
-          <dd>
-            {String(receipt.answered)} of {String(receipt.total)}
-            {receipt.unanswered > 0 && ` · ${String(receipt.unanswered)} left unanswered`}
-          </dd>
-        </dl>
+        <div className="exam-receipt-card">
+          <div className="exam-receipt-card-header">
+            <span className="exam-receipt-badge">Official Credential</span>
+            <span className="exam-receipt-card-time">{stamp(receipt.submittedAt)}</span>
+          </div>
+
+          <dl className="exam-facts">
+            <dt>Reference</dt>
+            <dd className="exam-receipt-ref-group">
+              {/* Selectable, monospaced and on its own line: it will be
+                  copied into an email or read aloud down a phone. */}
+              <code className="exam-receipt-ref">{receipt.attemptId}</code>
+              <button
+                type="button"
+                className="exam-receipt-copy-btn"
+                onClick={() => {
+                  void navigator.clipboard?.writeText(receipt.attemptId);
+                  setCopied(true);
+                  if (copyTimeoutRef.current) {
+                    clearTimeout(copyTimeoutRef.current);
+                  }
+                  copyTimeoutRef.current = setTimeout(() => setCopied(false), 2000);
+                }}
+                aria-label="Copy attempt reference"
+              >
+                {copied ? "Copied" : "Copy"}
+              </button>
+            </dd>
+            <dt>Submitted</dt>
+            <dd>{stamp(receipt.submittedAt)}</dd>
+            <dt>Attempt</dt>
+            <dd>
+              Attempt {String(receipt.attemptNo)} of {String(receipt.attemptsAllowed)}
+            </dd>
+            <dt>Answered</dt>
+            <dd>
+              {String(receipt.answered)} of {String(receipt.total)}
+              {receipt.unanswered > 0 && ` · ${String(receipt.unanswered)} left unanswered`}
+            </dd>
+          </dl>
+        </div>
 
         {/* The organiser's last word (#186), on the landing page's own
             message class — the finish page is that shell reused, so the

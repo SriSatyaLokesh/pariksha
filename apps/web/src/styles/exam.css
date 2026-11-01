@@ -1812,6 +1812,42 @@
   text-wrap: balance;
 }
 
+.exam-submit-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-xs);
+  margin: var(--space-md) 0;
+}
+
+.exam-submit-stat-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-base) var(--space-xs);
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-cream);
+  text-align: center;
+}
+
+.exam-submit-stat-value {
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-mono-md-size);
+  font-weight: 500;
+  line-height: var(--type-mono-md-line-height);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-ink);
+}
+
+.exam-submit-stat-label {
+  margin-top: var(--space-xs);
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+  color: var(--color-muted);
+}
+
 .exam-submit-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1831,10 +1867,82 @@
 /* The finish page: the landing page's own shell, because DESIGN.md makes
    them the two bookends of the same day. Nothing new is needed for the
    hero, the body or the facts list — only what a result adds. */
+.exam-receipt-card {
+  max-width: 64ch;
+  margin: var(--space-xl) 0;
+  padding: var(--space-xl);
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-lg);
+  background: var(--color-canvas);
+  box-shadow: 0 4px 16px rgb(from var(--color-shadow) r g b / 0.04);
+}
+
+.exam-receipt-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--space-base);
+  margin-bottom: var(--space-lg);
+  padding-bottom: var(--space-base);
+  border-bottom: var(--exam-edge, 1px) solid var(--color-hairline);
+}
+
+.exam-receipt-badge {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  color: var(--color-ink-soft);
+}
+
+.exam-receipt-card-time {
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  color: var(--color-muted);
+}
+
+.exam-receipt-card .exam-facts {
+  margin: 0;
+}
+
+.exam-receipt-ref-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-base);
+}
+
 .exam-receipt-ref {
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
   user-select: all;
+}
+
+.exam-receipt-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 28px;
+  padding: var(--space-xs) var(--space-base);
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-xs);
+  background: transparent;
+  color: var(--color-ink-soft);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-button-md-weight);
+  cursor: pointer;
+}
+
+.exam-receipt-copy-btn:hover {
+  background: var(--color-cream);
+  border-color: var(--color-voltage-deep);
+  color: var(--color-voltage-deep);
+}
+
+.exam-receipt-copy-btn:focus-visible {
+  outline: 2px solid var(--color-voltage-deep);
+  outline-offset: 2px;
 }
 
 .exam-finish-note {
