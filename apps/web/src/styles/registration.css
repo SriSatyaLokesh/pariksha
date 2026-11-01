@@ -1,3 +1,4 @@
+/* Hallmark · v2.0.0 · modern-minimal · candidate runtime */
 /* The registration form, which BOTH sides render.
 
    `components/testbuilder/RegistrationForm.tsx` is the one registration
@@ -96,7 +97,7 @@ select.text-input {
   letter-spacing: var(--type-body-md-letter-spacing);
   border: 1px solid var(--color-hairline-strong);
   border-radius: var(--rounded-xs);
-  padding: 10px var(--space-md);
+  padding: var(--space-md);
   height: 44px;
   width: 100%;
 }
@@ -125,7 +126,7 @@ textarea.text-input {
   letter-spacing: var(--type-body-md-letter-spacing);
   border: 1px solid var(--color-hairline-strong);
   border-radius: var(--rounded-xs);
-  padding: 10px var(--space-md);
+  padding: var(--space-md);
   height: auto;
   min-height: calc(3 * var(--type-body-md-line-height) + 20px);
   width: 100%;
@@ -138,6 +139,10 @@ textarea.text-input {
    recoloured rather than thickened, because growing it to 2px would reflow
    the field by a pixel on focus. */
 .text-input:focus-visible {
+  border-color: var(--color-voltage);
+}
+
+.text-input:active {
   border-color: var(--color-voltage);
 }
 
@@ -334,3 +339,26 @@ input[type="radio"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ---- Access gate code verification & consent card upgrades (Task 4) --- */
+
+.exam-access-code-input,
+#exam-access-code,
+#exam-access-otp {
+  font-family: var(--font-mono, var(--type-mono-sm-family));
+  font-size: 1.25rem;
+  font-weight: 500;
+  letter-spacing: 0.15em;
+  text-align: center;
+}
+
+.exam-consent-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+  border: 1px solid var(--color-hairline-strong);
+  background: var(--color-canvas);
+  border-radius: var(--rounded-md);
+  padding: var(--space-md) var(--space-lg);
+}
+

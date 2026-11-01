@@ -313,7 +313,7 @@ components:
     textColor: "{colors.ink}"
     typography: "{typography.body-md}"
     rounded: "{rounded.xs}"
-    padding: "10px 12px"
+    padding: "12px"
     height: 44px
     borderColor: "{colors.hairline-strong}"
   text-input-focus:
@@ -321,7 +321,7 @@ components:
     textColor: "{colors.ink}"
     typography: "{typography.body-md}"
     rounded: "{rounded.xs}"
-    padding: "10px 12px"
+    padding: "12px"
     height: 44px
     borderColor: "{colors.voltage}"
   text-input-error:
@@ -329,7 +329,7 @@ components:
     textColor: "{colors.ink}"
     typography: "{typography.body-md}"
     rounded: "{rounded.xs}"
-    padding: "10px 12px"
+    padding: "12px"
     height: 44px
     borderColor: "{colors.flag-risk}"
   consent-row:
@@ -348,14 +348,14 @@ components:
     textColor: "{colors.ink}"
     typography: "{typography.option-label}"
     rounded: "{rounded.md}"
-    padding: "14px 16px"
+    padding: "12px 16px"
     borderColor: "{colors.hairline-strong}"
   option-row-selected:
     backgroundColor: "{colors.cream}"
     textColor: "{colors.ink}"
     typography: "{typography.option-label}"
     rounded: "{rounded.md}"
-    padding: "14px 16px"
+    padding: "12px 16px"
     borderColor: "{colors.voltage}"
   palette-square:
     backgroundColor: "{colors.canvas}"

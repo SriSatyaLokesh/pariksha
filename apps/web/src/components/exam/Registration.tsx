@@ -333,6 +333,7 @@ export function ExamRegistration({
                 value={code}
                 onChange={setCode}
                 autoComplete="off"
+                inputClassName="exam-access-code-input"
               />
             )}
 
@@ -365,6 +366,7 @@ export function ExamRegistration({
                   value={otp}
                   onChange={setOtp}
                   autoComplete="one-time-code"
+                  inputClassName="exam-access-code-input"
                 />
                 <p className="exam-register-status" role="status">
                   {emailed ? `If ${email} is expected on this test, a code is on its way to it.` : ""}
@@ -403,8 +405,11 @@ export function ExamRegistration({
         {stage.kind === "form" && (
           <>
             {stage.payload.consent !== null && (
-              <section className="exam-consent" aria-labelledby="exam-consent-heading">
+              <section className="exam-consent exam-consent-card" aria-labelledby="exam-consent-heading">
                 <h2 id="exam-consent-heading">Before you register</h2>
+                <p className="field-help exam-consent-notice">
+                  Please review the academic integrity and assessment conduct declaration before proceeding.
+                </p>
                 {/* `TestConsent.text` is Markdown, through the one
                     `dangerouslySetInnerHTML` site in the application. */}
                 <RenderedHtml markdown={stage.payload.consent.text} />

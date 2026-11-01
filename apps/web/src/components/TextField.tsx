@@ -32,6 +32,7 @@ export function TextField({
   type = "text",
   autoComplete,
   inputRef,
+  inputClassName,
 }: {
   id: string;
   label: string;
@@ -43,9 +44,11 @@ export function TextField({
   type?: "text" | "email" | "password";
   autoComplete?: string | undefined;
   inputRef?: Ref<HTMLInputElement> | undefined;
+  inputClassName?: string | undefined;
 }) {
   const helpId = `${id}-help`;
   const errorId = `${id}-error`;
+  const inputClass = inputClassName ? `text-input ${inputClassName}` : "text-input";
   return (
     <div className="field">
       <label className="field-label" htmlFor={id}>
@@ -53,7 +56,7 @@ export function TextField({
         {required && <span className="registration-form__required"> *</span>}
       </label>
       <input
-        className="text-input"
+        className={inputClass}
         id={id}
         ref={inputRef}
         type={type}
