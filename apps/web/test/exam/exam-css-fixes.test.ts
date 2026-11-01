@@ -228,3 +228,57 @@ describe("G5-14: scrolling over the numeric field cannot silently change the ans
   // browser's own wheel-over-a-focused-number-input default action, so
   // "the value never moves during a real scroll" still needs a browser.
 });
+
+describe("Task 2: 4px spacing rhythms, display heading balance, and modal overflow geometry", () => {
+  it("`.exam-submit-confirm` uses width: 100% and max-width: 440px to prevent viewport overflow (Rule 34)", () => {
+    const confirm = ruleBody(".exam-submit-confirm");
+    expect(declared(confirm, "width")).toBe("100%");
+    expect(declared(confirm, "max-width")).toBe("440px");
+    expect(declared(confirm, "box-sizing")).toBe("border-box");
+  });
+
+  it("`.exam-timer` padding adheres to the 4px modular spacing scale (Rule 24b)", () => {
+    const timer = ruleBody(".exam-timer");
+    expect(declared(timer, "padding")).toBe("var(--space-base) var(--space-md)");
+  });
+
+  it("`.exam-font-scale` padding adheres to the 4px modular spacing scale (Rule 24b)", () => {
+    const scale = ruleBody(".exam-font-scale");
+    expect(declared(scale, "padding")).toBe("var(--space-base) var(--space-md)");
+  });
+
+  it("`.exam-view-choice` gap adheres to the 4px modular spacing scale (Rule 24b)", () => {
+    const choice = ruleBody(".exam-view-choice");
+    expect(declared(choice, "gap")).toBe("var(--space-base)");
+  });
+
+  it("`.exam-calc-handle` margin-bottom adheres to the 4px modular spacing scale (Rule 24b)", () => {
+    const handle = ruleBody(".exam-calc-handle");
+    expect(declared(handle, "margin-bottom")).toBe("var(--space-md)");
+  });
+
+  it("`.exam-option-row` padding adheres to the 4px modular spacing scale (Rule 24b)", () => {
+    const row = ruleBody(".exam-option-row");
+    expect(declared(row, "padding")).toBe("var(--space-md) var(--space-lg)");
+  });
+
+  it("`.demo-banner` elements adhere to the 4px modular spacing scale (Rule 24b)", () => {
+    const badge = ruleBody(".demo-banner-badge");
+    expect(declared(badge, "gap")).toBe("var(--space-base)");
+
+    const actions = ruleBody(".demo-banner-actions");
+    expect(declared(actions, "gap")).toBe("var(--space-md)");
+
+    const btn = ruleBody(".demo-banner-btn");
+    expect(declared(btn, "padding")).toBe("var(--space-xs) var(--space-base)");
+  });
+
+  it("display headings balance text wrapping (Rule F3)", () => {
+    const heroH1 = ruleBody(".exam-landing-hero h1");
+    expect(declared(heroH1, "text-wrap")).toBe("balance");
+
+    const submitHeading = ruleBody(".exam-submit-heading");
+    expect(declared(submitHeading, "text-wrap")).toBe("balance");
+  });
+});
+

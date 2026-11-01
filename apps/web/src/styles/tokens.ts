@@ -568,7 +568,7 @@ export const tokens = {
         letterSpacing: "0",
       },
       rounded: "6px",
-      padding: "14px 16px",
+      padding: "12px 16px",
       borderColor: "#ddd6ce",
     },
     "option-row-selected": {
@@ -583,7 +583,7 @@ export const tokens = {
         letterSpacing: "0",
       },
       rounded: "6px",
-      padding: "14px 16px",
+      padding: "12px 16px",
       borderColor: "#e24c18",
     },
     "palette-square": {

@@ -82,6 +82,7 @@
   font-weight: var(--type-display-xl-weight);
   line-height: var(--type-display-xl-line-height);
   letter-spacing: var(--type-display-xl-letter-spacing);
+  text-wrap: balance;
 }
 
 /* On cream, below the field — at 22px it would be 3.86:1 against voltage,
@@ -606,7 +607,7 @@
   align-items: baseline;
   gap: 8px;
   min-height: 36px;
-  padding: 6px 12px;
+  padding: var(--space-base) var(--space-md);
   border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
   border-radius: var(--rounded-md);
   background: var(--color-cream);
@@ -731,7 +732,7 @@
   align-items: center;
   gap: 12px;
   margin: 0;
-  padding: 6px 12px;
+  padding: var(--space-base) var(--space-md);
   border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
   border-radius: var(--rounded-md);
 }
@@ -747,7 +748,7 @@
 .exam-view-choice {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-base);
   min-height: 44px;
 }
 
@@ -1137,7 +1138,7 @@
   align-items: center;
   cursor: grab;
   padding: 4px 8px;
-  margin-bottom: 10px;
+  margin-bottom: var(--space-md);
   background: var(--color-canvas);
   border: 1px dashed var(--color-hairline-strong);
   border-radius: var(--rounded-sm);
@@ -1356,7 +1357,7 @@
   gap: 12px;
   align-items: center;
   min-height: 48px;
-  padding: 14px 16px;
+  padding: var(--space-md) var(--space-lg);
   border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
   border-radius: var(--rounded-md);
   background: var(--color-canvas);
@@ -1687,7 +1688,9 @@
   position: absolute;
   right: 32px;
   z-index: 20;
-  width: min(420px, calc(100vw - 64px));
+  width: 100%;
+  max-width: 440px;
+  box-sizing: border-box;
   margin-top: 8px;
   box-shadow: 0 8px 24px rgb(from var(--color-shadow) r g b / 0.18);
 }
@@ -1697,6 +1700,7 @@
   font-family: var(--type-heading-sm-family);
   font-size: var(--type-heading-sm-size);
   font-weight: var(--type-heading-sm-weight);
+  text-wrap: balance;
 }
 
 .exam-submit-actions {
@@ -2089,7 +2093,7 @@
 .demo-banner-badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-base);
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
   font-weight: 700;
@@ -2111,7 +2115,7 @@
 .demo-banner-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-md);
 }
 
 .demo-banner-link {
@@ -2128,7 +2132,7 @@
   border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
   border-radius: var(--rounded-md);
   color: var(--color-ink);
-  padding: 4px 10px;
+  padding: var(--space-xs) var(--space-base);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
   font-weight: var(--type-button-md-weight);
