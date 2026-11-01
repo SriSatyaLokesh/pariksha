@@ -103,10 +103,10 @@
 
 .reorderable-list__legend {
   padding: 0;
-  font-family: var(--type-mono-sm-family);
-  font-size: var(--type-mono-sm-size);
-  letter-spacing: var(--type-mono-sm-letter-spacing);
-  text-transform: uppercase;
+  font-family: var(--type-body-sm-family);
+  font-size: var(--type-body-sm-size);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 /* Visually present (not visually-hidden): the move controls already carry

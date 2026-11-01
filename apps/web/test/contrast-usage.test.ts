@@ -778,7 +778,9 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // the "you are here" ring sit on the square's own canvas.
   ".palette-square": both("canvas"),
   ".palette-square.is-filled": both("state-answered"),
+  '.palette-square[data-state="answered"]': both("state-answered"),
   ".palette-square.has-notch": both("state-marked"),
+  '.palette-square[data-state="marked"]': both("state-marked"),
   ".palette-square.has-ring": both("canvas"),
   ".palette-square.has-lock": both("state-locked"),
   // Why the locked squares are locked (Task 10). Under the rail, on the

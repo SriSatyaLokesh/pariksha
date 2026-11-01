@@ -259,6 +259,33 @@ describe("C-07: the warning marks", () => {
       /20 minutes remaining/i,
     );
   });
+
+  it("transitions cleanly through low-anxiety states: neutral (> 10m), warm amber (< 10m), and voltage highlight (< 2m)", () => {
+    renderClock();
+    // > 10m: neutral
+    expect(total()).toHaveAttribute("data-urgency", "normal");
+    expect(total()).not.toHaveClass("timer-chip-warning");
+    expect(total()).not.toHaveClass("timer-chip-urgent");
+
+    // < 10m: warm amber warning badge
+    advance(35 * MINUTE);
+    expect(total()).toHaveAttribute("data-urgency", "warning");
+    expect(total()).toHaveClass("timer-chip-warning");
+    expect(total()).not.toHaveClass("timer-chip-urgent");
+
+    // < 2m: controlled high-contrast voltage highlight
+    advance(8 * MINUTE);
+    expect(total()).toHaveAttribute("data-urgency", "urgent");
+    expect(total()).toHaveClass("timer-chip-urgent");
+    expect(total()).not.toHaveClass("timer-chip-warning");
+  });
+
+  it("exam.css defines low-anxiety clock tokens without animations or transitions", () => {
+    const css = readFileSync(EXAM_CSS, "utf8");
+    expect(css).toMatch(/\.exam-timer\.timer-chip-warning[^{]*\{[^}]*border-color:\s*var\(--color-flag-review\)/);
+    expect(css).toMatch(/\.exam-timer\.timer-chip-urgent[^{]*\{[^}]*border-color:\s*var\(--color-voltage\)/);
+    expect(css).toMatch(/\.exam-timer\.timer-chip-urgent\s+\.exam-timer-value\s*\{[^}]*color:\s*var\(--color-voltage-deep\)/);
+  });
 });
 
 // --- zero ----------------------------------------------------------------

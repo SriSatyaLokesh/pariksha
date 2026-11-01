@@ -132,6 +132,7 @@ function Chip({
   urgent: boolean;
   warnings: number;
 }): ReactElement {
+  const isWarning = warnings > 0 && !urgent;
   return (
     <span
       // `timer`'s accessible name comes from the author, never from its
@@ -140,8 +141,9 @@ function Chip({
       // is one of the two things it points at.
       role="timer"
       aria-labelledby={`${id}-label ${id}-value`}
-      className={`exam-timer${urgent ? " timer-chip-urgent" : ""}`}
+      className={`exam-timer${urgent ? " timer-chip-urgent" : isWarning ? " timer-chip-warning" : ""}`}
       data-warn={warnings}
+      data-urgency={urgent ? "urgent" : isWarning ? "warning" : "normal"}
     >
       <span id={`${id}-label`} className="exam-timer-label">
         {label}

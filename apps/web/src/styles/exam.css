@@ -687,8 +687,14 @@
   font-weight: 700;
 }
 
-.exam-timer.timer-chip-urgent {
-  border-color: var(--color-flag-risk);
+.exam-timer.timer-chip-warning,
+.exam-timer[data-urgency="warning"] {
+  border-color: var(--color-flag-review);
+}
+
+.exam-timer.timer-chip-urgent,
+.exam-timer[data-urgency="urgent"] {
+  border-color: var(--color-voltage);
 }
 
 /* The one colour swap DESIGN.md allows. Size and weight are not repeated
@@ -696,7 +702,7 @@
    and the audit reads them out of `INHERITED_SIZE_WEIGHT` rather than out
    of a second copy that can drift. */
 .exam-timer.timer-chip-urgent .exam-timer-value {
-  color: var(--color-flag-risk);
+  color: var(--color-voltage-deep);
 }
 
 .exam-clock-announce {
@@ -1087,14 +1093,28 @@
 .palette-square.is-filled {
   border-color: var(--color-state-answered);
   background: var(--color-state-answered);
-  color: var(--color-cream);
+  color: var(--color-canvas);
+  font-size: var(--type-mono-sm-size);
+}
+
+.palette-square[data-state="answered"] {
+  background: var(--color-state-answered);
+  color: var(--color-canvas);
+  border-color: var(--color-state-answered);
   font-size: var(--type-mono-sm-size);
 }
 
 .palette-square.has-notch {
   border-color: var(--color-state-marked);
   background: var(--color-state-marked);
-  color: var(--color-cream);
+  color: var(--color-canvas);
+  font-size: var(--type-mono-sm-size);
+}
+
+.palette-square[data-state="marked"] {
+  background: var(--color-state-marked);
+  color: var(--color-canvas);
+  border-color: var(--color-state-marked);
   font-size: var(--type-mono-sm-size);
 }
 
@@ -1121,6 +1141,17 @@
   color: var(--color-voltage-deep);
   font-size: var(--type-mono-sm-size);
   font-weight: 700;
+}
+
+.palette-square[data-current="true"] {
+  outline: 2px solid var(--color-voltage);
+  outline-offset: 2px;
+  font-weight: 700;
+}
+
+.palette-square[data-state="unanswered"] {
+  background: var(--color-canvas);
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
 }
 
 .palette-square.has-lock {
@@ -1415,6 +1446,16 @@
   cursor: pointer;
 }
 
+.exam-option-row:hover:not(:has(input:disabled)) {
+  background: var(--color-hairline);
+}
+
+.exam-option-row:focus-within,
+.exam-option-row:focus-visible {
+  outline: 2px solid var(--color-voltage);
+  outline-offset: 2px;
+}
+
 /* DESIGN.md's `option-row-selected`: cream fill, 2px voltage border, PLUS
    the filled control. Two carriers, so the choice survives a colour-blind
    reading and a greyscale print. */
@@ -1425,6 +1466,10 @@
   color: var(--color-ink);
   font-size: var(--type-option-label-size);
   font-weight: 500;
+}
+
+.exam-option-row.is-selected:hover:not(:has(input:disabled)) {
+  background: var(--color-cream);
 }
 
 /* G5-02 (UI/UX audit, P0). Under `[data-contrast="high"]` both of the two
@@ -1467,6 +1512,24 @@
 
 .exam-option-text {
   flex: 1;
+}
+
+.exam-option-marker,
+.exam-option-row input[type="radio"],
+.exam-option-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  inline-size: 20px;
+  block-size: 20px;
+  border: 2px solid var(--control-edge);
+}
+
+.exam-option-marker:checked,
+.exam-option-row input[type="radio"]:checked,
+.exam-option-row input[type="checkbox"]:checked,
+.exam-option-row.is-selected .exam-option-marker {
+  background: var(--control-accent);
+  border-color: var(--control-accent);
 }
 
 .exam-matching {
