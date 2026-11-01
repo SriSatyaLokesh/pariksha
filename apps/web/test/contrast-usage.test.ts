@@ -689,6 +689,7 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
   // not voltage — a button label is body text and gets the 4.5:1 bar.
   ".exam-landing-actions .exam-start": both("voltage-deep"),
+  ".exam-landing-actions button:not(.exam-start)": both("canvas"),
   // The disabled state fills itself with the page's own canvas in both
   // themes (fix round 1, C1 — it used to fill itself with `hairline`,
   // which the high-contrast block swaps to `ink`).
@@ -699,6 +700,8 @@ const SURFACE: Record<string, SurfaceEntry> = {
   '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("cream"),
   ".exam-mic-notice": both("canvas"),
   ".exam-camera-notice": both("canvas"),
+  ".exam-vu-meter-value": both("canvas"),
+  ".exam-device-test-dismiss": both("canvas"),
   ".exam-landing-footer": both("cream"),
 
   // ---- exam.css: registration (C-02/C-03, Task 6). The alert sits on the
@@ -1066,6 +1069,7 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // body text base.css sets (type-body-md, 16px/400). `font: inherit` is a
   // shorthand this parser cannot read, so the size is supplied here.
   ".exam-landing-actions .exam-start": { px: 16, weight: 400 },
+  ".exam-landing-actions button:not(.exam-start)": { px: 16, weight: 400 },
   ".exam-landing-actions button:disabled": { px: 16, weight: 400 },
   // The two device-report marks set colour only; size and weight both come
   // from the shared `.exam-finding-mark` base rule (type-mono-sm, 12px,

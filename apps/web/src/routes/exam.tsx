@@ -244,6 +244,7 @@ function CameraPreview({ stream }: { stream: MediaStream }) {
         autoPlay
         playsInline
         muted
+        poster="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='320' height='240' viewBox='0 0 320 240'%3E%3Crect width='320' height='240' fill='%23efebe6'/%3E%3Ctext x='50%25' y='50%25' dominant-baseline='middle' text-anchor='middle' fill='%236f6a66' font-family='sans-serif' font-size='14'%3ECamera ready%3C/text%3E%3C/svg%3E"
       />
     </div>
   );

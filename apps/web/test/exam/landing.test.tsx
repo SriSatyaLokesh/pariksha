@@ -336,3 +336,70 @@ describe("deviceReport", () => {
     expect(browser?.detail).toMatch(/Chrome|Edge|Firefox|Safari/);
   });
 });
+
+it("Rule 28b: CameraPreview renders a fallback poster frame on the preview video", async () => {
+  stubCompliantDevice();
+  const fakeTrack = { kind: "video", stop: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const fakeStream = {
+    getVideoTracks: () => [fakeTrack],
+    getAudioTracks: () => [],
+    getTracks: () => [fakeTrack],
+  };
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: {
+      getUserMedia: vi.fn().mockResolvedValue(fakeStream),
+    },
+  });
+
+  const payload: LandingPayload = {
+    ...landingFixture,
+    proctoring: {
+      profile: "strict",
+      requirements: ["A working camera, on for the whole test."],
+    },
+  };
+  await mount(payload);
+  const checkBtn = screen.getByRole("button", { name: /check my device/i });
+  fireEvent.click(checkBtn);
+
+  const video = await screen.findByTestId("camera-preview");
+  expect(video).toBeInTheDocument();
+  const poster = video.getAttribute("poster");
+  expect(poster).toBeTruthy();
+  expect(poster).toMatch(/^data:image\/svg\+xml/);
+  expect(poster).toContain("Camera ready");
+});
+
+it("pre-flight diagnostics displays accessible readiness findings and can be dismissed", async () => {
+  stubCompliantDevice();
+  const fakeVideoTrack = { kind: "video", stop: vi.fn(), addEventListener: vi.fn(), removeEventListener: vi.fn() };
+  const fakeStream = {
+    getVideoTracks: () => [fakeVideoTrack],
+    getAudioTracks: () => [],
+    getTracks: () => [fakeVideoTrack],
+  };
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: {
+      getUserMedia: vi.fn().mockResolvedValue(fakeStream),
+    },
+  });
+
+  await mount({
+    ...landingFixture,
+    proctoring: {
+      profile: "strict",
+      requirements: ["A working camera, on for the whole test."],
+    },
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: /check my device/i }));
+
+  expect(await screen.findByRole("region", { name: /device test preview/i })).toBeInTheDocument();
+  const dismissBtn = screen.getByRole("button", { name: /dismiss/i });
+  expect(dismissBtn).toBeInTheDocument();
+
+  fireEvent.click(dismissBtn);
+  expect(screen.queryByRole("region", { name: /device test preview/i })).toBeNull();
+});
