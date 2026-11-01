@@ -77,7 +77,7 @@ export function Receipt({
 
       <main className="exam-landing-body">
         <p className="exam-landing-lede">
-          Your answers are saved. Keep the reference below — it is what your organiser needs if you
+          Your answers are saved. Keep the reference below: it is what your organiser needs if you
           ever have to ask about this attempt.
         </p>
 

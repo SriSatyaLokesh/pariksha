@@ -764,6 +764,12 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".exam-submit": both("voltage-deep"),
   ".exam-submit:disabled": both("canvas"),
   ".exam-submit-error": both("cream"),
+  ".exam-submit-stat-value": both("canvas"),
+  ".exam-submit-stat-label": both("canvas"),
+  ".exam-receipt-badge": both("canvas"),
+  ".exam-receipt-card-time": both("canvas"),
+  ".exam-receipt-copy-btn": both("canvas"),
+  ".exam-receipt-copy-btn:hover": both("cream"),
   // The result, on the finish page's cream body. The verdict chip and
   // every review card paint their own canvas first; the table and the
   // pending note sit directly on cream.
@@ -1107,6 +1113,7 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".exam-verdict": { px: 16, weight: 600 },
   // The failing variant is the same element; only the colour changes.
   ".exam-verdict[data-passed=\"false\"]": { px: 16, weight: 600 },
+  ".exam-receipt-copy-btn:hover": { px: 14, weight: 500 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with
