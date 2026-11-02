@@ -10,8 +10,8 @@
 // that the browser renders exactly the block it was handed, and renders it
 // with the exact copy `K7` fixes.
 
-import { afterEach, expect, it } from "vitest";
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { axe } from "jest-axe";
 import { PROCTORING_DEFAULTS } from "@pariksha/core";
 import { ExamApp } from "../../src/routes/exam";
@@ -147,6 +147,28 @@ it("shows only this attempt's figure when the server sent no counted block", asy
 it("names the average, not a best, when counted_attempt is average", async () => {
   await submitThrough({ counted: { percent: 74.33, attemptId: null, of: 3 } });
   expect(screen.getByText(/Counted for your result: 74\.33%, your average of 3/)).toBeInTheDocument();
+});
+
+it("renders the credential card and copies attempt reference to clipboard", async () => {
+  const writeText = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+    writable: true,
+  });
+
+  await submitThrough();
+
+  const card = document.querySelector(".exam-receipt-card");
+  expect(card).not.toBeNull();
+  expect(within(card as HTMLElement).getByText(/official credential/i)).toBeVisible();
+
+  const copyBtn = screen.getByRole("button", { name: /copy attempt reference/i });
+  expect(copyBtn).toHaveTextContent("Copy");
+
+  await click(copyBtn);
+  expect(writeText).toHaveBeenCalledWith("att_finish01");
+  expect(copyBtn).toHaveTextContent("Copied");
 });
 
 it("the finish page with both figures has no axe violations", async () => {

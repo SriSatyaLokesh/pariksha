@@ -170,6 +170,7 @@ export function Runner({
   bannerSlot,
   submitSlot,
   language,
+  heading = null,
 }: {
   paper: AttemptPaper;
   index: number;
@@ -186,6 +187,11 @@ export function Runner({
   submitSlot: ReactElement;
   /** Phase 11 Task 2 (T-24): candidate interface language */
   language?: string;
+  /** What the bar names on its left: the test and whose it is. From the
+   *  landing payload, which the paper itself does not carry, so `null`
+   *  when a resumed attempt could not re-read it — the bar then carries
+   *  the attempt reference alone. */
+  heading?: { organiser: string | null; name: string } | null;
 }) {
   const lang = language ?? paper.language ?? "en";
   const t = createTranslator(lang);
@@ -242,24 +248,45 @@ export function Runner({
         >
           Skip to the palette
         </button>
+        {/* Left: whose test and which, with the attempt reference under it
+            in mono — the same reference the watermark and the receipt
+            carry. Centre: the clocks. Right: save status, the tools, and
+            the one irreversible control last. */}
+        <div className="exam-runner-identity">
+          {heading && <strong className="exam-runner-test">{heading.name}</strong>}
+          <span className="exam-runner-who">
+            {heading?.organiser ? `${heading.organiser}, ` : ""}
+            {paper.attemptId}
+          </span>
+        </div>
         <div className="exam-runner-clock">{clockSlot}</div>
-        <div className="exam-runner-banner">{bannerSlot}</div>
-        <ViewControls {...view} />
-        {paper.allowCalculator && (
-          <button
-            type="button"
-            className="exam-calc-open"
-            onClick={() => {
-              setCalculatorOpen(true);
-            }}
-          >
-            Calculator
-          </button>
-        )}
-        {/* Last in the bar and pushed to its end: the one primary action
-            on the screen, as far from Next and Clear as the row allows,
-            because it cannot be undone. */}
-        <div className="exam-runner-finish">{submitSlot}</div>
+        <div className="exam-runner-tools">
+          <div className="exam-runner-banner">{bannerSlot}</div>
+          {paper.allowCalculator && (
+            <button
+              type="button"
+              className="exam-calc-open"
+              onClick={() => {
+                setCalculatorOpen(true);
+              }}
+            >
+              Calculator
+            </button>
+          )}
+          {/* Text size and contrast, behind one disclosure: a native
+              <details>, so the controls are in the DOM and the tab order
+              only while the menu is open, with no script of its own. */}
+          <details className="exam-view-menu">
+            <summary className="exam-view-menu-summary">View</summary>
+            <div className="exam-view-menu-panel">
+              <ViewControls {...view} />
+            </div>
+          </details>
+          {/* Last in the bar and pushed to its end: the one primary action
+              on the screen, as far from Next and Clear as the row allows,
+              because it cannot be undone. */}
+          <div className="exam-runner-finish">{submitSlot}</div>
+        </div>
       </header>
 
       <main className="exam-question" aria-label={`Question ${String(number)}`}>

@@ -35,6 +35,7 @@ const form: RegistrationFormSpec = {
 
 const landingFixture: LandingPayload = {
   name: "Aptitude",
+  organiser: "Alpha Corp",
   description: null,
   durationMinutes: 45,
   questionCount: 1,
@@ -629,4 +630,28 @@ it("every control on the gate is a focusable native control in reading order", a
   for (const control of controls) expect(control).not.toHaveAttribute("tabindex");
   controls[0]?.focus();
   expect(controls[0]).toHaveFocus();
+});
+
+it("renders access code input with exam-access-code-input class", async () => {
+  await reachRegistration(clientFor());
+  const codeInput = screen.getByLabelText(/^access code/i);
+  expect(codeInput).toHaveClass("exam-access-code-input");
+});
+
+it("renders email otp input with exam-access-code-input class", async () => {
+  const emailLanding: LandingPayload = { ...landingFixture, accessMode: "email_code" };
+  await reachRegistration(clientFor({}, emailLanding));
+  const otpInput = screen.getByLabelText(/code from your email/i);
+  expect(otpInput).toHaveClass("exam-access-code-input");
+});
+
+it("renders consent affirmation block with elevated exam-consent-card container", async () => {
+  const { container } = await reachForm(
+    {},
+    { consent: { version: "v2", text: "Your answers are recorded." }, form },
+  );
+  const card = container.querySelector(".exam-consent-card");
+  expect(card).not.toBeNull();
+  expect(card).toHaveClass("exam-consent");
+  expect(within(card as HTMLElement).getByText(/academic integrity/i)).toBeVisible();
 });

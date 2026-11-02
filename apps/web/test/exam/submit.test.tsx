@@ -177,6 +177,23 @@ it("C-08: the confirmation names the unanswered and marked counts before anythin
   expect(submit).not.toHaveBeenCalled();
 });
 
+it("renders the pre-submission stats grid with answered, unanswered, and marked counts", async () => {
+  render(<ExamApp client={client()} />);
+  await screen.findByRole("navigation", { name: /question palette/i });
+  await click(screen.getByRole("button", { name: /mark for review/i }));
+  await click(screen.getByRole("button", { name: /submit test/i }));
+
+  const dialog = screen.getByRole("dialog", { name: /submit this test/i });
+  const grid = dialog.querySelector(".exam-submit-stats-grid");
+  expect(grid).not.toBeNull();
+  expect(within(grid as HTMLElement).getByText("2")).toBeVisible();
+  expect(within(grid as HTMLElement).getByText("Answered")).toBeVisible();
+  expect(within(grid as HTMLElement).getByText("5")).toBeVisible();
+  expect(within(grid as HTMLElement).getByText("Unanswered")).toBeVisible();
+  expect(within(grid as HTMLElement).getByText("1")).toBeVisible();
+  expect(within(grid as HTMLElement).getByText("Marked for review")).toBeVisible();
+});
+
 it("the confirmation counts the answer the candidate has just given, not the one the resume carried", async () => {
   render(<ExamApp client={client()} />);
   await screen.findByRole("navigation", { name: /question palette/i });

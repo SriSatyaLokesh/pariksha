@@ -63,6 +63,20 @@ export function SubmitDialog({
         {String(total)}. {plural(unanswered, "question is", "questions are")} unanswered and{" "}
         {plural(marked, "is", "are")} marked for review.
       </p>
+      <div className="exam-submit-stats-grid">
+        <div className="exam-submit-stat-card">
+          <span className="exam-submit-stat-value">{total - unanswered}</span>
+          <span className="exam-submit-stat-label">Answered</span>
+        </div>
+        <div className="exam-submit-stat-card">
+          <span className="exam-submit-stat-value">{unanswered}</span>
+          <span className="exam-submit-stat-label">Unanswered</span>
+        </div>
+        <div className="exam-submit-stat-card">
+          <span className="exam-submit-stat-value">{marked}</span>
+          <span className="exam-submit-stat-label">Marked for review</span>
+        </div>
+      </div>
       <p>
         Submitting ends your test. You cannot come back to the paper, and nothing can be changed
         afterwards.

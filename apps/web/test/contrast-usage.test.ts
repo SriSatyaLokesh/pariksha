@@ -683,31 +683,72 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // declared on the <h1> (beside its own font-size) rather than on the
   // container, where a later paragraph would inherit it silently. This
   // entry is what stops that from being a comment nobody enforces.
-  ".exam-landing-hero h1": both("voltage"),
-  ".exam-facts dt": both("cream"),
+  // The head is on cream now (the organiser owns the masthead, the test
+  // name is a display heading in ink) and the facts moved into the admit
+  // card, which fills itself with canvas.
+  ".exam-mast-plaque": both("canvas"),
+  ".exam-wordmark": both("canvas"),
+  ".exam-landing-lede": both("cream"),
+  ".exam-landing-when dt": both("cream"),
+  ".exam-landing-message .exam-landing-message-from": both("canvas"),
+  ".exam-section-index": both("cream"),
+  ".exam-landing-requirements li": both("cream"),
+  ".exam-facts dt": both("canvas"),
+  ".exam-finding-detail": both("canvas"),
   ".exam-section-count, .exam-section-limit": both("cream"),
   // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
   // not voltage — a button label is body text and gets the 4.5:1 bar.
-  ".exam-landing-actions .exam-start": both("voltage-deep"),
+  ".exam-landing-actions .exam-start": both("royal-deep"),
+  ".exam-landing-actions button:not(.exam-start)": both("canvas"),
+  ".exam-landing-actions button:not(.exam-start):hover": both("canvas"),
+  ".exam-device-head span": both("canvas"),
+  ".exam-landing-return": both("canvas"),
   // The disabled state fills itself with the page's own canvas in both
   // themes (fix round 1, C1 — it used to fill itself with `hairline`,
   // which the high-contrast block swaps to `ink`).
   ".exam-landing-actions button:disabled": both("canvas"),
   // The device report sits on the page's own cream, like everything else
   // in `.exam-landing-body`.
-  '.exam-device-report li[data-ok="false"] .exam-finding-mark': both("cream"),
-  '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("cream"),
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': both("canvas"),
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("canvas"),
   ".exam-mic-notice": both("canvas"),
   ".exam-camera-notice": both("canvas"),
+  ".exam-vu-meter-value": both("canvas"),
+  ".exam-device-test-dismiss": both("canvas"),
   ".exam-landing-footer": both("cream"),
 
   // ---- exam.css: registration (C-02/C-03, Task 6). The alert sits on the
   // page's own cream, above the panel; everything inside the panel is on
   // the canvas it fills itself with, which is the same ground the same
   // renderer is read on in the organiser app. -----------------------------
+  // The runner bar: the attempt reference and the view disclosure.
+  ".exam-runner-who": both("cream"),
+  ".exam-view-menu-summary": both("canvas"),
+  // Section tabs sit on the page's cream with no fill of their own.
+  ".exam-section-tab": both("cream"),
+  ".exam-section-tab.is-active": both("cream"),
   ".exam-register-notice": both("cream"),
+  // The organiser's half of the gate fills itself with `--color-brand`:
+  // the workspace's `primary_colour` when it set one, already held to
+  // 4.5:1 against cream by `brandColourIssue` (packages/core), else
+  // voltage-deep. The audit measures the fallback, which is the pair that
+  // ships when no organiser colour does; the organiser's own is AA by
+  // construction.
+  ".exam-gate-brand": both("royal-deep"),
+  ".exam-gate-organiser": both("royal-deep"),
+  ".exam-gate-brand h1": both("royal-deep"),
+  ".exam-gate-facts dt": both("royal-deep"),
+  ".exam-gate-facts dd": both("royal-deep"),
+  ".exam-gate-steps": both("royal-deep"),
+  ".exam-gate-plaque": both("royal-deep"),
+  ".exam-gate-plaque .exam-wordmark": both("royal-deep"),
+  // The current step's disc is cream with an ink numeral, whatever the
+  // organiser's colour behind it.
+  '.exam-gate-steps li[aria-current="step"]::before': both("cream"),
+  ".exam-register-form-head p": both("canvas"),
+  ".exam-register-aside": both("canvas"),
   ".exam-register-status": both("canvas"),
-  ".exam-register-submit": both("voltage-deep"),
+  ".exam-register-submit": both("royal-deep"),
   ".exam-register-submit:disabled, .exam-register-secondary:disabled": both("canvas"),
 
   // ---- exam.css: the test runner (Phase 6 Task 6, #70) -------------------
@@ -758,9 +799,15 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // The one primary action in the runner fills itself with voltage-deep
   // and writes in cream; disabled it falls back to the bar's own cream
   // ground. The refusal sentence sits in the bar beside it.
-  ".exam-submit": both("voltage-deep"),
+  ".exam-submit": both("royal-deep"),
   ".exam-submit:disabled": both("canvas"),
   ".exam-submit-error": both("cream"),
+  ".exam-submit-stat-value": both("canvas"),
+  ".exam-submit-stat-label": both("canvas"),
+  ".exam-receipt-badge": both("canvas"),
+  ".exam-receipt-card-time": both("canvas"),
+  ".exam-receipt-copy-btn": both("canvas"),
+  ".exam-receipt-copy-btn:hover": both("cream"),
   // The result, on the finish page's cream body. The verdict chip and
   // every review card paint their own canvas first; the table and the
   // pending note sit directly on cream.
@@ -775,7 +822,9 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // the "you are here" ring sit on the square's own canvas.
   ".palette-square": both("canvas"),
   ".palette-square.is-filled": both("state-answered"),
+  '.palette-square[data-state="answered"]': both("state-answered"),
   ".palette-square.has-notch": both("state-marked"),
+  '.palette-square[data-state="marked"]': both("state-marked"),
   ".palette-square.has-ring": both("canvas"),
   ".palette-square.has-lock": both("state-locked"),
   // Why the locked squares are locked (Task 10). Under the rail, on the
@@ -795,11 +844,11 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // declare no `color` of their own (the message inherits the dialog's
   // ink), so neither needs an entry.
   ".exam-proctoring-dialog": both("cream"),
-  ".exam-proctoring-overlay-action": both("voltage-deep"),
+  ".exam-proctoring-overlay-action": both("royal-deep"),
   // Phase 8g Task 3 (`C-10`, `D8`): candidate proctor broadcast banner.
   ".exam-proctor-banner": both("cream"),
   ".exam-proctor-banner-tag": both("cream"),
-  ".exam-proctor-banner-dismiss": both("voltage-deep"),
+  ".exam-proctor-banner-dismiss": both("royal-deep"),
   // Phase 7c Task 5 (`Q9`/`D1`): the watermark. `fixed`, over whatever the
   // runner has painted underneath — which is always the page's own cream,
   // the same ground every other ambient mark in this file reads on.
@@ -1066,6 +1115,7 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   // body text base.css sets (type-body-md, 16px/400). `font: inherit` is a
   // shorthand this parser cannot read, so the size is supplied here.
   ".exam-landing-actions .exam-start": { px: 16, weight: 400 },
+  ".exam-landing-actions button:not(.exam-start)": { px: 16, weight: 400 },
   ".exam-landing-actions button:disabled": { px: 16, weight: 400 },
   // The two device-report marks set colour only; size and weight both come
   // from the shared `.exam-finding-mark` base rule (type-mono-sm, 12px,
@@ -1101,6 +1151,7 @@ const INHERITED_SIZE_WEIGHT: Record<string, { px: number; weight: number }> = {
   ".exam-verdict": { px: 16, weight: 600 },
   // The failing variant is the same element; only the colour changes.
   ".exam-verdict[data-passed=\"false\"]": { px: 16, weight: 600 },
+  ".exam-receipt-copy-btn:hover": { px: 14, weight: 500 },
 };
 
 // Pure wrapper selectors: every piece of text under them is an element with

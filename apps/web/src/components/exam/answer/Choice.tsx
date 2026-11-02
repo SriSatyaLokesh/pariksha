@@ -135,6 +135,7 @@ export function Choice({ question, value, onChange, disabled }: AnswerProps) {
             >
               <input
                 type={multi ? "checkbox" : "radio"}
+                className="exam-option-marker"
                 // One shared name per radio group is what gives the
                 // browser its arrow-key navigation; a group without it is
                 // keyboard-operable only one Tab at a time.

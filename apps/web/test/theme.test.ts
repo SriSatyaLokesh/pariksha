@@ -384,8 +384,11 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
       "the set of stylesheets using var(--color-voltage*) changed. SHRINKING is expected as 6.5c, 6.5d and 6.5e re-ground the organiser — delete the entry below and keep the test. GROWING means voltage spread to a new surface, which D1 forbids.",
     ).toEqual(
       [
-        // The runtime's own chain — where D1 says voltage belongs.
-        "exam.css",
+        // exam.css left this list on 2026-11-03: the candidate admit-card
+        // redesign moved the runtime's accent to `royal` (DESIGN.md "The
+        // runtime's accent is royal"), so the runtime's own chain no
+        // longer paints voltage at all. The guard below pins that.
+        //
         // Shared with admin.css today; stays once the organiser drops it.
         "registration.css",
         // base.css's two are both in the global `:focus-visible` ring
@@ -407,14 +410,15 @@ describe("voltage stays in the candidate runtime and does not spread (D1)", () =
     );
   });
 
-  it("is really used by the runtime, so the list above is not vacuous", () => {
+  it("the list above is not vacuous, and the runtime has given voltage up", () => {
     // A typo in the regex, or a rename of the whole family, would empty
     // the list and make the assertion above pass only by matching [] to a
-    // list that is itself wrong. exam.css is the one file D1 guarantees —
-    // and the only one, so no count floor is asserted beside it: D1's end
-    // state could legitimately reach a single file if registration.css
-    // stops being shared, and a floor of two would red for that.
-    expect(voltageUsers).toContain("exam.css");
+    // list that is itself wrong. registration.css is the one file still
+    // painting voltage (its text-input focus, shared with the organiser),
+    // so it anchors the regex; exam.css moved to `royal` on 2026-11-03
+    // and must not take voltage back.
+    expect(voltageUsers).toContain("registration.css");
+    expect(voltageUsers).not.toContain("exam.css");
   });
 
   it("the landing page gave it up and has not taken it back (D1)", () => {

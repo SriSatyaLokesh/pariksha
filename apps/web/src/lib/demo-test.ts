@@ -179,6 +179,7 @@ export const DEMO_PAPER_FIXTURE: AttemptPaper = {
 
 export const DEMO_LANDING_FIXTURE: LandingPayload = {
   name: "Pariksha Interactive Demo Exam",
+  organiser: "Pariksha Public Demo",
   description: "Experience the candidate exam interface across multiple sections and all 12 question types with zero registration required.",
   durationMinutes: 15,
   questionCount: 12,
@@ -202,7 +203,7 @@ export const DEMO_LANDING_FIXTURE: LandingPayload = {
     logo: null,
     logoAlt: null,
     primaryColour: null,
-    footerText: "Powered by Pariksha Open Source Examination Platform",
+    footerText: "A sample test. Answers stay in this browser tab and are never sent anywhere.",
     startMessage: "Welcome to the Pariksha Public Demo! Take this sample test to evaluate candidate navigation and section breakdown.",
   },
   candidateList: false,

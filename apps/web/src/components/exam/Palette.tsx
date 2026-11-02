@@ -168,6 +168,8 @@ export function Palette({
             if (focusRef && at === stop) focusRef.current = element;
           }}
           className={classesFor(question)}
+          data-state={question.state}
+          data-current={question.current ? "true" : undefined}
           // The accessible name is a superset of the visible label
           // (WCAG 2.5.3): the square shows its number, the name adds
           // the word "question" and the state.
