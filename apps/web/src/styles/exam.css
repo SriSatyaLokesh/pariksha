@@ -36,7 +36,7 @@
    Measured against the grounds a control really sits on here: 3.98:1 on an
    option row's canvas and 3.86:1 on the selected row's cream, against the
    3:1 a non-text indicator needs; the white glyph is 3.98:1 on the fill.
-   Under `:root[data-contrast="high"]` below, `--color-voltage` resolves to
+   Under `:root[data-contrast="high"]` below, `--color-royal` resolves to
    voltage-deep and both rise to 5.83:1 — the high-contrast block raises this
    pair, it never lowers it.
 
@@ -46,13 +46,31 @@
    canvas, rising to 10.88:1 under high contrast, where `hairline-strong`
    would be 1.44:1. */
 :root {
-  --control-accent: var(--color-voltage);
+  --control-accent: var(--color-royal);
   --control-accent-ink: var(--color-canvas);
   --control-edge: var(--color-muted);
-  --accent-voltage: var(--color-voltage);
+  --accent-royal: var(--color-royal);
   --font-display: var(--type-display-xl-family);
   --font-body: var(--type-body-md-family);
   --font-mono: var(--type-mono-sm-family);
+}
+
+/* Royal, not voltage (2026-11-03, DESIGN.md "The runtime's accent is
+   royal"). The two rings the shared sheets paint in voltage are re-painted
+   here for the candidate's chain only: base.css's global :focus-visible
+   and registration.css's text-input focus, both of which admin.css
+   already overrides for its own ground. */
+.exam-landing :focus-visible,
+.exam-register :focus-visible,
+.exam-runner :focus-visible,
+.exam-receipt :focus-visible {
+  outline-color: var(--color-royal);
+  box-shadow: 0 0 0 3px rgb(from var(--color-royal) r g b / 0.25);
+}
+
+.exam-register .text-input:focus-visible,
+.exam-register .text-input:active {
+  border-color: var(--color-royal);
 }
 
 /* ---- The landing page: an admit card ---------------------------------
@@ -69,7 +87,7 @@
    `contrast-usage.test.ts` audits. */
 
 .exam-landing {
-  --color-brand: var(--color-voltage-deep);
+  --color-brand: var(--color-royal-deep);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -439,7 +457,7 @@
 }
 
 .exam-landing-actions button:not(.exam-start):hover {
-  color: var(--color-voltage-deep);
+  color: var(--color-royal-deep);
   font-size: var(--type-body-sm-size);
   font-weight: 500;
 }
@@ -463,10 +481,10 @@
 .exam-landing-actions .exam-start {
   width: 100%;
   min-height: 52px;
-  border: 1px solid var(--color-voltage-deep);
-  border-color: var(--color-voltage-deep);
+  border: 1px solid var(--color-royal-deep);
+  border-color: var(--color-royal-deep);
   border-radius: 999px;
-  background: var(--color-voltage-deep);
+  background: var(--color-royal-deep);
   color: var(--color-cream);
   font-size: var(--type-button-md-size);
 }
@@ -650,7 +668,7 @@
    Nothing animates. */
 
 .exam-register {
-  --color-brand: var(--color-voltage-deep);
+  --color-brand: var(--color-royal-deep);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
@@ -926,9 +944,9 @@
 .exam-register-submit {
   min-height: 52px;
   padding: 0 40px;
-  border-color: var(--color-voltage-deep);
+  border-color: var(--color-royal-deep);
   border-radius: 999px;
-  background: var(--color-voltage-deep);
+  background: var(--color-royal-deep);
   color: var(--color-cream);
 }
 
@@ -1011,7 +1029,7 @@
   --color-hairline-strong: var(--color-ink);
   --color-muted: var(--color-ink-soft);
   --color-cream: var(--color-canvas);
-  --color-voltage: var(--color-voltage-deep);
+  --color-royal: var(--color-royal-deep);
   --exam-edge: 2px;
   --exam-ring: 3px;
 }
@@ -1233,7 +1251,7 @@
 
 .exam-timer.timer-chip-urgent,
 .exam-timer[data-urgency="urgent"] {
-  border-color: var(--color-voltage);
+  border-color: var(--color-royal);
 }
 
 /* The one colour swap DESIGN.md allows. Size and weight are not repeated
@@ -1241,7 +1259,7 @@
    and the audit reads them out of `INHERITED_SIZE_WEIGHT` rather than out
    of a second copy that can drift. */
 .exam-timer.timer-chip-urgent .exam-timer-value {
-  color: var(--color-voltage-deep);
+  color: var(--color-royal-deep);
 }
 
 /* For the ear: the chips already say it to the eye, and a sentence in
@@ -1702,15 +1720,15 @@
    live attempt. The ring is the carrier, not the colour. */
 .palette-square.has-ring {
   border-width: var(--exam-ring, 2px);
-  border-color: var(--color-voltage);
+  border-color: var(--color-royal);
   background: var(--color-canvas);
-  color: var(--color-voltage-deep);
+  color: var(--color-royal-deep);
   font-size: var(--type-mono-sm-size);
   font-weight: 700;
 }
 
 .palette-square[data-current="true"] {
-  outline: 2px solid var(--color-voltage);
+  outline: 2px solid var(--color-royal);
   outline-offset: 2px;
   font-weight: 700;
 }
@@ -1855,7 +1873,7 @@
    A candidate driving this screen from the keyboard has to be able to see
    where they are. */
 .exam-runner :focus-visible {
-  outline: var(--exam-ring, 2px) solid var(--color-voltage-deep);
+  outline: var(--exam-ring, 2px) solid var(--color-royal-deep);
   outline-offset: 2px;
 }
 
@@ -2018,7 +2036,7 @@
 
 .exam-option-row:focus-within,
 .exam-option-row:focus-visible {
-  outline: 2px solid var(--color-voltage);
+  outline: 2px solid var(--color-royal);
   outline-offset: 2px;
 }
 
@@ -2027,7 +2045,7 @@
    reading and a greyscale print. */
 .exam-option-row.is-selected {
   border-width: 2px;
-  border-color: var(--color-voltage);
+  border-color: var(--color-royal);
   background: var(--color-cream);
   color: var(--color-ink);
   font-size: var(--type-option-label-size);
@@ -2060,7 +2078,7 @@
    reads 4px voltage-deep on white, unselected 2px ink on white — width
    AND hue both differ, not colour alone. */
 :root[data-contrast="high"] .exam-option-row.is-selected {
-  box-shadow: inset 0 0 0 var(--exam-edge, 1px) var(--color-voltage-deep);
+  box-shadow: inset 0 0 0 var(--exam-edge, 1px) var(--color-royal-deep);
 }
 
 /* A locked option (select_k at its limit) and a read-only attempt. The
@@ -2167,7 +2185,7 @@
    edge rather than a fill: it has to read against every row state the
    list can be in, and in greyscale. */
 .reorderable-list__item.is-drop-target {
-  border-inline-start: 4px solid var(--color-voltage);
+  border-inline-start: 4px solid var(--color-royal);
 }
 
 .exam-select,
@@ -2321,9 +2339,9 @@
 .exam-submit {
   min-height: 44px;
   padding: 0 24px;
-  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border: var(--exam-edge, 1px) solid var(--color-royal-deep);
   border-radius: var(--rounded-md);
-  background: var(--color-voltage-deep);
+  background: var(--color-royal-deep);
   color: var(--color-cream);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
@@ -2502,12 +2520,12 @@
 
 .exam-receipt-copy-btn:hover {
   background: var(--color-cream);
-  border-color: var(--color-voltage-deep);
-  color: var(--color-voltage-deep);
+  border-color: var(--color-royal-deep);
+  color: var(--color-royal-deep);
 }
 
 .exam-receipt-copy-btn:focus-visible {
-  outline: 2px solid var(--color-voltage-deep);
+  outline: 2px solid var(--color-royal-deep);
   outline-offset: 2px;
 }
 
@@ -2654,7 +2672,7 @@
   padding: 8px 12px;
   border-width: 2px;
   border-style: solid;
-  border-color: var(--color-voltage);
+  border-color: var(--color-royal);
   border-radius: var(--rounded-md);
   background: var(--color-cream);
   color: var(--color-ink);
@@ -2703,7 +2721,7 @@
   user-select: none;
   opacity: 0.08;
   transform: rotate(-24deg);
-  color: var(--color-voltage);
+  color: var(--color-royal);
   font-family: var(--type-mono-sm-family);
   font-size: 20px;
   font-weight: 700;
@@ -2739,7 +2757,7 @@
 .exam-proctoring-dialog {
   width: min(480px, 100%);
   padding: 24px;
-  border: 2px solid var(--color-voltage);
+  border: 2px solid var(--color-royal);
   border-radius: var(--rounded-md);
   background: var(--color-cream);
   color: var(--color-ink);
@@ -2779,9 +2797,9 @@
 .exam-proctoring-overlay-action {
   min-height: 44px;
   padding: 0 24px;
-  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border: var(--exam-edge, 1px) solid var(--color-royal-deep);
   border-radius: var(--rounded-md);
-  background: var(--color-voltage-deep);
+  background: var(--color-royal-deep);
   color: var(--color-cream);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
@@ -2804,7 +2822,7 @@
   justify-content: space-between;
   gap: 16px;
   padding: 12px 16px;
-  border: 2px solid var(--accent-voltage, var(--color-voltage));
+  border: 2px solid var(--accent-royal, var(--color-royal));
   border-radius: var(--rounded-md);
   background: var(--color-cream);
   color: var(--color-ink);
@@ -2824,7 +2842,7 @@
   font-family: var(--font-body);
   font-size: var(--type-body-sm-size);
   font-weight: 600;
-  color: var(--color-voltage-deep);
+  color: var(--color-royal-deep);
   text-transform: none;
   letter-spacing: normal;
 }
@@ -2841,9 +2859,9 @@
   flex-shrink: 0;
   min-height: 36px;
   padding: 0 16px;
-  border: var(--exam-edge, 1px) solid var(--color-voltage-deep);
+  border: var(--exam-edge, 1px) solid var(--color-royal-deep);
   border-radius: var(--rounded-md);
-  background: var(--color-voltage-deep);
+  background: var(--color-royal-deep);
   color: var(--color-cream);
   font-family: var(--type-button-md-family);
   font-size: var(--type-button-md-size);
@@ -2880,14 +2898,14 @@
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
   font-weight: 700;
-  color: var(--color-voltage-deep);
+  color: var(--color-royal-deep);
 }
 
 .demo-banner-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--color-voltage-deep);
+  background: var(--color-royal-deep);
 }
 
 .demo-banner-text {
@@ -2905,7 +2923,7 @@
   font-family: var(--type-body-sm-family);
   font-size: var(--type-body-sm-size);
   font-weight: var(--type-body-sm-weight);
-  color: var(--color-voltage-deep);
+  color: var(--color-royal-deep);
   text-decoration: underline;
   text-underline-offset: 3px;
 }

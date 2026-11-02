@@ -698,7 +698,7 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".exam-section-count, .exam-section-limit": both("cream"),
   // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
   // not voltage — a button label is body text and gets the 4.5:1 bar.
-  ".exam-landing-actions .exam-start": both("voltage-deep"),
+  ".exam-landing-actions .exam-start": both("royal-deep"),
   ".exam-landing-actions button:not(.exam-start)": both("canvas"),
   ".exam-landing-actions button:not(.exam-start):hover": both("canvas"),
   ".exam-device-head span": both("canvas"),
@@ -734,21 +734,21 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // voltage-deep. The audit measures the fallback, which is the pair that
   // ships when no organiser colour does; the organiser's own is AA by
   // construction.
-  ".exam-gate-brand": both("voltage-deep"),
-  ".exam-gate-organiser": both("voltage-deep"),
-  ".exam-gate-brand h1": both("voltage-deep"),
-  ".exam-gate-facts dt": both("voltage-deep"),
-  ".exam-gate-facts dd": both("voltage-deep"),
-  ".exam-gate-steps": both("voltage-deep"),
-  ".exam-gate-plaque": both("voltage-deep"),
-  ".exam-gate-plaque .exam-wordmark": both("voltage-deep"),
+  ".exam-gate-brand": both("royal-deep"),
+  ".exam-gate-organiser": both("royal-deep"),
+  ".exam-gate-brand h1": both("royal-deep"),
+  ".exam-gate-facts dt": both("royal-deep"),
+  ".exam-gate-facts dd": both("royal-deep"),
+  ".exam-gate-steps": both("royal-deep"),
+  ".exam-gate-plaque": both("royal-deep"),
+  ".exam-gate-plaque .exam-wordmark": both("royal-deep"),
   // The current step's disc is cream with an ink numeral, whatever the
   // organiser's colour behind it.
   '.exam-gate-steps li[aria-current="step"]::before': both("cream"),
   ".exam-register-form-head p": both("canvas"),
   ".exam-register-aside": both("canvas"),
   ".exam-register-status": both("canvas"),
-  ".exam-register-submit": both("voltage-deep"),
+  ".exam-register-submit": both("royal-deep"),
   ".exam-register-submit:disabled, .exam-register-secondary:disabled": both("canvas"),
 
   // ---- exam.css: the test runner (Phase 6 Task 6, #70) -------------------
@@ -799,7 +799,7 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // The one primary action in the runner fills itself with voltage-deep
   // and writes in cream; disabled it falls back to the bar's own cream
   // ground. The refusal sentence sits in the bar beside it.
-  ".exam-submit": both("voltage-deep"),
+  ".exam-submit": both("royal-deep"),
   ".exam-submit:disabled": both("canvas"),
   ".exam-submit-error": both("cream"),
   ".exam-submit-stat-value": both("canvas"),
@@ -844,11 +844,11 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // declare no `color` of their own (the message inherits the dialog's
   // ink), so neither needs an entry.
   ".exam-proctoring-dialog": both("cream"),
-  ".exam-proctoring-overlay-action": both("voltage-deep"),
+  ".exam-proctoring-overlay-action": both("royal-deep"),
   // Phase 8g Task 3 (`C-10`, `D8`): candidate proctor broadcast banner.
   ".exam-proctor-banner": both("cream"),
   ".exam-proctor-banner-tag": both("cream"),
-  ".exam-proctor-banner-dismiss": both("voltage-deep"),
+  ".exam-proctor-banner-dismiss": both("royal-deep"),
   // Phase 7c Task 5 (`Q9`/`D1`): the watermark. `fixed`, over whatever the
   // runner has painted underneath — which is always the page's own cream,
   // the same ground every other ambient mark in this file reads on.

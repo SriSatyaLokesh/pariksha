@@ -73,3 +73,12 @@ Sloplint on the prototypes: 0 FAIL after the sweep. The owner chose **A**.
 - Test name on a resumed attempt's bar: put it on `AttemptPaper` from the API.
 - Demo banner's middle-dot meta string.
 - Pre-flight camera panel, submit sheet and receipt: untouched by this slice.
+
+## 7. Colour: royal replaces voltage in the runtime (2026-11-03)
+
+The owner called the vermilion "volcanic orange" and asked for alternatives. Eight one-token variants of direction A were built in `.prototypes/candidate/` (ink, navy, petrol, wine, cobalt, marine, slate, chocolate), each kept clear of the attempt-state colours and above 6.9:1 with cream on the fill. The owner narrowed to "between navy and cobalt"; three steps were built (royal `#1e3f84`, sapphire `#204190`, ultramarine `#21439c`) and shown side by side in `blues.html`. **Royal** was chosen.
+
+- `DESIGN.md` gains `royal` and `royal-deep` (`#162f63`) with stated ratios 9.7:1 and 12.57:1 on cream, generated into `tokens.css` and `tokens.ts` by `pnpm tokens`.
+- `exam.css` swaps every `--color-voltage*` for `--color-royal*`: Start, Continue and Submit fills, the focus ring, the selected option row, the current palette square, the urgent clock, the proctor banner border, the finish block, the demo banner. Two rings painted by shared sheets (base.css's global focus ring, registration.css's text-input focus) are re-painted for the candidate chain only.
+- `theme.test.ts`'s containment guard now pins that `exam.css` does not paint voltage; `registration.css` anchors the regex. `clock`, `runner`, `exam-css-fixes` and `contrast-usage` name the new token.
+- Voltage stays a token: the organiser's branding preview and registration.css's shared focus ring still reference it.

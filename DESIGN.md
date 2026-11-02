@@ -10,6 +10,8 @@ colors:
   voltage-hover: "#f06a38"
   voltage-soft: "#f59a6e"
   voltage-deep: "#b63a10"
+  royal: "#1e3f84"
+  royal-deep: "#162f63"
   cream: "#fffbf5"
   canvas: "#ffffff"
   ink: "#231f1d"
@@ -473,7 +475,7 @@ Pariksha runs on one ground shared from marketing through to product, one accent
 
 **One ground, one accent.** The marketing site and the organiser share the Signal ground and its single green accent, in two measured palettes: dark (`{colors.signal-bg}`, accent `{colors.signal-accent}` #19e68c) and light (`{colors.signal-l-bg}`, accent `{colors.signal-l-accent}` #07744a). Both ship, and a viewer switches between them. The accent is a different green on each because it has to be: #19e68c is 1.60:1 on cream and 1.65:1 on white — illegal as text and illegal as a border — so an accent cannot cross grounds, and taking one means taking the other.
 
-**Voltage survives in the runtime alone.** Voltage `{colors.voltage}` (#e24c18) is no longer a canvas anywhere the organiser can see. Inside an attempt the surface is cream `{colors.cream}` (#fffbf5, never pure white) and ink, hairline-ruled, and the vermilion is reduced to a handful of marks: the "you are here" square in the question palette, the focus ring on a selected answer row or a focused input, and the border on the proctor banner. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The start and finish pages keep the full-bleed vermilion block — a display headline in cream with a fully-rounded cream pill beneath — because they are the runtime's edges, not the organiser's.
+**The runtime's accent is royal, not voltage** (2026-11-03). Voltage `{colors.voltage}` (#e24c18) is no longer a canvas anywhere the organiser can see, and since the candidate admit-card redesign it is no longer the runtime's mark either: every place this paragraph names now paints `{colors.royal}` (#1e3f84, 9.7:1 on cream, 12.57:1 at its deep step), chosen from eight colour prototypes because a saturated orange read as an alarm beside the risk red and the organiser's own colour, and a dark blue reads as a seal. The marks themselves are unchanged, so the rest of this paragraph still describes them. Inside an attempt the surface is cream `{colors.cream}` (#fffbf5, never pure white) and ink, hairline-ruled, and the vermilion is reduced to a handful of marks: the "you are here" square in the question palette, the focus ring on a selected answer row or a focused input, and the border on the proctor banner. A candidate sits inside that screen for 45 minutes under a running timer, often already nervous; a saturated orange field behind a reading task is a stress surface, and cream-on-voltage only reaches 3.86:1, which is legal for a 56px headline and illegal for a question stem. The start and finish pages keep the full-bleed vermilion block — a display headline in cream with a fully-rounded cream pill beneath — because they are the runtime's edges, not the organiser's.
 
 **The two never appear on one screen.** That separation is the hard rule, and it is what buys the rest. It lets `{colors.state-answered}` keep its green in the cream runtime while the accent carries positive meaning on the organiser: a light-legal green is 1.09:1 from `{colors.state-answered}` — the same colour to the eye — so if the two surfaces ever met, one of them would have to give up a meaning it already has.
 
@@ -509,6 +511,8 @@ Ratios below are measured against `{colors.cream}` (#fffbf5) unless stated. AA n
 | `{colors.voltage-hover}` | #f06a38 | 2.99:1     | Hover fills only. Never text, at any size.                                                                    |
 | `{colors.voltage-soft}`  | #f59a6e | —          | Illustration and gradient end-stop only.                                                                      |
 | `{colors.voltage-deep}`  | #b63a10 | **5.66:1** | The only voltage permitted as running text, and the fill under cream button labels (cream on it: **5.66:1**). |
+| `{colors.royal}`         | #1e3f84 | **9.7:1**  | The candidate runtime's accent since 2026-11-03: Start, Continue and Submit fills, the focus ring, the selected answer row, the current palette square, the proctor banner's border, the finish block. Cream on it: **9.7:1**. |
+| `{colors.royal-deep}`    | #162f63 | **12.57:1** | Royal's hover and high-contrast step, the way voltage-deep was voltage's. |
 
 That four-step split is the system's main departure from the brand colour it descends from. A single orange cannot be both a canvas and a link colour and stay legal; `{colors.voltage-deep}` exists so the voltage can appear in a sentence without failing AA.
 

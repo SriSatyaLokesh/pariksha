@@ -302,14 +302,14 @@ describe("the runner shell (C-04)", () => {
     expect(css).toMatch(/\.palette-square\[data-state="answered"\]\s*\{[^}]*color:\s*var\(--color-canvas\)/);
     expect(css).toMatch(/\.palette-square\[data-state="marked"\]\s*\{[^}]*background:\s*var\(--color-state-marked\)/);
     expect(css).toMatch(/\.palette-square\[data-state="marked"\]\s*\{[^}]*color:\s*var\(--color-canvas\)/);
-    expect(css).toMatch(/\.palette-square\[data-current="true"\]\s*\{[^}]*outline:\s*2px solid var\(--color-voltage\)/);
+    expect(css).toMatch(/\.palette-square\[data-current="true"\]\s*\{[^}]*outline:\s*2px solid var\(--color-royal\)/);
     expect(css).toMatch(/\.palette-square\[data-state="unanswered"\]\s*\{[^}]*background:\s*var\(--color-canvas\)/);
   });
 
   it("Task 5: option rows provide tactile hover feedback, focus outline, and 20px marker ergonomics", () => {
     const css = readFileSync(EXAM_CSS, "utf8");
     expect(css).toMatch(/\.exam-option-row:hover:not\(:has\(input:disabled\)\)\s*\{[^}]*background:\s*var\(--color-hairline\)/);
-    expect(css).toMatch(/\.exam-option-row:focus-within,\s*\.exam-option-row:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--color-voltage\)/);
+    expect(css).toMatch(/\.exam-option-row:focus-within,\s*\.exam-option-row:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--color-royal\)/);
     expect(css).toMatch(/\.exam-option-marker[^{]*\{[^}]*width:\s*20px;\s*height:\s*20px;/);
   });
 

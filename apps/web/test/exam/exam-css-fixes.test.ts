@@ -134,7 +134,7 @@ describe("G5-02: a selected option survives high contrast by more than its borde
   it("the high-contrast override is a non-box carrier, not a wider border", () => {
     const body = ruleBody(':root[data-contrast="high"] .exam-option-row.is-selected');
     expect(declared(body, "border-width"), "redeclares border-width — this is M1's own box-growing bug").toBeUndefined();
-    expect(declared(body, "box-shadow")).toBe("inset 0 0 0 var(--exam-edge, 1px) var(--color-voltage-deep)");
+    expect(declared(body, "box-shadow")).toBe("inset 0 0 0 var(--exam-edge, 1px) var(--color-royal-deep)");
   });
 
   // Still needs a browser: that the ring actually reads as different at a

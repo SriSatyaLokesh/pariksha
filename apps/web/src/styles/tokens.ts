@@ -6,6 +6,8 @@ export const tokens = {
     "voltage-hover": "#f06a38",
     "voltage-soft": "#f59a6e",
     "voltage-deep": "#b63a10",
+    royal: "#1e3f84",
+    "royal-deep": "#162f63",
     cream: "#fffbf5",
     canvas: "#ffffff",
     ink: "#231f1d",
@@ -822,6 +824,18 @@ export const contrastPairs = [
     fg: "#b63a10",
     bg: "#fffbf5",
     stated: 5.66,
+  },
+  {
+    token: "royal",
+    fg: "#1e3f84",
+    bg: "#fffbf5",
+    stated: 9.7,
+  },
+  {
+    token: "royal-deep",
+    fg: "#162f63",
+    bg: "#fffbf5",
+    stated: 12.57,
   },
   {
     token: "ink",

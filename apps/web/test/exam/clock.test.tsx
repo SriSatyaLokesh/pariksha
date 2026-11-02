@@ -283,8 +283,8 @@ describe("C-07: the warning marks", () => {
   it("exam.css defines low-anxiety clock tokens without animations or transitions", () => {
     const css = readFileSync(EXAM_CSS, "utf8");
     expect(css).toMatch(/\.exam-timer\.timer-chip-warning[^{]*\{[^}]*border-color:\s*var\(--color-flag-review\)/);
-    expect(css).toMatch(/\.exam-timer\.timer-chip-urgent[^{]*\{[^}]*border-color:\s*var\(--color-voltage\)/);
-    expect(css).toMatch(/\.exam-timer\.timer-chip-urgent\s+\.exam-timer-value\s*\{[^}]*color:\s*var\(--color-voltage-deep\)/);
+    expect(css).toMatch(/\.exam-timer\.timer-chip-urgent[^{]*\{[^}]*border-color:\s*var\(--color-royal\)/);
+    expect(css).toMatch(/\.exam-timer\.timer-chip-urgent\s+\.exam-timer-value\s*\{[^}]*color:\s*var\(--color-royal-deep\)/);
   });
 });
 
