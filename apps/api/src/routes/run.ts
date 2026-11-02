@@ -66,6 +66,9 @@ import { identityField } from "../import/candidates.js";
 
 export interface LandingPayload {
   name: string;
+  /** The workspace name: the organiser on the masthead, so a candidate
+   *  sees whose test this is before they see what it is. */
+  organiser: string;
   description: string | null;
   durationMinutes: number;
   questionCount: number;
@@ -166,6 +169,7 @@ function landingPayload(test: PublishedTest, now: number): LandingPayload {
 
   return {
     name: test.name,
+    organiser: test.workspaceName,
     description: test.description,
     durationMinutes,
     questionCount: sections.reduce((total, section) => total + section.questionCount, 0),

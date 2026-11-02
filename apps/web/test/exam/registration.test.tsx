@@ -35,6 +35,7 @@ const form: RegistrationFormSpec = {
 
 const landingFixture: LandingPayload = {
   name: "Aptitude",
+  organiser: "Alpha Corp",
   description: null,
   durationMinutes: 45,
   questionCount: 1,

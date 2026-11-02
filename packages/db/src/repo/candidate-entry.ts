@@ -44,11 +44,14 @@ export interface PublishedTest {
   sections: Section[];
   /** `workspace.branding_json` — logo, colour and footer (T-23's split). */
   workspaceBranding: unknown;
+  /** `workspace.name` — the organiser whose name is on the door of the candidate path. */
+  workspaceName: string;
 }
 
 interface PublishedTestRecord {
   workspace_id: string;
   workspace_branding: unknown;
+  workspace_name: string;
   test_id: string;
   name: string;
   description: string | null;
@@ -92,7 +95,7 @@ export async function resolvePublishedTest(
   if (RESERVED_RUN_SEGMENTS.has(workspaceSlug)) return null;
 
   const rows = await db.query<PublishedTestRecord>(
-    "SELECT w.id AS workspace_id, w.branding_json AS workspace_branding, " +
+    "SELECT w.id AS workspace_id, w.name AS workspace_name, w.branding_json AS workspace_branding, " +
       "t.id AS test_id, t.name AS name, t.description AS description, t.status AS status, " +
       "v.id AS version_id, v.version AS version, v.settings_json AS settings_json, v.sections_json AS sections_json " +
       "FROM test t JOIN workspace w ON w.id = t.workspace_id " +
@@ -119,6 +122,7 @@ export async function resolvePublishedTest(
     settings,
     sections: db.jsonValue<Section[]>(row.sections_json),
     workspaceBranding: row.workspace_branding == null ? null : db.jsonValue(row.workspace_branding),
+    workspaceName: row.workspace_name,
   };
 }
 

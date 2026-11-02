@@ -32,6 +32,9 @@ export type TestState = "draft" | "scheduled" | "open" | "closed" | "archived";
 /** `GET /api/v1/run/:workspaceSlug/:testSlug` — C-01 in one read. */
 export interface LandingPayload {
   name: string;
+  /** The workspace name, for the masthead. Optional only because a
+   *  payload cached before it shipped may still arrive without it. */
+  organiser?: string | null;
   description: string | null;
   durationMinutes: number;
   questionCount: number;

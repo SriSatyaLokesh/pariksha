@@ -55,61 +55,159 @@
   --font-mono: var(--type-mono-sm-family);
 }
 
+/* ---- The landing page: an admit card ---------------------------------
+
+   The organiser's name is on the masthead and Pariksha is on the plaque.
+   The test name is a display heading on cream — no vermilion field above
+   it any more: a candidate arriving nervous met a saturated wall and a
+   56px name before a single fact, and the facts were what they came for.
+   The right column is the admit card: duration, questions, window, the
+   device's own standing, and the one button. `--color-brand` is the
+   organiser's `primary_colour` when the workspace set one (already held
+   to AA on cream by `brandColourIssue`), and the 4px line at the top is
+   the one place it paints. Start stays voltage-deep, the pair
+   `contrast-usage.test.ts` audits. */
+
 .exam-landing {
+  --color-brand: var(--color-voltage-deep);
   display: flex;
   flex-direction: column;
   min-height: 100vh;
 }
 
-/* DESIGN.md's `card-voltage`: the one saturated field, carrying the
-   headline and NOTHING else.
+.exam-brandline {
+  height: 4px;
+  background: var(--color-brand);
+}
 
-   The colour is declared on the headline rather than on the field, on
-   purpose. Cream on voltage is 3.86:1, which clears the 3:1 bar for text
-   at 24px or more and fails the 4.5:1 bar for everything smaller — so a
-   `color` on the container would silently licence any later paragraph
-   dropped inside it. Declared on the one selector that also declares the
-   56px size, the two facts cannot drift apart. */
+.exam-mast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  min-height: 64px;
+  padding: 12px 32px;
+  border-bottom: 1px solid var(--color-hairline);
+  background: var(--color-canvas);
+}
+
+.exam-mast-organiser {
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+}
+
+.exam-mast-plaque {
+  margin: 0;
+  color: var(--color-muted);
+  font-family: var(--font-body);
+  font-size: var(--type-body-sm-size);
+  white-space: nowrap;
+}
+
+.exam-wordmark {
+  color: var(--color-ink);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-landing-body {
+  flex: 1;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 48px 32px 96px;
+}
+
 .exam-landing-hero {
-  background: var(--color-voltage);
-  padding: 64px 32px;
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 24px 48px;
+  align-items: end;
 }
 
 .exam-landing-hero h1 {
   margin: 0;
-  color: var(--color-cream);
-  font-family: var(--type-display-xl-family);
-  font-size: var(--type-display-xl-size);
-  font-weight: var(--type-display-xl-weight);
-  line-height: var(--type-display-xl-line-height);
-  letter-spacing: var(--type-display-xl-letter-spacing);
+  max-width: 18ch;
+  min-width: 0;
+  overflow-wrap: break-word;
+  font-family: var(--type-display-lg-family);
+  font-size: var(--type-display-lg-size);
+  font-weight: var(--type-display-lg-weight);
+  line-height: var(--type-display-lg-line-height);
+  letter-spacing: var(--type-display-lg-letter-spacing);
   text-wrap: balance;
 }
 
-/* On cream, below the field — at 22px it would be 3.86:1 against voltage,
-   which is illegal at reading size. */
 .exam-landing-lede {
-  margin: 0 0 24px;
-  max-width: 54ch;
+  margin: 16px 0 0;
+  max-width: 52ch;
+  color: var(--color-ink-soft);
+  font-family: var(--type-heading-md-family);
+  font-size: var(--type-heading-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-heading-md-line-height);
+}
+
+.exam-landing-when {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin: 0;
+}
+
+.exam-landing-when div {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.exam-landing-when dt {
+  color: var(--color-muted);
+  font-family: var(--font-body);
+  font-size: var(--type-body-sm-size);
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.exam-landing-when dd {
+  margin: 0;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-body-sm-size);
+}
+
+.exam-landing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 7fr) minmax(0, 5fr);
+  gap: 48px 64px;
+  align-items: start;
+  margin-top: 40px;
+}
+
+.exam-landing-main {
+  grid-column: 1;
+  grid-row: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+}
+
+.exam-landing-main h2 {
+  margin: 0 0 12px;
   font-family: var(--type-heading-md-family);
   font-size: var(--type-heading-md-size);
   font-weight: var(--type-heading-md-weight);
   line-height: var(--type-heading-md-line-height);
 }
 
-.exam-landing-body {
-  flex: 1;
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 32px;
-}
-
 /* Every out-of-window state says why in words. The border is the
    non-colour carrier: colour is never the only thing that says a test is
    shut (DESIGN.md). */
 .exam-notice {
-  margin: 0 0 24px;
+  margin: 0;
   padding: 16px;
   border: 1px solid var(--color-hairline-strong);
   border-left-width: 6px;
@@ -117,28 +215,24 @@
   background: var(--color-canvas);
 }
 
+/* The organiser's `start_message`, framed as the note it is. */
 .exam-landing-message {
-  margin: 0 0 24px;
-  max-width: 64ch;
-}
-
-.exam-facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: 8px 24px;
-  margin: 0 0 32px;
-}
-
-.exam-facts dt {
-  font-family: var(--font-body);
-  font-size: var(--type-body-sm-size);
-  text-transform: none;
-  letter-spacing: normal;
-  color: var(--color-muted);
-}
-
-.exam-facts dd {
   margin: 0;
+  padding: 16px 24px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: 6px;
+  background: var(--color-canvas);
+}
+
+.exam-landing-message p {
+  margin: 0;
+  max-width: 60ch;
+}
+
+.exam-landing-message .exam-landing-message-from {
+  margin-top: 8px;
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
 }
 
 .exam-landing-sections ul,
@@ -150,57 +244,179 @@
 }
 
 .exam-landing-sections li {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) auto auto;
   gap: 16px;
+  align-items: baseline;
   padding: 12px 0;
-  border-bottom: 1px solid var(--color-hairline);
+  border-bottom: 1px solid var(--color-hairline-strong);
 }
 
-.exam-section-title {
-  flex: 1;
-  min-width: 12ch;
+.exam-landing-sections li:first-child {
+  border-top: 1px solid var(--color-hairline-strong);
+}
+
+.exam-section-index {
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+.exam-landing-sections .exam-section-title {
+  min-width: 0;
+  font-family: var(--font-body);
+  font-size: var(--type-body-md-size);
+  font-weight: 500;
+  line-height: var(--type-body-md-line-height);
 }
 
 .exam-section-count,
 .exam-section-limit {
+  color: var(--color-muted);
   font-family: var(--type-mono-sm-family);
   font-size: var(--type-mono-sm-size);
-  color: var(--color-muted);
+  white-space: nowrap;
 }
 
 .exam-landing-rules p {
+  margin: 0;
   max-width: 64ch;
 }
 
 .exam-landing-requirements li {
   max-width: 64ch;
-  padding: 4px 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
 }
 
-.exam-landing-actions {
+/* ---- the admit card ---------------------------------------------------- */
+
+.exam-landing-aside {
+  grid-column: 2;
+  grid-row: 1;
+  position: sticky;
+  top: 24px;
+}
+
+.exam-ticket {
+  padding: 24px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-lg);
+  background: var(--color-canvas);
+  box-shadow:
+    0 1px 2px rgb(from var(--color-ink) r g b / 0.06),
+    0 8px 24px rgb(from var(--color-ink) r g b / 0.06);
+}
+
+.exam-ticket-head {
   display: flex;
-  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
   gap: 16px;
-  margin: 32px 0;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 2px solid var(--color-ink);
 }
 
-/* No colour set here — `Start`'s own disabled styling already carries
-   that (contrast-usage.test.ts's two SURFACE entries for
-   `.exam-landing-actions button:disabled`), so this sentence inherits the
-   page's ink rather than adding a second colour-setting selector for the
-   same state. */
-.exam-device-blocked {
-  margin: -16px 0 24px;
-  max-width: 64ch;
+.exam-ticket-head h2 {
+  margin: 0;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+}
+
+.exam-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 24px;
+  margin: 0 0 20px;
+}
+
+.exam-facts div {
+  min-width: 0;
+}
+
+.exam-facts dt {
+  font-family: var(--font-body);
+  font-size: var(--type-body-sm-size);
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--color-muted);
+}
+
+.exam-facts dd {
+  margin: 2px 0 0;
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-heading-sm-size);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The device's standing, as rows of the card. One list, present from
+   first render (the mount-time report) and refreshed by "Check my
+   device"; the mark is read before the colour is. */
+.exam-device-report ul {
+  border-top: 1px solid var(--color-hairline);
+}
+
+.exam-device-report li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--color-hairline);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
+}
+
+.exam-finding-label {
   font-weight: 500;
 }
 
+.exam-finding-detail {
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-finding-mark {
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: 700;
+}
+
+.exam-device-report li[data-ok="false"] .exam-finding-mark {
+  color: var(--color-flag-risk);
+}
+
+.exam-device-report li[data-ok="true"] .exam-finding-mark {
+  color: var(--color-state-answered);
+}
+
+.exam-landing-actions {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+
+.exam-landing-actions button:not(.exam-start) {
+  justify-self: start;
+}
+
+.exam-landing-actions .exam-register-secondary {
+  justify-self: center;
+}
+
 .exam-landing-actions button {
-  min-height: 44px;
-  padding: 0 24px;
-  border-radius: 999px;
+  min-height: 40px;
+  padding: 0 20px;
+  border-radius: var(--rounded-md);
   font: inherit;
+  font-weight: 500;
   cursor: pointer;
 }
 
@@ -210,13 +426,17 @@
   border: 1px solid var(--color-hairline-strong);
 }
 
-/* DESIGN.md: the cream pill CTA. Voltage-deep rather than voltage, because
-   a cream label on `voltage` is 3.86:1 and a button label is body text. */
+/* DESIGN.md: the pill CTA. Voltage-deep rather than voltage, because a
+   cream label on `voltage` is 3.86:1 and a button label is body text. */
 .exam-landing-actions .exam-start {
+  width: 100%;
+  min-height: 52px;
   border: 1px solid var(--color-voltage-deep);
   border-color: var(--color-voltage-deep);
+  border-radius: 999px;
   background: var(--color-voltage-deep);
   color: var(--color-cream);
+  font-size: var(--type-button-md-size);
 }
 
 /* Fix round 1, C1. This used to fill itself with `hairline` and write an
@@ -236,37 +456,28 @@
   color: var(--color-muted);
 }
 
-.exam-device-report li {
-  display: flex;
-  gap: 12px;
-  padding: 8px 0;
-}
-
-/* The non-colour carrier for every finding: the mark is read before the
-   colour is, and a candidate who cannot see the difference still can. */
-.exam-finding-mark {
-  font-family: var(--type-mono-sm-family);
-  font-size: var(--type-mono-sm-size);
-  font-weight: 700;
-}
-
-.exam-finding-label {
-  min-width: 9ch;
+/* No colour set here — `Start`'s own disabled styling already carries
+   that (contrast-usage.test.ts's two SURFACE entries for
+   `.exam-landing-actions button:disabled`), so this sentence inherits the
+   page's ink rather than adding a second colour-setting selector for the
+   same state. */
+.exam-device-blocked {
+  margin: 12px 0 0;
+  font-size: var(--type-body-sm-size);
   font-weight: 500;
+  line-height: var(--type-body-sm-line-height);
 }
 
-.exam-device-report li[data-ok="false"] .exam-finding-mark {
-  color: var(--color-flag-risk);
-}
-
-.exam-device-report li[data-ok="true"] .exam-finding-mark {
-  color: var(--color-state-answered);
+.exam-camera-blocked {
+  margin: 8px 0 0;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-line-height);
 }
 
 /* Phase 8.5 Task 4 (#209): Interactive Device Test Panel */
 .exam-device-test-panel {
   margin-top: var(--space-lg);
-  padding: var(--space-xl);
+  padding: var(--space-lg);
   border: 1px solid var(--color-hairline-strong);
   border-radius: var(--rounded-lg);
   background: var(--color-canvas);
@@ -358,44 +569,200 @@
 }
 
 .exam-landing-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
   padding: 24px 32px;
   border-top: 1px solid var(--color-hairline);
-  font-family: var(--type-mono-sm-family);
-  font-size: var(--type-mono-sm-size);
   color: var(--color-muted);
+  font-family: var(--font-body);
+  font-size: var(--type-body-sm-size);
 }
 
-/* ---- Registration (C-02, C-03) ---------------------------------------
+@media (max-width: 960px) {
+  .exam-landing-hero,
+  .exam-landing-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 
-   The screen between Start and the paper: the access gate, the consent
-   block and the one registration renderer, whose own rules are in
-   registration.css. Cream page, one canvas panel, one voltage-deep pill —
-   the same three facts the landing page states, so the candidate does not
-   meet a new product between pressing Start and answering question one.
+  .exam-landing-main,
+  .exam-landing-aside {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .exam-landing-aside {
+    position: static;
+  }
+}
+
+/* ---- Registration (C-02, C-03): the gate ------------------------------
+
+   The screen between Start and the paper. Split in two: the organiser's
+   half on the left, in the organiser's colour, carrying the test name,
+   the facts and the three steps between here and question one; the form
+   on the right, in one canvas panel, with the code set large in mono.
+   The same masthead as the landing page sits above both, so the
+   candidate does not meet a new product between pressing Start and
+   answering question one.
+
+   `--color-brand` is the organiser's `primary_colour` when the workspace
+   set one — `brandColourIssue` (`@pariksha/core`) refuses any value
+   under 4.5:1 against cream, which is what makes cream text on it legal
+   by construction. `contrast-usage.test.ts` audits the fallback pair,
+   cream on voltage-deep (5.66:1), the darkest the panel can be without
+   an organiser's colour.
 
    Nothing animates. */
 
 .exam-register {
-  width: 100%;
-  max-width: 760px;
-  margin: 0 auto;
-  padding: 32px;
+  --color-brand: var(--color-voltage-deep);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
 }
 
-.exam-register h1 {
-  margin: 0 0 24px;
+.exam-gate {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+}
+
+.exam-gate-brand {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 48px;
+  padding: 64px 48px;
+  background: var(--color-brand);
+  color: var(--color-cream);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+}
+
+.exam-gate-organiser {
+  margin: 0 0 16px;
+  color: var(--color-cream);
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-heading-sm-line-height);
+}
+
+.exam-gate-brand h1 {
+  margin: 0;
+  max-width: 16ch;
+  min-width: 0;
+  overflow-wrap: break-word;
+  color: var(--color-cream);
   font-family: var(--type-display-lg-family);
   font-size: var(--type-display-lg-size);
   font-weight: var(--type-display-lg-weight);
   line-height: var(--type-display-lg-line-height);
   letter-spacing: var(--type-display-lg-letter-spacing);
+  text-wrap: balance;
+}
+
+.exam-gate-facts {
+  margin: 24px 0 0;
+  max-width: 360px;
+}
+
+/* On the brand half every tone is cream — `muted` is an ink and would
+   vanish on a dark fill, and a cream mixed down for quietness would be a
+   pair the audit cannot measure. The hierarchy is size and weight. */
+.exam-gate-facts dt {
+  color: var(--color-cream);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+}
+
+.exam-gate-facts dd {
+  color: var(--color-cream);
+  font-size: var(--type-heading-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-gate-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  color: var(--color-cream);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
+}
+
+.exam-gate-steps li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: baseline;
+  counter-increment: step;
+}
+
+.exam-gate-steps li::before {
+  content: counter(step);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+}
+
+/* The current step: cream disc, brand numeral, and the weight. Two
+   carriers, so the step a candidate is on survives greyscale. */
+.exam-gate-steps li[aria-current="step"] {
+  font-weight: 500;
+}
+
+.exam-gate-steps li[aria-current="step"]::before {
+  border-color: transparent;
+  background: var(--color-cream);
+  color: var(--color-ink);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+}
+
+.exam-gate-plaque {
+  margin: 0;
+  color: var(--color-cream);
+  font-family: var(--font-body);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+}
+
+.exam-gate-plaque .exam-wordmark {
+  color: var(--color-cream);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+}
+
+.exam-gate-form {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 48px 32px;
 }
 
 /* The one live region on the screen, present and empty from first render.
    The ⚠ in the markup is the non-colour carrier; with no notice to show it
    has no box of its own, so an empty alert is not an empty bordered card. */
 .exam-register-notice {
-  margin: 0 0 16px;
+  margin: 0;
   max-width: 64ch;
   color: var(--color-flag-risk);
   font-family: var(--type-body-md-family);
@@ -405,6 +772,10 @@
   letter-spacing: var(--type-body-md-letter-spacing);
 }
 
+.exam-register-notice:empty {
+  display: none;
+}
+
 /* Canvas, which is what makes registration.css's `field-label`,
    `text-input` and `registration-form__*` read on the same ground here as
    they do inside the organiser's CardHairline. */
@@ -412,9 +783,9 @@
   display: flex;
   flex-direction: column;
   gap: 24px;
-  padding: 24px;
-  border: 1px solid var(--color-hairline);
-  border-radius: 6px;
+  padding: 32px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-lg);
   background: var(--color-canvas);
 }
 
@@ -425,18 +796,45 @@
   align-items: flex-start;
 }
 
+.exam-register-form-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .exam-register-form h2 {
   margin: 0;
-  max-width: 54ch;
+  max-width: 24ch;
   font-family: var(--type-heading-md-family);
   font-size: var(--type-heading-md-size);
   font-weight: var(--type-heading-md-weight);
   line-height: var(--type-heading-md-line-height);
+  letter-spacing: var(--type-heading-md-letter-spacing);
+  text-wrap: balance;
+}
+
+.exam-register-form-head p {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-md-size);
+  font-weight: var(--type-body-md-weight);
+  line-height: var(--type-body-md-line-height);
 }
 
 .exam-register-form .field,
 .exam-register-form .registration-form {
   width: 100%;
+}
+
+/* The way out when there is no code: a sentence, not a second control. */
+.exam-register-aside {
+  margin: 0;
+  max-width: 48ch;
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-body-sm-weight);
+  line-height: var(--type-body-sm-line-height);
 }
 
 .exam-consent {
@@ -477,10 +875,11 @@
 .exam-register-secondary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   min-height: 44px;
   padding: 0 24px;
   border: 1px solid var(--color-hairline-strong);
-  border-radius: 999px;
+  border-radius: var(--rounded-md);
   background: var(--color-canvas);
   text-decoration: none;
   cursor: pointer;
@@ -492,7 +891,10 @@
 }
 
 .exam-register-submit {
+  min-height: 52px;
+  padding: 0 40px;
   border-color: var(--color-voltage-deep);
+  border-radius: 999px;
   background: var(--color-voltage-deep);
   color: var(--color-cream);
 }
@@ -507,6 +909,17 @@
   border-color: var(--color-hairline-strong);
   background: var(--color-canvas);
   color: var(--color-muted);
+}
+
+@media (max-width: 960px) {
+  .exam-gate {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .exam-gate-brand {
+    gap: 32px;
+    padding: 32px 24px;
+  }
 }
 
 .exam-loading,
@@ -570,14 +983,106 @@
   --exam-ring: 3px;
 }
 
+/* One bar, three parts: the test and the attempt reference on the left,
+   the clocks in the centre, the tools and Submit on the right. The
+   question below it gets the width. */
 .exam-runner-bar {
   grid-column: 1 / -1;
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 16px;
+  min-height: 60px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--color-hairline-strong);
+}
+
+.exam-runner-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.exam-runner-test {
+  overflow: hidden;
+  font-family: var(--type-heading-sm-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-heading-sm-weight);
+  line-height: var(--type-body-sm-line-height);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exam-runner-who {
+  overflow: hidden;
+  color: var(--color-muted);
+  font-family: var(--type-mono-sm-family);
+  font-size: var(--type-mono-sm-size);
+  font-weight: var(--type-mono-sm-weight);
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.exam-runner-tools {
+  display: flex;
+  flex-wrap: nowrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* The disclosure that holds text size and contrast. A native <details>:
+   the panel is in the tab order only while it is open, and nothing here
+   animates. */
+.exam-view-menu {
+  position: relative;
+}
+
+.exam-view-menu-summary {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 16px;
+  border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-button-md-family);
+  font-size: var(--type-button-md-size);
+  font-weight: var(--type-button-md-weight);
+  list-style: none;
+  cursor: pointer;
+}
+
+.exam-view-menu-summary::-webkit-details-marker {
+  display: none;
+}
+
+.exam-view-menu[open] .exam-view-menu-summary {
+  border-color: var(--color-ink);
+}
+
+.exam-view-menu-panel {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 20;
+  min-width: 260px;
+  padding: 16px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-md);
+  background: var(--color-canvas);
+  box-shadow:
+    0 1px 2px rgb(from var(--color-ink) r g b / 0.06),
+    0 8px 24px rgb(from var(--color-ink) r g b / 0.1);
+}
+
+[dir="rtl"] .exam-view-menu-panel {
+  right: auto;
+  left: 0;
 }
 
 /* A skip control, visible the moment it has focus and out of the way
@@ -706,8 +1211,18 @@
   color: var(--color-voltage-deep);
 }
 
+/* For the ear: the chips already say it to the eye, and a sentence in
+   the middle of the bar is what pushed the tools onto a second row.
+   Clipped, not `display: none`, so a screen reader still hears each
+   warning as it passes. */
 .exam-clock-announce {
+  position: absolute;
+  width: 1px;
+  height: 1px;
   margin: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
   color: var(--color-ink-soft);
   font-size: var(--type-body-sm-size);
   font-weight: var(--type-body-sm-weight);
@@ -774,16 +1289,16 @@
 
 .exam-view-controls {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  margin-left: auto;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
 }
 
 .exam-font-scale {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
   margin: 0;
   padding: var(--space-base) var(--space-md);
   border: var(--exam-edge, 1px) solid var(--color-hairline-strong);
@@ -862,10 +1377,8 @@
 .exam-section-nav {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--color-hairline-strong);
 }
 
 .exam-section-tabs {
@@ -874,16 +1387,35 @@
   gap: 8px;
 }
 
+/* Section tabs as a tab row: a rule under the strip, the current one
+   underlined in ink and set bold — two carriers, no voltage. */
+.exam-section-tabs {
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--color-hairline-strong);
+}
+
 .exam-section-tab {
-  min-height: 36px;
+  min-height: 40px;
+  margin-bottom: -1px;
   padding: 0 12px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-muted);
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-button-md-weight);
+  white-space: nowrap;
 }
 
 .exam-section-tab.is-active {
-  border-color: var(--color-voltage);
-  border-width: 2px;
+  border-bottom-color: var(--color-ink);
+  background: transparent;
+  color: var(--color-ink);
+  font-size: var(--type-body-sm-size);
   font-weight: 700;
-  background: var(--color-cream);
 }
 
 .exam-section-tab.is-locked {
@@ -1026,9 +1558,9 @@
   max-height: calc(100vh - 48px);
   padding: var(--space-md);
   overflow-y: auto;
-  border: 1px solid var(--color-hairline-strong);
-  border-radius: var(--rounded-md);
-  background: var(--color-cream);
+  border: 1px solid var(--color-hairline);
+  border-radius: var(--rounded-lg);
+  background: var(--color-canvas);
 }
 
 .exam-palette-section {

@@ -38,6 +38,7 @@ import { acquireMedia, captureJpeg } from "../lib/camera";
 import { createSaveQueue, type SaveState } from "../lib/queue";
 import { Clock, anchorFrom, reanchor, type ClockAnchor } from "../components/exam/Clock";
 import { ExamRegistration, tokenFromUrl } from "../components/exam/Registration";
+import { ExamMast, useBrandColour } from "../components/exam/Mast";
 import { SubmitDialog } from "../components/exam/SubmitDialog";
 import { Receipt } from "../components/exam/Receipt";
 import { ResultCode } from "../components/exam/ResultCode";
@@ -440,218 +441,255 @@ export function ExamLanding({
     onStart?.(streamToPass);
   };
 
+  // The organiser's colour, when the workspace set one (`Mast.tsx`).
+  const brandRef = useBrandColour(test.branding.primaryColour);
+  const organiser = test.organiser ?? null;
+  // One device list, present from first render: the one computed on
+  // mount, replaced by the fresh report the moment "Check my device" runs.
+  // A candidate reads their device's standing beside Start instead of
+  // being handed a disabled button and a question.
+  const device = report ?? deviceStatus;
+  const latestStart = test.latestStartAt ?? test.closesAt;
+
   return (
-    <div className="exam-landing">
-      <header className="exam-landing-hero card-voltage">
-        {/* `branding.logo` is a media key, and the only route that can
-            serve one to a candidate is Task 7's attempt-scoped media route
-            — `GET /workspaces/:id/media/:key` keeps `banks.edit` (standing
-            decision 4). The key rides in the payload from today so that
-            task is a render, not a round trip; an <img> pointed at a route
-            that does not exist yet would be a broken image on the first
-            screen a candidate ever sees. */}
-        <h1>{test.name}</h1>
-      </header>
+    <div className="exam-landing" ref={brandRef}>
+      <ExamMast organiser={organiser} />
 
       <main className="exam-landing-body">
-        {/* On cream, not on the voltage field above it. Cream on voltage is
-            3.86:1 — legal for the 56px headline and illegal for anything at
-            reading size, which is precisely DESIGN.md's "one saturated
-            field and one sentence". */}
-        {test.description && <p className="exam-landing-lede">{test.description}</p>}
-
-        {notice && (
-          <p className="exam-notice" data-state={test.state}>
-            {notice}
-          </p>
-        )}
-
-        {test.branding.startMessage && (
-          <p className="exam-landing-message">{test.branding.startMessage}</p>
-        )}
-
-        <dl className="exam-facts">
-          <dt>Duration</dt>
-          <dd>{test.durationMinutes} minutes</dd>
-          <dt>Questions</dt>
-          <dd>{test.questionCount} questions</dd>
-          {test.opensAt !== null && (
-            <>
-              <dt>Opens</dt>
-              <dd>{formatInstant(test.opensAt, test.timezone)}</dd>
-            </>
+        <div className="exam-landing-hero">
+          <div>
+            <h1>{test.name}</h1>
+            {test.description && <p className="exam-landing-lede">{test.description}</p>}
+          </div>
+          {(test.opensAt !== null || latestStart !== null) && (
+            <dl className="exam-landing-when">
+              {test.opensAt !== null && (
+                <div>
+                  <dt>Opens</dt>
+                  <dd>{formatInstant(test.opensAt, test.timezone)}</dd>
+                </div>
+              )}
+              {latestStart !== null && (
+                <div>
+                  <dt>Latest start</dt>
+                  <dd>{formatInstant(latestStart, test.timezone)}</dd>
+                </div>
+              )}
+            </dl>
           )}
-          {test.closesAt !== null && (
-            <>
-              <dt>Closes</dt>
-              <dd>{formatInstant(test.closesAt, test.timezone)}</dd>
-            </>
-          )}
-        </dl>
+        </div>
 
-        <section className="exam-landing-sections">
-          <h2 id="exam-sections-heading">Sections</h2>
-          <ul aria-labelledby="exam-sections-heading">
-            {test.sections.map((section) => (
-              <li key={section.id}>
-                <span className="exam-section-title">{section.title}</span>
-                <span className="exam-section-count">{section.questionCount} questions</span>
-                {section.timeLimitMinutes !== null && (
-                  <span className="exam-section-limit">{section.timeLimitMinutes} minutes</span>
+        <div className="exam-landing-grid">
+          {/* First in the DOM, painted on the right: a candidate who tabs
+              meets the card before the reading, and the actions sit above
+              the requirements in document order. */}
+          <aside className="exam-landing-aside">
+            <div className="exam-ticket">
+              <div className="exam-ticket-head">
+                <h2>Your sitting</h2>
+              </div>
+
+              <dl className="exam-facts">
+                <div>
+                  <dt>Duration</dt>
+                  <dd>{test.durationMinutes} minutes</dd>
+                </div>
+                <div>
+                  <dt>Questions</dt>
+                  <dd>{test.questionCount} questions</dd>
+                </div>
+                {test.closesAt !== null && (
+                  <div>
+                    <dt>Closes</dt>
+                    <dd>{formatInstant(test.closesAt, test.timezone)}</dd>
+                  </div>
                 )}
-              </li>
-            ))}
-          </ul>
-        </section>
+              </dl>
 
-        {test.rules && (
-          <section className="exam-landing-rules">
-            <h2>Rules</h2>
-            <p>{test.rules}</p>
-          </section>
-        )}
+              {/* Present from first render rather than inserted with its
+                  content: a live region a screen reader has never seen is a
+                  live region it does not announce. */}
+              <div role="status" className="exam-device-report">
+                <ul>
+                  {device.findings.map((finding) => (
+                    <li key={finding.label} data-ok={finding.ok}>
+                      <span className="exam-finding-label">{finding.label}</span>
+                      <span className="exam-finding-detail">{finding.detail}</span>
+                      {/* The non-colour carrier: DESIGN.md's "colour is never
+                          the only carrier here". */}
+                      <span className="exam-finding-mark" aria-hidden="true">
+                        {finding.ok ? "OK" : "!"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
 
-        <div className="exam-landing-actions">
-          <button
-            type="button"
-            onClick={() => {
-              void handleCheckDevice();
-            }}
-          >
-            Check my device
-          </button>
-          {/* WCAG 2.5.3: the accessible name is a SUPERSET of the visible
-              label, never a replacement for it. "Start" alone is what the
-              eye wants on the one button that matters; a screen-reader
-              user who arrives at it out of context — from a button list,
-              say — needs to hear what is starting. */}
-          <button
-            type="button"
-            className="exam-start"
-            aria-label={`Start ${test.name}`}
-            aria-describedby="exam-device-blocked"
-            disabled={test.state !== "open" || refused}
-            onClick={() => {
-              void handleStartClick();
-            }}
-          >
-            Start
-          </button>
-          {/* WCAG 2.5.3 again: the name is a superset of the label, and
-              the label is what a candidate who has already sat this test
-              is looking for. */}
-          {onResult && (
-            <button
-              type="button"
-              className="exam-register-secondary"
-              aria-label={`See my result for ${test.name}`}
-              onClick={onResult}
-            >
-              See my result
-            </button>
-          )}
-        </div>
+              <div className="exam-landing-actions">
+                {/* Check, then start, then the way back in: the order a
+                    candidate reads, and the tab order the landing test
+                    pins. The check is quiet; the one button is Start. */}
+                <button
+                  type="button"
+                  className="exam-check-device"
+                  onClick={() => {
+                    void handleCheckDevice();
+                  }}
+                >
+                  Check my device
+                </button>
+                {/* WCAG 2.5.3: the accessible name is a SUPERSET of the
+                    visible label, never a replacement for it. "Start" alone
+                    is what the eye wants on the one button that matters; a
+                    screen-reader user who arrives at it out of context —
+                    from a button list, say — needs to hear what is
+                    starting. */}
+                <button
+                  type="button"
+                  className="exam-start"
+                  aria-label={`Start ${test.name}`}
+                  aria-describedby="exam-device-blocked"
+                  disabled={test.state !== "open" || refused}
+                  onClick={() => {
+                    void handleStartClick();
+                  }}
+                >
+                  Start
+                </button>
+                {/* WCAG 2.5.3 again: the name is a superset of the label,
+                    and the label is what a candidate who has already sat
+                    this test is looking for. */}
+                {onResult && (
+                  <button
+                    type="button"
+                    className="exam-register-secondary"
+                    aria-label={`See my result for ${test.name}`}
+                    onClick={onResult}
+                  >
+                    See my result
+                  </button>
+                )}
+              </div>
 
-        {/* A disabled control is not a reason — a candidate who cannot tell
-            `aria-disabled` from a slow network cannot do anything about
-            either. `aria-describedby` on Start ties this to the button's
-            accessible description, always, not only once refused — the
-            element itself is present from first render exactly like its
-            sibling below, and only its *contents* vary with `refused`, for
-            the same reason that one's comment gives: a live region a
-            screen reader has never seen is a live region it does not
-            announce. */}
-        <p id="exam-device-blocked" className="exam-device-blocked" role="status">
-          {refused &&
-            (refusedReason === "browser"
-              ? "This test requires a fully updated Chrome, Edge, Firefox or Safari. Please open this link in a supported browser."
-              : "This test must be taken on a desktop or laptop, not a phone or tablet. This test needs a laptop or desktop computer.")}
-        </p>
+              {/* A disabled control is not a reason — a candidate who cannot
+                  tell `aria-disabled` from a slow network cannot do anything
+                  about either. `aria-describedby` on Start ties this to the
+                  button's accessible description, always, not only once
+                  refused — the element itself is present from first render
+                  exactly like its sibling below, and only its *contents*
+                  vary with `refused`, for the same reason that one's comment
+                  gives: a live region a screen reader has never seen is a
+                  live region it does not announce. */}
+              <p id="exam-device-blocked" className="exam-device-blocked" role="status">
+                {refused &&
+                  (refusedReason === "browser"
+                    ? "This test requires a fully updated Chrome, Edge, Firefox or Safari. Please open this link in a supported browser."
+                    : "This test must be taken on a desktop or laptop, not a phone or tablet. This test needs a laptop or desktop computer.")}
+              </p>
 
-        {/* `P-05`/`Q2a`: the start gate's own live region, present from
-            first render for the same reason the device one above is —
-            mounted once, contents vary. Separate from `exam-device-blocked`
-            rather than sharing it: the two refusals are independent (a
-            compliant device and a denied camera can both be true at once)
-            and `aria-describedby` on Start already names the device one. */}
-        <p className="exam-camera-blocked" role="status">
-          {cameraError}
-        </p>
+              {/* `P-05`/`Q2a`: the start gate's own live region, present from
+                  first render for the same reason the device one above is —
+                  mounted once, contents vary. Separate from
+                  `exam-device-blocked` rather than sharing it: the two
+                  refusals are independent (a compliant device and a denied
+                  camera can both be true at once) and `aria-describedby` on
+                  Start already names the device one. */}
+              <p className="exam-camera-blocked" role="status">
+                {cameraError}
+              </p>
 
-        {/* Present from first render rather than inserted with its content:
-            a live region a screen reader has never seen is a live region it
-            does not announce. */}
-        <div role="status" className="exam-device-report">
-          {report && (
-            <ul>
-              {report.findings.map((finding) => (
-                <li key={finding.label} data-ok={finding.ok}>
-                  <span className="exam-finding-label">{finding.label}</span>
-                  {/* The non-colour carrier: DESIGN.md's "colour is never
-                      the only carrier here". */}
-                  <span className="exam-finding-mark" aria-hidden="true">
-                    {finding.ok ? "OK" : "!"}
-                  </span>
-                  <span className="exam-finding-detail">{finding.detail}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+              {deviceMediaOpen && (
+                <section className="exam-device-test-panel" aria-label="Device test preview">
+                  <h3>Device test</h3>
+                  {requiresCamera(test) &&
+                    deviceMediaStream &&
+                    deviceMediaStream.getVideoTracks().length > 0 && <CameraPreview stream={deviceMediaStream} />}
+                  {cameraNotice && (
+                    <p className="exam-camera-notice" role="status">
+                      {cameraNotice}
+                    </p>
+                  )}
+                  {requiresMicrophone(test) && deviceMediaStream && !micNotice && <MicMeter stream={deviceMediaStream} />}
+                  {micNotice && (
+                    <p className="exam-mic-notice" role="status">
+                      {micNotice}
+                    </p>
+                  )}
+                  <button type="button" className="exam-device-test-dismiss" onClick={handleDismissDeviceTest}>
+                    Dismiss
+                  </button>
+                </section>
+              )}
+            </div>
+          </aside>
 
-        {deviceMediaOpen && (
-          <section className="exam-device-test-panel" aria-label="Device test preview">
-            <h3>Device test</h3>
-            {requiresCamera(test) && deviceMediaStream && deviceMediaStream.getVideoTracks().length > 0 && (
-              <CameraPreview stream={deviceMediaStream} />
-            )}
-            {cameraNotice && (
-              <p className="exam-camera-notice" role="status">
-                {cameraNotice}
+          <div className="exam-landing-main">
+            {notice && (
+              <p className="exam-notice" data-state={test.state}>
+                {notice}
               </p>
             )}
-            {requiresMicrophone(test) && deviceMediaStream && !micNotice && (
-              <MicMeter stream={deviceMediaStream} />
-            )}
-            {micNotice && (
-              <p className="exam-mic-notice" role="status">
-                {micNotice}
-              </p>
-            )}
-            <button
-              type="button"
-              className="exam-device-test-dismiss"
-              onClick={handleDismissDeviceTest}
-            >
-              Dismiss
-            </button>
-          </section>
-        )}
 
-        {/* `Q1b`: the same sentences the runtime will enforce, so a
-            candidate who will be denied for having no camera learns it
-            before the timer starts rather than after. Empty for Off —
-            and for any test with every control turned off — so no
-            heading appears over nothing to list. */}
-        {test.proctoring.requirements.length > 0 && (
-          <section className="exam-landing-requirements">
-            <h2 id="exam-requirements-heading">Requirements</h2>
-            {/* `list-style: none` (DESIGN.md) drops list semantics in
-                WebKit and takes the accessible name with it — this list
-                only; the Sections list and the device-report list share
-                the same CSS and are out of scope here. */}
-            <ul role="list" aria-labelledby="exam-requirements-heading">
-              {test.proctoring.requirements.map((requirement) => (
-                <li key={requirement}>{requirement}</li>
-              ))}
-            </ul>
-          </section>
-        )}
+            {test.branding.startMessage && (
+              <div className="exam-landing-message">
+                <p>{test.branding.startMessage}</p>
+                {organiser && <p className="exam-landing-message-from">A note from {organiser}</p>}
+              </div>
+            )}
+
+            <section className="exam-landing-sections">
+              <h2 id="exam-sections-heading">Sections</h2>
+              <ul aria-labelledby="exam-sections-heading">
+                {test.sections.map((section, position) => (
+                  <li key={section.id}>
+                    <span className="exam-section-index" aria-hidden="true">
+                      {position + 1}
+                    </span>
+                    <span className="exam-section-title">{section.title}</span>
+                    <span className="exam-section-count">{section.questionCount} questions</span>
+                    {section.timeLimitMinutes !== null && (
+                      <span className="exam-section-limit">{section.timeLimitMinutes} minutes</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+
+            {test.rules && (
+              <section className="exam-landing-rules">
+                <h2>Rules</h2>
+                <p>{test.rules}</p>
+              </section>
+            )}
+
+            {/* `Q1b`: the same sentences the runtime will enforce, so a
+                candidate who will be denied for having no camera learns it
+                before the timer starts rather than after. Empty for Off —
+                and for any test with every control turned off — so no
+                heading appears over nothing to list. */}
+            {test.proctoring.requirements.length > 0 && (
+              <section className="exam-landing-requirements">
+                <h2 id="exam-requirements-heading">Before you begin</h2>
+                {/* `list-style: none` (DESIGN.md) drops list semantics in
+                    WebKit and takes the accessible name with it — this list
+                    only; the Sections list and the device-report list share
+                    the same CSS and are out of scope here. */}
+                <ul role="list" aria-labelledby="exam-requirements-heading">
+                  {test.proctoring.requirements.map((requirement) => (
+                    <li key={requirement}>{requirement}</li>
+                  ))}
+                </ul>
+              </section>
+            )}
+          </div>
+
+        </div>
       </main>
 
-      {test.branding.footerText && (
-        <footer className="exam-landing-footer">{test.branding.footerText}</footer>
-      )}
+      <footer className="exam-landing-footer">
+        {test.branding.footerText && <span>{test.branding.footerText}</span>}
+        <span>Conducted on Pariksha, an open-source exam platform</span>
+      </footer>
     </div>
   );
 }
@@ -666,6 +704,11 @@ type View =
   | {
       kind: "attempt";
       paper: AttemptPaper;
+      /** The landing payload the runner's bar names the test and the
+       *  organiser from. `null` when a resumed attempt could not re-read
+       *  it: the bar then carries the attempt reference alone, and nothing
+       *  else about the attempt depends on it. */
+      test: LandingPayload | null;
       /** `P-05`'s own stream, handed on to `ProctoringLayer` so its
        *  existing lifecycle effect is what stops the tracks when the
        *  attempt ends — never stopped right after the identity photo,
@@ -736,6 +779,7 @@ export function writeRegistrationToken(token: string): void {
 
 function AttemptView({
   paper,
+  test,
   client,
   onFinished,
   cameraStream,
@@ -743,6 +787,8 @@ function AttemptView({
   audioStream = null,
 }: {
   paper: AttemptPaper;
+  /** For the runner bar's heading (`View`'s own doc comment). */
+  test: LandingPayload | null;
   client: RunClient;
   /** Where the finish page comes from. The submission is owned here, not
    *  in `Runner`, because it is the thing that ends the attempt and
@@ -1054,6 +1100,7 @@ function AttemptView({
       )}
       <Runner
         paper={{ ...paper, responses, maxIndex }}
+        heading={test ? { organiser: test.organiser ?? null, name: test.name } : null}
         index={index}
         onIndex={setIndex}
         marked={marked}
@@ -1230,6 +1277,7 @@ export function ExamApp({ client }: { client: RunClient }) {
         setView({
           kind: "attempt",
           paper,
+          test,
           cameraStream,
           cameraUnavailable: false,
           audioStream,
@@ -1317,9 +1365,14 @@ export function ExamApp({ client }: { client: RunClient }) {
             resumedAudioStream = null;
           }
         }
+        // `test: null`: a resume never asks for the landing page (C-06,
+        // pinned by autosave.test.tsx) — the paper is already in hand, and
+        // the bar carries the attempt reference alone until the paper
+        // itself names the test.
         setView({
           kind: "attempt",
           paper: resumed,
+          test: null,
           cameraStream: resumedCameraStream,
           cameraUnavailable: resumedCameraUnavailable,
           audioStream: resumedAudioStream,
@@ -1365,6 +1418,7 @@ export function ExamApp({ client }: { client: RunClient }) {
     return (
       <AttemptView
         paper={view.paper}
+        test={view.test}
         client={client}
         cameraStream={view.cameraStream}
         cameraUnavailable={view.cameraUnavailable}

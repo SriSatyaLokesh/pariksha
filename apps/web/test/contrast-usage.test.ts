@@ -683,8 +683,18 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // declared on the <h1> (beside its own font-size) rather than on the
   // container, where a later paragraph would inherit it silently. This
   // entry is what stops that from being a comment nobody enforces.
-  ".exam-landing-hero h1": both("voltage"),
-  ".exam-facts dt": both("cream"),
+  // The head is on cream now (the organiser owns the masthead, the test
+  // name is a display heading in ink) and the facts moved into the admit
+  // card, which fills itself with canvas.
+  ".exam-mast-plaque": both("canvas"),
+  ".exam-wordmark": both("canvas"),
+  ".exam-landing-lede": both("cream"),
+  ".exam-landing-when dt": both("cream"),
+  ".exam-landing-message .exam-landing-message-from": both("canvas"),
+  ".exam-section-index": both("cream"),
+  ".exam-landing-requirements li": both("cream"),
+  ".exam-facts dt": both("canvas"),
+  ".exam-finding-detail": both("canvas"),
   ".exam-section-count, .exam-section-limit": both("cream"),
   // The pill CTA fills itself with voltage-deep (5.66:1 against cream),
   // not voltage — a button label is body text and gets the 4.5:1 bar.
@@ -696,8 +706,8 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".exam-landing-actions button:disabled": both("canvas"),
   // The device report sits on the page's own cream, like everything else
   // in `.exam-landing-body`.
-  '.exam-device-report li[data-ok="false"] .exam-finding-mark': both("cream"),
-  '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("cream"),
+  '.exam-device-report li[data-ok="false"] .exam-finding-mark': both("canvas"),
+  '.exam-device-report li[data-ok="true"] .exam-finding-mark': both("canvas"),
   ".exam-mic-notice": both("canvas"),
   ".exam-camera-notice": both("canvas"),
   ".exam-vu-meter-value": both("canvas"),
@@ -708,7 +718,32 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // page's own cream, above the panel; everything inside the panel is on
   // the canvas it fills itself with, which is the same ground the same
   // renderer is read on in the organiser app. -----------------------------
+  // The runner bar: the attempt reference and the view disclosure.
+  ".exam-runner-who": both("cream"),
+  ".exam-view-menu-summary": both("canvas"),
+  // Section tabs sit on the page's cream with no fill of their own.
+  ".exam-section-tab": both("cream"),
+  ".exam-section-tab.is-active": both("cream"),
   ".exam-register-notice": both("cream"),
+  // The organiser's half of the gate fills itself with `--color-brand`:
+  // the workspace's `primary_colour` when it set one, already held to
+  // 4.5:1 against cream by `brandColourIssue` (packages/core), else
+  // voltage-deep. The audit measures the fallback, which is the pair that
+  // ships when no organiser colour does; the organiser's own is AA by
+  // construction.
+  ".exam-gate-brand": both("voltage-deep"),
+  ".exam-gate-organiser": both("voltage-deep"),
+  ".exam-gate-brand h1": both("voltage-deep"),
+  ".exam-gate-facts dt": both("voltage-deep"),
+  ".exam-gate-facts dd": both("voltage-deep"),
+  ".exam-gate-steps": both("voltage-deep"),
+  ".exam-gate-plaque": both("voltage-deep"),
+  ".exam-gate-plaque .exam-wordmark": both("voltage-deep"),
+  // The current step's disc is cream with an ink numeral, whatever the
+  // organiser's colour behind it.
+  '.exam-gate-steps li[aria-current="step"]::before': both("cream"),
+  ".exam-register-form-head p": both("canvas"),
+  ".exam-register-aside": both("canvas"),
   ".exam-register-status": both("canvas"),
   ".exam-register-submit": both("voltage-deep"),
   ".exam-register-submit:disabled, .exam-register-secondary:disabled": both("canvas"),

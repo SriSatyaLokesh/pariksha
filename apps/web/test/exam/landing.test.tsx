@@ -16,6 +16,7 @@ const NOW = 1_760_000_000_000;
 
 const landingFixture: LandingPayload = {
   name: "Aptitude",
+  organiser: "Alpha Corp",
   description: "A 45-minute aptitude paper.",
   durationMinutes: 45,
   questionCount: 17,
@@ -239,9 +240,13 @@ it("a test that cannot be resolved says so rather than rendering an empty page",
   expect(await screen.findByRole("alert")).toHaveTextContent(/No such test\./);
 });
 
-it("DESIGN.md: the landing page keeps the voltage canvas", async () => {
+it("the landing head is the test name on cream, under the organiser's masthead", async () => {
   const { container } = await mount();
-  expect(container.querySelector(".exam-landing-hero")).toHaveClass("card-voltage");
+  // The head sits on cream now: the organiser is on the masthead and the
+  // test name is a display heading, not a vermilion wall (candidate
+  // anti-slop redesign). The class survives as the hero's own hook.
+  expect(container.querySelector(".exam-landing-hero")).not.toBeNull();
+  expect(container.querySelector(".exam-landing-hero h1")).toHaveTextContent("Aptitude");
 });
 
 it("the landing page has no axe violations", async () => {

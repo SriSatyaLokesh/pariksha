@@ -31,7 +31,7 @@ function declared(body: string, property: string): string | undefined {
 describe("Task 1: Hallmark stamp and typography anti-patterns (Rule 67 & Rule 64)", () => {
   describe("Hallmark stamp header", () => {
     it("starts with the required Hallmark stamp comment on line 1 of exam.css", () => {
-      const firstLine = RAW_EXAM_CSS.split("\n")[0].trim();
+      const firstLine = (RAW_EXAM_CSS.split("\n")[0] ?? "").trim();
       expect(firstLine).toBe("/* Hallmark · v2.0.0 · modern-minimal · candidate runtime */");
     });
 

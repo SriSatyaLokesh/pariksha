@@ -716,7 +716,7 @@ Deliberately deferred, and separate from the grounds above. A candidate-facing d
 
 Every component below is a cream-surface component. The marketing site left this set when it moved to the Signal ground, and the organiser is following it; what these now serve is the candidate's path — the start page, the registration form, the runner and the finish page — plus the cream screens still waiting their turn. The Signal ground's own components are not inventoried here.
 
-**`hero-section`** — Full-bleed `{colors.voltage}` canvas, 96×24px padding, square corners. Holds the h1 in cream, one lead sentence, and the cream pill CTA. Used on the test start page and the finish page — never behind a running attempt, and never on the Signal ground.
+**`hero-section`** — Full-bleed `{colors.voltage}` canvas, 96×24px padding, square corners. Holds the h1 in cream, one lead sentence, and the cream pill CTA. Used on the test start page and the finish page — never behind a running attempt, and never on the Signal ground. **Superseded on the start page** (2026-11-02, candidate anti-slop redesign): the landing is now an admit card on cream — the organiser's name on a masthead under a 4px line in `branding.primary_colour`, the test name as `{typography.display-lg}` in ink, and the facts, device standing and Start in a canvas card on the right. The registration gate splits the same way, organiser half in the brand colour. The finish page keeps the block.
 
 **`hero-heading`** — Cream on voltage at `{typography.display-xl}`. At 56px the 3.86:1 ratio clears AA for large text; this is the only place cream-on-voltage is legal.
 
