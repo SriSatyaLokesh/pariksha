@@ -700,6 +700,9 @@ const SURFACE: Record<string, SurfaceEntry> = {
   // not voltage — a button label is body text and gets the 4.5:1 bar.
   ".exam-landing-actions .exam-start": both("voltage-deep"),
   ".exam-landing-actions button:not(.exam-start)": both("canvas"),
+  ".exam-landing-actions button:not(.exam-start):hover": both("canvas"),
+  ".exam-device-head span": both("canvas"),
+  ".exam-landing-return": both("canvas"),
   // The disabled state fills itself with the page's own canvas in both
   // themes (fix round 1, C1 — it used to fill itself with `hairline`,
   // which the high-contrast block swaps to `ink`).

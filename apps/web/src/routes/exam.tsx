@@ -506,38 +506,43 @@ export function ExamLanding({
                 )}
               </dl>
 
-              {/* Present from first render rather than inserted with its
-                  content: a live region a screen reader has never seen is a
-                  live region it does not announce. */}
-              <div role="status" className="exam-device-report">
-                <ul>
-                  {device.findings.map((finding) => (
-                    <li key={finding.label} data-ok={finding.ok}>
-                      <span className="exam-finding-label">{finding.label}</span>
-                      <span className="exam-finding-detail">{finding.detail}</span>
-                      {/* The non-colour carrier: DESIGN.md's "colour is never
-                          the only carrier here". */}
-                      <span className="exam-finding-mark" aria-hidden="true">
-                        {finding.ok ? "OK" : "!"}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
               <div className="exam-landing-actions">
                 {/* Check, then start, then the way back in: the order a
                     candidate reads, and the tab order the landing test
-                    pins. The check is quiet; the one button is Start. */}
-                <button
-                  type="button"
-                  className="exam-check-device"
-                  onClick={() => {
-                    void handleCheckDevice();
-                  }}
-                >
-                  Check my device
-                </button>
+                    pins. The check is a quiet text control on the device
+                    rows it refreshes; the one button is Start. */}
+                <div className="exam-device-head">
+                  <span>This device</span>
+                  <button
+                    type="button"
+                    className="exam-check-device"
+                    onClick={() => {
+                      void handleCheckDevice();
+                    }}
+                  >
+                    Check my device
+                  </button>
+                </div>
+
+                {/* Present from first render rather than inserted with its
+                    content: a live region a screen reader has never seen is
+                    a live region it does not announce. */}
+                <div role="status" className="exam-device-report">
+                  <ul>
+                    {device.findings.map((finding) => (
+                      <li key={finding.label} data-ok={finding.ok}>
+                        <span className="exam-finding-label">{finding.label}</span>
+                        <span className="exam-finding-detail">{finding.detail}</span>
+                        {/* The non-colour carrier: DESIGN.md's "colour is never
+                            the only carrier here". */}
+                        <span className="exam-finding-mark" aria-hidden="true">
+                          {finding.ok ? "OK" : "!"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
                 {/* WCAG 2.5.3: the accessible name is a SUPERSET of the
                     visible label, never a replacement for it. "Start" alone
                     is what the eye wants on the one button that matters; a
@@ -558,16 +563,20 @@ export function ExamLanding({
                 </button>
                 {/* WCAG 2.5.3 again: the name is a superset of the label,
                     and the label is what a candidate who has already sat
-                    this test is looking for. */}
+                    this test is looking for. A sentence with a text control
+                    in it, not a third box under the one button. */}
                 {onResult && (
-                  <button
-                    type="button"
-                    className="exam-register-secondary"
-                    aria-label={`See my result for ${test.name}`}
-                    onClick={onResult}
-                  >
-                    See my result
-                  </button>
+                  <p className="exam-landing-return">
+                    Already sat this test?{" "}
+                    <button
+                      type="button"
+                      className="exam-register-secondary"
+                      aria-label={`See my result for ${test.name}`}
+                      onClick={onResult}
+                    >
+                      See my result
+                    </button>
+                  </p>
                 )}
               </div>
 
