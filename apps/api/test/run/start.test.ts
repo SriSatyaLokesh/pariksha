@@ -564,6 +564,8 @@ it("a timed first section's clock runs from the attempt's start", async () => {
 it("calculator comes from proctoring.overrides; legacy allow_calculator still reads as basic", async () => {
   expect((await paperOf(await startFresh("sets5"))).calculator).toBe("basic");
   expect((await paperOf(await startFresh("paper"))).calculator).toBe("off");
+  expect((await paperOf(await startFresh("sets5"))).allowCalculator).toBe(true); // old open pages
+  expect((await paperOf(await startFresh("paper"))).allowCalculator).toBe(false);
 });
 
 // Task 5 follow-up round: the bug this guards against is `proctoring`

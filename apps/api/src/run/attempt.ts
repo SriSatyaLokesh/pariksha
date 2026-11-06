@@ -227,6 +227,8 @@ export interface AttemptPaper {
   /** `docs/test-format.md` puts this in the `proctoring.overrides` table,
    *  not at the top level of the document. */
   calculator: CalculatorMode;
+  // ponytail: remove one release after the calculator-mode deploy; old open pages read this
+  allowCalculator: boolean;
   /** `AC-13`'s anchor: the browser's countdown is a delta from this. */
   serverNow: number;
   submittedAt: number | null;
@@ -258,7 +260,7 @@ export interface AttemptPaper {
 
 // --- reading the version's settings ------------------------------------
 
-// `allow_calculator` is a control under `proctoring.overrides`, and `Q1`
+// `calculator` (legacy `allow_calculator`) is a control under `proctoring.overrides`, and `Q1`
 // means every such control has one reader: `resolveProctoring`, never a
 // second ad-hoc path that reaches into the same key. `settings` arrives
 // `unknown` here (it is read straight off a stored row — `AttemptRecord.
@@ -591,6 +593,8 @@ export function paperFrom(input: {
     warnAtMinutes: [...(timing.warn_at_minutes ?? TIMING_DEFAULTS.warn_at_minutes)],
     lateSyncGraceSeconds: graceMsOf(input.settings) / 1000,
     calculator: calculatorOf(input.settings),
+    // ponytail: remove one release after the calculator-mode deploy; old open pages read this
+    allowCalculator: calculatorOf(input.settings) !== "off",
     serverNow: input.now,
     submittedAt: input.submittedAt,
     lockedAt: input.lockedAt,
