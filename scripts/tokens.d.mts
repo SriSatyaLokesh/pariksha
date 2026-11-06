@@ -4,6 +4,10 @@
 // TypeScript automatically as that module's types — same pattern as
 // prerender.d.mts beside prerender.mjs.
 
-export function hasIllegalColorLiteral(content: string): boolean;
+export function hasIllegalColorLiteral(
+  content: string,
+  options?: { allowKeywords?: readonly string[] },
+): boolean;
+export function allowedKeywordsFor(file: string): readonly string[];
 
 export const CSS_NAMED_COLORS: readonly string[];
