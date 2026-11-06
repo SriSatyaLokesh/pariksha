@@ -49,6 +49,7 @@ export const SCI_START: SciState = {
 // Same 12-significant-digit rule as Basic's show(), ported not imported
 // (Calculator.tsx stays untouched). Values are stored rounded too, so what
 // the candidate reads is what the next key computes with.
+// Full precision is carried everywhere; only the display is rounded to 12 digits.
 const r = (v: number): number => Number(v.toPrecision(12));
 const show = (v: number): string => (Number.isFinite(v) ? String(r(v)) : "Error");
 
@@ -82,7 +83,43 @@ const BIN: Record<Op, (a: number, b: number) => number> = {
   logy: (a, b) => Math.log(a) / Math.log(b),
 };
 
-const text = (ts: readonly Tok[]): string => ts.map((t) => t.t).join("");
+const SUB = "₀₁₂₃₄₅₆₇₈₉";
+/** Subscript for the logᵧx base, or null when a character has none. */
+function subscript(s: string): string | null {
+  let out = "";
+  for (const c of s) {
+    if (c >= "0" && c <= "9") out += SUB[Number(c)];
+    else if (c === "-" || c === "−") out += "₋";
+    else return null;
+  }
+  return out;
+}
+
+/** Top-line text. `x logᵧ y` reads `log₂(8)`, unless a following `^`/`logy`
+ * (right-associative) would make that function form misleading. */
+function text(ts: readonly Tok[]): string {
+  let out = "";
+  for (let i = 0; i < ts.length; i++) {
+    const t = ts[i] as Tok;
+    const op = ts[i + 1];
+    if (t.k === "n" && op?.k === "o" && op.o === "logy") {
+      const y = ts[i + 2];
+      const after = ts[i + 3];
+      if (y === undefined) {
+        out += `logᵧ(${t.t})`;
+        break;
+      }
+      if (y.k === "n" && !(after?.k === "o" && (after.o === "^" || after.o === "logy"))) {
+        const base = subscript(y.t);
+        out += base === null ? `log_(${y.t})(${t.t})` : `log${base}(${t.t})`;
+        i += 2;
+        continue;
+      }
+    }
+    out += t.t;
+  }
+  return out;
+}
 
 /** Shunting-yard over a bracket-free `n o n o n` list. NaN if malformed. */
 function evalFlat(ts: readonly Tok[]): number {
@@ -116,13 +153,14 @@ function closeLast(ts: readonly Tok[]): { rest: readonly Tok[]; v: number; text:
   const i = ts.map((t) => t.k).lastIndexOf("(");
   const inner = ts.slice(i + 1);
   const v = evalFlat(inner);
-  return Number.isFinite(v) ? { rest: ts.slice(0, i), v: r(v), text: `(${text(inner)})` } : null;
+  return Number.isFinite(v) ? { rest: ts.slice(0, i), v, text: `(${text(inner)})` } : null;
 }
 
 const snap = (v: number): number => (Math.abs(v) < 1e-12 ? 0 : v);
 
 function trig(kind: "sin" | "cos" | "tan", x: number, deg: boolean): number {
   if (deg) {
+    x = r(x); // computed arguments (e.g. 90.0000000000001) still snap
     if (x % 90 === 0) {
       // Exact values at multiples of 90 degrees.
       const k = (((x / 90) % 4) + 4) % 4;
@@ -162,7 +200,7 @@ const UNARY = {
   sq: [(x) => x * x, (i) => `(${i})²`],
   sqrt: [(x) => Math.sqrt(x), (i) => `√(${i})`],
   cbrt: [(x) => Math.cbrt(x), (i) => `∛(${i})`],
-  fact: [fact, (i) => `(${i})!`],
+  fact: [(x) => fact(r(x)), (i) => `(${i})!`],
   abs: [(x) => Math.abs(x), (i) => `|${i}|`],
   inv: [(x) => 1 / x, (i) => `1/(${i})`],
   neg: [(x) => -x, (i) => `−(${i})`],
@@ -175,7 +213,7 @@ const MEMKEYS: ReadonlySet<string> = new Set<SciKey>(["MC", "MR", "MS", "M+", "M
 
 function setEntry(s: SciState, v: number, label: string | null): SciState {
   if (!Number.isFinite(v)) return fail(s);
-  return { ...s, entry: show(v), val: r(v), typing: false, label, waiting: false, done: false };
+  return { ...s, entry: show(v), val: v, typing: false, label, waiting: false, done: false };
 }
 
 /** The entry as an operand: its top-line record if a key made it. */
@@ -189,7 +227,7 @@ const isFresh = (s: SciState): boolean =>
 /** Total: no key sequence throws, and nothing non-finite reaches the display. */
 export function sciReduce(s: SciState, key: SciKey): SciState {
   if (key === "C") return clear(s);
-  if (key === "deg" || key === "rad") return { ...s, angle: key };
+  if (key === "deg" || key === "rad") return { ...(s.entry === "Error" ? clear(s) : s), angle: key };
   if (s.entry === "Error") {
     // Memory keys do nothing on an Error; any other key recovers, then acts.
     return MEMKEYS.has(key) ? s : sciReduce(clear(s), key);
@@ -225,7 +263,7 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
     const v = entryVal(s);
     const m = key === "MS" ? v : key === "M+" ? s.memory + v : s.memory - v;
     return Number.isFinite(m)
-      ? { ...s, memory: r(m), entry: show(v), val: v, typing: false }
+      ? { ...s, memory: m, entry: show(v), val: v, typing: false }
       : fail(s);
   }
 
@@ -280,8 +318,11 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
 
 export function sciView(s: SciState): { expression: string; result: string; memory: boolean; angle: "deg" | "rad" } {
   const error = s.entry === "Error";
+  // A typed y after `x logᵧ` completes the `log₂(8)` form on the line.
+  const last = s.toks[s.toks.length - 1];
+  const open = last?.k === "o" && last.o === "logy" && !s.waiting;
   return {
-    expression: error ? "" : text(s.toks) + (s.label ?? ""),
+    expression: error ? "" : open ? text([...s.toks, operand(s)]) : text(s.toks) + (s.label ?? ""),
     result: error ? "Error" : entryText(s),
     memory: s.memory !== 0,
     angle: s.angle,

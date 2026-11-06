@@ -69,7 +69,8 @@ describe("scientific engine", () => {
   it("expression line", () => {
     const v = sciView(stateOf("3", "0", "sin", "+"));
     expect(v.expression).toBe("sin(30)+");
-    expect(sciView(stateOf("8", "logy", "2")).expression).toContain("log");
+    expect(sciView(stateOf("8", "logy", "2")).expression).toBe("log₂(8)");
+    expect(sciView(stateOf("8", "logy", "2", "+")).expression).toBe("log₂(8)+");
   });
 
   // Beyond the brief: the places a wrong key sequence could give a wrong answer.
@@ -92,6 +93,28 @@ describe("scientific engine", () => {
   it("deg/rad survive C and Error", () => {
     expect(run("rad", "C", "pi", "sin")).toBe("0");
     expect(run("rad", "1", "/", "0", "=", "C", "1", "asin")).toBe(String(Number((Math.PI / 2).toPrecision(12))));
+  });
+  it("full precision is carried; only the display rounds (rule 8)", () => {
+    expect(run("2", "sqrt", "sq")).toBe("2");
+    expect(run("2", "sqrt", "*", "2", "sqrt", "=")).toBe("2");
+    expect(run("3", "inv", "*", "3", "=")).toBe("1");
+    expect(run("(", "1", "/", "3", ")", "*", "3", "=")).toBe("1");
+    expect(run("1", "/", "3", "*", "3", "=")).toBe("1");
+    expect(run("pi", "-", "3", ".", "1", "4", "1", "5", "9", "=")).toBe(
+      String(Number((Math.PI - 3.14159).toPrecision(12))),
+    );
+    expect(run("rad", "pi", "/", "2", "=", "tan")).toBe("Error");
+  });
+  it("logy top line: subscript base, fallback, right-assoc stays infix", () => {
+    expect(sciView(stateOf("8", "logy")).expression).toBe("logᵧ(8)");
+    expect(sciView(stateOf("8", "logy", "2", ".", "5")).expression).toBe("log_(2.5)(8)");
+    expect(sciView(stateOf("8", "logy", "2", "^", "3")).expression).toBe("8 logᵧ 2^");
+  });
+  it("deg/rad on Error recover the display and set the angle", () => {
+    const d = sciView(stateOf("1", "/", "0", "=", "deg"));
+    expect(d.result).toBe("0");
+    expect(d.angle).toBe("deg");
+    expect(sciView(stateOf("1", "/", "0", "=", "rad"))).toMatchObject({ result: "0", angle: "rad" });
   });
   it("overflow and domain errors", () => {
     expect(run("1", "7", "1", "fact")).toBe("Error");
