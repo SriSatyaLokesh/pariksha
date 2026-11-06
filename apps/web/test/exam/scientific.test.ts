@@ -165,4 +165,21 @@ describe("scientific engine", () => {
     expect(run("1", "EXP", "2", "0", "=")).toBe("1e+20");
     expect(run("1", "EXP", "1", "4", "=")).toBe("100000000000000");
   });
+  it("a leading minus before ( negates the group", () => {
+    expect(run("-", "(", "2", "+", "3", ")", "=")).toBe("-5");
+    expect(run("(", "-", "(", "2", "+", "3", ")", ")", "=")).toBe("-5");
+    expect(run("2", "*", "(", "-", "(", "2", "+", "3", ")", ")", "=")).toBe("-10");
+    expect(run("neg", "(", "2", "+", "3", ")", "=")).toBe("-5");
+    expect(run("2", "^", "-", "(", "1", "+", "1", ")", "=")).toBe("0.25");
+  });
+  it("a second minus on a bare negative entry cancels it and never prints -0", () => {
+    expect(run("-", "-", "3", "=")).toBe("3");
+    expect(sciView(stateOf("-", "-", "3", "=")).expression).not.toContain("-0");
+    expect(sciView(stateOf("-", "(")).expression).not.toContain("-0");
+  });
+  it("mod is exact for large integer quotients", () => {
+    const d = (n: string) => n.split("") as SciKey[];
+    expect(run(...d("200000000001"), "mod", "2", "=")).toBe("1");
+    expect(run(...d("999999999998"), "mod", "7", "=")).toBe("6");
+  });
 });

@@ -12,7 +12,8 @@ export type SciKey =
   | "log" | "ln" | "exp" | "pow10" | "sq" | "sqrt" | "cbrt" | "fact" | "abs" | "inv" | "neg" | "pct"
   | "pi" | "e" | "MC" | "MR" | "MS" | "M+" | "M-" | "deg" | "rad";
 
-type Op = "+" | "-" | "*" | "/" | "mod" | "^" | "logy";
+// "ng" is internal: the `-1 ×` that a leading minus puts before `(`; it binds tighter than `^`.
+type Op = "+" | "-" | "*" | "/" | "mod" | "^" | "logy" | "ng";
 type Tok = { k: "n"; v: number; t: string } | { k: "o"; o: Op; t: string } | { k: "("; t: string };
 
 export interface SciState {
@@ -72,18 +73,20 @@ function entryVal(s: SciState): number {
   return Number.isNaN(n) ? 0 : n;
 }
 
-const GLYPH: Record<Op, string> = { "+": "+", "-": "−", "*": "×", "/": "÷", mod: " mod ", "^": "^", logy: " logᵧ " };
-const PREC: Record<Op, number> = { "+": 1, "-": 1, "*": 2, "/": 2, mod: 2, "^": 3, logy: 3 };
+const GLYPH: Record<Op, string> = { "+": "+", "-": "−", "*": "×", "/": "÷", mod: " mod ", "^": "^", logy: " logᵧ ", ng: "" };
+const PREC: Record<Op, number> = { "+": 1, "-": 1, "*": 2, "/": 2, mod: 2, "^": 3, logy: 3, ng: 4 };
 const BIN: Record<Op, (a: number, b: number) => number> = {
   "+": (a, b) => a + b,
   "-": (a, b) => a - b,
+  ng: (a, b) => a * b,
   "*": (a, b) => a * b,
   "/": (a, b) => a / b,
   // ponytail: JS remainder (sign of the dividend); no floored-mod variant.
-  // A quotient that is a whole number at 12 digits is exact (0.3 mod 0.1 = 0, not 0.1).
+  // A remainder within 1e-9 of 0 or of |b| is float noise (0.3 mod 0.1 = 0, not 0.1).
   mod: (a, b) => {
-    const q = r(a / b);
-    return Number.isInteger(q) && Math.abs(q) < 1e12 ? 0 : a % b;
+    const m = a % b;
+    const tol = Math.abs(b) * 1e-9;
+    return Math.abs(m) < tol || Math.abs(b) - Math.abs(m) < tol ? 0 : m;
   },
   "^": Math.pow,
   logy: (a, b) => Math.log(a) / Math.log(b),
@@ -279,6 +282,10 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
   if (OPKEYS.has(key)) {
     const op = key as Op;
     const tok: Tok = { k: "o", o: op, t: GLYPH[op] };
+    if (op === "-" && s.typing && s.entry === "-0") {
+      // `- -` cancels the sign (and keeps `-0` off the expression line).
+      return { ...s, entry: "0", typing: false, waiting: s.toks.length > 0 };
+    }
     if (op === "-" && (isFresh(s) || (s.waiting && s.toks[s.toks.length - 1]?.k === "("))) return startNegative(s);
     if (s.waiting) {
       // A second operator replaces the first; after `(` there is nothing to replace.
@@ -289,6 +296,11 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
   }
 
   if (key === "(") {
+    if (s.typing && s.entry === "-0") {
+      // A leading minus before a bracket negates the group: `-1 ×` ( .
+      const neg: Tok[] = [{ k: "n", v: -1, t: "−" }, { k: "o", o: "ng", t: "" }, { k: "(", t: "(" }];
+      return { ...s, toks: [...s.toks, ...neg], entry: "0", val: 0, typing: false, label: null, waiting: true, done: false };
+    }
     if (!(s.waiting || s.done || isFresh(s))) return s;
     return { ...s, toks: [...s.toks, { k: "(", t: "(" }], label: null, waiting: true, done: false };
   }

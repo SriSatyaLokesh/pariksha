@@ -1969,7 +1969,7 @@
 
 @media (max-width: 400px) {
   .exam-sci-key {
-    font-size: var(--type-caption-size);
+    font-size: var(--type-mono-sm-size);
   }
 }
 
