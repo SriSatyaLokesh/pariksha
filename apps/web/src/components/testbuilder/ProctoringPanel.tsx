@@ -4,6 +4,8 @@ import {
   snapshotCost,
   PROCTORING_DEFAULTS,
   PROFILE_LABEL,
+  CALCULATOR_MODES,
+  type CalculatorMode,
   type ProctoringOverrides,
   type ProctoringProfile,
   type ResolvedProctoring,
@@ -80,7 +82,6 @@ type BoolOverrideKey = Extract<
   | "require_camera"
   | "identity_photo"
   | "extra_monitor_check"
-  | "allow_calculator"
 >;
 
 type NumberOverrideKey = Extract<
@@ -97,7 +98,9 @@ type NumberOverrideKey = Extract<
  *  itself refuses to act on it (`Q3`). This table does not touch which
  *  value the checkbox renders — that stays `value.overrides.face_check`,
  *  per the brief's own standing ruling. */
-const OVERRIDE_KEY_TO_RESOLVED: Readonly<Record<keyof ProctoringOverrides, keyof ResolvedProctoring>> = {
+const OVERRIDE_KEY_TO_RESOLVED: Readonly<
+  Record<Exclude<keyof ProctoringOverrides, "allow_calculator">, keyof ResolvedProctoring>
+> = {
   desktop_only: "desktopOnly",
   require_fullscreen: "requireFullscreen",
   block_copy_paste: "blockCopyPaste",
@@ -113,7 +116,7 @@ const OVERRIDE_KEY_TO_RESOLVED: Readonly<Record<keyof ProctoringOverrides, keyof
   violation_action: "violationAction",
   camera_outage_seconds: "cameraOutageSeconds",
   multi_face_snapshots: "multiFaceSnapshots",
-  allow_calculator: "allowCalculator",
+  calculator: "calculator",
 };
 
 /**
@@ -131,9 +134,9 @@ const OVERRIDE_KEY_TO_RESOLVED: Readonly<Record<keyof ProctoringOverrides, keyof
 function overriddenKeys(
   profile: ProctoringProfile,
   overrides: ProctoringOverrides,
-): (keyof ProctoringOverrides)[] {
+): (keyof typeof OVERRIDE_KEY_TO_RESOLVED)[] {
   const defaults = PROCTORING_DEFAULTS[profile];
-  return (Object.keys(OVERRIDE_KEY_TO_RESOLVED) as (keyof ProctoringOverrides)[]).filter((key) => {
+  return (Object.keys(OVERRIDE_KEY_TO_RESOLVED) as (keyof typeof OVERRIDE_KEY_TO_RESOLVED)[]).filter((key) => {
     if (!(key in overrides) || overrides[key] === undefined) return false;
     return overrides[key] !== defaults[OVERRIDE_KEY_TO_RESOLVED[key]];
   });
@@ -260,7 +263,7 @@ export function ProctoringPanel({
    *  `aria-describedby` from this instance's `useId()` — never a named
    *  `role="group"` nothing here renders. `undefined` when `key` is not in
    *  `overridden`, so an unmarked field adds no id and no paragraph. */
-  function fieldMarker(key: keyof ProctoringOverrides): { id: string; node: ReactNode } | undefined {
+  function fieldMarker(key: keyof typeof OVERRIDE_KEY_TO_RESOLVED): { id: string; node: ReactNode } | undefined {
     if (!overridden.has(key)) return undefined;
     const id = `${ids}-${key}-marker`;
     return {
@@ -326,6 +329,7 @@ export function ProctoringPanel({
   const aiAudioCheckMarker = fieldMarker("ai_audio_check");
   const violationActionHelpId = `${ids}-violation_action-help`;
   const violationActionMarker = fieldMarker("violation_action");
+  const calculatorMarker = fieldMarker("calculator");
 
   const headingId = `${ids}-heading`;
 
@@ -427,7 +431,29 @@ export function ProctoringPanel({
           checkboxField("block_copy_paste", "Block copy and paste", resolved.blockCopyPaste),
           checkboxField("watermark", "Watermark the paper", resolved.watermark),
           checkboxField("extra_monitor_check", "Detect extra monitors", resolved.extraMonitorCheck),
-          checkboxField("allow_calculator", "Allow the calculator", resolved.allowCalculator),
+          <div className="field" key="calculator">
+            <label className="field-label" htmlFor={`${ids}-calculator`}>
+              Calculator
+            </label>
+            <select
+              className="text-input"
+              id={`${ids}-calculator`}
+              value={resolved.calculator}
+              onChange={(event) => {
+                const overrides: ProctoringOverrides = { ...value.overrides, calculator: event.target.value as CalculatorMode };
+                delete overrides.allow_calculator;
+                onChange({ profile: value.profile, overrides });
+              }}
+              aria-describedby={calculatorMarker?.id}
+            >
+              {CALCULATOR_MODES.map((mode) => (
+                <option key={mode} value={mode}>
+                  {mode === "off" ? "Off" : mode === "basic" ? "Basic" : "Scientific"}
+                </option>
+              ))}
+            </select>
+            {calculatorMarker?.node}
+          </div>,
         ],
         "These restrict what the candidate's browser lets them do while the test is open. They deter — none of them survive a photograph of the screen or a second device.",
       )}
