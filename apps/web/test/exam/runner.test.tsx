@@ -628,6 +628,28 @@ describe("the runner shell (C-04)", () => {
     expect(screen.getByRole("dialog", { name: /calculator/i })).toBeVisible();
   });
 
+  it("a scientific paper opens the scientific calculator, which keeps memory and angle across close and reopen", () => {
+    render(<Runner {...props({ paper: { ...paper, calculator: "scientific" } })} />);
+    activate(screen.getByRole("button", { name: /^calculator$/i }));
+    const dialog = screen.getByRole("dialog", { name: "Scientific calculator" });
+    activate(within(dialog).getByRole("button", { name: "5" }));
+    activate(within(dialog).getByRole("button", { name: /MS$/ }));
+    fireEvent.click(within(dialog).getByRole("radio", { name: "Rad" }));
+    activate(within(dialog).getByRole("button", { name: /close calculator/i }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    activate(screen.getByRole("button", { name: /^calculator$/i }));
+    expect(screen.getByLabelText("Memory holds a value")).toBeVisible();
+    expect(screen.getByRole("radio", { name: "Rad" })).toBeChecked();
+  });
+
+  it("a basic paper opens the basic calculator", () => {
+    render(<Runner {...props()} />);
+    activate(screen.getByRole("button", { name: /^calculator$/i }));
+    const dialog = screen.getByRole("dialog", { name: "Calculator" });
+    expect(dialog).toBeVisible();
+    expect(within(dialog).queryByRole("radio")).toBeNull();
+  });
+
   it("every control's accessible name is a superset of its visible label (WCAG 2.5.3)", () => {
     render(<Runner {...props()} />);
     const controls = screen.getAllByRole("button");

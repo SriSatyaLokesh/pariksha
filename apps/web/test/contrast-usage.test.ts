@@ -834,6 +834,13 @@ const SURFACE: Record<string, SurfaceEntry> = {
   ".exam-calc-key, .exam-calc-close": both("canvas"),
   ".exam-calc-title": both("canvas"),
   ".exam-calc-grip": both("canvas"),
+  ".exam-sci-display": both("canvas"),
+  ".exam-sci-expr": both("canvas"),
+  ".exam-sci-mem": both("canvas"),
+  ".exam-sci-modes": both("cream"),
+  ".exam-sci-key": both("canvas"),
+  ".exam-sci-clr": both("canvas"),
+  ".exam-sci-eq": both("royal-deep"),
   // Phase 7c Task 2 (`Q7a`): the proctoring warning count — cream fill,
   // the same pair `.exam-option-row.is-selected` already proves.
   ".exam-proctoring-count": both("cream"),

@@ -47,8 +47,7 @@ export const SCI_START: SciState = {
 };
 
 // Same 12-significant-digit rule as Basic's show(), ported not imported
-// (Calculator.tsx stays untouched). Values are stored rounded too, so what
-// the candidate reads is what the next key computes with.
+// (Calculator.tsx stays untouched).
 // Full precision is carried everywhere; only the display is rounded to 12 digits.
 const r = (v: number): number => Number(v.toPrecision(12));
 const show = (v: number): string => (Number.isFinite(v) ? String(r(v)) : "Error");

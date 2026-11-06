@@ -1869,6 +1869,129 @@
   margin-top: 8px;
 }
 
+/* ---- the scientific calculator: an 8-column keypad on Basic's shell ----- */
+
+.exam-sci {
+  width: 440px;
+  max-width: calc(100vw - 20px);
+}
+
+.exam-sci-display {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-timer-numeric-family);
+  font-size: var(--type-body-sm-size);
+  font-weight: 400;
+  font-variant-numeric: var(--type-timer-numeric-font-variant-numeric);
+  text-align: right;
+}
+
+.exam-sci-expr {
+  min-height: 1.4em;
+  overflow-x: auto;
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  white-space: nowrap;
+}
+
+.exam-sci-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.exam-sci-mem {
+  color: var(--color-ink-soft);
+  font-size: var(--type-body-sm-size);
+  font-weight: 700;
+}
+
+.exam-sci-result {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  font-size: var(--type-timer-numeric-size);
+  font-weight: 600;
+}
+
+.exam-sci-modes {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--color-ink);
+  font-size: var(--type-body-sm-size);
+}
+
+.exam-sci-angle {
+  display: flex;
+  gap: 12px;
+}
+
+.exam-sci-angle label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.exam-sci-memory {
+  display: flex;
+  gap: 4px;
+}
+
+.exam-sci-keys {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 5px;
+}
+
+.exam-sci-key {
+  min-width: 24px;
+  min-height: 32px;
+  padding: 0 2px;
+  border: 1px solid var(--color-hairline-strong);
+  border-radius: var(--rounded-sm);
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--type-mono-md-family);
+  font-size: var(--type-body-sm-size);
+  cursor: pointer;
+}
+
+.exam-sci-mem-key {
+  min-height: 28px;
+  padding: 0 6px;
+}
+
+.exam-sci-fn {
+  background: var(--color-cream);
+}
+
+.exam-sci-num {
+  font-weight: 600;
+}
+
+.exam-sci-clr {
+  color: var(--color-flag-risk);
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+}
+
+.exam-sci-eq {
+  grid-column: span 2;
+  border-color: var(--color-royal-deep);
+  background: var(--color-royal-deep);
+  color: var(--color-canvas);
+  font-size: var(--type-body-sm-size);
+  font-weight: 700;
+}
+
 /* DESIGN.md: focus rings are 2px, 3px in high contrast, and never removed.
    A candidate driving this screen from the keyboard has to be able to see
    where they are. */
