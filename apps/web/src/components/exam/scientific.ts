@@ -50,7 +50,9 @@ export const SCI_START: SciState = {
 // (Calculator.tsx stays untouched).
 // Full precision is carried everywhere; only the display is rounded to 12 digits.
 const r = (v: number): number => Number(v.toPrecision(12));
-const show = (v: number): string => (Number.isFinite(v) ? String(r(v)) : "Error");
+// From 1e15 up, e notation with 12 significant digits and no trailing zeros ("1e+20").
+const show = (v: number): string =>
+  !Number.isFinite(v) ? "Error" : Math.abs(v) >= 1e15 ? v.toExponential(11).replace(/\.?0+e/, "e") : String(r(v));
 
 const clear = (s: SciState): SciState => ({ ...SCI_START, angle: s.angle, memory: s.memory });
 const fail = (s: SciState): SciState => ({ ...clear(s), entry: "Error" });
@@ -77,7 +79,12 @@ const BIN: Record<Op, (a: number, b: number) => number> = {
   "-": (a, b) => a - b,
   "*": (a, b) => a * b,
   "/": (a, b) => a / b,
-  mod: (a, b) => a % b, // ponytail: JS remainder (sign of the dividend); no floored-mod variant
+  // ponytail: JS remainder (sign of the dividend); no floored-mod variant.
+  // A quotient that is a whole number at 12 digits is exact (0.3 mod 0.1 = 0, not 0.1).
+  mod: (a, b) => {
+    const q = r(a / b);
+    return Number.isInteger(q) && Math.abs(q) < 1e12 ? 0 : a % b;
+  },
   "^": Math.pow,
   logy: (a, b) => Math.log(a) / Math.log(b),
 };
@@ -223,6 +230,9 @@ function operand(s: SciState): Tok {
 const isFresh = (s: SciState): boolean =>
   s.entry === "0" && !s.typing && s.toks.length === 0 && s.label === null && !s.done;
 
+/** A sign pressed where an operand is due starts a negative entry (`-0`; digits make it `-3`). */
+const startNegative = (s: SciState): SciState => ({ ...s, entry: "-0", typing: true, waiting: false, label: null, done: false });
+
 /** Total: no key sequence throws, and nothing non-finite reaches the display. */
 export function sciReduce(s: SciState, key: SciKey): SciState {
   if (key === "C") return clear(s);
@@ -235,8 +245,8 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
   if (/^\d$/.test(key)) {
     if (!s.typing) return { ...s, entry: key, typing: true, label: null, waiting: false, done: false };
     const [mant = "", expo] = s.entry.split("e");
-    // 15 mantissa digits / 3 exponent digits keep typed numbers finite.
-    if (expo === undefined ? mant.replace(/[-.]/g, "").length >= 15 : expo.replace("-", "").length >= 3) return s;
+    // 12 mantissa digits (what a result shows) / 3 exponent digits keep typed numbers finite.
+    if (expo === undefined ? mant.replace(/[-.]/g, "").length >= 12 : expo.replace("-", "").length >= 3) return s;
     const entry = expo === undefined ? mant.replace(/^(-?)0$/, "$1") + key : `${s.entry}${key}`;
     return Number.isFinite(Number(entry)) ? { ...s, entry } : fail(s);
   }
@@ -269,6 +279,7 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
   if (OPKEYS.has(key)) {
     const op = key as Op;
     const tok: Tok = { k: "o", o: op, t: GLYPH[op] };
+    if (op === "-" && (isFresh(s) || (s.waiting && s.toks[s.toks.length - 1]?.k === "("))) return startNegative(s);
     if (s.waiting) {
       // A second operator replaces the first; after `(` there is nothing to replace.
       return s.toks[s.toks.length - 1]?.k === "o" ? { ...s, toks: [...s.toks.slice(0, -1), tok] } : s;
@@ -302,6 +313,7 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
 
   if (key in UNARY) {
     const [fn, label] = UNARY[key as UnaryKey];
+    if (key === "neg" && (s.waiting || isFresh(s))) return startNegative(s);
     if (key === "neg" && s.typing) {
       // Flip the sign of what is being typed (of the exponent once EXP is pressed).
       const entry = s.entry.includes("e")

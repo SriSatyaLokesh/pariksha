@@ -142,4 +142,27 @@ describe("scientific engine", () => {
       expect(expression).not.toMatch(/NaN|undefined|Infinity/);
     }
   });
+  it("a negative can start an operand: after ( , after an operator, at the start", () => {
+    expect(run("2", "*", "(", "-", "3", ")", "=")).toBe("-6");
+    expect(run("2", "+", "(", "neg", "3", ")", "=")).toBe("-1");
+    expect(run("2", "^", "neg", "3", "=")).toBe("0.125");
+    expect(run("neg", "3", "*", "2", "=")).toBe("-6");
+    expect(run("-", "3", "+", "5", "=")).toBe("2");
+    expect(run("3", "neg")).toBe("-3");
+    expect(run("2", "*", "-", "3", "=")).toBe("-1"); // GATE: second operator replaces the first
+  });
+  it("mod is exact for decimals", () => {
+    expect(run("0", ".", "3", "mod", "0", ".", "1", "=")).toBe("0");
+    expect(run("1", "mod", "0", ".", "1", "=")).toBe("0");
+    expect(run("1", "2", ".", "5", "mod", "0", ".", "1", "=")).toBe("0");
+    expect(run("1", "7", "mod", "5", "=")).toBe("2");
+    expect(run("7", ".", "5", "mod", "2", "=")).toBe("1.5");
+  });
+  it("typed mantissa is capped at 12 digits", () => {
+    expect(run(..."1234567890123".split("") as SciKey[])).toBe("123456789012");
+  });
+  it("very large results use e notation", () => {
+    expect(run("1", "EXP", "2", "0", "=")).toBe("1e+20");
+    expect(run("1", "EXP", "1", "4", "=")).toBe("100000000000000");
+  });
 });

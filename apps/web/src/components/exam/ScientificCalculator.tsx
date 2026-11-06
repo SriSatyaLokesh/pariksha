@@ -61,12 +61,12 @@ export function ScientificCalculator({
   onClose,
 }: {
   state: SciState;
-  onState: (next: SciState) => void;
+  onState: (next: SciState | ((s: SciState) => SciState)) => void;
   onClose: () => void;
 }) {
   const view = sciView(state);
   const press = (key: SciKey) => {
-    onState(sciReduce(state, key));
+    onState((s) => sciReduce(s, key));
   };
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const dragRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
