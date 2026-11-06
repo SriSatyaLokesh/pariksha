@@ -1873,7 +1873,9 @@
 
 .exam-sci {
   width: 440px;
-  max-width: calc(100vw - 20px);
+  max-width: calc(100vw - 42px);
+  max-height: calc(100vh - 42px);
+  overflow-y: auto;
 }
 
 .exam-sci-display {
@@ -1922,6 +1924,7 @@
 .exam-sci-modes {
   display: flex;
   justify-content: space-between;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;

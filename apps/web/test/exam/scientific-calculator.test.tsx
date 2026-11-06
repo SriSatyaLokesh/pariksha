@@ -77,6 +77,8 @@ describe("the scientific calculator", () => {
     open();
     press("5", "0", "%");
     expect(result()).toBe("0.5");
+    press("c", "(", "2", "+", "3", ")", "*", "2", "Enter");
+    expect(result()).toBe("10");
   });
 
   it("Enter on a focused key is that key's own activation", () => {

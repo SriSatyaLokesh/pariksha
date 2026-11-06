@@ -634,12 +634,19 @@ describe("the runner shell (C-04)", () => {
     const dialog = screen.getByRole("dialog", { name: "Scientific calculator" });
     activate(within(dialog).getByRole("button", { name: "5" }));
     activate(within(dialog).getByRole("button", { name: /MS$/ }));
+    activate(within(dialog).getByRole("button", { name: "Sine sin" }));
+    const shown = within(dialog).getByRole("status").textContent;
+    const line = dialog.querySelector(".exam-sci-expr")?.textContent;
+    expect(line).toBe("sin(5)");
     fireEvent.click(within(dialog).getByRole("radio", { name: "Rad" }));
     activate(within(dialog).getByRole("button", { name: /close calculator/i }));
     expect(screen.queryByRole("dialog")).toBeNull();
     activate(screen.getByRole("button", { name: /^calculator$/i }));
     expect(screen.getByLabelText("Memory holds a value")).toBeVisible();
     expect(screen.getByRole("radio", { name: "Rad" })).toBeChecked();
+    const back = screen.getByRole("dialog", { name: "Scientific calculator" });
+    expect(within(back).getByRole("status").textContent).toBe(shown);
+    expect(back.querySelector(".exam-sci-expr")?.textContent).toBe("sin(5)");
   });
 
   it("a basic paper opens the basic calculator", () => {
