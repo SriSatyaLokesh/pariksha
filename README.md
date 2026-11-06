@@ -59,7 +59,7 @@ You can test the candidate examination experience right now in your browser with
 
 - **12 Question Types**: Single and multiple choice, true/false, fill-in-the-blank (`{{b1}}` and `[[b1]]`), numeric with tolerance, assertion–reason, matching (with multi-option mapping), ordering, select exactly K, and written responses.
 - **Timed Sections**: 15 minutes total duration with 3 distinct 5-minute sections (Computer Science Fundamentals, Algorithms & Quantitative Analysis, Distributed Systems).
-- **Floating Draggable Calculator**: A lightweight 4-function calculator modal (`z-index: 100`) with boundary-clamped dragging and arrow-key nudging that never gets obscured under question content.
+- **Floating Draggable Calculator**: Set per test as Off, Basic (four-function) or Scientific (GATE-style: trig, logs, powers, memory, Deg/Rad). The modal (`z-index: 100`) has boundary-clamped dragging and arrow-key nudging, so it never gets obscured under question content.
 - **Client-Side Proctoring**: Fullscreen lock, watermarking, copy-paste blocking, and dual-monitor detection with a 3-violation escalation limit and automatic local submission.
 - **Instant Client-Side Grading**: Scored locally in pure TypeScript with instant feedback and answer review.
 

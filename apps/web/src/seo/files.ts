@@ -51,7 +51,7 @@ export function buildLlmsTxt(siteUrl: string): string {
 > ${META_DESCRIPTION}
 
 - [Pariksha](${home}): what it is, how running an exam works, what it costs
-- [Interactive Live Demo](${home}exam?demo=true): test-drive the candidate exam runtime (12 question types, floating calculator, proctoring, access code DEMO)
+- [Interactive Live Demo](${home}exam?demo=true): test-drive the candidate exam runtime (12 question types, floating scientific calculator, proctoring, access code DEMO)
 - [Repository](https://github.com/SriSatyaLokesh/pariksha): source, issues, the build
 - [Deployment Guide](https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/deployment.md): multi-target deployment (Cloudflare serverless, Docker SQLite, Docker PostgreSQL 16 + MinIO S3 cluster, on-premise air-gapped LAN)
 - [Quickstart](https://github.com/SriSatyaLokesh/pariksha/blob/main/docs/quickstart.md): 5-minute setup

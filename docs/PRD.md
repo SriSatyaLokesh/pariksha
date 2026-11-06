@@ -273,7 +273,7 @@ Which checks run depends on the test's proctoring profile. With Off, the device,
   - Previous, Next, Mark for review, Clear answer
   - overall and section countdowns
   - font-size and high-contrast controls
-  - optional on-screen calculator, set per test
+  - optional on-screen calculator, set per test: Off, Basic (four-function) or Scientific (GATE-style)
 - **C-05 Saving.** Each change is saved within 2 seconds. Offline changes are queued in the browser and synced on reconnect, with a banner showing Saving, Saved or Offline.
 - **C-06 Resume.** After a crash or refresh, the same browser resumes the attempt with the clock still running. A different device needs a proctor unlock.
 - **C-07 Time.** Warnings at 10 and 2 minutes (configurable). Sections auto-advance when their time ends. The whole attempt auto-submits at zero.
