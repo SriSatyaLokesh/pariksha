@@ -170,7 +170,7 @@ describe("scientific engine", () => {
     expect(run("(", "-", "(", "2", "+", "3", ")", ")", "=")).toBe("-5");
     expect(run("2", "*", "(", "-", "(", "2", "+", "3", ")", ")", "=")).toBe("-10");
     expect(run("neg", "(", "2", "+", "3", ")", "=")).toBe("-5");
-    expect(run("2", "^", "-", "(", "1", "+", "1", ")", "=")).toBe("0.25");
+    expect(run("2", "^", "neg", "(", "1", "+", "1", ")", "=")).toBe("0.25");
   });
   it("a second minus on a bare negative entry cancels it and never prints -0", () => {
     expect(run("-", "-", "3", "=")).toBe("3");
