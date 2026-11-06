@@ -262,7 +262,7 @@ export function Runner({
         <div className="exam-runner-clock">{clockSlot}</div>
         <div className="exam-runner-tools">
           <div className="exam-runner-banner">{bannerSlot}</div>
-          {paper.allowCalculator && (
+          {paper.calculator !== "off" && (
             <button
               type="button"
               className="exam-calc-open"

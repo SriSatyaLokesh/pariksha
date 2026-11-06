@@ -75,7 +75,7 @@ function paperFixture(opts: { proctoring: ResolvedProctoring }): AttemptPaper {
     sectionRemainingMs: null,
     warnAtMinutes: [10, 2],
     lateSyncGraceSeconds: 30,
-    allowCalculator: false,
+    calculator: "off",
     serverNow: NOW,
     submittedAt: null,
     lockedAt: null,

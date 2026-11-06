@@ -29,7 +29,7 @@
  * carried for the screens branch is gone with them.
  */
 
-import type { QuestionType, ResolvedProctoring, ResponseValue } from "@pariksha/core";
+import type { CalculatorMode, QuestionType, ResolvedProctoring, ResponseValue } from "@pariksha/core";
 
 /**
  * One question as a candidate sees it: the prompt and the choices, and
@@ -103,7 +103,7 @@ export interface AttemptPaper {
   sectionRemainingMs: number | null;
   warnAtMinutes: number[];
   lateSyncGraceSeconds: number;
-  allowCalculator: boolean;
+  calculator: CalculatorMode;
   serverNow: number;
   submittedAt: number | null;
   /** Phase 7e Task 3 (`E-R1`): mirrors `apps/api/src/run/attempt.ts`'s own

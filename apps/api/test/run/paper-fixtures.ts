@@ -198,7 +198,7 @@ export async function seedAttemptTests(deps: AppDeps, workspaceId: string): Prom
   });
 
   // Five sets, round robin — and the one test that turns the calculator
-  // on, so `allowCalculator` is proved in both directions.
+  // on, so `calculator` is proved in both directions.
   await seedTest(deps, workspaceId, {
     name: "Five sets",
     slug: "sets5",

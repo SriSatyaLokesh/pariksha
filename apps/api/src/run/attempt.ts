@@ -67,6 +67,7 @@ import {
   resolveProctoring,
   type AttemptLayout,
   type NavigationMode,
+  type CalculatorMode,
   type PassageGroup,
   type Question,
   type ResolvedProctoring,
@@ -225,7 +226,7 @@ export interface AttemptPaper {
   lateSyncGraceSeconds: number;
   /** `docs/test-format.md` puts this in the `proctoring.overrides` table,
    *  not at the top level of the document. */
-  allowCalculator: boolean;
+  calculator: CalculatorMode;
   /** `AC-13`'s anchor: the browser's countdown is a delta from this. */
   serverNow: number;
   submittedAt: number | null;
@@ -275,7 +276,7 @@ export interface AttemptPaper {
 export const resolvedProctoringOf = (settings: unknown): ResolvedProctoring =>
   resolveProctoring((settings as { proctoring?: Test["proctoring"] } | undefined)?.proctoring);
 
-const allowCalculator = (settings: unknown): boolean => resolvedProctoringOf(settings).allowCalculator;
+const calculatorOf = (settings: unknown): CalculatorMode => resolvedProctoringOf(settings).calculator;
 
 // --- refusals ----------------------------------------------------------
 
@@ -589,7 +590,7 @@ export function paperFrom(input: {
     sectionRemainingMs: clock.sectionRemainingMs,
     warnAtMinutes: [...(timing.warn_at_minutes ?? TIMING_DEFAULTS.warn_at_minutes)],
     lateSyncGraceSeconds: graceMsOf(input.settings) / 1000,
-    allowCalculator: allowCalculator(input.settings),
+    calculator: calculatorOf(input.settings),
     serverNow: input.now,
     submittedAt: input.submittedAt,
     lockedAt: input.lockedAt,

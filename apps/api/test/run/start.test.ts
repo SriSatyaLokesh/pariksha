@@ -561,9 +561,9 @@ it("a timed first section's clock runs from the attempt's start", async () => {
   expect(paper.sectionRemainingMs).toBe(15 * 60_000);
 });
 
-it("allowCalculator comes from proctoring.overrides, in both directions", async () => {
-  expect((await paperOf(await startFresh("sets5"))).allowCalculator).toBe(true);
-  expect((await paperOf(await startFresh("paper"))).allowCalculator).toBe(false);
+it("calculator comes from proctoring.overrides; legacy allow_calculator still reads as basic", async () => {
+  expect((await paperOf(await startFresh("sets5"))).calculator).toBe("basic");
+  expect((await paperOf(await startFresh("paper"))).calculator).toBe("off");
 });
 
 // Task 5 follow-up round: the bug this guards against is `proctoring`
@@ -573,7 +573,7 @@ it("allowCalculator comes from proctoring.overrides, in both directions", async 
 // has to survive resolution into the object this route actually ships.
 it("/start's payload carries proctoring, resolved from the version's settings", async () => {
   const paper = await paperOf(await startFresh("sets5"));
-  expect(paper.proctoring.allowCalculator).toBe(true);
+  expect(paper.proctoring.calculator).toBe("basic");
   // A just-minted attempt's count can only ever be zero (`GET /attempt`
   // is the one route that overrides it with a real one, on resume).
   expect(paper.violations).toBe(0);

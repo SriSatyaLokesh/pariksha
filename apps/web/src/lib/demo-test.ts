@@ -153,7 +153,7 @@ export const DEMO_PROCTORING_CONFIG: ResolvedProctoring = {
   watermark: true,
   blockCopyPaste: true,
   extraMonitorCheck: true,
-  allowCalculator: true,
+  calculator: "basic",
   violationLimit: 3,
   violationAction: "warn_then_flag",
 };
@@ -169,7 +169,7 @@ export const DEMO_PAPER_FIXTURE: AttemptPaper = {
   sectionRemainingMs: 5 * 60_000,
   warnAtMinutes: [5, 1],
   lateSyncGraceSeconds: 60,
-  allowCalculator: true,
+  calculator: "basic",
   serverNow: Date.now(),
   submittedAt: null,
   lockedAt: null,

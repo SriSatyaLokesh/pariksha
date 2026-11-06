@@ -34,7 +34,7 @@ const MOCK_PAPER: AttemptPaper = {
   sectionRemainingMs: null,
   warnAtMinutes: [5],
   lateSyncGraceSeconds: 30,
-  allowCalculator: false,
+  calculator: "off",
   serverNow: Date.now(),
   submittedAt: null,
   lockedAt: null,

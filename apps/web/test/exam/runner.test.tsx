@@ -73,18 +73,18 @@ const paper: AttemptPaper = {
   sectionRemainingMs: 15 * 60_000,
   warnAtMinutes: [10, 5],
   lateSyncGraceSeconds: 120,
-  allowCalculator: true,
+  calculator: "basic",
   serverNow: NOW,
   submittedAt: null,
   lockedAt: null,
-  // Whole-branch review (point 7, minor): `allowCalculator` above and
-  // `proctoring.allowCalculator` are the same fact twice (`paperFrom`
+  // Whole-branch review (point 7, minor): `calculator` above and
+  // `proctoring.calculator` are the same fact twice (`paperFrom`
   // derives both from one `resolveProctoring` call) — `off`'s own
-  // `allowCalculator` is `false`, which this fixture's top-level `true`
+  // `calculator` is `"off"`, which this fixture's top-level `"basic"`
   // disagreed with, a paper the server could never actually produce. A
   // real resolution can still override just this one key regardless of
   // profile (`allow_calculator`), which is what this is.
-  proctoring: { ...PROCTORING_DEFAULTS.off, allowCalculator: true },
+  proctoring: { ...PROCTORING_DEFAULTS.off, calculator: "basic" },
   violations: 0,
 };
 
@@ -618,7 +618,7 @@ describe("the runner shell (C-04)", () => {
   });
 
   it("the calculator appears only when the test allows it", () => {
-    render(<Runner {...props({ paper: { ...paper, allowCalculator: false } })} />);
+    render(<Runner {...props({ paper: { ...paper, calculator: "off" } })} />);
     expect(screen.queryByRole("button", { name: /calculator/i })).toBeNull();
   });
 
