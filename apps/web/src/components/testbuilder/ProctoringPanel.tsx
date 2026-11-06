@@ -136,6 +136,10 @@ function overriddenKeys(
   overrides: ProctoringOverrides,
 ): (keyof typeof OVERRIDE_KEY_TO_RESOLVED)[] {
   const defaults = PROCTORING_DEFAULTS[profile];
+  // Rule 13: a legacy-only `allow_calculator` is the calculator override it resolves to.
+  if (overrides.calculator === undefined && overrides.allow_calculator !== undefined) {
+    overrides = { ...overrides, calculator: overrides.allow_calculator ? "basic" : "off" };
+  }
   return (Object.keys(OVERRIDE_KEY_TO_RESOLVED) as (keyof typeof OVERRIDE_KEY_TO_RESOLVED)[]).filter((key) => {
     if (!(key in overrides) || overrides[key] === undefined) return false;
     return overrides[key] !== defaults[OVERRIDE_KEY_TO_RESOLVED[key]];
@@ -440,9 +444,8 @@ export function ProctoringPanel({
               id={`${ids}-calculator`}
               value={resolved.calculator}
               onChange={(event) => {
-                const overrides: ProctoringOverrides = { ...value.overrides, calculator: event.target.value as CalculatorMode };
-                delete overrides.allow_calculator;
-                onChange({ profile: value.profile, overrides });
+                const { allow_calculator: _legacy, ...rest } = value.overrides;
+                onChange({ profile: value.profile, overrides: { ...rest, calculator: event.target.value as CalculatorMode } });
               }}
               aria-describedby={calculatorMarker?.id}
             >

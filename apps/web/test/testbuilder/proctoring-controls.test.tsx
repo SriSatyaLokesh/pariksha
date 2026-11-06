@@ -279,8 +279,13 @@ describe("the Calculator control (Off / Basic / Scientific)", () => {
     expect(screen.getByLabelText(/^Calculator/i)).toHaveAccessibleDescription(/changed from Standard/i);
   });
 
-  it("does not mark a legacy-only override", async () => {
+  it("marks a legacy-only allow_calculator: true like any other override", async () => {
     await openProctoringPanel({ profile: "standard", overrides: { allow_calculator: true } });
+    expect(screen.getByLabelText(/^Calculator/i)).toHaveAccessibleDescription(/changed from Standard/i);
+  });
+
+  it("does not mark a legacy-only allow_calculator: false", async () => {
+    await openProctoringPanel({ profile: "standard", overrides: { allow_calculator: false } });
     expect(screen.queryByText(/changed from/i)).toBeNull();
   });
 });
