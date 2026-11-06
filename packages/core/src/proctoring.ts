@@ -23,6 +23,9 @@ export type ViolationAction = "warn_only" | "warn_then_flag" | "auto_submit" | "
 export const SNAPSHOT_KB = 25;
 export const KB_PER_MB = 1000;
 
+export type CalculatorMode = "off" | "basic" | "scientific";
+export const CALCULATOR_MODES: readonly CalculatorMode[] = ["off", "basic", "scientific"];
+
 /** Every field present, no optionals. This is what every reader consumes. */
 export interface ResolvedProctoring {
   profile: ProctoringProfile;
@@ -50,7 +53,7 @@ export interface ResolvedProctoring {
   violationAction: ViolationAction;
   cameraOutageSeconds: number;
   multiFaceSnapshots: number;
-  allowCalculator: boolean;
+  calculator: CalculatorMode;
 }
 
 export type ProctoringOverrides = Partial<{
@@ -59,7 +62,9 @@ export type ProctoringOverrides = Partial<{
   snapshot_interval_seconds: number; face_check: boolean; require_microphone: boolean;
   ai_audio_check: boolean;
   extra_monitor_check: boolean; violation_limit: number; violation_action: ViolationAction;
-  camera_outage_seconds: number; multi_face_snapshots: number; allow_calculator: boolean;
+  camera_outage_seconds: number; multi_face_snapshots: number;
+  /** @deprecated legacy, read only; the editor writes `calculator` */
+  allow_calculator: boolean; calculator: CalculatorMode;
 }>;
 
 // Phase 7b branch-review Finding 9: the one place these three display names
@@ -109,7 +114,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     violationAction: "warn_only",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
-    allowCalculator: false,
+    calculator: "off",
   },
   standard: {
     profile: "standard",
@@ -128,7 +133,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     violationAction: "warn_then_flag",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
-    allowCalculator: false,
+    calculator: "off",
   },
   strict: {
     profile: "strict",
@@ -147,7 +152,7 @@ export const PROCTORING_DEFAULTS: Readonly<Record<ProctoringProfile, ResolvedPro
     violationAction: "warn_then_flag",
     cameraOutageSeconds: 120,
     multiFaceSnapshots: 2,
-    allowCalculator: false,
+    calculator: "off",
   },
 };
 
@@ -219,7 +224,8 @@ export function resolveProctoring(
     // in `integrityFor`.
     cameraOutageSeconds: Math.max(1, overrideOr(overrides, "camera_outage_seconds", defaults.cameraOutageSeconds)),
     multiFaceSnapshots: Math.max(1, overrideOr(overrides, "multi_face_snapshots", defaults.multiFaceSnapshots)),
-    allowCalculator: overrideOr(overrides, "allow_calculator", defaults.allowCalculator),
+    // `calculator` wins; else legacy `allow_calculator` (true is basic); else the default.
+    calculator: overrides?.calculator ?? (overrides?.allow_calculator === undefined ? defaults.calculator : overrides.allow_calculator ? "basic" : "off"),
   };
 }
 

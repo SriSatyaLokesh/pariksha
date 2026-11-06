@@ -130,7 +130,9 @@ Pick a `profile` — `off`, `standard` or `strict` — then change individual co
 | `violation_action` | `warn_only`, `warn_then_flag`, `auto_submit`, `lock` |
 | `camera_outage_seconds` | ≥ 1, how long the camera may stay dark before the attempt is marked `high_risk` |
 | `multi_face_snapshots` | ≥ 1, consecutive multi-face snapshots before the attempt is marked `high_risk` |
-| `allow_calculator` | `true` / `false` |
+| `calculator` | `off` / `basic` / `scientific` |
+
+Older documents' `allow_calculator: true` / `false` still reads as `basic` / `off`.
 
 Browser checks deter and record; they cannot prove or prevent cheating — a second phone is invisible to all of them. Pariksha flags attempts for a human to judge and never disqualifies anyone by itself, except the `auto_submit` and `lock` actions an organiser explicitly chose.
 

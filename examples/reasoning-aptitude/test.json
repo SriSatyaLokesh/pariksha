@@ -148,7 +148,7 @@
     "overrides": {
       "violation_limit": 4,
       "violation_action": "warn_then_flag",
-      "allow_calculator": true
+      "calculator": "basic"
     }
   },
 
