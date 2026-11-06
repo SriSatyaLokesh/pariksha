@@ -142,6 +142,28 @@ describe("scientific engine", () => {
       expect(expression).not.toMatch(/NaN|undefined|Infinity/);
     }
   });
+  it("is total from a leading negative: -/neg then ( or -, then random keys", () => {
+    const keys: SciKey[] = [
+      ..."0123456789.+-*/^()=".split("").map((c) => c as SciKey),
+      "mod", "logy", "C", "Backspace", "EXP", "sin", "sqrt", "fact", "inv", "neg", "pct", "pi", "MR", "M+",
+    ];
+    let seed = 777;
+    const next = () => (seed = (seed * 1103515245 + 12345) % 2147483648);
+    for (const first of ["-", "neg"] as SciKey[]) {
+      for (const second of ["(", "-"] as SciKey[]) {
+        for (let run = 0; run < 40; run++) {
+          let s = sciReduce(sciReduce(SCI_START, first), second);
+          for (let i = 0; i < 40; i++) {
+            s = sciReduce(s, keys[next() % keys.length] as SciKey);
+            const { result, expression } = sciView(s);
+            expect(result === "Error" || Number.isFinite(Number(result))).toBe(true);
+            expect(expression).not.toMatch(/NaN|undefined|Infinity/);
+            expect(expression).not.toMatch(/(^|[^e\d.])-0(?![\d.e])/);
+          }
+        }
+      }
+    }
+  });
   it("a negative can start an operand: after ( , after an operator, at the start", () => {
     expect(run("2", "*", "(", "-", "3", ")", "=")).toBe("-6");
     expect(run("2", "+", "(", "neg", "3", ")", "=")).toBe("-1");
@@ -176,6 +198,13 @@ describe("scientific engine", () => {
     expect(run("-", "-", "3", "=")).toBe("3");
     expect(sciView(stateOf("-", "-", "3", "=")).expression).not.toContain("-0");
     expect(sciView(stateOf("-", "(")).expression).not.toContain("-0");
+  });
+  it("mod keeps real remainders when the divisor is huge or the dividend tiny", () => {
+    const d = (x: string) => x.split("") as SciKey[];
+    expect(run("5", "mod", ...d("10000000000"), "=")).toBe("5");
+    expect(run(..."0.0000001".split("") as SciKey[], "mod", "1", "0", "0", "0", "=")).toBe("1e-7");
+    expect(run(...d("19999999999"), "mod", ...d("10000000000"), "=")).toBe("9999999999");
+    expect(run("7", "neg", "mod", "3", "=")).toBe("-1");
   });
   it("mod is exact for large integer quotients", () => {
     const d = (n: string) => n.split("") as SciKey[];

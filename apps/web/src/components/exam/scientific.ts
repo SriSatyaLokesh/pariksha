@@ -82,11 +82,12 @@ const BIN: Record<Op, (a: number, b: number) => number> = {
   "*": (a, b) => a * b,
   "/": (a, b) => a / b,
   // ponytail: JS remainder (sign of the dividend); no floored-mod variant.
-  // A remainder within 1e-9 of 0 or of |b| is float noise (0.3 mod 0.1 = 0, not 0.1).
+  // Float noise scales with the dividend: a remainder within 1e-14 of it, of 0 or of |b|,
+  // is noise (0.3 mod 0.1 = 0, not 0.1).
   mod: (a, b) => {
-    const m = a % b;
-    const tol = Math.abs(b) * 1e-9;
-    return Math.abs(m) < tol || Math.abs(b) - Math.abs(m) < tol ? 0 : m;
+    const m = a % b,
+      t = Math.abs(a) * 1e-14;
+    return Math.abs(m) <= t || Math.abs(b) - Math.abs(m) <= t ? 0 : m;
   },
   "^": Math.pow,
   logy: (a, b) => Math.log(a) / Math.log(b),
@@ -227,7 +228,7 @@ function setEntry(s: SciState, v: number, label: string | null): SciState {
 
 /** The entry as an operand: its top-line record if a key made it. */
 function operand(s: SciState): Tok {
-  return { k: "n", v: entryVal(s), t: s.done || s.label === null ? entryText(s) : s.label };
+  return { k: "n", v: entryVal(s), t: s.done || s.label === null ? entryText(s).replace(/^-0$/, "0") : s.label };
 }
 
 const isFresh = (s: SciState): boolean =>
@@ -333,7 +334,7 @@ export function sciReduce(s: SciState, key: SciKey): SciState {
         : s.entry.startsWith("-") ? s.entry.slice(1) : `-${s.entry}`;
       return { ...s, entry };
     }
-    const inner = s.done || s.label === null ? entryText(s) : s.label;
+    const inner = s.done || s.label === null ? entryText(s).replace(/^-0$/, "0") : s.label;
     return setEntry(s, fn(entryVal(s), s.angle === "deg"), label(inner));
   }
   return s;
