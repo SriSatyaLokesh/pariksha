@@ -110,7 +110,6 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
       "Block copy and paste",
       "Watermark the paper",
       "Detect extra monitors",
-      "Allow the calculator",
     ]) {
       expect(screen.getByLabelText(new RegExp(name, "i")), name).toBeInTheDocument();
     }
@@ -175,7 +174,7 @@ describe("the fifteen proctoring controls, in three field-row groups (Q8)", () =
   it("uses no browser-default checkbox or radio", async () => {
     await openProctoringPanel({});
     const boxes = screen.getAllByRole("checkbox");
-    expect(boxes.length).toBe(11); // eleven editable checkboxes
+    expect(boxes.length).toBe(10); // ten editable checkboxes
     for (const el of boxes) {
       expect(paintsIn(el, "appearance", ADMIN_CSS)).toBe("none");
     }
@@ -202,7 +201,6 @@ describe("each override key is written by the control its label names (branch-re
     ["Block copy and paste", "block_copy_paste"],
     ["Watermark the paper", "watermark"],
     ["Detect extra monitors", "extra_monitor_check"],
-    ["Allow the calculator", "allow_calculator"],
     ["Require a camera", "require_camera"],
     ["Identity photo", "identity_photo"],
     ["Require a microphone", "require_microphone"],
@@ -258,5 +256,36 @@ describe("each override key is written by the control its label names (branch-re
   it("M3: an explicit override still wins over the resolved default", async () => {
     await openProctoringPanel({ profile: "strict", overrides: { violation_action: "warn_only" } });
     expect(screen.getByLabelText(/When the limit is reached/i)).toHaveValue("warn_only");
+  });
+});
+
+describe("the Calculator control (Off / Basic / Scientific)", () => {
+  it("shows the resolved mode, legacy included", async () => {
+    await openProctoringPanel({ profile: "standard", overrides: { allow_calculator: true } });
+    expect(screen.getByLabelText(/^Calculator/i)).toHaveValue("basic");
+  });
+
+  it("choosing Scientific writes calculator and drops the legacy key", async () => {
+    const onChange = vi.fn();
+    await openProctoringPanel({ overrides: { allow_calculator: true } }, { onChange });
+    fireEvent.change(screen.getByLabelText(/^Calculator/i), { target: { value: "scientific" } });
+    const last = onChange.mock.lastCall![0];
+    expect(last.overrides.calculator).toBe("scientific");
+    expect("allow_calculator" in last.overrides).toBe(false);
+  });
+
+  it("marks Calculator as changed from the profile when not off", async () => {
+    await openProctoringPanel({ profile: "standard", overrides: { calculator: "scientific" } });
+    expect(screen.getByLabelText(/^Calculator/i)).toHaveAccessibleDescription(/changed from Standard/i);
+  });
+
+  it("marks a legacy-only allow_calculator: true like any other override", async () => {
+    await openProctoringPanel({ profile: "standard", overrides: { allow_calculator: true } });
+    expect(screen.getByLabelText(/^Calculator/i)).toHaveAccessibleDescription(/changed from Standard/i);
+  });
+
+  it("does not mark a legacy-only allow_calculator: false", async () => {
+    await openProctoringPanel({ profile: "standard", overrides: { allow_calculator: false } });
+    expect(screen.queryByText(/changed from/i)).toBeNull();
   });
 });

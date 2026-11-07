@@ -57,7 +57,7 @@ describe("resolveProctoring", () => {
       violationAction: "warn_only",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
-      allowCalculator: false,
+      calculator: "off",
     });
   });
 
@@ -79,7 +79,7 @@ describe("resolveProctoring", () => {
       violationAction: "warn_then_flag",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
-      allowCalculator: false,
+      calculator: "off",
     });
   });
 
@@ -101,7 +101,7 @@ describe("resolveProctoring", () => {
       violationAction: "warn_then_flag",
       cameraOutageSeconds: 120,
       multiFaceSnapshots: 2,
-      allowCalculator: false,
+      calculator: "off",
     });
   });
 
@@ -422,5 +422,22 @@ describe("CANDIDATE_PROCTORING_EVENTS / SERVER_SYNTHESIZED_EVENTS", () => {
       "attempt_locked",
       "attempt_unlocked",
     ]);
+  });
+});
+
+describe("calculator mode", () => {
+  it("defaults to off on every profile", () => {
+    for (const profile of ["off", "standard", "strict"] as const)
+      expect(resolveProctoring({ profile }).calculator).toBe("off");
+  });
+  it("reads the new key", () => {
+    expect(resolveProctoring({ overrides: { calculator: "scientific" } }).calculator).toBe("scientific");
+  });
+  it("maps legacy allow_calculator: true to basic and false to off", () => {
+    expect(resolveProctoring({ overrides: { allow_calculator: true } }).calculator).toBe("basic");
+    expect(resolveProctoring({ overrides: { allow_calculator: false } }).calculator).toBe("off");
+  });
+  it("lets calculator win over the legacy key", () => {
+    expect(resolveProctoring({ overrides: { allow_calculator: true, calculator: "off" } }).calculator).toBe("off");
   });
 });

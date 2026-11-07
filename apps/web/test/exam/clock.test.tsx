@@ -442,7 +442,7 @@ const resumedPaper: AttemptPaper = {
   sectionRemainingMs: 15 * MINUTE,
   warnAtMinutes: [10, 2],
   lateSyncGraceSeconds: 30,
-  allowCalculator: false,
+  calculator: "off",
   serverNow: 1_760_000_000_000,
   submittedAt: null,
   lockedAt: null,

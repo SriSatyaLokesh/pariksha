@@ -279,14 +279,36 @@ function stripCommentsForScan(content) {
  * comment reads as a colour literal here. That is a known cost, not a bug;
  * the fix is to reword the prose, which 6.5e Task 8 did after meeting it.
  */
-export function hasIllegalColorLiteral(content) {
+export function hasIllegalColorLiteral(content, { allowKeywords = [] } = {}) {
   const scanned = stripCommentsForScan(content);
   if (HEX_LITERAL_RE.test(scanned)) return true;
-  if (NAMED_COLOR_RE.test(scanned)) return true;
+  const namedRe = allowKeywords.length
+    ? new RegExp(
+        `(?<![a-zA-Z0-9_-])(?:${CSS_NAMED_COLORS.filter((c) => !allowKeywords.includes(c)).join("|")})(?![a-zA-Z0-9_-])`,
+        "i",
+      )
+    : NAMED_COLOR_RE;
+  if (namedRe.test(scanned)) return true;
   for (const match of scanned.matchAll(COLOR_FUNCTION_RE)) {
     if (!isLegalColorFunctionArgs(match[1])) return true;
   }
   return false;
+}
+
+// `tan` is the tangent key of the scientific calculator, not a colour. Only
+// these two files, only this keyword; hex, colour functions and every other
+// named colour stay illegal in them.
+const KEYWORD_ALLOWANCES = {
+  "scientific.ts": ["tan"],
+  "ScientificCalculator.tsx": ["tan"],
+};
+
+/** Keywords `file` may contain (matched by basename under components/exam/). */
+export function allowedKeywordsFor(file) {
+  const parts = file.split(/[\\/]/);
+  const name = parts.at(-1);
+  const inExam = parts.at(-2) === "exam" && parts.at(-3) === "components";
+  return inExam ? (KEYWORD_ALLOWANCES[name] ?? []) : [];
 }
 
 const SCANNED_EXTENSIONS = new Set([".ts", ".tsx", ".css", ".html"]);
@@ -315,7 +337,11 @@ export function filesWithHexLiterals(dir, { except = [] } = {}) {
   const exceptSet = new Set(except.map((p) => p.split("/").join(sep)));
   return walk(dir)
     .filter((file) => !exceptSet.has(relative(dir, file)))
-    .filter((file) => hasIllegalColorLiteral(readFileSync(file, "utf8")));
+    .filter((file) =>
+      hasIllegalColorLiteral(readFileSync(file, "utf8"), {
+        allowKeywords: allowedKeywordsFor(file),
+      }),
+    );
 }
 
 async function main() {

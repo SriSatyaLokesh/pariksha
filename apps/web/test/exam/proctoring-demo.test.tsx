@@ -16,7 +16,7 @@ describe("Demo Proctoring Configuration", () => {
     expect(DEMO_PROCTORING_CONFIG.watermark).toBe(true);
     expect(DEMO_PROCTORING_CONFIG.blockCopyPaste).toBe(true);
     expect(DEMO_PROCTORING_CONFIG.extraMonitorCheck).toBe(true);
-    expect(DEMO_PROCTORING_CONFIG.allowCalculator).toBe(true);
+    expect(DEMO_PROCTORING_CONFIG.calculator).toBe("scientific");
     expect(DEMO_PROCTORING_CONFIG.violationLimit).toBe(3);
     expect(DEMO_PROCTORING_CONFIG.violationAction).toBe("warn_then_flag");
   });

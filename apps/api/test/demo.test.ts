@@ -6,6 +6,7 @@ import {
   listTests,
   getPublishedVersion,
 } from "@pariksha/db";
+import { resolveProctoring } from "@pariksha/core";
 import { createApp, ROUTE_BUDGETS } from "../src/app.js";
 import { countingDeps } from "../src/instrument.js";
 import { FIXED_NOW, testDeps } from "./deps.js";
@@ -78,6 +79,8 @@ it("seeds sample question bank, published test with 3 sections, and 5 attempt ro
   const version = await getPublishedVersion(deps.db, workspace.id, publishedTest!.id);
   expect(version).not.toBeNull();
   expect(version!.body.sections).toHaveLength(3);
+  // The showcase test lets demo visitors try the scientific calculator.
+  expect(resolveProctoring(version!.body.settings.proctoring).calculator).toBe("scientific");
 
   // 3. 5 attempts with clean, review, scoring_blocked flags
   const attempts = await deps.db.query<{

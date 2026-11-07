@@ -215,7 +215,8 @@
               "minimum": 1,
               "description": "How many consecutive snapshots with more than one face before the attempt is marked high_risk."
             },
-            "allow_calculator": { "type": "boolean" }
+            "allow_calculator": { "type": "boolean", "description": "Legacy: read as basic (true) or off (false); superseded by calculator." },
+            "calculator": { "enum": ["off", "basic", "scientific"] }
           },
           "additionalProperties": false
         }

@@ -133,7 +133,7 @@ export const examPaper: AttemptPaper = {
   sectionRemainingMs: null,
   warnAtMinutes: [10, 5],
   lateSyncGraceSeconds: 120,
-  allowCalculator: false,
+  calculator: "off",
   serverNow: NOW,
   submittedAt: null,
   lockedAt: null,

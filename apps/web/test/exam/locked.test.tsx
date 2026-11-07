@@ -51,7 +51,7 @@ function paperFixture(proctoring: ResolvedProctoring, lockedAt: number | null = 
     sectionRemainingMs: null,
     warnAtMinutes: [10, 2],
     lateSyncGraceSeconds: 30,
-    allowCalculator: false,
+    calculator: "off",
     serverNow: NOW,
     submittedAt: null,
     lockedAt,

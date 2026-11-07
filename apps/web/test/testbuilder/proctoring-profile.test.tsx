@@ -153,6 +153,12 @@ describe("the profile rewrites the controls, visibly (Q8a)", () => {
       expect(dialog).toHaveAccessibleName(/standard/i);
     });
 
+    it("asks before a profile change drops a legacy-only allow_calculator: true", async () => {
+      await openProctoringPanel({ profile: "standard", overrides: { allow_calculator: true } });
+      user.selectOptions(screen.getByLabelText(/Profile/i), "strict");
+      expect(await screen.findByText(/1 setting differs from Standard/)).toBeVisible();
+    });
+
     it("changes the profile without asking when nothing was overridden", async () => {
       const onChange = vi.fn();
       await openProctoringPanel({ profile: "strict", overrides: {} }, { onChange });

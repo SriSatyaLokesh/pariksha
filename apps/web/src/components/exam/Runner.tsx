@@ -4,6 +4,8 @@ import type { AttemptPaper, CandidateQuestion } from "../../lib/paper";
 import { Palette, type PaletteQuestion, type PaletteSectionGroup, type PaletteState } from "./Palette";
 import { ViewControls, useViewPreferences } from "./ViewControls";
 import { Calculator } from "./Calculator";
+import { ScientificCalculator } from "./ScientificCalculator";
+import { SCI_START } from "./scientific";
 import { SectionNav } from "./SectionNav";
 import { useDialogKeys } from "../useDialogKeys";
 
@@ -202,6 +204,8 @@ export function Runner({
   const currentSectionIndex = sectionIndices[index] ?? 0;
   const view = useViewPreferences();
   const [calculatorOpen, setCalculatorOpen] = useState(false);
+  // Lifted so memory, Deg/Rad and the expression survive close and reopen.
+  const [sciState, setSciState] = useState(SCI_START);
   const [confirmingClear, setConfirmingClear] = useState(false);
   const paletteStop = useRef<HTMLButtonElement | null>(null);
 
@@ -262,7 +266,7 @@ export function Runner({
         <div className="exam-runner-clock">{clockSlot}</div>
         <div className="exam-runner-tools">
           <div className="exam-runner-banner">{bannerSlot}</div>
-          {paper.allowCalculator && (
+          {paper.calculator !== "off" && (
             <button
               type="button"
               className="exam-calc-open"
@@ -396,13 +400,22 @@ export function Runner({
         {/* Inside the landmark on purpose: a dialog is not a landmark,
             and content outside every landmark is content a screen-reader
             user can only reach by walking the whole page. */}
-        {calculatorOpen && (
-          <Calculator
-            onClose={() => {
-              setCalculatorOpen(false);
-            }}
-          />
-        )}
+        {calculatorOpen &&
+          (paper.calculator === "scientific" ? (
+            <ScientificCalculator
+              state={sciState}
+              onState={setSciState}
+              onClose={() => {
+                setCalculatorOpen(false);
+              }}
+            />
+          ) : (
+            <Calculator
+              onClose={() => {
+                setCalculatorOpen(false);
+              }}
+            />
+          ))}
       </main>
 
       <Palette

@@ -2,7 +2,10 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, extname, join, relative, resolve } from "node:path";
-import { hasIllegalColorLiteral } from "../../../scripts/tokens.mjs";
+import {
+  allowedKeywordsFor,
+  hasIllegalColorLiteral,
+} from "../../../scripts/tokens.mjs";
 
 // Controller decision #1, widened by issue 137 (T28, constraints.md §2.1):
 // no colour literal of any kind anywhere in apps/web/src, across .ts, .tsx,
@@ -51,7 +54,11 @@ describe("no colour literal of any kind anywhere in apps/web/src", () => {
   for (const file of allScannedFiles) {
     it(`${relative(ROOT_DIR, file)} has no illegal colour literal`, () => {
       const content = readFileSync(file, "utf8");
-      expect(hasIllegalColorLiteral(content)).toBe(false);
+      expect(
+        hasIllegalColorLiteral(content, {
+          allowKeywords: allowedKeywordsFor(file),
+        }),
+      ).toBe(false);
     });
   }
 });
@@ -77,4 +84,29 @@ describe("no CSS-in-JS runtime is imported", () => {
       expect(content).not.toMatch(cssInJsPattern);
     });
   }
+});
+
+// `tan` is the tangent key, not a colour: allowed in exactly two files, and
+// only that one keyword. Each probe fails if the allowance is removed or widened.
+describe("the `tan` allowance is narrow", () => {
+  const sci = "src/components/exam/scientific.ts";
+  const scan = (content: string, file: string) =>
+    hasIllegalColorLiteral(content, { allowKeywords: allowedKeywordsFor(file) });
+  it("still flags tan in any other file", () => {
+    expect(scan('case "tan":', "src/components/exam/Foo.tsx")).toBe(true);
+    expect(scan('case "tan":', "src/other/scientific.ts")).toBe(true);
+  });
+  it("allows tan in scientific.ts and ScientificCalculator.tsx", () => {
+    expect(scan('case "tan":', sci)).toBe(false);
+    expect(
+      scan('case "tan":', "src/components/exam/ScientificCalculator.tsx"),
+    ).toBe(false);
+  });
+  it("still flags other named colours in an allowed file", () => {
+    expect(scan("color: red", sci)).toBe(true);
+  });
+  it("still flags hex and colour functions in an allowed file", () => {
+    expect(scan("#fff", sci)).toBe(true);
+    expect(scan("rgb(1 2 3)", sci)).toBe(true);
+  });
 });

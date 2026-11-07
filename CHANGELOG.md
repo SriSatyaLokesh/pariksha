@@ -34,6 +34,7 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ### Added
 
+- **Scientific calculator**: each test now sets its calculator to Off, Basic (four-function) or Scientific (GATE-style); the public demo uses Scientific.
 - **Native On-Device Face Counting via Shape Detection API** (Issue #264)
   - Implemented client-side face counting in `apps/web/src/lib/face.ts` using the browser's native `window.FaceDetector` API with fast mode and max 5 faces.
   - Required zero WebAssembly (`'wasm-unsafe-eval'`) and zero CSP relaxations, preserving strict `script-src 'self'`.

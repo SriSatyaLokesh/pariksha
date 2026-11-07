@@ -317,7 +317,11 @@ export const seedDemoWorkspace = scoped(
         testVersionId,
         workspaceId,
         testId,
-        db.jsonParam({ timing: { duration_minutes: 45 }, scoring: { pass_mark_percent: 60 } }),
+        db.jsonParam({
+          timing: { duration_minutes: 45 },
+          scoring: { pass_mark_percent: 60 },
+          proctoring: { profile: "off", overrides: { calculator: "scientific" } },
+        }),
         db.jsonParam(sections),
         now,
         now,
